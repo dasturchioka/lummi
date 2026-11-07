@@ -23,3 +23,6 @@ materials/_archives/
 
 # Claude Code runtime
 .claude/scheduled_tasks.lock
+
+# Impeccable design tool cache and review screenshots
+.impeccable/

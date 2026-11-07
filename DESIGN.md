@@ -1,0 +1,354 @@
+---
+name: LUMMI.
+description: The LUMMI box opened inside Telegram — a quiet perfume shop where each fragrance appears as its own label.
+colors:
+  milk: "#F5F2EC"
+  stone: "#CFC6B8"
+  graphite: "#2A2A2A"
+  sage: "#9AA592"
+  card-white: "#FFFFFF"
+  milk-field: "#ECE7DF"
+  ink-muted: "#67625B"
+  ink-faint: "#A39D94"
+  sage-ink: "#5C6855"
+  hairline: "rgba(42, 42, 42, .11)"
+  hairline-strong: "rgba(42, 42, 42, .22)"
+  sage-wash: "rgba(154, 165, 146, .18)"
+  photo-blush: "#F1DDD0"
+  dark-room: "#1D1C1A"
+  dark-field: "#353330"
+  dark-block: "#3A3631"
+  dark-ink-faint: "#6E6A63"
+  dark-sage-ink: "#AEB8A6"
+  dark-hairline: "rgba(245, 242, 236, .10)"
+  dark-hairline-strong: "rgba(245, 242, 236, .22)"
+  dark-sage-wash: "rgba(154, 165, 146, .16)"
+  dark-photo: "#3A322C"
+typography:
+  title:
+    fontFamily: "Tenor Sans, Manrope, sans-serif"
+    fontSize: "22px"
+    fontWeight: 400
+    lineHeight: 1.25
+    letterSpacing: "0.2em"
+  section:
+    fontFamily: "Tenor Sans, Manrope, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.35
+    letterSpacing: "0.2em"
+  label-caps:
+    fontFamily: "Tenor Sans, Manrope, sans-serif"
+    fontSize: "10.5px"
+    fontWeight: 400
+    lineHeight: 1.45
+    letterSpacing: "0.2em"
+  name:
+    fontFamily: "Cormorant Garamond, Georgia, serif"
+    fontSize: "20px"
+    fontWeight: 500
+    lineHeight: 1.1
+    letterSpacing: "0.005em"
+  name-large:
+    fontFamily: "Cormorant Garamond, Georgia, serif"
+    fontSize: "24px"
+    fontWeight: 500
+    lineHeight: 1.1
+  body:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.5
+  body-small:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "12.5px"
+    fontWeight: 400
+    lineHeight: 1.45
+  price:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    fontFeature: "tnum"
+  amount:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.01em"
+    fontFeature: "tnum"
+  button:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1
+  badge:
+    fontFamily: "Tenor Sans, Manrope, sans-serif"
+    fontSize: "10px"
+    fontWeight: 400
+    lineHeight: 1
+    letterSpacing: "0.2em"
+rounded:
+  thumb: "6px"
+  photo: "8px"
+  button: "10px"
+  card: "12px"
+  pill: "999px"
+spacing:
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  gutter: "16px"
+  section: "28px"
+components:
+  button-primary:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    typography: "{typography.button}"
+    rounded: "{rounded.button}"
+    padding: "0 16px"
+    height: "48px"
+  button-primary-small:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.button}"
+    padding: "0 14px"
+    height: "36px"
+  button-secondary:
+    backgroundColor: "transparent"
+    textColor: "{colors.graphite}"
+    typography: "{typography.button}"
+    rounded: "{rounded.button}"
+    height: "48px"
+  button-disabled:
+    backgroundColor: "{colors.milk-field}"
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.button}"
+    height: "48px"
+  button-add:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.button}"
+    size: "32px"
+  field:
+    backgroundColor: "{colors.milk-field}"
+    textColor: "{colors.graphite}"
+    typography: "{typography.body}"
+    rounded: "{rounded.button}"
+    padding: "0 14px"
+    height: "48px"
+  chip:
+    backgroundColor: "transparent"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.pill}"
+    padding: "0 14px"
+    height: "34px"
+  chip-selected:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.pill}"
+    height: "34px"
+  card-product:
+    backgroundColor: "{colors.card-white}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.card}"
+    padding: "8px 8px 12px"
+  block-stone:
+    backgroundColor: "{colors.stone}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.card}"
+  badge-hit:
+    backgroundColor: "{colors.sage}"
+    textColor: "{colors.graphite}"
+    typography: "{typography.badge}"
+    rounded: "{rounded.pill}"
+    padding: "5px 8px 4px"
+  badge-new:
+    backgroundColor: "transparent"
+    textColor: "{colors.sage-ink}"
+    typography: "{typography.badge}"
+    rounded: "{rounded.pill}"
+    padding: "5px 8px 4px"
+  volume-option:
+    backgroundColor: "{colors.card-white}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.button}"
+    padding: "10px 6px 9px"
+  volume-option-selected:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.button}"
+  tab-bar:
+    backgroundColor: "{colors.card-white}"
+    textColor: "{colors.ink-muted}"
+    height: "62px"
+  segmented:
+    backgroundColor: "{colors.milk-field}"
+    textColor: "{colors.ink-muted}"
+    rounded: "{rounded.button}"
+    padding: "3px"
+---
+
+# Design System: LUMMI.
+
+## Overview
+
+**Creative North Star: "The Opened Box"**
+
+The shop is the LUMMI box opened inside Telegram. Every fragrance is shown the way the brand prints it on its own bottle label: the original brand in small tracked Tenor Sans caps, the name in Cormorant Italic, a thin Sage line. The packaging grammar becomes the working controls. The set builder is drawn as the Discovery box with five compartments. The one Sage thread on the box becomes the app's single measure of progress.
+
+The world is pinned by Brandbook v2.0. The milk, stone, graphite and sage palette, the three typefaces, the 12 / 10 px radii and the 1.5 px linear icons are binding brand decisions, not taste. Surfaces are calm and dense in the way of a well-made category app: a 360 px phone column, 16 px gutters, white cards on a Milk ground, Graphite filled actions. Restraint carries the premium feel. There are no shadows, no gradients, no sticker discounts, no red sale prices and no badges on every card.
+
+The theme follows Telegram's `colorScheme`. Light is the brandbook. Dark is our derivation, a warm graphite room, and **it still needs customer approval**. Telegram draws the top header (Close / Back, title, ⋯); the app owns everything below it.
+
+**Key Characteristics:**
+- Milk ground, white cards, Stone blocks, Graphite ink and filled buttons, Sage only as thread, rule, badge and confirmation.
+- Fragrance shown as a label lockup: tracked caps attribution → italic name → Sage rule → notes joined by " · ".
+- Flat. Depth comes from tone (Milk → white → Stone) and 1 px hairlines, never from shadows.
+- Radii 12 (cards, blocks) and 10 (buttons, fields, controls); pills only for chips, badges, status and the language switch.
+- Linear 1.5 px stroke icons on a 24 px grid, round caps and joins, `currentColor`.
+- Bilingual RU / UZ-Latin at equal weight; layouts hold the longer string.
+
+## Colors
+
+The palette is a quiet paper-and-ink palette. Sage is the only accent, and it is never used for alarm.
+
+### Primary
+- **Graphite** (graphite): ink for text, headings and icons; fill of every primary action (button, "+" add, selected chip, selected volume, cart count) with Milk text. 10% of a screen.
+
+### Secondary
+- **Sage** (sage): the accent, at 5%. It appears as the thread fill, the rule under a name, the label divider, the "ХИТ" badge fill, the active-tab tick, the set-picker "chosen" square, and the done dots and line in the order timeline. Sage never carries text on Milk or white, because it is too light for that.
+- **Sage Ink** (sage-ink; dark: dark-sage-ink): Sage deepened for text and icons. It is used for the "НОВИНКА" outline badge, discount and "free" amounts, the confirmed status, perk icons, and the set-deal emphasis.
+
+### Neutral
+- **Milk** (milk): app ground (60%) and text on Graphite buttons.
+- **Card White** (card-white): product cards, lists, the amount card and the tab bar.
+- **Stone** (stone): blocks at 25%, such as the home banner, the empty-state monogram disc and the profile avatar.
+- **Milk Field** (milk-field): Milk with 25% Stone. It is used for inputs, the disclaimer plate, segmented tracks, disabled buttons and the set-box compartment tray.
+- **Muted Ink** (ink-muted): secondary text at 5:1 on Milk, for notes, meta, labels and inactive tabs.
+- **Faint Ink** (ink-faint): non-text only, such as sold-out volume glyphs. It is never used for readable copy.
+- **Hairline / Hairline Strong** (hairline, hairline-strong): 1 px dividers, and inset outlines on secondary buttons, chips, steppers, volume tiles and empty slots.
+- **Sage Wash** (sage-wash): the tinted ground of the set-deal strip and the confirmed status pill.
+- **Photo Blush** (photo-blush; dark: dark-photo): placeholder behind bottle photography while it loads.
+
+### Dark theme (derived, pending customer approval)
+Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
+
+### Named Rules
+**The Sage Thread Rule.** Sage is the measure, not decoration. If something fills, completes or confirms, it is Sage. If something is just pretty, it is not.
+
+**The No Alarm Rule.** Discounts and savings are Sage Ink, and old prices are struck through in Muted Ink. Sale prices are never red. Burgundy, rose gold and gold never appear.
+
+## Typography
+
+**Display Font:** Tenor Sans (with Manrope, sans-serif), always uppercase and tracked
+**Body Font:** Manrope 400 / 500 / 600 (with system-ui)
+**Name Font:** Cormorant Garamond Italic 500 (with Georgia), fragrance names only
+
+All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subsets. The subsets cover Uzbek Latin `oʻ` / `gʻ` (U+02BB) and keep the first screen within budget.
+
+**Character:** The caps engrave, the italic perfumes, and Manrope does the work. The pairing reads as a printed label laid over a plain, legible shop.
+
+### Hierarchy
+- **Title** (Tenor 400, 22px, 1.25, +0.2em, caps): screen titles such as КАТАЛОГ, КОРЗИНА, НАБОРЫ.
+- **Section** (Tenor 400, 13px, 1.35, +0.2em, caps): section heads such as "Топ продаж" and "Выберите 5 разных ароматов".
+- **Label caps** (Tenor 400, 10.5px, 1.45, +0.2em, caps, Muted Ink): the attribution line "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" and the box-lid label.
+- **Name** (Cormorant Italic 500, 20px; 24px on the product page; 17–19px in compact rows; 12.5px under set slots): fragrance names, and only those.
+- **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
+- **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
+
+### Named Rules
+**The Label Lockup Rule.** A fragrance is always named as: label caps attribution, then the italic name, then (in full cards) a 28 px Sage rule (18 px on list cards), then notes joined by " · ". The attribution line is mandatory legal wording, not a kicker. Never drop it, reword it or move it below the name.
+
+**The Italic Is Sacred Rule.** Cormorant Italic is for fragrance names only. Headings, prices, buttons and marketing lines never use it.
+
+**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals.
+
+**The Unbroken Date Rule.** UZ date phrases such as "2-dekabrgacha" are wrapped in no-wrap and never break across lines.
+
+## Layout
+
+The app is a single 360 px-first column inside the Telegram WebView. Page gutters are 16 px. The product grid has two columns with an 8 px gap. Horizontal rows ("Топ продаж", suggestions) scroll 158 px cards with an 8 px gap and a hidden scrollbar. Sections are separated by 28 px (26 px between checkout blocks). Within a block, elements stack at 12 px. Controls are 48 px tall (36 px small, 34 px chips, steppers and copy buttons). Every row and card is built to hold the longer of the RU and UZ strings.
+
+Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the 62 px five-tab bar (Главная, Каталог, Наборы, Корзина, Профиль) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment).
+
+## Elevation & Depth
+
+The system is flat, with no box-shadows for depth. Depth is tonal: Milk ground, white card, Stone block, plus 1 px hairlines between rows. Inset 1 px outlines (drawn as inset box-shadow) are used as borders on secondary controls. A 2 px surface-coloured ring separates the cart count from the tab icon. Neither of these is elevation. The one overlay, the share button on the product gallery, sits on a 92% Milk disc.
+
+### Named Rules
+**The Flat Box Rule.** Nothing floats. If a surface needs separation, step it one tone or add a hairline.
+
+## Shapes
+
+Corners are soft but not round: 12 px for cards, blocks, the banner, the set box and the payment card, and 10 px for buttons, fields, steppers, volume tiles, the disclaimer plate and segmented tracks. Photos inside cards are clipped to 8 px, and thumbnails to 6 px. Full pills are reserved for chips, badges, status, the language switch and the cart count. Bottle photography is always 3:4 (set compartments are 180:564 vial crops).
+
+The one ornament is the **label divider**: hairline, 4 px Sage diamond, hairline, 72 px wide. It is taken from the bottle label. It appears only on label lockups (the product-page name block and the set-box lid). It is not a section divider.
+
+## Components
+
+### Buttons
+Quiet, solid and decisive.
+- **Shape:** gently rounded (10px), 48px tall, Manrope 600 15px, no-wrap.
+- **Primary:** Graphite fill with Milk text (inverted in dark). One per screen, usually in the dock.
+- **Secondary:** transparent with a 1 px hairline-strong inset outline and Graphite text.
+- **Disabled / pending:** Milk Field fill with Muted Ink text, carrying the reason as its label ("Выберите ещё 2").
+- **Add "+":** a 32px Graphite square (30px on list cards) with a 10px radius. This is the list-card add-to-cart control per TZ §3.2. A 158 px card cannot hold "В корзину", which is a recorded deviation from bb-08.
+- **Focus:** a 2px Sage outline at a 2px offset on every focusable element.
+
+### Chips
+- **Style:** a 34px pill with a hairline-strong inset outline, Manrope 500 13px.
+- **Selected:** Graphite fill with Milk text. An optional count is shown as an inverted mini-pill.
+
+### Cards / Containers
+- **Corner Style:** 12px.
+- **Background:** Card White on Milk, or Graphite in dark.
+- **Shadow Strategy:** none (see Elevation).
+- **Product card:** 8 / 8 / 12 px padding. The top row holds the badge left and the type (HOMME / FEMME / UNISEX) right in 10px Tenor. Then come the 3:4 photo, the label lockup with an 18 px rule, two lines of notes, and a footer with the "from" price and "+".
+- **Compact rows** (cart items, set picker, suggestions): thumbnail plus label lockup without the Sage rule, separated by hairlines.
+
+### Inputs / Fields
+- **Style:** Milk Field fill, no border, 10px radius, 48px, 15px text. The label sits above in 12.5px Manrope 500, Muted Ink. Hints sit below in 12px.
+- **Search:** the same field with a leading 18px search icon and the placeholder "name or note".
+
+### Navigation
+- **Tab bar:** five tabs on Card White with a top hairline, 22px icon over an 11px label. The active tab uses Graphite ink at 600 with a 22 × 2 px Sage tick on the top edge. Inactive tabs use Muted Ink. The cart count is a Graphite pill.
+- **Segmented control:** a Milk Field track with a white selected segment at 600.
+- **Language switch:** an RU / UZ pill pair at the top right of home, with Graphite fill on the active pair. It occupies bb-08's avatar slot.
+
+### The Sage Thread (signature)
+This is the single progress and measure component: a 2 px track in hairline colour with a Sage fill, rounded 2 px, and an optional row of end labels in 11.5px tabular Muted Ink below it. It is used for the free-delivery nudge, set slots filled, and (as a vertical 2 px Sage line between done dots) the order-status timeline. It is never duplicated by a second progress style.
+
+### Badges
+- **ХИТ / Hit:** filled Sage with Graphite text, 10px Tenor, +0.2em, pill.
+- **НОВИНКА / Yangi:** transparent with a 1 px Sage inset outline and Sage Ink text.
+- **Rule:** at most one badge per card. It is hidden inside a row whose title already says it (no ХИТ inside "Топ продаж").
+
+### Volume selector
+Three tiles in a grid (10 / 30 / 50 ml), each showing the volume in 600 and the price under it. The selected tile has a Graphite fill. A sold-out tile is transparent with a faint hairline and Faint Ink, and reads "нет в наличии". Choosing a volume cross-fades the gallery photo (0.32s, cubic-bezier(.16, 1, .3, 1)).
+
+### Set box
+The Discovery box redrawn: a white 12px card. The lid has the logo, the "DISCOVERY SET" label caps at +0.3em, the label divider and "5 × 10 мл". Below it, five vial compartments sit on a Milk Field tray. The next empty slot has a 1.5 px ink outline. Italic names sit under the slots, and the Sage thread runs underneath.
+
+### Payment
+The amount card shows the 28px amount, the card number with copy buttons, and the reserve deadline with a clock icon. Steps are numbered in Sage-outlined circles. The receipt drop zone has a 1.5 px dashed hairline-strong border. The status pill is Milk Field (pending) or Sage Wash with Sage Ink (confirmed). The confirmed state shows a 64 px Sage disc with a Graphite check.
+
+## Do's and Don'ts
+
+### Do:
+- **Do** follow Telegram's `colorScheme` for light / dark, and treat the dark tokens as provisional until the customer approves them.
+- **Do** build every fragrance mention from the Label Lockup: "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" in label caps above the Cormorant Italic name.
+- **Do** use the Sage thread for every progress or measure, and nothing else.
+- **Do** keep the label divider (hairline–diamond–hairline) for label lockups only: the product name block and the set-box lid.
+- **Do** format money as integer so'm with U+00A0 thousands ("149 000 сум" / "149 000 soʻm", "69 000 soʻmdan"), no-wrap and tabular.
+- **Do** keep UZ date phrases ("2-dekabrgacha") on one line.
+- **Do** draw icons as 24px-grid linear strokes at 1.5 px with round caps, in `currentColor`.
+- **Do** show the logo at 80 px wide or more (home: 16 px tall ≈ 107 px wide). Keep its trailing dot, and never add effects.
+
+### Don't:
+- **Don't** use shadows, glows or gradients for depth. Tone and hairlines only.
+- **Don't** use Cormorant Italic for anything but fragrance names.
+- **Don't** colour sale prices red or use burgundy, rose gold or gold. Savings are Sage Ink.
+- **Don't** put Sage text on Milk or white. Use Sage Ink.
+- **Don't** stack a badge on a card inside a row whose title already names it.
+- **Don't** draw the top header. Telegram owns it.
+- **Don't** add tracked-caps lines above headings. Label caps exist only for the brand attribution and the box-lid label.
