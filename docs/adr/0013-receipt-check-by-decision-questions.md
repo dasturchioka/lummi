@@ -1,9 +1,9 @@
 # Receipts are checked with decision questions against known candidate credits, not by field extraction
 
-The receipt AI is **TypeSafe** (Jev) with **OpenAI Decisions** (`gpt-6-luna`) as fallback. Both are decision APIs: they answer yes/no as a probability, pick one of given options, or score. Neither reads free-form values such as an amount or a time out of an image. We don't need extraction anyway. Code first selects **candidate credits** (unclaimed, amount equal to the order total, arrived after the order was created); with no candidate, no AI call is made and the receipt waits (ADR 0012). With candidates, one request asks:
+The receipt AI is **TypeSafe** (Jev) with **OpenAI Decisions** (`gpt-6-luna`) as fallback. Both are decision APIs: they answer yes/no as a probability, pick one of given options, or score. Neither reads free-form values such as an amount or a time out of an image. We don't need extraction anyway. Code first selects **candidate credits** (unclaimed, amount equal to the order's amount due, arrived after the order was created); with no candidate, no AI call is made and the receipt waits (ADR 0012). With candidates, one request asks:
 
 - predicate: the image is a receipt of a successful card transfer;
-- predicate: the amount transferred is exactly <order total> so'm;
+- predicate: the amount transferred is exactly <amount due> so'm;
 - predicate: the recipient card ends in <last-4> or the recipient is <holder name>;
 - choice: the transfer date-time on the receipt, among the candidate credits' times plus "none of these".
 

@@ -120,12 +120,16 @@ _Avoid_: Purchase, transaction, checkout
 A customer's proof of a card transfer (screenshot or PDF) uploaded for an order. One order may have several; at most one is accepted.
 _Avoid_: Check, чек (in code), payment proof, fiscal receipt
 
+**Amount due**:
+The part of an order's total the customer must transfer to the shop card. Equals the total in stage 1.
+_Avoid_: Payable, balance, sum to pay
+
 **Credit**:
 An incoming transfer to the shop card, as reported by the official Humo bot. Can be linked to at most one order.
 _Avoid_: Payment, transaction, поступление (in code), notification
 
 **Candidate credit**:
-A credit that could pay a given order: not linked to any order, same amount as the order total, arrived after the order was created.
+A credit that could pay a given order: not linked to any order, same amount as the order's amount due, arrived after the order was created.
 _Avoid_: Possible match, suggestion
 
 **Payment not found**:

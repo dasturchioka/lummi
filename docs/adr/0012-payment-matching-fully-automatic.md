@@ -16,3 +16,7 @@ Accepted risk: a forged screenshot whose amount and time coincide with someone e
 A receipt stays «Чек на проверке» and is re-matched on every new credit. If no fitting credit arrives within the wait window (admin setting, default 2 h), the system does **not** reject it: the receipt gets the verdict "payment not found", the order goes back to «Ожидает оплаты», and the customer is asked to check the amount and card and upload again, with a «Написать менеджеру» button. If the reserve has already run out, the order is cancelled automatically. The orders group gets an informational post with no required action. Rejection stays manager-only (TZ §4). While the userbot is down or Humo has been silent longer than the alert threshold, all receipt timers pause and the owner is alerted, so an outage never cancels paid orders.
 
 Superseded in part by ADR 0013: among several candidate credits, the AI's choice of the receipt's date-time picks the credit, not "closest in time".
+
+## Amount due
+
+An order stores its **amount due** (what the customer must transfer to the shop card) separately from its total, and matching compares credits and receipts against the amount due. In stage 1 the two are always equal. The split exists so that other means of payment (gift certificates, requested 2026-11-07 and deferred to v1.1) can cover part of a total later without reworking matching.

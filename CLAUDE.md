@@ -6,7 +6,7 @@ Telegram Mini App + bot + admin panel for **LUMMI.**, a perfume brand selling Ex
 
 ## Docs
 
-- `docs/adr/` — design decisions (0001–0028) locked in the 2026-11-07 grilling session; read the relevant ADR before changing money, payment, stock or architecture code.
+- `docs/adr/` — design decisions (0001–0029) locked in the 2026-11-07 grilling session; read the relevant ADR before changing money, payment, stock or architecture code.
 - `GLOSSARY.md` — the domain vocabulary; use its terms in code and docs.
 
 - `docs/spec.md` — business rules digest of the TZ (screens, set discount, birthday, payment and reconciliation, bot, manager group, admin, promo, delivery, acceptance). Read the relevant section before implementing or estimating any feature.
@@ -37,7 +37,7 @@ AI payment verification matches receipts against credit notifications from the *
 
 ## Invariants — every change respects these
 
-- **The server owns money.** It computes prices, discounts, delivery, and totals. The client only displays them. Validate the Telegram `initData` signature on every API request.
+- **The server owns money.** It computes prices, discounts, delivery, and totals. The client only displays them. Verify the Telegram `initData` signature and freshness once, at sign-in, and exchange it for our own short-lived session; never trust a user id from the client (ADR 0029).
 - **Integer so'm**, displayed as `100 000 сум` / `100 000 soʻm`.
 - **One discount per order**: upgrade right (from a set, or from a 10 ml bottle once approved), promo code, or birthday coupon. An entered promo code wins; otherwise the server picks the entitlement giving the lowest total incl. delivery, and the customer can switch (ADR 0002). Discounts apply to items only, never to delivery, and not to marked-down items by default (ADR 0008). The free-delivery threshold (250 000) base is a per-source setting: before an upgrade right, after a promo code, after a birthday coupon (to confirm).
 - **Stock reservation** happens in a DB transaction, so the last unit can't be sold twice. Available = on hand − reserve; on hand drops at BTS handover (ADR 0010). A reserve lives 12 h without a receipt. An uploaded receipt holds it until a credit matches or the wait window ends with "payment not found" (ADR 0012). Cancelling returns stock, the promo use and any right or coupon still within validity (ADR 0005).
@@ -77,3 +77,17 @@ AI payment verification matches receipts against credit notifications from the *
 - Logo: the trailing dot is part of the mark. Clear space = height of the "L". Minimum on screen: logo 80 px, monogram "L." 32 px. The avatar/app icon is the "L." monogram on Stone (`logo-pack/LUMMI_avatar_stone.svg`).
 - **Theme follows Telegram** (light or dark). The customer said "Standart rejim", agreed internally on 2026-11-06. The brandbook defines light only, so dark-theme tokens are ours to derive (Graphite surfaces, Milk text, Sage accent) and need customer approval.
 - Photos: 3:4 for product cards, 9:16 for stories. Bottle photos are 1086×1448 PNG with Russian text baked in (notes, longevity, gender). The customer decided on 2026-11-06 to keep them as-is in both languages. There is one photo per volume, and the gallery switches when the customer picks 10 / 30 / 50 ml. Serve them as WebP.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `dasturchioka/lummi`, via `gh`; ticket blocking edges are native issue dependencies. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

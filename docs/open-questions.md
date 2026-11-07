@@ -27,6 +27,10 @@ Missing — **day 11**: About / FAQ / Returns texts (drafts exist in TZ appendix
 
 Also asked on 2026-11-05 and not yet answered: **home-page banner images (1–2) and banner text**.
 
+## Deferred to the next version
+
+- **Gift certificates** (customer request, 2026-11-07): a buyer pays for a certificate (100/200/300k or custom, 2–3 designs, wish, signed or anonymous), sends it to a friend via `savePreparedInlineMessage` + `shareMessage`, the friend claims it with their phone in the Mini App, and spends the balance at checkout in parts within 6 months; not combined with a promo code. Deferred to v1.1: outside the TZ, about 3–4 days, and it touches pricing, payment matching and reports. Stage 1 keeps the order's amount due separate from its total so it slots in later (ADR 0012). Message to the customer drafted 2026-11-07.
+
 ## Our proposals awaiting customer approval
 
 - **Upgrade right from a single 10 ml bottle** (2026-11-07, ADR 0003). A delivered 10 ml bottle gives a one-time discount on a 30/50 ml bottle of the same fragrance, like the set discount. Outside the TZ, so it ships switched off. Ask the customer: on or off, percentage (set source is 20%), validity (set source is 30 days). Free-delivery threshold for it defaults to "before discount", like the set source.
