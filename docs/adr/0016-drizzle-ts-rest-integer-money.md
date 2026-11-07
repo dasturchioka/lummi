@@ -1,0 +1,5 @@
+# Drizzle for the DB, ts-rest + zod for the API contract, integer so'm everywhere
+
+The money and stock rules need explicit SQL: `SELECT … FOR UPDATE` on variants and promo codes, conditional `UPDATE … WHERE used_by_order_id IS NULL` on rights, aggregate "on hand − reserve" queries. **Drizzle** (`packages/db`, migrations by `drizzle-kit`) keeps these typed and close to SQL. Prisma needs raw SQL for row locks, and TypeORM's types are weak. The API contract is one **ts-rest** contract with **zod** schemas in `packages/contracts`, served by `@ts-rest/nest` and consumed by typed clients in the Mini App and admin: no codegen step, and input and output are validated.
+
+Amounts are Postgres `integer` whole so'm (report sums `bigint`), plain numbers in JSON, never floats. Internal keys are `bigint identity`. The customer-facing order number is a separate sequence starting at 1001. Mini App deep links use product slugs (`startapp=p_tygar`), not numeric ids. Times are stored as UTC `timestamptz`; day-based rules (promo expiry, birthdays, report days) are evaluated in Asia/Tashkent.

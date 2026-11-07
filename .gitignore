@@ -1,0 +1,25 @@
+# env
+.env*
+!.env.example
+
+# deps and build output
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+
+# runtime files
+media/
+*.log
+
+# customer originals: zips duplicate the extracted files
+materials/_archives/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock

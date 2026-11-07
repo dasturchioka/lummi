@@ -1,0 +1,5 @@
+# A markdown is a price, not a discount, and blocks discounts by default
+
+Each volume has a regular `price` and an optional `sale_price` with an optional `sale_ends_at`. While `sale_price < price` and the end date hasn't passed, the sale price is the effective price; it reverts on its own, with no admin action or job. The UI shows it Uzum-style: regular price struck through, the sale price, a "−N%" badge, and «до <дата>» when an end date is set (no countdown timer).
+
+Because a markdown is a price, it doesn't count toward "one discount per order". But stacking a 20% right on a marked-down bottle would cost the owner far more than either alone, so by default **no discount applies to marked-down items**: each promo code has the TZ's "применять к уценённым" flag, and the birthday coupon and the upgrade right each have one global admin setting, off by default. Where a discount won't apply, it isn't advertised either: a marked-down card shows only its sale price, never «Скидка за набор». Discovery and builder sets follow the same rule.

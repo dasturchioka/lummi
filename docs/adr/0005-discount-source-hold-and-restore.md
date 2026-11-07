@@ -1,0 +1,5 @@
+# Discount sources are held at order creation; their state is derived, not stored
+
+An upgrade right, a birthday coupon or a promo-code use is **held** by an order in the same DB transaction that reserves stock: a conditional `UPDATE … WHERE used_by_order_id IS NULL AND expires_at > now()` for rights and coupons, and a `FOR UPDATE` lock on the promo row while counting its non-voided uses against the total and per-customer limits. Two concurrent orders can't spend one right.
+
+Rights and coupons store only `used_by_order_id`, `expires_at`, `closed_at`; their state is derived (active / used / expired / closed), so expiry needs no job (jobs only send the 7-day and 1-day reminders). Cancelling the holding order clears the link and the source is active again if still within validity, otherwise it is lost (TZ: "в пределах срока"); the promo use is voided. A returned discounted order restores the source the same way. A returned **source** order (the set or 10 ml order) closes the right it opened; if that right was already spent on another order, that order keeps its discount — no clawback, since it may already be paid.

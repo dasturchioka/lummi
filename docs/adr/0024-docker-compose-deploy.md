@@ -1,0 +1,5 @@
+# Docker Compose on the VPS, images from GitHub Actions, migrations before start
+
+Production (customer VPS) and staging (Sardor's VPS) run the same Compose file with different `.env`: `caddy` (automatic TLS, reverse proxy, serves the Mini App build and `/media/public`), `api` and `worker` (one image, two entrypoints), `admin` (Next.js standalone), `userbot`, and `postgres` and `redis` with no published ports. Hosts: `<domain>` Mini App, `api.<domain>` API + bot webhook, `admin.<domain>`, `media.<domain>`.
+
+GitHub Actions runs lint, typecheck, tests and the 27/30 search gate, then builds images to GHCR. Deploy is an SSH step: `docker compose pull`, migrations in a one-off `api` container, then `up -d`. `main` deploys to staging; production deploys only from `v*` tags. A few seconds of restart are acceptable, because Telegram redelivers webhook updates. Hosts run Ubuntu 24.04 LTS with key-only SSH, `ufw` (22/80/443), `fail2ban` and `unattended-upgrades`. Apps log JSON with pino under Docker log rotation; errors and staff actions are also persisted in the DB (TZ §9).

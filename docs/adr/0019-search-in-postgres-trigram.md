@@ -1,0 +1,5 @@
+# Search runs in Postgres (pg_trgm + transliteration), gated by the 30 control queries in CI
+
+The catalog is small (tens to a few hundred fragrances), so we add no search service. Each fragrance gets a search document (name, aliases, original brand, notes RU/UZ, family) normalised to a Latin skeleton: lower case, apostrophes dropped, Cyrillic transliterated (`мегамаре` → `megamare`, `уд` → `ud`), Uzbek digraphs unified. Queries go through the same normalisation. Ranking: exact or prefix match on name/alias first, then trigram similarity on name and aliases (×3), brand (×1.5), notes and family (×1); weights are settings. Suggestions start at 2 characters, debounced 150 ms, top 5.
+
+The TZ acceptance (expected fragrance in the top 3 for ≥ 27 of 30 control queries) is an automated test on the seed catalog that runs in CI and fails the build below 27/30. Until the customer sends the agreed list we use 30 provisional queries of our own. Meilisearch or Typesense is considered only if that test can't be passed; neither transliterates Cyrillic↔Latin, so normalisation stays ours either way.

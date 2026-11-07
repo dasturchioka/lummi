@@ -1,0 +1,256 @@
+# LUMMI Mini App — spec digest (TZ v1.11)
+
+English digest of `materials/tz/LUMMI_TZ_MiniApp_v1.11.pdf` (Russian, 13 pages; text dump in `materials/tz/LUMMI_TZ_MiniApp_v1.11.txt`). The PDF is authoritative: when a new TZ version arrives, re-diff it against this file. `§` numbers below are TZ sections.
+
+Values in `[brackets]` are TZ placeholders or defaults still to be confirmed (tracked in `docs/open-questions.md`). Every value in a rules table is **admin-configurable** ("меняется в админке"); store them as settings, not constants.
+
+## §1–2 Goal and global requirements
+
+- Customer opens the LUMMI shop inside Telegram, picks fragrance + volume, orders BTS postal delivery, pays by **card transfer + receipt upload**. Click/Payme are out of scope. Orders go to managers instantly; customer gets status notifications; owner manages catalog, prices, orders in the admin panel.
+- Audience: Uzbekistan, mostly mobile. Traffic: Instagram, Telegram channel, in-store stands (QR), Uzum.
+- Languages: Russian + Uzbek (Latin). Default = user's Telegram language; switch in profile.
+- Design strictly per brandbook (tokens in `CLAUDE.md`). Support Telegram light and dark themes.
+- Currency: so'm, formatted `100 000 сум` (narrow-space thousands).
+- Responsive from 360 px; iOS, Android, Telegram Desktop.
+- First screen < 2 s on 4G; images WebP, lazy-loaded.
+- A fragrance is identified by its **name**. No `No.XXX` numbers anywhere. An internal product code exists for import/accounting and is never shown to customers.
+- Every list/screen has states: loading, empty, nothing found, out of stock, network error with "Повторить" (retry).
+
+## §3 Mini App screens
+
+### 3.1 Home
+Banner slider (managed in admin) · quick sections Homme / Femme / Unisex / Наборы (sets) · "Топ продаж" (auto) and "Новинки" (admin checkbox) blocks · search at the top.
+
+### 3.2 Catalog
+- **Search**, one field: by name ("Megamare") and by notes ("ваниль", "уд", "бергамот"). Must tolerate typos and abbreviations ("мегамаре", "megamar"), Cyrillic ↔ Latin, with suggestions while typing. Admin can add name spelling variants (aliases).
+- **Search acceptance**: customer and contractor agree on 30 control queries before start; the expected fragrance must be in the top 3 for ≥ 27 of them.
+- Filters: gender (Homme/Femme/Unisex), family (woody, floral, fresh, citrus, oriental, gourmand…), volume, price, season.
+- Sort: top sales (default), new, price ↑, price ↓. Top sales = auto, by **paid** orders over the last `[30]` days; admin can pin fragrances to the top.
+- List card: photo, name, type, 3 main notes, price "от …" (from), "+" button.
+
+### 3.3 Product card
+- Gallery — its own photo per volume.
+- Name, type (HOMME/FEMME/UNISEX), family; notes pyramid top / heart / base; description RU/UZ; characteristics: longevity, sillage, season, time of day.
+- Volume selector 10 / 30 / 50 ml → price and stock change.
+- "В корзину" (add to cart), "Купить сейчас" (buy now), "Поделиться" (share link opens this product).
+- "Купить на Uzum": per-fragrance URL from admin; hidden when empty.
+- "Похожие ароматы" (similar): same family **and** type, in stock, max 6.
+- Mandatory disclaimer `[text to approve: «Аромат LUMMI по мотивам, не оригинальный парфюм»]`. Never use original brands' logos or photos.
+
+### 3.4 Sets
+- **Discovery set** 5 × 10 ml at fixed `[price]` — behaves as a regular product; its composition is set in admin.
+- **Set builder**: customer picks 5 *different* in-stock fragrances at 10 ml. Price = Discovery set price (admin), independent of the picks.
+
+**Full-size discount after a set** — the system remembers a customer's set fragrances and gives 20% when they buy one of them full-size:
+
+| Rule | Value |
+|---|---|
+| Qualifying sets | Builder sets and the ready Discovery set |
+| Right appears | When the order containing the set reaches "Доставлен" (delivered). Fragrances are saved to the customer account (keyed by phone), visible in Profile → "Мои наборы" |
+| Discount | 20% on one bottle of one fragrance from the set; delivery excluded |
+| Full size | 30 ml and 50 ml |
+| Limit | One set = one discount. After use the right for that set closes, even if other set fragrances remain. A new set grants a new right |
+| Validity | 30 days from the set order reaching "Доставлен" |
+| Reminders | Bot reminds 7 days and 1 day before expiry if unused. If the bot is blocked, the discount stays visible in profile |
+| Display | Eligible product card shows the discounted price + "Скидка за набор" label; applied automatically in cart |
+| Stacking | Does not stack with promo code or birthday coupon — one discount per order, customer chooses |
+| Free-delivery threshold | Computed on items **before** the set discount. (Promo code: threshold computed **after** discount. Birthday coupon: `[before / after]`) |
+| Cancel / return | If the discounted order is cancelled/returned, the right is restored within its validity. If the set order itself is cancelled/returned, the right never appears or is closed |
+
+### 3.5 Cart
+Change quantity, remove, promo code, total incl. delivery. Cart persists across app closes. An item that went out of stock is flagged and excluded from the order.
+
+### 3.6 Checkout
+1. Name; phone via Telegram "share contact" button or typed.
+2. Date of birth (optional, see 3.8).
+3. Fulfilment: **only** BTS postal delivery across Uzbekistan; customer-facing ETA "до 48 часов"; price by region.
+4. Address: region (list), city/district, street, house, landmark + map pin (geolocation). *Superseded: delivery goes to a BTS pickup point, so street/house/map pin need rethinking. See "Changes agreed after TZ v1.11".*
+5. Order comment.
+6. Total: items + delivery − discount → "Перейти к оплате".
+7. Payment screen: card number with "Скопировать" (copy), recipient, exact amount, order number, receipt upload → "Отправить чек".
+
+Name, phone, birthday are asked on the first order; catalog works without registration. Data-processing consent (incl. birthday) and bot write permission are requested on the first order.
+
+### 3.7 Orders and profile
+Order history with status and "Повторить заказ" (repeat order). Profile: language, phone, saved addresses, birthday coupon, "Мои наборы" + set discount. Info pages: About, Delivery & payment, Returns, FAQ, Contacts, Public offer (drafts in TZ appendix).
+
+### 3.8 Birthday
+
+| Rule | Value |
+|---|---|
+| Discount | 20% on items, delivery excluded |
+| Coupon sent | 3 days before birthday at 10:00 Asia/Tashkent: bot message + coupon in profile |
+| Validity | From 3 days before to 7 days after the birthday |
+| Abuse guard | Date entered once; only admin can change it. First coupon no earlier than 14 days after the date was entered. One phone = one account |
+| Limits | Once per calendar year, one order. Max discount `[amount]` so'm |
+| 29 Feb | In non-leap years treated as 28 Feb |
+| Bot blocked | Coupon stays in profile; report shows "не доставлено" (not delivered) |
+
+## §4 Payment
+
+### Card transfer + receipt (manual baseline)
+1. On order creation stock is **reserved**; payment status "Ожидает оплаты" (awaiting payment).
+2. Customer sees card details + exact amount, transfers, uploads a screenshot or file (JPG, PNG, PDF, ≤ 10 MB).
+3. Status → "Чек на проверке" (receipt under review); receipt goes to managers.
+4. Manager compares amount/time with the actual account credit → "Оплата подтверждена" (confirmed) or "Чек не принят" (rejected) with a reason.
+
+- Ground truth is money on the account, never the screenshot. Unconfirmed orders are not assembled or shipped.
+- Reserve: no receipt within `12 h` (admin) → auto-cancel; stock and promo usage are returned. An uploaded receipt holds the reserve until the manager decides (so payment never "expires" overnight).
+- After rejection the customer may re-upload while the reserve window is open.
+- Same receipt file re-uploaded on another order → warning to manager.
+- Card details editable only by owner; changes go to the audit log. Card `[number + holder; must belong to IP/LLC — confirm with accountant]`.
+- No fiscal receipt is generated by the system `[procedure: customer's accountant]`. Refunds are manual to the customer's card, with amount + date recorded on the order.
+
+### AI auto-verification (scope to confirm — see open questions)
+Payment is confirmed automatically when AI-read receipt fields match a Humo credit notification; a manager steps in only on mismatch or low confidence.
+
+1. Customer sends the receipt screenshot to @Lummiuz_bot or uploads it on the payment screen — both feed one check.
+2. Bot links the receipt to an order: automatically if the customer has exactly one "awaiting payment" order, otherwise the customer picks the order by button.
+3. Humo's bot posts every card operation into a private Telegram group "Поступления" (credits) `[to create]`.
+4. **Bots cannot see other bots' messages**, so a **service Telegram user account** (separate number, owned by customer) reads Humo notifications via the Telegram API (MTProto userbot) and forwards them to the server. If Humo's bot can't post into a group, the service session reads them where they arrive `[verify on connect]`.
+5. Each notification is stored as a credit: amount, datetime, sender (name or last-4), operation id — whatever the message has. Debits and refunds are ignored.
+6. AI reads the screenshot: amount, datetime, recipient last-4, recipient name, sender, operation id, bank app.
+7. Match found → "Оплата подтверждена", customer notified, order goes to assembly. No match / unsure → "Ручная проверка" (manual review), receipt goes to managers.
+
+| Reconciliation rule | Value |
+|---|---|
+| Amount | Receipt = credit = order total, exact to the so'm. Any difference → manual |
+| Time | Receipt vs credit differ ≤ `[5 min]`; credit not earlier than order creation |
+| Recipient | Receipt last-4 = shop card; if absent on the screenshot, check recipient name |
+| Operation id | If present on both, must match — strongest signal |
+| One credit, one order | A credit already linked to an order is never reused |
+| Multiple candidates | ≥ 2 credits fit (same amount, same time) → manual |
+| AI confidence | ≥ `[90%]` per required field; unreadable field or cropped screenshot → manual |
+| Duplicate receipt | Same file or same operation id on another order → manual, tagged "Повторный чек" |
+| No credit | None within `[10 min]` of the receipt → manual; if it arrives later, the system re-matches until a manager decides |
+
+- AI may only **confirm**. Only a manager can reject (with reason, §6).
+- Manual-review post in the orders group carries: receipt, candidate credits, reason ("сумма не совпала", "нет поступления", "несколько поступлений", "ИИ не уверен", "повторный чек").
+- Order card shows who confirmed: "ИИ" or the manager's name. Recognised fields, matched credit, and confidence are logged.
+- Unlinked credits appear in admin as "Не привязано"; manager can link manually.
+- Humo silent > `[30 min]` during working hours while receipts wait → all receipts go manual, owner is alerted.
+- Humo messages parsed by template; if the format changes, AI parses and owner gets a warning.
+- AI provider `[to choose]`, paid by customer per use. Only the receipt image is sent to AI — no phone or address.
+
+## §5 Telegram bot (@Lummiuz_bot)
+- `/start`: greeting in the customer's language + "Открыть магазин" button; bot menu button opens the Mini App.
+- Customer notifications: order created, receipt received, payment confirmed / receipt rejected, assembling, handed to BTS (with tracking number), delivered, cancelled.
+- `startapp` deep links for ads: open a specific product or set, prefill a promo code, attribute the source (Instagram, channel, stand QR).
+- "Написать менеджеру" → `[manager @username]`.
+- Bot messages only users who granted permission; permission requested on first order.
+
+**Post-order review**
+
+| Rule | Value |
+|---|---|
+| When | `[24 h]` after "Доставлен", once. Cancelled orders excluded. No re-reminders |
+| What | "Как вам заказ?" — rating 1–5 via buttons, then optional comment |
+| Low rating | 1–3 goes straight to the orders group: order number, phone, rating, comment |
+| Storage | On the order card and admin "Отзывы": list, filter by rating and date, average, Excel export |
+| Bot blocked | Not sent; review marked "не доставлено" |
+| Publishing | Private. Show on product card: `[yes / no]` |
+
+## §6 Orders for managers
+- Each new order → one private Telegram group `[to create]`: order number, items (name, volume, qty), total, receipt, customer, phone, address + map, comment.
+- Payment buttons: "Оплата подтверждена" / "Чек не принят". Responsible person `[who sees account credits]`.
+- Then status buttons: **Принят → Собирается → Передан в BTS → Доставлен / Отменён** (accepted → assembling → handed to BTS → delivered / cancelled). Customer notified automatically.
+- Cancel requires a reason: out of stock, customer refused, unreachable, payment not received, not collected at BTS. Stock and promo usage are returned.
+- Receipt unchecked > `[15 min]` in working hours → owner alerted.
+- Every cancel/status change in the group is logged with the staff member's name.
+- One warehouse, one stock. Uzum and store sales don't decrement app stock, so managers confirm availability per order; stock is updated manually or via Excel until REGOS (stage 2).
+
+## §7 Admin panel (all stage 1)
+
+| Section | Functions |
+|---|---|
+| Products | Add / edit / hide; Uzum link; name aliases; pin to Top sales; price + stock per volume; photos; hit / new flags; Excel import & update (template `LUMMI_Katalog_shablon.xlsx`, not yet received) |
+| Sets | Discovery set as product; builder settings; full-size discount rules |
+| Orders | List, filters (status, payment, date), order card with receipt, payment confirmation, reserve window, status change, BTS tracking number, refund mark, Excel export |
+| Customers | List, order history, total spend |
+| Reviews | Ratings + comments, average, send-delay setting, Excel export |
+| Marketing | Banners; promo codes (% or fixed, expiry, limits); birthday rules; broadcast to bot users |
+| Delivery | Tariff table region → price, customer ETA, free delivery threshold |
+| Reports | Promo codes & sources; sales by day; top fragrances and volumes; set discount (issued, used, net sales) |
+| Access | Roles: owner (everything), manager (orders + stock). No "marketer" role |
+
+**Promo codes**: fields — code, source (blogger, Instagram, channel), % or fixed, max discount, expiry, min order total, total limit, per-customer limit, new-customers-only, `startapp` link. One discount per order; computed on items excluding delivery; free-delivery threshold uses the total **after** promo discount; not applied to marked-down items unless enabled.
+
+**Promo report**: link opens (app opens via the code's `startapp`) · fulfilled orders (paid, "Доставлен", with code) · customers / new customers (unique phones / first fulfilled order) · total before discount (items of fulfilled orders, no delivery) · discount · net sales (before − discount) · average check (net / fulfilled) · conversion (fulfilled / opens; hidden for codes without a link). Filters: period, source, code. Excel export. No profit (no cost data).
+
+## §8 Delivery
+- Single warehouse in **Termez** (Surkhandarya). Only BTS postal delivery nationwide. No pickup, no Tashkent courier.
+- 14 regions, price per region `[to fill]`, ETA "до 48 часов" after handover to BTS, **free from 250 000 сум**. *Superseded: delivery goes to a BTS pickup point, at a flat 25 000 сум. See "Changes agreed after TZ v1.11".*
+- Manager enters the BTS tracking number manually; no BTS API in stage 1. Delayed order → customer sees tracking number + "Написать менеджеру".
+
+## §9 Technical requirements
+- Validate Telegram `initData` signature on the server. **Only the server computes prices and totals.**
+- Domain, hosting, bot, DB are registered to the customer, who gets all access. Source code handed over as a repo with a run guide.
+- Daily DB backup.
+- Receipts in private storage; accessible only to owner and managers.
+- Personal data per Uzbekistan law; recommended to host in Uzbekistan (final call by customer's lawyer).
+- Data-processing consent on first order, incl. birthday.
+- Stock reservation inside a DB transaction — two people can't buy the last unit.
+- Errors and staff action log are persisted.
+- Customer owns fragrance names, descriptions, photos and rights to them.
+- Asl Belgisi digital marking for perfume `[check with accountant]`; separate agreement if mandatory.
+- Stage 2: stock/sales sync with REGOS.
+
+## §10 Stages and acceptance
+- **Stage 1 (MVP), 14 calendar days** from project start + receipt of the "day 1" materials (§11): everything above — catalog, card, search/filters, cart, Discovery set, set builder + 20% set discount, reviews, broadcasts, full reports, Uzum button, checkout, BTS delivery, card payment with receipt check, bot, orders group, admin (products, orders, Excel import), promo codes + report, birthday, RU/UZ, both themes.
+- **Stage 2**: REGOS, bonuses / cashback.
+
+| Days | Dates (day 1 = 2026-11-07) | Result |
+|---|---|---|
+| 1–2 | 11-07 – 11-08 | Screens approved, server, bot |
+| 3–7 | 11-09 – 11-13 | Catalog, search, stock, cart, registration, set builder |
+| 6–10 | 11-12 – 11-16 | Catalog + checkout demo; checkout, payment & receipts, statuses, Telegram group, orders panel, Excel import |
+| 9–11 | 11-15 – 11-17 | Promo codes, birthday, set discount, reviews, broadcasts, reports, admin panel |
+| 12–14 | 11-18 – 11-20 | Testing, data load, training, launch |
+
+**Acceptance checklist**: test orders to 3 regions via BTS with tracking entry · payment: confirm, reject, re-upload, reserve auto-cancel · 30 search queries · Discovery set and Uzum button · builder: set saved after "Доставлен", discount fires once, reminders at 7 and 1 days, delivery threshold computed before discount · review question + 1–3 rating in group · broadcast · promo: valid, expired, exhausted · birthday coupon arrives exactly once · report numbers match a manual calculation over 20 test orders · iPhone + Android, light + dark · both languages. Customer reviews the build within `[3 working days]`; no remarks = accepted.
+
+**Warranty**: 60 days of bug fixes after launch (bug = deviation from TZ); critical (orders failing) response ≤ 24 h.
+
+## §12 Developer answers (stack and hosting)
+- Stack: **React + Vite** (Mini App), **grammY** (bot), **NestJS + PostgreSQL + Redis** (server), **Next.js** (admin).
+- Hosting paid by customer; target: Tashkent VPS 4 vCPU / 4 GB / 100 GB SSD (~$59/mo, PRO-DATA). Domain yearly. Total ~$60–70/mo. No other paid services in stage 1 (the AI receipt provider would be extra, pay-per-use).
+
+## Changes agreed after TZ v1.11
+
+Customer decisions from the project chat. They override the TZ sections they name.
+
+- **2026-11-06 — Delivery (§3.6, §8).** BTS delivers to a **BTS pickup point** ("BTS punktigacha"), not to the door. Delivery costs a **flat 25 000 сум for every region**. Keep the region → price table as an admin setting with every row at 25 000, so per-region pricing can return without code changes. Free delivery from 250 000 сум is unchanged. BTS point selection and address fields: see the 2026-11-07 entry below.
+- **2026-11-07 — Humo credit feed (§4 AI auto-verification, steps 3–4).** Humo notifications don't reach a group. They arrive as messages from the official Humo bot in **the customer's own Telegram account**. A userbot (mtcute session logged into that account) therefore listens **only to the Humo bot chat** and forwards each notification to a group. Our recommendation: it also writes the parsed credit straight into our DB, so matching doesn't depend on re-reading the group. Sample notification (values anonymised), with 3 inline buttons under it:
+  ```
+  💸 To'lov
+  ➖ 75.750,00 UZS
+  📍 CLICK P2P HUMO2UZCAR
+  💳 HUMOCARD *1234
+  🕓 20:54 22.06.2025
+  💰 1.234.567,89 UZS
+  ```
+  Lines: type, signed amount (`.` thousands, `,` tiyin), counterparty, card mask, `HH:MM DD.MM.YYYY` Tashkent time (no seconds), balance after. This sample is a debit ("➖"), and debits are ignored. **No operation id and no sender name**, so the TZ's strongest match signal is missing. Matching relies on amount + time + card last-4, and two same-amount payments inside the time window will go to manual review.
+- **2026-11-07 — Stage 1 clock started.** Day 1 = 2026-11-07, day 14 = 2026-11-20 (dates in the §10 plan above).
+- **2026-11-07 — Account phone (§3.6, §3.4, §3.8). Internal decision, not from the customer.** The customer's phone comes only from Telegram "share contact", mandatory on the first order, unique per customer. A typed phone is the recipient's phone for BTS pickup and grants no rights. See ADR 0004.
+- **2026-11-07 — Returns and refunds (§4, §6, §7). Internal decision.** New terminal status «Возвращён» after «Доставлен» (whole order came back, set in admin only, reason required, per-line back-to-stock flag). Refund is a separate money record on any paid order, may be partial, never changes status. See ADR 0006.
+- **2026-11-07 — Free-delivery threshold base (§3.4, §7). Internal decision.** The base ("before" or "after" the discount) is an admin setting per discount source. Defaults: upgrade right (set and 10 ml) before, promo code after, birthday coupon after (to confirm). The nudge "add N so'm" uses the base of the discount currently applied and comes from the server quote.
+- **2026-11-07 — Promo code counting (§7). Internal clarification.** "New customers only" = the customer has no other non-cancelled order (awaiting payment, delivered and returned all count). The report's "new customers" metric keeps the TZ definition (first fulfilled order). Total and per-customer limits count non-voided uses; a cancelled order voids its use. Codes are case-insensitive, trimmed, unique, stored upper-case. Expiry = 23:59:59 Asia/Tashkent on the given date. An invalid prefilled code shows its reason in the cart and never blocks the order; the link's source attribution is kept.
+- **2026-11-07 — Statuses (§4, §6). Internal decision.** One linear order status; receipts are separate records with their own verdict ("Ручная проверка" is a receipt verdict, the customer sees «Чек на проверке»). «Принят» = manager confirmed the bottles are on the shelf. The customer may cancel their own order in the app only while «Ожидает оплаты». See ADR 0011.
+- **2026-11-07 — Payment matching (§4 reconciliation table). Internal decision.** No unique per-order amount. AI confirms when receipt amount = unclaimed Humo credit amount = order total, recipient card is the shop's, and times are within the match window. With several fitting credits the closest in time is taken (TZ said: manual). Goal: no human in payment confirmation. Accepted risk recorded in ADR 0012.
+- **2026-11-07 — Receipt without a credit (§4). Internal decision.** Not sent to a manager (TZ said: manual after 10 min). After the wait window (default 2 h) the receipt is marked "payment not found", the order returns to «Ожидает оплаты» and the customer is asked to re-upload; if the reserve has run out the order is cancelled. Timers pause while Humo is silent or the userbot is down. Only a manager can reject. See ADR 0012.
+- **2026-11-07 — Receipt AI (§4 steps 6–7, confidence row). Internal decision.** TypeSafe, with OpenAI Decisions as fallback. No field extraction: the AI answers yes/no questions (is a receipt, amount = order total, recipient = shop card) and picks the receipt's date-time among candidate credits. Thresholds are admin settings (P ≥ 0.8, choice confidence ≥ 0.6) instead of "90% per field". PDF/WebP are converted to PNG/JPEG before sending. See ADR 0013.
+- **2026-11-07 — Payment details (§4, §5). Internal decisions.** Receipts sent to the bot attach to the customer's only open order, otherwise the customer picks the order by button; JPG/PNG/PDF/WebP ≤ 10 MB. Duplicate receipts (SHA-256 or perceptual hash already on another order) skip the AI, are tagged «Повторный чек» with an info post in the group, and follow the "payment not found" path. New: the bot reminds N hours (default 2) before a reserve auto-cancels if no receipt was uploaded. Payment screen: card number and amount with copy buttons, holder, order number, «Оплатите до …», upload; checkout is closed while no card is set.
+- **2026-11-07 — BTS point selection (§3.6, §3.7, §8). Internal decision; closes the question left open on 2026-11-06.** We keep a BTS points table (code, region, city/district, address, landmark, hours, active), seeded once from the public bts.uz offices page and fully managed in the admin panel (owner and manager: add, edit, hide). Checkout: region → city/district → point, with search; «Не нашёл свой пункт» falls back to region + free text, flagged on the order. The delivery region comes from the point. Remaining fields: recipient name and phone, BTS point, comment; street, house and map pin are dropped. Profile "saved addresses" become "Мои пункты BTS" (recipient + point). The order snapshots the point (code, address).
+- **2026-11-07 — Cart (§3.3, §3.5, §3.7). Internal clarification.** The cart is server-side, per customer (same on phone and Desktop), and holds the chosen discount and any link-prefilled promo code. Lines: volume × qty, Discovery set × qty, builder set (5 fragrances) × qty; qty never exceeds available; sold-out lines stay flagged «Нет в наличии» and are left out of the quote. «Купить сейчас» opens a one-item checkout and leaves the cart untouched. «Повторить заказ» adds the old lines at current prices, skipping what is unavailable («2 из 3 товаров добавлены»). The cart never expires; prices are re-quoted on every open.
+- **2026-11-07 — Orders group (§6). Internal decision.** The "Lummi" group becomes a supergroup with topics: Заказы, Поступления (Humo forwards), Отзывы (ratings 1–3), Системные (alerts, payment not found, duplicate receipts); the bot follows `migrate_to_chat_id`. An order is posted when its payment is confirmed, not at creation (TZ said instantly; unpaid orders stay in admin). One card message per order, edited on every change (status, items, discount, total, BTS point, recipient, customer link, comment, history «✅ Принят — <name>, 14:32»); the receipt is a reply to it. Buttons show only the next step plus «Отменить»: «Передан в BTS» asks for the tracking number by ForceReply, «Отменить» asks for a TZ reason and a confirmation. Callback data carries the expected current status, so a second press gets «Уже изменено». Owner alerts go to Системные and to the owner's DM.
+- **2026-11-07 — Customer messages and broadcasts (§5, §7). Internal decision.** Write access is requested with `requestWriteAccess()` in the same step as sharing the contact on the first order; refusing doesn't block the order (statuses stay visible in the app, customer flagged `bot_blocked`). Messages, in the customer's language with 1–2 emoji: order created, receipt received, payment confirmed / receipt rejected (reason), Собирается, Передан в BTS (tracking), Доставлен, Отменён (reason), payment not found, reserve reminder, set-discount reminders at 7 and 1 days, birthday coupon, review request. No message for «Принят». Each carries «Открыть заказ» (web_app) and, where useful, «Написать менеджеру». Broadcasts (owner only): RU + UZ text, optional image and `startapp` button; audience all / RU / UZ; «Отправить себе» test first; each customer gets their language; result counts sent / blocked / failed. Reviews per TZ; ratings 1–3 go to the Отзывы topic.
+- **2026-11-07 — Source code (§9).** The customer doesn't need the repository handed over (per Sardor); it stays a private repo with us. The customer still gets the run guide and all access to their server, bot and domain. See ADR 0026.
+- **2026-11-07 — Excel import/export (§7). Internal decision.** We write the template `LUMMI_Katalog.xlsx` (`exceljs`): sheets Ароматы (internal code, name, original brand, type, family, season, time of day, longevity, sillage, RU/UZ description, notes by level, aliases, Uzum link, hit/new, hidden), Объёмы (internal code, volume, price, sale price and end, on hand), Справочник (families, notes RU/UZ). Upsert by internal code; nothing is deleted by import (hide via the column). A dry run shows new/changed counts, row/column errors and on-hand vs reserve warnings; «Применить» writes everything in one transaction or nothing. Photos are uploaded per volume in admin, not via Excel. Catalog export uses the same template; orders, reviews and reports export per TZ. The seed file is written in this template and doubles as the customer's example.
+- **2026-11-06 — Free-delivery nudge (§3.5).** The customer wants an Uzum-style prompt. Example: a 10 ml costs 69 000, so the cart tells the customer to add N so'm more for free delivery to the BTS point. Shown in the cart, and optionally on the product card or as a mini-bar, until the 250 000 threshold is reached. The threshold follows the same discount rules as §3.4 and §7. The customer left the UX to us ("uyog'ini o'zingiz qilib ko'rasiz").
+- **2026-11-06 — Payment card.** The card isn't opened yet. Ship with an empty or placeholder card, editable by the owner in admin (§4).
+- **2026-11-06 — Prices.** Use placeholder prices until the customer confirms real ones, expected after 2026-11-09. That includes the Discovery set.
+- **2026-11-06 — Photos.** Bottle photos stay as delivered (Russian text baked in), and the gallery switches with the selected volume. Details in `CLAUDE.md` → Design tokens.
+- **2026-11-06 — Theme** follows Telegram (customer: "Standart rejim").
+
+## Appendix — app texts (drafts)
+About, FAQ, Returns, Delivery & payment drafts in RU + UZ are in the TZ appendix (last page of the txt dump). Public offer comes from the customer's lawyer. Returns draft: damaged / leaking / wrong item → contact within `[3]` days with a photo → replacement or refund; opened perfume of proper quality is not returnable.

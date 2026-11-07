@@ -1,0 +1,5 @@
+# Refund is a money record; "Returned" is a separate terminal order status
+
+TZ uses "возврат" for two different things and has no status for it. We split them. A **Refund** is a money record on any paid order (amount, date, reason, actor). It may be partial, e.g. one leaking bottle out of three, or a paid order later cancelled. It never changes the order status or any discount source, and reports subtract it from net sales. **Returned** («Возвращён») is a new terminal status, reachable only from «Доставлен», meaning the whole order came back. Owner or manager sets it in the admin panel only (not by a group button), with a mandatory reason and a per-line "back to stock" flag, since a leaking bottle doesn't go back. Only this status triggers the restore and close rules of ADR 0005, and because "fulfilled" in reports means «Доставлен», returned orders drop out of the promo report by themselves.
+
+Replacements of a faulty bottle are not modelled in stage 1: the manager adjusts stock by hand and notes it on the order. "Не забрал в BTS" stays a cancellation reason (Передан в BTS → Отменён), set when the parcel is back in Termez; stock returns then.
