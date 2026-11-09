@@ -14,8 +14,8 @@ import {
   type FragranceAdmin,
   type FragranceInput,
 } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, X } from 'lucide-react';
+import { formatMoney, type Language } from '@lummi/i18n';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, CircleAlert, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -134,6 +134,11 @@ function message(t: AdminMessages, e?: FieldError): string | undefined {
 const num = (v: unknown) => (v === '' || v == null ? Number.NaN : Number(v));
 const numOrNull = (v: unknown) => (v === '' || v == null ? null : Number(v));
 const textOrNull = (v: unknown) => (v ? String(v) : null);
+/** A typed price read back with its thousands («1250000» -> «1 250 000 сум»), once it has some. */
+const priceEcho = (v: unknown, language: Language) =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 1000
+    ? formatMoney(v, language)
+    : undefined;
 
 /**
  * Create and edit a fragrance: every field, RU/UZ side by side, notes by level from the
@@ -297,17 +302,28 @@ export function FragranceForm({
   };
 
   return (
-    <form onSubmit={submit} noValidate>
-      <Link
-        href="/catalog"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" strokeWidth={1.5} aria-hidden />
-        {c.back}
-      </Link>
+    // fields focused by a failed save scroll clear of the top bar and the sticky save bar
+    // autofill off: a field named «name» must not offer the owner's own name
+    <form
+      onSubmit={submit}
+      noValidate
+      autoComplete="off"
+      className="[&_:is(input,select,textarea)]:scroll-mt-24 [&_:is(input,select,textarea)]:scroll-mb-28"
+    >
       <PageHeader
         title={initial ? initial.name : c.newTitle}
         description={code ? `${c.productCode}: ${code}. ${c.productCodeHint}` : undefined}
+        actions={
+          <div className="flex items-center gap-3">
+            {initial?.hidden && <Badge>{c.hidden}</Badge>}
+            <Button variant="outline" asChild>
+              <Link href="/catalog">
+                <ArrowLeft strokeWidth={1.5} aria-hidden />
+                {c.back}
+              </Link>
+            </Button>
+          </div>
+        }
       />
 
       <div className="grid gap-4">
@@ -452,11 +468,17 @@ export function FragranceForm({
                             ids.filter((x) => x !== id),
                           )
                         }
-                        className="inline-flex h-9 items-center gap-1.5 rounded-full bg-field pr-2.5 pl-3.5 text-sm transition-colors hover:bg-stone/60"
+                        className="group inline-flex h-9 max-w-full items-center gap-1.5 rounded-full bg-field pr-2.5 pl-3.5 text-left text-sm transition-[background-color,transform] duration-150 ease-out hover:bg-stone/60 active:scale-[0.97]"
                         aria-label={`${c.remove}: ${noteById.get(id) ? noteName(noteById.get(id)!) : id}`}
                       >
-                        {noteById.get(id) ? noteName(noteById.get(id)!) : id}
-                        <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+                        <span className="min-w-0 truncate">
+                          {noteById.get(id) ? noteName(noteById.get(id)!) : id}
+                        </span>
+                        <X
+                          className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-foreground"
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
                       </button>
                     </li>
                   ))}
@@ -499,8 +521,8 @@ export function FragranceForm({
                   key={id}
                   className="flex items-center gap-2 rounded-button bg-field py-1 pr-1 pl-3.5 text-sm"
                 >
-                  <span className="w-5 tabular-nums text-muted-foreground">{i + 1}</span>
-                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                  <span className="w-5 shrink-0 tabular-nums text-muted-foreground">{i + 1}</span>
+                  <span className="min-w-0 flex-1 py-1.5 break-words">
                     {others.find((o) => o.id === id)?.name ?? id}
                   </span>
                   <Button
@@ -560,43 +582,58 @@ export function FragranceForm({
         </Section>
 
         <Section title={c.sectionVolumes}>
-          <div className="grid gap-4 lg:grid-cols-3">
+          {/* three columns from 1024 px, split by hairlines (no box inside the card) */}
+          <div className="grid divide-y divide-border lg:-mx-6 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
             {VOLUME_MLS.map((ml, i) => {
               const on = enabled[ml];
               const locked = !!initial?.volumes.some((x) => x.ml === ml);
+              const typed = v.volumes[i]!;
               return (
                 <div
                   key={ml}
-                  className="grid content-start gap-3 rounded-button p-4 shadow-[inset_0_0_0_1px_var(--hairline-strong)]"
+                  className="@container grid scroll-mt-24 content-start gap-4 py-5 first:pt-0 last:pb-0 lg:px-6 lg:py-0"
                   data-volume={ml}
                 >
-                  <label className="flex items-center gap-2.5 font-semibold">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-graphite"
-                      checked={on}
-                      disabled={locked}
-                      onChange={(e) => setEnabled((s) => ({ ...s, [ml]: e.target.checked }))}
-                    />
-                    {ml} {c.ml}
-                    <span className="sr-only"> · {c.volumeEnabled}</span>
-                  </label>
+                  <div className="flex min-h-6 items-center justify-between gap-3">
+                    <h3 className="text-[15px] font-semibold tabular-nums">
+                      {ml} {c.ml}
+                    </h3>
+                    {/* a volume that is already sold stays: only a new one can be switched off */}
+                    {!locked && (
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="size-[18px] accent-graphite"
+                          checked={on}
+                          onChange={(e) => setEnabled((s) => ({ ...s, [ml]: e.target.checked }))}
+                        />
+                        {c.volumeEnabled}
+                      </label>
+                    )}
+                  </div>
                   {on && (
                     <>
-                      <Field id={`f-price-${ml}`} label={c.price} error={volumeErr(i, 'price')}>
+                      <Field
+                        id={`f-price-${ml}`}
+                        label={c.price}
+                        hint={priceEcho(typed.price, language)}
+                        error={volumeErr(i, 'price')}
+                      >
                         <Input
                           inputMode="numeric"
+                          className="tabular-nums"
                           {...reg(`volumes.${i}.price`, { setValueAs: num })}
                         />
                       </Field>
                       <Field
                         id={`f-sale-${ml}`}
                         label={c.salePrice}
-                        hint={c.salePriceHint}
+                        hint={priceEcho(typed.salePrice, language) ?? c.salePriceHint}
                         error={volumeErr(i, 'salePrice')}
                       >
                         <Input
                           inputMode="numeric"
+                          className="tabular-nums"
                           {...reg(`volumes.${i}.salePrice`, { setValueAs: numOrNull })}
                         />
                       </Field>
@@ -608,6 +645,7 @@ export function FragranceForm({
                       >
                         <Input
                           type="date"
+                          className="tabular-nums"
                           {...reg(`volumes.${i}.saleEndsOn`, { setValueAs: textOrNull })}
                         />
                       </Field>
@@ -619,13 +657,14 @@ export function FragranceForm({
                       >
                         <Input
                           inputMode="numeric"
+                          className="tabular-nums"
                           {...reg(`volumes.${i}.onHand`, { setValueAs: num })}
                         />
                       </Field>
-                      {(reservedByMl[ml] ?? 0) > v.volumes[i]!.onHand && (
-                        <p role="status" className="text-xs leading-snug font-medium">
-                          {c.belowReserve} {fill(c.reserved, { n: String(reservedByMl[ml]) })}
-                        </p>
+                      {(reservedByMl[ml] ?? 0) > typed.onHand && (
+                        <Notice title={c.belowReserve}>
+                          {fill(c.reserved, { n: String(reservedByMl[ml]) })}
+                        </Notice>
                       )}
                       <PhotoUpload
                         ml={ml}
@@ -649,29 +688,41 @@ export function FragranceForm({
         </Section>
       </div>
 
-      <div className="sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center gap-3 bg-background/95 px-4 py-3 backdrop-blur sm:-mx-0 sm:px-0">
-        <Button type="submit" loading={pending} className="max-sm:w-full">
+      {/* the save bar: a Milk dock with a top hairline, edge to edge of the content column */}
+      <div className="sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <Button type="submit" loading={pending} className="max-sm:w-full sm:min-w-40">
           {c.save}
         </Button>
         {banner && (
           <p
+            key={banner.text}
             role={banner.kind === 'error' ? 'alert' : 'status'}
-            className="flex items-center gap-1.5 text-sm font-medium"
+            className="flex min-w-0 flex-1 animate-[overlay-in_200ms_var(--ease-out)] items-start gap-2 text-sm leading-snug font-medium text-pretty"
           >
-            {banner.kind === 'ok' && <Check className="size-4" strokeWidth={1.5} aria-hidden />}
+            {banner.kind === 'ok' ? (
+              <Check
+                className="mt-px size-4 shrink-0 text-sage-ink"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+            ) : (
+              <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+            )}
             {banner.text}
           </p>
         )}
-        {initial && initial.hidden && <Badge>{c.hidden}</Badge>}
       </div>
     </form>
   );
 }
 
+/** A card per part of the form, headed in the DESIGN.md Section role (Tenor caps, 13 px). */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Card className="grid gap-5 p-4 sm:p-6">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
+    <Card className="grid scroll-mt-24 gap-5 p-4 sm:p-6">
+      <h2 className="font-display text-[13px] leading-[1.35] tracking-[0.2em] uppercase">
+        {title}
+      </h2>
       {children}
     </Card>
   );
@@ -683,11 +734,11 @@ function Toggle({
   ...props
 }: { label: string; hint: string } & UseFormRegisterReturn) {
   return (
-    <label className="flex items-start gap-3">
-      <input type="checkbox" className="mt-1 size-4 accent-graphite" {...props} />
-      <span>
+    <label className="flex cursor-pointer items-start gap-3">
+      <input type="checkbox" className="mt-0.5 size-[18px] shrink-0 accent-graphite" {...props} />
+      <span className="min-w-0">
         <span className="block font-medium">{label}</span>
-        <span className="block text-[13px] text-muted-foreground">{hint}</span>
+        <span className="block text-[13px] text-pretty text-muted-foreground">{hint}</span>
       </span>
     </label>
   );

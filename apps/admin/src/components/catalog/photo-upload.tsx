@@ -1,10 +1,11 @@
 'use client';
 
 import { MAX_PHOTO_BYTES } from '@lummi/contracts';
-import { ImagePlus } from 'lucide-react';
+import { Check, CircleAlert, ImageOff, ImagePlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AdminMessages } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 import { photoUrl } from './photo';
 
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -12,7 +13,8 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /**
  * One volume's photo: the current 3:4 rendition (or the picked file) as a preview, and an upload
  * button. The file goes up as raw bytes; the server rechecks type, size and dimensions, so the
- * browser's checks here only save a round trip.
+ * browser's checks here only save a round trip. The preview sits beside the controls when the
+ * column has room (a phone, a tablet) and above them in the three-column desktop editor.
  */
 export function PhotoUpload({
   ml,
@@ -67,46 +69,74 @@ export function PhotoUpload({
   };
 
   const shown = preview ?? (hash ? photoUrl(hash, 400) : null);
+  const busy = state.kind === 'busy';
   return (
-    <div className="grid gap-2" data-photo={ml}>
+    <div className="grid gap-1.5" data-photo={ml}>
       <p className="text-[12.5px] font-medium text-muted-foreground">{c.photo}</p>
       {volumeId === null ? (
-        <p className="text-xs text-muted-foreground">{c.photoSaveFirst}</p>
+        <p className="text-xs text-pretty text-muted-foreground">{c.photoSaveFirst}</p>
       ) : (
-        <>
-          <div className="grid aspect-[3/4] w-32 place-items-center overflow-hidden rounded-button bg-field text-xs text-muted-foreground">
-            {shown ? <img src={shown} alt="" className="size-full object-cover" /> : c.noPhoto}
-          </div>
-          <input
-            ref={input}
-            type="file"
-            accept={TYPES.join(',')}
-            className="sr-only"
-            tabIndex={-1}
-            aria-label={`${c.photo} ${ml} ${c.ml}`}
-            onChange={(e) => {
-              void pick(e.target.files?.[0]);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit"
-            loading={state.kind === 'busy'}
-            onClick={() => input.current?.click()}
+        <div className="flex flex-col gap-3 @xs:flex-row @xs:items-start @xs:gap-4">
+          {/* DESIGN.md photo: 3:4, clipped to 8 px; dimmed while the new one goes up */}
+          <div
+            className={cn(
+              'grid aspect-[3/4] w-28 shrink-0 place-items-center overflow-hidden rounded-[8px] bg-field transition-opacity duration-200',
+              busy && 'opacity-60',
+            )}
           >
-            <ImagePlus strokeWidth={1.5} aria-hidden />
-            {shown ? c.photoReplace : c.photoChoose}
-          </Button>
-          <p className="text-xs text-muted-foreground">{c.photoHint}</p>
-          {state.text && state.kind !== 'busy' && (
-            <p role={state.kind === 'error' ? 'alert' : 'status'} className="text-xs font-medium">
-              {state.text}
-            </p>
-          )}
-        </>
+            {shown ? (
+              <img src={shown} alt="" className="size-full object-cover" decoding="async" />
+            ) : (
+              <span className="grid justify-items-center gap-1.5 px-2 text-center text-xs text-muted-foreground">
+                <ImageOff className="size-5" strokeWidth={1.5} aria-hidden />
+                {c.noPhoto}
+              </span>
+            )}
+          </div>
+          <div className="grid min-w-0 content-start justify-items-start gap-2">
+            <input
+              ref={input}
+              type="file"
+              accept={TYPES.join(',')}
+              className="sr-only"
+              tabIndex={-1}
+              aria-label={`${c.photo} ${ml} ${c.ml}`}
+              onChange={(e) => {
+                void pick(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              loading={busy}
+              onClick={() => input.current?.click()}
+            >
+              <ImagePlus strokeWidth={1.5} aria-hidden />
+              {shown ? c.photoReplace : c.photoChoose}
+            </Button>
+            <p className="text-xs text-pretty text-muted-foreground">{c.photoHint}</p>
+            {state.text && !busy && (
+              <p
+                key={state.text}
+                role={state.kind === 'error' ? 'alert' : 'status'}
+                className="flex animate-[overlay-in_200ms_var(--ease-out)] items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
+              >
+                {state.kind === 'error' ? (
+                  <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+                ) : (
+                  <Check
+                    className="size-3.5 shrink-0 text-sage-ink"
+                    strokeWidth={1.5}
+                    aria-hidden
+                  />
+                )}
+                {state.text}
+              </p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
