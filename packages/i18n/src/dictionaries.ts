@@ -8,6 +8,12 @@ export const ru = {
     loading: 'Загрузка',
     close: 'Закрыть',
   },
+  bot: {
+    greeting:
+      'Добро пожаловать в LUMMI.\nExtrait de Parfum по мотивам известных ароматов. Откройте магазин и выберите свой.',
+    openShop: 'Открыть магазин',
+    alertPrefix: 'Системное сообщение',
+  },
   errors: {
     generic: 'Что-то пошло не так. Попробуйте ещё раз.',
     sessionExpired: 'Сессия истекла. Откройте приложение заново.',
@@ -52,6 +58,12 @@ export const uz: Messages = {
     retry: 'Qayta urinish',
     loading: 'Yuklanmoqda',
     close: 'Yopish',
+  },
+  bot: {
+    greeting:
+      'LUMMI ga xush kelibsiz.\nMashhur atirlar asosidagi Extrait de Parfum. Doʻkonni oching va oʻzingizni tanlang.',
+    openShop: 'Doʻkonni ochish',
+    alertPrefix: 'Tizim xabari',
   },
   errors: {
     generic: 'Nimadir xato ketdi. Qaytadan urinib koʻring.',

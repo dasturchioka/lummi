@@ -1,3 +1,4 @@
+import { BotBlockedError } from '../../src/edges';
 import type {
   Clock,
   Edges,
@@ -24,7 +25,10 @@ export class FakeClock implements Clock {
 
 export class FakeTelegramSender implements TelegramSender {
   readonly sent: OutboundMessage[] = [];
+  /** Chats that answer 403, like a user who blocked the bot. */
+  readonly blockedChats = new Set<number>();
   async send(message: OutboundMessage): Promise<{ messageId: number }> {
+    if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
     this.sent.push(message);
     return { messageId: this.sent.length };
   }

@@ -6,3 +6,4 @@ dist/
 .turbo/
 package-lock.json
 packages/db/drizzle/
+*.md

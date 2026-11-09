@@ -10,9 +10,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:int": "vitest run --project integration"
+    "test:int": "vitest run --project integration",
+    "dev:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx --watch src/worker.ts",
+    "start:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/worker.ts"
   },
   "dependencies": {
+    "@grammyjs/auto-retry": "^2.0.2",
+    "@grammyjs/transformer-throttler": "^1.2.1",
     "@lummi/contracts": "*",
     "@lummi/db": "*",
     "@lummi/i18n": "*",
@@ -21,6 +25,9 @@
     "@nestjs/platform-express": "^11.2.9",
     "@ts-rest/core": "~3.52.1",
     "@ts-rest/nest": "~3.52.1",
+    "bullmq": "^6.7.2",
+    "grammy": "^1.46.0",
+    "ioredis": "^6.0.0",
     "jose": "^6.2.16",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -30,6 +37,7 @@
   "devDependencies": {
     "@lummi/config": "*",
     "@testcontainers/postgresql": "^12.2.1",
+    "@testcontainers/redis": "^12.2.1",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.23.1",
