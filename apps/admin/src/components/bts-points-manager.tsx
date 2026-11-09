@@ -6,7 +6,7 @@ import type { Language } from '@lummi/i18n';
 import { ChevronDown, MapPin, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -148,12 +148,16 @@ export function BtsPointsManager({
   const place = (p: AdminBtsPointDto) => (
     <MetaLine className="mt-0.5 text-small text-muted-foreground" parts={[region(p), p.city]} />
   );
+  /**
+   * The address, then one Muted line: the landmark and each part of the hours as « · » facts, so
+   * the line fills before it wraps and only ever breaks between two of them.
+   */
   const details = (p: AdminBtsPointDto) => (
     <>
       <p className="break-words">{p.address}</p>
       <MetaLine
         className="mt-0.5 text-small text-muted-foreground"
-        parts={[p.landmark, p.hours ? <Hours key="hours" text={p.hours} /> : null]}
+        parts={[p.landmark, ...hoursParts(p.hours)]}
       />
     </>
   );
@@ -311,7 +315,7 @@ export function BtsPointsManager({
               <THead>
                 <TR>
                   <TH>{t.btsPoints.code}</TH>
-                  <TH className="w-[30%]">{t.btsPoints.name}</TH>
+                  <TH className="w-[24%]">{t.btsPoints.name}</TH>
                   <TH>{t.btsPoints.address}</TH>
                   <TH className="w-px">{t.btsPoints.status}</TH>
                   <TH>
@@ -332,9 +336,12 @@ export function BtsPointsManager({
                     className="cursor-pointer [&>td]:py-3.5 [&>td]:align-top [&>td]:break-words"
                   >
                     <TD className="w-px whitespace-nowrap text-muted-foreground">{p.code}</TD>
-                    <TD className="min-w-[15rem]">
+                    <TD className="min-w-[12rem]">
                       {nameButton(p)}
-                      {place(p)}
+                      {/* the region repeats the Region filter: the city alone keeps the row to two lines */}
+                      <p className="mt-0.5 text-small break-words text-muted-foreground">
+                        {p.city}
+                      </p>
                     </TD>
                     <TD className="min-w-[16rem]">{details(p)}</TD>
                     <TD className="w-px whitespace-nowrap">{status(p)}</TD>
@@ -410,20 +417,24 @@ export function BtsPointsManager({
 }
 
 /**
- * Opening hours as BTS writes them ("Пн-Сб: 09:00-18:00; Вс: выходной; обед 13:00-14:00"): a line
- * breaks only between the parts, never inside a day range or a time range.
+ * Opening hours as BTS writes them ("Пн-Сб: 09:00-18:00; Вс: выходной; обед 13:00-14:00"), one
+ * part per day range, none of them broken inside a day range or a time range.
  */
-function Hours({ text }: { text: string }) {
-  const parts = text
+function hoursParts(text: string | null) {
+  if (!text) return [];
+  return text
     .replace(/(\d)-(\d)/g, '$1\u2011$2')
     .split(/;\s*/)
-    .filter(Boolean);
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {i > 0 ? '; ' : null}
-      {part.length <= 24 ? <span className="whitespace-nowrap">{part}</span> : part}
-    </Fragment>
-  ));
+    .filter(Boolean)
+    .map((part, i) =>
+      part.length <= 24 ? (
+        <span key={i} className="whitespace-nowrap">
+          {part}
+        </span>
+      ) : (
+        part
+      ),
+    );
 }
 
 /**
