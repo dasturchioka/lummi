@@ -1,5 +1,6 @@
 import { usePrefs } from '../lib/prefs';
 import { CardList, ListRow } from '../ui/Card';
+import { ContrastIcon, GlobeIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -14,7 +15,7 @@ export function Profile() {
     return (
       <Screen>
         <ScreenHeader title={t.profile.title} />
-        <ErrorState onRetry={customerQuery.refetch} />
+        <ErrorState fill onRetry={customerQuery.refetch} retrying={customerQuery.isFetching} />
       </Screen>
     );
   }
@@ -23,27 +24,36 @@ export function Profile() {
   return (
     <Screen>
       <ScreenHeader title={t.profile.title} />
-      <div className="mb-[var(--section)] flex items-center gap-4">
-        <div className="grid size-14 shrink-0 place-items-center rounded-pill bg-block text-ink">
-          <Monogram size={28} />
+      <div className="mb-6 flex min-h-14 items-center gap-4">
+        <div
+          aria-hidden="true"
+          className="grid size-14 shrink-0 place-items-center rounded-pill bg-block text-ink"
+        >
+          <Monogram size={30} />
         </div>
         {customer ? (
           <div className="min-w-0">
-            <p className="type-body truncate font-semibold">{name}</p>
+            {/* Telegram names run to 64 + 64 characters: wrap to two lines, never cut mid-name. */}
+            <p className="type-heading line-clamp-2 [overflow-wrap:anywhere]">
+              {name || t.profile.guest}
+            </p>
             {customer.username ? (
-              <p className="type-small truncate text-muted">@{customer.username}</p>
+              <p className="type-small mt-0.5 text-muted [overflow-wrap:anywhere]">
+                @{customer.username}
+              </p>
             ) : null}
           </div>
         ) : (
           <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-24" />
           </div>
         )}
       </div>
       <CardList>
         <ListRow
           id="row-language"
+          leading={<GlobeIcon size={20} />}
           label={t.profile.language}
           trailing={
             <Segmented
@@ -59,6 +69,7 @@ export function Profile() {
         />
         <ListRow
           id="row-theme"
+          leading={<ContrastIcon size={20} />}
           label={t.profile.theme}
           trailing={
             <Segmented

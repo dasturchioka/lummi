@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useSyncExternalStore } from 'react';
 import { session } from '../lib/api';
 import { PrefsProvider, usePrefs } from '../lib/prefs';
+import { Screen } from '../ui/Screen';
 import { EmptyState, ErrorState } from '../ui/States';
 import { router } from './router';
 
@@ -16,15 +17,22 @@ function Gate() {
 
   // Stale initData: nothing to retry. A calm instruction instead of a broken app.
   if (state === 'reopen') {
-    return <EmptyState title={t.session.reopenTitle} text={t.session.reopenText} />;
+    return (
+      <Screen tabBar={false}>
+        <EmptyState fill title={t.session.reopenTitle} text={t.session.reopenText} />
+      </Screen>
+    );
   }
   if (state === 'failed') {
     return (
-      <ErrorState
-        onRetry={() => {
-          void session.start().catch(() => undefined);
-        }}
-      />
+      <Screen tabBar={false}>
+        <ErrorState
+          fill
+          onRetry={() => {
+            void session.start().catch(() => undefined);
+          }}
+        />
+      </Screen>
     );
   }
   return <RouterProvider router={router} />;

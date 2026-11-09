@@ -64,6 +64,16 @@ typography:
     fontSize: "12.5px"
     fontWeight: 400
     lineHeight: 1.45
+  heading:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 600
+    lineHeight: 1.35
+  input:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.4
   price:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "15px"
@@ -132,7 +142,7 @@ components:
   field:
     backgroundColor: "{colors.milk-field}"
     textColor: "{colors.graphite}"
-    typography: "{typography.body}"
+    typography: "{typography.input}"
     rounded: "{rounded.button}"
     padding: "0 14px"
     height: "48px"
@@ -220,7 +230,7 @@ The customer chose **Nurmuhammad's variant 2 with elements of variant 1** (`desi
 
 | Screen | Follow | Notes |
 |---|---|---|
-| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner, «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
+| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan is Tenor caps under a 32 px hairline, not the variant's italic (the Italic Is Sacred Rule); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner, «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
 | Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «от … сум», «+». |
 | Fragrance card | `design/approved` (variant 2 + icon row from variant 1) | Large photo with back, heart and share. Name lockup, description, the characteristics icon row, volume tiles with price under each, notes pyramid, then the reviews block, then «Купить на Uzum». Dock: «В корзину · <цена>» and «Купить сейчас». |
 | Cart | `design/approved` (variant 2 + bin from variant 1) and the free-delivery block from `design/mockups` 04-cart | Lines with stepper and bin. Promo field with «Применить». Dark totals block (items, promo, delivery «Доставка BTS, <город>», «Итого») with «Оформить заказ» inside. The free-delivery Sage thread with «Подойдёт любой аромат 10 мл» suggestions sits above the lines, exactly as in our mockup (the customer asked for it). |
@@ -272,6 +282,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Section** (Tenor 400, 13px, 1.35, +0.2em, caps): section heads such as "Топ продаж" and "Выберите 5 разных ароматов".
 - **Label caps** (Tenor 400, 10.5px, 1.45, +0.2em, caps, Muted Ink): the attribution line "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" and the box-lid label.
 - **Name** (Cormorant Italic 500, 20px; 24px on the product page; 17–19px in compact rows; 12.5px under set slots): fragrance names, and only those.
+- **Heading** (Manrope 600, 17px, 1.35, sentence case): the title of an empty, error or sign-in state, and the profile name. Never tracked caps, so long UZ titles stay readable.
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
 - **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
 
@@ -327,7 +338,7 @@ Quiet, solid and decisive.
 - **Compact rows** (cart items, set picker, suggestions): thumbnail plus label lockup without the Sage rule, separated by hairlines.
 
 ### Inputs / Fields
-- **Style:** Milk Field fill, no border, 10px radius, 48px, 15px text. The label sits above in 12.5px Manrope 500, Muted Ink. Hints sit below in 12px.
+- **Style:** Milk Field fill, no border, 10px radius, 48px, 16px text (iOS zooms into a focused field under 16px; the Mini App's base CSS sets it). The label sits above in 12.5px Manrope 500, Muted Ink. Hints sit below in 12px.
 - **Search:** the same field with a leading 18px search icon and the placeholder "name or note".
 
 ### Navigation

@@ -42,3 +42,46 @@ export const AlertIcon = (p: P) => (
 );
 export const ChevronIcon = (p: P) => <Icon d="m9 6 6 6-6 6" {...p} />;
 export const CloseIcon = (p: P) => <Icon d="M6 6l12 12M18 6 6 18" {...p} />;
+export const GlobeIcon = (p: P) => (
+  <Icon
+    d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c2.2 2.3 3.3 5.1 3.3 8.5s-1.1 6.2-3.3 8.5c-2.2-2.3-3.3-5.1-3.3-8.5s1.1-6.2 3.3-8.5z"
+    {...p}
+  />
+);
+/** Half-filled disc: the theme (light / dark) setting. */
+export const ContrastIcon = (p: P) => (
+  <Icon
+    d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM12 3.5v17M12 7.5h4.5M12 11.5h5.5M12 15.5h4.5"
+    {...p}
+  />
+);
+
+/** Busy indicator for a button or row: a 1.5 px arc that turns, in currentColor. */
+export function Spinner({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      data-spin=""
+      className="animate-[spin_0.8s_linear_infinite]"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="8.5"
+        stroke="currentColor"
+        strokeOpacity="0.25"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M20.5 12A8.5 8.5 0 0 0 12 3.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

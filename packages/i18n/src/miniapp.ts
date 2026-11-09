@@ -15,9 +15,20 @@ export const miniappMessages = defineMessages(
       emptyTitle: 'Скоро здесь появятся ароматы',
       emptyText: 'Мы собираем коллекцию. Загляните чуть позже.',
     },
+    /** The empty screens behind the tabs until their tickets build them. */
     placeholder: {
-      emptyTitle: 'Раздел скоро откроется',
-      emptyText: 'Мы уже работаем над ним.',
+      catalog: {
+        title: 'Каталог скоро откроется',
+        text: 'Здесь будут все ароматы LUMMI в 10, 30 и 50 мл.',
+      },
+      cart: {
+        title: 'Корзина скоро откроется',
+        text: 'Сюда попадут ароматы, которые вы выберете.',
+      },
+      orders: {
+        title: 'Здесь появятся ваши заказы',
+        text: 'Вы сможете следить за каждым заказом: от оплаты до доставки.',
+      },
     },
     profile: {
       title: 'Профиль',
@@ -42,13 +53,23 @@ export const miniappMessages = defineMessages(
       profile: 'Profil',
     },
     home: {
-      slogan: 'Yoritadigan xushboʻyliklar',
-      emptyTitle: 'Tez orada bu yerda atirlar paydo boʻladi',
+      slogan: 'Lahzalaringizni yorituvchi iforlar',
+      emptyTitle: 'Tez orada bu yerda iforlar paydo boʻladi',
       emptyText: 'Kolleksiyani tayyorlayapmiz. Birozdan keyin kiring.',
     },
     placeholder: {
-      emptyTitle: 'Boʻlim tez orada ochiladi',
-      emptyText: 'Ustida ishlayapmiz.',
+      catalog: {
+        title: 'Katalog tez orada ochiladi',
+        text: 'Bu yerda LUMMI’ning barcha iforlari boʻladi: 10, 30 va 50 ml.',
+      },
+      cart: {
+        title: 'Savat tez orada ochiladi',
+        text: 'Tanlagan iforlaringiz shu yerda boʻladi.',
+      },
+      orders: {
+        title: 'Buyurtmalaringiz shu yerda boʻladi',
+        text: 'Har bir buyurtmangizni toʻlovdan yetkazib berishgacha kuzatib borasiz.',
+      },
     },
     profile: {
       title: 'Profil',

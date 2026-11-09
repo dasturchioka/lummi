@@ -73,6 +73,14 @@
   line-height: 1.1;
   letter-spacing: 0.005em;
 }
+/* State titles and the profile name: a plain, readable heading in sentence case (no tracked caps). */
+@utility type-heading {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
 @utility type-body {
   font-family: var(--font-ui);
   font-size: 14px;
@@ -130,8 +138,11 @@
     background: var(--c-ground);
     color: var(--c-ink);
     font-family: var(--font-ui);
+    caret-color: var(--c-ink);
+    scrollbar-color: var(--c-line-strong) transparent; /* Telegram Desktop; phones overlay theirs */
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; /* the root scroller: no rubber band or pull-to-refresh */
   }
   body {
     margin: 0;
@@ -141,6 +152,16 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  ::selection {
+    background: var(--c-sage-wash);
+    color: var(--c-ink);
+  }
+  /* iOS zooms into a focused field under 16 px and never zooms back: fields are 16 px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
   button,
   a {
     cursor: pointer;
@@ -148,12 +169,23 @@
     -webkit-user-select: none;
     user-select: none;
   }
+  /* No iOS link preview or image menu on a long press: the shop is an app, not a page. */
+  a,
+  button,
+  img,
+  svg {
+    -webkit-touch-callout: none;
+  }
+  img {
+    -webkit-user-drag: none;
+  }
   :focus-visible {
     outline: 2px solid var(--c-sage);
     outline-offset: 2px;
   }
+  /* Reduced motion: no movement, except a busy spinner, which is the only sign of progress. */
   @media (prefers-reduced-motion: reduce) {
-    *,
+    *:not([data-spin]),
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
@@ -171,6 +203,16 @@
   /* What the floating tab bar covers at the bottom; `Screen` pads by it. */
   --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) * 2 + var(--safe-b) + 16px);
   min-height: var(--tg-viewport-stable-height, 100dvh);
+}
+
+/*
+ * Switching theme or language cross-fades the whole page once (View Transitions, where the
+ * WebView has them) instead of snapping every surface at the same instant.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes sheet-in {

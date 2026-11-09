@@ -12,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { api, unwrap } from './api';
 import { paintTelegramChrome, telegramLanguage } from './telegram';
 
@@ -47,6 +48,21 @@ export function applyInitialTheme() {
   document.documentElement.dataset.theme = readHint().theme ?? 'light';
 }
 
+/**
+ * Run a theme or language change inside a View Transition: the page cross-fades once (0.28 s,
+ * index.css) instead of every surface snapping at the same instant. A fade is not movement, so
+ * it stays under reduced motion. Without the API the change is simply applied.
+ */
+function crossFade(update: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (typeof doc.startViewTransition !== 'function') return update();
+  try {
+    doc.startViewTransition(() => flushSync(update));
+  } catch {
+    update();
+  }
+}
+
 /** Shared strings plus this app's own; the bot's and admin's are never bundled here. */
 export type Messages = SharedMessages & MiniappMessages;
 
@@ -55,7 +71,7 @@ interface PrefsValue {
   theme: Theme;
   t: Messages;
   customer: CustomerDto | undefined;
-  customerQuery: { isError: boolean; isPending: boolean; refetch: () => void };
+  customerQuery: { isError: boolean; isPending: boolean; isFetching: boolean; refetch: () => void };
   setLanguage(language: Language): void;
   setTheme(theme: Theme): void;
 }
@@ -110,14 +126,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = useCallback(
     (next: Language) => {
-      setLocal((p) => ({ ...p, language: next }));
+      crossFade(() => setLocal((p) => ({ ...p, language: next })));
       save.mutate({ language: next });
     },
     [save],
   );
   const setTheme = useCallback(
     (next: Theme) => {
-      setLocal((p) => ({ ...p, theme: next }));
+      crossFade(() => setLocal((p) => ({ ...p, theme: next })));
       save.mutate({ theme: next });
     },
     [save],
@@ -132,12 +148,23 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
       customerQuery: {
         isError: me.isError,
         isPending: me.isPending,
+        isFetching: me.isFetching,
         refetch: () => void me.refetch(),
       },
       setLanguage,
       setTheme,
     }),
-    [language, theme, me.data, me.isError, me.isPending, me.refetch, setLanguage, setTheme],
+    [
+      language,
+      theme,
+      me.data,
+      me.isError,
+      me.isPending,
+      me.isFetching,
+      me.refetch,
+      setLanguage,
+      setTheme,
+    ],
   );
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>;
 }
