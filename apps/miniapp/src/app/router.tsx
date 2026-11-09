@@ -74,7 +74,10 @@ const devRoutes = import.meta.env.DEV
       createRoute({
         ...at('/dev/cart'),
         validateSearch: (s: Record<string, unknown>) => ({
-          data: (['discount', 'plain'] as const).find((n) => n === s.data) ?? 'discount',
+          data:
+            (['discount', 'plain', 'worst', 'worst-nudge', 'unavailable'] as const).find(
+              (n) => n === s.data,
+            ) ?? 'discount',
         }),
         component: lazyRouteComponent(() => import('../dev/CartFixtures'), 'CartFixtures'),
       }),
