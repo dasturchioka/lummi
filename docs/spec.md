@@ -357,4 +357,4 @@ Customer decisions from the project chat. They override the TZ sections they nam
 
 ## Appendix — app texts (drafts)
 About, FAQ, Returns, Delivery & payment drafts in RU + UZ are in the TZ appendix (last page of the txt dump). Public offer comes from the customer's lawyer. Returns draft: damaged / leaking / wrong item → contact within `[3]` days with a photo → replacement or refund; opened perfume of proper quality is not returnable.
-
+- **2026-11-09 — BTS tariffs and the delivery city, clarifications (ticket #11 review).** The per-region delivery tariff is owner-edited, audited data (`regions.delivery_tariff`), the deliberate per-region exception to "every rule value is a setting"; it is not a settings key. Ticket #18 (cart) names the delivery city in the cart's delivery line («Доставка BTS, <город>»). Ticket #23 (checkout) persists the typed «Не нашёл свой пункт» fallback on the order, flagged as typed.

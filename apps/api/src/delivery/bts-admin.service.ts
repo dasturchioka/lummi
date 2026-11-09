@@ -20,6 +20,7 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { toAdminPointDto, toAdminRegionDto } from './dto';
 import { AuditService } from '../audit/audit.service';
 import { likeContains, pointSearchText } from '../bts/search-text';
 import type { Edges } from '../edges';
@@ -28,7 +29,17 @@ import { DB, EDGES } from '../tokens';
 export type AdminOutcome<T> =
   { ok: true; value: T } | { ok: false; reason: 'not_found' | 'conflict' | 'unknown_region' };
 
-const FIELDS = ['regionId', 'city', 'name', 'address', 'landmark', 'hours', 'active'] as const;
+const FIELDS = [
+  'regionId',
+  'city',
+  'name',
+  'address',
+  'landmark',
+  'hours',
+  'active',
+] as const satisfies readonly (keyof BtsPointRow)[];
+type PointField = (typeof FIELDS)[number];
+type Changes = { [F in PointField]?: { from: BtsPointRow[F]; to: BtsPointRow[F] } };
 
 /** Staff-side BTS points and the owner's tariffs. Every change is audited with the staff member. */
 @Injectable()
@@ -39,27 +50,9 @@ export class BtsAdminService {
     @Inject(EDGES) private readonly edges: Edges,
   ) {}
 
-  private async regionDto(r: RegionRow, tx: DbOrTx = this.db): Promise<AdminRegionDto> {
-    const [c] = await tx
-      .select({
-        total: sql<number>`count(*)::int`,
-        active: sql<number>`(count(*) filter (where ${btsPoints.active}))::int`,
-      })
-      .from(btsPoints)
-      .where(eq(btsPoints.regionId, r.id));
-    return {
-      id: r.id,
-      code: r.code,
-      nameRu: r.nameRu,
-      nameUz: r.nameUz,
-      deliveryTariff: r.deliveryTariff,
-      pointCount: c?.total ?? 0,
-      activePointCount: c?.active ?? 0,
-    };
-  }
-
-  async listRegions(): Promise<AdminRegionDto[]> {
-    const rows = await this.db
+  /** Regions with their point counts, optionally just one (the same join serves the list and a tariff change). */
+  async listRegions(onlyId?: number, tx: DbOrTx = this.db): Promise<AdminRegionDto[]> {
+    const rows = await tx
       .select({
         region: regions,
         total: sql<number>`count(${btsPoints.id})::int`,
@@ -67,17 +60,10 @@ export class BtsAdminService {
       })
       .from(regions)
       .leftJoin(btsPoints, eq(btsPoints.regionId, regions.id))
+      .where(onlyId === undefined ? undefined : eq(regions.id, onlyId))
       .groupBy(regions.id)
       .orderBy(asc(regions.position));
-    return rows.map((r) => ({
-      id: r.region.id,
-      code: r.region.code,
-      nameRu: r.region.nameRu,
-      nameUz: r.region.nameUz,
-      deliveryTariff: r.region.deliveryTariff,
-      pointCount: r.total,
-      activePointCount: r.active,
-    }));
+    return rows.map((r) => toAdminRegionDto(r.region, r.total, r.active));
   }
 
   /** The owner changes a tariff; the old and new values go to the audit log in the same transaction. */
@@ -94,13 +80,15 @@ export class BtsAdminService {
         .for('update');
       if (!before) return { ok: false, reason: 'not_found' } as const;
       if (before.deliveryTariff === deliveryTariff) {
-        return { ok: true, value: await this.regionDto(before, tx) } as const;
+        return {
+          ok: true,
+          value: (await this.listRegions(regionId, tx))[0] as AdminRegionDto,
+        } as const;
       }
-      const [row] = await tx
+      await tx
         .update(regions)
         .set({ deliveryTariff, updatedAt: this.edges.clock.now() })
-        .where(eq(regions.id, regionId))
-        .returning();
+        .where(eq(regions.id, regionId));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
         action: 'region.tariff_changed',
@@ -108,25 +96,16 @@ export class BtsAdminService {
         targetId: regionId,
         payload: { code: before.code, old: before.deliveryTariff, new: deliveryTariff },
       });
-      return { ok: true, value: await this.regionDto(row as RegionRow, tx) } as const;
+      return {
+        ok: true,
+        value: (await this.listRegions(regionId, tx))[0] as AdminRegionDto,
+      } as const;
     });
   }
 
   private async withRegion(p: BtsPointRow, tx: DbOrTx = this.db): Promise<AdminBtsPointDto> {
     const [r] = await tx.select().from(regions).where(eq(regions.id, p.regionId));
-    return {
-      id: p.id,
-      code: p.code,
-      regionId: p.regionId,
-      city: p.city,
-      name: p.name,
-      address: p.address,
-      landmark: p.landmark,
-      hours: p.hours,
-      active: p.active,
-      regionNameRu: r?.nameRu ?? '',
-      regionNameUz: r?.nameUz ?? '',
-    };
+    return toAdminPointDto(p, r as RegionRow);
   }
 
   async listPoints(query: AdminPointsQuery) {
@@ -154,19 +133,7 @@ export class BtsAdminService {
       .limit(ADMIN_POINTS_PAGE_SIZE)
       .offset((page - 1) * ADMIN_POINTS_PAGE_SIZE);
     return {
-      items: rows.map(({ point: p, region: r }) => ({
-        id: p.id,
-        code: p.code,
-        regionId: p.regionId,
-        city: p.city,
-        name: p.name,
-        address: p.address,
-        landmark: p.landmark,
-        hours: p.hours,
-        active: p.active,
-        regionNameRu: r.nameRu,
-        regionNameUz: r.nameUz,
-      })),
+      items: rows.map(({ point, region }) => toAdminPointDto(point, region)),
       total: count?.n ?? 0,
       page,
       pageSize: ADMIN_POINTS_PAGE_SIZE,
@@ -230,9 +197,10 @@ export class BtsAdminService {
         ...before,
         ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)),
       } as BtsPointRow;
-      const changed: Record<string, { from: unknown; to: unknown }> = {};
+      const changed: Changes = {};
       for (const f of FIELDS) {
-        if (before[f] !== next[f]) changed[f] = { from: before[f], to: next[f] };
+        if (before[f] !== next[f])
+          Object.assign(changed, { [f]: { from: before[f], to: next[f] } });
       }
       if (Object.keys(changed).length === 0) {
         return { ok: true, value: await this.withRegion(before, tx) } as const;
@@ -257,15 +225,14 @@ export class BtsAdminService {
         targetType: 'bts_point',
         targetId: id,
       };
-      if (changed['active']) {
+      if (changed.active) {
         await this.audit.record(tx, {
           ...base,
           action: next.active ? 'bts_point.shown' : 'bts_point.hidden',
           payload: { code: before.code },
         });
       }
-      const { active: _active, ...fields } = changed;
-      void _active;
+      const { active: _visibility, ...fields } = changed;
       if (Object.keys(fields).length > 0) {
         await this.audit.record(tx, {
           ...base,

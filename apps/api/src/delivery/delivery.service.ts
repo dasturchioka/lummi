@@ -8,34 +8,15 @@ import {
   eq,
   regions,
   sql,
-  type BtsPointRow,
   type Db,
-  type RegionRow,
 } from '@lummi/db';
 import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { toPointDto, toRegionDto } from './dto';
 import { AuditService } from '../audit/audit.service';
 import { likeContains } from '../bts/search-text';
 import { seedRegions } from '../bts/seed-regions';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
-
-export const toRegionDto = (r: RegionRow): RegionDto => ({
-  id: r.id,
-  nameRu: r.nameRu,
-  nameUz: r.nameUz,
-  deliveryTariff: r.deliveryTariff,
-});
-
-export const toPointDto = (p: BtsPointRow): BtsPointDto => ({
-  id: p.id,
-  code: p.code,
-  regionId: p.regionId,
-  city: p.city,
-  name: p.name,
-  address: p.address,
-  landmark: p.landmark,
-  hours: p.hours,
-});
 
 export type SetCityOutcome =
   | { ok: true; deliveryCity: DeliveryCityDto }
