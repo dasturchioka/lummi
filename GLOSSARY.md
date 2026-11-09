@@ -36,6 +36,14 @@ _Avoid_: Ingredient, component, accord
 The olfactory group of a fragrance (woody, floral, fresh, …), used by filters and "similar fragrances".
 _Avoid_: Category, type (type means Homme / Femme / Unisex)
 
+**Favourite**:
+A fragrance or set the customer marked with the heart. Kept per customer on the server and listed in Profile → «Избранное».
+_Avoid_: Wishlist, bookmark, like
+
+**Review**:
+A customer's rating (1–5) for a delivered order, with an optional comment and photos. Private until staff publish it; a published review shows on the cards of the fragrances and sets in that order.
+_Avoid_: Feedback, testimonial, comment
+
 **Set**:
 Five different fragrances in 10 ml sold as one item at one price: the Discovery set or a builder set.
 _Avoid_: Kit, bundle, sampler, gift box
@@ -115,6 +123,10 @@ _Avoid_: Oblast, area, zone
 **Order**:
 A customer's purchase from creation to its end state. It has exactly one status at a time, from «Ожидает оплаты» to «Доставлен», «Отменён» or «Возвращён».
 _Avoid_: Purchase, transaction, checkout
+
+**Gift order**:
+An order the customer marked «Это подарок» at checkout: gift-packed, with an optional greeting card text and no receipt in the parcel. Not a gift certificate (that is a deferred means of payment).
+_Avoid_: Present, gift certificate, gift card
 
 **Receipt**:
 A customer's proof of a card transfer (screenshot or PDF) uploaded for an order. One order may have several; at most one is accepted.

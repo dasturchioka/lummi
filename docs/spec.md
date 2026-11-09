@@ -245,13 +245,67 @@ Customer decisions from the project chat. They override the TZ sections they nam
 - **2026-11-07 — Orders group (§6). Internal decision.** The "Lummi" group becomes a supergroup with topics: Заказы, Поступления (Humo forwards), Отзывы (ratings 1–3), Системные (alerts, payment not found, duplicate receipts); the bot follows `migrate_to_chat_id`. An order is posted when its payment is confirmed, not at creation (TZ said instantly; unpaid orders stay in admin). One card message per order, edited on every change (status, items, discount, total, BTS point, recipient, customer link, comment, history «✅ Принят — <name>, 14:32»); the receipt is a reply to it. Buttons show only the next step plus «Отменить»: «Передан в BTS» asks for the tracking number by ForceReply, «Отменить» asks for a TZ reason and a confirmation. Callback data carries the expected current status, so a second press gets «Уже изменено». Owner alerts go to Системные and to the owner's DM.
 - **2026-11-07 — Customer messages and broadcasts (§5, §7). Internal decision.** Write access is requested with `requestWriteAccess()` in the same step as sharing the contact on the first order; refusing doesn't block the order (statuses stay visible in the app, customer flagged `bot_blocked`). Messages, in the customer's language with 1–2 emoji: order created, receipt received, payment confirmed / receipt rejected (reason), Собирается, Передан в BTS (tracking), Доставлен, Отменён (reason), payment not found, reserve reminder, set-discount reminders at 7 and 1 days, birthday coupon, review request. No message for «Принят». Each carries «Открыть заказ» (web_app) and, where useful, «Написать менеджеру». Broadcasts (owner only): RU + UZ text, optional image and `startapp` button; audience all / RU / UZ; «Отправить себе» test first; each customer gets their language; result counts sent / blocked / failed. Reviews per TZ; ratings 1–3 go to the Отзывы topic.
 - **2026-11-07 — Source code (§9).** The customer doesn't need the repository handed over (per Sardor); it stays a private repo with us. The customer still gets the run guide and all access to their server, bot and domain. See ADR 0026.
-- **2026-11-07 — Excel import/export (§7). Internal decision.** We write the template `LUMMI_Katalog.xlsx` (`exceljs`): sheets Ароматы (internal code, name, original brand, type, family, season, time of day, longevity, sillage, RU/UZ description, notes by level, aliases, Uzum link, hit/new, hidden), Объёмы (internal code, volume, price, sale price and end, on hand), Справочник (families, notes RU/UZ). Upsert by internal code; nothing is deleted by import (hide via the column). A dry run shows new/changed counts, row/column errors and on-hand vs reserve warnings; «Применить» writes everything in one transaction or nothing. Photos are uploaded per volume in admin, not via Excel. Catalog export uses the same template; orders, reviews and reports export per TZ. The seed file is written in this template and doubles as the customer's example.
-- **2026-11-07 — Gift certificates deferred to v1.1.** The customer asked for e-gift certificates sent through Telegram (see `docs/open-questions.md` → Deferred). Not in stage 1; orders keep an amount due separate from the total so they fit later (ADR 0012).
+- **2026-11-07 — Excel import/export (§7). Internal decision.** We write the template `LUMMI_Katalog.xlsx` (`exceljs`): sheets Ароматы (internal code, name, original brand, type, family, season, time of day, longevity, sillage, RU/UZ description, RU/UZ «Когда носить», three key notes, notes by level, similar fragrances by internal code, internal remark, aliases, Uzum link, hit/new, hidden; the last five fields added 2026-11-07 with the customer's guide), Объёмы (internal code, volume, price, sale price and end, on hand), Справочник (families, notes RU/UZ). Upsert by internal code; nothing is deleted by import (hide via the column). A dry run shows new/changed counts, row/column errors and on-hand vs reserve warnings; «Применить» writes everything in one transaction or nothing. Photos are uploaded per volume in admin, not via Excel. Catalog export uses the same template; orders, reviews and reports export per TZ. The seed file (the customer's 67-fragrance guide converted into this template) doubles as the customer's example.
+- **2026-11-07 — Gift certificates deferred to v1.1.** The customer asked for e-gift certificates sent through Telegram (see `docs/open-questions.md` → Deferred). Not in stage 1; orders keep an amount due separate from the total so they fit later (ADR 0012). The customer agreed («вторым этапом») and is waiting for our price and timeline.
+- **2026-11-07 — Design approved (§2 theme, §3.1–§3.5, §5 reviews).** The customer chose Nurmuhammad's variant 2 with elements of variant 1 (chat msg 26, reply to `LUMMI_Vybor_dizaina.pdf`). The PDF, page renders, verbatim reply and a "what comes from where" table are in `design/approved/`; how it combines with our mockups is in `DESIGN.md`. It overrides:
+  - **Theme (§2).** Light by default. Variant 2's dark theme (dark fabric on Home) is the additional theme, switched in Profile and saved per customer. Telegram's `colorScheme` no longer decides (our reading of «по умолчанию — светлая», Sardor 2026-11-09). The dark theme is approved, so our dark tokens are no longer provisional.
+  - **Opening and Home (§3.1).** No welcome screen: the app opens on Home. Home has, top to bottom:
+    - a top block with a fabric photo, the logo and the slogan «Ароматы, которые освещают»;
+    - the delivery city and the profile icon;
+    - the search field «Название или нота»;
+    - a dark Discovery set banner;
+    - «Популярное» (= top sales) with chips Все / Homme / Femme / Unisex over a two-column grid;
+    - «Новинки» with «Все →».
+
+    There is **no banner slider**, and the Homme / Femme / Unisex / Наборы quick sections become chips. The RU/UZ switch lives only in Profile.
+  - **Delivery city on Home (our reading).** The customer picks region + city from our BTS list. It is saved per customer, preselects the BTS point picker at checkout and labels delivery in the cart («Доставка BTS, Ташкент»). It never changes the price (flat tariff).
+  - **Catalog (§3.2).**
+    - Two-column grid with large photos.
+    - Type chips as photo circles: Все / Homme / Femme / Unisex / Наборы.
+    - Filters: family, volume, price, season. Sort, default «Топ продаж». Counter «Найдено: N».
+    - Each card: 2–3 notes under the name, «+», and a heart.
+  - **Favourites (new, not in the TZ).** The heart on list cards and the fragrance card adds the fragrance (or set) to the customer's favourites, kept on the server. The list lives in Profile → «Избранное» (our default; the design doesn't show the list).
+  - **Fragrance card (§3.3).**
+    - Large photo with heart and share.
+    - Characteristics as **icons**: longevity, sillage, season, time of day.
+    - Longevity reads «до 24 часов» / «24 soatgacha» everywhere.
+    - Volume tiles 10 / 30 / 50 ml with the price under each.
+    - Notes pyramid, then the reviews block.
+    - «Купить на Uzum», «В корзину», «Купить сейчас».
+  - **Cart (§3.5).**
+    - A dark totals block (items, promo code, delivery, total) with «Оформить заказ» inside.
+    - A bin button next to the quantity.
+    - The free-delivery bar with 10 ml suggestions, as in our first mockup (`design/mockups` cart).
+    - Delivery stays flat 25 000, free from 250 000.
+  - **Tab bar.** Dark and floating, labelled Главная / Каталог / Корзина / Заказы / Профиль. Sets are reached through the Home banner and the «Наборы» chip.
+  - **Reviews (§5 "Publishing", bracket resolved: show).** Published reviews show on the product card with rating and photos, in a block under the notes. Our defaults, to confirm with the customer:
+    - After the rating and optional comment, the bot accepts up to 3 optional photos.
+    - A review is **published only after staff approve it**, since customer text can carry banned words («копия», «оригинал»).
+    - A published review shows on the cards of every fragrance and set in that order. The card shows the average rating and count.
+    - Ratings 1–3 still go to the «Отзывы» topic.
+  - **«Это подарок» at checkout (agreed separately with the customer).** Gift packaging, a greeting card, no receipt in the parcel. Our defaults, to confirm:
+    - free of charge;
+    - optional greeting text (RU/UZ as typed);
+    - the order is flagged as a gift for the managers (group card, admin order page).
+- **2026-11-07 — Full catalog guide and bottle photos (§3.2, §3.3, §7).** The customer sent the guide for all **67** fragrances (chat msg 28; `materials/catalog/`, field mapping in its README) and photos for all of them in 10 / 30 / 50 ml (msg 27; `materials/flakons/`). It brings new fields:
+  - «Когда носить» (when to wear), RU/UZ;
+  - exactly three key notes (list cards, name block);
+  - 4 curated similar fragrances per fragrance;
+  - an internal remark (admin only).
+
+  Decisions:
+  - Families are the guide's 29 RU/UZ families, which closes the families question.
+  - Sillage, season and time of day use the guide's value sets.
+  - **Longevity:** the guide gives 10 / 12 / 16 / 24 h per fragrance, but every fragrance shows «до 24 часов» per the customer's design instruction and the bottle photos (Sardor, 2026-11-09). Longevity stays an admin field.
+  - **«Похожие ароматы» (internal decision):** the curated similar fragrances first, then same family and type, available only, up to 6.
+  - Deep-link slugs follow the fragrance name in ASCII kebab case (`p_guidance`, not the brand).
+
+  Still missing: prices, stock, Uzum links, the Discovery set composition.
 - **2026-11-06 — Free-delivery nudge (§3.5).** The customer wants an Uzum-style prompt. Example: a 10 ml costs 69 000, so the cart tells the customer to add N so'm more for free delivery to the BTS point. Shown in the cart, and optionally on the product card or as a mini-bar, until the 250 000 threshold is reached. The threshold follows the same discount rules as §3.4 and §7. The customer left the UX to us ("uyog'ini o'zingiz qilib ko'rasiz").
 - **2026-11-06 — Payment card.** The card isn't opened yet. Ship with an empty or placeholder card, editable by the owner in admin (§4).
 - **2026-11-06 — Prices.** Use placeholder prices until the customer confirms real ones, expected after 2026-11-09. That includes the Discovery set.
 - **2026-11-06 — Photos.** Bottle photos stay as delivered (Russian text baked in), and the gallery switches with the selected volume. Details in `CLAUDE.md` → Design tokens.
-- **2026-11-06 — Theme** follows Telegram (customer: "Standart rejim").
+- **2026-11-06 — Theme** follows Telegram (customer: "Standart rejim"). **Superseded 2026-11-07** by the design approval: light by default, dark switched on in Profile.
 
 ## Appendix — app texts (drafts)
 About, FAQ, Returns, Delivery & payment drafts in RU + UZ are in the TZ appendix (last page of the txt dump). Public offer comes from the customer's lawyer. Returns draft: damaged / leaking / wrong item → contact within `[3]` days with a photo → replacement or refund; opened perfume of proper quality is not returnable.

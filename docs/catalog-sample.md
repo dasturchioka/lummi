@@ -1,18 +1,20 @@
 # Sample catalog — 5 fragrances
 
+> **Superseded for the seed (2026-11-07).** The customer sent the full guide for all 67 fragrances (`materials/catalog/`, see its README) and photos for all of them (`materials/flakons/`). Seed from the guide; this file stays as the record of the first sample and the placeholder-price rules below.
+
 Sent by the customer (Fayzali) in the project chat on 2026-11-06 as seed data. Texts are copied verbatim; the customer asked us to **proofread the spelling** before use (e.g. UZ "tazeligi", "Greyfrutning" vs "greypfrut", mixed `’`/`ʻ` apostrophes — Uzbek Latin uses `oʻ`/`gʻ` with U+02BB and `’` U+2019 for the tutuq belgisi).
 
 **Still missing for each**: price per volume, stock, family (filters + "similar"), full notes pyramid (top/heart/base — only 3 key notes given), longevity and sillage, Uzum link. Photos say "Стойкость до 24 часов" (brandbook: Extrait de Parfum, up to 24 h).
 
 | Slug (photo prefix) | Display name | Original brand ("по мотивам") | Type | Key notes (UZ / RU) | Season · time |
 |---|---|---|---|---|---|
-| `amouage` | Guidance | Amouage | UNISEX | nok, findiq, ladan / груша, фундук, ладан | autumn–winter · evening |
+| `guidance` | Guidance | Amouage | UNISEX | nok, findiq, ladan / груша, фундук, ладан | autumn–winter · evening |
 | `blue-seduction` | Blue Seduction | Antonio Banderas | HOMME | bergamot, qovun, yalpiz / бергамот, дыня, мята | spring–summer · day |
 | `blue-sapphire` | Blue Sapphire | Boadicea the Victorious | UNISEX | limon, atirgul, ud / лимон, роза, уд | autumn–winter · evening |
 | `tygar` | Tygar | Bvlgari | HOMME | greypfrut, zanjabil, yogʻoch notalari / грейпфрут, имбирь, древесные ноты | spring–summer · day |
 | `tygar-extrait` | Tygar Extrait | Bvlgari | HOMME | greypfrut, ambra, benzoin / грейпфрут, амбра, бензоин | all year · day and evening |
 
-Photos: `materials/flakons/<slug>_<10|30|50>ml.png` (one per volume).
+Photos: `materials/flakons/<slug>_<10|30|50>ml.webp` (one per volume; renamed from the brand-based `amouage_*` on 2026-11-09, since slugs follow the fragrance name).
 
 ## Descriptions (verbatim)
 
@@ -48,10 +50,10 @@ Photos: `materials/flakons/<slug>_<10|30|50>ml.png` (one per volume).
 
 ## Seed data for development
 
-Real prices and the full catalog come later: prices after 2026-11-09, the catalog by day 3 once we send the Excel template. Until then, development runs on seed data. Every seed value below is **ours, not the customer's**, so no seed price or invented field may reach launch.
+Real prices, stock, Uzum links and the Discovery set composition come later (prices after 2026-11-09). Every seed value below that the guide doesn't give is **ours, not the customer's**, so no seed price or invented value may reach launch.
 
-- **The 5 real fragrances above**, with their photos and texts. Prices are placeholders: 10 ml 69 000 (the customer's own example), 30 ml 149 000, 50 ml 219 000, Discovery set 299 000. Stock: 20 per volume.
-- **Missing fields are filled with plausible placeholders** and marked as such: family, the top/heart/base pyramid (spread the 3 key notes across it), longevity, sillage.
-- **Demo fragrances** (~15–20) exercise filters, sort, pagination, the 30-query search check, and the empty and out-of-stock states. They reuse the 5 photos and carry an `is_demo` flag. Include awkward cases: Cyrillic/Latin name pairs, typo-prone names (TZ example: "Megamare"), one sold-out volume, one hidden product.
+- **All 67 fragrances from `materials/catalog/lummi_aromatlar.json`**, with their photos and RU/UZ texts, families, notes by level and curated similar fragrances. Longevity is «до 24 часов» for every fragrance (customer, 2026-11-07), not the guide's per-fragrance hours.
+- **Placeholder prices**: 10 ml 69 000 (the customer's own example), 30 ml 149 000, 50 ml 219 000, Discovery set 299 000. Stock: 20 per volume. Prices and stock are flagged as placeholders.
+- **Edge cases for tests** (one sold-out volume, one hidden fragrance, a marked-down volume) are set on real fragrances in test fixtures, not as invented demo products. The guide's 67 names already cover typo-prone and Cyrillic/Latin search cases.
 - **Seed through the Excel import path.** The seed file then doubles as the template example we send the customer.
-- **At data load (days 12–14)** delete everything flagged `is_demo` and replace placeholder prices with the customer's.
+- **At data load (days 12–14)** replace placeholder prices and stock with the customer's.

@@ -6,7 +6,7 @@
 
 web
 
-Telegram Mini App (WebView inside Telegram on iOS, Android, Telegram Desktop), opened from @Lummiuz_bot. Mobile-first from 360 px. Theme follows Telegram's light / dark scheme.
+Telegram Mini App (WebView inside Telegram on iOS, Android, Telegram Desktop), opened from @Lummiuz_bot. Mobile-first from 360 px. Light theme by default; the customer can switch to dark in Profile (approved design, 2026-11-07).
 
 ## Stack
 
@@ -68,4 +68,4 @@ LUMMI makes Extrait de Parfum "по мотивам" (inspired by) famous fragran
 
 ## Accessibility & Inclusion
 
-Russian and Uzbek (Latin, with `oʻ` / `gʻ` as U+02BB) everywhere; layouts must hold the longer of the two strings. Readable on low-end Android at 360 px over 4G (first screen < 2 s). Both Telegram themes must keep WCAG AA text contrast.
+Russian and Uzbek (Latin, with `oʻ` / `gʻ` as U+02BB) everywhere; layouts must hold the longer of the two strings. Readable on low-end Android at 360 px over 4G (first screen < 2 s). Both themes (light and dark) must keep WCAG AA text contrast.

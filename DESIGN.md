@@ -178,9 +178,15 @@ components:
     textColor: "{colors.milk}"
     rounded: "{rounded.button}"
   tab-bar:
-    backgroundColor: "{colors.card-white}"
-    textColor: "{colors.ink-muted}"
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.stone}"
+    rounded: "{rounded.pill}"
     height: "62px"
+  totals-block:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.card}"
+    padding: "16px"
   segmented:
     backgroundColor: "{colors.milk-field}"
     textColor: "{colors.ink-muted}"
@@ -198,7 +204,7 @@ The shop is the LUMMI box opened inside Telegram. Every fragrance is shown the w
 
 The world is pinned by Brandbook v2.0. The milk, stone, graphite and sage palette, the three typefaces, the 12 / 10 px radii and the 1.5 px linear icons are binding brand decisions, not taste. Surfaces are calm and dense in the way of a well-made category app: a 360 px phone column, 16 px gutters, white cards on a Milk ground, Graphite filled actions. Restraint carries the premium feel. There are no shadows, no gradients, no sticker discounts, no red sale prices and no badges on every card.
 
-The theme follows Telegram's `colorScheme`. Light is the brandbook. Dark is our derivation, a warm graphite room, and **it still needs customer approval**. Telegram draws the top header (Close / Back, title, ⋯); the app owns everything below it.
+**Light is the default**, whatever Telegram's theme is. Light is the brandbook. Dark is our derivation, a warm graphite room, approved by the customer through Nurmuhammad's variant 2 on 2026-11-07. The customer switches to it in Profile, and the choice is saved per customer. Telegram draws the top header (Close / Back, title, ⋯), and the app sets the header and background colours to match its own theme. The app owns everything below the header.
 
 **Key Characteristics:**
 - Milk ground, white cards, Stone blocks, Graphite ink and filled buttons, Sage only as thread, rule, badge and confirmation.
@@ -207,6 +213,19 @@ The theme follows Telegram's `colorScheme`. Light is the brandbook. Dark is our 
 - Radii 12 (cards, blocks) and 10 (buttons, fields, controls); pills only for chips, badges, status and the language switch.
 - Linear 1.5 px stroke icons on a 24 px grid, round caps and joins, `currentColor`.
 - Bilingual RU / UZ-Latin at equal weight; layouts hold the longer string.
+
+## Approved layout (customer, 2026-11-07)
+
+The customer chose **Nurmuhammad's variant 2 with elements of variant 1** (`design/approved/`, with the verbatim reply and a table of what comes from where). It outranks our earlier mockups in `design/mockups/` wherever they differ. The tokens, type, lockups and component rules in this file still hold, because both variants use the same brand palette and type.
+
+| Screen | Follow | Notes |
+|---|---|---|
+| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner, «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
+| Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «от … сум», «+». |
+| Fragrance card | `design/approved` (variant 2 + icon row from variant 1) | Large photo with back, heart and share. Name lockup, description, the characteristics icon row, volume tiles with price under each, notes pyramid, then the reviews block, then «Купить на Uzum». Dock: «В корзину · <цена>» and «Купить сейчас». |
+| Cart | `design/approved` (variant 2 + bin from variant 1) and the free-delivery block from `design/mockups` 04-cart | Lines with stepper and bin. Promo field with «Применить». Dark totals block (items, promo, delivery «Доставка BTS, <город>», «Итого») with «Оформить заказ» inside. The free-delivery Sage thread with «Подойдёт любой аромат 10 мл» suggestions sits above the lines, exactly as in our mockup (the customer asked for it). |
+| Tab bar | `design/approved` | Dark floating pill with labels: Главная, Каталог, Корзина, Заказы, Профиль. |
+| Set builder, Discovery set, checkout, payment, orders, profile, sale and discount states | `design/mockups` | No approved variant covers them. Keep the mockups' structure, restyled to the approved chrome: floating tab bar, no RU/UZ switch on Home, Profile holds the language and theme switches and «Избранное». |
 
 ## Colors
 
@@ -230,8 +249,8 @@ The palette is a quiet paper-and-ink palette. Sage is the only accent, and it is
 - **Sage Wash** (sage-wash): the tinted ground of the set-deal strip and the confirmed status pill.
 - **Photo Blush** (photo-blush; dark: dark-photo): placeholder behind bottle photography while it loads.
 
-### Dark theme (derived, pending customer approval)
-Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
+### Dark theme (derived; approved 2026-11-07 via variant 2)
+Dark is the optional theme, switched in Profile. The Home top block uses the dark fabric photo. Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
 
 ### Named Rules
 **The Sage Thread Rule.** Sage is the measure, not decoration. If something fills, completes or confirms, it is Sage. If something is just pretty, it is not.
@@ -267,20 +286,20 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 ## Layout
 
-The app is a single 360 px-first column inside the Telegram WebView. Page gutters are 16 px. The product grid has two columns with an 8 px gap. Horizontal rows ("Топ продаж", suggestions) scroll 158 px cards with an 8 px gap and a hidden scrollbar. Sections are separated by 28 px (26 px between checkout blocks). Within a block, elements stack at 12 px. Controls are 48 px tall (36 px small, 34 px chips, steppers and copy buttons). Every row and card is built to hold the longer of the RU and UZ strings.
+The app is a single 360 px-first column inside the Telegram WebView. Page gutters are 16 px. The product grid has two columns with an 8 px gap. Horizontal rows («Новинки», suggestions) scroll 158 px cards with an 8 px gap and a hidden scrollbar. Sections are separated by 28 px (26 px between checkout blocks). Within a block, elements stack at 12 px. Controls are 48 px tall (36 px small, 34 px chips, steppers and copy buttons). Every row and card is built to hold the longer of the RU and UZ strings.
 
-Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the 62 px five-tab bar (Главная, Каталог, Наборы, Корзина, Профиль) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment).
+Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the floating five-tab bar (Главная, Каталог, Корзина, Заказы, Профиль; a 62 px Graphite pill inset 12 px from the sides and the bottom safe area) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment). Content scrolls under the floating bar with enough bottom padding to clear it.
 
 ## Elevation & Depth
 
 The system is flat, with no box-shadows for depth. Depth is tonal: Milk ground, white card, Stone block, plus 1 px hairlines between rows. Inset 1 px outlines (drawn as inset box-shadow) are used as borders on secondary controls. A 2 px surface-coloured ring separates the cart count from the tab icon. Neither of these is elevation. The one overlay, the share button on the product gallery, sits on a 92% Milk disc.
 
 ### Named Rules
-**The Flat Box Rule.** Nothing floats. If a surface needs separation, step it one tone or add a hairline.
+**The Flat Box Rule.** Nothing casts a shadow. If a surface needs separation, step it one tone or add a hairline. The one detached surface is the floating tab bar from the approved design, and it is flat too: a solid Graphite pill with no shadow.
 
 ## Shapes
 
-Corners are soft but not round: 12 px for cards, blocks, the banner, the set box and the payment card, and 10 px for buttons, fields, steppers, volume tiles, the disclaimer plate and segmented tracks. Photos inside cards are clipped to 8 px, and thumbnails to 6 px. Full pills are reserved for chips, badges, status, the language switch and the cart count. Bottle photography is always 3:4 (set compartments are 180:564 vial crops).
+Corners are soft but not round: 12 px for cards, blocks, the banner, the set box and the payment card, and 10 px for buttons, fields, steppers, volume tiles, the disclaimer plate and segmented tracks. Photos inside cards are clipped to 8 px, and thumbnails to 6 px. Full pills are reserved for chips, badges, status, the language and theme switches, the floating tab bar and the cart count. Type chips in the catalog and in «Популярное» carry a small circular bottle photo before the label. Bottle photography is always 3:4 (set compartments are 180:564 vial crops).
 
 The one ornament is the **label divider**: hairline, 4 px Sage diamond, hairline, 72 px wide. It is taken from the bottle label. It appears only on label lockups (the product-page name block and the set-box lid). It is not a section divider.
 
@@ -298,12 +317,13 @@ Quiet, solid and decisive.
 ### Chips
 - **Style:** a 34px pill with a hairline-strong inset outline, Manrope 500 13px.
 - **Selected:** Graphite fill with Milk text. An optional count is shown as an inverted mini-pill.
+- **Type chips (approved design):** Все / Homme / Femme / Unisex (/ Наборы in the catalog), each with a 24 px circular bottle photo before the label.
 
 ### Cards / Containers
 - **Corner Style:** 12px.
 - **Background:** Card White on Milk, or Graphite in dark.
 - **Shadow Strategy:** none (see Elevation).
-- **Product card:** 8 / 8 / 12 px padding. The top row holds the badge left and the type (HOMME / FEMME / UNISEX) right in 10px Tenor. Then come the 3:4 photo, the label lockup with an 18 px rule, two lines of notes, and a footer with the "from" price and "+".
+- **Product card:** 8 / 8 / 12 px padding. The top row holds the badge left and the type (HOMME / FEMME / UNISEX) right in 10px Tenor. Then come the 3:4 photo with the favourite heart (32 px Milk disc at 92%, top-left corner of the photo), the label lockup with an 18 px rule, 2–3 key notes joined by " · ", and a footer with the "from" price and "+".
 - **Compact rows** (cart items, set picker, suggestions): thumbnail plus label lockup without the Sage rule, separated by hairlines.
 
 ### Inputs / Fields
@@ -311,9 +331,10 @@ Quiet, solid and decisive.
 - **Search:** the same field with a leading 18px search icon and the placeholder "name or note".
 
 ### Navigation
-- **Tab bar:** five tabs on Card White with a top hairline, 22px icon over an 11px label. The active tab uses Graphite ink at 600 with a 22 × 2 px Sage tick on the top edge. Inactive tabs use Muted Ink. The cart count is a Graphite pill.
+- **Tab bar (approved design):** a floating Graphite pill with five tabs, 22px icon over an 11px label: Главная, Каталог, Корзина, Заказы, Профиль. The active tab sits in a Milk circle with Graphite icon and Milk label at 600. Inactive tabs use Stone. The cart count is a Milk pill with Graphite text. In the dark theme the pill is Dark Block.
 - **Segmented control:** a Milk Field track with a white selected segment at 600.
-- **Language switch:** an RU / UZ pill pair at the top right of home, with Graphite fill on the active pair. It occupies bb-08's avatar slot.
+- **Language and theme switches:** RU / UZ and Светлая / Тёмная pill pairs in Profile, Graphite fill on the active option. Home's top-right slot holds the profile avatar (the "L." monogram on a Stone disc, bb-08), not a switch.
+- **Delivery city selector (Home):** "Доставка" in 11px Muted Ink over the city name in 15px 600 with a chevron, centred under the top block. It opens the region → city sheet from the BTS list.
 
 ### The Sage Thread (signature)
 This is the single progress and measure component: a 2 px track in hairline colour with a Sage fill, rounded 2 px, and an optional row of end labels in 11.5px tabular Muted Ink below it. It is used for the free-delivery nudge, set slots filled, and (as a vertical 2 px Sage line between done dots) the order-status timeline. It is never duplicated by a second progress style.
@@ -322,6 +343,12 @@ This is the single progress and measure component: a 2 px track in hairline colo
 - **ХИТ / Hit:** filled Sage with Graphite text, 10px Tenor, +0.2em, pill.
 - **НОВИНКА / Yangi:** transparent with a 1 px Sage inset outline and Sage Ink text.
 - **Rule:** at most one badge per card. It is hidden inside a row whose title already says it (no ХИТ inside "Топ продаж").
+
+### Characteristics row (approved design, from variant 1)
+Four equal columns under the description: longevity, sillage, season, time of day. Each is a 24 px linear icon over an 11px Muted Ink label over a 13px 600 value («до 24 часов», «Сильный», «Осень–зима», «Вечер»). Hairlines above and below. These replace text tags.
+
+### Cart totals block (approved design, from variant 2)
+A Graphite block (Dark Block in dark) with Milk text: rows for items, the promo code discount in Dark Sage Ink with a "−" sign, delivery «Доставка BTS, <город>», then a hairline and «Итого» in 600. The primary «Оформить заказ» sits inside the block, inverted (Milk fill, Graphite text).
 
 ### Volume selector
 Three tiles in a grid (10 / 30 / 50 ml), each showing the volume in 600 and the price under it. The selected tile has a Graphite fill. A sold-out tile is transparent with a faint hairline and Faint Ink, and reads "нет в наличии". Choosing a volume cross-fades the gallery photo (0.32s, cubic-bezier(.16, 1, .3, 1)).
@@ -335,7 +362,7 @@ The amount card shows the 28px amount, the card number with copy buttons, and th
 ## Do's and Don'ts
 
 ### Do:
-- **Do** follow Telegram's `colorScheme` for light / dark, and treat the dark tokens as provisional until the customer approves them.
+- **Do** open in the light theme and switch to dark only from the Profile setting; set Telegram's header and background colours to the active theme.
 - **Do** build every fragrance mention from the Label Lockup: "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" in label caps above the Cormorant Italic name.
 - **Do** use the Sage thread for every progress or measure, and nothing else.
 - **Do** keep the label divider (hairline–diamond–hairline) for label lockups only: the product name block and the set-box lid.

@@ -11,12 +11,14 @@ Telegram Mini App + bot + admin panel for **LUMMI.**, a perfume brand selling Ex
 
 - `docs/spec.md` — business rules digest of the TZ (screens, set discount, birthday, payment and reconciliation, bot, manager group, admin, promo, delivery, acceptance). Read the relevant section before implementing or estimating any feature.
 - `docs/open-questions.md` — unresolved decisions, missing customer inputs, conflicts between TZ, brandbook and photos. Check it before relying on any `[bracketed]` value; update it when the chat answers something.
-- `docs/catalog-sample.md` — the 5 seed fragrances (RU/UZ texts, notes, type, season) mapped to their photos.
+- `docs/catalog-sample.md` — the first 5-fragrance sample and the placeholder-price rules for the seed. Superseded as the seed source by `materials/catalog/`.
+- `design/approved/` — the customer-approved layout (2026-11-07): Nurmuhammad's variant 2 + elements of variant 1, with the customer's verbatim reply. It outranks `design/mockups/` (our pre-approval mockups); `DESIGN.md` → "Approved layout" says which screens still follow the mockups.
 - `materials/` — originals from the customer, read-only:
   - `tz/` — TZ PDF + `.txt` dump (Russian; authoritative over `docs/spec.md`)
   - `brandbook/` — Brandbook v2.0 PDF, `.txt` dump, `pages/bb-NN.png` renders (`pages/_overview.png` = all pages)
   - `logo-pack/` — logo, monogram, avatar as SVG + PNG
-  - `flakons/` — bottle photos `<slug>_<ml>ml.png` (filenames normalised from the zip)
+  - `flakons/` — bottle photos for all 67 fragrances, `<slug>_<ml>ml.webp` (WebP q90 at full 1086×1448, converted from the PNG originals in `_archives/LUMMI_FLAKONS_67.zip`; slug = fragrance name in ASCII kebab case)
+  - `catalog/` — the customer's full fragrance guide (67 fragrances, RU/UZ, notes by level, families, similar fragrances, note dictionary); `catalog/README.md` maps its fields to our model and lists the slugs
   - `photos/discovery-set-box.jpg`
   - `_archives/` — the original zips
 
@@ -75,8 +77,10 @@ AI payment verification matches receipts against credit notifications from the *
   - **Cormorant Garamond Italic**: fragrance names only, 20–24 px.
 - Product name block: a small Tenor Sans caps line "ПО МОТИВАМ <BRAND>" above the Cormorant Italic name, then the notes joined with " · ", then "от 99 000 сум". See `materials/brandbook/pages/bb-08.png`.
 - Logo: the trailing dot is part of the mark. Clear space = height of the "L". Minimum on screen: logo 80 px, monogram "L." 32 px. The avatar/app icon is the "L." monogram on Stone (`logo-pack/LUMMI_avatar_stone.svg`).
-- **Theme follows Telegram** (light or dark). The customer said "Standart rejim", agreed internally on 2026-11-06. The brandbook defines light only, so dark-theme tokens are ours to derive (Graphite surfaces, Milk text, Sage accent) and need customer approval.
-- Photos: 3:4 for product cards, 9:16 for stories. Bottle photos are 1086×1448 PNG with Russian text baked in (notes, longevity, gender). The customer decided on 2026-11-06 to keep them as-is in both languages. There is one photo per volume, and the gallery switches when the customer picks 10 / 30 / 50 ml. Serve them as WebP.
+- **Light by default; dark is a Profile option.** The customer approved the design on 2026-11-07: «тёмная тема варианта 2 — как дополнительная, по умолчанию — светлая». The app opens light whatever Telegram's theme is; the customer switches to dark in Profile and the choice is saved per customer. Dark uses our derived tokens (Graphite surfaces, Milk text, Sage accent), now approved through variant 2.
+- **Layout follows `design/approved/`**: dark floating tab bar (Главная / Каталог / Корзина / Заказы / Профиль), no welcome screen, RU/UZ switch only in Profile. Details in `DESIGN.md` → "Approved layout".
+- Longevity reads «до 24 часов» / «24 soatgacha» on every fragrance (customer, 2026-11-07), whatever his guide says per fragrance.
+- Photos: 3:4 for product cards, 9:16 for stories. Bottle photos are 1086×1448 (originals PNG, kept in the repo as WebP q90) with Russian text baked in (notes, longevity, gender). The customer decided on 2026-11-06 to keep them as-is in both languages. There is one photo per volume, and the gallery switches when the customer picks 10 / 30 / 50 ml. Serve them as WebP.
 
 ## Agent skills
 
