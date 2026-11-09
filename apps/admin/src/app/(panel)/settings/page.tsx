@@ -1,0 +1,13 @@
+import { redirect } from 'next/navigation';
+import { SettingsEditor } from '@/components/settings-editor';
+import { getAdminMessages } from '@/lib/i18n';
+import { serverApi } from '@/lib/server-api';
+
+export default async function SettingsPage() {
+  const api = await serverApi();
+  const res = await api.settings.list();
+  if (res.status === 401) redirect('/login');
+  if (res.status !== 200) redirect('/'); // 403: managers have no settings page
+  const { language, t } = await getAdminMessages();
+  return <SettingsEditor states={res.body} language={language} t={t} />;
+}

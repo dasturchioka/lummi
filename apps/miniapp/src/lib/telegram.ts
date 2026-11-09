@@ -148,15 +148,16 @@ export async function askWriteAccess(): Promise<boolean | null> {
   }
 }
 
-/** The shop's manager account, the target of every «Написать менеджеру». */
-const MANAGER_LINK = 'https://t.me/lummi_manager';
+/** Until the customer record arrives; the owner changes the live value in the admin Settings. */
+export const DEFAULT_MANAGER_USERNAME = '@lummi_manager';
 
-/** Open the chat with the manager in Telegram (a new tab in a plain browser). */
-export function openManagerChat(): void {
+/** Open the chat with the shop's manager (`@username`, from the customer's `config`) in Telegram; a new tab in a plain browser. */
+export function openManagerChat(username: string = DEFAULT_MANAGER_USERNAME): void {
+  const link = `https://t.me/${username.replace(/^@/, '')}`;
   try {
-    if (openTelegramLink.isAvailable() && !mocked) return openTelegramLink(MANAGER_LINK);
+    if (openTelegramLink.isAvailable() && !mocked) return openTelegramLink(link);
   } catch {
     /* fall through */
   }
-  window.open(MANAGER_LINK, '_blank', 'noopener');
+  window.open(link, '_blank', 'noopener');
 }

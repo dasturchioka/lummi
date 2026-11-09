@@ -122,7 +122,9 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
             onShare={() => void share()}
             // Closing over «Номер сохранён» only skips the beat: the phone is already saved.
             onClose={() => finish(status === 'done' ? 'ready' : 'cancelled')}
-            onWriteManager={openManagerChat}
+            onWriteManager={() =>
+              openManagerChat(queryClient.getQueryData<CustomerDto>(['me'])?.config.managerUsername)
+            }
           />
         </Suspense>
       ) : null}

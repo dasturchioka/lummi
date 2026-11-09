@@ -26,6 +26,11 @@ export const customerSchema = z.object({
   phone: z.string().nullable(),
   /** The answer to the write-access request; null = not asked yet. */
   writeAccess: z.enum(['granted', 'refused']).nullable(),
+  /** Public settings the Mini App needs; they ride on the customer so they refresh with it. */
+  config: z.object({
+    /** The manager's Telegram account, with `@`: the target of «Написать менеджеру». */
+    managerUsername: z.string(),
+  }),
 });
 export type CustomerDto = z.infer<typeof customerSchema>;
 

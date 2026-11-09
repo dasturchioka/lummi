@@ -360,3 +360,10 @@ Customer decisions from the project chat. They override the TZ sections they nam
 
 ## Appendix — app texts (drafts)
 About, FAQ, Returns, Delivery & payment drafts in RU + UZ are in the TZ appendix (last page of the txt dump). Public offer comes from the customer's lawyer. Returns draft: damaged / leaking / wrong item → contact within `[3]` days with a photo → replacement or refund; opened perfume of proper quality is not returnable.
+
+### 2026-11-10: admin Settings and audit (ticket #9)
+
+- The Settings page is generated from the settings registry (`packages/contracts/src/settings.ts`): each setting carries an area, a RU/UZ label, an optional hint and unit, and the page derives the input from the zod schema. A new registry entry appears with no UI work; give it `area` and `label` (typecheck enforces it).
+- Settings and the audit log are owner-only on the server (403 for managers), and hidden from the manager's nav. A save that changes nothing writes nothing and no audit entry.
+- New setting `shop.managerUsername` (default `@lummi_manager`): the target of «Написать менеджеру». It reaches the Mini App as `config.managerUsername` on the customer record (`GET /me` and the other customer responses).
+- Audit dates are shown and filtered as Asia/Tashkent days (`from` inclusive from 00:00, `to` inclusive to the next midnight). The Tashkent/UTC helper moved to `@lummi/contracts`.

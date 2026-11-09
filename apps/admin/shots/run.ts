@@ -49,6 +49,7 @@ const apiUrl = `http://127.0.0.1:${apiPort}`;
 const adminUrl = `http://localhost:${adminPort}`;
 const databaseUrl = process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`;
 
+const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-admin-shots';
 const started: ChildProcess[] = [];
 let startedDb = false;
 
@@ -94,16 +95,7 @@ async function ensureServices() {
       console.log(`starting dev Postgres on ${dbPort} (docker compose project lummi-admin-shots)`);
       run(
         'docker',
-        [
-          'compose',
-          '-f',
-          'docker-compose.dev.yml',
-          '-p',
-          'lummi-admin-shots',
-          'up',
-          '-d',
-          '--wait',
-        ],
+        ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'up', '-d', '--wait'],
         {
           POSTGRES_HOST_PORT: String(dbPort),
         },
@@ -137,7 +129,7 @@ function stopServices() {
   if (startedDb) {
     spawnSync(
       'docker',
-      ['compose', '-f', 'docker-compose.dev.yml', '-p', 'lummi-admin-shots', 'down', '-v'],
+      ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'down', '-v'],
       {
         cwd: repoRoot,
         stdio: 'ignore',
@@ -185,6 +177,14 @@ async function seedStaff() {
     telegramId: number;
     active: boolean;
   }[];
+  // a few audited changes, so the audit page and the settings page have something to show
+  for (const [key, value] of [
+    ['pricing.freeDeliveryThreshold', 300_000],
+    ['shop.managerUsername', '@lummi_help'],
+  ] as const) {
+    const res = await call(`/admin/settings/${key}`, 'PUT', { value });
+    if (res.status !== 200) throw new Error(`could not set ${key}: ${res.status}`);
+  }
   for (const member of SHOT_STAFF.filter((s) => s.role === 'manager')) {
     let row = list.find((s) => s.telegramId === member.telegramId);
     if (!row) {
@@ -246,7 +246,7 @@ async function main() {
           });
           // Next's dev-mode indicator is not part of the design
           await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
-          await screen.act?.({ page, t, outsiderId: OUTSIDER_ID, width });
+          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width });
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);

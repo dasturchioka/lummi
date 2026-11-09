@@ -1,3 +1,4 @@
+import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import type { Page } from '@playwright/test';
 
@@ -25,6 +26,7 @@ export const OUTSIDER_ID = 990000099;
 export type ScreenContext = {
   page: Page;
   t: AdminMessages;
+  language: 'ru' | 'uz';
   outsiderId: number;
   width: number;
 };
@@ -96,6 +98,45 @@ export const screens: Screen[] = [
     act: async ({ page, t }) => {
       await page.getByRole('button', { name: t.staff.remove, exact: true }).first().click();
       await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  { id: 'settings', path: '/settings', as: 'owner' },
+  {
+    id: 'settings-error',
+    path: '/settings',
+    as: 'owner',
+    act: async ({ page, language }) => {
+      // a fraction where a whole number of so'm is required, and an out-of-range number of seconds
+      const threshold = page.getByLabel(
+        settingDefinitions['pricing.freeDeliveryThreshold'].label[language],
+        { exact: true },
+      );
+      await threshold.fill('250000.5');
+      await threshold.press('Enter');
+      await page.locator('[aria-invalid="true"]').first().waitFor();
+      const ttl = page.getByLabel(settingDefinitions['auth.sessionTtlSeconds'].label[language], {
+        exact: true,
+      });
+      await ttl.fill('5');
+      await ttl.press('Enter');
+      await page.locator('[aria-invalid="true"]').nth(1).waitFor();
+    },
+  },
+  { id: 'audit', path: '/audit', as: 'owner' },
+  {
+    id: 'audit-filtered',
+    path: '/audit',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.getByLabel(t.audit.filters.actor).selectOption({ label: SHOT_STAFF[0]!.name });
+      await page.getByLabel(t.audit.filters.action).selectOption('setting.changed');
+      await page.getByLabel(t.audit.filters.from).fill('2026-01-01');
+      await page
+        .getByLabel(t.audit.filters.to)
+        .fill(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tashkent' }));
+      await page.getByRole('button', { name: t.audit.filters.apply }).click();
+      await page.waitForURL(/action=setting\.changed/);
+      await page.getByRole('link', { name: t.audit.filters.reset }).waitFor();
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

@@ -1,6 +1,12 @@
-import { settingDefinitions, type SettingKey, type SettingValue } from '@lummi/contracts';
+import {
+  settingDefinitions,
+  settingKeys,
+  type SettingKey,
+  type SettingValue,
+} from '@lummi/contracts';
 import { inArray, settings, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { isDeepStrictEqual } from 'node:util';
 import { AuditService, type Actor } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
@@ -23,6 +29,14 @@ export async function readSettings<K extends SettingKey>(
   return out as { [P in K]: SettingValue<P> };
 }
 
+export interface SettingRowState {
+  key: SettingKey;
+  value: unknown;
+  updatedAt: Date | null;
+  /** A stored value that no longer fits its schema; `value` is the default then. */
+  invalid: boolean;
+}
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -36,6 +50,21 @@ export class SettingsService {
     return (await readSettings(tx, [key]))[key];
   }
 
+  /** Every registered setting with its effective value; a stale stored value is flagged, not thrown. */
+  async listAll(): Promise<SettingRowState[]> {
+    const rows = await this.db.select().from(settings);
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    return settingKeys.map((key) => {
+      const def = settingDefinitions[key];
+      const row = byKey.get(key);
+      if (!row) return { key, value: def.default, updatedAt: null, invalid: false };
+      const parsed = def.schema.safeParse(row.value);
+      return parsed.success
+        ? { key, value: parsed.data, updatedAt: row.updatedAt, invalid: false }
+        : { key, value: def.default, updatedAt: row.updatedAt, invalid: true };
+    });
+  }
+
   /** The only way to change a setting: validates, writes, and audits old and new in one transaction (the caller's when `outer` is given). */
   async set<K extends SettingKey>(
     key: K,
@@ -46,6 +75,7 @@ export class SettingsService {
     const parsed = settingDefinitions[key].schema.parse(value);
     const run = async (tx: DbOrTx) => {
       const old = await this.get(key, tx);
+      if (isDeepStrictEqual(old, parsed)) return; // nothing changed: no write, no audit noise
       await tx
         .insert(settings)
         .values({ key, value: parsed })
