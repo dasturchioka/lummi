@@ -1,4 +1,5 @@
-import { SHOT_USER, signContact, type ApiClient } from './api';
+import { signContact } from '@lummi/contracts/sign-contact';
+import { SHOT_USER, type ApiClient } from './api';
 
 /**
  * Every screen the screenshot run captures, in one place. Each UI ticket adds its screens here
@@ -31,7 +32,14 @@ export const screens: ScreenDef[] = [
     setup: async ({ api }) => {
       const botToken = process.env.BOT_TOKEN ?? '';
       const res = await api.me.shareContact({
-        body: { proof: signContact(botToken, SHOT_USER.id, '+998901234567') },
+        body: {
+          proof: signContact({
+            botToken,
+            userId: SHOT_USER.id,
+            phone: '+998901234567',
+            authDate: Math.floor(Date.now() / 1000),
+          }),
+        },
       });
       if (res.status !== 200) throw new Error(`profile shot: share contact failed ${res.status}`);
     },

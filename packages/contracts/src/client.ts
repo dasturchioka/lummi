@@ -29,7 +29,7 @@ export const clientRoutes = {
   me: {
     get: route('GET', '/me', [200, 401]),
     updatePreferences: route('PATCH', '/me/preferences', [200, 401]),
-    shareContact: route('POST', '/me/contact', [200, 400, 401, 403]),
+    shareContact: route('POST', '/me/contact', [200, 400, 401, 403, 409]),
     writeAccess: route('POST', '/me/write-access', [200, 401]),
   },
 };

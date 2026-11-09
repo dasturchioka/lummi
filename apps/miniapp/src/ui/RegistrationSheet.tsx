@@ -2,7 +2,8 @@ import { usePrefs } from '../lib/prefs';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 
-export type RegistrationStatus = 'idle' | 'busy' | 'denied' | 'unsupported' | 'failed' | 'foreign';
+export type RegistrationStatus =
+  'idle' | 'busy' | 'denied' | 'unsupported' | 'failed' | 'foreign' | 'expired' | 'taken';
 
 /** The registration step: share the contact, then allow the bot to write. Pure view; the flow lives in lib/registration. */
 export default function RegistrationSheet({
@@ -23,6 +24,8 @@ export default function RegistrationSheet({
     unsupported: r.unsupported,
     failed: r.failed,
     foreign: r.foreign,
+    expired: r.expired,
+    taken: r.taken,
   };
   return (
     <Sheet
@@ -42,7 +45,9 @@ export default function RegistrationSheet({
         </p>
       ) : null}
       <Button block loading={status === 'busy'} onClick={onShare}>
-        {status === 'denied' || status === 'failed' ? t.common.retry : r.share}
+        {status === 'denied' || status === 'failed' || status === 'expired'
+          ? t.common.retry
+          : r.share}
       </Button>
       <p className="type-small mt-3 text-center text-muted">{r.privacy}</p>
     </Sheet>

@@ -71,6 +71,8 @@ export function RegistrationProvider({ children }: { children: ReactNode }) {
       return setStatus('failed');
     }
     if (res.status === 403) return setStatus('foreign');
+    if (res.status === 409) return setStatus('taken');
+    if (res.status === 400 && res.body.code === 'expired_contact') return setStatus('expired');
     if (res.status !== 200) return setStatus('failed');
     // A phone that belonged to an older account relinks it: carry on with that account's session.
     if (res.body.session) {

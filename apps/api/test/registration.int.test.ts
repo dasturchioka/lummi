@@ -1,6 +1,9 @@
 import { auditLog, customers, eq } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { signContact } from './harness/sign-contact';
+import { apiContract } from '@lummi/contracts';
+import { signContact } from '@lummi/contracts/sign-contact';
+import { initClient } from '@ts-rest/core';
+import { OutboxService } from '../src/outbox/outbox.service';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -127,6 +130,10 @@ describe('share contact', () => {
     });
     expect(res.body.session).not.toBeNull();
 
+    // the OLD Telegram account's session no longer reaches this customer: not /me, not refresh
+    expect((await old.client.me.get()).status).toBe(401);
+    expect((await old.client.auth.refresh()).status).toBe(401);
+
     const rows = await t.db.select().from(customers);
     expect(rows).toHaveLength(1);
     const relink = (await t.db.select().from(auditLog)).find(
@@ -139,8 +146,6 @@ describe('share contact', () => {
     });
 
     // the new session belongs to the relinked customer
-    const { initClient } = await import('@ts-rest/core');
-    const { apiContract } = await import('@lummi/contracts');
     const client = initClient(apiContract, {
       baseUrl: t.baseUrl,
       baseHeaders: { authorization: `Bearer ${res.body.session!.token}` },
@@ -168,24 +173,94 @@ describe('share contact', () => {
   });
 });
 
+describe('relink safety', () => {
+  it('never absorbs a customer that already has a phone: 409 phone_taken, nothing changes', async () => {
+    const old = await t.signIn(ali);
+    await old.client.me.shareContact({ body: { proof: contact() } });
+    const other = await t.signIn(vali);
+    await other.client.me.shareContact({
+      body: { proof: contact({ userId: vali.id, phone: '998935550000' }) },
+    });
+    // vali's Telegram account now claims ali's number
+    const res = await other.client.me.shareContact({
+      body: { proof: contact({ userId: vali.id }) },
+    });
+    expect(res.status).toBe(409);
+    if (res.status === 409) expect(res.body.code).toBe('phone_taken');
+    const rows = await t.db.select().from(customers);
+    expect(rows.map((r) => [r.telegramId, r.phone]).sort()).toEqual([
+      [ali.id, '+998901234567'],
+      [vali.id, '+998935550000'],
+    ]);
+    expect((await other.client.me.get()).status).toBe(200);
+  });
+
+  it('the relinked customer takes the new account chat state, not the old one', async () => {
+    const old = await t.signIn(ali);
+    await old.client.me.shareContact({ body: { proof: contact() } });
+    await t.db.update(customers).set({ botBlocked: true, writeAccess: 'granted' });
+    const fresh = await t.signIn(vali);
+    await fresh.client.me.writeAccess({ body: { allowed: false } });
+    const res = await fresh.client.me.shareContact({
+      body: { proof: contact({ userId: vali.id }) },
+    });
+    expect(res.status).toBe(200);
+    const [c] = await t.db.select().from(customers);
+    expect(c).toMatchObject({ telegramId: vali.id, botBlocked: false, writeAccess: 'refused' });
+  });
+
+  it('two concurrent verifications of one phone end in one customer, never a 500', async () => {
+    for (let round = 0; round < 5; round++) {
+      await t.reset();
+      const [a, b] = await Promise.all([t.signIn(ali), t.signIn(vali)]);
+      const [ra, rb] = await Promise.all([
+        a.client.me.shareContact({ body: { proof: contact() } }),
+        b.client.me.shareContact({ body: { proof: contact({ userId: vali.id }) } }),
+      ]);
+      expect([ra.status, rb.status].every((s) => s === 200 || s === 409)).toBe(true);
+      const rows = await t.db.select().from(customers);
+      expect(rows.filter((r) => r.phone === '+998901234567')).toHaveLength(1);
+    }
+  });
+});
+
 describe('write access', () => {
-  it('records a refusal, flags the customer, audits it, and does not block anything', async () => {
+  it('records a refusal in write_access only, and audits it', async () => {
     const { client } = await t.signIn(ali);
     const res = await client.me.writeAccess({ body: { allowed: false } });
     expect(res.status === 200 && res.body.writeAccess).toBe('refused');
     const [c] = await t.db.select().from(customers);
-    expect(c?.botBlocked).toBe(true);
+    expect(c).toMatchObject({ writeAccess: 'refused', botBlocked: false });
     expect(await actions()).toContain('customer.write_access_refused');
-    const me = await client.me.get();
-    expect(me.status).toBe(200);
+    expect((await client.me.get()).status).toBe(200);
   });
 
-  it('records a grant and clears the flag', async () => {
+  it('a grant updates write_access and never clears a bot-observed block', async () => {
     const { client } = await t.signIn(ali);
-    await client.me.writeAccess({ body: { allowed: false } });
+    await t.db.update(customers).set({ botBlocked: true });
     const res = await client.me.writeAccess({ body: { allowed: true } });
     expect(res.status === 200 && res.body.writeAccess).toBe('granted');
     const [c] = await t.db.select().from(customers);
-    expect(c?.botBlocked).toBe(false);
+    expect(c?.botBlocked).toBe(true);
+  });
+
+  it('the outbox sends nothing to a customer who refused or blocked the bot', async () => {
+    const outboxSvc = t.app.get(OutboxService);
+    const send = async (telegramId: number) => {
+      const [id] = await outboxSvc.withTx((tx) =>
+        outboxSvc.enqueue(tx, { chatId: telegramId, text: 'status' }),
+      );
+      return outboxSvc.deliver(id!);
+    };
+    const { client } = await t.signIn(ali);
+    t.edges.telegram.sent.length = 0;
+    expect(await send(ali.id)).toBe('sent'); // not asked yet: allowed
+    await client.me.writeAccess({ body: { allowed: false } });
+    expect(await send(ali.id)).not.toBe('sent');
+    await client.me.writeAccess({ body: { allowed: true } });
+    expect(await send(ali.id)).toBe('sent');
+    await t.db.update(customers).set({ botBlocked: true });
+    expect(await send(ali.id)).not.toBe('sent');
+    expect(t.edges.telegram.sent).toHaveLength(2);
   });
 });

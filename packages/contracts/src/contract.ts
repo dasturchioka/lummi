@@ -69,6 +69,7 @@ export const contract = c.router({
         400: contactErrorSchema,
         401: authErrorSchema,
         403: contactErrorSchema,
+        409: contactErrorSchema,
       },
       summary: 'Set the account phone from the signed requestContact payload (ADR 0004)',
     },

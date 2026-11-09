@@ -1,5 +1,8 @@
 import { createHmac } from 'node:crypto';
 
+/**
+ * Node only (tests and the screenshot run): never import this from the Mini App bundle.
+ */
 export interface SignContactOptions {
   botToken: string;
   userId: number;

@@ -38,11 +38,11 @@ export const preferencesBodySchema = z
   .partial()
   .refine((v) => v.language !== undefined || v.theme !== undefined, 'nothing to change');
 
-/** `raw` is the signed string `requestContact` returns; the server verifies it, never a bare phone. */
+/** `proof` is the signed string `requestContact` returns; the server verifies it, never a bare phone. */
 export const contactBodySchema = z.object({ proof: z.string().min(1).max(4096) });
 
 export const contactErrorSchema = z.object({
-  code: z.enum(['invalid_contact', 'expired_contact', 'contact_not_yours']),
+  code: z.enum(['invalid_contact', 'expired_contact', 'contact_not_yours', 'phone_taken']),
 });
 
 /** `session` is set only when the phone relinked an older account: use this token from now on. */

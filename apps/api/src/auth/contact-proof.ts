@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { InitDataError, verifySignedFields, type VerifyOptions } from './init-data';
+import { SignedPayloadError, verifySignedPayload, type VerifyOptions } from './signed-payload';
 
 const contactSchema = z.object({
   user_id: z.number().int().positive(),
@@ -32,16 +32,10 @@ export function verifyContactProof(
 ): { phone: string } {
   let fields;
   try {
-    fields = verifySignedFields(raw, opts.botToken);
+    ({ fields } = verifySignedPayload(raw, opts));
   } catch (e) {
-    if (e instanceof InitDataError) throw new ContactError('invalid');
-    throw e;
-  }
-  const authDateRaw = fields.get('auth_date');
-  if (!authDateRaw || !/^\d{1,12}$/.test(authDateRaw)) throw new ContactError('invalid');
-  const age = opts.now.getTime() / 1000 - Number(authDateRaw);
-  if (age > opts.maxAgeSeconds || age < -opts.maxFutureSkewSeconds) {
-    throw new ContactError('expired');
+    if (!(e instanceof SignedPayloadError)) throw e;
+    throw new ContactError(e.reason === 'stale' || e.reason === 'future' ? 'expired' : 'invalid');
   }
   let contact;
   try {

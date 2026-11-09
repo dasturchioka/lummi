@@ -49,9 +49,12 @@ export const miniappMessages = defineMessages(
       share: 'Поделиться контактом',
       privacy: 'Номер видят только мы. Без разрешения писать статусы будут в приложении.',
       denied: 'Без контакта оформить заказ нельзя. Попробуйте ещё раз.',
-      unsupported: 'Эта версия Telegram не умеет делиться контактом. Обновите Telegram.',
+      unsupported:
+        'Обновите Telegram: в этой версии нельзя поделиться контактом, а без него заказ не оформить.',
       failed: 'Не получилось. Проверьте соединение и повторите.',
       foreign: 'Это контакт другого аккаунта. Поделитесь своим.',
+      expired: 'Подтверждение устарело. Нажмите ещё раз.',
+      taken: 'Этот номер уже привязан к другому аккаунту. Напишите менеджеру, мы поможем.',
     },
     session: {
       reopenTitle: 'Откройте приложение заново',
@@ -105,9 +108,12 @@ export const miniappMessages = defineMessages(
       share: 'Kontaktni ulashish',
       privacy: 'Raqamni faqat biz koʻramiz. Ruxsatsiz holatlar ilovada koʻrinadi.',
       denied: 'Kontaktsiz buyurtma berib boʻlmaydi. Qaytadan urinib koʻring.',
-      unsupported: 'Telegramning bu versiyasi kontakt ulasha olmaydi. Telegramni yangilang.',
+      unsupported:
+        'Telegramni yangilang: bu versiyada kontaktni ulashib boʻlmaydi, kontaktsiz esa buyurtma berib boʻlmaydi.',
       failed: 'Chiqmadi. Internetni tekshiring va qayta urinib koʻring.',
       foreign: 'Bu boshqa akkauntning kontakti. Oʻzingizniki bilan ulashing.',
+      expired: 'Tasdiq eskirdi. Yana bir marta bosing.',
+      taken: 'Bu raqam boshqa akkauntga bogʻlangan. Menejerga yozing, yordam beramiz.',
     },
     session: {
       reopenTitle: 'Ilovani qaytadan oching',

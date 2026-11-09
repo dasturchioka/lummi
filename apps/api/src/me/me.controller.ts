@@ -86,7 +86,13 @@ export class MeController {
       }
       const done = await this.customers.setVerifiedPhone(customerId, phone);
       if (!done) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      const session = done.relinkedTo === null ? null : await this.sessions.issue(done.customer.id);
+      if (done.kind === 'taken') {
+        return { status: 409 as const, body: { code: 'phone_taken' as const } };
+      }
+      const session =
+        done.relinkedTo === null
+          ? null
+          : await this.sessions.issue(done.customer.id, done.customer.telegramId);
       return {
         status: 200 as const,
         body: {

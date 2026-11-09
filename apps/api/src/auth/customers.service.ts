@@ -1,4 +1,4 @@
-import { customers, eq, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
+import { customers, eq, sql, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
@@ -93,71 +93,95 @@ export class CustomersService {
   }
 
   /**
-   * Set the account phone from a VERIFIED contact (the caller has checked the proof, ADR 0004).
-   * A phone held by another customer relinks that customer to this Telegram id: the older
-   * record keeps its orders and rights, this fresh one is merged away. `relinkedTo` is set then,
-   * and the caller must hand the client a session for it.
+   * Set the account phone from a VERIFIED contact (the caller has checked the proof, ADR 0004/0032).
+   *
+   * - Nobody holds the phone: this customer gets it.
+   * - Another customer holds it and this record is fresh (no phone yet): relink. The older customer
+   *   takes over this Telegram id and this chat's state; this record is merged away
+   *   (`moveCustomerData`), and `relinkedTo` tells the caller to issue a session for the older one.
+   * - Another customer holds it and this one already has a phone: `taken`. Nothing changes; the
+   *   customer should talk to a manager.
+   *
+   * Concurrent verifications of one phone race on the unique index; the loser retries and lands on
+   * a branch above.
    */
   async setVerifiedPhone(
     customerId: number,
     phone: string,
-  ): Promise<{ customer: CustomerRow; relinkedTo: number | null } | null> {
-    return this.db.transaction(async (tx) => {
-      const [current] = await tx.select().from(customers).where(eq(customers.id, customerId));
-      if (!current) return null;
-      const now = this.edges.clock.now();
-      const actor = { type: 'customer' as const, id: customerId };
-      const [holder] = await tx.select().from(customers).where(eq(customers.phone, phone));
-
-      if (!holder || holder.id === current.id) {
-        if (current.phone === phone) return { customer: current, relinkedTo: null };
-        const [row] = await tx
-          .update(customers)
-          .set({ phone, phoneVerifiedAt: now, updatedAt: now })
-          .where(eq(customers.id, current.id))
-          .returning();
-        await this.audit.record(tx, {
-          actor,
-          action: 'customer.phone_set',
-          targetType: 'customer',
-          targetId: current.id,
-          payload: { previous: current.phone !== null },
-        });
-        return { customer: row!, relinkedTo: null };
+  ): Promise<
+    { kind: 'ok'; customer: CustomerRow; relinkedTo: number | null } | { kind: 'taken' } | null
+  > {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.db.transaction((tx) => this.setPhoneIn(tx, customerId, phone));
+      } catch (e) {
+        if (attempt >= 3 || !isRetryable(e)) throw e;
       }
+    }
+  }
 
-      // Another Telegram id held this phone: the person moved to a new account. Phone wins.
-      await tx.delete(customers).where(eq(customers.id, current.id));
+  private async setPhoneIn(tx: DbOrTx, customerId: number, phone: string) {
+    const [current] = await tx.select().from(customers).where(eq(customers.id, customerId));
+    if (!current) return null;
+    const now = this.edges.clock.now();
+    const [holder] = await tx.select().from(customers).where(eq(customers.phone, phone));
+
+    if (!holder || holder.id === current.id) {
+      if (current.phone === phone)
+        return { kind: 'ok' as const, customer: current, relinkedTo: null };
       const [row] = await tx
         .update(customers)
-        .set({
-          telegramId: current.telegramId,
-          firstName: current.firstName,
-          lastName: current.lastName,
-          username: current.username,
-          phoneVerifiedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(customers.id, holder.id))
+        .set({ phone, phoneVerifiedAt: now, updatedAt: now })
+        .where(eq(customers.id, current.id))
         .returning();
       await this.audit.record(tx, {
-        actor: { type: 'customer', id: holder.id },
-        action: 'customer.relinked',
+        actor: { type: 'customer', id: current.id },
+        action: 'customer.phone_set',
         targetType: 'customer',
-        targetId: holder.id,
-        payload: {
-          fromTelegramId: holder.telegramId,
-          toTelegramId: current.telegramId,
-          mergedCustomerId: current.id,
-        },
+        targetId: current.id,
+        payload: { previous: current.phone !== null },
       });
-      return { customer: row!, relinkedTo: holder.id };
+      return { kind: 'ok' as const, customer: row!, relinkedTo: null };
+    }
+
+    // Another Telegram id held this phone: the person moved to a new account, phone wins.
+    // Only a fresh record may be absorbed; one with its own phone (and so history) may not.
+    if (current.phone !== null) return { kind: 'taken' as const };
+    await moveCustomerData(tx, current.id, holder.id);
+    await tx.delete(customers).where(eq(customers.id, current.id));
+    const [row] = await tx
+      .update(customers)
+      .set({
+        telegramId: current.telegramId,
+        firstName: current.firstName,
+        lastName: current.lastName,
+        username: current.username,
+        // the chat state belongs to the Telegram account now in use, not the abandoned one
+        botBlocked: current.botBlocked,
+        writeAccess: current.writeAccess,
+        phoneVerifiedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(customers.id, holder.id))
+      .returning();
+    await this.audit.record(tx, {
+      actor: { type: 'customer', id: holder.id },
+      action: 'customer.relinked',
+      targetType: 'customer',
+      targetId: holder.id,
+      payload: {
+        fromTelegramId: holder.telegramId,
+        toTelegramId: current.telegramId,
+        mergedCustomerId: current.id,
+      },
     });
+    return { kind: 'ok' as const, customer: row!, relinkedTo: holder.id };
   }
 
   /**
-   * The answer to requestWriteAccess. Refusing never blocks ordering: it only flags the customer
-   * (bot_blocked) so statuses stay in the app. Granting clears the flag.
+   * The customer's own report of the requestWriteAccess answer. Only `write_access` changes:
+   * `bot_blocked` stays what the bot observed (a grant must not hide a real 403). The outbox skips
+   * customers who refused or blocked, so statuses stay in the app.
    */
   async recordWriteAccess(id: number, allowed: boolean): Promise<CustomerRow | null> {
     return this.db.transaction(async (tx) => {
@@ -166,7 +190,7 @@ export class CustomersService {
       const writeAccess = allowed ? ('granted' as const) : ('refused' as const);
       const [row] = await tx
         .update(customers)
-        .set({ writeAccess, botBlocked: !allowed, updatedAt: this.edges.clock.now() })
+        .set({ writeAccess, updatedAt: this.edges.clock.now() })
         .where(eq(customers.id, id))
         .returning();
       if (before.writeAccess !== writeAccess) {
@@ -180,4 +204,46 @@ export class CustomersService {
       return row ?? null;
     });
   }
+
+  /** /start in the private chat: the customer opened the chat themselves, so the bot may write. */
+  async markStarted(telegramId: number, tx: DbOrTx = this.db): Promise<void> {
+    await tx
+      .update(customers)
+      .set({
+        botBlocked: false,
+        writeAccess: sql`case when ${customers.writeAccess} = 'refused' then 'granted'::write_access else ${customers.writeAccess} end`,
+      })
+      .where(eq(customers.telegramId, telegramId));
+  }
+
+  /** False for a customer who refused write access or blocked the bot; true for anyone else. */
+  async canMessage(telegramId: number): Promise<boolean> {
+    const [c] = await this.db
+      .select({ botBlocked: customers.botBlocked, writeAccess: customers.writeAccess })
+      .from(customers)
+      .where(eq(customers.telegramId, telegramId));
+    return !c || (!c.botBlocked && c.writeAccess !== 'refused');
+  }
+}
+
+/**
+ * Everything that hangs on a customer record moves here when a fresh record is merged into the
+ * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
+ * (the cart, #18, moves its lines). Today only preferences exist and the fresh record has none worth keeping.
+ */
+export async function moveCustomerData(
+  _tx: DbOrTx,
+  _fromId: number,
+  _toId: number,
+): Promise<void> {}
+
+/** A lost race on the phone's unique index, or a deadlock between two relinks: run the transaction again. */
+function isRetryable(e: unknown): boolean {
+  const codes = new Set(['23505', '40P01', '40001']);
+  for (let cur: unknown = e, depth = 0; cur && depth < 4; depth++) {
+    const code = (cur as { code?: unknown }).code;
+    if (typeof code === 'string' && codes.has(code)) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
 }
