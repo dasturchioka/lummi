@@ -331,7 +331,7 @@ export function Checkout() {
       <ScreenHeader title={o.checkout.title} />
 
       <section className="flex flex-col gap-3.5">
-        <SectionTitle>{o.checkout.recipient}</SectionTitle>
+        <SectionTitle flush>{o.checkout.recipient}</SectionTitle>
         <TextField
           label={o.checkout.name}
           value={nameValue}
@@ -370,7 +370,7 @@ export function Checkout() {
       </section>
 
       <section className="mt-[26px] flex flex-col gap-3.5">
-        <SectionTitle>{o.checkout.delivery}</SectionTitle>
+        <SectionTitle flush>{o.checkout.delivery}</SectionTitle>
         <Card className="type-body flex items-start gap-3 p-4">
           <span className="mt-0.5 shrink-0 text-ink">
             <TruckIcon size={20} />
@@ -509,7 +509,8 @@ function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
       className="grid transition-[grid-template-rows,opacity] duration-[260ms] ease-[cubic-bezier(0.23,1,0.32,1)]"
       style={{ gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0 }}
     >
-      <div className="min-h-0 overflow-hidden">{children}</div>
+      {/* 4 px of room each side, so a focused field's Sage ring is not clipped by the fold */}
+      <div className="-mx-1 min-h-0 overflow-hidden px-1 pb-1">{children}</div>
     </div>
   );
 }

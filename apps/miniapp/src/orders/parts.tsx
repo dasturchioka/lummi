@@ -34,8 +34,15 @@ export function StatusPill({ status }: { status: OrderStatus }) {
 }
 
 /** A section title over a block: Tenor caps (DESIGN.md Section), as «ПОЛУЧАТЕЛЬ» in mockup 06. */
-export function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="type-section mb-3 text-ink">{children}</h2>;
+export function SectionTitle({
+  children,
+  flush = false,
+}: {
+  children: ReactNode;
+  flush?: boolean;
+}) {
+  // `flush`: the parent's gap already spaces it (a flex column of fields)
+  return <h2 className={`type-section text-ink ${flush ? '' : 'mb-3'}`}>{children}</h2>;
 }
 
 function discountSource(d: Discount, t: ReturnType<typeof usePrefs>['t']): string {
