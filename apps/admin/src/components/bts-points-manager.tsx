@@ -190,7 +190,7 @@ export function BtsPointsManager({
       <Card className="mb-4 p-4">
         <form
           key={href(filters, 1)}
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr_auto]"
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_2fr_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);
@@ -242,7 +242,8 @@ export function BtsPointsManager({
               placeholder={t.btsPoints.searchPlaceholder}
             />
           </Field>
-          <div className="flex items-end gap-2 max-sm:order-2">
+          {/* phones: when «Сбросить» does not fit beside the other two, it takes its own row */}
+          <div className="flex items-end gap-2 max-sm:order-2 max-sm:flex-wrap">
             <Button type="submit" className="max-sm:flex-1">
               {t.btsPoints.apply}
             </Button>
@@ -263,7 +264,7 @@ export function BtsPointsManager({
               )}
             </Button>
             {filtered && (
-              <Button variant="outline" asChild>
+              <Button variant="outline" className="max-sm:flex-1" asChild>
                 <Link href="/bts-points">{t.btsPoints.reset}</Link>
               </Button>
             )}
@@ -310,9 +311,9 @@ export function BtsPointsManager({
               <THead>
                 <TR>
                   <TH>{t.btsPoints.code}</TH>
-                  <TH>{t.btsPoints.name}</TH>
+                  <TH className="w-[30%]">{t.btsPoints.name}</TH>
                   <TH>{t.btsPoints.address}</TH>
-                  <TH>{t.btsPoints.status}</TH>
+                  <TH className="w-px">{t.btsPoints.status}</TH>
                   <TH>
                     <span className="sr-only">{t.btsPoints.actions}</span>
                   </TH>
@@ -331,12 +332,12 @@ export function BtsPointsManager({
                     className="cursor-pointer [&>td]:py-3.5 [&>td]:align-top [&>td]:break-words"
                   >
                     <TD className="w-px whitespace-nowrap text-muted-foreground">{p.code}</TD>
-                    <TD className="min-w-[14rem]">
+                    <TD className="min-w-[15rem]">
                       {nameButton(p)}
                       {place(p)}
                     </TD>
                     <TD className="min-w-[16rem]">{details(p)}</TD>
-                    <TD>{status(p)}</TD>
+                    <TD className="w-px whitespace-nowrap">{status(p)}</TD>
                     <TD className="w-px">
                       <div className="-my-1.5 flex">{hideAction(p)}</div>
                     </TD>
