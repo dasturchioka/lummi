@@ -1,6 +1,33 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 const port = z.coerce.number().int().min(0).max(65535);
+
+export interface Cidr {
+  address: string;
+  prefix: number;
+  family: 'ipv4' | 'ipv6';
+}
+
+/** «127.0.0.0/8,::1/128» → subnets; a malformed entry fails the env check, so the API refuses to boot. */
+const cidrList = z.string().transform((value, ctx): Cidr[] => {
+  const list: Cidr[] = [];
+  for (const entry of value
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean)) {
+    const [address = '', prefixText = ''] = entry.split('/');
+    const version = isIP(address);
+    const prefix = Number(prefixText);
+    const max = version === 6 ? 128 : 32;
+    if (version === 0 || !/^\d{1,3}$/.test(prefixText) || prefix > max) {
+      ctx.addIssue({ code: 'custom', message: `not a CIDR: «${entry}»` });
+      return z.NEVER;
+    }
+    list.push({ address, prefix, family: version === 6 ? 'ipv6' : 'ipv4' });
+  }
+  return list;
+});
 
 const botModes = ['polling', 'webhook', 'off'] as const;
 
@@ -26,6 +53,16 @@ export const envSchema = z
     /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
+    /** Shared secret of the internal endpoints the userbot calls (ADR 0015); unset = they answer 404. */
+    INTERNAL_API_SECRET: z
+      .string()
+      .min(32, 'INTERNAL_API_SECRET must be at least 32 characters')
+      .optional(),
+    /**
+     * Source networks allowed to call the internal endpoints. Loopback only by default (ADR 0015);
+     * a Compose deploy where the userbot is its own container adds that network's subnet.
+     */
+    INTERNAL_ALLOWED_CIDRS: cidrList.default('127.0.0.0/8,::1/128'),
   })
   .superRefine((env, ctx) => {
     if (env.BOT_MODE === 'webhook') {
