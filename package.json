@@ -20,7 +20,8 @@
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "npm run generate -w @lummi/db",
-    "db:migrate": "npm run migrate -w @lummi/db"
+    "db:migrate": "npm run migrate -w @lummi/db",
+    "dev:worker": "npm run dev:worker -w @lummi/api"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

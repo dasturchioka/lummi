@@ -8,6 +8,13 @@
       "when": 1794218211378,
       "tag": "0000_thick_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794218836712,
+      "tag": "0001_cute_karen_page",
+      "breakpoints": true
     }
   ]
 }

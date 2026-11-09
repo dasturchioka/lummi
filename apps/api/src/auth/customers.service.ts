@@ -6,6 +6,9 @@ import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import type { InitDataUser } from './init-data';
 
+/** A transaction handle; the bot opens one per update and passes it down. */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -15,8 +18,13 @@ export class CustomersService {
   ) {}
 
   /** First sign-in creates the customer (language from language_code); later ones refresh the profile only. */
-  async signIn(user: InitDataUser): Promise<CustomerRow> {
-    return this.db.transaction(async (tx) => {
+  async signIn(user: InitDataUser, outer?: Tx): Promise<CustomerRow> {
+    if (outer) return this.signInIn(outer, user);
+    return this.db.transaction((tx) => this.signInIn(tx, user));
+  }
+
+  private async signInIn(tx: Tx, user: InitDataUser): Promise<CustomerRow> {
+    {
       const profile = {
         firstName: user.first_name,
         lastName: user.last_name ?? null,
@@ -47,7 +55,7 @@ export class CustomersService {
         .returning();
       if (!updated) throw new Error('customer vanished during sign-in');
       return updated;
-    });
+    }
   }
 
   async getById(id: number): Promise<CustomerRow | null> {
