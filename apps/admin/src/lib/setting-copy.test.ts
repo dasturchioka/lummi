@@ -17,9 +17,7 @@ describe('durationText', () => {
 
   it('spells out every part when no single unit is exact', () => {
     expect(durationText(5_400, 'seconds', 'ru', ru)).toBe('= 1 ч 30 мин');
-    expect(durationText(90_061, 'seconds', 'uz', uz)).toBe(
-      '= 1 kun 1 soat 1 daqiqa 1 soniya',
-    );
+    expect(durationText(90_061, 'seconds', 'uz', uz)).toBe('= 1 kun 1 soat 1 daqiqa 1 soniya');
   });
 
   it('stays quiet where it would only repeat the field', () => {
