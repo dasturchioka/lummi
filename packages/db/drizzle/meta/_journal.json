@@ -57,6 +57,13 @@
       "when": 1794253484228,
       "tag": "0007_red_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794255982697,
+      "tag": "0008_search_documents",
+      "breakpoints": true
     }
   ]
 }

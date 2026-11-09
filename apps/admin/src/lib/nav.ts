@@ -56,7 +56,7 @@ export const NAV: NavGroup[] = [
   {
     key: 'shop',
     items: [
-      { key: 'catalog', icon: Droplet, href: null, roles: OWNER },
+      { key: 'catalog', icon: Droplet, href: '/catalog', roles: OWNER },
       { key: 'stock', icon: Warehouse, href: null, roles: ALL },
       { key: 'content', icon: FileText, href: null, roles: OWNER },
     ],

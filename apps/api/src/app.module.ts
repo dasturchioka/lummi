@@ -4,6 +4,8 @@ import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
+import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
+import { CatalogAdminService } from './admin/catalog-admin.service';
 import { SettingsController } from './admin/settings.controller';
 import { StaffController } from './admin/staff.controller';
 import { AuditQueryService } from './audit/audit-query.service';
@@ -16,6 +18,7 @@ import { DeliveryController } from './delivery/delivery.controller';
 import { DeliveryService } from './delivery/delivery.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
+import { SearchService } from './search/search.service';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
@@ -61,6 +64,8 @@ export class AppModule {
         StaffController,
         SettingsController,
         AuditController,
+        CatalogAdminController,
+        OnHandController,
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
@@ -78,6 +83,8 @@ export class AppModule {
         WorkerRuntime,
         SettingsService,
         CatalogService,
+        CatalogAdminService,
+        SearchService,
         CustomersService,
         DeliveryService,
         BtsAdminService,

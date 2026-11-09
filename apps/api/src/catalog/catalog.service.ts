@@ -1,13 +1,16 @@
-import type { FragranceCard, VolumeCard } from '@lummi/contracts';
+import type { FragranceCard, FragranceListItem, VolumeCard } from '@lummi/contracts';
 import {
+  and,
   asc,
   eq,
   families,
   fragranceNotes,
   fragrances,
+  inArray,
   notes,
   volumes,
   type Db,
+  type DbOrTx,
   type VolumeRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
@@ -20,9 +23,15 @@ import { DB, EDGES } from '../tokens';
  * checkout ticket; until then nothing is reserved. Keep this the one place that knows, so
  * "available" is on hand minus reserve everywhere.
  */
-export async function reservedByVolume(_db: Db, volumeIds: number[]): Promise<Map<number, number>> {
+export async function reservedByVolume(
+  _db: DbOrTx,
+  volumeIds: number[],
+): Promise<Map<number, number>> {
   return new Map(volumeIds.map((id) => [id, 0]));
 }
+
+/** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
+export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {
@@ -40,7 +49,7 @@ export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeC
     salePercent: sale === null ? null : Math.round(((v.price - sale) / v.price) * 100),
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
-    available: Math.max(0, v.onHand - reserved),
+    available: available(v.onHand, reserved),
     photo: v.photoHash,
   };
 }
@@ -51,6 +60,70 @@ export class CatalogService {
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
   ) {}
+
+  /**
+   * List cards for these fragrances, in the order of `ids` (hidden and unknown ones are skipped).
+   * Search results and, with #15, the catalog list come through here, so a list card is built in
+   * one place: the family pair, the lowest price and the sold-out flag through `toVolumeCard`.
+   */
+  async listItems(ids: readonly number[]): Promise<FragranceListItem[]> {
+    if (ids.length === 0) return [];
+    const [rows, vols] = await Promise.all([
+      this.db
+        .select({
+          id: fragrances.id,
+          slug: fragrances.slug,
+          name: fragrances.name,
+          brand: fragrances.originalBrand,
+          type: fragrances.type,
+          keyNotesRu: fragrances.keyNotesRu,
+          keyNotesUz: fragrances.keyNotesUz,
+          isHit: fragrances.isHit,
+          isNew: fragrances.isNew,
+          familyRu: families.nameRu,
+          familyUz: families.nameUz,
+        })
+        .from(fragrances)
+        .leftJoin(families, eq(families.id, fragrances.familyId))
+        .where(and(inArray(fragrances.id, [...ids]), eq(fragrances.hidden, false))),
+      this.db
+        .select()
+        .from(volumes)
+        .where(inArray(volumes.fragranceId, [...ids]))
+        .orderBy(asc(volumes.ml)),
+    ]);
+    const reserved = await reservedByVolume(
+      this.db,
+      vols.map((v) => v.id),
+    );
+    const now = this.edges.clock.now();
+    const volsOf = new Map<number, VolumeRow[]>();
+    for (const v of vols) volsOf.set(v.fragranceId, [...(volsOf.get(v.fragranceId) ?? []), v]);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+
+    return ids.flatMap((id) => {
+      const f = byId.get(id);
+      if (!f) return [];
+      const cards = (volsOf.get(id) ?? []).map((v) =>
+        toVolumeCard(v, reserved.get(v.id) ?? 0, now),
+      );
+      return [
+        {
+          slug: f.slug,
+          name: f.name,
+          brand: f.brand,
+          type: f.type,
+          family: f.familyRu && f.familyUz ? { ru: f.familyRu, uz: f.familyUz } : null,
+          keyNotes: { ru: f.keyNotesRu, uz: f.keyNotesUz },
+          isHit: f.isHit,
+          isNew: f.isNew,
+          fromPrice: cards.length ? Math.min(...cards.map((c) => c.effectivePrice)) : null,
+          soldOut: cards.length === 0 || cards.every((c) => c.available === 0),
+          photo: cards[0]?.photo ?? null,
+        },
+      ];
+    });
+  }
 
   /** The card for a customer. Hidden and unknown slugs are both `null`. Only customer-safe fields are selected. */
   async cardBySlug(slug: string): Promise<FragranceCard | null> {

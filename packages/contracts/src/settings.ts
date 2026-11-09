@@ -4,7 +4,15 @@ import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
-export const SETTING_AREAS = ['shop', 'pricing', 'auth', 'ai', 'worker', 'system'] as const;
+export const SETTING_AREAS = [
+  'shop',
+  'pricing',
+  'search',
+  'auth',
+  'ai',
+  'worker',
+  'system',
+] as const;
 export type SettingArea = (typeof SETTING_AREAS)[number];
 
 /** What a number means; the label is in the admin messages (`settings.units`). */
@@ -280,6 +288,75 @@ export const settingDefinitions = {
     hint: {
       ru: 'По истечении проверка считается неудавшейся.',
       uz: 'Vaqt tugasa, tekshiruv muvaffaqiyatsiz hisoblanadi.',
+    },
+  },
+  // ---- Search (ADR 0019)
+  /** Ranking weights of the trigram score: name and aliases, original brand, notes, family. */
+  'search.weights': {
+    schema: z.object({
+      name: z.number().min(0).max(100),
+      brand: z.number().min(0).max(100),
+      notes: z.number().min(0).max(100),
+      family: z.number().min(0).max(100),
+      /** Added to a fragrance whose card key notes contain the query word, within its tier. */
+      keyNotes: z.number().min(0).max(100),
+    }),
+    default: { name: 3, brand: 1.5, notes: 1, family: 1, keyNotes: 10 },
+    area: 'search',
+    label: { ru: 'Вес совпадений в поиске', uz: 'Qidiruvda mosliklar vazni' },
+    hint: {
+      ru: 'От 0 до 100. Чем больше вес поля, тем выше аромат, совпавший в этом поле.',
+      uz: '0 dan 100 gacha. Maydon vazni qancha katta boʻlsa, shu maydonda mos kelgan atir shuncha yuqorida.',
+    },
+    fields: {
+      name: { ru: 'Название и псевдонимы', uz: 'Nomi va taxalluslar' },
+      brand: { ru: 'Бренд', uz: 'Brend' },
+      notes: { ru: 'Ноты', uz: 'Notalar' },
+      family: { ru: 'Семейство', uz: 'Oila' },
+      keyNotes: { ru: 'Три ключевые ноты', uz: 'Uchta asosiy nota' },
+    },
+  },
+  /** A field only counts when its trigram word similarity with the query reaches this (0..1). */
+  'search.minSimilarity': {
+    schema: z.number().min(0).max(1),
+    default: 0.3,
+    area: 'search',
+    unit: 'ratio',
+    label: { ru: 'Порог похожести в поиске', uz: 'Qidiruvda oʻxshashlik chegarasi' },
+    hint: {
+      ru: 'От 0 до 1. Чем выше порог, тем меньше опечаток прощает поиск.',
+      uz: '0 dan 1 gacha. Chegara qancha baland boʻlsa, qidiruv shuncha kam xatoni kechiradi.',
+    },
+  },
+  /** Suggestions and results start at this many characters. */
+  'search.minQueryLength': {
+    schema: z.number().int().min(1).max(10),
+    default: 2,
+    area: 'search',
+    label: { ru: 'С какой буквы искать', uz: 'Nechanchi harfdan qidiriladi' },
+    hint: {
+      ru: 'Подсказки и результаты появляются, когда введено столько букв.',
+      uz: 'Shuncha harf kiritilganda takliflar va natijalar chiqadi.',
+    },
+  },
+  'search.suggestLimit': {
+    schema: z.number().int().min(1).max(20),
+    default: 5,
+    area: 'search',
+    label: { ru: 'Сколько подсказок показывать', uz: 'Nechta taklif koʻrsatiladi' },
+    hint: {
+      ru: 'Подсказки под полем поиска, пока клиент печатает.',
+      uz: 'Mijoz yozayotganda qidiruv maydoni ostidagi takliflar.',
+    },
+  },
+  'search.resultsLimit': {
+    schema: z.number().int().min(1).max(100),
+    default: 30,
+    area: 'search',
+    label: { ru: 'Сколько результатов показывать', uz: 'Nechta natija koʻrsatiladi' },
+    hint: {
+      ru: 'Карточки ароматов, когда клиент отправил запрос.',
+      uz: 'Mijoz soʻrovni yuborganda chiqadigan atir kartochkalari.',
     },
   },
   // ---- Background jobs

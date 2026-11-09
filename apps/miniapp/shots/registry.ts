@@ -20,6 +20,8 @@ export interface ScreenDef {
   teardown?: (ctx: { api: ApiClient; db: ShotDb }) => Promise<void>;
   /** Interact with the loaded page (open a sheet, type in a search) before the capture. */
   act?: (ctx: { page: Page }) => Promise<void>;
+  /** Capture the loading state `act` left on screen: skeletons are expected, not waited out. */
+  loading?: boolean;
   /** Sign in with initData this many seconds old (shows the "reopen the app" state). */
   initDataAgeSeconds?: number;
   /** Capture the whole scrolling page instead of the 390x844 viewport. */
@@ -52,6 +54,13 @@ async function pickRegion(page: Page, n: number) {
 async function pickCityRow(page: Page, text: string) {
   await sheet(page).getByTestId('city-row').filter({ hasText: text }).first().click();
   await sheet(page).getByTestId('point-row').first().waitFor();
+}
+
+/** Types a search and submits it, as the keyboard's «Найти» does. */
+async function searchFor(page: Page, text: string) {
+  const box = page.getByRole('searchbox');
+  await box.fill(text);
+  await box.press('Enter');
 }
 
 /** A customer who has not shared the contact yet (Profile shows the «Добавить» row). */
@@ -272,6 +281,64 @@ export const screens: ScreenDef[] = [
   { id: 'fragrance-worst', path: '/dev/fragrance?data=worst', fullPage: true },
   { id: 'fragrance-one-volume', path: '/dev/fragrance?data=one', fullPage: true },
   { id: 'fragrance-empty', path: '/dev/fragrance?data=empty', fullPage: true },
+  // Search (#16): the empty field with its hint, suggestions while typing (the fifth is the
+  // longest attribution, Boadicea the Victorious), the submitted result list, the 30-result cap
+  // («ambra»), nothing found, a typo («aventuss»), a UZ note («zanjabil» is ginger), a long UZ
+  // query, all on the seed catalog; then loading, error and the keyboard-shrunk viewport.
+  { id: 'search-hint', path: '/search' },
+  { id: 'search-suggestions', path: '/search?q=bla' },
+  { id: 'search-results', path: '/search?q=vanil&s=1', fullPage: true },
+  { id: 'search-results-30', path: '/search?q=ambra&s=1', fullPage: true },
+  { id: 'search-nothing-found', path: '/search?q=zzqx&s=1' },
+  { id: 'search-typo', path: '/search?q=aventuss&s=1' },
+  { id: 'search-uz-note', path: '/search?q=zanjabil&s=1' },
+  {
+    id: 'search-long-query',
+    path: `/search?q=${encodeURIComponent('kechqurun kiyiladigan yogʻochli ziravorli iforlar')}&s=1`,
+  },
+  {
+    // The request never answers: the result cards' skeleton.
+    id: 'search-loading',
+    path: '/search',
+    loading: true,
+    act: async ({ page }) => {
+      await page.route('**/catalog/search*', () => undefined);
+      await searchFor(page, 'vanil');
+      await page.locator('[data-skeleton]').first().waitFor();
+    },
+  },
+  {
+    id: 'search-suggest-loading',
+    path: '/search',
+    loading: true,
+    act: async ({ page }) => {
+      await page.route('**/catalog/suggest*', () => undefined);
+      await page.getByRole('searchbox').fill('bla');
+      await page.locator('[data-skeleton]').first().waitFor();
+    },
+  },
+  {
+    // The request fails (and its one retry): the error with «Повторить».
+    id: 'search-error',
+    path: '/search',
+    act: async ({ page }) => {
+      await page.route('**/catalog/search*', (route) => route.abort());
+      await searchFor(page, 'vanil');
+      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+    },
+  },
+  {
+    // The keyboard is up: Telegram shrinks the viewport, the list scrolls under the field.
+    id: 'search-keyboard',
+    path: '/search?q=bla',
+    act: async ({ page }) => {
+      await page.getByRole('searchbox').focus();
+      await page.setViewportSize({ width: 390, height: 480 });
+      await page.evaluate(() => window.scrollBy(0, 160));
+    },
+  },
+  // FragranceListCard on dev fixtures: grid (the catalog's), row and compact, worst cases included.
+  { id: 'list-cards', path: '/dev/list', fullPage: true },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
   // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
   { id: 'ui-gallery', path: '/dev/ui', fullPage: true },

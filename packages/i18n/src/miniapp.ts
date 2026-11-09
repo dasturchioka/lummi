@@ -19,6 +19,23 @@ export const miniappMessages = defineMessages(
       emptyTitle: 'Скоро здесь появятся ароматы',
       emptyText: 'Мы собираем коллекцию. Загляните чуть позже.',
     },
+    /** The search screen and the list card (search results now, the catalog next). */
+    search: {
+      label: 'Название или нота',
+      placeholder: 'Название или нота',
+      clear: 'Очистить',
+      hint: 'Введите название аромата или ноту: «мегамаре», «ваниль», «bergamot».',
+      suggestions: 'Подсказки',
+      results: 'Найдено',
+      emptyTitle: 'Ничего не нашлось',
+      emptyText: 'Проверьте написание или попробуйте другое слово: название аромата или ноту.',
+      toCatalog: 'Открыть каталог',
+    },
+    list: {
+      from: 'от {price}',
+      soldOut: 'Нет в наличии',
+      open: 'Открыть {name}',
+    },
     /** The empty screens behind the tabs until their tickets build them. */
     placeholder: {
       catalog: {
@@ -175,6 +192,22 @@ export const miniappMessages = defineMessages(
       changeCity: 'Yetkazish shahrini oʻzgartirish',
       emptyTitle: 'Tez orada bu yerda iforlar paydo boʻladi',
       emptyText: 'Kolleksiyani tayyorlayapmiz. Birozdan keyin kiring.',
+    },
+    search: {
+      label: 'Nomi yoki nota',
+      placeholder: 'Nomi yoki nota',
+      clear: 'Tozalash',
+      hint: 'Ifor nomini yoki notasini kiriting: «megamare», «vanil», «bergamot».',
+      suggestions: 'Takliflar',
+      results: 'Topildi',
+      emptyTitle: 'Hech narsa topilmadi',
+      emptyText: 'Yozilishini tekshiring yoki boshqa soʻz sinab koʻring: ifor nomi yoki nota.',
+      toCatalog: 'Katalogni ochish',
+    },
+    list: {
+      from: '{price}dan',
+      soldOut: 'Sotuvda yoʻq',
+      open: '{name}’ni ochish',
     },
     placeholder: {
       catalog: {
