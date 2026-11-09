@@ -1,0 +1,185 @@
+@import 'tailwindcss';
+@import './fonts.css';
+@import './tokens.css';
+
+@theme inline {
+  --color-*: initial;
+  --color-ground: var(--c-ground);
+  --color-card: var(--c-card);
+  --color-block: var(--c-block);
+  --color-field: var(--c-field);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-ink-muted);
+  --color-faint: var(--c-ink-faint);
+  --color-sage: var(--c-sage);
+  --color-sage-ink: var(--c-sage-ink);
+  --color-sage-wash: var(--c-sage-wash);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-btn: var(--c-btn);
+  --color-btn-ink: var(--c-btn-ink);
+  --color-bar: var(--c-bar);
+  --color-bar-ink: var(--c-bar-ink);
+  --color-bar-active: var(--c-bar-active);
+  --color-bar-active-ink: var(--c-bar-active-ink);
+  --color-totals: var(--c-totals);
+  --color-totals-ink: var(--c-totals-ink);
+  --color-photo: var(--c-photo);
+  --color-overlay: var(--c-overlay);
+  --color-transparent: transparent;
+
+  --radius-*: initial;
+  --radius-thumb: var(--radius-thumb);
+  --radius-photo: var(--radius-photo);
+  --radius-btn: var(--radius-btn);
+  --radius-card: var(--radius-card);
+  --radius-pill: 999px;
+
+  --font-display: 'Tenor Sans', 'Manrope', sans-serif;
+  --font-ui: 'Manrope', system-ui, sans-serif;
+  --font-name: 'Cormorant Garamond', Georgia, serif;
+}
+
+/* Type roles from DESIGN.md. Italic is for fragrance names only (`type-name`). */
+@utility type-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-section {
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-label {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-name {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+}
+@utility type-body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+@utility type-small {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+@utility type-price {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@utility type-amount {
+  font-family: var(--font-ui);
+  font-size: 28px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@utility type-button {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@utility inset-line {
+  box-shadow: inset 0 0 0 1px var(--c-line-strong);
+}
+
+@layer base {
+  html {
+    background: var(--c-ground);
+    color: var(--c-ink);
+    font-family: var(--font-ui);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    margin: 0;
+    min-height: var(--tg-viewport-stable-height, 100dvh);
+    background: var(--c-ground);
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button,
+  a {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--c-sage);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Telegram safe areas (device cut-outs and Telegram's own chrome) with the CSS env() fallback. */
+#root {
+  --safe-t: max(env(safe-area-inset-top, 0px), var(--tg-viewport-content-safe-area-inset-top, 0px));
+  --safe-b: max(env(safe-area-inset-bottom, 0px), var(--tg-viewport-safe-area-inset-bottom, 0px));
+  --safe-l: max(env(safe-area-inset-left, 0px), var(--tg-viewport-safe-area-inset-left, 0px));
+  --safe-r: max(env(safe-area-inset-right, 0px), var(--tg-viewport-safe-area-inset-right, 0px));
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes skeleton {
+  50% {
+    opacity: 0.5;
+  }
+}

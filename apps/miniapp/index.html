@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <title>LUMMI.</title>
+    <link rel="icon" type="image/svg+xml" href="/brand/LUMMI_avatar_stone.svg" />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/Manrope-normal-cyrillic-3.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/Manrope-normal-latin-5.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/TenorSans-normal-cyrillic-6.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/TenorSans-normal-latin-8.woff2"
+    />
+    <style>
+      /* First paint before the stylesheet: no white flash on a dark phone. */
+      html {
+        background: #f5f2ec;
+      }
+      html[data-theme='dark'] {
+        background: #1d1c1a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
