@@ -17,6 +17,7 @@ import {
   setMiniAppBottomBarColor,
   setMiniAppHeaderColor,
   openTelegramLink,
+  hapticFeedbackNotificationOccurred,
 } from '@telegram-apps/sdk-react';
 import { languageFromTelegram, type Language } from '@lummi/i18n';
 
@@ -159,4 +160,14 @@ export function openManagerChat(): void {
     /* fall through */
   }
   window.open(MANAGER_LINK, '_blank', 'noopener');
+}
+
+/** A quiet "done" tap where the client supports it; silent elsewhere. */
+export function hapticSuccess(): void {
+  try {
+    if (hapticFeedbackNotificationOccurred.isAvailable())
+      hapticFeedbackNotificationOccurred('success');
+  } catch {
+    /* unsupported in this client */
+  }
 }

@@ -417,10 +417,15 @@ function Pyramid({ card }: { card: FragranceCard }) {
  */
 function Dock({
   volume,
+  adding = false,
+  note,
   onAddToCart,
   onBuyNow,
 }: {
   volume: VolumeCard | undefined;
+  adding?: boolean;
+  /** A brief line above the buttons («Осталось 3»). */
+  note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -428,6 +433,8 @@ function Dock({
   const row = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(false);
+  const [shownNote, setShownNote] = useState(note);
+  if (note && note !== shownNote) setShownNote(note);
   const canBuy = volume !== undefined && volume.available > 0;
   useLayoutEffect(() => {
     const r = row.current;
@@ -458,35 +465,56 @@ function Dock({
     </span>
   );
   return (
-    <div ref={row} className="relative flex gap-2">
-      {/* Clipped to the row, so the measuring copy never widens the page. */}
-      <div
+    <div className="relative">
+      {/*
+        The note («Осталось 3») rises above the dock as a small status pill and fades away again, so
+        the buttons never move under the customer's thumb. The last text stays while it fades.
+      */}
+      <span role="status" className="sr-only">
+        {note ?? ''}
+      </span>
+      <span
         aria-hidden="true"
-        className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+        data-open={note ? '' : undefined}
+        className="type-caption pointer-events-none absolute bottom-full left-1/2 mb-[22px] -translate-x-1/2 translate-y-1 rounded-pill bg-btn px-3 py-1.5 font-semibold whitespace-nowrap text-btn-ink opacity-0 transition-[opacity,translate] duration-150 ease-out data-[open]:translate-y-0 data-[open]:opacity-100 data-[open]:duration-200"
       >
-        <div ref={probe} className="type-button flex w-max gap-2">
-          <span className="px-3.5">{oneLine}</span>
-          <span className="px-3.5">{t.card.buyNow}</span>
+        {shownNote}
+      </span>
+      <div ref={row} className="relative flex gap-2">
+        {/* Clipped to the row, so the measuring copy never widens the page. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+        >
+          <div ref={probe} className="type-button flex w-max gap-2">
+            <span className="px-3.5">{oneLine}</span>
+            <span className="px-3.5">{t.card.buyNow}</span>
+          </div>
         </div>
+        <Button
+          size="pair"
+          className="min-w-0 flex-1"
+          loading={adding}
+          onClick={() => onAddToCart?.(volume.ml)}
+        >
+          {stacked ? (
+            <span className="flex flex-col items-center gap-1">
+              {t.card.toCart}
+              <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
+            </span>
+          ) : (
+            oneLine
+          )}
+        </Button>
+        <Button
+          variant="tonal"
+          size="pair"
+          className="shrink-0"
+          onClick={() => onBuyNow?.(volume.ml)}
+        >
+          {t.card.buyNow}
+        </Button>
       </div>
-      <Button size="pair" className="min-w-0 flex-1" onClick={() => onAddToCart?.(volume.ml)}>
-        {stacked ? (
-          <span className="flex flex-col items-center gap-1">
-            {t.card.toCart}
-            <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
-          </span>
-        ) : (
-          oneLine
-        )}
-      </Button>
-      <Button
-        variant="tonal"
-        size="pair"
-        className="shrink-0"
-        onClick={() => onBuyNow?.(volume.ml)}
-      >
-        {t.card.buyNow}
-      </Button>
     </div>
   );
 }
@@ -499,12 +527,16 @@ export function FragranceView({
   card,
   onBack,
   onShare,
+  adding,
+  note,
   onAddToCart,
   onBuyNow,
 }: {
   card: FragranceCard;
   onBack: () => void;
   onShare: () => void;
+  adding?: boolean;
+  note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -518,7 +550,15 @@ export function FragranceView({
   return (
     <Screen
       tabBar={false}
-      dock={<Dock volume={volume} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />}
+      dock={
+        <Dock
+          volume={volume}
+          adding={adding}
+          note={note}
+          onAddToCart={onAddToCart}
+          onBuyNow={onBuyNow}
+        />
+      }
     >
       <article className="flex flex-col pt-3 pb-7">
         <Gallery card={card} hash={volume?.photo ?? null} onBack={onBack} onShare={onShare} />

@@ -25,6 +25,7 @@
   --color-bar-active-ink: var(--c-bar-active-ink);
   --color-totals: var(--c-totals);
   --color-totals-ink: var(--c-totals-ink);
+  --color-totals-accent: var(--c-totals-accent);
   --color-photo: var(--c-photo);
   --color-overlay: var(--c-overlay);
   --color-on-sage: var(--c-on-sage);
@@ -168,6 +169,15 @@
   font-size: 12.5px;
   line-height: 1.3;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* «Итого» and its amount in the cart's totals block. */
+@utility type-total {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -323,6 +333,36 @@
 }
 @keyframes fade-out {
   to {
+    opacity: 0;
+  }
+}
+/* A count stepping up rolls in from below, stepping down from above (the cart stepper). */
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(55%);
+  }
+}
+@keyframes count-down {
+  from {
+    opacity: 0;
+    transform: translateY(-55%);
+  }
+}
+/* A server number that just changed settles in place (the cart totals). */
+@keyframes tick {
+  from {
+    opacity: 0.35;
+  }
+}
+/* A removed cart line folds away: it was already dimmed while the removal was in flight. */
+@keyframes fold {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 0.4;
+  }
+  to {
+    grid-template-rows: 0fr;
     opacity: 0;
   }
 }

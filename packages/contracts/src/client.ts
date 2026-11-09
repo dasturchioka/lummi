@@ -1,6 +1,6 @@
 import type { contract } from './contract';
 
-export { SEARCH_QUERY_MAX } from './limits';
+export { CART_MAX_QTY, SEARCH_QUERY_MAX } from './limits';
 
 /**
  * The Mini App's view of the API contract, WITHOUT zod at runtime.
@@ -41,6 +41,12 @@ export const clientRoutes = {
     regions: route('GET', '/delivery/regions', [200, 401]),
     cities: route('GET', '/delivery/regions/:regionId/cities', [200, 401, 404]),
     points: route('GET', '/delivery/points', [200, 401]),
+  },
+  cart: {
+    get: route('GET', '/cart', [200, 401]),
+    addLine: route('POST', '/cart/lines', [200, 401, 404, 409]),
+    setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
+    removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
   },
   catalog: {
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),

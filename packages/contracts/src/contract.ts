@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
   catalogErrorSchema,
   fragranceCardSchema,
@@ -185,6 +186,42 @@ export const contract = c.router({
       query: searchQuerySchema,
       responses: { 200: searchResultSchema, 401: authErrorSchema },
       summary: 'Search results as list cards, best match first (ADR 0019)',
+    },
+  },
+  cart: {
+    get: {
+      method: 'GET',
+      path: '/cart',
+      responses: { 200: cartSchema, 401: cartErrorSchema },
+      summary: 'The customer cart, freshly quoted',
+    },
+    addLine: {
+      method: 'POST',
+      path: '/cart/lines',
+      body: addCartLineBodySchema,
+      responses: {
+        200: cartSchema,
+        401: cartErrorSchema,
+        404: cartErrorSchema,
+        409: cartErrorSchema,
+      },
+      summary: 'Add a volume (quantity capped at available); 409 sold_out when none is available',
+    },
+    setQuantity: {
+      method: 'PATCH',
+      path: '/cart/lines/:lineId',
+      pathParams: z.object({ lineId: z.coerce.number().int().positive() }),
+      body: setCartLineBodySchema,
+      responses: { 200: cartSchema, 401: cartErrorSchema, 404: cartErrorSchema },
+      summary: 'Set a line quantity, never above available',
+    },
+    removeLine: {
+      method: 'DELETE',
+      path: '/cart/lines/:lineId',
+      pathParams: z.object({ lineId: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: { 200: cartSchema, 401: cartErrorSchema },
+      summary: 'Remove a line',
     },
   },
 });
