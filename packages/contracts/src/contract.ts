@@ -1,7 +1,12 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
-import { catalogErrorSchema, fragranceCardSchema } from './catalog';
+import {
+  catalogErrorSchema,
+  fragranceCardSchema,
+  searchQuerySchema,
+  searchResultSchema,
+} from './catalog';
 import {
   adminErrorSchema,
   createManagerBodySchema,
@@ -154,6 +159,21 @@ export const contract = c.router({
       pathParams: z.object({ slug: z.string().min(1).max(100) }),
       responses: { 200: fragranceCardSchema, 401: authErrorSchema, 404: catalogErrorSchema },
       summary: 'A fragrance card by slug; hidden and unknown fragrances are 404',
+    },
+    suggest: {
+      method: 'GET',
+      path: '/catalog/suggest',
+      query: searchQuerySchema,
+      responses: { 200: searchResultSchema, 401: authErrorSchema },
+      summary:
+        'Suggestions while typing: the top few fragrances for a name or note, typos and either alphabet tolerated; empty under the minimum length (ADR 0019)',
+    },
+    search: {
+      method: 'GET',
+      path: '/catalog/search',
+      query: searchQuerySchema,
+      responses: { 200: searchResultSchema, 401: authErrorSchema },
+      summary: 'Search results as list cards, best match first (ADR 0019)',
     },
   },
   cart: {

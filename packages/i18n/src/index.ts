@@ -5,4 +5,4 @@ export { formatMoney } from './money';
 export { plural, type PluralForms } from './plural';
 export { formatPhone } from './phone';
 export { fill } from './fill';
-export { normalizeUzbek } from './uzbek';
+export { APOSTROPHE_CLASS, normalizeUzbek } from './uzbek';

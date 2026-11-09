@@ -18,6 +18,8 @@ import { connectShotDb } from './db';
 import { SHOT_USER, signInitData, signedInClient } from './api';
 import { screens } from './registry';
 
+/** One compose project per run; set SHOTS_COMPOSE_PROJECT so parallel branches do not share a pgdata volume. */
+const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-shots';
 const THEMES = ['light', 'dark'] as const;
 const LANGS = ['ru', 'uz'] as const;
 
@@ -43,8 +45,6 @@ if (unknown.length) {
 }
 
 const repoRoot = resolve(import.meta.dirname, '../../..');
-/** Parallel checkouts give each run its own compose project, so the containers and volume never collide. */
-const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-shots';
 const apiPort = Number(process.env.API_PORT ?? 4000);
 const appPort = Number(process.env.MINIAPP_PORT ?? 5173);
 const dbPort = Number(process.env.POSTGRES_HOST_PORT ?? 5432);
@@ -223,11 +223,12 @@ async function main() {
             { timeout: 20_000 },
           );
           await screen.act?.({ page });
-          await page.waitForFunction(
-            () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
-            undefined,
-            { timeout: 20_000 },
-          );
+          if (!screen.loading)
+            await page.waitForFunction(
+              () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
+              undefined,
+              { timeout: 20_000 },
+            );
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(screen.act ? 450 : 150); // sheets finish rising
           if (screen.fullPage) {

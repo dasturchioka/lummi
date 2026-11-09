@@ -1,5 +1,7 @@
 import type { contract } from './contract';
 
+export { SEARCH_QUERY_MAX } from './limits';
+
 /**
  * The Mini App's view of the API contract, WITHOUT zod at runtime.
  *
@@ -48,6 +50,8 @@ export const clientRoutes = {
   },
   catalog: {
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
+    suggest: route('GET', '/catalog/suggest', [200, 401]),
+    search: route('GET', '/catalog/search', [200, 401]),
   },
 };
 

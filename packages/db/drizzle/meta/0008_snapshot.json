@@ -1,5 +1,5 @@
 {
-  "id": "3b1cfa6b-bcc8-45d4-8a97-340447cc2f4c",
+  "id": "2f38a5bb-190f-4643-b811-998d23aa49e0",
   "prevId": "5f603248-b96f-4d23-af5a-b7f2ebbd5245",
   "version": "7",
   "dialect": "postgresql",
@@ -235,12 +235,8 @@
           "name": "bts_points_region_id_regions_id_fk",
           "tableFrom": "bts_points",
           "tableTo": "regions",
-          "columnsFrom": [
-            "region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["region_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -250,187 +246,9 @@
         "bts_points_code_unique": {
           "name": "bts_points_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.cart_lines": {
-      "name": "cart_lines",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "cart_lines_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "volume_id": {
-          "name": "volume_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "qty": {
-          "name": "qty",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "cart_lines_customer_volume_idx": {
-          "name": "cart_lines_customer_volume_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "volume_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cart_lines_volume_idx": {
-          "name": "cart_lines_volume_idx",
-          "columns": [
-            {
-              "expression": "volume_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "cart_lines_customer_id_customers_id_fk": {
-          "name": "cart_lines_customer_id_customers_id_fk",
-          "tableFrom": "cart_lines",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "cart_lines_volume_id_volumes_id_fk": {
-          "name": "cart_lines_volume_id_volumes_id_fk",
-          "tableFrom": "cart_lines",
-          "tableTo": "volumes",
-          "columnsFrom": [
-            "volume_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "cart_lines_qty_check": {
-          "name": "cart_lines_qty_check",
-          "value": "\"cart_lines\".\"qty\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.carts": {
-      "name": "carts",
-      "schema": "",
-      "columns": {
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "discount_choice": {
-          "name": "discount_choice",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "promo_code": {
-          "name": "promo_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "carts_customer_id_customers_id_fk": {
-          "name": "carts_customer_id_customers_id_fk",
-          "tableFrom": "carts",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -538,12 +356,8 @@
           "name": "credits_humo_message_id_humo_messages_message_id_fk",
           "tableFrom": "credits",
           "tableTo": "humo_messages",
-          "columnsFrom": [
-            "humo_message_id"
-          ],
-          "columnsTo": [
-            "message_id"
-          ],
+          "columnsFrom": ["humo_message_id"],
+          "columnsTo": ["message_id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -553,9 +367,7 @@
         "credits_humo_message_id_unique": {
           "name": "credits_humo_message_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "humo_message_id"
-          ]
+          "columns": ["humo_message_id"]
         }
       },
       "policies": {},
@@ -690,12 +502,8 @@
           "name": "customers_delivery_region_id_regions_id_fk",
           "tableFrom": "customers",
           "tableTo": "regions",
-          "columnsFrom": [
-            "delivery_region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["delivery_region_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -705,16 +513,12 @@
         "customers_telegram_id_unique": {
           "name": "customers_telegram_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "telegram_id"
-          ]
+          "columns": ["telegram_id"]
         },
         "customers_phone_unique": {
           "name": "customers_phone_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "phone"
-          ]
+          "columns": ["phone"]
         }
       },
       "policies": {},
@@ -769,16 +573,12 @@
         "families_name_ru_unique": {
           "name": "families_name_ru_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name_ru"
-          ]
+          "columns": ["name_ru"]
         },
         "families_name_uz_unique": {
           "name": "families_name_uz_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name_uz"
-          ]
+          "columns": ["name_uz"]
         }
       },
       "policies": {},
@@ -849,12 +649,8 @@
           "name": "fragrance_notes_fragrance_id_fragrances_id_fk",
           "tableFrom": "fragrance_notes",
           "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["fragrance_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -862,13 +658,83 @@
           "name": "fragrance_notes_note_id_notes_id_fk",
           "tableFrom": "fragrance_notes",
           "tableTo": "notes",
-          "columnsFrom": [
-            "note_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["note_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fragrance_search": {
+      "name": "fragrance_search",
+      "schema": "",
+      "columns": {
+        "fragrance_id": {
+          "name": "fragrance_id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aliases": {
+          "name": "aliases",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "brand": {
+          "name": "brand",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "family": {
+          "name": "family",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key_notes": {
+          "name": "key_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "fragrance_search_fragrance_id_fragrances_id_fk": {
+          "name": "fragrance_search_fragrance_id_fragrances_id_fk",
+          "tableFrom": "fragrance_search",
+          "tableTo": "fragrances",
+          "columnsFrom": ["fragrance_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -929,12 +795,8 @@
           "name": "fragrance_similar_fragrance_id_fragrances_id_fk",
           "tableFrom": "fragrance_similar",
           "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["fragrance_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -942,12 +804,8 @@
           "name": "fragrance_similar_similar_id_fragrances_id_fk",
           "tableFrom": "fragrance_similar",
           "tableTo": "fragrances",
-          "columnsFrom": [
-            "similar_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["similar_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1146,12 +1004,8 @@
           "name": "fragrances_family_id_families_id_fk",
           "tableFrom": "fragrances",
           "tableTo": "families",
-          "columnsFrom": [
-            "family_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["family_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1161,16 +1015,12 @@
         "fragrances_slug_unique": {
           "name": "fragrances_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         },
         "fragrances_code_unique": {
           "name": "fragrances_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         }
       },
       "policies": {},
@@ -1267,9 +1117,7 @@
         "notes_name_ru_unique": {
           "name": "notes_name_ru_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name_ru"
-          ]
+          "columns": ["name_ru"]
         }
       },
       "policies": {},
@@ -1489,16 +1337,12 @@
         "regions_code_unique": {
           "name": "regions_code_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
+          "columns": ["code"]
         },
         "regions_bts_id_unique": {
           "name": "regions_bts_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "bts_id"
-          ]
+          "columns": ["bts_id"]
         }
       },
       "policies": {},
@@ -1606,9 +1450,7 @@
         "staff_telegram_id_unique": {
           "name": "staff_telegram_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "telegram_id"
-          ]
+          "columns": ["telegram_id"]
         }
       },
       "policies": {},
@@ -1690,12 +1532,8 @@
           "name": "staff_sessions_staff_id_staff_id_fk",
           "tableFrom": "staff_sessions",
           "tableTo": "staff",
-          "columnsFrom": [
-            "staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["staff_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1705,9 +1543,7 @@
         "staff_sessions_token_hash_unique": {
           "name": "staff_sessions_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "policies": {},
@@ -1845,12 +1681,8 @@
           "name": "volumes_fragrance_id_fragrances_id_fk",
           "tableFrom": "volumes",
           "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["fragrance_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1875,91 +1707,52 @@
     "public.actor_type": {
       "name": "actor_type",
       "schema": "public",
-      "values": [
-        "customer",
-        "staff",
-        "ai",
-        "system"
-      ]
+      "values": ["customer", "staff", "ai", "system"]
     },
     "public.fragrance_type": {
       "name": "fragrance_type",
       "schema": "public",
-      "values": [
-        "homme",
-        "femme",
-        "unisex"
-      ]
+      "values": ["homme", "femme", "unisex"]
     },
     "public.language": {
       "name": "language",
       "schema": "public",
-      "values": [
-        "ru",
-        "uz"
-      ]
+      "values": ["ru", "uz"]
     },
     "public.note_level": {
       "name": "note_level",
       "schema": "public",
-      "values": [
-        "top",
-        "heart",
-        "base"
-      ]
+      "values": ["top", "heart", "base"]
     },
     "public.season": {
       "name": "season",
       "schema": "public",
-      "values": [
-        "spring_summer",
-        "autumn_winter",
-        "all_year",
-        "spring_autumn"
-      ]
+      "values": ["spring_summer", "autumn_winter", "all_year", "spring_autumn"]
     },
     "public.sillage": {
       "name": "sillage",
       "schema": "public",
-      "values": [
-        "medium",
-        "noticeable",
-        "strong"
-      ]
+      "values": ["medium", "noticeable", "strong"]
     },
     "public.staff_role": {
       "name": "staff_role",
       "schema": "public",
-      "values": [
-        "owner",
-        "manager"
-      ]
+      "values": ["owner", "manager"]
     },
     "public.theme": {
       "name": "theme",
       "schema": "public",
-      "values": [
-        "light",
-        "dark"
-      ]
+      "values": ["light", "dark"]
     },
     "public.time_of_day": {
       "name": "time_of_day",
       "schema": "public",
-      "values": [
-        "day",
-        "evening",
-        "day_evening",
-        "everyday"
-      ]
+      "values": ["day", "evening", "day_evening", "everyday"]
     },
     "public.write_access": {
       "name": "write_access",
       "schema": "public",
-      "values": [
-        "granted",
-        "refused"
-      ]
+      "values": ["granted", "refused"]
     }
   },
   "schemas": {},

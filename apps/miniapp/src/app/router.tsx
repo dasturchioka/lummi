@@ -8,6 +8,7 @@ import {
   redirect,
   useRouter,
 } from '@tanstack/react-router';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';
@@ -21,9 +22,12 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
-  // A fragrance card is a task screen: it carries its own dock, not the tab bar (also on its fixtures).
+  // The fragrance card (it carries its own dock, also on its fixtures), the search and the checkout are task screens: no tab bar.
   const showTabBar =
-    !pathname.startsWith('/p/') && pathname !== '/dev/fragrance' && pathname !== '/checkout';
+    !pathname.startsWith('/p/') &&
+    pathname !== '/search' &&
+    pathname !== '/dev/fragrance' &&
+    pathname !== '/checkout';
   const cartCount = useCartCount();
 
   // Telegram's native back button: visible on screens deeper than a tab root.
@@ -41,7 +45,7 @@ const rootRoute = createRootRoute({ component: Shell });
 const at = (path: string) => ({ getParentRoute: () => rootRoute, path });
 
 /*
- * Component gallery, development only: `/dev/ui`, `/dev/sheet` with the sheet open, and `/dev/delivery` hosting the BTS point picker.
+ * Component gallery, development only: `/dev/ui`, `/dev/list` (the list cards alone), `/dev/sheet` with the sheet open, and `/dev/delivery` hosting the BTS point picker.
  * `import.meta.env.DEV` is `false` in a build, so these routes and their lazy chunk are dropped;
  * `npm run size` fails if the gallery ever reaches dist.
  */
@@ -54,6 +58,10 @@ const devRoutes = import.meta.env.DEV
       createRoute({
         ...at('/dev/delivery'),
         component: lazyRouteComponent(() => import('../dev/Delivery'), 'DeliveryDev'),
+      }),
+      createRoute({
+        ...at('/dev/list'),
+        component: lazyRouteComponent(() => import('../dev/Gallery'), 'GalleryListCards'),
       }),
       createRoute({
         ...at('/dev/sheet'),
@@ -89,6 +97,14 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     ...at('/catalog'),
     component: lazyRouteComponent(() => import('../screens/Tabs'), 'CatalogTab'),
+  }),
+  createRoute({
+    ...at('/search'),
+    validateSearch: (s: Record<string, unknown>): { q?: string; s?: number } => ({
+      ...(typeof s.q === 'string' && s.q !== '' ? { q: s.q.slice(0, SEARCH_QUERY_MAX) } : {}),
+      ...(Number(s.s) === 1 ? { s: 1 } : {}),
+    }),
+    component: lazyRouteComponent(() => import('../screens/Search'), 'Search'),
   }),
   createRoute({
     ...at('/p/$slug'),
