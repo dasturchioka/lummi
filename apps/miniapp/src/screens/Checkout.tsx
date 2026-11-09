@@ -1,27 +1,594 @@
+import type { CheckoutDto, CreateOrderBody } from '@lummi/contracts';
+import {
+  ORDER_COMMENT_MAX,
+  RECIPIENT_NAME_MAX,
+  RECIPIENT_PHONE_INPUT_MAX,
+  normalizeRecipientPhone,
+} from '@lummi/contracts/client';
+import { fill, formatPhone } from '@lummi/i18n';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChosenPoint } from '../delivery/ChosenPoint';
+import { DeliveryPicker } from '../delivery/DeliveryPicker';
+import { regionName, useCities, type Picked } from '../delivery/queries';
+import { MoneySummary, SectionTitle } from '../orders/parts';
+import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
+import { useRegistration } from '../lib/registration';
+import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
-import { BagIcon } from '../ui/icons';
+import { Card } from '../ui/Card';
+import { Checkbox, TextArea, TextField } from '../ui/Field';
+import {
+  AlertIcon,
+  BagIcon,
+  CheckIcon,
+  ChevronIcon,
+  GiftIcon,
+  PhoneIcon,
+  TruckIcon,
+} from '../ui/icons';
+import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
-import { EmptyState } from '../ui/States';
+import { ScreenHeader } from '../ui/ScreenHeader';
+import { Sheet } from '../ui/Sheet';
+import { Skeleton } from '../ui/Skeleton';
+import { EmptyState, ErrorState } from '../ui/States';
 
-/** Where «Оформить заказ» lands until the checkout ticket (#23) builds the real screen. */
-export function Checkout() {
+type Destination = Exclude<Picked, { kind: 'city' }>;
+
+interface Conflict {
+  code: 'total_changed' | 'nothing_to_order';
+  /** The total the shopper had confirmed. */
+  was: number;
+  checkout: CheckoutDto;
+}
+
+/** «Пункт BTS» with «Сменить» over a plate: the shape of `ChosenPoint`, for a typed address. */
+function TypedPlace({
+  region,
+  text,
+  onChange,
+}: {
+  region: string;
+  text: string;
+  onChange: () => void;
+}) {
   const { t } = usePrefs();
-  const router = useRouter();
+  const o = useOrdersText();
   return (
-    <Screen tabBar={false}>
-      <EmptyState
-        fill
-        icon={<BagIcon size={28} />}
-        title={t.cart.checkoutSoonTitle}
-        text={t.cart.checkoutSoonText}
-        action={
-          <Button block onClick={() => router.history.back()}>
-            {t.cart.title}
-          </Button>
+    <div data-testid="typed-point">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="type-small font-medium text-muted">{t.delivery.pointTitle}</span>
+        <button
+          type="button"
+          onClick={onChange}
+          className="type-small -my-3 -mr-2 rounded-btn px-2 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
+        >
+          {t.delivery.change}
+        </button>
+      </div>
+      <div className="rounded-btn bg-card px-3.5 py-3 shadow-[inset_0_0_0_1.5px_var(--c-ink)]">
+        <p className="type-row font-semibold break-words">{region}</p>
+        <p className="type-body break-words whitespace-pre-line">{text}</p>
+        <p className="type-small mt-1 text-muted">
+          {o.checkout.typedTitle}. {o.checkout.typedNote}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** «Пункт BTS» before one is chosen: a field-like row that opens the picker. */
+function ChoosePoint({ onOpen }: { onOpen: () => void }) {
+  const { t } = usePrefs();
+  const o = useOrdersText();
+  return (
+    <div>
+      <span className="type-small mb-1.5 block font-medium text-muted">
+        {t.delivery.pointTitle}
+      </span>
+      <button
+        type="button"
+        data-testid="choose-point"
+        onClick={onOpen}
+        className="type-row flex h-12 w-full items-center justify-between gap-3 rounded-btn bg-field px-3.5 text-left text-ink transition-[background-color,transform] duration-150 active:scale-[0.99]"
+      >
+        <span className="min-w-0 truncate">{o.checkout.choosePoint}</span>
+        <span className="shrink-0 text-muted">
+          <ChevronIcon size={18} />
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function Loading() {
+  const o = useOrdersText();
+  const field = (
+    <div className="space-y-1.5">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-12 w-full" rounded="btn" />
+    </div>
+  );
+  return (
+    <Screen tabBar={false} dock={<Skeleton className="h-12 w-full" rounded="btn" />}>
+      <ScreenHeader title={o.checkout.title} />
+      <div className="flex flex-col gap-4" aria-busy="true">
+        <Skeleton className="h-3.5 w-28" />
+        {field}
+        {field}
+        {field}
+        <Skeleton className="mt-3 h-[92px] w-full" rounded="card" />
+      </div>
+    </Screen>
+  );
+}
+
+/** Mockup 06, restyled to the approved chrome: recipient, BTS point, comment, gift, the server's total. */
+export function Checkout() {
+  const o = useOrdersText();
+  const { t, language } = usePrefs();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { ensurePhone } = useRegistration();
+
+  const [dest, setDest] = useState<Destination | null>(null);
+  const regionId = dest?.region.id;
+  const checkout = useCheckout(regionId);
+  const create = useCreateOrder();
+  const cities = useCities(dest?.kind === 'point' ? dest.region.id : undefined);
+
+  const [name, setName] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [phoneBlurred, setPhoneBlurred] = useState(false);
+  const [comment, setComment] = useState('');
+  const [gift, setGift] = useState(false);
+  const [giftMessage, setGiftMessage] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [conflict, setConflict] = useState<Conflict | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const data = checkout.data;
+  const noPhone = !!data && data.phone === null;
+
+  // Checkout needs the account phone (ADR 0004): the registration step opens once on arrival.
+  const askedPhone = useRef(false);
+  const askPhone = async () => {
+    if ((await ensurePhone()) === 'ready') await qc.invalidateQueries({ queryKey: ['checkout'] });
+  };
+  useEffect(() => {
+    if (!noPhone || askedPhone.current) return;
+    askedPhone.current = true;
+    void askPhone();
+    // once per arrival: `askPhone` is recreated each render, the flag keeps it to one call
+  }, [noPhone]);
+
+  if (checkout.isError && !data)
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <ErrorState fill retrying={checkout.isFetching} onRetry={() => void checkout.refetch()} />
+      </Screen>
+    );
+  if (!data) return <Loading />;
+
+  const toCart = () => void router.navigate({ to: '/cart' });
+
+  if (noPhone)
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <EmptyState
+          fill
+          icon={<PhoneIcon size={28} />}
+          title={o.checkout.phoneTitle}
+          text={o.checkout.phoneText}
+          action={
+            <>
+              <Button block onClick={() => void askPhone()}>
+                {o.checkout.phoneShare}
+              </Button>
+              <Button block variant="secondary" onClick={toCart}>
+                {o.checkout.backToCart}
+              </Button>
+            </>
+          }
+        />
+      </Screen>
+    );
+
+  if (data.itemCount === 0)
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <EmptyState
+          fill
+          icon={<BagIcon size={28} />}
+          title={o.checkout.emptyTitle}
+          text={o.checkout.emptyText}
+          action={
+            <Button block onClick={toCart}>
+              {o.checkout.toCart}
+            </Button>
+          }
+        />
+      </Screen>
+    );
+
+  const nameValue = name ?? data.recipientName;
+  const phoneValue = phone ?? (data.phone ? formatPhone(data.phone) : '');
+  const phoneOk = normalizeRecipientPhone(phoneValue) !== null;
+  const giftTooLong = gift && giftMessage.trim().length > data.giftMessageMax;
+  const reason = !dest
+    ? o.checkout.needPoint
+    : !nameValue.trim()
+      ? o.checkout.needName
+      : !phoneOk
+        ? o.checkout.needPhone
+        : data.needsConsent && !consent
+          ? o.checkout.needConsent
+          : giftTooLong
+            ? fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) })
+            : null;
+
+  const place =
+    dest?.kind === 'point'
+      ? dest.point.city
+      : dest?.kind === 'typed'
+        ? regionName(dest.region, language)
+        : (data.deliveryCity?.city ?? null);
+  const inCity =
+    dest?.kind === 'point'
+      ? (cities.data?.find((c) => c.city === dest.point.city)?.pointCount ?? 0)
+      : 0;
+
+  const submit = (confirmedTotal: number) => {
+    if (!dest || reason) return;
+    setError(null);
+    const body: CreateOrderBody = {
+      recipientName: nameValue.trim(),
+      recipientPhone: phoneValue,
+      delivery:
+        dest.kind === 'point'
+          ? { kind: 'point', pointId: dest.point.id }
+          : { kind: 'typed', regionId: dest.region.id, text: dest.text },
+      comment: comment.trim() || undefined,
+      gift,
+      giftMessage: gift && giftMessage.trim() ? giftMessage.trim() : undefined,
+      consent,
+      confirmedTotal,
+    };
+    create.mutate(body, {
+      onSuccess: (r) => {
+        if (r.kind === 'created') {
+          setConflict(null);
+          hapticSuccess();
+          void router.navigate({
+            to: '/orders/$number',
+            params: { number: String(r.order.number) },
+            replace: true,
+          });
+        } else if (r.kind === 'conflict') {
+          // the new numbers replace the old ones on the screen too
+          qc.setQueryData(checkoutKey(regionId), r.checkout);
+          setConflict({ code: r.code, was: confirmedTotal, checkout: r.checkout });
+        } else if (r.kind === 'phone_required') {
+          void askPhone();
+        } else {
+          setConflict(null);
+          if (r.code === 'unknown_point' || r.code === 'unknown_region') {
+            setDest(null);
+            setError(o.checkout.unknownPoint);
+          } else if (r.code === 'gift_message_too_long') {
+            setError(fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }));
+          } else {
+            void qc.invalidateQueries({ queryKey: ['checkout'] });
+            setError(o.checkout.needConsent);
+          }
         }
+      },
+      onError: () => setError(o.checkout.failed),
+    });
+  };
+
+  const total = data.quote.total;
+  const dock = (
+    <div className="flex flex-col gap-2">
+      {error ? (
+        <p
+          role="alert"
+          className="type-small flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+        >
+          <span className="shrink-0">
+            <AlertIcon size={18} />
+          </span>
+          <span className="pt-px">{error}</span>
+        </p>
+      ) : null}
+      <Button
+        block
+        data-testid="submit"
+        disabled={!!reason}
+        loading={create.isPending && !conflict}
+        onClick={() => submit(total)}
+      >
+        {reason ?? (
+          <>
+            <span className="min-w-0 truncate">{o.checkout.submit}</span>
+            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
+            <Money amount={total} className="text-current" />
+          </>
+        )}
+      </Button>
+    </div>
+  );
+
+  return (
+    <Screen tabBar={false} dock={dock}>
+      <ScreenHeader title={o.checkout.title} />
+
+      <section className="flex flex-col gap-3.5">
+        <SectionTitle>{o.checkout.recipient}</SectionTitle>
+        <TextField
+          label={o.checkout.name}
+          value={nameValue}
+          onChange={(e) => setName(e.target.value)}
+          autoComplete="name"
+          maxLength={RECIPIENT_NAME_MAX}
+        />
+        {data.phone ? (
+          <TextField
+            label={o.checkout.accountPhone}
+            value={formatPhone(data.phone)}
+            readOnly
+            tabIndex={-1}
+            className="!bg-transparent tabular-nums inset-line"
+            trailing={
+              <span className="type-small flex items-center gap-1 font-semibold text-sage-ink">
+                <CheckIcon size={14} />
+                {o.checkout.fromTelegram}
+              </span>
+            }
+          />
+        ) : null}
+        <TextField
+          label={o.checkout.recipientPhone}
+          value={phoneValue}
+          onChange={(e) => setPhone(e.target.value)}
+          onBlur={() => setPhoneBlurred(true)}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          maxLength={RECIPIENT_PHONE_INPUT_MAX}
+          className="tabular-nums"
+          hint={o.checkout.recipientPhoneHint}
+          error={phoneBlurred && !phoneOk ? o.checkout.phoneInvalid : null}
+        />
+      </section>
+
+      <section className="mt-[26px] flex flex-col gap-3.5">
+        <SectionTitle>{o.checkout.delivery}</SectionTitle>
+        <Card className="type-body flex items-start gap-3 p-4">
+          <span className="mt-0.5 shrink-0 text-ink">
+            <TruckIcon size={20} />
+          </span>
+          <span className="text-pretty">
+            <b className="font-semibold">{o.checkout.deliveryLead}</b> {o.checkout.deliveryInfo}
+          </span>
+        </Card>
+        {dest?.kind === 'point' ? (
+          <ChosenPoint
+            point={dest.point}
+            otherPoints={Math.max(0, inCity - 1)}
+            onChange={() => setPickerOpen(true)}
+          />
+        ) : dest?.kind === 'typed' ? (
+          <TypedPlace
+            region={regionName(dest.region, language)}
+            text={dest.text}
+            onChange={() => setPickerOpen(true)}
+          />
+        ) : (
+          <ChoosePoint onOpen={() => setPickerOpen(true)} />
+        )}
+      </section>
+
+      <section className="mt-[26px]">
+        <TextArea
+          label={o.checkout.comment}
+          aside={o.checkout.optional}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder={o.checkout.commentPlaceholder}
+          maxLength={ORDER_COMMENT_MAX}
+          rows={2}
+        />
+      </section>
+
+      <section className="mt-[26px]">
+        <Card className="p-4" data-testid="gift">
+          <Checkbox checked={gift} onChange={setGift} testId="gift-toggle">
+            <span className="flex items-center gap-2 font-semibold">
+              <GiftIcon size={18} />
+              {o.checkout.gift}
+            </span>
+            <span className="type-small mt-0.5 block text-muted">{o.checkout.giftText}</span>
+          </Checkbox>
+          <Reveal open={gift}>
+            <div className="pt-3.5">
+              <TextArea
+                label={o.checkout.giftMessage}
+                aside={o.checkout.optional}
+                value={giftMessage}
+                onChange={(e) => setGiftMessage(e.target.value)}
+                placeholder={o.checkout.giftMessagePlaceholder}
+                maxLength={data.giftMessageMax}
+                rows={3}
+                hint={
+                  <span className="block text-right tabular-nums">
+                    {fill(o.checkout.giftMessageCount, {
+                      n: String(giftMessage.trim().length),
+                      max: String(data.giftMessageMax),
+                    })}
+                  </span>
+                }
+              />
+            </div>
+          </Reveal>
+        </Card>
+      </section>
+
+      <section className="mt-[26px]">
+        <SectionTitle>{o.checkout.summary}</SectionTitle>
+        <MoneySummary
+          itemCount={data.itemCount}
+          itemsSubtotal={data.quote.itemsSubtotal}
+          discount={data.quote.discount}
+          deliveryFee={data.quote.deliveryFee}
+          total={data.quote.total}
+          place={place}
+        />
+      </section>
+
+      {data.needsConsent ? (
+        <section className="mt-5" data-testid="consent">
+          <Checkbox checked={consent} onChange={setConsent}>
+            {o.checkout.consent}
+          </Checkbox>
+        </section>
+      ) : null}
+      <div className="h-6" />
+
+      <Sheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        title={t.delivery.pointTitle}
+        description={t.delivery.pointText}
+        closeLabel={t.common.close}
+        tall
+      >
+        <DeliveryPicker
+          mode="point"
+          initial={
+            dest?.kind === 'point'
+              ? { regionId: dest.region.id, city: dest.point.city }
+              : data.deliveryCity
+                ? { regionId: data.deliveryCity.region.id, city: data.deliveryCity.city }
+                : null
+          }
+          selectedPointId={dest?.kind === 'point' ? dest.point.id : undefined}
+          onPick={(p) => {
+            if (p.kind === 'city') return;
+            setDest(p);
+            setError(null);
+            setPickerOpen(false);
+          }}
+        />
+      </Sheet>
+
+      <ConflictSheet
+        conflict={conflict}
+        busy={create.isPending}
+        place={place}
+        onConfirm={(newTotal) => submit(newTotal)}
+        onCart={toCart}
+        onClose={() => setConflict(null)}
       />
     </Screen>
+  );
+}
+
+/** Folds content open and shut without a jump (the cart's suggestion fold). */
+function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div
+      inert={!open}
+      className="grid transition-[grid-template-rows,opacity] duration-[260ms] ease-[cubic-bezier(0.23,1,0.32,1)]"
+      style={{ gridTemplateRows: open ? '1fr' : '0fr', opacity: open ? 1 : 0 }}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The total changed while the shopper was checking out (ADR 0001): they see the old total struck,
+ * the new one and its breakdown, and confirm it, because they will transfer exactly that. When
+ * nothing is left to order, the only way on is back to the cart.
+ */
+function ConflictSheet({
+  conflict,
+  busy,
+  place,
+  onConfirm,
+  onCart,
+  onClose,
+}: {
+  conflict: Conflict | null;
+  busy: boolean;
+  place: string | null;
+  onConfirm: (total: number) => void;
+  onCart: () => void;
+  onClose: () => void;
+}) {
+  const { t } = usePrefs();
+  const o = useOrdersText();
+  // keep the last conflict on screen while the sheet slides away
+  const [shown, setShown] = useState(conflict);
+  if (conflict && conflict !== shown) setShown(conflict);
+  const c = conflict ?? shown;
+  const gone = c?.code === 'nothing_to_order';
+  return (
+    <Sheet
+      open={!!conflict}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={gone ? o.checkout.goneTitle : o.checkout.changedTitle}
+      description={gone ? o.checkout.goneText : o.checkout.changedText}
+      closeLabel={t.common.close}
+    >
+      {c && !gone ? (
+        <div className="flex flex-col gap-3 pb-1" data-testid="total-changed">
+          <div className="flex items-end justify-between gap-4 px-0.5">
+            <div>
+              <p className="type-small text-muted">{o.checkout.changedWas}</p>
+              <s className="text-muted">
+                <Money amount={c.was} />
+              </s>
+            </div>
+            <div className="text-right">
+              <p className="type-small text-muted">{o.checkout.changedNow}</p>
+              <Money amount={c.checkout.quote.total} size="amount" />
+            </div>
+          </div>
+          <MoneySummary
+            itemCount={c.checkout.itemCount}
+            itemsSubtotal={c.checkout.quote.itemsSubtotal}
+            discount={c.checkout.quote.discount}
+            deliveryFee={c.checkout.quote.deliveryFee}
+            total={c.checkout.quote.total}
+            place={place}
+          />
+          <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote.total)}>
+            <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>
+            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
+            <Money amount={c.checkout.quote.total} className="text-current" />
+          </Button>
+          <Button block variant="secondary" onClick={onCart}>
+            {o.checkout.backToCart}
+          </Button>
+        </div>
+      ) : (
+        <div className="pb-1">
+          <Button block onClick={onCart}>
+            {o.checkout.backToCart}
+          </Button>
+        </div>
+      )}
+    </Sheet>
   );
 }

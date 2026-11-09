@@ -11,7 +11,6 @@ import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
-import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -21,6 +20,7 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
+import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
 
 type T = ReturnType<typeof usePrefs>['t'];
@@ -35,30 +35,6 @@ export interface CartPending {
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
-
-/** A 3:4 bottle thumbnail on its Photo Blush slot, which stays when the photo is missing or fails. */
-function Thumb({ photo, className }: { photo: string | null; className: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div
-      aria-hidden="true"
-      className={`${className} relative aspect-[3/4] shrink-0 overflow-hidden rounded-thumb bg-photo`}
-    >
-      {photo && !failed ? (
-        <img
-          src={photoUrl(photo, 400)}
-          srcSet={photoSrcSet(photo)}
-          sizes="64px"
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-          className="absolute inset-0 size-full object-cover"
-        />
-      ) : null}
-    </div>
-  );
-}
 
 /** How many times a value has changed since mount (0 = never), to replay a small settle on change. */
 function useChanges<V>(value: V): number {

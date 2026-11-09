@@ -19,7 +19,7 @@ export interface ScreenDef {
   /** Undo what `setup` changed in the database, so the next run starts from the seed. */
   teardown?: (ctx: { api: ApiClient; db: ShotDb }) => Promise<void>;
   /** Interact with the loaded page (open a sheet, type in a search) before the capture. */
-  act?: (ctx: { page: Page }) => Promise<void>;
+  act?: (ctx: { page: Page; db: ShotDb }) => Promise<void>;
   /** Capture the loading state `act` left on screen: skeletons are expected, not waited out. */
   loading?: boolean;
   /** Sign in with initData this many seconds old (shows the "reopen the app" state). */
@@ -107,6 +107,97 @@ const registrationStates: ScreenDef[] = (
     ['browser', 'browser'],
   ] as const
 ).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
+
+/** The screenshot customer's account phone from a signed contact, as the registration step saves it. */
+async function sharePhone(api: ApiClient, userId = SHOT_USER.id) {
+  const res = await api.me.shareContact({
+    body: {
+      proof: signContact({
+        botToken: process.env.BOT_TOKEN ?? '',
+        userId,
+        phone: '+998901234567',
+        authDate: Math.floor(Date.now() / 1000),
+      }),
+    },
+  });
+  if (res.status !== 200) throw new Error(`share contact failed ${res.status}`);
+}
+
+/** Removes the shot customers' orders (their lines are the reserve) and, optionally, their consent. */
+async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none' } = {}) {
+  const ids = [SHOT_USER.id, NO_PHONE_USER.id];
+  await db.query(
+    `delete from orders where customer_id in (select id from customers where telegram_id = any($1))`,
+    [ids],
+  );
+  if (consent)
+    await db.query(`update customers set data_consent_at = $2 where telegram_id = any($1)`, [
+      ids,
+      consent === 'given' ? new Date() : null,
+    ]);
+}
+
+/** The first offered point of the saved city (Samarkand). */
+async function firstPoint(api: ApiClient) {
+  const regions = await api.delivery.regions();
+  if (regions.status !== 200) throw new Error(`regions: HTTP ${regions.status}`);
+  const region = regions.body.find((r) => r.nameRu.startsWith('Самаркандская'))!;
+  const points = await api.delivery.points({ query: { regionId: region.id, city: 'Самарканд' } });
+  if (points.status !== 200 || !points.body[0]) throw new Error('no point (run bts:import)');
+  return { region, point: points.body[0] };
+}
+
+/** Places an order through the real API, at the total checkout quotes. */
+async function placeOrder(
+  api: ApiClient,
+  items: [slug: string, ml: 10 | 30 | 50, qty?: number][],
+  extra: { gift?: boolean; giftMessage?: string; comment?: string } = {},
+) {
+  await fillCart(api, items);
+  const { region, point } = await firstPoint(api);
+  const checkout = await api.checkout.get({ query: { regionId: region.id } });
+  if (checkout.status !== 200) throw new Error(`checkout: HTTP ${checkout.status}`);
+  const res = await api.orders.create({
+    body: {
+      recipientName: 'Dilnoza Karimova',
+      recipientPhone: '+998901234567',
+      delivery: { kind: 'point', pointId: point.id },
+      consent: true,
+      confirmedTotal: checkout.body.quote.total,
+      ...extra,
+    },
+  });
+  if (res.status !== 201) throw new Error(`order: HTTP ${res.status}`);
+}
+
+/** Checkout's state for a shot: phone shared, Samarkand saved, the mockup's 243 000 cart. */
+async function checkoutReady(api: ApiClient, db: ShotDb, consent: 'given' | 'none') {
+  await sharePhone(api);
+  await chooseCity(api);
+  await clearOrders(db, { consent });
+  await fillCart(api, [
+    ['symphony', 10],
+    ['tygar', 30],
+  ]);
+}
+const checkoutDone = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+  await clearOrders(db);
+  await emptyCart({ api, db });
+};
+
+/** Opens the point picker (on the saved city's points) and takes the first point. */
+async function pickFirstPoint(page: Page) {
+  await page.getByTestId('choose-point').click();
+  await sheet(page).getByTestId('point-row').first().click();
+  await sheet(page).waitFor({ state: 'detached' });
+  await page.getByTestId('chosen-point').waitFor();
+}
+
+/** Opens the newest order from the «Заказы» list. */
+async function openFirstOrder(page: Page) {
+  await page.getByTestId('order-row').first().click();
+  await page.getByTestId('timeline').waitFor();
+}
 
 export const screens: ScreenDef[] = [
   { id: 'home', path: '/', setup: ({ api }) => forgetCity(api) },
@@ -236,7 +327,117 @@ export const screens: ScreenDef[] = [
   },
   { id: 'catalog', path: '/catalog' },
   { id: 'cart', path: '/cart' },
-  { id: 'orders', path: '/orders' },
+  // Checkout (#23): the mockup's cart (243 000 with delivery to Samarkand), a point chosen.
+  {
+    id: 'checkout',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    // the first order: the consent check, and the dock says what is still missing
+    id: 'checkout-consent',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'none'),
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    // «Это подарок» on, with a greeting for the card (free of charge: the total does not move)
+    id: 'checkout-gift',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => {
+      await pickFirstPoint(page);
+      await page.getByTestId('gift-toggle').click();
+      await page
+        .getByTestId('gift')
+        .getByRole('textbox')
+        .fill('С днём рождения, Мадина! Пусть этот аромат напоминает о нашем лете в Самарканде.');
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // the owner raised a price while the shopper was on the screen: the 409 sheet with the new total
+    id: 'checkout-total-changed',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(
+        `update volumes set price = price + 10000 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.query(
+        `update volumes set price = price - 10000 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    // no account phone yet: checkout opens the registration step on arrival
+    id: 'checkout-no-phone',
+    path: '/checkout',
+    user: NO_PHONE_USER,
+    setup: ({ api }) => fillCart(api, [['symphony', 10]]),
+    act: async ({ page }) => void (await sheet(page).waitFor()),
+    teardown: async ({ api }) => fillCart(api, []),
+  },
+  // The «Заказы» tab: empty, then two orders (a gift among them), and an order's detail.
+  { id: 'orders-empty', path: '/orders', setup: ({ db }) => clearOrders(db) },
+  {
+    id: 'orders-list',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail-gift',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]], {
+        gift: true,
+        giftMessage: 'С днём рождения, Мадина! Пусть этот аромат напоминает о нашем лете.',
+        comment: 'Позвоните получателю за час до доставки',
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
   {
     id: 'profile',
     path: '/profile',

@@ -123,7 +123,15 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/orders'),
-    component: lazyRouteComponent(() => import('../screens/Tabs'), 'OrdersTab'),
+    component: lazyRouteComponent(() => import('../screens/Orders'), 'Orders'),
+  }),
+  createRoute({
+    ...at('/orders/$number'),
+    // an order number only; anything else lands on the list
+    beforeLoad: ({ params }) => {
+      if (!/^[1-9]\d{0,9}$/.test(params.number)) throw redirect({ to: '/orders', replace: true });
+    },
+    component: lazyRouteComponent(() => import('../screens/Order'), 'Order'),
   }),
   createRoute({
     ...at('/profile'),
