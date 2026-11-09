@@ -205,9 +205,9 @@ export const miniappMessages = defineMessages(
       toCatalog: 'Katalogni ochish',
     },
     list: {
-      from: '{price} dan',
+      from: '{price}dan',
       soldOut: 'Sotuvda yoʻq',
-      open: '{name} ni ochish',
+      open: '{name}’ni ochish',
     },
     placeholder: {
       catalog: {

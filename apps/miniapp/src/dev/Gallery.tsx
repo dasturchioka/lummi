@@ -45,7 +45,7 @@ import thumbA from './thumbs/symphony.webp';
 import thumbB from './thumbs/althair.webp';
 import thumbC from './thumbs/absolu-aventus.webp';
 
-const LIST_ITEMS: Record<'normal' | 'worst' | 'soldOut', FragranceListItem> = {
+const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', FragranceListItem> = {
   normal: {
     slug: 'baccarat-rouge-540',
     name: 'Baccarat Rouge 540',
@@ -54,13 +54,27 @@ const LIST_ITEMS: Record<'normal' | 'worst' | 'soldOut', FragranceListItem> = {
     family: { ru: 'Амброво-древесный', uz: 'Ambrali yogʻochli' },
     keyNotes: {
       ru: ['шафран', 'амбровое дерево', 'кедр'],
-      uz: ['za’faron', 'ambra daraxti', 'kedr'],
+      uz: ['za’faron', 'ambra yogʻochi', 'kedr'],
     },
     isHit: true,
     isNew: false,
     fromPrice: 69_000,
     soldOut: false,
     photo: '32c0930f6c672207',
+  },
+  // The longest real attribution: «ПО МОТИВАМ BOADICEA THE VICTORIOUS» wraps in every layout.
+  longBrand: {
+    slug: 'blue-sapphire',
+    name: 'Blue Sapphire',
+    brand: 'Boadicea the Victorious',
+    type: 'unisex',
+    family: { ru: 'Цитрусово-амбровый', uz: 'Sitrusli ambrali' },
+    keyNotes: { ru: ['лимон', 'роза', 'уд'], uz: ['limon', 'atirgul', 'ud'] },
+    isHit: false,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: false,
+    photo: 'd11347a1d027622c',
   },
   // The realistic worst case: very long name and brand, no family, a seven-digit price, no photo.
   worst: {
@@ -90,9 +104,45 @@ const LIST_ITEMS: Record<'normal' | 'worst' | 'soldOut', FragranceListItem> = {
     isNew: false,
     fromPrice: 69_000,
     soldOut: true,
-    photo: null,
+    photo: 'bdee0c5f88c675d9',
   },
 };
+
+/** FragranceListCard in its three layouts on the fixtures above (also `/dev/list`, for its shot). */
+function ListCards() {
+  const { normal, longBrand, worst, soldOut } = LIST_ITEMS;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} layout="grid" item={item} />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} item={item} />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col divide-y divide-line">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} compact item={item} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** `/dev/list`: only the list cards, at the width a phone shows them. */
+export function GalleryListCards() {
+  return (
+    <Screen>
+      <div data-gallery="" className="contents">
+        <ScreenHeader title="List cards" />
+        <ListCards />
+      </div>
+    </Screen>
+  );
+}
 
 const demo = {
   ru: {
@@ -476,19 +526,7 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
         </Section>
 
         <Section name="FragranceListCard · grid / row / compact (catalog, search results, suggestions)">
-          <div className="grid grid-cols-2 gap-2">
-            <FragranceListCard layout="grid" item={LIST_ITEMS.normal} />
-            <FragranceListCard layout="grid" item={LIST_ITEMS.worst} />
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            <FragranceListCard item={LIST_ITEMS.normal} />
-            <FragranceListCard item={LIST_ITEMS.worst} />
-            <FragranceListCard item={LIST_ITEMS.soldOut} />
-          </div>
-          <div className="mt-3 flex flex-col divide-y divide-line">
-            <FragranceListCard compact item={LIST_ITEMS.normal} />
-            <FragranceListCard compact item={LIST_ITEMS.worst} />
-          </div>
+          <ListCards />
         </Section>
 
         <Section name="ChosenPoint (checkout: the BTS point, collapsed)">
