@@ -35,10 +35,7 @@ function Thumb({
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div
-      aria-hidden="true"
-      className={`relative shrink-0 overflow-hidden rounded-card bg-photo ${className}`}
-    >
+    <div aria-hidden="true" className={`relative shrink-0 overflow-hidden bg-photo ${className}`}>
       {hash && !failed ? (
         <img
           src={photoUrl(hash, 400)}
@@ -108,7 +105,7 @@ export function FragranceListCard({
         <Thumb
           hash={item.photo}
           sizes="(min-width: 520px) 240px, 45vw"
-          className="aspect-[3/4] w-full"
+          className="aspect-[3/4] w-full rounded-card"
         />
         <span className="flex px-1">{lockup}</span>
       </button>
@@ -125,7 +122,7 @@ export function FragranceListCard({
       <Thumb
         hash={item.photo}
         sizes={compact ? '48px' : '96px'}
-        className={compact ? 'w-12 aspect-[3/4] !rounded-[8px]' : 'w-24 aspect-[3/4]'}
+        className={compact ? 'aspect-[3/4] w-12 rounded-photo' : 'aspect-[3/4] w-24 rounded-card'}
       />
       {lockup}
     </button>

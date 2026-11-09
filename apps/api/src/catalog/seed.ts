@@ -82,7 +82,7 @@ export const SEED_ALIASES: Record<string, string[]> = {
   'miss-dior-blooming-bouquet': ['Мисс Диор Блуминг Букет'],
   'bal-dafrique': ['Баль д’Африк', 'Bal Dafrik'],
   'oud-wood': ['Уд Вуд', 'Oud Vud'],
-}
+};
 
 const list = (s: string, sep: string | RegExp) =>
   s

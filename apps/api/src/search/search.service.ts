@@ -1,21 +1,9 @@
-import type { FragranceListItem } from '@lummi/contracts';
-import {
-  and,
-  asc,
-  eq,
-  families,
-  fragrances,
-  inArray,
-  sql,
-  volumes,
-  type Db,
-  type VolumeRow,
-} from '@lummi/db';
-import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
-import { toVolumeCard, reservedByVolume } from '../catalog/catalog.service';
-import type { Edges } from '../edges';
+import type { SearchResult } from '@lummi/contracts';
+import { sql, type Db } from '@lummi/db';
+import { Inject, Injectable } from '@nestjs/common';
+import { CatalogService } from '../catalog/catalog.service';
 import { readSettings } from '../settings/settings.service';
-import { DB, EDGES } from '../tokens';
+import { DB } from '../tokens';
 import { skeleton } from './normalize';
 import { syncSearchIndex } from './search-index';
 
@@ -24,31 +12,20 @@ interface RankedRow extends Record<string, unknown> {
 }
 
 @Injectable()
-export class SearchService implements OnApplicationBootstrap {
-  private readonly log = new Logger(SearchService.name);
-
+export class SearchService {
   constructor(
     @Inject(DB) private readonly db: Db,
-    @Inject(EDGES) private readonly edges: Edges,
+    @Inject(CatalogService) private readonly catalog: CatalogService,
   ) {}
 
-  async onApplicationBootstrap(): Promise<void> {
-    try {
-      const n = await syncSearchIndex(this.db);
-      if (n > 0) this.log.log(`search index: rebuilt ${n} stale document(s)`);
-    } catch (err) {
-      this.log.error(`search index sync failed: ${String(err)}`);
-    }
-  }
-
   /** The top few for the box under the field while typing. */
-  async suggest(query: string): Promise<FragranceListItem[]> {
+  async suggest(query: string): Promise<SearchResult> {
     const s = await readSettings(this.db, ['search.suggestLimit']);
     return this.run(query, s['search.suggestLimit']);
   }
 
   /** The full result list. */
-  async search(query: string): Promise<FragranceListItem[]> {
+  async search(query: string): Promise<SearchResult> {
     const s = await readSettings(this.db, ['search.resultsLimit']);
     return this.run(query, s['search.resultsLimit']);
   }
@@ -61,14 +38,15 @@ export class SearchService implements OnApplicationBootstrap {
    * family x1 (the weights are settings). `word_similarity` asks how well the query sits inside
    * the field, so «megamar» finds "megamare" and «ваниль» finds a field full of other notes.
    */
-  async rank(query: string, limit: number): Promise<number[]> {
+  async rank(query: string, limit: number): Promise<number[] | 'too-short'> {
     const q = skeleton(query);
     const cfg = await readSettings(this.db, [
       'search.weights',
       'search.minSimilarity',
       'search.minQueryLength',
     ]);
-    if (q === '' || Array.from(query.trim()).length < cfg['search.minQueryLength']) return [];
+    // The minimum counts the skeleton, not the raw input: `'a` is one letter.
+    if (Array.from(q).length < cfg['search.minQueryLength']) return 'too-short';
     const w = cfg['search.weights'];
     const min = cfg['search.minSimilarity'];
 
@@ -103,63 +81,9 @@ export class SearchService implements OnApplicationBootstrap {
     return res.rows.map((r) => Number(r.id));
   }
 
-  private async run(query: string, limit: number): Promise<FragranceListItem[]> {
+  private async run(query: string, limit: number): Promise<SearchResult> {
     const ids = await this.rank(query, limit);
-    if (ids.length === 0) return [];
-    const [rows, vols] = await Promise.all([
-      this.db
-        .select({
-          id: fragrances.id,
-          slug: fragrances.slug,
-          name: fragrances.name,
-          brand: fragrances.originalBrand,
-          type: fragrances.type,
-          keyNotesRu: fragrances.keyNotesRu,
-          keyNotesUz: fragrances.keyNotesUz,
-          isHit: fragrances.isHit,
-          isNew: fragrances.isNew,
-          familyRu: families.nameRu,
-          familyUz: families.nameUz,
-        })
-        .from(fragrances)
-        .leftJoin(families, eq(families.id, fragrances.familyId))
-        .where(and(inArray(fragrances.id, ids), eq(fragrances.hidden, false))),
-      this.db
-        .select()
-        .from(volumes)
-        .where(inArray(volumes.fragranceId, ids))
-        .orderBy(asc(volumes.ml)),
-    ]);
-    const reserved = await reservedByVolume(
-      this.db,
-      vols.map((v) => v.id),
-    );
-    const now = this.edges.clock.now();
-    const volsOf = new Map<number, VolumeRow[]>();
-    for (const v of vols) volsOf.set(v.fragranceId, [...(volsOf.get(v.fragranceId) ?? []), v]);
-    const byId = new Map(rows.map((r) => [r.id, r]));
-
-    return ids.flatMap((id) => {
-      const f = byId.get(id);
-      if (!f) return [];
-      const cards = (volsOf.get(id) ?? []).map((v) =>
-        toVolumeCard(v, reserved.get(v.id) ?? 0, now),
-      );
-      return [
-        {
-          slug: f.slug,
-          name: f.name,
-          brand: f.brand,
-          type: f.type,
-          family: f.familyRu && f.familyUz ? { ru: f.familyRu, uz: f.familyUz } : null,
-          keyNotes: { ru: f.keyNotesRu, uz: f.keyNotesUz },
-          isHit: f.isHit,
-          isNew: f.isNew,
-          fromPrice: cards.length ? Math.min(...cards.map((c) => c.effectivePrice)) : null,
-          soldOut: cards.length === 0 || cards.every((c) => c.available === 0),
-          photo: cards[0]?.photo ?? null,
-        },
-      ];
-    });
+    if (ids === 'too-short') return { items: [], tooShort: true };
+    return { items: await this.catalog.listItems(ids), tooShort: false };
   }
 }

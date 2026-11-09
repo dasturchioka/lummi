@@ -17,11 +17,11 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-async function top3(q: string): Promise<string[]> {
+async function top(q: string, n: number): Promise<string[]> {
   const { client } = await t.signIn();
   const res = await client.catalog.search({ query: { q } });
   if (res.status !== 200) throw new Error(`search ${q}: HTTP ${res.status}`);
-  return res.body.items.slice(0, 3).map((i) => i.slug);
+  return res.body.items.slice(0, n).map((i) => i.slug);
 }
 
 async function slugsWithNotes(ruNames: string[]): Promise<Set<string>> {
@@ -34,18 +34,10 @@ async function slugsWithNotes(ruNames: string[]): Promise<Set<string>> {
   return new Set(rows.map((r) => r.slug));
 }
 
-async function slugsOfBrand(brand: string): Promise<Set<string>> {
-  const rows = await t.db
-    .select({ slug: fragrances.slug })
-    .from(fragrances)
-    .where(eq(fragrances.originalBrand, brand));
-  return new Set(rows.map((r) => r.slug));
-}
-
 async function passes(c: ControlQuery, got: string[]): Promise<boolean> {
   if (got.length === 0) return false;
   if (c.kind === 'name') return got.some((s) => c.slugs.includes(s));
-  const pool = c.kind === 'note' ? await slugsWithNotes(c.notes) : await slugsOfBrand(c.brand);
+  const pool = await slugsWithNotes(c.notes);
   // Only so many fragrances can answer: the first slots must all be answers.
   return got.slice(0, Math.min(3, pool.size)).every((s) => pool.has(s));
 }
@@ -59,7 +51,7 @@ describe('search control queries (CI gate)', () => {
     const failed: string[] = [];
     let ok = 0;
     for (const c of CONTROL_QUERIES) {
-      const got = await top3(c.q);
+      const got = await top(c.q, c.kind === 'name' ? (c.top ?? 3) : 3);
       const pass = await passes(c, got);
       if (process.env.SEARCH_VERBOSE)
         console.log(pass ? 'ok  ' : 'FAIL', `«${c.q}»`, got.join(', '));

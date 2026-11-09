@@ -8,6 +8,7 @@ import {
   redirect,
   useRouter,
 } from '@tanstack/react-router';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';
@@ -20,7 +21,7 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
-  // A fragrance card and the search are task screens: it carries its own dock, not the tab bar (also on its fixtures).
+  // The fragrance card (it carries its own dock, also on its fixtures) and the search are task screens: no tab bar.
   const showTabBar =
     !pathname.startsWith('/p/') && pathname !== '/search' && pathname !== '/dev/fragrance';
 
@@ -76,7 +77,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     ...at('/search'),
     validateSearch: (s: Record<string, unknown>): { q?: string; s?: number } => ({
-      ...(typeof s.q === 'string' && s.q !== '' ? { q: s.q.slice(0, 100) } : {}),
+      ...(typeof s.q === 'string' && s.q !== '' ? { q: s.q.slice(0, SEARCH_QUERY_MAX) } : {}),
       ...(Number(s.s) === 1 ? { s: 1 } : {}),
     }),
     component: lazyRouteComponent(() => import('../screens/Search'), 'Search'),

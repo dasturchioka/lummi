@@ -1,4 +1,4 @@
-import { normalizeUzbek } from '@lummi/i18n';
+import { APOSTROPHE_CLASS, normalizeUzbek } from '@lummi/i18n';
 
 /**
  * The Latin skeleton of search (ADR 0019): the one alphabet both the catalog documents and the
@@ -53,7 +53,7 @@ const CYRILLIC: Record<string, string> = {
   ҳ: 'h',
 };
 
-const APOSTROPHES = /['‘’ʻʼ`´′ʹ]/g;
+const APOSTROPHES = new RegExp(APOSTROPHE_CLASS, 'g');
 
 function transliterate(s: string): string {
   let out = '';

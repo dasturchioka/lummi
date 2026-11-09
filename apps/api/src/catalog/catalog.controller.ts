@@ -26,7 +26,7 @@ export class CatalogController {
   suggest() {
     return tsRestHandler(contract.catalog.suggest, async ({ query }) => ({
       status: 200 as const,
-      body: { items: await this.search.suggest(query.q) },
+      body: await this.search.suggest(query.q),
     }));
   }
 
@@ -34,7 +34,7 @@ export class CatalogController {
   searchAll() {
     return tsRestHandler(contract.catalog.search, async ({ query }) => ({
       status: 200 as const,
-      body: { items: await this.search.search(query.q) },
+      body: await this.search.search(query.q),
     }));
   }
 }

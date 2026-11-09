@@ -197,7 +197,6 @@ export const userbotHeartbeat = pgTable(
   (t) => [check('userbot_heartbeat_one_row', sql`${t.id}`)],
 );
 
-
 /*
  * Catalog (ADR 0018): translatable text is a pair of NOT NULL columns, names of fragrances and
  * their original brands are single fields. Money is integer so'm; stock is "on hand" only, the
@@ -346,34 +345,30 @@ export const volumes = pgTable(
 
 /**
  * The search document of one fragrance (ADR 0019), every field a Latin skeleton
- * (`apps/api/src/search/normalize.ts`). Written by the catalog code that changes a fragrance
- * (`SearchIndex`), never by hand; trigram indexes serve `word_similarity`.
+ * (`apps/api/src/search/normalize.ts`). Written only by `reindexFragrances`
+ * (`apps/api/src/search/search-index.ts`), called in the transaction of whatever changes the
+ * catalog; `updatedAt` is when this document was built. There are no trigram indexes on purpose:
+ * the ranking asks `word_similarity()` of every row, which a GIN index cannot serve, and the
+ * catalog is a few dozen rows. If it ever grows to thousands, switch the match to the `<%`
+ * operator and add GIN `gin_trgm_ops` indexes then.
  */
-export const fragranceSearch = pgTable(
-  'fragrance_search',
-  {
-    fragranceId: bigint('fragrance_id', { mode: 'number' })
-      .primaryKey()
-      .references(() => fragrances.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    /** One skeleton per alias, so an exact alias match is a plain equality. */
-    aliases: text('aliases')
-      .array()
-      .notNull()
-      .default(sql`'{}'::text[]`),
-    brand: text('brand').notNull(),
-    /** Notes of every level, RU and UZ. */
-    notes: text('notes').notNull(),
-    /** The family, RU and UZ. */
-    family: text('family').notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index('fragrance_search_name_trgm').using('gin', t.name.op('gin_trgm_ops')),
-    index('fragrance_search_brand_trgm').using('gin', t.brand.op('gin_trgm_ops')),
-    index('fragrance_search_notes_trgm').using('gin', t.notes.op('gin_trgm_ops')),
-  ],
-);
+export const fragranceSearch = pgTable('fragrance_search', {
+  fragranceId: bigint('fragrance_id', { mode: 'number' })
+    .primaryKey()
+    .references(() => fragrances.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  /** One skeleton per alias, so an exact alias match is a plain equality. */
+  aliases: text('aliases')
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  brand: text('brand').notNull(),
+  /** Notes of every level, RU and UZ. */
+  notes: text('notes').notNull(),
+  /** The family, RU and UZ. */
+  family: text('family').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export type FragranceRow = typeof fragrances.$inferSelect;
 export type VolumeRow = typeof volumes.$inferSelect;

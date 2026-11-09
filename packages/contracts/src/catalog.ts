@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SEARCH_QUERY_MAX } from './limits';
 
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });
@@ -78,6 +79,14 @@ export const fragranceListItemSchema = z.object({
 });
 export type FragranceListItem = z.infer<typeof fragranceListItemSchema>;
 
-export const searchQuerySchema = z.object({ q: z.string().max(100) });
-export const searchResultSchema = z.object({ items: z.array(fragranceListItemSchema) });
+export const searchQuerySchema = z.object({ q: z.string().max(SEARCH_QUERY_MAX) });
+export const searchResultSchema = z.object({
+  items: z.array(fragranceListItemSchema),
+  /**
+   * The text is shorter than `search.minQueryLength` once reduced to its skeleton (`'a` is one
+   * letter): the client shows its hint, not «nothing found». The minimum is a setting, so the
+   * server says it.
+   */
+  tooShort: z.boolean(),
+});
 export type SearchResult = z.infer<typeof searchResultSchema>;

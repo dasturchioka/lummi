@@ -1,5 +1,7 @@
 import type { contract } from './contract';
 
+export { SEARCH_QUERY_MAX } from './limits';
+
 /**
  * The Mini App's view of the API contract, WITHOUT zod at runtime.
  *

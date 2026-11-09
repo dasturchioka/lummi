@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
 import { useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { api, unwrap } from '../lib/api';
@@ -12,8 +13,6 @@ import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { useDebounced } from './search/useDebounced';
 
-/** Suggestions start at this many characters (the server's `search.minQueryLength` default). */
-const MIN_CHARS = 2;
 const DEBOUNCE_MS = 150;
 
 function Rows() {
@@ -49,7 +48,8 @@ export function Search() {
   // A submitted list is for the submitted text; otherwise suggestions follow the debounced input.
   const debounced = useDebounced(typed, DEBOUNCE_MS);
   const q = submitted ? typed : debounced;
-  const active = Array.from(q).length >= MIN_CHARS;
+  // The server decides what is too short (`search.minQueryLength`, counted on the skeleton).
+  const active = q !== '';
   const mode = submitted ? 'search' : 'suggest';
 
   const query = useQuery({
@@ -61,14 +61,14 @@ export function Search() {
         mode === 'search'
           ? await api.catalog.search({ query: { q } })
           : await api.catalog.suggest({ query: { q } });
-      return unwrap(res, 200).items;
+      return unwrap(res, 200);
     },
   });
 
   const open = (slug: string) => void navigate({ to: '/p/$slug', params: { slug } });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (Array.from(typed).length < MIN_CHARS) return;
+    if (typed === '') return;
     setSubmitted(true);
     void navigate({ to: '/search', search: { q: typed, s: 1 }, replace: true });
   };
@@ -77,12 +77,13 @@ export function Search() {
     setSubmitted(false);
   };
 
-  const items = active ? query.data : undefined;
+  const items = active ? query.data?.items : undefined;
+  const tooShort = active && query.data?.tooShort === true;
   // What the debounce has not caught up with yet is still loading, not "nothing found".
   const settled = submitted || debounced === typed;
 
   let body;
-  if (!active) {
+  if (!active || (settled && tooShort)) {
     body = (
       <p className="type-body px-1 pt-6 text-center text-muted text-balance">{t.search.hint}</p>
     );
@@ -149,7 +150,7 @@ export function Search() {
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            maxLength={100}
+            maxLength={SEARCH_QUERY_MAX}
             value={text}
             onChange={(e) => edit(e.target.value)}
             placeholder={t.search.placeholder}

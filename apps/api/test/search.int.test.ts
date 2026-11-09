@@ -1,4 +1,4 @@
-import { eq, fragrances, volumes } from '@lummi/db';
+import { eq, families, fragranceSearch, fragrances, notes, sql, volumes } from '@lummi/db';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '../src/audit/audit.service';
@@ -27,12 +27,21 @@ async function search(q: string, route: 'search' | 'suggest' = 'search') {
   if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
   return res.body.items;
 }
+async function tooShort(q: string) {
+  const { client } = await t.signIn();
+  const res = await client.catalog.suggest({ query: { q } });
+  if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+  return res.body.tooShort;
+}
 const slugs = async (q: string, route: 'search' | 'suggest' = 'search') =>
   (await search(q, route)).map((i) => i.slug);
 
 describe('suggest', () => {
   it('starts at two characters and returns the top 5', async () => {
     expect(await slugs('a', 'suggest')).toEqual([]);
+    expect(await tooShort("'a")).toBe(true); // the apostrophe does not count: one letter
+    expect(await tooShort('av')).toBe(false);
+    expect(await tooShort('qwxzvk')).toBe(false); // long enough, simply nothing found
     expect(await slugs(' a ', 'suggest')).toEqual([]);
     expect((await slugs('av', 'suggest'))[0]).toBe('aventus');
     expect((await slugs('lo', 'suggest')).length).toBeLessThanOrEqual(5);
@@ -112,28 +121,74 @@ describe('search', () => {
 });
 
 describe('search document stays current', () => {
-  it('a new alias is found once the fragrance is reindexed', async () => {
+  async function docOf(slug: string) {
+    const [r] = await t.db
+      .select({ doc: fragranceSearch })
+      .from(fragranceSearch)
+      .innerJoin(fragrances, eq(fragrances.id, fragranceSearch.fragranceId))
+      .where(eq(fragrances.slug, slug));
+    return r!.doc;
+  }
+  const idOf = async (slug: string) =>
+    (await t.db.select().from(fragrances).where(eq(fragrances.slug, slug)))[0]!.id;
+
+  it('a new alias is found once the fragrance is reindexed in the same transaction', async () => {
     expect(await slugs('аванти')).not.toContain('aventus');
-    const [row] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'aventus'));
+    const id = await idOf('aventus');
     await t.db.transaction(async (tx) => {
       await tx
         .update(fragrances)
         .set({ aliases: ['Аванти'] })
-        .where(eq(fragrances.id, row!.id));
-      await reindexFragrances(tx, [row!.id]);
+        .where(eq(fragrances.id, id));
+      expect(await reindexFragrances(tx, [id])).toBe(1);
     });
     expect((await slugs('аванти'))[0]).toBe('aventus');
   });
 
-  it('syncSearchIndex heals a document that lags its fragrance, and fills a missing one', async () => {
-    const [row] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'tilia'));
+  it('writes only documents whose text changed', async () => {
+    const id = await idOf('aventus');
+    expect(await t.db.transaction((tx) => reindexFragrances(tx, [id]))).toBe(0);
+    expect(await t.db.transaction((tx) => reindexFragrances(tx, []))).toBe(0);
+  });
+
+  it('syncSearchIndex heals a renamed note and a renamed family, which no timestamp shows', async () => {
+    await t.db.update(notes).set({ nameRu: 'зелёный перец' }).where(eq(notes.nameRu, 'шафран'));
     await t.db
-      .update(fragrances)
-      .set({ name: 'Linden', updatedAt: new Date(Date.now() + 5000) })
-      .where(eq(fragrances.id, row!.id));
-    expect(await slugs('linden')).not.toContain('tilia');
-    expect(await syncSearchIndex(t.db)).toBe(1);
-    expect((await slugs('linden'))[0]).toBe('tilia');
+      .update(families)
+      .set({ nameRu: 'Агрумовый' })
+      .where(eq(families.nameRu, 'Фруктовый шипровый'));
+    expect(await slugs('зелёный перец')).not.toContain('safran-secret');
+    expect(await syncSearchIndex(t.db)).toBeGreaterThan(0);
+    expect(await slugs('зелёный перец')).toContain('safran-secret');
+    expect((await docOf('aventus')).family).toContain('agrumovi');
     expect(await syncSearchIndex(t.db)).toBe(0);
+  });
+
+  it('syncSearchIndex fills a missing document', async () => {
+    const id = await idOf('tilia');
+    await t.db.delete(fragranceSearch).where(eq(fragranceSearch.fragranceId, id));
+    expect(await slugs('tilia')).not.toContain('tilia');
+    expect(await syncSearchIndex(t.db)).toBe(1);
+    expect((await slugs('tilia'))[0]).toBe('tilia');
+  });
+
+  it('an upsert cannot replace a document stamped later than the build', async () => {
+    const id = await idOf('tilia');
+    const later = new Date(Date.now() + 3_600_000);
+    await t.db
+      .update(fragranceSearch)
+      .set({ name: 'newer', updatedAt: later })
+      .where(eq(fragranceSearch.fragranceId, id));
+    await t.db.transaction((tx) => reindexFragrances(tx, [id]));
+    expect((await docOf('tilia')).name).toBe('newer');
+  });
+
+  it('two syncs at once leave one consistent index', async () => {
+    await t.db.delete(fragranceSearch);
+    await Promise.all([syncSearchIndex(t.db), syncSearchIndex(t.db)]);
+    const [{ n }] = (
+      await t.db.execute<{ n: string }>(sql`select count(*) as n from fragrance_search`)
+    ).rows;
+    expect(Number(n)).toBe(67);
   });
 });
