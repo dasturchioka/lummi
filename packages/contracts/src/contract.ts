@@ -3,9 +3,12 @@ import { z } from 'zod';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
   catalogErrorSchema,
+  catalogQuerySchema,
+  catalogResultSchema,
   fragranceCardSchema,
   searchQuerySchema,
   searchResultSchema,
+  similarResultSchema,
 } from './catalog';
 import {
   catalogAdminErrorSchema,
@@ -177,6 +180,21 @@ export const contract = c.router({
       pathParams: z.object({ slug: z.string().min(1).max(100) }),
       responses: { 200: fragranceCardSchema, 401: authErrorSchema, 404: catalogErrorSchema },
       summary: 'A fragrance card by slug; hidden and unknown fragrances are 404',
+    },
+    list: {
+      method: 'GET',
+      path: '/catalog/fragrances',
+      query: catalogQuerySchema,
+      responses: { 200: catalogResultSchema, 401: authErrorSchema },
+      summary:
+        'The catalog list: filters (type, family, volume, price, season), sorts (top sales, new, price) and the total; hidden fragrances never appear',
+    },
+    similar: {
+      method: 'GET',
+      path: '/catalog/fragrances/:slug/similar',
+      pathParams: z.object({ slug: z.string().min(1).max(100) }),
+      responses: { 200: similarResultSchema, 401: authErrorSchema, 404: catalogErrorSchema },
+      summary: 'Similar fragrances for a card: curated first, then same family and type, in stock',
     },
     suggest: {
       method: 'GET',

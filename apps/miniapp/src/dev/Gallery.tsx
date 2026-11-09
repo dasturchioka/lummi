@@ -144,6 +144,13 @@ export function GalleryListCards() {
   );
 }
 
+/** The chevron of a chip that opens a sheet, as the catalog draws it. */
+const chevronDown = (
+  <span aria-hidden="true" className="-mr-1 rotate-90">
+    <ChevronIcon size={14} />
+  </span>
+);
+
 const demo = {
   ru: {
     add: 'В корзину',
@@ -449,12 +456,25 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
               }))}
             />
           </Specimen>
-          <Specimen label="Chip · inactive · active · pressed · no thumbnail">
+          <Specimen label="Chip · inactive · active · pressed · photo loading · icon">
             <div className="flex flex-wrap gap-2">
               <Chip label={d.types[1]} thumb={thumbB} />
               <Chip label={d.types[0]} thumb={thumbA} selected />
               <Chip label={d.types[2]} thumb={thumbC} pressed />
-              <Chip label={d.types[3]} />
+              <Chip label={d.types[3]} thumb={null} />
+              <Chip label={d.types[4]} icon={<BoxIcon size={16} />} />
+            </div>
+          </Specimen>
+          <Specimen label="Chip variant=filter · inactive · chosen · pressed">
+            <div className="flex flex-wrap gap-2">
+              <Chip variant="filter" label={t.catalog.filters.family} trailing={chevronDown} />
+              <Chip variant="filter" label="30 ml" selected trailing={chevronDown} />
+              <Chip
+                variant="filter"
+                label={t.catalog.filters.season}
+                pressed
+                trailing={chevronDown}
+              />
             </div>
           </Specimen>
         </Section>

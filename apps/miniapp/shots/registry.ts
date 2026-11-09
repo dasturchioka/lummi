@@ -26,6 +26,8 @@ export interface ScreenDef {
   initDataAgeSeconds?: number;
   /** Capture the whole scrolling page instead of the 390x844 viewport. */
   fullPage?: boolean;
+  /** Viewport width in CSS px (default 390): 360 for the narrow Android check. */
+  width?: number;
   /** Take this screen as another customer (default `SHOT_USER`), e.g. one who never shared a phone. */
   user?: ShotUser;
 }
@@ -108,10 +110,127 @@ const registrationStates: ScreenDef[] = (
   ] as const
 ).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
 
+/** The seed has no hits and no new flags: pin three hits and flag six novelties for Home and the catalog. */
+const HITS = ['symphony', 'aventus', 'tygar'];
+const NEWS = [
+  'althair',
+  'power-of-you',
+  'ink-mark',
+  'rain-tea',
+  'safran-secret',
+  'baccarat-rouge-540',
+];
+async function flagHome(db: ShotDb) {
+  await db.query(`update fragrances set is_hit = true where slug = any($1)`, [HITS]);
+  await db.query(`update fragrances set is_new = true where slug = any($1)`, [NEWS]);
+}
+async function unflagHome(db: ShotDb) {
+  await db.query(`update fragrances set is_hit = false, is_new = false`);
+}
+const withFlags: Pick<ScreenDef, 'setup' | 'teardown'> = {
+  setup: ({ db }) => flagHome(db),
+  teardown: ({ db }) => unflagHome(db),
+};
+const catalogSheet =
+  (name: RegExp): NonNullable<ScreenDef['act']> =>
+  async ({ page }) => {
+    await page.getByRole('button', { name }).first().click();
+    await sheet(page).waitFor();
+    await sheet(page).getByTestId('option-row').first().waitFor();
+  };
+
+/** Holds every catalog list request open, so the first load stays on its skeletons. */
+const holdCatalog = async ({ page }: { page: Page }) => {
+  await page.route('**/catalog/fragrances?*', () => undefined);
+  await page.reload();
+  await page.locator('[data-skeleton]').first().waitFor();
+};
+/** Fails every catalog list request, as a dropped connection does. */
+const failCatalog = async ({ page }: { page: Page }) => {
+  await page.route('**/catalog/fragrances?*', (route) => route.abort());
+  await page.reload();
+  await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+};
+
+/**
+ * The realistic worst case through the data (break-ui): the longest brands of the guide pinned to
+ * the top («Maison Francis Kurkdjian», «Boadicea the Victorious»), the longest name with a
+ * seven-digit price, and a hit sold out in every volume.
+ */
+const WORST_HITS = [
+  'elysium-pour-homme-parfum',
+  'baccarat-rouge-540',
+  'blue-sapphire',
+  'miss-dior-blooming-bouquet',
+];
+const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
+  setup: async ({ db }) => {
+    await db.query(`update fragrances set is_hit = true where slug = any($1)`, [WORST_HITS]);
+    await db.query(`update fragrances set is_new = true where slug = 'baccarat-rouge-540'`);
+    await db.query(
+      `update volumes set price = case ml when 10 then 1250000 when 30 then 2450000 else 3490000 end
+       where fragrance_id = (select id from fragrances where slug = 'elysium-pour-homme-parfum')`,
+    );
+    await db.setOnHand('blue-sapphire', 0);
+  },
+  teardown: async ({ db }) => {
+    await unflagHome(db);
+    // The seed's placeholder prices (one set for every fragrance).
+    await db.query(
+      `update volumes set price = case ml when 10 then 69000 when 30 then 149000 else 219000 end
+       where fragrance_id = (select id from fragrances where slug = 'elysium-pour-homme-parfum')`,
+    );
+    await db.restore('blue-sapphire');
+  },
+};
+
 export const screens: ScreenDef[] = [
-  { id: 'home', path: '/', setup: ({ api }) => forgetCity(api) },
+  {
+    id: 'home',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+    },
+    teardown: ({ db }) => unflagHome(db),
+  },
   // Home with the delivery city chosen, and the sheet that changes it.
-  { id: 'home-delivery', path: '/', setup: ({ api }) => chooseCity(api) },
+  {
+    id: 'home-delivery',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await chooseCity(api);
+      await flagHome(db);
+    },
+    teardown: ({ db }) => unflagHome(db),
+  },
+  // The whole page: «Популярное» (no ХИТ badge: the title says it) and the «Новинки» rail.
+  { id: 'home-full', path: '/', ...withFlags, fullPage: true },
+  // A 360 px Android, the narrowest phone we build for.
+  { id: 'home-360', path: '/', ...withFlags, width: 360, fullPage: true },
+  { id: 'home-loading', path: '/', loading: true, act: holdCatalog },
+  { id: 'home-error', path: '/', act: failCatalog },
+  {
+    // Nothing visible in the catalog yet: one calm state instead of empty sections.
+    id: 'home-empty',
+    path: '/',
+    setup: async ({ db }) => void (await db.query(`update fragrances set hidden = true`)),
+    teardown: async ({ db }) => void (await db.query(`update fragrances set hidden = false`)),
+  },
+  {
+    // «Популярное» with a chip selected: it filters in place.
+    id: 'home-popular-femme',
+    path: '/',
+    ...withFlags,
+    act: async ({ page }) => {
+      await page.getByRole('radio', { name: 'Femme' }).click();
+      await page.waitForFunction(
+        () =>
+          !document.querySelector('[data-skeleton]') &&
+          !document.querySelector('[aria-busy="true"]'),
+      );
+    },
+  },
   {
     id: 'delivery-regions',
     path: '/',
@@ -234,7 +353,79 @@ export const screens: ScreenDef[] = [
         .waitFor();
     },
   },
-  { id: 'catalog', path: '/catalog' },
+  // Catalog (#15): the default, each filter sheet, the sort, a combination, and the states.
+  { id: 'catalog', path: '/catalog', fullPage: true },
+  { id: 'catalog-sheet-family', path: '/catalog', act: catalogSheet(/Семейство|Oila/) },
+  { id: 'catalog-sheet-volume', path: '/catalog', act: catalogSheet(/Объём|Hajm/) },
+  { id: 'catalog-sheet-season', path: '/catalog', act: catalogSheet(/Сезон|Mavsum/) },
+  {
+    id: 'catalog-sheet-price',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await page
+        .getByRole('button', { name: /Цена|Narx/ })
+        .first()
+        .click();
+      await sheet(page).getByRole('textbox').first().waitFor();
+    },
+  },
+  {
+    id: 'catalog-sheet-sort',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await page.getByRole('button', { name: /Топ продаж|Koʻp sotilganlar/ }).click();
+      await sheet(page).getByTestId('option-row').first().waitFor();
+    },
+  },
+  { id: 'catalog-sort-price-asc', path: '/catalog?sort=price_asc', fullPage: true },
+  { id: 'catalog-sort-new', path: '/catalog?sort=new', ...withFlags, fullPage: true },
+  {
+    id: 'catalog-filtered',
+    path: '/catalog?type=femme&volume=30&season=autumn_winter&min=100000&max=200000',
+    fullPage: true,
+  },
+  { id: 'catalog-nothing-found', path: '/catalog?min=9000000' },
+  {
+    // The longest family name of the guide, chosen: the chip shows it.
+    id: 'catalog-family-chosen',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await catalogSheet(/Семейство|Oila/)({ page });
+      await sheet(page)
+        .getByTestId('option-row')
+        .filter({ hasText: /Древесно-цветочный мускусный|Yogʻochli gulli mushkli/ })
+        .click();
+      await sheet(page).waitFor({ state: 'detached' });
+      await page
+        .getByRole('button', { name: /Древесно-цветочный мускусный|Yogʻochli gulli mushkli/ })
+        .waitFor();
+    },
+  },
+  {
+    // «Показать ещё»: the second page settles in under the first.
+    id: 'catalog-more',
+    path: '/catalog',
+    act: async ({ page }) => {
+      const cards = page.getByRole('list', { name: /^(Каталог|Katalog)$/ }).getByRole('listitem');
+      await page.getByRole('button', { name: /Показать ещё|Yana koʻrsatish/ }).click();
+      await cards.nth(24).waitFor();
+      await cards.nth(22).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  { id: 'catalog-360', path: '/catalog', width: 360 },
+  { id: 'catalog-worst-360', path: '/catalog', ...worstData, width: 360, fullPage: true },
+  { id: 'catalog-sets', path: '/catalog?type=sets' },
+  {
+    // One fragrance sold out in every volume: its card says «Нет в наличии» in place of the price.
+    id: 'catalog-sold-out',
+    path: '/catalog',
+    setup: async ({ db }) => db.setOnHand('symphony', 0),
+    teardown: async ({ db }) => db.restore('symphony'),
+    ...{ fullPage: true },
+  },
+  // A filter change keeps the old list (dimmed); the skeleton is the first load.
+  { id: 'catalog-loading', path: '/catalog', loading: true, act: holdCatalog },
+  { id: 'catalog-error', path: '/catalog?type=homme', act: failCatalog },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },
   {
@@ -419,6 +610,18 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'fragrance-not-found', path: '/p/no-such-scent' },
+  {
+    // «Похожие ароматы» at the foot of the card (the curated ones, then the same family and type).
+    id: 'fragrance-similar',
+    path: '/p/symphony',
+    act: async ({ page }) => {
+      const heading = page.getByRole('heading', { name: /Похожие ароматы|Oʻxshash iforlar/ });
+      await heading.waitFor();
+      await page.locator('[data-skeleton]').first().waitFor({ state: 'detached' });
+      await heading.scrollIntoViewIfNeeded();
+      await heading.evaluate((h) => h.scrollIntoView({ block: 'start' }));
+    },
+  },
   // The card on dev fixtures (src/dev/fragrance-fixtures.ts): the realistic worst case (long name
   // and brand, no family, every volume on sale, a seven-digit price, a missing photo), a fragrance
   // sold in one volume, and one with nothing optional (no volumes, notes or key notes).

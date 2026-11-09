@@ -33,13 +33,14 @@ const NBSP = ' ';
 
 /**
  * «по мотивам <brand>» / «<brand> asosida» with the template's own words held together, so a long
- * brand wraps between its own words and «по мотивам» never splits across lines.
+ * brand wraps between its own words and «по мотивам» never splits across lines. A hyphenated
+ * brand keeps its hyphen (a non-breaking one): «MARC-ANTOINE», never «MARC- / ANTOINE».
  */
 export function attribution(template: string, brand: string): string {
   return template
     .split('{brand}')
     .map((part) => part.replace(/(\S) (?=\S)/g, `$1${NBSP}`))
-    .join(brand);
+    .join(brand.replace(/-/g, '\u2011'));
 }
 
 /** Text that wraps only between its words: «Цветочно-фруктовый» never breaks after its hyphen. */
@@ -89,6 +90,9 @@ export function FragranceListCard({
   const { t, language } = usePrefs();
   const grid = layout === 'grid' && !compact;
   const notes = item.keyNotes[language].slice(0, 3);
+  // Nothing to buy: the bottle steps back, so a grid scans for what is in stock before the eye
+  // reaches «Нет в наличии» on the price line.
+  const faded = item.soldOut ? 'opacity-55' : '';
 
   // The price line, or «Нет в наличии» in its place; 30 px tall on cards, the «+» square's height.
   // A grid card under 155 px inside (a 360 px phone) steps the price down to 13.5 px, so
@@ -103,7 +107,8 @@ export function FragranceListCard({
 
   const lockup = (
     <>
-      <span className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
+      {/* Balanced: «ПО МОТИВАМ / LOUIS VUITTON», never «ПО МОТИВАМ LOUIS / VUITTON» on a wide row. */}
+      <span className="type-label text-balance text-muted [overflow-wrap:anywhere]">
         {attribution(t.card.basedOn, item.brand)}
       </span>
       <span
@@ -171,7 +176,7 @@ export function FragranceListCard({
         <Thumb
           hash={item.photo}
           sizes="(min-width: 520px) 240px, 45vw"
-          className="aspect-[3/4] w-full rounded-photo"
+          className={`aspect-[3/4] w-full rounded-photo ${faded}`}
         />
         <span className="flex flex-1 flex-col px-1 pt-2.5">
           {lockup}
@@ -189,7 +194,7 @@ export function FragranceListCard({
       <Thumb
         hash={item.photo}
         sizes={compact ? '48px' : '96px'}
-        className={compact ? 'aspect-[3/4] w-12 rounded-thumb' : 'aspect-[3/4] w-24 rounded-photo'}
+        className={`${compact ? 'aspect-[3/4] w-12 rounded-thumb' : 'aspect-[3/4] w-24 rounded-photo'} ${faded}`}
       />
       <span className="flex min-w-0 flex-1 flex-col">
         {lockup}

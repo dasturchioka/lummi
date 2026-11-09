@@ -68,6 +68,8 @@ export const BottleIcon = (p: P) => (
   />
 );
 export const ArrowLeftIcon = (p: P) => <Icon d="m15 5-7 7 7 7" {...p} />;
+/** «Все →» at the end of a section's title line. */
+export const ArrowRightIcon = (p: P) => <Icon d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" {...p} />;
 /** Leaves the app (the Uzum shop): an arrow out of a corner. */
 export const ExternalIcon = (p: P) => (
   <Icon

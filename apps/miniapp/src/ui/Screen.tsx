@@ -17,6 +17,8 @@ const GUTTER_R = 'max(var(--gutter), var(--safe-r, 0px))';
  * `header` is its mirror at the top (the search field): edge to edge on the Milk ground, it stays
  * put while the content scrolls under it, so the field is never scrolled away when the keyboard
  * has shrunk the viewport. A hairline appears under it once something is under it.
+ * `lead` sits above a `header` and scrolls away while the header stays (the catalog's title over
+ * its search field and type chips).
  * `footer` closes a tab screen whose last block carries its action (the cart's totals with
  * «Оформить заказ»): it follows the content and, on a phone tall enough to spare the room, stays
  * above the floating tab bar while the content scrolls under it. It paints the Milk ground down to
@@ -29,6 +31,7 @@ export function Screen({
   tabBar = true,
   dock,
   header,
+  lead,
   footer,
 }: {
   children: ReactNode;
@@ -36,6 +39,7 @@ export function Screen({
   tabBar?: boolean;
   dock?: ReactNode;
   header?: ReactNode;
+  lead?: ReactNode;
   footer?: ReactNode;
 }) {
   return (
@@ -48,12 +52,13 @@ export function Screen({
           ? undefined
           : {
               // A header covers the top safe area itself, so it can stick at the very top.
-              paddingTop: header ? 0 : 'var(--safe-t, 0px)',
+              paddingTop: header && !lead ? 0 : 'var(--safe-t, 0px)',
               paddingLeft: GUTTER_L,
               paddingRight: GUTTER_R,
             }),
       }}
     >
+      {lead}
       {header ? <StickyHeader bleed={bleed}>{header}</StickyHeader> : null}
       {children}
       {footer ? (

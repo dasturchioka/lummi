@@ -102,11 +102,13 @@ describe('search', () => {
     });
   });
 
-  it('shows the price to start from and a sold-out fragrance as such', async () => {
+  it('shows the price to start from (in-stock volumes only) and a sold-out fragrance without one', async () => {
+    const [aventus] = await search('aventus');
+    expect(aventus).toMatchObject({ soldOut: false, fromPrice: 69_000 });
     const [row] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'aventus'));
     await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.fragranceId, row!.id));
     const [hit] = await search('aventus');
-    expect(hit).toMatchObject({ soldOut: true, fromPrice: 69_000 });
+    expect(hit).toMatchObject({ soldOut: true, fromPrice: null });
   });
 
   it('the result limit, the similarity floor and the weights are settings', async () => {
