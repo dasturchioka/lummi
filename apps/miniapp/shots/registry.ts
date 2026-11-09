@@ -121,6 +121,44 @@ export const screens: ScreenDef[] = [
       await sheet(page).getByRole('textbox').waitFor();
     },
   },
+  {
+    id: 'delivery-point-noresults',
+    path: '/dev/delivery',
+    act: async ({ page }) => {
+      await sheet(page).getByRole('searchbox').fill('qwerty');
+      await sheet(page)
+        .getByRole('heading', { name: /Ничего не нашли|Hech narsa topilmadi/ })
+        .waitFor();
+    },
+  },
+  {
+    // the end of a city's list: the way into the typed address
+    id: 'delivery-points-end',
+    path: '/dev/delivery',
+    act: async ({ page }) => {
+      await pickRegion(page, 2);
+      await pickCityRow(page, 'Самарканд');
+      await sheet(page).evaluate((dialog) => {
+        const body = [...dialog.querySelectorAll('div')].find(
+          (d) => getComputedStyle(d).overflowY === 'auto',
+        );
+        if (body) body.scrollTop = body.scrollHeight;
+      });
+    },
+  },
+  {
+    // reopened on a saved point: the picker opens on its city, the row marked and in view
+    id: 'delivery-point-selected',
+    path: '/dev/delivery',
+    act: async ({ page }) => {
+      await pickRegion(page, 2);
+      await pickCityRow(page, 'Самарканд');
+      await sheet(page).getByTestId('point-row').nth(6).click();
+      await sheet(page).waitFor({ state: 'detached' });
+      await page.getByTestId('picked').click();
+      await sheet(page).locator('[data-testid="point-row"][aria-pressed="true"]').waitFor();
+    },
+  },
   { id: 'catalog', path: '/catalog' },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },

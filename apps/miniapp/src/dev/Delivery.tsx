@@ -18,13 +18,21 @@ export function DeliveryDev() {
   return (
     <Screen>
       <ScreenHeader title={t.delivery.pointTitle} />
-      <Card className="p-4" data-testid="picked">
-        {picked?.kind === 'point'
-          ? `${picked.point.name} · ${picked.point.address}`
-          : picked?.kind === 'typed'
-            ? `typed: ${picked.text}`
-            : '-'}
-      </Card>
+      {/* Tapping the choice reopens the picker on it, as checkout's «Сменить» will. */}
+      <button
+        type="button"
+        data-testid="picked"
+        onClick={() => setOpen(true)}
+        className="block w-full text-left"
+      >
+        <Card className="type-body p-4">
+          {picked?.kind === 'point'
+            ? `${picked.point.name} · ${picked.point.address}`
+            : picked?.kind === 'typed'
+              ? `typed: ${picked.text}`
+              : '-'}
+        </Card>
+      </button>
       <Sheet
         open={open}
         onOpenChange={setOpen}
@@ -35,6 +43,11 @@ export function DeliveryDev() {
       >
         <DeliveryPicker
           mode="point"
+          initial={
+            picked?.kind === 'point'
+              ? { regionId: picked.region.id, city: picked.point.city }
+              : null
+          }
           selectedPointId={picked?.kind === 'point' ? picked.point.id : undefined}
           onPick={(p) => {
             setPicked(p);

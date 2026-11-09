@@ -43,7 +43,13 @@ const FIELD_BASE =
 const SEARCH = `${FIELD_BASE} h-12 appearance-none pl-10 text-ellipsis [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none`;
 const LABEL = 'type-small mb-1.5 block font-medium text-muted';
 const ROW =
-  'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-field active:bg-field';
+  'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150';
+/*
+ * Rows wash to Milk Field while pressed. The saved choice rests on Sage Wash with a Sage Ink
+ * check: the one row that is already yours (DESIGN.md: Sage confirms).
+ */
+const rowTone = (selected: boolean) =>
+  selected ? 'bg-sage-wash' : 'hover:bg-field active:bg-field';
 
 /** Waits for the typing to settle so a search is not sent per keystroke. */
 function useDebounced<T>(value: T, ms = 250): T {
@@ -138,7 +144,7 @@ function PointRow({
       onClick={onClick}
       aria-pressed={selected}
       data-testid="point-row"
-      className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-field active:bg-field"
+      className={`flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors duration-150 ${rowTone(selected)}`}
     >
       <span className="mt-px shrink-0 text-muted">
         <PinIcon size={20} />
@@ -263,6 +269,10 @@ export function DeliveryPicker({
     if (r) onPick({ kind: 'point', region: r, point });
   };
 
+  /** The saved delivery city (city mode only): marked in its region's list. */
+  const savedCity = (c: string) =>
+    mode === 'city' && c === initial?.city && regionId === initial.regionId;
+
   const notFoundLink = mode === 'point' && (step === 'points' || searching || step === 'cities');
   const typedRegion = regions.data?.find((r) => r.id === typedRegionId);
   const canSubmitTyped = !!typedRegion && typedText.trim().length >= 3;
@@ -358,7 +368,7 @@ export function DeliveryPicker({
             type="button"
             data-testid="region-row"
             onClick={() => pickRegion(r)}
-            className={ROW}
+            className={`${ROW} ${rowTone(false)}`}
           >
             <span className="type-row min-w-0 flex-1 [overflow-wrap:anywhere]">{name(r)}</span>
             <span className="shrink-0 text-muted">
@@ -390,15 +400,12 @@ export function DeliveryPicker({
         {shownCities.map((c) => (
           <button
             key={c.city}
-            ref={
-              mode === 'city' && c.city === initial?.city && regionId === initial.regionId
-                ? reveal
-                : undefined
-            }
+            ref={savedCity(c.city) ? reveal : undefined}
             type="button"
             data-testid="city-row"
+            aria-current={savedCity(c.city) || undefined}
             onClick={() => pickCity(c.city)}
-            className={ROW}
+            className={`${ROW} ${rowTone(savedCity(c.city))}`}
           >
             <span className="min-w-0 flex-1">
               <span className="type-row block [overflow-wrap:anywhere]">{c.city}</span>
@@ -413,7 +420,7 @@ export function DeliveryPicker({
               <span className="shrink-0 text-ink">
                 <Spinner size={20} />
               </span>
-            ) : mode === 'city' && c.city === initial?.city && regionId === initial.regionId ? (
+            ) : savedCity(c.city) ? (
               <span className="shrink-0 text-sage-ink" role="img" aria-label={t.delivery.selected}>
                 <CheckIcon size={20} />
               </span>
