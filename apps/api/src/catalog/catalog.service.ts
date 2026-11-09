@@ -1,6 +1,7 @@
 import type { FragranceCard, VolumeCard } from '@lummi/contracts';
 import {
   asc,
+  desc,
   eq,
   families,
   fragranceNotes,
@@ -8,6 +9,7 @@ import {
   notes,
   volumes,
   type Db,
+  type DbOrTx,
   type VolumeRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
@@ -20,9 +22,19 @@ import { DB, EDGES } from '../tokens';
  * checkout ticket; until then nothing is reserved. Keep this the one place that knows, so
  * "available" is on hand minus reserve everywhere.
  */
-export async function reservedByVolume(_db: Db, volumeIds: number[]): Promise<Map<number, number>> {
+export async function reservedByVolume(
+  _db: DbOrTx,
+  volumeIds: number[],
+): Promise<Map<number, number>> {
   return new Map(volumeIds.map((id) => [id, 0]));
 }
+
+/**
+ * "Top sellers" order, the one definition (spec §3.2, Changes 2026-11-10): owner-pinned (hit)
+ * fragrances first, then the newest. Until orders exist there are no sales; #15 adds paid-order
+ * counts over the window ahead of the newest tier, here, for every list that ranks by it.
+ */
+export const topSellersOrder = () => [desc(fragrances.isHit), desc(fragrances.id)];
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {

@@ -51,10 +51,7 @@ function Nudge({
   const { quote } = cart;
   if (quote.itemsSubtotal === 0) return null;
   const reached = quote.amountToFreeDelivery === 0;
-  const pct = Math.min(
-    100,
-    Math.round((quote.thresholdBaseAmount / quote.freeDeliveryThreshold) * 100),
-  );
+  const pct = cart.freeDeliveryProgress;
   return (
     <Card className="mb-3 p-4" data-testid="nudge" data-reached={reached}>
       <p className="type-body flex items-start gap-2 text-ink">
@@ -181,6 +178,12 @@ function Line({
         <p className="type-caption mt-0.5 text-muted">
           {line.ml} {t.card.ml}
           {line.soldOut ? <span className="text-ink"> · {t.cart.soldOut}</span> : null}
+          {line.limited ? (
+            <span className="text-ink" data-testid="only-left">
+              {' '}
+              · {fill(t.cart.onlyLeft, { n: String(line.available) })}
+            </span>
+          ) : null}
         </p>
         {priced && !line.soldOut ? (
           <p className="mt-1 flex items-baseline gap-2">
@@ -233,7 +236,10 @@ function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void })
         </div>
         {quote.discount ? (
           <div className={`${row} text-sage`} data-testid="discount-row">
-            <span>{discountLabel(quote.discount, t)}</span>
+            <span className="flex flex-col">
+              <span>{t.cart.discount}</span>
+              <span className="type-caption opacity-80">{discountLabel(quote.discount, t)}</span>
+            </span>
             <span className="type-price whitespace-nowrap">
               −<Money amount={quote.discount.amount} className="!font-[inherit]" />
             </span>
@@ -287,11 +293,48 @@ function ScreenHeaderTitle() {
   return <ScreenHeader title={t.cart.title} />;
 }
 
+/** What the cart screen shows for one server cart; the dev fixtures render it too. */
+export function CartView({
+  cart: data,
+  busy = false,
+  onAdd = () => undefined,
+  onQty = () => undefined,
+  onRemove = () => undefined,
+  onCheckout = () => undefined,
+}: {
+  cart: CartDto;
+  busy?: boolean;
+  onAdd?: (s: CartSuggestionDto) => void;
+  onQty?: (lineId: number, qty: number) => void;
+  onRemove?: (lineId: number) => void;
+  onCheckout?: () => void;
+}) {
+  return (
+    <Screen>
+      <ScreenHeaderTitle />
+      <Nudge cart={data} busy={busy} onAdd={onAdd} />
+      <Card as="ul" className="divide-y divide-line overflow-hidden" data-testid="cart-lines">
+        {data.lines.map((line) => (
+          <Line
+            key={line.id}
+            line={line}
+            cart={data}
+            busy={busy}
+            onQty={(qty) => onQty(line.id, qty)}
+            onRemove={() => onRemove(line.id)}
+          />
+        ))}
+      </Card>
+      <Totals cart={data} onCheckout={onCheckout} />
+    </Screen>
+  );
+}
+
 /** The cart tab: everything shown comes from the server cart and its Quote. */
 export function Cart() {
   const { t } = usePrefs();
   const router = useRouter();
-  const cart = useCart();
+  const cart = useCart({ fresh: true });
   const add = useAddToCart();
   const setQty = useSetQuantity();
   const remove = useRemoveLine();
@@ -326,22 +369,13 @@ export function Cart() {
     );
 
   return (
-    <Screen>
-      <ScreenHeaderTitle />
-      <Nudge cart={data} busy={busy} onAdd={(s) => add.mutate({ slug: s.slug, ml: s.ml })} />
-      <Card as="ul" className="divide-y divide-line overflow-hidden" data-testid="cart-lines">
-        {data.lines.map((line) => (
-          <Line
-            key={line.id}
-            line={line}
-            cart={data}
-            busy={busy}
-            onQty={(qty) => setQty.mutate({ lineId: line.id, qty })}
-            onRemove={() => remove.mutate(line.id)}
-          />
-        ))}
-      </Card>
-      <Totals cart={data} onCheckout={() => void router.navigate({ to: '/checkout' })} />
-    </Screen>
+    <CartView
+      cart={data}
+      busy={busy}
+      onAdd={(s) => add.mutate({ slug: s.slug, ml: s.ml })}
+      onQty={(lineId, qty) => setQty.mutate({ lineId, qty })}
+      onRemove={(lineId) => remove.mutate(lineId)}
+      onCheckout={() => void router.navigate({ to: '/checkout' })}
+    />
   );
 }

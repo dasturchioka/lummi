@@ -3,10 +3,21 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { apiContract } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
-import { and, cartLines, carts, customers, eq, fragrances, regions, volumes } from '@lummi/db';
+import {
+  and,
+  cartLines,
+  carts,
+  customers,
+  eq,
+  fragrances,
+  regions,
+  settings,
+  volumes,
+} from '@lummi/db';
 import { initClient } from '@ts-rest/core';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { loadCartQuote } from '../src/cart/load-cart';
 import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
@@ -245,7 +256,7 @@ describe('delivery fee and the free-delivery nudge', () => {
 
   it('takes the default tariff from the setting', async () => {
     const [slug] = await slugs();
-    await t.db.insert((await import('@lummi/db')).settings).values({
+    await t.db.insert(settings).values({
       key: 'delivery.defaultTariff',
       value: 18_000,
     });
@@ -271,43 +282,167 @@ describe('delivery fee and the free-delivery nudge', () => {
 });
 
 describe('suggestions', () => {
-  it('lists up to 3 available 10 ml volumes not in the cart, hits first', async () => {
-    const all = await slugs(8);
-    const hit = all[5]!;
-    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, hit));
+  /** A cart of two 30 ml bottles less `short` so'm below the 250 000 threshold, via a price change. */
+  async function cartWithGap(gap: number) {
+    const all = await slugs(10);
+    await t.db.update(fragrances).set({ isHit: false });
     const { add } = await me();
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, all[0]!));
+    await t.db
+      .update(volumes)
+      .set({ price: 250_000 - gap })
+      .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 10)));
     const res = await add(all[0]!, 10);
     if (res.status !== 200) throw new Error();
-    const got = res.body.suggestions;
-    expect(got).toHaveLength(3);
-    expect(got.every((s) => s.ml === 10 && s.price === 69_000)).toBe(true);
-    expect(got.map((s) => s.slug)).not.toContain(all[0]);
-    expect(got[0]?.slug).toBe(hit);
+    return { all, add, cart: res.body };
+  }
+
+  it('a gap a 10 ml can close: up to 3 available 10 ml volumes not in the cart, pinned first, newest next', async () => {
+    const { all, cart } = await cartWithGap(32_000);
+    expect(cart.quote.amountToFreeDelivery).toBe(32_000);
+    expect(cart.suggestions).toHaveLength(3);
+    expect(cart.suggestions.every((s) => s.ml === 10 && s.price === 69_000)).toBe(true);
+    expect(cart.suggestions.map((s) => s.slug)).not.toContain(all[0]);
+    const ids = await t.db.select({ slug: fragrances.slug, id: fragrances.id }).from(fragrances);
+    const newest = ids.filter((r) => r.slug !== all[0]).sort((a, b) => b.id - a.id)[0]!;
+    expect(cart.suggestions[0]?.slug).toBe(newest.slug);
   });
 
-  it('skips sold-out and hidden volumes and prices a markdown at its sale price', async () => {
-    const all = await slugs(8);
+  it('puts a pinned (hit) fragrance first', async () => {
+    const all = await slugs(10);
+    await t.db.update(fragrances).set({ isHit: false });
+    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[5]!));
+    const { add } = await me();
+    await t.db.update(volumes).set({ price: 218_000 }).where(eq(volumes.ml, 30));
+    const res = await add(all[0]!, 30);
+    if (res.status !== 200) throw new Error();
+    expect(res.body.suggestions[0]?.slug).toBe(all[5]);
+  });
+
+  it('has none when no 10 ml can close the gap, so the caption is never false', async () => {
+    const { cart } = await cartWithGap(181_000);
+    expect(cart.quote.amountToFreeDelivery).toBe(181_000);
+    expect(cart.suggestions).toEqual([]);
+  });
+
+  it('skips sold-out and hidden volumes, and prices a markdown at its sale price', async () => {
+    const all = await slugs(10);
     await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[1]!));
     await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[2]!));
+    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[3]!));
     await setStock(all[1]!, 10, 0);
     await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, all[2]!));
     const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, all[3]!));
-    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[3]!));
     await t.db
       .update(volumes)
       .set({ salePrice: 50_000 })
       .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 10)));
+    await t.db.update(volumes).set({ price: 218_000 }).where(eq(volumes.ml, 30));
     const { add } = await me();
     const res = await add(all[0]!, 30);
     if (res.status !== 200) throw new Error();
-    const slugsGot = res.body.suggestions.map((s) => s.slug);
-    expect(slugsGot).not.toContain(all[1]);
-    expect(slugsGot).not.toContain(all[2]);
+    const got = res.body.suggestions.map((s) => s.slug);
+    expect(got).not.toContain(all[1]);
+    expect(got).not.toContain(all[2]);
     expect(res.body.suggestions[0]).toMatchObject({ slug: all[3], price: 50_000 });
   });
 
-  it('has none for an empty cart', async () => {
+  it('judges a markdown at its end instant as still active (ADR 0008), one past it as over', async () => {
+    const all = await slugs(10);
+    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.slug, all[3]!));
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, all[3]!));
+    await t.db.update(volumes).set({ price: 218_000 }).where(eq(volumes.ml, 30));
+    const end = new Date(t.edges.clock.now().getTime());
+    await t.db
+      .update(volumes)
+      .set({ salePrice: 50_000, saleEndsAt: end })
+      .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 10)));
+    const { add, get } = await me();
+    const atEnd = await add(all[0]!, 30);
+    expect(atEnd.status === 200 && atEnd.body.suggestions[0]).toMatchObject({
+      slug: all[3],
+      price: 50_000,
+    });
+    t.edges.clock.advance(1);
+    const after = await get();
+    expect(after.suggestions[0]).toMatchObject({ slug: all[3], price: 69_000 });
+  });
+
+  it('has none for an empty cart, and the limit is a setting', async () => {
     expect((await (await me()).get()).suggestions).toEqual([]);
+    await t.db.insert(settings).values({ key: 'cart.suggestionsLimit', value: 1 });
+    const { cart } = await cartWithGap(32_000);
+    expect(cart.suggestions).toHaveLength(1);
+  });
+});
+
+describe('the free-delivery progress', () => {
+  it('is an integer 0-100 from the server: partial, then 100 once reached', async () => {
+    const [s1, s2] = await slugs();
+    const { add } = await me();
+    const first = await add(s1!, 30); // 149 000 of 250 000
+    expect(first.status === 200 && first.body.freeDeliveryProgress).toBe(59);
+    const second = await add(s2!, 30);
+    expect(second.status === 200 && second.body.freeDeliveryProgress).toBe(100);
+  });
+
+  it('is 100 when the threshold is 0, and 0 for an empty cart', async () => {
+    const [slug] = await slugs();
+    await t.db.insert(settings).values({ key: 'pricing.freeDeliveryThreshold', value: 0 });
+    const { add, get } = await me();
+    expect((await get()).freeDeliveryProgress).toBe(0);
+    const res = await add(slug!, 10);
+    expect(res.status === 200 && res.body.freeDeliveryProgress).toBe(100);
+  });
+});
+
+describe('capped lines', () => {
+  it('flag a wish above available as limited, and clear it on restock', async () => {
+    const [slug] = await slugs();
+    const { add, get } = await me();
+    await add(slug!, 10, 5);
+    expect((await get()).lines[0]?.limited).toBe(false);
+    await setStock(slug!, 10, 2);
+    expect((await get()).lines[0]).toMatchObject({ qty: 2, limited: true });
+    await setStock(slug!, 10, 9);
+    expect((await get()).lines[0]?.limited).toBe(false);
+  });
+});
+
+describe('concurrent adds', () => {
+  it('two adds of the last units never pass available', async () => {
+    const [slug] = await slugs();
+    await setStock(slug!, 10, 3);
+    const { add, get } = await me();
+    const results = await Promise.all([add(slug!, 10, 2), add(slug!, 10, 2)]);
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    const cart = await get();
+    expect(cart.lines).toHaveLength(1);
+    expect(cart.lines[0]?.qty).toBe(3);
+  });
+});
+
+describe('the quote input', () => {
+  it('carries the real fragrance id, so an upgrade right applies to a cart line', async () => {
+    const [slug] = await slugs();
+    const { add } = await me();
+    await add(slug!, 30);
+    const [customer] = await t.db.select().from(customers).where(eq(customers.telegramId, ali.id));
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug!));
+    const loaded = await loadCartQuote(t.db, t.edges.clock.now(), customer!.id, {
+      entitlements: [
+        {
+          type: 'upgrade_right',
+          id: 1,
+          source: 'set',
+          percent: 20,
+          fragranceIds: [f!.id],
+          expiresAt: new Date(t.edges.clock.now().getTime() + 86_400_000),
+        },
+      ],
+    });
+    expect(loaded.quote.discount).toMatchObject({ type: 'upgrade_right', amount: 29_800 });
+    expect(loaded.quote.total).toBe(149_000 - 29_800 + 25_000);
   });
 });
 

@@ -4,11 +4,16 @@ import { api, unwrap } from '../lib/api';
 
 export const CART_KEY = ['cart'] as const;
 
-/** The server cart with its fresh quote; re-read on every open, never computed here. */
-export function useCart() {
+/**
+ * The server cart with its fresh quote, never computed here. One shared query: the tab bar and the
+ * fragrance card read it as cached (30 s), mutations write their response into it, and the cart
+ * screen (`fresh`) re-reads it on every open so prices are re-quoted.
+ */
+export function useCart({ fresh = false }: { fresh?: boolean } = {}) {
   return useQuery({
     queryKey: CART_KEY,
-    staleTime: 0,
+    staleTime: 30_000,
+    refetchOnMount: fresh ? 'always' : true,
     queryFn: async () => unwrap(await api.cart.get(), 200),
   });
 }

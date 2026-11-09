@@ -250,7 +250,6 @@ export const userbotHeartbeat = pgTable(
   (t) => [check('userbot_heartbeat_one_row', sql`${t.id}`)],
 );
 
-
 /*
  * Catalog (ADR 0018): translatable text is a pair of NOT NULL columns, names of fragrances and
  * their original brands are single fields. Money is integer so'm; stock is "on hand" only, the
@@ -413,12 +412,16 @@ export type ActorType = (typeof actorTypeEnum.enumValues)[number];
  * the discount the customer switched to and the link-prefilled promo code for the discount tickets
  * (ADR 0002); the lines are in `cart_lines`. The cart never expires.
  */
+/** The discount the customer switched to (ADR 0002); the pricing module's `DiscountChoice` has this same shape. */
+export type StoredDiscountChoice =
+  { type: 'upgrade_right' | 'birthday_coupon'; id: number } | { type: 'promo_code' };
+
 export const carts = pgTable('carts', {
   customerId: bigint('customer_id', { mode: 'number' })
     .primaryKey()
     .references(() => customers.id, { onDelete: 'cascade' }),
   /** `{ type: 'upgrade_right' | 'birthday_coupon', id } | { type: 'promo_code' }`; cleared when a code is typed. */
-  discountChoice: jsonb('discount_choice'),
+  discountChoice: jsonb('discount_choice').$type<StoredDiscountChoice>(),
   /** An entered or link-prefilled promo code, upper-case; judged by the quote, never blocks the order. */
   promoCode: text('promo_code'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -440,8 +443,10 @@ export const cartLines = pgTable(
   },
   (t) => [
     uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
+    index('cart_lines_volume_idx').on(t.volumeId),
     check('cart_lines_qty_check', sql`${t.qty} > 0`),
   ],
 );
 
+export type CartRow = typeof carts.$inferSelect;
 export type CartLineRow = typeof cartLines.$inferSelect;

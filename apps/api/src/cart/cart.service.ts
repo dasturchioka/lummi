@@ -1,42 +1,26 @@
 import type { CartDto, CartSuggestionDto } from '@lummi/contracts';
 import {
   and,
-  asc,
   cartLines,
   carts,
-  desc,
   eq,
   fragrances,
+  gte,
+  notInArray,
   sql,
   volumes,
   type Db,
   type DbOrTx,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { reservedByVolume } from '../catalog/catalog.service';
-import { DeliveryService } from '../delivery/delivery.service';
+import { reservedByVolume, topSellersOrder } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
-import { quote, type DiscountChoice, type QuoteLineInput } from '../pricing/quote';
+import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
-
-const SUGGESTION_LIMIT = 3;
+import { loadCartQuote } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
-
-interface Loaded {
-  lineId: number;
-  volumeId: number;
-  slug: string;
-  name: string;
-  ml: number;
-  photo: string | null;
-  qty: number;
-  price: number;
-  salePrice: number | null;
-  saleEndsAt: Date | null;
-  available: number;
-}
 
 /** The customer's server-side cart (spec Changes 2026-11-10). Money comes only from `quote()`. */
 @Injectable()
@@ -44,88 +28,15 @@ export class CartService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
-    @Inject(DeliveryService) private readonly delivery: DeliveryService,
   ) {}
 
   /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
-    const rows = await tx
-      .select({
-        lineId: cartLines.id,
-        volumeId: cartLines.volumeId,
-        slug: fragrances.slug,
-        name: fragrances.name,
-        hidden: fragrances.hidden,
-        ml: volumes.ml,
-        photo: volumes.photoHash,
-        qty: cartLines.qty,
-        price: volumes.price,
-        salePrice: volumes.salePrice,
-        saleEndsAt: volumes.saleEndsAt,
-        onHand: volumes.onHand,
-      })
-      .from(cartLines)
-      .innerJoin(volumes, eq(volumes.id, cartLines.volumeId))
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(eq(cartLines.customerId, customerId))
-      .orderBy(asc(cartLines.id));
-    const reserved = await reservedByVolume(
-      tx as Db,
-      rows.map((r) => r.volumeId),
-    );
-    const lines: Loaded[] = rows.map((r) => ({
-      ...r,
-      // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-      available: r.hidden ? 0 : Math.max(0, r.onHand - (reserved.get(r.volumeId) ?? 0)),
-    }));
-
-    const [state] = await tx.select().from(carts).where(eq(carts.customerId, customerId));
-    const city = await this.delivery.getDeliveryCity(customerId, tx);
-    const settings = await readSettings(tx, [
-      'pricing.freeDeliveryThreshold',
-      'pricing.thresholdBase',
-      'pricing.discountsApplyToMarkedDown',
-      'pricing.fullSizeVolumesMl',
-      'delivery.defaultTariff',
-    ]);
-
-    const effective = lines.map((l) => ({
-      ...l,
-      soldOut: l.available === 0,
-      // the stored quantity is the wish; what the quote counts never exceeds what is on hand
-      qty: l.available === 0 ? l.qty : Math.min(l.qty, l.available),
-    }));
-    const quoteLines: QuoteLineInput[] = effective.map((l) => ({
-      key: String(l.lineId),
-      item: { kind: 'volume', fragranceId: 0, volumeMl: l.ml },
-      qty: l.qty,
-      price: {
-        regular: l.price,
-        markdown: l.salePrice === null ? null : { price: l.salePrice, endsAt: l.saleEndsAt },
-      },
-      soldOut: l.soldOut,
-    }));
-    const q = quote({
-      lines: quoteLines,
-      entitlements: [],
-      promoCode: null,
-      choice: (state?.discountChoice as DiscountChoice | null) ?? null,
-      deliveryTariff: city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
-      settings: {
-        freeDeliveryThreshold: settings['pricing.freeDeliveryThreshold'],
-        thresholdBase: settings['pricing.thresholdBase'],
-        discountsApplyToMarkedDown: settings['pricing.discountsApplyToMarkedDown'],
-        fullSizeVolumesMl: settings['pricing.fullSizeVolumesMl'],
-      },
-      now: this.edges.clock.now(),
-    });
-
-    const suggestions =
-      q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0
-        ? await this.suggestions(tx, new Set(lines.map((l) => l.volumeId)))
-        : [];
+    const now = this.edges.clock.now();
+    const { lines, quote: q, state, city } = await loadCartQuote(tx, now, customerId);
+    const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
-      lines: effective.map((l) => ({
+      lines: lines.map((l) => ({
         id: l.lineId,
         slug: l.slug,
         name: l.name,
@@ -134,20 +45,38 @@ export class CartService {
         qty: l.qty,
         available: l.available,
         soldOut: l.soldOut,
+        limited: l.limited,
       })),
       quote: q,
-      count: effective.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
+      count: lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
       deliveryCity: city,
-      suggestions,
+      freeDeliveryProgress: progress(q),
+      suggestions: open
+        ? await this.suggestions(
+            tx,
+            lines.map((l) => l.volumeId),
+            q.amountToFreeDelivery,
+            now,
+          )
+        : [],
       promoCode: state?.promoCode ?? null,
     };
   }
 
   /**
-   * Up to 3 bottles of 10 ml that can be bought and are not in the cart. "Top sellers first":
-   * until orders exist there are no sales, so the rule is the pinned (hit) ones, then the newest.
+   * Available 10 ml bottles not in the cart whose price alone closes the gap, so «Подойдёт любой
+   * аромат 10 мл» is true. Ranked by the catalog's top-sellers order. The price test goes through
+   * `activeMarkdown` (one markdown rule); SQL pre-filters on the regular price, which a markdown
+   * can only lower.
    */
-  private async suggestions(tx: DbOrTx, inCart: Set<number>): Promise<CartSuggestionDto[]> {
+  private async suggestions(
+    tx: DbOrTx,
+    inCart: number[],
+    gap: number,
+    now: Date,
+  ): Promise<CartSuggestionDto[]> {
+    const { 'cart.suggestionsLimit': limit } = await readSettings(tx, ['cart.suggestionsLimit']);
+    if (limit === 0) return [];
     const rows = await tx
       .select({
         volumeId: volumes.id,
@@ -161,27 +90,35 @@ export class CartService {
       })
       .from(volumes)
       .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(and(eq(volumes.ml, 10), eq(fragrances.hidden, false), sql`${volumes.onHand} > 0`))
-      .orderBy(desc(fragrances.isHit), desc(fragrances.isNew), desc(fragrances.id))
-      .limit(60);
+      .where(
+        and(
+          eq(volumes.ml, 10),
+          eq(fragrances.hidden, false),
+          gte(volumes.price, gap),
+          inCart.length > 0 ? notInArray(volumes.id, inCart) : undefined,
+        ),
+      )
+      .orderBy(...topSellersOrder());
     const reserved = await reservedByVolume(
-      tx as Db,
+      tx,
       rows.map((r) => r.volumeId),
     );
-    const now = this.edges.clock.now();
-    return rows
-      .filter((r) => !inCart.has(r.volumeId) && r.onHand - (reserved.get(r.volumeId) ?? 0) > 0)
-      .slice(0, SUGGESTION_LIMIT)
-      .map((r) => {
-        const live = r.salePrice !== null && (r.saleEndsAt === null || r.saleEndsAt > now);
-        return {
-          slug: r.slug,
-          name: r.name,
-          ml: 10 as const,
-          photo: r.photo,
-          price: live && r.salePrice !== null && r.salePrice < r.price ? r.salePrice : r.price,
-        };
-      });
+    const out: CartSuggestionDto[] = [];
+    for (const r of rows) {
+      if (r.onHand - (reserved.get(r.volumeId) ?? 0) <= 0) continue;
+      const price =
+        activeMarkdown(
+          {
+            regular: r.price,
+            markdown: r.salePrice === null ? null : { price: r.salePrice, endsAt: r.saleEndsAt },
+          },
+          now,
+        ) ?? r.price;
+      if (price < gap) continue;
+      out.push({ slug: r.slug, name: r.name, ml: 10, photo: r.photo, price });
+      if (out.length === limit) break;
+    }
+    return out;
   }
 
   /** Adds a volume; the total on the line never passes what is available. */
@@ -193,7 +130,7 @@ export class CartService {
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
         .where(and(eq(fragrances.slug, slug), eq(fragrances.hidden, false), eq(volumes.ml, ml)));
       if (!v) return 'not_found' as const;
-      const reserved = await reservedByVolume(tx as unknown as Db, [v.id]);
+      const reserved = await reservedByVolume(tx, [v.id]);
       const available = Math.max(0, v.onHand - (reserved.get(v.id) ?? 0));
       if (available === 0) return 'sold_out' as const;
       await this.touch(tx, customerId);
@@ -218,7 +155,7 @@ export class CartService {
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
         .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));
       if (!row) return false;
-      const reserved = await reservedByVolume(tx as unknown as Db, [row.volumeId]);
+      const reserved = await reservedByVolume(tx, [row.volumeId]);
       const available = row.hidden
         ? 0
         : Math.max(0, row.onHand - (reserved.get(row.volumeId) ?? 0));
@@ -269,4 +206,16 @@ export class CartService {
       .values({ customerId })
       .onConflictDoUpdate({ target: carts.customerId, set: { updatedAt: this.edges.clock.now() } });
   }
+}
+
+/** The Sage thread's fill, whole percent: 100 once reached (or with no threshold), never 100 before. */
+function progress(q: {
+  itemsSubtotal: number;
+  amountToFreeDelivery: number;
+  thresholdBaseAmount: number;
+  freeDeliveryThreshold: number;
+}): number {
+  if (q.itemsSubtotal === 0) return 0;
+  if (q.amountToFreeDelivery === 0 || q.freeDeliveryThreshold === 0) return 100;
+  return Math.min(99, Math.floor((q.thresholdBaseAmount * 100) / q.freeDeliveryThreshold));
 }

@@ -1,5 +1,5 @@
 {
-  "id": "7df8abcf-348b-4398-9606-929e02bc71f5",
+  "id": "3b1cfa6b-bcc8-45d4-8a97-340447cc2f4c",
   "prevId": "5f603248-b96f-4d23-af5a-b7f2ebbd5245",
   "version": "7",
   "dialect": "postgresql",
@@ -324,6 +324,21 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cart_lines_volume_idx": {
+          "name": "cart_lines_volume_idx",
+          "columns": [
+            {
+              "expression": "volume_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

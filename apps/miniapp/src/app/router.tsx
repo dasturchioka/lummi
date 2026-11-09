@@ -63,6 +63,13 @@ const devRoutes = import.meta.env.DEV
         ...at('/dev/registration'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'GalleryRegistrationOpen'),
       }),
+      createRoute({
+        ...at('/dev/cart'),
+        validateSearch: (s: Record<string, unknown>) => ({
+          data: (['discount', 'plain'] as const).find((n) => n === s.data) ?? 'discount',
+        }),
+        component: lazyRouteComponent(() => import('../dev/CartFixtures'), 'CartFixtures'),
+      }),
       // The fragrance card on fixtures: `?data=demo|worst|one|empty` (worst by default).
       createRoute({
         ...at('/dev/fragrance'),

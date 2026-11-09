@@ -74,13 +74,8 @@ export class DeliveryService implements OnApplicationBootstrap {
     return rows.map(toPointDto);
   }
 
-  async getDeliveryCity(customerId: number, tx: DbOrTx = this.db): Promise<DeliveryCityDto | null> {
-    const [row] = await tx
-      .select({ region: regions, city: customers.deliveryCity })
-      .from(customers)
-      .innerJoin(regions, eq(regions.id, customers.deliveryRegionId))
-      .where(eq(customers.id, customerId));
-    return row?.city ? { region: toRegionDto(row.region), city: row.city } : null;
+  getDeliveryCity(customerId: number, tx: DbOrTx = this.db): Promise<DeliveryCityDto | null> {
+    return readDeliveryCity(tx, customerId);
   }
 
   /** Region + city must come from the offered list, so the saved city always has points to pick from. */
@@ -136,4 +131,17 @@ export class DeliveryService implements OnApplicationBootstrap {
       .set({ deliveryRegionId: null, deliveryCity: null, updatedAt: this.edges.clock.now() })
       .where(eq(customers.id, customerId));
   }
+}
+
+/** The customer's saved delivery city with its region (and so its tariff); null until chosen. */
+export async function readDeliveryCity(
+  tx: DbOrTx,
+  customerId: number,
+): Promise<DeliveryCityDto | null> {
+  const [row] = await tx
+    .select({ region: regions, city: customers.deliveryCity })
+    .from(customers)
+    .innerJoin(regions, eq(regions.id, customers.deliveryRegionId))
+    .where(eq(customers.id, customerId));
+  return row?.city ? { region: toRegionDto(row.region), city: row.city } : null;
 }

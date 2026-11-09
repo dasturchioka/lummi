@@ -1,6 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
-import { useAddToCart, useCart } from '../cart/queries';
+import type { CartDto } from '@lummi/contracts';
+import { fill } from '@lummi/i18n';
+import { useEffect, useState } from 'react';
+import { CART_KEY, useAddToCart } from '../cart/queries';
+import { hapticSuccess } from '../lib/telegram';
 import { api } from '../lib/api';
 import { goBackOrCatalog } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
@@ -47,13 +51,22 @@ function Loading() {
   );
 }
 
+/** Units of a volume in the cart (0 when none). */
+const lineQty = (cart: CartDto | undefined, slug: string, ml: number) =>
+  cart?.lines.find((l) => l.slug === slug && l.ml === ml)?.qty ?? 0;
+
 /** `/p/<slug>`, also the target of the `p_<slug>` deep link. */
 export function Fragrance() {
   const { slug } = useParams({ from: '/p/$slug' });
   const { t } = usePrefs();
   const router = useRouter();
   const qc = useQueryClient();
-  const cart = useCart();
+  const [note, setNote] = useState<string | undefined>();
+  useEffect(() => {
+    if (!note) return;
+    const id = setTimeout(() => setNote(undefined), 2500);
+    return () => clearTimeout(id);
+  }, [note]);
   const add = useAddToCart();
 
   const query = useQuery({
@@ -97,22 +110,25 @@ export function Fragrance() {
       card={card}
       onBack={() => goBackOrCatalog(router)}
       onShare={() => void shareFragrance(card.slug, card.name)}
-      inCart={(ml) =>
-        cart.data?.lines.find((l) => l.slug === card.slug && l.ml === ml && !l.soldOut)?.qty ?? 0
-      }
       adding={add.isPending}
+      note={note}
       onAddToCart={(ml) => {
-        const inCart = cart.data?.lines.some(
-          (l) => l.slug === card.slug && l.ml === ml && !l.soldOut,
-        );
-        if (inCart) {
-          void router.navigate({ to: '/cart' });
-          return;
-        }
-        // Stock moved under the customer (409/404): re-read the card so the dock tells the truth.
+        const before = lineQty(qc.getQueryData<CartDto>(CART_KEY), card.slug, ml);
         add.mutate(
           { slug: card.slug, ml },
-          { onError: () => void qc.invalidateQueries({ queryKey: ['fragrance', card.slug] }) },
+          {
+            onSuccess: (next) => {
+              const after = next.lines.find((l) => l.slug === card.slug && l.ml === ml);
+              if (after && after.qty <= before) {
+                // The server capped it: say how many there are, briefly.
+                setNote(fill(t.cart.onlyLeft, { n: String(after.available) }));
+              } else {
+                hapticSuccess();
+              }
+            },
+            // Stock moved under the customer (409/404): re-read the card so the dock tells the truth.
+            onError: () => void qc.invalidateQueries({ queryKey: ['fragrance', card.slug] }),
+          },
         );
       }}
     />

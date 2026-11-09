@@ -18,10 +18,12 @@ export const cartLineSchema = z.object({
   /** On hand minus reserve: the most the stepper can reach. 0 = «Нет в наличии». */
   available: z.number().int().nonnegative(),
   soldOut: z.boolean(),
+  /** The customer asked for more than is available; `qty` is what is left («Осталось N»). */
+  limited: z.boolean(),
 });
 export type CartLineDto = z.infer<typeof cartLineSchema>;
 
-/** A 10 ml bottle that would close the gap to free delivery. */
+/** A 10 ml bottle that alone would close the gap to free delivery. */
 export const cartSuggestionSchema = z.object({
   slug: z.string(),
   name: z.string(),
@@ -39,7 +41,9 @@ export const cartSchema = z.object({
   count: z.number().int().nonnegative(),
   /** The customer's saved delivery city, which names the delivery line and sets the tariff. */
   deliveryCity: deliveryCitySchema.nullable(),
-  /** Up to 3 available 10 ml volumes not in the cart; empty once the threshold is reached. */
+  /** The Sage thread's fill, an integer 0-100 worked out by the server (100 when reached or the threshold is 0; 0 for an empty cart). */
+  freeDeliveryProgress: z.number().int().min(0).max(100),
+  /** Available 10 ml volumes not in the cart whose price covers the gap (up to `cart.suggestionsLimit`); empty when none does or the threshold is reached. */
   suggestions: z.array(cartSuggestionSchema),
   /** The link-prefilled or entered promo code (the promo ticket reads and clears it). */
   promoCode: z.string().nullable(),

@@ -296,6 +296,8 @@ export const screens: ScreenDef[] = [
     },
     teardown: emptyCart,
   },
+  // An applied discount and a line capped at what is left, on fixtures (no discount source exists yet).
+  { id: 'cart-discount', path: '/dev/cart?data=discount', fullPage: true },
   { id: 'cart-empty', path: '/cart', setup: emptyCart },
   // The fragrance card's dock once the volume is in the cart.
   {

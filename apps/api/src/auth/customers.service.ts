@@ -148,7 +148,7 @@ export class CustomersService {
     // Another Telegram id held this phone: the person moved to a new account, phone wins.
     // Only a fresh record may be absorbed; one with its own phone (and so history) may not.
     if (current.phone !== null) return { kind: 'taken' as const };
-    await moveCustomerData(tx, current.id, holder.id);
+    await moveCustomerData(tx, current.id, holder.id, now);
     await tx.delete(customers).where(eq(customers.id, current.id));
     const [row] = await tx
       .update(customers)
@@ -232,8 +232,13 @@ export class CustomersService {
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
  * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
  */
-export async function moveCustomerData(tx: DbOrTx, fromId: number, toId: number): Promise<void> {
-  await moveCartData(tx, fromId, toId);
+export async function moveCustomerData(
+  tx: DbOrTx,
+  fromId: number,
+  toId: number,
+  now: Date,
+): Promise<void> {
+  await moveCartData(tx, fromId, toId, now);
 }
 
 /** A lost race on the phone's unique index, or a deadlock between two relinks: run the transaction again. */

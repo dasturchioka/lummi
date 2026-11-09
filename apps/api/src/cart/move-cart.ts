@@ -5,7 +5,12 @@ import { cartLines, carts, eq, sql, type DbOrTx } from '@lummi/db';
  * volume add up (the read caps the total at available); the older cart keeps its own discount
  * choice and promo code and only fills the ones it lacks.
  */
-export async function moveCartData(tx: DbOrTx, fromId: number, toId: number): Promise<void> {
+export async function moveCartData(
+  tx: DbOrTx,
+  fromId: number,
+  toId: number,
+  now: Date,
+): Promise<void> {
   const [from] = await tx.select().from(carts).where(eq(carts.customerId, fromId));
   await tx.execute(sql`
     insert into cart_lines (customer_id, volume_id, qty)
@@ -22,7 +27,7 @@ export async function moveCartData(tx: DbOrTx, fromId: number, toId: number): Pr
         set: {
           discountChoice: sql`coalesce(${carts.discountChoice}, excluded.discount_choice)`,
           promoCode: sql`coalesce(${carts.promoCode}, excluded.promo_code)`,
-          updatedAt: sql`now()`,
+          updatedAt: now,
         },
       });
     await tx.delete(carts).where(eq(carts.customerId, fromId));

@@ -417,15 +417,15 @@ function Pyramid({ card }: { card: FragranceCard }) {
  */
 function Dock({
   volume,
-  inCart = 0,
   adding = false,
+  note,
   onAddToCart,
   onBuyNow,
 }: {
   volume: VolumeCard | undefined;
-  /** How many of this volume are in the cart; the primary button then opens the cart. */
-  inCart?: number;
   adding?: boolean;
+  /** A brief line above the buttons («Осталось 3»). */
+  note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -463,43 +463,47 @@ function Dock({
     </span>
   );
   return (
-    <div ref={row} className="relative flex gap-2">
-      {/* Clipped to the row, so the measuring copy never widens the page. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none invisible absolute inset-0 overflow-hidden"
-      >
-        <div ref={probe} className="type-button flex w-max gap-2">
-          <span className="px-3.5">{oneLine}</span>
-          <span className="px-3.5">{t.card.buyNow}</span>
+    <div>
+      {note ? (
+        <p role="status" className="type-caption mb-2 text-center text-muted">
+          {note}
+        </p>
+      ) : null}
+      <div ref={row} className="relative flex gap-2">
+        {/* Clipped to the row, so the measuring copy never widens the page. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+        >
+          <div ref={probe} className="type-button flex w-max gap-2">
+            <span className="px-3.5">{oneLine}</span>
+            <span className="px-3.5">{t.card.buyNow}</span>
+          </div>
         </div>
+        <Button
+          size="pair"
+          className="min-w-0 flex-1"
+          loading={adding}
+          onClick={() => onAddToCart?.(volume.ml)}
+        >
+          {stacked ? (
+            <span className="flex flex-col items-center gap-1">
+              {t.card.toCart}
+              <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
+            </span>
+          ) : (
+            oneLine
+          )}
+        </Button>
+        <Button
+          variant="tonal"
+          size="pair"
+          className="shrink-0"
+          onClick={() => onBuyNow?.(volume.ml)}
+        >
+          {t.card.buyNow}
+        </Button>
       </div>
-      <Button
-        size="pair"
-        className="min-w-0 flex-1"
-        loading={adding}
-        data-in-cart={inCart > 0}
-        onClick={() => onAddToCart?.(volume.ml)}
-      >
-        {inCart > 0 ? (
-          fill(t.card.inCart, { n: String(inCart) })
-        ) : stacked ? (
-          <span className="flex flex-col items-center gap-1">
-            {t.card.toCart}
-            <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
-          </span>
-        ) : (
-          oneLine
-        )}
-      </Button>
-      <Button
-        variant="tonal"
-        size="pair"
-        className="shrink-0"
-        onClick={() => onBuyNow?.(volume.ml)}
-      >
-        {t.card.buyNow}
-      </Button>
     </div>
   );
 }
@@ -512,17 +516,16 @@ export function FragranceView({
   card,
   onBack,
   onShare,
-  inCart,
   adding,
+  note,
   onAddToCart,
   onBuyNow,
 }: {
   card: FragranceCard;
   onBack: () => void;
   onShare: () => void;
-  /** Units of a volume already in the cart, by ml. */
-  inCart?: (ml: VolumeCard['ml']) => number;
   adding?: boolean;
+  note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -539,8 +542,8 @@ export function FragranceView({
       dock={
         <Dock
           volume={volume}
-          inCart={volume ? inCart?.(volume.ml) : 0}
           adding={adding}
+          note={note}
           onAddToCart={onAddToCart}
           onBuyNow={onBuyNow}
         />
