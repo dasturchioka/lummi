@@ -16,7 +16,7 @@ export const TEST_BOT_TOKEN = '123456:TEST-bot-token-for-unit-tests';
 
 export const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
 export const TEST_MINIAPP_URL = 'https://miniapp.test.invalid/';
-/** Shared secret of the internal endpoints the userbot calls (ADR 0015). */
+/** Shared secret of the internal endpoints the userbot calls (ADR 0031). */
 export const TEST_INTERNAL_SECRET = 'test-internal-secret-test-internal-secret';
 
 export interface StaffSession {

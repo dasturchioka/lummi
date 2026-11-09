@@ -4,7 +4,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { InternalGuard } from '../internal/internal.guard';
 import { HumoFeedService } from './humo-feed.service';
 
-/** What the userbot calls (ADR 0014, ADR 0015). Internal network and shared secret only. */
+/** What the userbot calls (ADR 0014, ADR 0031). Internal network and shared secret only. */
 @Controller()
 @UseGuards(InternalGuard)
 export class HumoFeedController {

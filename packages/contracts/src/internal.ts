@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Internal endpoints (ADR 0015): only the userbot calls them, from the internal network, with the
+ * Internal endpoints (ADR 0031): only the userbot calls them, from the internal network, with the
  * shared secret in this header. The Mini App and admin never do.
  */
 export const INTERNAL_SECRET_HEADER = 'x-internal-secret';

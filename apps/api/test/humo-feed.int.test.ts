@@ -9,7 +9,7 @@ import { userbotLastSeenAt } from './harness/humo';
 import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/test-app';
 
-/** Seam 1 (ADR 0028): the userbot's side of the Humo feed (ADR 0014, ADR 0015) over HTTP. */
+/** Seam 1 (ADR 0028): the userbot's side of the Humo feed (ADR 0014, ADR 0031) over HTTP. */
 
 let t: TestApp;
 let worker: WorkerRuntime;

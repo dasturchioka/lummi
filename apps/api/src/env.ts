@@ -60,13 +60,13 @@ export const envSchema = z
     /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
     EVENTS_QUEUE: z.string().min(1).default('events'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
-    /** Shared secret of the internal endpoints the userbot calls (ADR 0015); unset = they answer 404. */
+    /** Shared secret of the internal endpoints the userbot calls (ADR 0031); unset = they answer 404. */
     INTERNAL_API_SECRET: z
       .string()
       .min(32, 'INTERNAL_API_SECRET must be at least 32 characters')
       .optional(),
     /**
-     * Source networks allowed to call the internal endpoints. Loopback only by default (ADR 0015);
+     * Source networks allowed to call the internal endpoints. Loopback only by default (ADR 0031);
      * a Compose deploy where the userbot is its own container adds that network's subnet.
      */
     INTERNAL_ALLOWED_CIDRS: cidrList.default('127.0.0.0/8,::1/128'),

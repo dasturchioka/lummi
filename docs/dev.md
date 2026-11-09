@@ -113,9 +113,9 @@ Seam 1 helpers: `t.ownerSession()`, `t.managerSession()` (or `t.signInStaff(role
 
 The userbot (ADR 0014) calls the API over `internalContract`, from an allowed network and with the `x-internal-secret` header (ADR 0031). Set `INTERNAL_API_SECRET` (at least 32 characters) in `.env.local`; without it the routes answer 404. `INTERNAL_ALLOWED_CIDRS` defaults to loopback, and a request with `X-Forwarded-For`, `Forwarded` or `X-Real-IP` is always refused.
 
-- `POST /internal/humo/messages` `{messageId, text}` records a ➕ as a credit. A ➖ is ignored and not stored. Anything else is stored raw, flagged, and alerts the owner. A repeated `messageId` changes nothing (`duplicate: true`).
+- `POST /internal/humo/messages` `{messageId, text}` records a ➕ as a credit. A ➖ is ignored and not stored. Anything else is stored raw, flagged, and alerts the owner. A repeated `messageId` changes nothing (`duplicate: true`). The accepted variants are in `docs/spec.md` → Changes 2026-11-09 «Humo credit intake».
 - `GET /internal/humo/last-message-id` returns where the userbot resumes after a restart.
-- `POST /internal/userbot/heartbeat` `{}` stamps the userbot's last-seen time, which `HumoFeedService.userbotLastSeenAt()` returns.
+- `POST /internal/userbot/heartbeat` `{}` stamps the userbot's last-seen time (the one row of `userbot_heartbeat`).
 
 Try it against a running API:
 
@@ -125,7 +125,15 @@ curl -s localhost:4113/internal/humo/messages -H "x-internal-secret: $INTERNAL_A
   -d '{"messageId":1,"text":"➕ 75.750,00 UZS\n💳 HUMOCARD *1234\n🕓 20:54 22.06.2025"}'
 ```
 
-Payment matching subscribes with `CreditEvents.onCreditRecorded(listener)`. Listeners run after the commit, but a crash can drop the event, so the subscriber also needs its own catch-up sweep. Real Humo notifications go in `apps/api/test/fixtures/humo-notifications.ts`, and the parser test runs each one.
+Payment matching subscribes with `CreditEvents.onCreditRecorded(handler)` in a provider's constructor. The handler runs in the worker, not the API, and the event is durable (ADR 0021):
+
+- The credit row is the event, and the API queues it to `EVENTS_QUEUE` right after the commit. The API and the worker must use the same `EVENTS_QUEUE`.
+- The `credit-recorded` sweep queues anything missed.
+- The credit is stamped `event_handled_at` once every handler has succeeded. A handler that throws is retried, so handlers must be idempotent.
+
+Real Humo messages go in `apps/api/test/fixtures/humo-messages.ts`, and the parser test runs each one.
+
+Logs: an unexpected error is logged only as `describeError()` (`apps/api/src/logging/`), never with its message or stack, because a failed query's message carries its parameters, which hold personal data. Use `describeError(e)` wherever you log, store or alert an error.
 
 ## Hooks for later tickets
 

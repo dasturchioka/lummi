@@ -19,7 +19,7 @@ const PROXY_HEADERS = ['x-forwarded-for', 'forwarded', 'x-real-ip'] as const;
 const digest = (value: string): Buffer => createHash('sha256').update(value).digest();
 
 /**
- * Internal endpoints (ADR 0015) answer only a caller on the internal network holding the shared
+ * Internal endpoints (ADR 0031) answer only a caller on the internal network holding the shared
  * secret. No secret configured: 404, as if the route did not exist. A source address outside
  * INTERNAL_ALLOWED_CIDRS, or any request relayed by the public reverse proxy (which runs on the
  * same network and adds X-Forwarded-For), is refused with 403. A missing or wrong secret is 401.
