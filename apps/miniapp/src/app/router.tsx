@@ -49,6 +49,10 @@ const devRoutes = import.meta.env.DEV
         ...at('/dev/sheet'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'GallerySheetOpen'),
       }),
+      createRoute({
+        ...at('/dev/registration'),
+        component: lazyRouteComponent(() => import('../dev/Gallery'), 'GalleryRegistrationOpen'),
+      }),
     ]
   : [];
 

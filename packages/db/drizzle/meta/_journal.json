@@ -36,6 +36,13 @@
       "when": 1794223215129,
       "tag": "0004_spicy_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794223861380,
+      "tag": "0005_flaky_power_man",
+      "breakpoints": true
     }
   ]
 }

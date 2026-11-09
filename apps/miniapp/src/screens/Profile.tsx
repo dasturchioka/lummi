@@ -1,6 +1,7 @@
 import { usePrefs } from '../lib/prefs';
+import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
-import { ContrastIcon, GlobeIcon } from '../ui/icons';
+import { ContrastIcon, GlobeIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -9,6 +10,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/States';
 
 export function Profile() {
+  const { ensurePhone } = useRegistration();
   const { t, language, theme, setLanguage, setTheme, customer, customerQuery } = usePrefs();
 
   if (customerQuery.isError) {
@@ -51,6 +53,21 @@ export function Profile() {
         )}
       </div>
       <CardList>
+        <ListRow
+          id="row-phone"
+          leading={<PhoneIcon size={20} />}
+          label={t.profile.phone}
+          onClick={customer && !customer.phone ? () => void ensurePhone() : undefined}
+          trailing={
+            customer?.phone ? (
+              <span className="type-body text-ink">{customer.phone}</span>
+            ) : customer ? (
+              <span className="type-body text-ink">{t.profile.phoneAdd}</span>
+            ) : (
+              <Skeleton className="h-4 w-28" />
+            )
+          }
+        />
         <ListRow
           id="row-language"
           leading={<GlobeIcon size={20} />}

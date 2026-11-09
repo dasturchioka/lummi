@@ -91,4 +91,93 @@ export class CustomersService {
       return row ?? null;
     });
   }
+
+  /**
+   * Set the account phone from a VERIFIED contact (the caller has checked the proof, ADR 0004).
+   * A phone held by another customer relinks that customer to this Telegram id: the older
+   * record keeps its orders and rights, this fresh one is merged away. `relinkedTo` is set then,
+   * and the caller must hand the client a session for it.
+   */
+  async setVerifiedPhone(
+    customerId: number,
+    phone: string,
+  ): Promise<{ customer: CustomerRow; relinkedTo: number | null } | null> {
+    return this.db.transaction(async (tx) => {
+      const [current] = await tx.select().from(customers).where(eq(customers.id, customerId));
+      if (!current) return null;
+      const now = this.edges.clock.now();
+      const actor = { type: 'customer' as const, id: customerId };
+      const [holder] = await tx.select().from(customers).where(eq(customers.phone, phone));
+
+      if (!holder || holder.id === current.id) {
+        if (current.phone === phone) return { customer: current, relinkedTo: null };
+        const [row] = await tx
+          .update(customers)
+          .set({ phone, phoneVerifiedAt: now, updatedAt: now })
+          .where(eq(customers.id, current.id))
+          .returning();
+        await this.audit.record(tx, {
+          actor,
+          action: 'customer.phone_set',
+          targetType: 'customer',
+          targetId: current.id,
+          payload: { previous: current.phone !== null },
+        });
+        return { customer: row!, relinkedTo: null };
+      }
+
+      // Another Telegram id held this phone: the person moved to a new account. Phone wins.
+      await tx.delete(customers).where(eq(customers.id, current.id));
+      const [row] = await tx
+        .update(customers)
+        .set({
+          telegramId: current.telegramId,
+          firstName: current.firstName,
+          lastName: current.lastName,
+          username: current.username,
+          phoneVerifiedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(customers.id, holder.id))
+        .returning();
+      await this.audit.record(tx, {
+        actor: { type: 'customer', id: holder.id },
+        action: 'customer.relinked',
+        targetType: 'customer',
+        targetId: holder.id,
+        payload: {
+          fromTelegramId: holder.telegramId,
+          toTelegramId: current.telegramId,
+          mergedCustomerId: current.id,
+        },
+      });
+      return { customer: row!, relinkedTo: holder.id };
+    });
+  }
+
+  /**
+   * The answer to requestWriteAccess. Refusing never blocks ordering: it only flags the customer
+   * (bot_blocked) so statuses stay in the app. Granting clears the flag.
+   */
+  async recordWriteAccess(id: number, allowed: boolean): Promise<CustomerRow | null> {
+    return this.db.transaction(async (tx) => {
+      const [before] = await tx.select().from(customers).where(eq(customers.id, id));
+      if (!before) return null;
+      const writeAccess = allowed ? ('granted' as const) : ('refused' as const);
+      const [row] = await tx
+        .update(customers)
+        .set({ writeAccess, botBlocked: !allowed, updatedAt: this.edges.clock.now() })
+        .where(eq(customers.id, id))
+        .returning();
+      if (before.writeAccess !== writeAccess) {
+        await this.audit.record(tx, {
+          actor: { type: 'customer', id },
+          action: allowed ? 'customer.write_access_granted' : 'customer.write_access_refused',
+          targetType: 'customer',
+          targetId: id,
+        });
+      }
+      return row ?? null;
+    });
+  }
 }

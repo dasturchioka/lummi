@@ -31,12 +31,13 @@ export interface VerifyOptions {
   maxFutureSkewSeconds: number;
 }
 
+export type SignedFields = Map<string, string>;
+
 /**
- * Verify Telegram Mini App initData (HMAC path), ADR 0029.
- * Key = HMAC_SHA256(key "WebAppData", msg bot token); `hash` and `signature` are left out of the
- * check string; fields are sorted, joined by "\n", values as received (url-decoded once).
+ * The signature check shared by initData and the signed contact payload of `requestContact`
+ * (same scheme: HMAC with the "WebAppData" key). Returns the fields without hash and signature.
  */
-export function verifyInitData(raw: string, opts: VerifyOptions): VerifiedInitData {
+export function verifySignedFields(raw: string, botToken: string): SignedFields {
   const fields = new Map<string, string>();
   for (const [key, value] of new URLSearchParams(raw)) {
     if (fields.has(key)) throw new InitDataError('duplicate_field');
@@ -52,11 +53,21 @@ export function verifyInitData(raw: string, opts: VerifyOptions): VerifiedInitDa
     .sort()
     .map((k) => `${k}=${fields.get(k)}`)
     .join('\n');
-  const secret = createHmac('sha256', 'WebAppData').update(opts.botToken).digest();
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
   const expected = createHmac('sha256', secret).update(checkString).digest();
   if (!timingSafeEqual(expected, Buffer.from(received, 'hex'))) {
     throw new InitDataError('bad_signature');
   }
+  return fields;
+}
+
+/**
+ * Verify Telegram Mini App initData (HMAC path), ADR 0029.
+ * Key = HMAC_SHA256(key "WebAppData", msg bot token); `hash` and `signature` are left out of the
+ * check string; fields are sorted, joined by "\n", values as received (url-decoded once).
+ */
+export function verifyInitData(raw: string, opts: VerifyOptions): VerifiedInitData {
+  const fields = verifySignedFields(raw, opts.botToken);
 
   const authDateRaw = fields.get('auth_date');
   if (!authDateRaw || !/^\d{1,12}$/.test(authDateRaw)) throw new InitDataError('malformed');

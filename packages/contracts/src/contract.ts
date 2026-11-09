@@ -10,6 +10,10 @@ import {
 } from './admin';
 import {
   authErrorSchema,
+  contactBodySchema,
+  contactErrorSchema,
+  contactResultSchema,
+  writeAccessBodySchema,
   customerSchema,
   preferencesBodySchema,
   sessionSchema,
@@ -55,6 +59,25 @@ export const contract = c.router({
       body: preferencesBodySchema,
       responses: { 200: customerSchema, 401: authErrorSchema },
       summary: 'Save the customer language and/or theme (the bot reads the language too)',
+    },
+    shareContact: {
+      method: 'POST',
+      path: '/me/contact',
+      body: contactBodySchema,
+      responses: {
+        200: contactResultSchema,
+        400: contactErrorSchema,
+        401: authErrorSchema,
+        403: contactErrorSchema,
+      },
+      summary: 'Set the account phone from the signed requestContact payload (ADR 0004)',
+    },
+    writeAccess: {
+      method: 'POST',
+      path: '/me/write-access',
+      body: writeAccessBodySchema,
+      responses: { 200: customerSchema, 401: authErrorSchema },
+      summary: 'Record the answer to requestWriteAccess; a refusal keeps statuses in the app',
     },
   },
 });

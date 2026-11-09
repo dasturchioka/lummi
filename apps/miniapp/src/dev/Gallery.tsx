@@ -30,6 +30,8 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Chip, TypeChips } from '../ui/Chips';
 import { Segmented } from '../ui/Segmented';
+import { useRegistration } from '../lib/registration';
+import RegistrationSheet from '../ui/RegistrationSheet';
 import { Sheet } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
@@ -117,6 +119,8 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
   const [sheet, setSheet] = useState(sheetOpen);
   const [type, setType] = useState('0');
   const [busy, setBusy] = useState(false);
+  const { ensurePhone } = useRegistration();
+  const [phoneResult, setPhoneResult] = useState('-');
 
   return (
     <Screen>
@@ -300,6 +304,23 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           </Specimen>
         </Section>
 
+        <Section name="Registration · useRegistration().ensurePhone()">
+          <Specimen label="opens the sheet unless the account has a phone; resolves 'ready' | 'cancelled'">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void ensurePhone().then(setPhoneResult)}
+              >
+                Ask for phone
+              </Button>
+              <span className="type-small text-muted" data-testid="phone-result">
+                {phoneResult}
+              </span>
+            </div>
+          </Specimen>
+        </Section>
+
         <Section name="Card · CardList · ListRow">
           <CardList>
             <ListRow label={t.profile.language} trailing="RU" />
@@ -433,3 +454,12 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
 
 /** `/dev/sheet`: the gallery with the sheet already open, for the screenshot run. */
 export const GallerySheetOpen = () => <Gallery sheetOpen />;
+
+/** `/dev/registration`: the registration sheet open, for the screenshot run (no Telegram call). */
+export function GalleryRegistrationOpen() {
+  return (
+    <Screen>
+      <RegistrationSheet open status="idle" onShare={() => undefined} onClose={() => undefined} />
+    </Screen>
+  );
+}

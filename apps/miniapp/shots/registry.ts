@@ -1,4 +1,4 @@
-import type { ApiClient } from './api';
+import { SHOT_USER, signContact, type ApiClient } from './api';
 
 /**
  * Every screen the screenshot run captures, in one place. Each UI ticket adds its screens here
@@ -24,9 +24,22 @@ export const screens: ScreenDef[] = [
   { id: 'catalog', path: '/catalog' },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },
-  { id: 'profile', path: '/profile' },
+  {
+    id: 'profile',
+    path: '/profile',
+    // A customer who has shared the contact: Profile shows the account phone.
+    setup: async ({ api }) => {
+      const botToken = process.env.BOT_TOKEN ?? '';
+      const res = await api.me.shareContact({
+        body: { proof: signContact(botToken, SHOT_USER.id, '+998901234567') },
+      });
+      if (res.status !== 200) throw new Error(`profile shot: share contact failed ${res.status}`);
+    },
+  },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
   // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
   { id: 'ui-gallery', path: '/dev/ui', fullPage: true },
   { id: 'ui-sheet', path: '/dev/sheet' },
+  // The registration step (contact + write access), dev trigger in the gallery.
+  { id: 'registration-sheet', path: '/dev/registration' },
 ];

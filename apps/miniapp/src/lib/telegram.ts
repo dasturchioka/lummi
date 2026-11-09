@@ -2,6 +2,7 @@ import {
   bindViewportCssVars,
   closeMiniApp,
   expandViewport,
+  isAccessDeniedError,
   init,
   isTMA,
   miniAppReady,
@@ -9,6 +10,8 @@ import {
   mountMiniAppSync,
   mountViewport,
   retrieveLaunchParams,
+  requestContactComplete,
+  requestWriteAccess,
   retrieveRawInitData,
   setMiniAppBackgroundColor,
   setMiniAppBottomBarColor,
@@ -110,4 +113,31 @@ export function paintTelegramChrome(): void {
   void safely(() => setMiniAppHeaderColor.isAvailable() && setMiniAppHeaderColor(color));
   void safely(() => setMiniAppBackgroundColor.isAvailable() && setMiniAppBackgroundColor(color));
   void safely(() => setMiniAppBottomBarColor.isAvailable() && setMiniAppBottomBarColor(color));
+}
+
+export type ContactAnswer =
+  { ok: true; proof: string } | { ok: false; reason: 'denied' | 'unsupported' | 'failed' };
+
+/**
+ * Ask Telegram for the user's contact. `proof` is the raw signed string
+ * (`contact=...&auth_date=...&hash=...`); only the server can tell whether it is genuine.
+ */
+export async function askContact(): Promise<ContactAnswer> {
+  if (!requestContactComplete.isAvailable()) return { ok: false, reason: 'unsupported' };
+  try {
+    const { raw } = await requestContactComplete();
+    return { ok: true, proof: raw };
+  } catch (e) {
+    return { ok: false, reason: isAccessDeniedError(e) ? 'denied' : 'failed' };
+  }
+}
+
+/** true = allowed, false = refused, null = could not ask (old client). Never throws. */
+export async function askWriteAccess(): Promise<boolean | null> {
+  if (!requestWriteAccess.isAvailable()) return null;
+  try {
+    return (await requestWriteAccess()) === 'allowed';
+  } catch {
+    return null;
+  }
 }

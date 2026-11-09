@@ -37,6 +37,9 @@ export const UserIcon = (p: P) => (
     {...p}
   />
 );
+export const PhoneIcon = (p: P) => (
+  <Icon d="M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2" {...p} />
+);
 export const AlertIcon = (p: P) => (
   <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.3v.1" {...p} />
 );

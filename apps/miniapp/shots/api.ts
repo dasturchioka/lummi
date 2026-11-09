@@ -35,6 +35,21 @@ export function signInitData(botToken: string, user: ShotUser, ageSeconds = 0): 
   return new URLSearchParams({ ...fields, hash, signature: 'dev-signature' }).toString();
 }
 
+/** The signed payload `requestContact` returns, signed with the dev bot token (the API verifies it). */
+export function signContact(botToken: string, userId: number, phone: string): string {
+  const fields: Record<string, string> = {
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    contact: JSON.stringify({ user_id: userId, phone_number: phone, first_name: 'Dilnoza' }),
+  };
+  const check = Object.keys(fields)
+    .sort()
+    .map((k) => `${k}=${fields[k]}`)
+    .join('\n');
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const hash = createHmac('sha256', secret).update(check).digest('hex');
+  return new URLSearchParams({ ...fields, hash }).toString();
+}
+
 export type ApiClient = ReturnType<typeof makeClient>;
 
 export function makeClient(baseUrl: string, token?: string) {
