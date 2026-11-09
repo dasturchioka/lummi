@@ -51,7 +51,6 @@ const adminUrl = `http://localhost:${adminPort}`;
 const databaseUrl = process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`;
 // parallel worktrees each take their own compose project (and volume)
 const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-admin-shots';
-
 const started: ChildProcess[] = [];
 let startedDb = false;
 
@@ -179,6 +178,14 @@ async function seedStaff() {
     telegramId: number;
     active: boolean;
   }[];
+  // a few audited changes, so the audit page and the settings page have something to show
+  for (const [key, value] of [
+    ['pricing.freeDeliveryThreshold', 300_000],
+    ['shop.managerUsername', '@lummi_help'],
+  ] as const) {
+    const res = await call(`/admin/settings/${key}`, 'PUT', { value });
+    if (res.status !== 200) throw new Error(`could not set ${key}: ${res.status}`);
+  }
   for (const member of SHOT_STAFF.filter((s) => s.role === 'manager')) {
     let row = list.find((s) => s.telegramId === member.telegramId);
     if (!row) {
@@ -239,6 +246,15 @@ async function main() {
           const as =
             screen.as === 'owner' ? SHOT_STAFF[0] : SHOT_STAFF.find((s) => s.role === screen.as);
           if (as) await signIn(context, as.telegramId);
+          // Next's dev-mode indicator is not part of the design, on any page a screen opens
+          // (a string, not a function: tsx's name helpers do not exist in the page)
+          await context.addInitScript({
+            content: `document.addEventListener('DOMContentLoaded', () => {
+              const style = document.createElement('style');
+              style.textContent = 'nextjs-portal{display:none!important}';
+              document.head.append(style);
+            });`,
+          });
           const page = await context.newPage();
           page.on('pageerror', (e) => console.error(`  [${screen.id}] page error: ${e.message}`));
           page.on('console', (m) => {
@@ -248,9 +264,7 @@ async function main() {
             waitUntil: 'networkidle',
             timeout: 120_000,
           });
-          // Next's dev-mode indicator is not part of the design
-          await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
-          await screen.act?.({ page, t, outsiderId: OUTSIDER_ID, width });
+          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width });
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);

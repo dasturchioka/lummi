@@ -7,6 +7,7 @@ import type {
   OnHandItem,
   VolumeInput,
 } from '@lummi/contracts';
+import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
 import {
   and,
   asc,
@@ -32,7 +33,6 @@ import { reindexFragrances } from '../search/search-index';
 import { storePhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
-import { tashkentToUtc, utcToTashkent } from '../time/tashkent';
 import { DB, EDGES } from '../tokens';
 
 export type Failure = {

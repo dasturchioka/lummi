@@ -22,5 +22,6 @@
   "devDependencies": {
     "@lummi/config": "*",
     "vitest": "^5.1.0"
-  }
+  },
+  "sideEffects": false
 }

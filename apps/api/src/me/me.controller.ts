@@ -11,7 +11,8 @@ import { SettingsService } from '../settings/settings.service';
 import { EDGES, ENV } from '../tokens';
 import type { Env } from '../env';
 
-function toDto(c: CustomerRow): CustomerDto {
+/** Public settings that ride on the customer (see customerSchema.config). */
+async function toDto(c: CustomerRow, settings: SettingsService): Promise<CustomerDto> {
   return {
     id: c.id,
     telegramId: c.telegramId,
@@ -22,6 +23,7 @@ function toDto(c: CustomerRow): CustomerDto {
     theme: c.theme,
     phone: c.phone,
     writeAccess: c.writeAccess,
+    config: { managerUsername: await settings.get('shop.managerUsername') },
   };
 }
 
@@ -41,7 +43,7 @@ export class MeController {
     return tsRestHandler(contract.me.get, async () => {
       const c = await this.customers.getById(customerId);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: toDto(c) };
+      return { status: 200 as const, body: await toDto(c, this.settings) };
     });
   }
 
@@ -50,7 +52,7 @@ export class MeController {
     return tsRestHandler(contract.me.updatePreferences, async ({ body }) => {
       const c = await this.customers.updatePreferences(customerId, body);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: toDto(c) };
+      return { status: 200 as const, body: await toDto(c, this.settings) };
     });
   }
 
@@ -96,7 +98,7 @@ export class MeController {
       return {
         status: 200 as const,
         body: {
-          customer: toDto(done.customer),
+          customer: await toDto(done.customer, this.settings),
           session: session
             ? { token: session.token, expiresAt: session.expiresAt.toISOString() }
             : null,
@@ -110,7 +112,7 @@ export class MeController {
     return tsRestHandler(contract.me.writeAccess, async ({ body }) => {
       const c = await this.customers.recordWriteAccess(customerId, body.allowed);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: toDto(c) };
+      return { status: 200 as const, body: await toDto(c, this.settings) };
     });
   }
 }
