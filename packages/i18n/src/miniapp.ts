@@ -12,6 +12,7 @@ export const miniappMessages = defineMessages(
     },
     home: {
       slogan: 'Ароматы, которые освещают',
+      search: 'Поиск',
       emptyTitle: 'Скоро здесь появятся ароматы',
       emptyText: 'Мы собираем коллекцию. Загляните чуть позже.',
     },
@@ -46,7 +47,7 @@ export const miniappMessages = defineMessages(
   },
   {
     tabs: {
-      home: 'Bosh sahifa',
+      home: 'Asosiy',
       catalog: 'Katalog',
       cart: 'Savat',
       orders: 'Buyurtmalar',
@@ -54,6 +55,7 @@ export const miniappMessages = defineMessages(
     },
     home: {
       slogan: 'Lahzalaringizni yorituvchi iforlar',
+      search: 'Qidiruv',
       emptyTitle: 'Tez orada bu yerda iforlar paydo boʻladi',
       emptyText: 'Kolleksiyani tayyorlayapmiz. Birozdan keyin kiring.',
     },

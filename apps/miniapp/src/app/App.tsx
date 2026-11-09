@@ -3,6 +3,9 @@ import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useSyncExternalStore } from 'react';
 import { session } from '../lib/api';
 import { PrefsProvider, usePrefs } from '../lib/prefs';
+import { closeApp } from '../lib/telegram';
+import { Button } from '../ui/Button';
+import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { EmptyState, ErrorState } from '../ui/States';
 import { router } from './router';
@@ -19,7 +22,17 @@ function Gate() {
   if (state === 'reopen') {
     return (
       <Screen tabBar={false}>
-        <EmptyState fill title={t.session.reopenTitle} text={t.session.reopenText} />
+        <EmptyState
+          fill
+          icon={<Monogram size={38} />}
+          title={t.session.reopenTitle}
+          text={t.session.reopenText}
+          action={
+            <Button block onClick={closeApp}>
+              {t.common.close}
+            </Button>
+          }
+        />
       </Screen>
     );
   }

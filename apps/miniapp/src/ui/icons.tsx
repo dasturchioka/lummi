@@ -42,6 +42,16 @@ export const AlertIcon = (p: P) => (
 );
 export const ChevronIcon = (p: P) => <Icon d="m9 6 6 6-6 6" {...p} />;
 export const CloseIcon = (p: P) => <Icon d="M6 6l12 12M18 6 6 18" {...p} />;
+export const SearchIcon = (p: P) => (
+  <Icon d="M10.5 17.5a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM15.5 15.5 20 20" {...p} />
+);
+/** A LUMMI bottle: cap, neck, body, label line. The empty Home and anything "fragrance". */
+export const BottleIcon = (p: P) => (
+  <Icon
+    d="M10 3.5h4v3h-4zM11 6.5v2M13 6.5v2M8.5 8.5h7a2.5 2.5 0 0 1 2.5 2.5v7.5a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 18.5V11a2.5 2.5 0 0 1 2.5-2.5zM9.5 14.5h5"
+    {...p}
+  />
+);
 export const GlobeIcon = (p: P) => (
   <Icon
     d="M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM3.5 12h17M12 3.5c2.2 2.3 3.3 5.1 3.3 8.5s-1.1 6.2-3.3 8.5c-2.2-2.3-3.3-5.1-3.3-8.5s1.1-6.2 3.3-8.5z"

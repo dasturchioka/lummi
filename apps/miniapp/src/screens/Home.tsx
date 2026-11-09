@@ -1,6 +1,7 @@
 import type { Theme } from '@lummi/contracts';
 import { Link } from '@tanstack/react-router';
 import { usePrefs } from '../lib/prefs';
+import { BottleIcon, SearchIcon } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { EmptyState } from '../ui/States';
@@ -53,14 +54,16 @@ function TopBlock() {
         <CoverArcs />
       )}
       {/* The slot's own proportion, so a photo never shifts the layout when it arrives. */}
-      <div className="flex aspect-[3/2] flex-col items-center px-6 pt-8 text-center">
+      <div className="flex aspect-[3/2] flex-col items-center px-5 pt-8 text-center">
         <Logo height={24} />
-        <span aria-hidden="true" className="mt-4 mb-3.5 h-px w-8 bg-line-strong" />
-        <p className="type-section max-w-[26ch] text-balance">{t.home.slogan}</p>
+        <p className="type-slogan mt-3 text-balance">{t.home.slogan}</p>
       </div>
     </section>
   );
 }
+
+const DISC =
+  'grid size-11 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
 
 /** Home, no welcome screen (approved design): the top block, then the Milk sheet over its edge. */
 export function Home() {
@@ -75,17 +78,25 @@ export function Home() {
           paddingRight: 'max(var(--gutter), var(--safe-r, 0px))',
         }}
       >
-        {/* The approved row: search left and delivery city centre arrive with their tickets. */}
-        <div className="flex h-11 items-center justify-end">
-          <Link
-            to="/profile"
-            aria-label={t.tabs.profile}
-            className="grid size-10 place-items-center rounded-pill bg-block text-ink transition-transform duration-150 active:scale-95"
-          >
+        {/*
+          The approved row: search left, avatar right, on white discs. The centre is where the
+          delivery city selector goes (regions arrive with their ticket); until then the two
+          discs stand as a plain toolbar. Search opens the Catalog until search exists (#16).
+        */}
+        <div className="flex h-11 items-center justify-between">
+          <Link to="/catalog" aria-label={t.home.search} className={DISC}>
+            <SearchIcon size={20} />
+          </Link>
+          <Link to="/profile" aria-label={t.tabs.profile} className={DISC}>
             <Monogram size={22} />
           </Link>
         </div>
-        <EmptyState fill title={t.home.emptyTitle} text={t.home.emptyText} />
+        <EmptyState
+          fill
+          icon={<BottleIcon size={28} />}
+          title={t.home.emptyTitle}
+          text={t.home.emptyText}
+        />
       </div>
     </Screen>
   );

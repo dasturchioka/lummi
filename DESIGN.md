@@ -17,7 +17,7 @@ colors:
   photo-blush: "#F1DDD0"
   dark-room: "#1D1C1A"
   dark-field: "#353330"
-  dark-block: "#3A3631"
+  dark-block: "#31302C"
   dark-ink-faint: "#6E6A63"
   dark-sage-ink: "#AEB8A6"
   dark-hairline: "rgba(245, 242, 236, .10)"
@@ -54,6 +54,12 @@ typography:
     fontSize: "24px"
     fontWeight: 500
     lineHeight: 1.1
+  slogan:
+    fontFamily: "Cormorant Garamond, Georgia, serif"
+    fontSize: "21px"
+    fontWeight: 500
+    lineHeight: 1.2
+    letterSpacing: "0.005em"
   body:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "14px"
@@ -157,6 +163,17 @@ components:
     textColor: "{colors.milk}"
     rounded: "{rounded.pill}"
     height: "34px"
+  type-chip:
+    backgroundColor: "{colors.card-white}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.pill}"
+    padding: "0 16px 0 5px"
+    height: "40px"
+  type-chip-selected:
+    backgroundColor: "{colors.graphite}"
+    textColor: "{colors.milk}"
+    rounded: "{rounded.pill}"
+    height: "40px"
   card-product:
     backgroundColor: "{colors.card-white}"
     textColor: "{colors.graphite}"
@@ -191,7 +208,7 @@ components:
     backgroundColor: "{colors.graphite}"
     textColor: "{colors.stone}"
     rounded: "{rounded.pill}"
-    height: "62px"
+    height: "64px"
   totals-block:
     backgroundColor: "{colors.graphite}"
     textColor: "{colors.milk}"
@@ -230,7 +247,7 @@ The customer chose **Nurmuhammad's variant 2 with elements of variant 1** (`desi
 
 | Screen | Follow | Notes |
 |---|---|---|
-| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan is Tenor caps under a 32 px hairline, not the variant's italic (the Italic Is Sacred Rule); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner, «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
+| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan sits on one line under the logo in the Slogan role (Cormorant Italic, as the comp); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». The row under it has a search disc (left) and the avatar (right) on Card White discs; until the city selector exists its centre stays empty. Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner, «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
 | Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «от … сум», «+». |
 | Fragrance card | `design/approved` (variant 2 + icon row from variant 1) | Large photo with back, heart and share. Name lockup, description, the characteristics icon row, volume tiles with price under each, notes pyramid, then the reviews block, then «Купить на Uzum». Dock: «В корзину · <цена>» and «Купить сейчас». |
 | Cart | `design/approved` (variant 2 + bin from variant 1) and the free-delivery block from `design/mockups` 04-cart | Lines with stepper and bin. Promo field with «Применить». Dark totals block (items, promo, delivery «Доставка BTS, <город>», «Итого») with «Оформить заказ» inside. The free-delivery Sage thread with «Подойдёт любой аромат 10 мл» suggestions sits above the lines, exactly as in our mockup (the customer asked for it). |
@@ -251,7 +268,7 @@ The palette is a quiet paper-and-ink palette. Sage is the only accent, and it is
 ### Neutral
 - **Milk** (milk): app ground (60%) and text on Graphite buttons.
 - **Card White** (card-white): product cards, lists, the amount card and the tab bar.
-- **Stone** (stone): blocks at 25%, such as the home banner, the empty-state monogram disc and the profile avatar.
+- **Stone** (stone): blocks at 25%, such as the home banner, the empty-state icon disc and the profile avatar.
 - **Milk Field** (milk-field): Milk with 25% Stone. It is used for inputs, the disclaimer plate, segmented tracks, disabled buttons and the set-box compartment tray.
 - **Muted Ink** (ink-muted): secondary text at 5:1 on Milk, for notes, meta, labels and inactive tabs.
 - **Faint Ink** (ink-faint): non-text only, such as sold-out volume glyphs. It is never used for readable copy.
@@ -260,7 +277,7 @@ The palette is a quiet paper-and-ink palette. Sage is the only accent, and it is
 - **Photo Blush** (photo-blush; dark: dark-photo): placeholder behind bottle photography while it loads.
 
 ### Dark theme (derived; approved 2026-11-07 via variant 2)
-Dark is the optional theme, switched in Profile. The Home top block uses the dark fabric photo. Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
+Dark is the optional theme, switched in Profile. The Home top block uses the dark fabric photo. Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. The tab bar stays brand Graphite, as in the comp. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
 
 ### Named Rules
 **The Sage Thread Rule.** Sage is the measure, not decoration. If something fills, completes or confirms, it is Sage. If something is just pretty, it is not.
@@ -271,7 +288,7 @@ Dark is the optional theme, switched in Profile. The Home top block uses the dar
 
 **Display Font:** Tenor Sans (with Manrope, sans-serif), always uppercase and tracked
 **Body Font:** Manrope 400 / 500 / 600 (with system-ui)
-**Name Font:** Cormorant Garamond Italic 500 (with Georgia), fragrance names only
+**Name Font:** Cormorant Garamond Italic 500 (with Georgia), fragrance names, plus the slogan in the Home top block (customer-approved comp)
 
 All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subsets. The subsets cover Uzbek Latin `oʻ` / `gʻ` (U+02BB) and keep the first screen within budget.
 
@@ -281,7 +298,8 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Title** (Tenor 400, 22px, 1.25, +0.2em, caps): screen titles such as КАТАЛОГ, КОРЗИНА, НАБОРЫ.
 - **Section** (Tenor 400, 13px, 1.35, +0.2em, caps): section heads such as "Топ продаж" and "Выберите 5 разных ароматов".
 - **Label caps** (Tenor 400, 10.5px, 1.45, +0.2em, caps, Muted Ink): the attribution line "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" and the box-lid label.
-- **Name** (Cormorant Italic 500, 20px; 24px on the product page; 17–19px in compact rows; 12.5px under set slots): fragrance names, and only those.
+- **Name** (Cormorant Italic 500, 20px; 24px on the product page; 17–19px in compact rows; 12.5px under set slots): fragrance names.
+- **Slogan** (Cormorant Italic 500, 21px, 1.2, sentence case, no trailing period): «Ароматы, которые освещают» / «Lahzalaringizni yorituvchi iforlar», one line under the logo in the Home top block. The one use of the italic beyond names (customer-approved comp).
 - **Heading** (Manrope 600, 17px, 1.35, sentence case): the title of an empty, error or sign-in state, and the profile name. Never tracked caps, so long UZ titles stay readable.
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
 - **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
@@ -289,7 +307,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 ### Named Rules
 **The Label Lockup Rule.** A fragrance is always named as: label caps attribution, then the italic name, then (in full cards) a 28 px Sage rule (18 px on list cards), then notes joined by " · ". The attribution line is mandatory legal wording, not a kicker. Never drop it, reword it or move it below the name.
 
-**The Italic Is Sacred Rule.** Cormorant Italic is for fragrance names only. Headings, prices, buttons and marketing lines never use it.
+**The Italic Is Sacred Rule.** Cormorant Italic is for fragrance names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
 
 **The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals.
 
@@ -299,7 +317,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 The app is a single 360 px-first column inside the Telegram WebView. Page gutters are 16 px. The product grid has two columns with an 8 px gap. Horizontal rows («Новинки», suggestions) scroll 158 px cards with an 8 px gap and a hidden scrollbar. Sections are separated by 28 px (26 px between checkout blocks). Within a block, elements stack at 12 px. Controls are 48 px tall (36 px small, 34 px chips, steppers and copy buttons). Every row and card is built to hold the longer of the RU and UZ strings.
 
-Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the floating five-tab bar (Главная, Каталог, Корзина, Заказы, Профиль; a 62 px Graphite pill inset 12 px from the sides and the bottom safe area) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment). Content scrolls under the floating bar with enough bottom padding to clear it.
+Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the floating five-tab bar (Главная, Каталог, Корзина, Заказы, Профиль; a 64 px Graphite pill 20 px from the sides and 12 px above the bottom safe area) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment). Content scrolls under the floating bar with enough bottom padding to clear it.
 
 ## Elevation & Depth
 
@@ -328,7 +346,10 @@ Quiet, solid and decisive.
 ### Chips
 - **Style:** a 34px pill with a hairline-strong inset outline, Manrope 500 13px.
 - **Selected:** Graphite fill with Milk text. An optional count is shown as an inverted mini-pill.
-- **Type chips (approved design):** Все / Homme / Femme / Unisex (/ Наборы in the catalog), each with a 24 px circular bottle photo before the label.
+- **Type chips (approved design, `TypeChips` / `Chip`):** Все / Homme / Femme / Unisex (/ Наборы in the catalog). A 40 px pill: a 30 px circular crop of the bottle photo, then the label in Manrope 500 13px. Inactive is a Card White pill with no outline; active is the primary fill (Graphite with Milk text, inverted in dark) at 600. The row scrolls sideways under the gutters with no scrollbar. Every in-page filter uses chips.
+
+### Empty and error states
+A 72px Stone disc holding a 28px line icon of what will live there (grid for the catalog, bag for the cart, box for orders, bottle for Home), a Manrope 600 17px title in sentence case, a 14px Muted line, then at most a primary and a secondary action. The "L." monogram appears only on the avatar and the sign-in states. Errors use the alert icon and one primary «Повторить», which turns busy while it retries.
 
 ### Cards / Containers
 - **Corner Style:** 12px.
@@ -342,8 +363,8 @@ Quiet, solid and decisive.
 - **Search:** the same field with a leading 18px search icon and the placeholder "name or note".
 
 ### Navigation
-- **Tab bar (approved design):** a floating Graphite pill with five tabs, 22px icon over an 11px label: Главная, Каталог, Корзина, Заказы, Профиль. The active tab sits in a Milk circle with Graphite icon and Milk label at 600. Inactive tabs use Stone. The cart count is a Milk pill with Graphite text. In the dark theme the pill is Dark Block.
-- **Segmented control:** a Milk Field track with a white selected segment at 600.
+- **Tab bar (approved design):** a floating Graphite pill (both themes), 64px tall, 20px from the screen sides, with five equal-width tabs, 22px icon over an 11px label: Главная, Каталог, Корзина, Заказы, Профиль (UZ «Asosiy» for Home, to confirm). The active icon sits in a 38px Milk disc, its label Milk at 600. Inactive tabs use Stone. Labels never truncate; the longest UZ one may spill a few pixels past its cell. The cart count is a Milk pill with Graphite text outside the icon's top-right corner, capped at «9+».
+- **Segmented control (settings only):** a Milk Field pill track whose chosen option is a gliding Graphite pill (inverted in dark), for the Profile language and theme. In-page filters use type chips, never Segmented.
 - **Language and theme switches:** RU / UZ and Светлая / Тёмная pill pairs in Profile, Graphite fill on the active option. Home's top-right slot holds the profile avatar (the "L." monogram on a Stone disc, bb-08), not a switch.
 - **Delivery city selector (Home):** "Доставка" in 11px Muted Ink over the city name in 15px 600 with a chevron, centred under the top block. It opens the region → city sheet from the BTS list.
 
@@ -384,7 +405,7 @@ The amount card shows the 28px amount, the card number with copy buttons, and th
 
 ### Don't:
 - **Don't** use shadows, glows or gradients for depth. Tone and hairlines only.
-- **Don't** use Cormorant Italic for anything but fragrance names.
+- **Don't** use Cormorant Italic for anything but fragrance names and the Home slogan.
 - **Don't** colour sale prices red or use burgundy, rose gold or gold. Savings are Sage Ink.
 - **Don't** put Sage text on Milk or white. Use Sage Ink.
 - **Don't** stack a badge on a card inside a row whose title already names it.

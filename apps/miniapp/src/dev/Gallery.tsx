@@ -12,6 +12,7 @@ import { Card, CardList, ListRow } from '../ui/Card';
 import {
   AlertIcon,
   BagIcon,
+  BottleIcon,
   BoxIcon,
   ChevronIcon,
   CloseIcon,
@@ -19,6 +20,7 @@ import {
   GlobeIcon,
   GridIcon,
   HomeIcon,
+  SearchIcon,
   Spinner,
   UserIcon,
 } from '../ui/icons';
@@ -26,11 +28,16 @@ import { Logo, Monogram } from '../ui/Logo';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
+import { Chip, TypeChips } from '../ui/Chips';
 import { Segmented } from '../ui/Segmented';
 import { Sheet } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { TabBar } from '../ui/TabBar';
+// Placeholder bottle thumbnails, cut down from materials/flakons (dev only, never in dist).
+import thumbA from './thumbs/symphony.webp';
+import thumbB from './thumbs/althair.webp';
+import thumbC from './thumbs/absolu-aventus.webp';
 
 const demo = {
   ru: {
@@ -45,7 +52,8 @@ const demo = {
     notes: 'грейпфрут · имбирь · бергамот',
     emptyCart: 'В корзине пока пусто',
     emptyCartText: 'Начните с Discovery set: пять ароматов по 10 мл, чтобы найти свой.',
-    paper: ['Все', 'Homme', 'Femme'],
+    types: ['Все', 'Homme', 'Femme', 'Unisex', 'Наборы'],
+    buildSet: 'Собрать набор',
   },
   uz: {
     add: 'Savatga',
@@ -59,7 +67,8 @@ const demo = {
     notes: 'greypfrut · zanjabil · bergamot',
     emptyCart: 'Savat hozircha boʻsh',
     emptyCartText: 'Discovery set’dan boshlang: oʻzingiznikini topish uchun 10 ml’dan beshta ifor.',
-    paper: ['Hammasi', 'Homme', 'Femme'],
+    types: ['Hammasi', 'Homme', 'Femme', 'Unisex', 'Toʻplamlar'],
+    buildSet: 'Toʻplam yigʻish',
   },
 } as const;
 
@@ -106,7 +115,7 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
   const { t, language, theme, setLanguage, setTheme } = usePrefs();
   const d = demo[language];
   const [sheet, setSheet] = useState(sheetOpen);
-  const [paper, setPaper] = useState<'0' | '1' | '2'>('0');
+  const [type, setType] = useState('0');
   const [busy, setBusy] = useState(false);
 
   return (
@@ -243,8 +252,31 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           </div>
         </Section>
 
-        <Section name="Segmented">
-          <Specimen label="ink · the Profile switches (live)">
+        <Section name="TypeChips · Chip (in-page filters)">
+          <Specimen label="TypeChips · one choice, scrolls under the gutters (live)">
+            <TypeChips
+              label="type"
+              value={type}
+              onChange={setType}
+              options={d.types.map((label, i) => ({
+                value: String(i),
+                label,
+                thumb: [thumbA, thumbB, thumbC, thumbA, thumbB][i],
+              }))}
+            />
+          </Specimen>
+          <Specimen label="Chip · inactive · active · pressed · no thumbnail">
+            <div className="flex flex-wrap gap-2">
+              <Chip label={d.types[1]} thumb={thumbB} />
+              <Chip label={d.types[0]} thumb={thumbA} selected />
+              <Chip label={d.types[2]} thumb={thumbC} pressed />
+              <Chip label={d.types[3]} />
+            </div>
+          </Specimen>
+        </Section>
+
+        <Section name="Segmented (settings only)">
+          <Specimen label="the Profile switches (live)">
             <div className="flex flex-wrap gap-2">
               <Segmented
                 label={t.profile.language}
@@ -263,20 +295,6 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
                   { value: 'light', label: t.profile.themeLight },
                   { value: 'dark', label: t.profile.themeDark },
                 ]}
-              />
-            </div>
-          </Specimen>
-          <Specimen label="paper · in-page filters">
-            <div>
-              <Segmented
-                tone="paper"
-                label="filter"
-                value={paper}
-                onChange={setPaper}
-                options={d.paper.map((label, i) => ({
-                  value: String(i) as '0' | '1' | '2',
-                  label,
-                }))}
               />
             </div>
           </Specimen>
@@ -333,13 +351,14 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
         <Section name="EmptyState · ErrorState">
           <Card>
             <EmptyState
+              icon={<BagIcon size={28} />}
               title={d.emptyCart}
               text={d.emptyCartText}
               action={
                 <>
-                  <Button block>{d.add}</Button>
+                  <Button block>{d.catalog}</Button>
                   <Button block variant="secondary">
-                    {d.catalog}
+                    {d.buildSet}
                   </Button>
                 </>
               }
@@ -355,7 +374,7 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
 
         <Section name="TabBar · in flow, with cart counts">
           <TabBar floating={false} badges={{ cart: 3 }} />
-          <TabBar floating={false} badges={{ cart: 120, orders: 1 }} />
+          <TabBar floating={false} badges={{ cart: 12, orders: 1 }} />
         </Section>
 
         <Section name="Logo · monogram · icons (24 grid, 1.5 stroke)">
@@ -377,6 +396,8 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
               ChevronIcon,
               CloseIcon,
               AlertIcon,
+              SearchIcon,
+              BottleIcon,
             ].map((Icon, i) => (
               <Icon key={i} />
             ))}

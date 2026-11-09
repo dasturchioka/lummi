@@ -13,10 +13,9 @@ interface Thumb {
 }
 
 /**
- * Two or three options in a Milk Field pill track (RU / UZ, Светлая / Тёмная).
- * `ink` (default): the chosen option is a Graphite pill, as the approved switches.
- * `paper`: the chosen option is a white segment, for in-page filters later.
- * The chosen pill is one element that glides to the new option, so a switch reads as a move.
+ * A settings switch: two or three options in a Milk Field pill track, the chosen one a Graphite
+ * pill (inverted in dark) that glides to the new option. For settings only (Profile language
+ * and theme); in-page filters use `TypeChips` / `Chip`.
  */
 export function Segmented<V extends string>({
   options,
@@ -24,14 +23,12 @@ export function Segmented<V extends string>({
   onChange,
   label,
   labelledBy,
-  tone = 'ink',
 }: {
   options: SegmentedOption<V>[];
   value: V;
   onChange: (value: V) => void;
   label?: string;
   labelledBy?: string;
-  tone?: 'ink' | 'paper';
 }) {
   const track = useRef<HTMLDivElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -72,8 +69,8 @@ export function Segmented<V extends string>({
     }
   };
 
-  const on = tone === 'ink' ? 'text-btn-ink' : 'text-ink';
-  const thumbFill = tone === 'ink' ? 'bg-btn' : 'bg-card';
+  const on = 'text-btn-ink';
+  const thumbFill = 'bg-btn';
   const measured = thumb !== null && thumb.w > 0;
 
   return (

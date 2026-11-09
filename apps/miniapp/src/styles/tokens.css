@@ -36,8 +36,9 @@
 
   --gutter: 16px;
   --section: 28px;
-  --tabbar-h: 62px;
-  --tabbar-inset: 12px;
+  --tabbar-h: 64px;
+  --tabbar-inset: 12px; /* above the bottom safe area */
+  --tabbar-side: 20px; /* from the screen edges */
 }
 
 :root[data-theme='dark'] {
@@ -45,7 +46,7 @@
 
   --c-ground: #1d1c1a; /* Dark Room */
   --c-card: #2a2a2a; /* brand Graphite */
-  --c-block: #3a3631; /* Dark Block */
+  --c-block: #31302c; /* Dark Block: a neutral step above the room */
   --c-field: #353330; /* Dark Field */
   --c-ink: #f5f2ec;
   --c-ink-muted: #cfc6b8; /* Stone as secondary ink */
@@ -57,11 +58,11 @@
   --c-line-strong: rgba(245, 242, 236, 0.22);
   --c-btn: #f5f2ec; /* primary inverts */
   --c-btn-ink: #2a2a2a;
-  --c-bar: #3a3631;
+  --c-bar: #2a2a2a; /* Graphite, as the approved dark comp */
   --c-bar-ink: #cfc6b8;
   --c-bar-active: #f5f2ec;
   --c-bar-active-ink: #2a2a2a;
-  --c-totals: #3a3631;
+  --c-totals: #31302c;
   --c-totals-ink: #f5f2ec;
   --c-photo: #3a322c;
   --c-overlay: rgba(0, 0, 0, 0.55);

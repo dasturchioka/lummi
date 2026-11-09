@@ -1,5 +1,6 @@
 import {
   bindViewportCssVars,
+  closeMiniApp,
   expandViewport,
   init,
   isTMA,
@@ -57,6 +58,11 @@ export async function bootTelegram(): Promise<void> {
 
 export function telegramReady(): void {
   void safely(() => miniAppReady.isAvailable() && miniAppReady());
+}
+
+/** Close the Mini App (the session-reopen state's «Закрыть»). */
+export function closeApp(): void {
+  void safely(() => closeMiniApp.isAvailable() && closeMiniApp());
 }
 
 export function rawInitData(): string | null {

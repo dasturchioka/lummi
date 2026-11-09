@@ -73,6 +73,18 @@
   line-height: 1.1;
   letter-spacing: 0.005em;
 }
+/*
+ * The Home slogan, and the one use of the Cormorant italic beyond fragrance names
+ * (customer-approved comp, 2026-11-07): sentence case, one line under the logo.
+ */
+@utility type-slogan {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+}
 /* State titles and the profile name: a plain, readable heading in sentence case (no tracked caps). */
 @utility type-heading {
   font-family: var(--font-ui);
@@ -201,7 +213,7 @@
   --safe-l: max(env(safe-area-inset-left, 0px), var(--tg-viewport-safe-area-inset-left, 0px));
   --safe-r: max(env(safe-area-inset-right, 0px), var(--tg-viewport-safe-area-inset-right, 0px));
   /* What the floating tab bar covers at the bottom; `Screen` pads by it. */
-  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) * 2 + var(--safe-b) + 16px);
+  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 28px);
   min-height: var(--tg-viewport-stable-height, 100dvh);
 }
 

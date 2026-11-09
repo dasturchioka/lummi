@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Button } from './Button';
 import { AlertIcon } from './icons';
-import { Monogram } from './Logo';
 
 /** `fill`: take the free height of the Screen and sit at its optical centre (a whole-screen state). */
 interface StateLayout {
@@ -42,20 +41,23 @@ function State({
   );
 }
 
-/** Nothing here yet: the Stone disc with the "L." monogram. */
+/**
+ * Nothing here yet: a 28 px line icon of what will live here (grid, bag, box…) in the Stone disc.
+ * The "L." monogram is only for the avatar and the sign-in states (`icon={<Monogram />}`).
+ */
 export function EmptyState({
+  icon,
   title,
   text,
   action,
   fill,
 }: {
+  icon: ReactNode;
   title: string;
   text?: string;
   action?: ReactNode;
 } & StateLayout) {
-  return (
-    <State disc={<Monogram size={38} />} title={title} text={text} action={action} fill={fill} />
-  );
+  return <State disc={icon} title={title} text={text} action={action} fill={fill} />;
 }
 
 /** Network or server trouble: calm wording and one way forward, «Повторить». */
