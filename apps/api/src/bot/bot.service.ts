@@ -9,6 +9,7 @@ import type { Env } from '../env';
 import { OutboxService } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
 import { ENV } from '../tokens';
+import { describeError } from '../logging/describe-error';
 
 export const BOT_INFO = Symbol('BOT_INFO');
 
@@ -43,7 +44,7 @@ export class BotService implements OnApplicationShutdown {
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
     this.bot.catch((err) =>
-      this.log.error(`update ${err.ctx.update.update_id} failed: ${err.message}`),
+      this.log.error(`update ${err.ctx.update.update_id} failed: ${describeError(err)}`),
     );
   }
 
@@ -62,7 +63,7 @@ export class BotService implements OnApplicationShutdown {
       await this.bot.api.deleteWebhook(); // getUpdates refuses to run while a webhook is set
       this.bot
         .start({ allowed_updates: [...ALLOWED_UPDATES] })
-        .catch((e: Error) => this.log.error(`long polling stopped: ${e.message}`));
+        .catch((e: unknown) => this.log.error(`long polling stopped: ${describeError(e)}`));
       this.log.log('long polling started');
     } else {
       await this.bot.api.setWebhook(this.env.WEBHOOK_URL!, {
@@ -119,7 +120,9 @@ export class BotService implements OnApplicationShutdown {
       await next();
     });
     for (const job of afterCommit) {
-      await job().catch((e: Error) => this.log.warn(`after-commit step failed: ${e.message}`));
+      await job().catch((e: unknown) =>
+        this.log.warn(`after-commit step failed: ${describeError(e)}`),
+      );
     }
   }
 

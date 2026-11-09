@@ -19,6 +19,7 @@ import { BotBlockedError } from '../edges';
 import type { Env } from '../env';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
+import { describeError } from '../logging/describe-error';
 
 export interface OutboxMessage {
   chatId: number;
@@ -69,7 +70,7 @@ export class OutboxService implements OnApplicationShutdown {
       try {
         await withTimeout(this.dispatch(ids), DISPATCH_TIMEOUT_MS);
       } catch (e) {
-        this.log.warn(`immediate dispatch failed, the tick will queue it: ${(e as Error).message}`);
+        this.log.warn(`immediate dispatch failed, the tick will queue it: ${describeError(e)}`);
       }
     }
     return result;

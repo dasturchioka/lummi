@@ -8,6 +8,7 @@ import { AlertService } from '../outbox/alert.service';
 import { OutboxService, SEND_ATTEMPTS } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
+import { describeError } from '../logging/describe-error';
 
 /** Telegram sends per second for the whole queue (ADR 0021: broadcasts at <= 25 msg/s). */
 const SEND_RATE_PER_SECOND = 25;
@@ -95,17 +96,19 @@ export class WorkerRuntime implements OnApplicationShutdown {
     } catch (e) {
       const count = (this.failures.get(sweep.name) ?? 0) + 1;
       this.failures.set(sweep.name, count);
-      this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${(e as Error).message}`);
+      this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${describeError(e)}`);
       const limit = await this.settings.get('worker.sweepFailureAlertAfter');
       if (count === limit) {
         await ctx
           .withTx((tx) =>
             this.alerts.alertOwner(
               tx,
-              `Сбой задачи «${sweep.name}» ${count} раз подряд: ${(e as Error).message}`,
+              `Сбой задачи «${sweep.name}» ${count} раз подряд: ${describeError(e)}`,
             ),
           )
-          .catch((err: Error) => this.log.error(`could not queue the alert: ${err.message}`));
+          .catch((err: unknown) =>
+            this.log.error(`could not queue the alert: ${describeError(err)}`),
+          );
       }
     }
   }
@@ -126,7 +129,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
       await this.outbox.deliver(job.data.id);
     } catch (e) {
       if (job.attemptsMade + 1 >= SEND_ATTEMPTS) {
-        await this.outbox.markFailed(job.data.id, (e as Error).message);
+        await this.outbox.markFailed(job.data.id, describeError(e));
       }
       throw e;
     }

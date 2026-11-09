@@ -1,10 +1,11 @@
 import { internalContract } from '@lummi/contracts';
-import { credits, eq, humoMessages, outbox } from '@lummi/db';
+import { credits, eq, humoMessages, outbox, sql } from '@lummi/db';
 import { initClient } from '@ts-rest/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreditEvents, type CreditRecorded } from '../src/humo/credit-events';
 import { HumoFeedService } from '../src/humo/humo-feed.service';
 import { SettingsService } from '../src/settings/settings.service';
+import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/test-app';
 
 /** Seam 1 (ADR 0028): the userbot's side of the Humo feed (ADR 0014, ADR 0015) over HTTP. */
@@ -276,5 +277,39 @@ describe('catch-up and heartbeat', () => {
     t.edges.clock.advance(60_000);
     await feed().userbotHeartbeat({ body: {} });
     expect(await service.userbotLastSeenAt()).toEqual(new Date('2026-11-09T10:01:00Z'));
+  });
+});
+
+/** Raw POST, for answers the contract does not declare (400, 500). */
+const postRaw = (body: unknown) =>
+  fetch(`${t.baseUrl}/internal/humo/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-internal-secret': TEST_INTERNAL_SECRET },
+    body: JSON.stringify(body),
+  });
+
+describe('personal data stays out of logs', () => {
+  it('a failing insert answers 500 and logs the cause, never the Humo text', async () => {
+    const logs = captureLogs();
+    await t.db.execute(sql`ALTER TABLE humo_messages RENAME TO humo_messages_x`);
+    try {
+      const res = await postRaw({ messageId: 801, text: creditText('12.345,67') });
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ statusCode: 500, message: 'Internal server error' });
+    } finally {
+      await t.db.execute(sql`ALTER TABLE humo_messages_x RENAME TO humo_messages`);
+      logs.stop();
+    }
+    const logged = logs.entries.map((e) => e.text).join('\n');
+    expect(logged).toContain('relation "humo_messages" does not exist');
+    for (const secret of ['12.345,67', 'HUMOCARD', '1.234.567,89', 'CLICK P2P']) {
+      expect(logged).not.toContain(secret);
+    }
+  });
+
+  it('refuses a NUL character in the text (Postgres text cannot hold it)', async () => {
+    const res = await postRaw({ messageId: 802, text: `${creditText()}\u0000` });
+    expect(res.status).toBe(400);
+    expect(await t.db.select().from(humoMessages)).toHaveLength(0);
   });
 });

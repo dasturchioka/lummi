@@ -11,7 +11,10 @@ export const humoMessageBodySchema = z.object({
   /** Telegram message id. Idempotency key; in a user account it grows across all private chats. */
   messageId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   /** The text exactly as received (Telegram caps a message at 4096 characters). */
-  text: z.string().max(4096),
+  text: z
+    .string()
+    .max(4096)
+    .refine((t) => !t.includes('\u0000'), 'text must not contain NUL (U+0000)'),
 });
 
 export const humoMessageResultSchema = z.object({

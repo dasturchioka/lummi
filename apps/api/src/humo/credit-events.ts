@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { describeError } from '../logging/describe-error';
 
 /** What a subscriber (payment matching) learns when a new credit is recorded. */
 export interface CreditRecorded {
@@ -38,7 +39,7 @@ export class CreditEvents {
       try {
         await listener(event);
       } catch (e) {
-        this.log.error(`credit ${event.creditId}: a listener failed: ${(e as Error).message}`);
+        this.log.error(`credit ${event.creditId}: a listener failed: ${describeError(e)}`);
       }
     }
   }

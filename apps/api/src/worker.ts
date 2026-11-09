@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { GrammySender, LocalFileStore, SystemClock, UnconfiguredReceiptJudge } from './edges';
 import { parseEnv } from './env';
 import { WorkerRuntime } from './worker/runtime';
+import { describeError } from './logging/describe-error';
 
 // Separate from HTTP (ADR 0015): a crashed worker never takes down checkout.
 // Same modules as the API, as an application context without an HTTP listener.
@@ -25,7 +26,8 @@ const app = await NestFactory.createApplicationContext(
 app.enableShutdownHooks();
 const worker = app.get(WorkerRuntime);
 worker.start();
-const run = () => worker.tick().catch((e: Error) => console.error(`tick failed: ${e.message}`));
+const run = () =>
+  worker.tick().catch((e: unknown) => console.error(`tick failed: ${describeError(e)}`));
 await run();
 const timer = setInterval(run, 60_000);
 console.log('worker started');
