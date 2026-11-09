@@ -3,10 +3,10 @@
 import type { AdminBtsPointDto, AdminRegionDto } from '@lummi/contracts';
 import { ADMIN_POINTS_PAGE_SIZE } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
-import { MapPin, Plus } from 'lucide-react';
+import { MapPin, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -22,12 +22,13 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { fill } from '@/lib/utils';
+import { cn, fill } from '@/lib/utils';
 
 type Status = 'all' | 'active' | 'hidden';
 export type PointFilters = { regionId: number | undefined; status: Status; q: string };
@@ -48,10 +49,19 @@ const href = (f: PointFilters, page: number) => {
   return qs ? `/bts-points?${qs}` : '/bts-points';
 };
 
+/** Row actions are quiet: Muted Ink 500, Ink on hover and focus (the row itself opens the editor). */
+export const QUIET_ACTION =
+  'font-medium text-muted-foreground hover:text-foreground focus-visible:text-foreground';
+
+/** A text link in the page header or a form (DESIGN.md link: Ink 500, hairline underline). */
+const TEXT_LINK =
+  'rounded-sm text-sm font-medium underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current';
+
 /**
  * BTS points for staff (owner and manager): filter by region, status and text, add, edit, and
  * hide or show. There is no delete: a hidden point just leaves the customers' list. The owner
- * also gets the link to the tariffs.
+ * also gets the link to the tariffs. A row (or its name) opens the editor; «Скрыть» / «Показать»
+ * is the one explicit row action.
  */
 export function BtsPointsManager({
   regions,
@@ -72,10 +82,15 @@ export function BtsPointsManager({
   const [dialog, setDialog] = useState<{ point: AdminBtsPointDto | null } | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+  const activeFilters =
+    (filters.regionId !== undefined ? 1 : 0) + (filters.status !== 'all' ? 1 : 0);
+  // phones show only the search; region and status open behind «Фильтры» (open when in use)
+  const [showFilters, setShowFilters] = useState(activeFilters > 0);
   const regionName = (r: { nameRu: string; nameUz: string }) =>
     language === 'uz' ? r.nameUz : r.nameRu;
   const pages = Math.max(1, Math.ceil(data.total / (data.pageSize || ADMIN_POINTS_PAGE_SIZE)));
   const filtered = filters.regionId !== undefined || filters.status !== 'all' || filters.q !== '';
+  const edit = (p: AdminBtsPointDto) => setDialog({ point: p });
 
   const toggle = async (p: AdminBtsPointDto) => {
     setRowError(null);
@@ -93,47 +108,54 @@ export function BtsPointsManager({
       {p.active ? t.btsPoints.visible : t.btsPoints.hidden}
     </Badge>
   );
-  // Quiet text buttons, as on Staff. Hide / show is as wide as the longer of its two labels, so
-  // the column does not jump when a point flips.
+  // Hide / show is as wide as the longer of its two labels, so the column does not jump when a
+  // point flips.
   const toggleWidth = {
     minWidth: `calc(${Math.max(t.btsPoints.hide.length, t.btsPoints.show.length)}ch + 1.5rem)`,
   };
-  const actions = (p: AdminBtsPointDto) => (
-    <>
-      <Button variant="ghost" size="sm" onClick={() => setDialog({ point: p })}>
-        {t.btsPoints.edit}
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="justify-start"
-        style={toggleWidth}
-        loading={busyId === p.id}
-        onClick={() => toggle(p)}
-      >
-        {p.active ? t.btsPoints.hide : t.btsPoints.show}
-      </Button>
-    </>
+  const hideAction = (p: AdminBtsPointDto) => (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={cn('justify-start', QUIET_ACTION)}
+      style={toggleWidth}
+      loading={busyId === p.id}
+      onClick={(e) => {
+        e.stopPropagation(); // not the row's «open the editor»
+        void toggle(p);
+      }}
+    >
+      {p.active ? t.btsPoints.hide : t.btsPoints.show}
+    </Button>
+  );
+  /** The point's name, a button that opens the editor (the keyboard path; a tap on the row does the same). */
+  const nameButton = (p: AdminBtsPointDto) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        edit(p);
+      }}
+      aria-label={`${t.btsPoints.edit}: ${p.name}`}
+      className="rounded-sm text-left font-semibold break-words underline-offset-[3px] hover:underline"
+    >
+      {p.name}
+    </button>
   );
   const region = (p: AdminBtsPointDto) =>
     regionName({ nameRu: p.regionNameRu, nameUz: p.regionNameUz });
-  const code = (p: AdminBtsPointDto) => (
-    <span className="tabular-nums">{`${t.btsPoints.code}\u00a0${p.code}`}</span>
+  /** Where the point is: region, city (a wrap never leaves a dangling « · »). */
+  const place = (p: AdminBtsPointDto) => (
+    <MetaLine className="mt-0.5 text-small text-muted-foreground" parts={[region(p), p.city]} />
   );
   const details = (p: AdminBtsPointDto) => (
     <>
-      <p className="[overflow-wrap:anywhere]">{p.address}</p>
-      {p.landmark && (
-        <p className="mt-0.5 text-small text-muted-foreground [overflow-wrap:anywhere]">
-          {p.landmark}
-        </p>
-      )}
-      {p.hours && (
+      <p className="break-words">{p.address}</p>
+      <MetaLine
+        className="mt-0.5 text-small text-muted-foreground"
         // a time range never breaks across lines
-        <p className="mt-0.5 text-small text-muted-foreground">
-          {p.hours.replace(/(\d)-(\d)/g, '$1\u2011$2')}
-        </p>
-      )}
+        parts={[p.landmark, p.hours?.replace(/(\d)-(\d)/g, '$1\u2011$2')]}
+      />
     </>
   );
 
@@ -142,18 +164,27 @@ export function BtsPointsManager({
       <PageHeader
         title={t.btsPoints.title}
         description={t.btsPoints.description}
+        titleAction={
+          <Button
+            size="icon"
+            aria-label={t.btsPoints.add}
+            onClick={() => setDialog({ point: null })}
+          >
+            <Plus strokeWidth={1.5} aria-hidden />
+          </Button>
+        }
         actions={
-          <>
+          <div className="flex items-center gap-5">
             {isOwner && (
-              <Button variant="outline" asChild className="max-sm:w-full">
-                <Link href="/bts-points/tariffs">{t.btsPoints.tariffs}</Link>
-              </Button>
+              <Link href="/bts-points/tariffs" className={TEXT_LINK}>
+                {t.btsPoints.tariffs}
+              </Link>
             )}
-            <Button onClick={() => setDialog({ point: null })} className="max-sm:w-full">
+            <Button onClick={() => setDialog({ point: null })} className="max-sm:hidden">
               <Plus strokeWidth={1.5} aria-hidden />
               {t.btsPoints.add}
             </Button>
-          </>
+          </div>
         }
       />
 
@@ -177,7 +208,12 @@ export function BtsPointsManager({
             );
           }}
         >
-          <Field id="f-region" label={t.btsPoints.region}>
+          {/* phones: search, then the buttons with «Фильтры», then region and status when open */}
+          <Field
+            id="f-region"
+            label={t.btsPoints.region}
+            className={cn('max-sm:order-3', !showFilters && 'max-sm:hidden')}
+          >
             <Select name="region" defaultValue={filters.regionId ?? ''}>
               <option value="">{t.btsPoints.allRegions}</option>
               {regions.map((r) => (
@@ -187,14 +223,18 @@ export function BtsPointsManager({
               ))}
             </Select>
           </Field>
-          <Field id="f-status" label={t.btsPoints.status}>
+          <Field
+            id="f-status"
+            label={t.btsPoints.status}
+            className={cn('max-sm:order-3', !showFilters && 'max-sm:hidden')}
+          >
             <Select name="status" defaultValue={filters.status}>
               <option value="all">{t.btsPoints.allStatuses}</option>
               <option value="active">{t.btsPoints.onlyVisible}</option>
               <option value="hidden">{t.btsPoints.onlyHidden}</option>
             </Select>
           </Field>
-          <Field id="f-q" label={t.btsPoints.search}>
+          <Field id="f-q" label={t.btsPoints.search} className="max-sm:order-1">
             <Input
               name="q"
               type="search"
@@ -203,9 +243,25 @@ export function BtsPointsManager({
               placeholder={t.btsPoints.searchPlaceholder}
             />
           </Field>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 max-sm:order-2">
             <Button type="submit" className="max-sm:flex-1">
               {t.btsPoints.apply}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={showFilters}
+              aria-controls="f-region f-status"
+              onClick={() => setShowFilters((v) => !v)}
+              className="sm:hidden"
+            >
+              <SlidersHorizontal strokeWidth={1.5} aria-hidden />
+              {t.btsPoints.filters}
+              {activeFilters > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+                  {activeFilters}
+                </span>
+              )}
             </Button>
             {filtered && (
               <Button variant="outline" asChild>
@@ -227,20 +283,26 @@ export function BtsPointsManager({
           <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
             {fill(t.btsPoints.total, { n: String(data.total) })}
           </p>
+          {/* a tap anywhere on a point opens it; the name is the keyboard path */}
           <ul className="divide-y divide-border @4xl:hidden">
             {data.items.map((p) => (
-              <li key={p.id} className="px-4 py-4 @xl:px-5">
+              <li
+                key={p.id}
+                onClick={() => edit(p)}
+                className="cursor-pointer px-4 py-4 transition-colors duration-150 hover:bg-milk/60 @xl:px-5"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-semibold [overflow-wrap:anywhere]">{p.name}</p>
-                    <p className="mt-0.5 text-small text-muted-foreground [overflow-wrap:anywhere]">
-                      {region(p)} · {p.city} · {code(p)}
+                    {nameButton(p)}
+                    {place(p)}
+                    <p className="text-small text-muted-foreground tabular-nums break-words">
+                      {t.btsPoints.code} {p.code}
                     </p>
                   </div>
                   <div className="shrink-0">{status(p)}</div>
                 </div>
                 <div className="mt-2 text-sm">{details(p)}</div>
-                <div className="-ml-3 mt-2 flex flex-wrap gap-1.5">{actions(p)}</div>
+                <div className="-ml-3 mt-1.5 flex">{hideAction(p)}</div>
               </li>
             ))}
           </ul>
@@ -248,6 +310,7 @@ export function BtsPointsManager({
             <Table>
               <THead>
                 <TR>
+                  <TH>{t.btsPoints.code}</TH>
                   <TH>{t.btsPoints.name}</TH>
                   <TH>{t.btsPoints.address}</TH>
                   <TH>{t.btsPoints.status}</TH>
@@ -260,22 +323,23 @@ export function BtsPointsManager({
                 {data.items.map((p) => (
                   /*
                     Every cell reads from its top line, so a wrapped address never floats the
-                    name. Where the point is and its code sit under the name, as in the list
-                    above: four columns leave room for the actions in UZ at 1280 px.
-                    break-words, not anywhere: a column is never squeezed to mid-word breaks.
+                    name. The name carries where the point is under it; break-words, not
+                    anywhere, so a column is never squeezed to mid-word breaks.
                   */
-                  <TR key={p.id} className="[&>td]:py-3.5 [&>td]:align-top [&>td]:break-words">
-                    <TD className="min-w-[12rem]">
-                      <p className="font-semibold">{p.name}</p>
-                      <p className="mt-0.5 text-small text-muted-foreground">
-                        {region(p)} · {p.city}
-                      </p>
-                      <p className="text-small text-muted-foreground">{code(p)}</p>
+                  <TR
+                    key={p.id}
+                    onClick={() => edit(p)}
+                    className="cursor-pointer [&>td]:py-3.5 [&>td]:align-top [&>td]:break-words"
+                  >
+                    <TD className="w-px whitespace-nowrap text-muted-foreground">{p.code}</TD>
+                    <TD className="min-w-[14rem]">
+                      {nameButton(p)}
+                      {place(p)}
                     </TD>
-                    <TD className="min-w-[15rem]">{details(p)}</TD>
+                    <TD className="min-w-[16rem]">{details(p)}</TD>
                     <TD>{status(p)}</TD>
                     <TD className="w-px">
-                      <div className="-my-1.5 flex gap-1.5">{actions(p)}</div>
+                      <div className="-my-1.5 flex">{hideAction(p)}</div>
                     </TD>
                   </TR>
                 ))}
@@ -336,6 +400,41 @@ export function BtsPointsManager({
   );
 }
 
+/** Cities already used in a region, so a new point picks one instead of a typo variant. */
+const regionCities = new Map<number, Promise<string[]>>();
+function loadRegionCities(regionId: number): Promise<string[]> {
+  let cached = regionCities.get(regionId);
+  if (!cached) {
+    cached = (async () => {
+      const found = new Set<string>();
+      for (let page = 1; page <= 20; page++) {
+        const res = await browserApi.btsPoints
+          .list({ query: { regionId, status: 'all', page } })
+          .catch(() => null);
+        if (res?.status !== 200) break;
+        for (const p of res.body.items) found.add(p.city);
+        if (page * res.body.pageSize >= res.body.total) break;
+      }
+      return [...found].sort((a, b) => a.localeCompare(b, 'ru'));
+    })();
+    regionCities.set(regionId, cached);
+  }
+  return cached;
+}
+
+function useRegionCities(regionId: number | undefined): string[] {
+  const [loaded, setLoaded] = useState<{ regionId: number; cities: string[] } | null>(null);
+  useEffect(() => {
+    if (!regionId) return;
+    let live = true;
+    void loadRegionCities(regionId).then((cities) => live && setLoaded({ regionId, cities }));
+    return () => {
+      live = false;
+    };
+  }, [regionId]);
+  return loaded && loaded.regionId === regionId ? loaded.cities : [];
+}
+
 function PointForm({
   point,
   regions,
@@ -353,6 +452,8 @@ function PointForm({
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regionId, setRegionId] = useState<number | undefined>(point?.regionId ?? defaultRegionId);
+  const cities = useRegionCities(regionId);
   return (
     <>
       <DialogTitle>{point ? t.btsPoints.editTitle : t.btsPoints.addTitle}</DialogTitle>
@@ -386,17 +487,17 @@ function PointForm({
         }}
       >
         {/* Two columns from 640 px: code and name, region and city; the long texts span both. */}
-        <Field id="p-code" label={t.btsPoints.code} hint={point ? undefined : t.btsPoints.codeHint}>
-          <Input
-            name="code"
-            required
-            maxLength={40}
-            autoComplete="off"
-            defaultValue={point?.code}
-            readOnly={point !== null}
-            disabled={point !== null}
-          />
-        </Field>
+        {point ? (
+          // the code is the point's identity and never changes: plain text, not a dead field
+          <div className="grid gap-1.5">
+            <p className="text-[12.5px] font-medium text-muted-foreground">{t.btsPoints.code}</p>
+            <p className="flex min-h-11 items-center tabular-nums">{point.code}</p>
+          </div>
+        ) : (
+          <Field id="p-code" label={t.btsPoints.code} hint={t.btsPoints.codeHint}>
+            <Input name="code" required maxLength={40} autoComplete="off" />
+          </Field>
+        )}
         <Field id="p-name" label={t.btsPoints.name}>
           <Input
             name="name"
@@ -407,7 +508,12 @@ function PointForm({
           />
         </Field>
         <Field id="p-region" label={t.btsPoints.region}>
-          <Select name="region" required defaultValue={point?.regionId ?? defaultRegionId ?? ''}>
+          <Select
+            name="region"
+            required
+            value={regionId ?? ''}
+            onChange={(e) => setRegionId(Number(e.target.value) || undefined)}
+          >
             <option value="" disabled>
               {t.btsPoints.regionChoose}
             </option>
@@ -418,15 +524,22 @@ function PointForm({
             ))}
           </Select>
         </Field>
-        <Field id="p-city" label={t.btsPoints.city}>
+        {/* A combobox: the region's cities as suggestions, a new one still allowed. */}
+        <Field id="p-city" label={t.btsPoints.city} hint={t.btsPoints.cityHint}>
           <Input
             name="city"
             required
             maxLength={200}
             autoComplete="off"
+            list="p-city-options"
             defaultValue={point?.city}
           />
         </Field>
+        <datalist id="p-city-options">
+          {cities.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
         <Field id="p-address" label={t.btsPoints.address} className="sm:col-span-2">
           <Input
             name="address"

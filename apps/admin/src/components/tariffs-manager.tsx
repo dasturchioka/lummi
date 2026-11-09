@@ -1,11 +1,12 @@
 'use client';
 
 import type { AdminRegionDto } from '@lummi/contracts';
-import { formatMoney, type Language } from '@lummi/i18n';
+import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { QUIET_ACTION } from '@/components/bts-points-manager';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
@@ -57,7 +59,7 @@ export function TariffsManager({
           <THead>
             <TR>
               <TH>{t.tariffs.region}</TH>
-              <TH className="text-right">{t.tariffs.tariff}</TH>
+              <TH className="text-right max-sm:hidden">{t.tariffs.tariff}</TH>
               <TH className="max-sm:hidden">{t.tariffs.points}</TH>
               <TH>
                 <span className="sr-only">{t.btsPoints.actions}</span>
@@ -65,25 +67,49 @@ export function TariffsManager({
             </TR>
           </THead>
           <TBody>
-            {initial.map((r) => (
-              <TR key={r.id}>
-                <TD className="font-semibold [overflow-wrap:anywhere]">{name(r)}</TD>
-                <TD className="text-right whitespace-nowrap">
-                  {formatMoney(r.deliveryTariff, language)}
-                </TD>
-                <TD className="whitespace-nowrap text-muted-foreground max-sm:hidden">
-                  {fill(t.tariffs.pointsCount, {
-                    active: String(r.activePointCount),
-                    total: String(r.pointCount),
-                  })}
-                </TD>
-                <TD className="w-px">
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(r)}>
-                    {t.tariffs.edit}
-                  </Button>
-                </TD>
-              </TR>
-            ))}
+            {initial.map((r) => {
+              const tariff = formatMoney(r.deliveryTariff, language);
+              const hidden = r.pointCount - r.activePointCount;
+              const hiddenNote =
+                hidden > 0 ? plural(language, hidden, t.tariffs.hiddenCount) : null;
+              return (
+                // a tap on the row opens the editor; «Изменить» is the keyboard path
+                <TR key={r.id} onClick={() => setEditing(r)} className="cursor-pointer">
+                  <TD className="break-words">
+                    <span className="font-semibold">{name(r)}</span>
+                    {/* phones: the tariff and the count under the region, not in squeezed columns */}
+                    <MetaLine
+                      className="mt-0.5 text-small text-muted-foreground sm:hidden"
+                      parts={[
+                        <span key="tariff" className="whitespace-nowrap text-foreground">
+                          {tariff}
+                        </span>,
+                        plural(language, r.activePointCount, t.tariffs.pointsCount),
+                        hiddenNote,
+                      ]}
+                    />
+                  </TD>
+                  <TD className="text-right whitespace-nowrap max-sm:hidden">{tariff}</TD>
+                  <TD className="whitespace-nowrap text-muted-foreground max-sm:hidden">
+                    {r.activePointCount}
+                    {hiddenNote ? ` · ${hiddenNote}` : null}
+                  </TD>
+                  <TD className="w-px">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={QUIET_ACTION}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditing(r);
+                      }}
+                    >
+                      {t.tariffs.edit}
+                    </Button>
+                  </TD>
+                </TR>
+              );
+            })}
           </TBody>
         </Table>
       </Card>
