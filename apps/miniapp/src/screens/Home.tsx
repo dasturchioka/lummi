@@ -1,4 +1,5 @@
 import type { Theme } from '@lummi/contracts';
+import { lazy, Suspense } from 'react';
 import { Link } from '@tanstack/react-router';
 import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
@@ -6,7 +7,12 @@ import { SearchIcon } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
-import { DiscoveryBanner, Novelties, Popular } from './home/Sections';
+import { GridSkeleton } from '../ui/GridSkeleton';
+import { DiscoveryBanner } from './home/DiscoveryBanner';
+
+/** Below the fold: its own chunk, so the first screen carries less code. */
+const Popular = lazy(() => import('./home/Popular'));
+const Novelties = lazy(() => import('./home/Novelties'));
 
 /**
  * The fabric photos of the top block (approved variant 2), one per theme. To ship them, put the
@@ -97,8 +103,12 @@ export function Home() {
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
           <DiscoveryBanner />
-          <Popular />
-          <Novelties />
+          <Suspense fallback={<GridSkeleton />}>
+            <Popular />
+          </Suspense>
+          <Suspense fallback={null}>
+            <Novelties />
+          </Suspense>
         </div>
       </div>
     </Screen>

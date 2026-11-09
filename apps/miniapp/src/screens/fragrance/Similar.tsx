@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
 import { api, unwrap } from '../../lib/api';
+import { useOpenFragrance } from '../../lib/navigation';
 import { usePrefs } from '../../lib/prefs';
 import { FragranceListCard } from '../../ui/FragranceListCard';
 import { Skeleton } from '../../ui/Skeleton';
@@ -12,7 +12,7 @@ import { Skeleton } from '../../ui/Skeleton';
  */
 export function Similar({ slug }: { slug: string }) {
   const { t } = usePrefs();
-  const navigate = useNavigate();
+  const open = useOpenFragrance();
   const q = useQuery({
     queryKey: ['catalog', 'similar', slug],
     queryFn: async () => unwrap(await api.catalog.similar({ params: { slug } }), 200).items,
@@ -28,10 +28,7 @@ export function Similar({ slug }: { slug: string }) {
         <ul className="flex flex-col gap-2">
           {q.data.map((it) => (
             <li key={it.slug}>
-              <FragranceListCard
-                item={it}
-                onSelect={(s) => void navigate({ to: '/p/$slug', params: { slug: s } })}
-              />
+              <FragranceListCard item={it} onSelect={open} />
             </li>
           ))}
         </ul>

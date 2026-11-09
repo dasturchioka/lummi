@@ -5,9 +5,8 @@ import {
   VOLUMES_ML,
   type CatalogSort,
 } from '@lummi/contracts/constants';
-import type { CatalogQuery } from '@lummi/contracts';
 
-type FragranceType = (typeof FRAGRANCE_TYPES)[number];
+export type FragranceType = (typeof FRAGRANCE_TYPES)[number];
 type Season = (typeof SEASONS)[number];
 type Volume = (typeof VOLUMES_ML)[number];
 
@@ -21,13 +20,16 @@ export interface CatalogSearch {
   max?: number;
   season?: Season;
   sort?: CatalogSort;
-  /** Only the owner-flagged new fragrances; set by nothing in the UI yet, Home uses `sort=new`. */
+  /** Only the owner-flagged new fragrances: Home's «Новинки» row asks for it; never part of the URL. */
   isNew?: 1;
 }
 
+/** A whole number written in digits only (no sign, no decimals, no exponent). */
 const int = (v: unknown): number | undefined => {
-  const n = Number(v);
-  return v !== '' && v !== null && Number.isSafeInteger(n) && n >= 0 ? n : undefined;
+  if (typeof v === 'number') return Number.isSafeInteger(v) && v >= 0 ? v : undefined;
+  return typeof v === 'string' && /^\d+$/.test(v) && Number.isSafeInteger(Number(v))
+    ? Number(v)
+    : undefined;
 };
 const oneOf = <T extends string | number>(list: readonly T[], v: unknown): T | undefined =>
   list.find((x) => String(x) === String(v));
@@ -46,32 +48,6 @@ export function parseCatalogSearch(s: Record<string, unknown>): CatalogSearch {
     ...(oneOf(CATALOG_SORTS, s.sort) && s.sort !== 'top'
       ? { sort: oneOf(CATALOG_SORTS, s.sort) }
       : {}),
-    ...(Number(s.isNew) === 1 ? { isNew: 1 as const } : {}),
   };
   return out;
-}
-
-/** The filters the sheets set (not the type chip, not the sort). */
-export function activeFilterCount(f: CatalogSearch): number {
-  return (
-    Number(f.family !== undefined) +
-    Number(f.volume !== undefined) +
-    Number(f.min !== undefined || f.max !== undefined) +
-    Number(f.season !== undefined)
-  );
-}
-
-export function toQuery(f: CatalogSearch, limit: number, offset: number): CatalogQuery {
-  return {
-    ...(f.type && f.type !== 'sets' ? { type: f.type } : {}),
-    ...(f.family ? { family: f.family } : {}),
-    ...(f.volume ? { volume: f.volume } : {}),
-    ...(f.min !== undefined ? { priceMin: f.min } : {}),
-    ...(f.max !== undefined ? { priceMax: f.max } : {}),
-    ...(f.season ? { season: f.season } : {}),
-    ...(f.isNew ? { isNew: '1' as const } : {}),
-    sort: f.sort ?? 'top',
-    limit,
-    offset,
-  };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { activeFilterCount, parseCatalogSearch, toQuery } from './filters';
+import { parseCatalogSearch } from './filters';
+import { activeFilterCount, toQuery } from './request';
 
 describe('catalog URL state', () => {
   it('keeps what is valid and drops the rest', () => {
@@ -15,6 +16,16 @@ describe('catalog URL state', () => {
     expect(
       parseCatalogSearch({ type: 'x', family: '-1', volume: '20', season: 'summer', sort: 'zzz' }),
     ).toEqual({});
+  });
+
+  it('takes whole numbers written in digits only', () => {
+    for (const bad of ['1e3', '-1', '1.5', '0x10', ' 5', '', '12abc'])
+      expect(parseCatalogSearch({ min: bad, family: bad })).toEqual({});
+    expect(parseCatalogSearch({ min: '0', max: '250000' })).toEqual({ min: 0, max: 250000 });
+  });
+
+  it('never reads isNew from the URL', () => {
+    expect(parseCatalogSearch({ isNew: '1' })).toEqual({});
   });
 
   it('leaves the default sort out of the URL and the type chip «Наборы» out of the query', () => {

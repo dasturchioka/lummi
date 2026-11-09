@@ -1,14 +1,17 @@
 import { fill, formatMoney } from '@lummi/i18n';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { lazy, Suspense, useState } from 'react';
-import { activeFilterCount, type CatalogSearch } from '../catalog/filters';
-import { useCatalogList } from '../catalog/queries';
+import type { CatalogSearch, FragranceType } from '../catalog/filters';
+import { activeFilterCount } from '../catalog/request';
+import { useCatalogList } from '../catalog/infinite';
+import { typeChipOptions } from '../catalog/typeChips';
 import type { SheetName } from '../catalog/CatalogSheets';
-import { photoUrl } from '../lib/media';
+import { useOpenFragrance } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { CHIP_ROW, Chip, TypeChips } from '../ui/Chips';
-import { FragranceGrid, GridSkeleton } from '../ui/FragranceGrid';
+import { FragranceGrid } from '../ui/FragranceGrid';
+import { GridSkeleton } from '../ui/GridSkeleton';
 import { BoxIcon, ChevronIcon, SearchIcon } from '../ui/icons';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
@@ -16,7 +19,7 @@ import { EmptyState, ErrorState } from '../ui/States';
 
 const CatalogSheets = lazy(() => import('../catalog/CatalogSheets'));
 
-type TypeValue = 'all' | 'homme' | 'femme' | 'unisex' | 'sets';
+type TypeValue = 'all' | FragranceType | 'sets';
 const TYPES: TypeValue[] = ['all', 'homme', 'femme', 'unisex', 'sets'];
 
 const chevron = (
@@ -33,12 +36,13 @@ const chevron = (
 export function Catalog() {
   const { t, language } = usePrefs();
   const navigate = useNavigate();
+  const open = useOpenFragrance();
   const filters: CatalogSearch = useSearch({ strict: false });
   const [sheet, setSheet] = useState<SheetName | null>(null);
   const [sheetMounted, setSheetMounted] = useState(false);
 
   const sets = filters.type === 'sets';
-  const list = useCatalogList(filters, undefined, !sets);
+  const list = useCatalogList(filters, !sets);
   const first = list.data?.pages[0];
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const facets = first?.facets;
@@ -65,11 +69,7 @@ export function Catalog() {
     setSheet(name);
   };
 
-  const typeOptions = TYPES.map((v) => ({
-    value: v,
-    label: t.catalog.types[v],
-    thumb: v !== 'sets' && facets?.typePhotos[v] ? photoUrl(facets.typePhotos[v], 400) : undefined,
-  }));
+  const typeOptions = typeChipOptions(TYPES, t.catalog.types, facets?.typePhotos);
 
   const familyName = facets?.families.find((f) => f.id === filters.family)?.name[language];
   const priceLabel =
@@ -140,7 +140,7 @@ export function Catalog() {
           items={items}
           label={t.catalog.title}
           busy={list.isPlaceholderData}
-          onSelect={(slug) => void navigate({ to: '/p/$slug', params: { slug } })}
+          onSelect={open}
         />
         {list.hasNextPage ? (
           <Button

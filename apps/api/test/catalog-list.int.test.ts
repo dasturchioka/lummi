@@ -163,6 +163,49 @@ describe('GET /catalog/fragrances: the list', () => {
   });
 });
 
+describe('query validation', () => {
+  it.each([
+    'limit=101',
+    'limit=0',
+    'sort=zzz',
+    'priceMin=-1',
+    'priceMin=1.5',
+    'priceMax=100000001',
+    'offset=-1',
+    'volume=20',
+  ])('answers 400 for %s', async (qs) => {
+    const { token } = await t.signIn();
+    const res = await fetch(`${t.baseUrl}/catalog/fragrances?${qs}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('one lowest-price rule', () => {
+  it('a sold-out cheap volume counts nowhere: card, price filter and price sort agree', async () => {
+    await setPrice('aventus', 10, 99_000);
+    await setPrice('aventus', 30, 199_000);
+    await sellOut('aventus', 10);
+    const asc = await list({ limit: 100, sort: 'price_asc' });
+    const card = asc.items.find((i) => i.slug === 'aventus')!;
+    expect(card.fromPrice).toBe(199_000);
+    expect(card.soldOut).toBe(false);
+    // the filter and the sort judge the same number the card shows
+    expect(await slugsOf({ priceMax: 150_000 })).not.toContain('aventus');
+    expect(await slugsOf({ priceMin: 190_000, priceMax: 200_000 })).toEqual(['aventus']);
+    const order = asc.items.filter((i) => i.fromPrice !== null).map((i) => i.fromPrice!);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(asc.items.at(-1)?.slug).toBe('aventus');
+  });
+
+  it('keeps no «от …» price when nothing is in stock', async () => {
+    await sellOut('aventus');
+    const card = (await list({ limit: 100 })).items.find((i) => i.slug === 'aventus')!;
+    expect(card).toMatchObject({ soldOut: true, fromPrice: null });
+  });
+});
+
 describe('sorting', () => {
   beforeEach(async () => {
     await setPrice('aventus', 10, 50_000);
@@ -287,52 +330,71 @@ describe('«Похожие ароматы»', () => {
     return res.body.items.map((i) => i.slug);
   };
 
-  it('puts the curated ones first, in their order, then fills with the same family and type', async () => {
-    const id = await idOf('symphony');
-    const curated = await t.db
-      .select()
-      .from(fragranceSimilar)
-      .where(eq(fragranceSimilar.fragranceId, id))
-      .orderBy(fragranceSimilar.position);
-    const curatedSlugs = (
-      await Promise.all(
-        curated.map((c) => t.db.select().from(fragrances).where(eq(fragrances.id, c.similarId))),
-      )
-    ).map((r) => r[0]!.slug);
-    const got = await slugs('symphony');
-    expect(got.length).toBeLessThanOrEqual(6);
-    expect(got.slice(0, Math.min(curatedSlugs.length, 6))).toEqual(curatedSlugs.slice(0, 6));
-    expect(got).not.toContain('symphony');
-    expect(new Set(got).size).toBe(got.length);
-  });
-
-  it('falls back to the same family and type when nothing is curated', async () => {
-    const [me] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'symphony'));
-    await t.db.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, me!.id));
-    const peers = await t.db
-      .select()
-      .from(fragrances)
-      .where(and(eq(fragrances.familyId, me!.familyId!), eq(fragrances.type, me!.type)));
-    const got = await slugs('symphony');
-    const expected = peers.map((p) => p.slug).filter((s) => s !== 'symphony');
-    expect(got.sort()).toEqual(
-      expected.slice(0, 6).length === expected.length ? expected.sort() : got.sort(),
+  /**
+   * A controlled subject: symphony with three curated non-peers in a chosen order, its peers
+   * (same family and type) with known ages and one pinned hit. Returns what the list must be.
+   */
+  async function arrange() {
+    const all = await t.db.select().from(fragrances);
+    all.sort((x, y) => x.id - y.id);
+    // age by id: a higher id is newer, so the newest peer is the one with the highest id
+    for (const [i, f] of all.entries())
+      await t.db
+        .update(fragrances)
+        .set({ createdAt: new Date(Date.UTC(2026, 9, 1 + i)), isHit: false })
+        .where(eq(fragrances.id, f.id));
+    // the subject comes from the biggest family-and-type group, so there are peers enough
+    const groups = new Map<string, typeof all>();
+    for (const f of all) {
+      const key = `${f.familyId}/${f.type}`;
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    const biggest = [...groups.values()].sort((x, y) => y.length - x.length)[0]!;
+    const me = biggest[0]!;
+    const peers = all.filter(
+      (f) => f.id !== me.id && f.familyId === me.familyId && f.type === me.type,
     );
-    expect(got.every((s) => expected.includes(s))).toBe(true);
-    expect(got.length).toBe(Math.min(6, expected.length));
+    expect(peers.length).toBeGreaterThan(3);
+    const hit = peers[0]!; // the oldest peer, pinned: it must lead the fallback
+    await t.db.update(fragrances).set({ isHit: true }).where(eq(fragrances.id, hit.id));
+    const strangers = all.filter(
+      (f) => f.id !== me.id && !(f.familyId === me.familyId && f.type === me.type),
+    );
+    const curated = [strangers[5]!, strangers[1]!, strangers[3]!]; // the owner's order
+    await t.db.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, me.id));
+    await t.db
+      .insert(fragranceSimilar)
+      .values(curated.map((c, position) => ({ fragranceId: me.id, similarId: c.id, position })));
+    const fallback = [...peers].sort(
+      (x, y) => Number(x.id === hit.id ? 0 : 1) - Number(y.id === hit.id ? 0 : 1) || y.id - x.id,
+    );
+    return { me, curated, fallback };
+  }
+
+  it('lists the curated ones in the owner order, then the same family and type, pinned and newest first, capped at six', async () => {
+    const { me, curated, fallback } = await arrange();
+    const expected = [...curated, ...fallback].map((f) => f.slug).slice(0, 6);
+    expect(expected).toHaveLength(6);
+    expect(await slugs(me.slug)).toEqual(expected);
   });
 
-  it('skips what is hidden or sold out, and the count is a setting', async () => {
-    const before = await slugs('symphony');
-    expect(before.length).toBeGreaterThan(1);
-    const [first, second] = before;
-    await sellOut(first!);
-    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, second!));
-    const after = await slugs('symphony');
-    expect(after).not.toContain(first);
-    expect(after).not.toContain(second);
-    await settings.set('catalog.similarCount', 1, { type: 'system' });
-    expect(await slugs('symphony')).toHaveLength(1);
+  it('is the same family and type alone when nothing is curated', async () => {
+    const { me, fallback } = await arrange();
+    await t.db.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, me.id));
+    expect(await slugs(me.slug)).toEqual(fallback.map((f) => f.slug).slice(0, 6));
+  });
+
+  it('skips a curated or peer fragrance that is sold out or hidden, never lists itself, and honours the count setting', async () => {
+    const { me, curated, fallback } = await arrange();
+    await sellOut(curated[0]!.slug);
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, fallback[1]!.id));
+    const expected = [curated[1]!, curated[2]!, fallback[0]!, ...fallback.slice(2)]
+      .map((f) => f.slug)
+      .slice(0, 6);
+    expect(await slugs(me.slug)).toEqual(expected);
+    expect(expected).not.toContain(me.slug);
+    await settings.set('catalog.similarCount', 2, { type: 'system' });
+    expect(await slugs(me.slug)).toEqual(expected.slice(0, 2));
   });
 
   it('answers 404 for an unknown or hidden fragrance', async () => {

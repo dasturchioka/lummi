@@ -1,5 +1,5 @@
 import type {
-  CatalogQuery,
+  CatalogParams,
   CatalogResult,
   FragranceCard,
   FragranceListItem,
@@ -40,36 +40,60 @@ export async function reservedByVolume(
 }
 
 /**
- * Paid orders per fragrance since `since`, for the top-sales ranking. Orders arrive with the
- * checkout ticket; until then nothing has been sold, so the ranking falls through to newest.
+ * Paid orders per fragrance since `since`, for the top-sales ranking: paid orders only (not
+ * cancelled or refunded) over the window. Orders arrive with the checkout ticket; until then
+ * nothing has been sold, so the ranking falls through to newest.
  */
-export async function paidOrderCounts(_db: Db, _since: Date): Promise<Map<number, number>> {
+export async function paidOrderCounts(_db: DbOrTx, _since: Date): Promise<Map<number, number>> {
   return new Map();
 }
 
-/** A fragrance as the list queries see it: filter fields plus its volumes through `toVolumeCard`. */
+/** A visible fragrance as the list queries see it: card fields, filter fields and its volumes. */
 interface CatalogEntry {
   id: number;
+  slug: string;
+  name: string;
+  brand: string;
   type: FragranceListItem['type'];
   season: FragranceCard['season'];
   familyId: number | null;
+  family: FragranceListItem['family'];
+  keyNotes: FragranceListItem['keyNotes'];
+  isHit: boolean;
   isNew: boolean;
   createdAt: Date;
   cards: VolumeCard[];
 }
 
-/** In stock in at least one volume. */
-const inStock = (e: CatalogEntry) => e.cards.some((c) => c.available > 0);
+/** Nothing to buy: no volumes, or every one sold out. */
+const soldOut = (cards: readonly VolumeCard[]) => !cards.some((c) => c.available > 0);
 
 /**
- * The price a shopper compares: the lowest effective price among the volumes in stock (a markdown
- * counts while active), or that of the chosen volume. Null when nothing is in stock.
+ * THE lowest-price rule: the lowest effective price (a markdown counts while active, through
+ * `toVolumeCard`) among the volumes with something available, or of the chosen volume. Null when
+ * nothing is in stock. The card's «от …», the price filter and the price sorts all read this.
  */
-export function comparablePrice(e: CatalogEntry, volume?: number): number | null {
-  const prices = e.cards
+function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | null {
+  const prices = cards
     .filter((c) => c.available > 0 && (volume === undefined || c.ml === volume))
     .map((c) => c.effectivePrice);
   return prices.length ? Math.min(...prices) : null;
+}
+
+function toListItem(e: CatalogEntry): FragranceListItem {
+  return {
+    slug: e.slug,
+    name: e.name,
+    brand: e.brand,
+    type: e.type,
+    family: e.family,
+    keyNotes: e.keyNotes,
+    isHit: e.isHit,
+    isNew: e.isNew,
+    fromPrice: lowestPrice(e.cards),
+    soldOut: soldOut(e.cards),
+    photo: e.cards[0]?.photo ?? null,
+  };
 }
 
 /** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
@@ -105,65 +129,15 @@ export class CatalogService {
 
   /**
    * List cards for these fragrances, in the order of `ids` (hidden and unknown ones are skipped).
-   * Search results and, with #15, the catalog list come through here, so a list card is built in
-   * one place: the family pair, the lowest price and the sold-out flag through `toVolumeCard`.
+   * Search results, the catalog list and similar all come through one pass (`visibleEntries`), so
+   * a list card is built in one place: the family pair, the lowest price and the sold-out flag.
    */
   async listItems(ids: readonly number[]): Promise<FragranceListItem[]> {
     if (ids.length === 0) return [];
-    const [rows, vols] = await Promise.all([
-      this.db
-        .select({
-          id: fragrances.id,
-          slug: fragrances.slug,
-          name: fragrances.name,
-          brand: fragrances.originalBrand,
-          type: fragrances.type,
-          keyNotesRu: fragrances.keyNotesRu,
-          keyNotesUz: fragrances.keyNotesUz,
-          isHit: fragrances.isHit,
-          isNew: fragrances.isNew,
-          familyRu: families.nameRu,
-          familyUz: families.nameUz,
-        })
-        .from(fragrances)
-        .leftJoin(families, eq(families.id, fragrances.familyId))
-        .where(and(inArray(fragrances.id, [...ids]), eq(fragrances.hidden, false))),
-      this.db
-        .select()
-        .from(volumes)
-        .where(inArray(volumes.fragranceId, [...ids]))
-        .orderBy(asc(volumes.ml)),
-    ]);
-    const reserved = await reservedByVolume(
-      this.db,
-      vols.map((v) => v.id),
-    );
-    const now = this.edges.clock.now();
-    const volsOf = new Map<number, VolumeRow[]>();
-    for (const v of vols) volsOf.set(v.fragranceId, [...(volsOf.get(v.fragranceId) ?? []), v]);
-    const byId = new Map(rows.map((r) => [r.id, r]));
-
+    const byId = new Map((await this.visibleEntries(ids)).map((e) => [e.id, e]));
     return ids.flatMap((id) => {
-      const f = byId.get(id);
-      if (!f) return [];
-      const cards = (volsOf.get(id) ?? []).map((v) =>
-        toVolumeCard(v, reserved.get(v.id) ?? 0, now),
-      );
-      return [
-        {
-          slug: f.slug,
-          name: f.name,
-          brand: f.brand,
-          type: f.type,
-          family: f.familyRu && f.familyUz ? { ru: f.familyRu, uz: f.familyUz } : null,
-          keyNotes: { ru: f.keyNotesRu, uz: f.keyNotesUz },
-          isHit: f.isHit,
-          isNew: f.isNew,
-          fromPrice: cards.length ? Math.min(...cards.map((c) => c.effectivePrice)) : null,
-          soldOut: cards.length === 0 || cards.every((c) => c.available === 0),
-          photo: cards[0]?.photo ?? null,
-        },
-      ];
+      const e = byId.get(id);
+      return e ? [toListItem(e)] : [];
     });
   }
 
@@ -193,20 +167,35 @@ export class CatalogService {
       .map((r) => r.id);
   }
 
-  private async visibleEntries(): Promise<CatalogEntry[]> {
+  /** Every visible fragrance (or just `ids`) with its volumes: one volumes -> reserve -> card pass. */
+  private async visibleEntries(ids?: readonly number[]): Promise<CatalogEntry[]> {
+    const only = ids ? [...ids] : undefined;
     const [rows, vols] = await Promise.all([
       this.db
         .select({
           id: fragrances.id,
+          slug: fragrances.slug,
+          name: fragrances.name,
+          brand: fragrances.originalBrand,
           type: fragrances.type,
           season: fragrances.season,
           familyId: fragrances.familyId,
+          keyNotesRu: fragrances.keyNotesRu,
+          keyNotesUz: fragrances.keyNotesUz,
+          isHit: fragrances.isHit,
           isNew: fragrances.isNew,
           createdAt: fragrances.createdAt,
+          familyRu: families.nameRu,
+          familyUz: families.nameUz,
         })
         .from(fragrances)
-        .where(eq(fragrances.hidden, false)),
-      this.db.select().from(volumes).orderBy(asc(volumes.ml)),
+        .leftJoin(families, eq(families.id, fragrances.familyId))
+        .where(and(eq(fragrances.hidden, false), only ? inArray(fragrances.id, only) : undefined)),
+      this.db
+        .select()
+        .from(volumes)
+        .where(only ? inArray(volumes.fragranceId, only) : undefined)
+        .orderBy(asc(volumes.ml)),
     ]);
     const reserved = await reservedByVolume(
       this.db,
@@ -219,20 +208,34 @@ export class CatalogService {
         ...(cardsOf.get(v.fragranceId) ?? []),
         toVolumeCard(v, reserved.get(v.id) ?? 0, now),
       ]);
-    return rows.map((r) => ({ ...r, cards: cardsOf.get(r.id) ?? [] }));
+    return rows.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      name: r.name,
+      brand: r.brand,
+      type: r.type,
+      season: r.season,
+      familyId: r.familyId,
+      family: r.familyRu && r.familyUz ? { ru: r.familyRu, uz: r.familyUz } : null,
+      keyNotes: { ru: r.keyNotesRu, uz: r.keyNotesUz },
+      isHit: r.isHit,
+      isNew: r.isNew,
+      createdAt: r.createdAt,
+      cards: cardsOf.get(r.id) ?? [],
+    }));
   }
 
   /**
    * The catalog list. Filters combine with AND; `volume` keeps fragrances that have it in stock and
    * prices them by it. The page comes back as list cards (`listItems`), `total` counts every match.
    */
-  async list(q: CatalogQuery): Promise<CatalogResult> {
-    const sort = q.sort ?? 'top';
+  async list(q: CatalogParams): Promise<CatalogResult> {
+    const sort = q.sort;
     const [all, rank] = await Promise.all([this.visibleEntries(), this.topSellersOrder()]);
     const position = new Map(rank.map((id, i) => [id, i]));
     const rankOf = (e: CatalogEntry) => position.get(e.id) ?? Number.MAX_SAFE_INTEGER;
     const volume = q.volume;
-    const price = (e: CatalogEntry) => comparablePrice(e, volume);
+    const price = (e: CatalogEntry) => lowestPrice(e.cards, volume);
 
     const kept = all.filter((e) => {
       if (q.type && e.type !== q.type) return false;
@@ -267,19 +270,15 @@ export class CatalogService {
     // Ties of every sort fall back to the top-sales order, so a page boundary never reshuffles.
     const ordered = [...kept].sort((a, b) => compare[sort](a, b) || rankOf(a) - rankOf(b));
 
-    const offset = q.offset ?? 0;
-    const page = ordered.slice(offset, offset + (q.limit ?? 24));
+    const page = ordered.slice(q.offset, q.offset + q.limit);
 
-    const [facetRows, items] = await Promise.all([
-      this.db
-        .select({ id: families.id, ru: families.nameRu, uz: families.nameUz })
-        .from(families)
-        .orderBy(asc(families.nameRu)),
-      this.listItems(page.map((e) => e.id)),
-    ]);
+    const facetRows = await this.db
+      .select({ id: families.id, ru: families.nameRu, uz: families.nameUz })
+      .from(families)
+      .orderBy(asc(families.nameRu));
     const present = new Set(all.map((e) => e.familyId));
     const prices = all.flatMap((e) => {
-      const p = comparablePrice(e);
+      const p = lowestPrice(e.cards);
       return p === null ? [] : [p];
     });
     const byId = new Map(all.map((e) => [e.id, e]));
@@ -292,7 +291,7 @@ export class CatalogService {
       return null;
     };
     return {
-      items,
+      items: page.map(toListItem),
       total: kept.length,
       facets: {
         families: facetRows
@@ -330,7 +329,7 @@ export class CatalogService {
       this.visibleEntries(),
       this.topSellersOrder(),
     ]);
-    const stocked = new Set(all.filter(inStock).map((e) => e.id));
+    const stocked = new Set(all.filter((e) => !soldOut(e.cards)).map((e) => e.id));
     const same = new Set(
       all
         .filter((e) => f.familyId !== null && e.familyId === f.familyId && e.type === f.type)
@@ -339,7 +338,8 @@ export class CatalogService {
     const ids = [...curated.map((c) => c.id), ...rank.filter((id) => same.has(id))].filter(
       (id, i, a) => id !== f.id && stocked.has(id) && a.indexOf(id) === i,
     );
-    return this.listItems(ids.slice(0, cfg['catalog.similarCount']));
+    const byId = new Map(all.map((e) => [e.id, e]));
+    return ids.slice(0, cfg['catalog.similarCount']).map((id) => toListItem(byId.get(id)!));
   }
 
   /** The card for a customer. Hidden and unknown slugs are both `null`. Only customer-safe fields are selected. */

@@ -11,8 +11,6 @@ import {
   VOLUMES_ML,
 } from './constants';
 
-export { FRAGRANCE_TYPES, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './constants';
-
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });
 export type Bilingual = z.infer<typeof bilingualSchema>;
@@ -76,7 +74,7 @@ export const fragranceListItemSchema = z.object({
   keyNotes: z.object({ ru: z.array(z.string()), uz: z.array(z.string()) }),
   isHit: z.boolean(),
   isNew: z.boolean(),
-  /** The lowest price to pay over the volumes (a markdown counts while active); null without volumes. */
+  /** The lowest price to pay over the volumes in stock (a markdown counts while active); null when nothing is in stock. */
   fromPrice: z.number().int().nullable(),
   /** Every volume is out of stock. */
   soldOut: z.boolean(),
@@ -97,6 +95,9 @@ export const searchResultSchema = z.object({
 });
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
+/** The same ceiling the other so'm schemas use. */
+const MAX_PRICE = 100_000_000;
+
 const volumeFilter = z.coerce
   .number()
   .pipe(z.union([z.literal(VOLUMES_ML[0]), z.literal(VOLUMES_ML[1]), z.literal(VOLUMES_ML[2])]));
@@ -110,8 +111,8 @@ export const catalogQuerySchema = z.object({
   type: z.enum(FRAGRANCE_TYPES).optional(),
   family: z.coerce.number().int().positive().optional(),
   volume: volumeFilter.optional(),
-  priceMin: z.coerce.number().int().min(0).optional(),
-  priceMax: z.coerce.number().int().min(0).optional(),
+  priceMin: z.coerce.number().int().min(0).max(MAX_PRICE).optional(),
+  priceMax: z.coerce.number().int().min(0).max(MAX_PRICE).optional(),
   season: z.enum(SEASONS).optional(),
   /** Only the owner-flagged new fragrances («Новинки»). */
   isNew: z.enum(['1']).optional(),
@@ -119,7 +120,9 @@ export const catalogQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(CATALOG_PAGE_MAX).default(CATALOG_PAGE_SIZE),
   offset: z.coerce.number().int().min(0).default(0),
 });
+/** What a caller may send (defaults optional) and what the service receives (defaults applied). */
 export type CatalogQuery = z.input<typeof catalogQuerySchema>;
+export type CatalogParams = z.output<typeof catalogQuerySchema>;
 
 export const catalogResultSchema = z.object({
   items: z.array(fragranceListItemSchema),

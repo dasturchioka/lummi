@@ -1,9 +1,9 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
 import { useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { useRef, useState, type FormEvent } from 'react';
 import { api, unwrap } from '../lib/api';
-import { goBackOrCatalog } from '../lib/navigation';
+import { goBackOrCatalog, useOpenFragrance } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { FragranceListCard } from '../ui/FragranceListCard';
@@ -92,7 +92,7 @@ export function Search() {
     },
   });
 
-  const open = (slug: string) => void navigate({ to: '/p/$slug', params: { slug } });
+  const open = useOpenFragrance();
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (typed === '') return;

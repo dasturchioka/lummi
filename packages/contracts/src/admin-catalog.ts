@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FRAGRANCE_TYPES, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './catalog';
+import { FRAGRANCE_TYPES, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './constants';
 
 /**
  * Admin catalog editing (ticket #17). Text is trimmed; the API normalises Uzbek apostrophes on
