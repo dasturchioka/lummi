@@ -51,6 +51,24 @@ API tests come in two projects: `*.unit.test.ts` (no I/O) and `*.int.test.ts` (S
 - Group chat id, topic ids and alert recipients are settings (`bot.groupChatId`, `bot.topics`, `bot.alertRecipients`).
 - Tests: one Testcontainers Redis per run (`TEST_REDIS_URL` reuses a running one). `t.postUpdate(json)` posts to the webhook; `t.startWorker()` gives a worker whose sends land on `t.edges.telegram`.
 
+## Humo feed (internal endpoints)
+
+The userbot (ADR 0014) calls the API over `contract.internal`, from an allowed network and with the `x-internal-secret` header (ADR 0030). Set `INTERNAL_API_SECRET` (at least 32 characters) in `.env.local`; without it the routes answer 404. `INTERNAL_ALLOWED_CIDRS` defaults to loopback, and a request with `X-Forwarded-For`, `Forwarded` or `X-Real-IP` is always refused.
+
+- `POST /internal/humo/messages` `{messageId, text}` records a ➕ as a credit. A ➖ is ignored and not stored. Anything else is stored raw, flagged, and alerts the owner. A repeated `messageId` changes nothing (`duplicate: true`).
+- `GET /internal/humo/last-message-id` returns where the userbot resumes after a restart.
+- `POST /internal/userbot/heartbeat` `{}` stamps the userbot's last-seen time, which `HumoFeedService.userbotLastSeenAt()` returns.
+
+Try it against a running API:
+
+```sh
+curl -s localhost:4113/internal/humo/messages -H "x-internal-secret: $INTERNAL_API_SECRET" \
+  -H 'content-type: application/json' \
+  -d '{"messageId":1,"text":"➕ 75.750,00 UZS\n💳 HUMOCARD *1234\n🕓 20:54 22.06.2025"}'
+```
+
+Payment matching subscribes with `CreditEvents.onCreditRecorded(listener)`. Listeners run after the commit, but a crash can drop the event, so the subscriber also needs its own catch-up sweep. Real Humo notifications go in `apps/api/test/fixtures/humo-notifications.ts`, and the parser test runs each one.
+
 ## Hooks for later tickets
 
 - New app: add `apps/<name>` with `lint`, `typecheck`, `test` scripts and its own port env var; turbo picks it up.

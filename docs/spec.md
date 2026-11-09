@@ -317,6 +317,21 @@ Customer decisions from the project chat. They override the TZ sections they nam
   - **Nudge.** «Добавьте N сум» is the smallest whole N for which items + N bring the applied discount's base to the threshold. Under an "after" base a % or fixed discount grows with what is added (counted as if all of it were discountable, so adding N of anything reaches the threshold), up to its cap: with 10% off 260 000 the nudge is 17 777, not 16 000. An upgrade right discounts one unit, so its discount doesn't grow; under a "before" base the discount is ignored.
   - **Markdown end.** «до <дата>» means the end of that day, 23:59:59 Asia/Tashkent, the same rule as promo expiry. Admin stores that instant in `sale_ends_at` and `quote()` receives it: the markdown is active up to and including it, and the regular price applies from 00:00 the next day.
   - **Settings.** `pricing.freeDeliveryThreshold` (250 000), `pricing.thresholdBase` per source (upgrade right by its source: set before, 10 ml before; promo after; birthday after), `pricing.discountsApplyToMarkedDown` (upgrade right off, birthday off), `pricing.fullSizeVolumesMl` (30, 50; never 10 ml). An entitlement brings its own percent (and the birthday coupon its cap), so the rights and birthday tickets decide whether those are fixed at issue or read live from their settings.
+- **2026-11-09 — Humo credit intake (§4; refines the 2026-11-07 Humo credit feed). Internal decision, ticket #13, ADR 0030.**
+  - **What is a credit.** The userbot posts every message of the Humo bot chat (text + `message_id`), and the API decides what each one is. A notification has exactly one line starting with ➕ or ➖.
+    - ➖ is a debit. It is ignored and nothing of it is stored, because the customer's own spending stays out of our DB.
+    - ➕ becomes a credit only when its amount, time and card fit the documented layout exactly. The type, «📍» counterparty and «💰» balance lines are not required, and the balance is never stored.
+  - **Unparseable.** Anything else is stored raw, flagged with the field that failed, and alerts the owner. That covers no ➕/➖ line or several, an amount in another format or currency, a missing or impossible time, and a card without `*NNNN`.
+    - The parser refuses rather than guesses: «75,750.00» and «75.75» are not read as amounts.
+    - The alert names the `message_id` and the field but never quotes the text. A non-notification message from Humo can carry anything (a code, a balance), and alerts go to the Системные topic.
+  - **Amount.** Kept exact in tiyin. The whole-so'm amount that matching compares is empty when a credit has tiyin, so such a credit never confirms an order automatically and stays unlinked for a manager.
+  - **Time.** `HH:MM DD.MM.YYYY` is read as Asia/Tashkent (UTC+5, no DST) and stored as UTC. It has minute precision, so payment matching must test "arrived after the order was created" at the minute. Otherwise a payment made within the order's own minute is missed.
+  - **Idempotency and catch-up.**
+    - Intake is idempotent on `message_id`. A repeat records, alerts and notifies nothing.
+    - After a restart the userbot resumes after the highest stored `message_id`. Debits aren't stored, so it may re-post a few debits, which is harmless.
+    - In a user account, message ids are one sequence across all private chats. They stay unique only while the userbot stays on one Telegram account. Moving it to another account requires clearing the stored Humo messages first, or the new account's lower ids would be skipped as already seen.
+    - A flagged message is not re-parsed when the parser is fixed, since a re-post counts as a duplicate. Re-parsing flagged messages is a later admin or developer action.
+  - **Heartbeat.** The userbot reports in every minute. The API keeps its last-seen time for the Humo-silence guard (ADR 0012).
 
 ## Appendix — app texts (drafts)
 About, FAQ, Returns, Delivery & payment drafts in RU + UZ are in the TZ appendix (last page of the txt dump). Public offer comes from the customer's lawyer. Returns draft: damaged / leaking / wrong item → contact within `[3]` days with a photo → replacement or refund; opened perfume of proper quality is not returnable.
