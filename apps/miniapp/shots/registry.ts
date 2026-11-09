@@ -26,4 +26,7 @@ export const screens: ScreenDef[] = [
   { id: 'orders', path: '/orders' },
   { id: 'profile', path: '/profile' },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
+  // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
+  { id: 'ui-gallery', path: '/dev/ui', fullPage: true },
+  { id: 'ui-sheet', path: '/dev/sheet' },
 ];

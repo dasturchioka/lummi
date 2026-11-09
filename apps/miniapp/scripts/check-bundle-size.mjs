@@ -35,11 +35,13 @@ if (process.env.VITE_BROWSER_MODE) {
 const { readdirSync } = await import('node:fs');
 for (const file of readdirSync(join(dist, 'assets')).filter((f) => f.endsWith('.js'))) {
   const text = readFileSync(join(dist, 'assets', file), 'utf8');
-  for (const marker of ['mockTelegramEnv', 'browser mode: Telegram is mocked']) {
+  for (const [marker, what] of [
+    ['mockTelegramEnv', 'browser mode'],
+    ['browser mode: Telegram is mocked', 'browser mode'],
+    ['data-gallery', 'the dev component gallery'],
+  ]) {
     if (text.includes(marker)) {
-      console.error(
-        `dist/assets/${file} contains "${marker}": browser mode leaked into the build.`,
-      );
+      console.error(`dist/assets/${file} contains "${marker}": ${what} leaked into the build.`);
       process.exit(1);
     }
   }

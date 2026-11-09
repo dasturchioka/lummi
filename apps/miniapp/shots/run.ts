@@ -188,11 +188,23 @@ async function main() {
             state: 'attached',
             timeout: 20_000,
           });
-          await page.waitForFunction(() => !document.querySelector('[data-skeleton]'), undefined, {
-            timeout: 20_000,
-          });
+          // A lazy route renders nothing until its chunk arrives; every screen is a `Screen` (<main>).
+          await page.waitForSelector('main', { state: 'attached', timeout: 20_000 });
+          // The component gallery shows skeletons on purpose; everywhere else they mean "loading".
+          await page.waitForFunction(
+            () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
+            undefined,
+            { timeout: 20_000 },
+          );
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(150);
+          if (screen.fullPage) {
+            // Grow the viewport to the page so fixed parts (the tab bar) sit at its real bottom
+            // instead of floating over the middle of a stitched capture.
+            const height = await page.evaluate(() => document.documentElement.scrollHeight);
+            await page.setViewportSize({ width: 390, height: Math.max(844, height) });
+            await page.waitForTimeout(100);
+          }
           const file = resolve(outDir, `${screen.id}-${theme}-${lang}.png`);
           await page.screenshot({ path: file, fullPage: screen.fullPage ?? false });
           await context.close();

@@ -60,6 +60,8 @@ Captures every screen in `apps/miniapp/shots/registry.ts` at 390x844 (deviceScal
 
 To add a screen, append to `registry.ts`: `{ id, path, setup?, initDataAgeSeconds?, fullPage? }`. `setup({ api })` runs before the capture with a client signed in as the screenshot customer (for example, add to the cart first). The run waits for `html[data-ready]`, for every `[data-skeleton]` to disappear (use the `Skeleton` component for loading states) and for fonts.
 
+**Component gallery** (dev server only): `/dev/ui` shows every base component in every state (pressed, disabled, loading, skeleton, empty, error), the type roles with the Uzbek `oʻ gʻ` glyphs, and the colour roles; `/dev/sheet` opens the sheet. Both are in the screenshot run (`ui-gallery`, `ui-sheet`). Add a new base component there with its states. The routes exist only under `import.meta.env.DEV`, and `npm run size` fails if the gallery reaches `dist`.
+
 ### Bundle budget
 
 `npm run build -w @lummi/miniapp && npm run size -w @lummi/miniapp` fails above 150 KB gzip of initial JS (entry chunk and its static imports; lazy route chunks do not count). CI runs both. Load screens with `lazyRouteComponent` and keep heavy libraries (Radix Dialog is only in `Sheet`) off the entry path.

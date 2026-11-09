@@ -34,6 +34,24 @@ function Shell() {
 const rootRoute = createRootRoute({ component: Shell });
 const at = (path: string) => ({ getParentRoute: () => rootRoute, path });
 
+/*
+ * Component gallery, development only: `/dev/ui`, and `/dev/sheet` with the sheet open.
+ * `import.meta.env.DEV` is `false` in a build, so these routes and their lazy chunk are dropped;
+ * `npm run size` fails if the gallery ever reaches dist.
+ */
+const devRoutes = import.meta.env.DEV
+  ? [
+      createRoute({
+        ...at('/dev/ui'),
+        component: lazyRouteComponent(() => import('../dev/Gallery'), 'Gallery'),
+      }),
+      createRoute({
+        ...at('/dev/sheet'),
+        component: lazyRouteComponent(() => import('../dev/Gallery'), 'GallerySheetOpen'),
+      }),
+    ]
+  : [];
+
 const routeTree = rootRoute.addChildren([
   createRoute({ ...at('/'), component: Home }),
   createRoute({
@@ -52,6 +70,7 @@ const routeTree = rootRoute.addChildren([
     ...at('/profile'),
     component: lazyRouteComponent(() => import('../screens/Profile'), 'Profile'),
   }),
+  ...devRoutes,
   // Anything unknown lands on Home.
   createRoute({
     ...at('$'),
