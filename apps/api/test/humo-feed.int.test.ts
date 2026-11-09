@@ -3,8 +3,8 @@ import { credits, eq, humoMessages, outbox, sql } from '@lummi/db';
 import { initClient } from '@ts-rest/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreditEvents, type CreditRecorded } from '../src/humo/credit-events';
-import { HumoFeedService } from '../src/humo/humo-feed.service';
 import { SettingsService } from '../src/settings/settings.service';
+import { userbotLastSeenAt } from './harness/humo';
 import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/test-app';
 
@@ -63,7 +63,7 @@ describe('internal endpoints refuse anything not internal and authenticated', ()
       expect((await client.userbotHeartbeat({ body: {} })).status).toBe(401);
     }
     expect(await t.db.select().from(humoMessages)).toHaveLength(0);
-    expect(await t.app.get(HumoFeedService).userbotLastSeenAt()).toBeNull();
+    expect(await userbotLastSeenAt(t.db)).toBeNull();
   });
 
   it('refuses a request relayed by the public reverse proxy, even with the secret', async () => {
@@ -176,7 +176,7 @@ describe('Humo message intake', () => {
       body: { outcome: 'unparseable', duplicate: false, creditId: null },
     });
     expect(await t.db.select().from(humoMessages)).toEqual([
-      expect.objectContaining({ messageId: 506, text, parseError: 'amount' }),
+      expect.objectContaining({ messageId: 506, text, parseError: 'not_an_operation' }),
     ]);
     expect(await t.db.select().from(credits)).toHaveLength(0);
 
@@ -226,7 +226,6 @@ describe('the "credit recorded" hook', () => {
       {
         event: {
           creditId: 1,
-          amountTiyin: 25_000_000,
           amountSom: 250_000,
           occurredAt: new Date('2025-06-22T15:54:00Z'),
           cardLast4: '1234',
@@ -269,14 +268,13 @@ describe('catch-up and heartbeat', () => {
   });
 
   it("records the userbot's last-seen time from the clock on each heartbeat", async () => {
-    const service = t.app.get(HumoFeedService);
-    expect(await service.userbotLastSeenAt()).toBeNull();
+    expect(await userbotLastSeenAt(t.db)).toBeNull();
     t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
     expect((await feed().userbotHeartbeat({ body: {} })).status).toBe(200);
-    expect(await service.userbotLastSeenAt()).toEqual(new Date('2026-11-09T10:00:00Z'));
+    expect(await userbotLastSeenAt(t.db)).toEqual(new Date('2026-11-09T10:00:00Z'));
     t.edges.clock.advance(60_000);
     await feed().userbotHeartbeat({ body: {} });
-    expect(await service.userbotLastSeenAt()).toEqual(new Date('2026-11-09T10:01:00Z'));
+    expect(await userbotLastSeenAt(t.db)).toEqual(new Date('2026-11-09T10:01:00Z'));
   });
 });
 

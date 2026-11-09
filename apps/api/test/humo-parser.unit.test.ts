@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { parseHumoNotification } from '../src/humo/humo-parser';
-import { recordedHumoNotifications } from './fixtures/humo-notifications';
+import { parseHumoMessage } from '../src/humo/humo-parser';
+import { recordedHumoMessages } from './fixtures/humo-messages';
 
 /**
  * Humo notifications built from the documented format (spec Changes 2026-11-07, «Humo credit
  * feed»). The only real sample so far is a debit; a credit is the same layout with ➕.
  * `null` drops a line, to model a missing field.
  */
-function notification(
+function humoMessage(
   lines: {
     type?: string | null;
     amount?: string | null;
@@ -33,7 +33,7 @@ function notification(
 
 describe('a credit in the documented format', () => {
   it('reads amount, Tashkent time as UTC, card mask and counterparty', () => {
-    expect(parseHumoNotification(notification())).toEqual({
+    expect(parseHumoMessage(humoMessage())).toEqual({
       kind: 'credit',
       credit: {
         amountTiyin: 7_575_000,
@@ -48,17 +48,17 @@ describe('a credit in the documented format', () => {
 
 describe('a debit', () => {
   it('the documented ➖ sample is a debit, whatever else it carries', () => {
-    expect(parseHumoNotification(notification({ amount: '➖ 75.750,00 UZS' }))).toEqual({
+    expect(parseHumoMessage(humoMessage({ amount: '➖ 75.750,00 UZS' }))).toEqual({
       kind: 'debit',
     });
     expect(
-      parseHumoNotification(notification({ amount: '➖ 75.750,00 UZS', card: null, time: null })),
+      parseHumoMessage(humoMessage({ amount: '➖ 75.750,00 UZS', card: null, time: null })),
     ).toEqual({ kind: 'debit' });
   });
 });
 
 const amountOf = (amountLine: string) => {
-  const r = parseHumoNotification(notification({ amount: amountLine }));
+  const r = parseHumoMessage(humoMessage({ amount: amountLine }));
   return r.kind === 'credit' ? r.credit.amountTiyin : r;
 };
 
@@ -70,12 +70,12 @@ describe('credit amount, exact in tiyin', () => {
     ['non-zero tiyin kept', '➕ 75.750,50 UZS', 7_575_050],
     ['one tiyin', '➕ 0,01 UZS', 1],
     ['space thousands', '➕ 75 750,00 UZS', 7_575_000],
-    ['no-break space thousands', '➕ 1 250 000,00 UZS', 125_000_000],
-    ['narrow no-break space thousands', '➕ 75 750,00 UZS', 7_575_000],
+    ['no-break space thousands', '➕ 1\u00A0250\u00A0000,00 UZS', 125_000_000],
+    ['narrow no-break space thousands', '➕ 75\u202F750,00 UZS', 7_575_000],
     ['no thousands separator', '➕ 75750,00 UZS', 7_575_000],
     ['no tiyin part', '➕ 99.000 UZS', 9_900_000],
     ['no space after the sign', '➕75.750,00 UZS', 7_575_000],
-    ['emoji variation selector after the sign', '➕️ 75.750,00 UZS', 7_575_000],
+    ['emoji variation selector after the sign', '➕\uFE0F 75.750,00 UZS', 7_575_000],
   ])('%s: %s', (_name, line, tiyin) => {
     expect(amountOf(line)).toBe(tiyin);
   });
@@ -91,28 +91,34 @@ describe('an amount that does not fit is refused, never guessed', () => {
     ['other currency', '➕ 75.750,00 USD'],
     ['no currency', '➕ 75.750,00'],
     ['zero', '➕ 0,00 UZS'],
-    ['ASCII plus instead of ➕', '+ 75.750,00 UZS'],
     ['no digits', '➕ UZS'],
   ])('%s: %s', (_name, line) => {
-    expect(parseHumoNotification(notification({ amount: line }))).toEqual({
+    expect(parseHumoMessage(humoMessage({ amount: line }))).toEqual({
       kind: 'unparseable',
       reason: 'amount',
     });
   });
 
-  it('a message with no ➕ or ➖ line is not a credit', () => {
-    for (const text of ['Kartangiz vaqtincha bloklandi', '', notification({ amount: null })]) {
-      expect(parseHumoNotification(text)).toEqual({ kind: 'unparseable', reason: 'amount' });
+  it('a message with no ➕ or ➖ line reports no card operation', () => {
+    for (const text of ['Kartangiz vaqtincha bloklandi', '', humoMessage({ amount: null })]) {
+      expect(parseHumoMessage(text)).toEqual({ kind: 'unparseable', reason: 'not_an_operation' });
     }
   });
 
+  it('an ASCII plus is not ➕: the message reports no card operation', () => {
+    expect(parseHumoMessage(humoMessage({ amount: '+ 75.750,00 UZS' }))).toEqual({
+      kind: 'unparseable',
+      reason: 'not_an_operation',
+    });
+  });
+
   it('two amount lines are ambiguous, even if one is ➖', () => {
-    const two = (second: string) => notification({ amount: `➕ 75.750,00 UZS\n${second}` });
-    expect(parseHumoNotification(two('➕ 10.000,00 UZS'))).toEqual({
+    const two = (second: string) => humoMessage({ amount: `➕ 75.750,00 UZS\n${second}` });
+    expect(parseHumoMessage(two('➕ 10.000,00 UZS'))).toEqual({
       kind: 'unparseable',
       reason: 'amount',
     });
-    expect(parseHumoNotification(two('➖ 10.000,00 UZS'))).toEqual({
+    expect(parseHumoMessage(two('➖ 10.000,00 UZS'))).toEqual({
       kind: 'unparseable',
       reason: 'amount',
     });
@@ -120,7 +126,7 @@ describe('an amount that does not fit is refused, never guessed', () => {
 });
 
 const timeOf = (timeLine: string | null) => {
-  const r = parseHumoNotification(notification({ time: timeLine }));
+  const r = parseHumoMessage(humoMessage({ time: timeLine }));
   return r.kind === 'credit' ? r.credit.occurredAt.toISOString() : r;
 };
 
@@ -154,8 +160,8 @@ describe('credit time: HH:MM DD.MM.YYYY in Asia/Tashkent (UTC+5), stored as UTC'
   });
 });
 
-const creditOf = (lines: Parameters<typeof notification>[0]) => {
-  const r = parseHumoNotification(notification(lines));
+const creditOf = (lines: Parameters<typeof humoMessage>[0]) => {
+  const r = parseHumoMessage(humoMessage(lines));
   return r.kind === 'credit' ? r.credit : r;
 };
 
@@ -198,17 +204,17 @@ describe('lines matching does not need', () => {
   });
 
   it('Windows line endings', () => {
-    const r = parseHumoNotification(notification().replace(/\n/g, '\r\n'));
+    const r = parseHumoMessage(humoMessage().replace(/\n/g, '\r\n'));
     expect(r).toMatchObject({ kind: 'credit', credit: { cardLast4: '1234' } });
   });
 });
 
-describe('recorded real notifications (test/fixtures/humo-notifications.ts)', () => {
-  it.each(recordedHumoNotifications)('$name', ({ text, expected }) => {
-    expect(parseHumoNotification(text)).toEqual(expected);
+describe('recorded real notifications (test/fixtures/humo-messages.ts)', () => {
+  it.each(recordedHumoMessages)('$name', ({ text, expected }) => {
+    expect(parseHumoMessage(text)).toEqual(expected);
   });
 
-  if (!recordedHumoNotifications.some((n) => n.expected.kind === 'credit')) {
+  if (!recordedHumoMessages.some((n) => n.expected.kind === 'credit')) {
     it.todo('a real ➕ credit: waiting for the first transfer to the shop card');
   }
 });

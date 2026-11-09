@@ -1,6 +1,6 @@
 import type { HumoParse } from '../../src/humo/humo-parser';
 
-export interface RecordedHumoNotification {
+export interface RecordedHumoMessage {
   /** Where it came from: who sent it, when, and what kind of operation. */
   name: string;
   /** The message text exactly as the Humo bot sent it, anonymised (see below). */
@@ -9,7 +9,7 @@ export interface RecordedHumoNotification {
 }
 
 /**
- * Real notifications from the official Humo bot (ADR 0023, ADR 0028), checked by
+ * Real Humo messages from the official Humo bot (ADR 0014, ADR 0028), checked by
  * `humo-parser.unit.test.ts` on every run. The table rows there are built from the documented
  * format; these are the ground truth that format came from.
  *
@@ -22,7 +22,7 @@ export interface RecordedHumoNotification {
  * Still missing: a real ➕ credit (P2P transfer to the shop card). See docs/open-questions.md →
  * «Humo userbot».
  */
-export const recordedHumoNotifications: RecordedHumoNotification[] = [
+export const recordedHumoMessages: RecordedHumoMessage[] = [
   {
     name: 'debit, CLICK P2P (customer, project chat 2026-11-07, anonymised)',
     text: [

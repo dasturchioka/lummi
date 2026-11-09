@@ -130,7 +130,7 @@ export const outbox = pgTable(
  * Every Humo bot message the userbot posted (ADR 0014), keyed by its Telegram message id so a repeat
  * post changes nothing; the highest id is where the userbot's catch-up resumes. Debits (➖) are never
  * stored. `parse_error` is null when the message became a credit; otherwise it names the field that
- * did not fit the template ('amount', 'time', 'card') and the owner was alerted. The raw text stays
+ * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted. The raw text stays
  * here either way.
  */
 export const humoMessages = pgTable('humo_messages', {
@@ -175,14 +175,18 @@ export const credits = pgTable(
   ],
 );
 
-/** Last time a background process reported in, by name ('userbot'); feeds the Humo-silence guard (ADR 0012). */
-export const heartbeats = pgTable('heartbeats', {
-  component: text('component').primaryKey(),
-  seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
-});
+/** The userbot's last heartbeat, one row; feeds the Humo-silence guard (ADR 0012). */
+export const userbotHeartbeat = pgTable(
+  'userbot_heartbeat',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [check('userbot_heartbeat_one_row', sql`${t.id}`)],
+);
 
 export type OutboxRow = typeof outbox.$inferSelect;
-export type CreditRow = typeof credits.$inferSelect;
 export type CustomerRow = typeof customers.$inferSelect;
 export type StaffRow = typeof staff.$inferSelect;
 export type StaffRole = (typeof staffRoleEnum.enumValues)[number];

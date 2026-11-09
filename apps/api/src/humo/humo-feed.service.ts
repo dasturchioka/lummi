@@ -1,20 +1,19 @@
 import type { HumoMessageResult } from '@lummi/contracts';
-import { credits, desc, eq, heartbeats, humoMessages, type Db, type DbOrTx } from '@lummi/db';
+import { credits, desc, eq, humoMessages, userbotHeartbeat, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { AlertService } from '../outbox/alert.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { DB, EDGES } from '../tokens';
 import { CreditEvents, type CreditRecorded } from './credit-events';
-import { parseHumoNotification, type HumoParseError } from './humo-parser';
+import { parseHumoMessage, type HumoParseError } from './humo-parser';
 
-const USERBOT = 'userbot';
-
-/** Staff-facing, so Russian (like every owner alert). */
-const FIELD_NAMES: Record<HumoParseError, string> = {
-  amount: 'сумма',
-  time: 'время',
-  card: 'карта',
+/** What did not fit, for the owner alert. Staff-facing, so Russian (like every owner alert). */
+const WHAT_FAILED: Record<HumoParseError, string> = {
+  not_an_operation: 'в нём нет строки с ➕ или ➖',
+  amount: 'не по шаблону поле «сумма»',
+  time: 'не по шаблону поле «время»',
+  card: 'не по шаблону поле «карта»',
 };
 
 /**
@@ -37,7 +36,7 @@ export class HumoFeedService {
    * alerts and emits nothing. A debit is neither stored nor remembered, so a repeat is a debit again.
    */
   async intake(messageId: number, text: string): Promise<HumoMessageResult> {
-    const parsed = parseHumoNotification(text);
+    const parsed = parseHumoMessage(text);
     if (parsed.kind === 'debit') return { outcome: 'debit', duplicate: false, creditId: null };
 
     const { result, event } = await this.outbox.withTx(async (tx) => {
@@ -51,14 +50,14 @@ export class HumoFeedService {
         })
         .onConflictDoNothing()
         .returning({ messageId: humoMessages.messageId });
-      if (!stored) return { result: await this.stored(tx, messageId), event: null };
+      if (!stored) return { result: await this.previousResult(tx, messageId), event: null };
 
       if (parsed.kind === 'unparseable') {
         await this.alerts.alertOwner(
           tx,
-          `Не удалось разобрать сообщение Humo (message_id ${messageId}): не по шаблону поле ` +
-            `«${FIELD_NAMES[parsed.reason]}». Если это поступление, оно не записано и не подтвердит ` +
-            `заказ автоматически. Формат уведомлений мог измениться: сообщите разработчику.`,
+          `Не удалось разобрать сообщение Humo (message_id ${messageId}): ` +
+            `${WHAT_FAILED[parsed.reason]}. Если это поступление, оно не записано и не подтвердит ` +
+            `заказ автоматически. Формат сообщений мог измениться: сообщите разработчику.`,
         );
         return {
           result: { outcome: 'unparseable', duplicate: false, creditId: null } as const,
@@ -72,7 +71,6 @@ export class HumoFeedService {
         .returning();
       const recorded: CreditRecorded = {
         creditId: credit!.id,
-        amountTiyin: credit!.amountTiyin,
         amountSom: credit!.amountSom,
         occurredAt: credit!.occurredAt,
         cardLast4: credit!.cardLast4,
@@ -100,21 +98,13 @@ export class HumoFeedService {
   async userbotHeartbeat(): Promise<void> {
     const now = this.edges.clock.now();
     await this.db
-      .insert(heartbeats)
-      .values({ component: USERBOT, seenAt: now })
-      .onConflictDoUpdate({ target: heartbeats.component, set: { seenAt: now } });
+      .insert(userbotHeartbeat)
+      .values({ seenAt: now })
+      .onConflictDoUpdate({ target: userbotHeartbeat.id, set: { seenAt: now } });
   }
 
-  /** For the Humo-silence guard (ADR 0012): null until the userbot first reports in. */
-  async userbotLastSeenAt(): Promise<Date | null> {
-    const [row] = await this.db
-      .select({ seenAt: heartbeats.seenAt })
-      .from(heartbeats)
-      .where(eq(heartbeats.component, USERBOT));
-    return row?.seenAt ?? null;
-  }
-
-  private async stored(tx: DbOrTx, messageId: number): Promise<HumoMessageResult> {
+  /** What the first post of this message_id was answered. */
+  private async previousResult(tx: DbOrTx, messageId: number): Promise<HumoMessageResult> {
     const [credit] = await tx
       .select({ id: credits.id })
       .from(credits)

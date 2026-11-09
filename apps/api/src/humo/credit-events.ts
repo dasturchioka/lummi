@@ -4,7 +4,6 @@ import { describeError } from '../logging/describe-error';
 /** What a subscriber (payment matching) learns when a new credit is recorded. */
 export interface CreditRecorded {
   creditId: number;
-  amountTiyin: number;
   /** Whole so'm, compared with an order's amount due; null when the credit has tiyin. */
   amountSom: number | null;
   /** The notification's time (minute precision), UTC. */

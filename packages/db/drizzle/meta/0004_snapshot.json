@@ -1,5 +1,5 @@
 {
-  "id": "9aa53dd2-aa47-406e-b5d9-a6532bd4f8f7",
+  "id": "5a07b591-b166-4ba8-beff-0ee6dc9cc6b0",
   "prevId": "614f2257-fa15-4958-944e-4f9b4ffda436",
   "version": "7",
   "dialect": "postgresql",
@@ -317,31 +317,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.heartbeats": {
-      "name": "heartbeats",
-      "schema": "",
-      "columns": {
-        "component": {
-          "name": "component",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "seen_at": {
-          "name": "seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -731,6 +706,37 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.userbot_heartbeat": {
+      "name": "userbot_heartbeat",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "seen_at": {
+          "name": "seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "userbot_heartbeat_one_row": {
+          "name": "userbot_heartbeat_one_row",
+          "value": "\"userbot_heartbeat\".\"id\""
+        }
+      },
       "isRLSEnabled": false
     }
   },

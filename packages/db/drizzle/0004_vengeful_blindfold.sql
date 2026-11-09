@@ -12,16 +12,17 @@ CREATE TABLE "credits" (
 	CONSTRAINT "credits_card_last4" CHECK ("credits"."card_last4" ~ '^[0-9]{4}$')
 );
 --> statement-breakpoint
-CREATE TABLE "heartbeats" (
-	"component" text PRIMARY KEY NOT NULL,
-	"seen_at" timestamp with time zone NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "humo_messages" (
 	"message_id" bigint PRIMARY KEY NOT NULL,
 	"text" text NOT NULL,
 	"received_at" timestamp with time zone NOT NULL,
 	"parse_error" text
+);
+--> statement-breakpoint
+CREATE TABLE "userbot_heartbeat" (
+	"id" boolean PRIMARY KEY DEFAULT true NOT NULL,
+	"seen_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "userbot_heartbeat_one_row" CHECK ("userbot_heartbeat"."id")
 );
 --> statement-breakpoint
 ALTER TABLE "credits" ADD CONSTRAINT "credits_humo_message_id_humo_messages_message_id_fk" FOREIGN KEY ("humo_message_id") REFERENCES "public"."humo_messages"("message_id") ON DELETE no action ON UPDATE no action;
