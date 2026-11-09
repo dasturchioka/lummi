@@ -26,3 +26,4 @@ materials/_archives/
 
 # Impeccable design tool cache and review screenshots
 .impeccable/
+.worktrees/

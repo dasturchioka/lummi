@@ -1,0 +1,5 @@
+{
+  "extends": "@lummi/config/tsconfig.base.json",
+  "compilerOptions": { "experimentalDecorators": true, "emitDecoratorMetadata": false },
+  "include": ["src", "test", "*.ts"]
+}

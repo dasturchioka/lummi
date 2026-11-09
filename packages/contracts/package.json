@@ -1,0 +1,23 @@
+{
+  "name": "@lummi/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@lummi/i18n": "*",
+    "@ts-rest/core": "~3.52.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@lummi/config": "*",
+    "vitest": "^5.1.0"
+  }
+}
