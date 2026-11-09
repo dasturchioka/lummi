@@ -82,10 +82,10 @@ export function Home() {
       >
         {/*
           The approved row: search left, avatar right, on white discs, the delivery city between
-          them. Search opens the Catalog until search exists (#16).
+          them. Search opens the search screen.
         */}
         <div className="flex h-11 items-center justify-between gap-2">
-          <Link to="/catalog" aria-label={t.home.search} className={DISC}>
+          <Link to="/search" aria-label={t.home.search} className={DISC}>
             <SearchIcon size={20} />
           </Link>
           <DeliveryRow />

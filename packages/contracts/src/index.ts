@@ -3,6 +3,7 @@ export * from './auth';
 export * from './delivery';
 export * from './internal';
 export * from './catalog';
+export * from './limits';
 export * from './quote';
 export * from './settings';
 export { adminContract, apiContract, contract, internalContract } from './contract';

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 const GUTTER_L = 'max(var(--gutter), var(--safe-l, 0px))';
 const GUTTER_R = 'max(var(--gutter), var(--safe-r, 0px))';
@@ -14,17 +14,22 @@ const GUTTER_R = 'max(var(--gutter), var(--safe-r, 0px))';
  * `dock` is the bottom zone of a task screen (DESIGN.md Layout): a Milk bar with a top hairline,
  * edge to edge, that stays on screen while the content scrolls under it and sits above the bottom
  * safe area. It implies no tab bar.
+ * `header` is its mirror at the top (the search field): edge to edge on the Milk ground, it stays
+ * put while the content scrolls under it, so the field is never scrolled away when the keyboard
+ * has shrunk the viewport. A hairline appears under it once something is under it.
  */
 export function Screen({
   children,
   bleed = false,
   tabBar = true,
   dock,
+  header,
 }: {
   children: ReactNode;
   bleed?: boolean;
   tabBar?: boolean;
   dock?: ReactNode;
+  header?: ReactNode;
 }) {
   return (
     <main
@@ -33,9 +38,15 @@ export function Screen({
         paddingBottom: dock ? 0 : tabBar ? 'var(--tabbar-clear)' : 'max(16px, var(--safe-b, 0px))',
         ...(bleed
           ? undefined
-          : { paddingTop: 'var(--safe-t, 0px)', paddingLeft: GUTTER_L, paddingRight: GUTTER_R }),
+          : {
+              // A header covers the top safe area itself, so it can stick at the very top.
+              paddingTop: header ? 0 : 'var(--safe-t, 0px)',
+              paddingLeft: GUTTER_L,
+              paddingRight: GUTTER_R,
+            }),
       }}
     >
+      {header ? <StickyHeader bleed={bleed}>{header}</StickyHeader> : null}
       {children}
       {dock ? (
         <div
@@ -53,5 +64,38 @@ export function Screen({
         </div>
       ) : null}
     </main>
+  );
+}
+
+/** The `header` slot: sticky at the top, over the top safe area, with a hairline once content scrolls under it. */
+function StickyHeader({ children, bleed }: { children: ReactNode; bleed: boolean }) {
+  const sentinel = useRef<HTMLDivElement>(null);
+  const [under, setUnder] = useState(false);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setUnder(e ? !e.isIntersecting : false));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <>
+      <div ref={sentinel} aria-hidden="true" className="h-px -mb-px" />
+      <div
+        className={`sticky top-0 z-20 border-b bg-ground transition-colors duration-200 ${
+          under ? 'border-line' : 'border-transparent'
+        }`}
+        style={{
+          paddingTop: 'var(--safe-t, 0px)',
+          paddingLeft: GUTTER_L,
+          paddingRight: GUTTER_R,
+          ...(bleed
+            ? undefined
+            : { marginLeft: `calc(-1 * ${GUTTER_L})`, marginRight: `calc(-1 * ${GUTTER_R})` }),
+        }}
+      >
+        {children}
+      </div>
+    </>
   );
 }

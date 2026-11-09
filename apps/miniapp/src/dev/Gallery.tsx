@@ -11,6 +11,8 @@ import { usePrefs } from '../lib/prefs';
 import { Badge, FragranceBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card, CardList, ListRow } from '../ui/Card';
+import { FragranceListCard } from '../ui/FragranceListCard';
+import type { FragranceListItem } from '@lummi/contracts';
 import {
   AlertIcon,
   BagIcon,
@@ -42,6 +44,105 @@ import { TabBar } from '../ui/TabBar';
 import thumbA from './thumbs/symphony.webp';
 import thumbB from './thumbs/althair.webp';
 import thumbC from './thumbs/absolu-aventus.webp';
+
+const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', FragranceListItem> = {
+  normal: {
+    slug: 'baccarat-rouge-540',
+    name: 'Baccarat Rouge 540',
+    brand: 'Maison Francis Kurkdjian',
+    type: 'unisex',
+    family: { ru: 'Амброво-древесный', uz: 'Ambrali yogʻochli' },
+    keyNotes: {
+      ru: ['шафран', 'амбровое дерево', 'кедр'],
+      uz: ['za’faron', 'ambra yogʻochi', 'kedr'],
+    },
+    isHit: true,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: false,
+    photo: '32c0930f6c672207',
+  },
+  // The longest real attribution: «ПО МОТИВАМ BOADICEA THE VICTORIOUS» wraps in every layout.
+  longBrand: {
+    slug: 'blue-sapphire',
+    name: 'Blue Sapphire',
+    brand: 'Boadicea the Victorious',
+    type: 'unisex',
+    family: { ru: 'Цитрусово-амбровый', uz: 'Sitrusli ambrali' },
+    keyNotes: { ru: ['лимон', 'роза', 'уд'], uz: ['limon', 'atirgul', 'ud'] },
+    isHit: false,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: false,
+    photo: 'd11347a1d027622c',
+  },
+  // The realistic worst case: very long name and brand, no family, a seven-digit price, no photo.
+  worst: {
+    slug: 'long',
+    name: 'Elysium Pour Homme Parfum Extraordinaire',
+    brand: 'Maison Francis Kurkdjian Paris Collection',
+    type: 'homme',
+    family: null,
+    keyNotes: {
+      ru: ['грейпфрут', 'имбирь', 'бергамот'],
+      uz: ['greypfrut', 'zanjabil', 'bergamot'],
+    },
+    isHit: false,
+    isNew: true,
+    fromPrice: 1_249_000,
+    soldOut: false,
+    photo: null,
+  },
+  soldOut: {
+    slug: 'ink-mark',
+    name: 'Ink Mark',
+    brand: 'Nishane',
+    type: 'femme',
+    family: { ru: 'Цветочный', uz: 'Gulli' },
+    keyNotes: { ru: [], uz: [] },
+    isHit: false,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: true,
+    photo: 'bdee0c5f88c675d9',
+  },
+};
+
+/** FragranceListCard in its three layouts on the fixtures above (also `/dev/list`, for its shot). */
+function ListCards() {
+  const { normal, longBrand, worst, soldOut } = LIST_ITEMS;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} layout="grid" item={item} />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} item={item} />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-col divide-y divide-line">
+        {[normal, longBrand, worst, soldOut].map((item) => (
+          <FragranceListCard key={item.slug} compact item={item} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/** `/dev/list`: only the list cards, at the width a phone shows them. */
+export function GalleryListCards() {
+  return (
+    <Screen>
+      <div data-gallery="" className="contents">
+        <ScreenHeader title="List cards" />
+        <ListCards />
+      </div>
+    </Screen>
+  );
+}
 
 const demo = {
   ru: {
@@ -422,6 +523,10 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <Card className="p-4">
             <p className="type-body">{t.home.emptyText}</p>
           </Card>
+        </Section>
+
+        <Section name="FragranceListCard · grid / row / compact (catalog, search results, suggestions)">
+          <ListCards />
         </Section>
 
         <Section name="ChosenPoint (checkout: the BTS point, collapsed)">

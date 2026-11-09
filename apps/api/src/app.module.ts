@@ -13,6 +13,7 @@ import { DeliveryController } from './delivery/delivery.controller';
 import { DeliveryService } from './delivery/delivery.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
+import { SearchService } from './search/search.service';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
@@ -72,6 +73,7 @@ export class AppModule {
         WorkerRuntime,
         SettingsService,
         CatalogService,
+        SearchService,
         CustomersService,
         DeliveryService,
         BtsAdminService,
