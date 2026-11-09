@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { AuditQuery } from '@lummi/contracts';
 import { auditLog, eq, settings } from '@lummi/db';
 import { createTestApp, type TestApp } from './harness/test-app';
 
@@ -199,8 +200,7 @@ describe('audit log (owner only)', () => {
 
   it('filters by actor, action type and date range', async () => {
     const { owner, manager } = await seed();
-    const q = (query: Parameters<typeof owner.client.admin.audit.list>[0]['query']) =>
-      owner.client.admin.audit.list({ query }).then(ids);
+    const q = (query: AuditQuery) => owner.client.admin.audit.list({ query }).then(ids);
     expect(await q({ actor: `staff:${manager.staff.id}` })).toEqual(['2']);
     expect(await q({ actor: 'system' })).toEqual(['7']);
     expect(await q({ actor: 'ai' })).toEqual(['8']);

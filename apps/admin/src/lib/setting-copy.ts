@@ -10,6 +10,8 @@ import type { Language } from '@lummi/i18n';
 import type { AdminMessages } from './i18n';
 import { fill } from './utils';
 
+const NBSP = String.fromCharCode(160);
+
 export const pick = (l: Localized, language: Language) => l[language];
 
 /** `10.11.2026 14:05`, Asia/Tashkent, from a UTC instant (the shared helper, never the browser's zone). */
@@ -48,7 +50,7 @@ export function rangeText(t: AdminMessages, spec: InputSpec): string | null {
   return null;
 }
 
-const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
 
 /** A stored value as a readable line (for "default" and the like). */
 export function displayValue(
@@ -66,7 +68,7 @@ export function displayValue(
   };
   const unit =
     meta.unit && meta.unit !== 'none' && meta.unit !== 'ratio'
-      ? ` ${t.settings.units[meta.unit]}`
+      ? `${NBSP}${t.settings.units[meta.unit]}`
       : '';
   const inner = spec.kind === 'nullable' ? spec.inner : spec;
   if (value === null || value === undefined) return t.settings.notSet;
