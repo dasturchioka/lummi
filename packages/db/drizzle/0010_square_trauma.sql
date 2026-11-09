@@ -56,12 +56,14 @@ CREATE TABLE "orders" (
 	"threshold_base_amount" integer NOT NULL,
 	"total" integer NOT NULL,
 	"amount_due" integer NOT NULL,
+	"idempotency_key" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "orders_number_unique" UNIQUE("number"),
-	CONSTRAINT "orders_point_or_typed" CHECK (("orders"."point_code" is not null and "orders"."typed_address" is null) or ("orders"."point_code" is null and "orders"."bts_point_id" is null and "orders"."typed_address" is not null)),
+	CONSTRAINT "orders_point_or_typed" CHECK (("orders"."typed_address" is null and "orders"."point_code" is not null and "orders"."point_name" is not null and "orders"."point_city" is not null and "orders"."point_address" is not null) or ("orders"."typed_address" is not null and "orders"."bts_point_id" is null and "orders"."point_code" is null and "orders"."point_name" is null and "orders"."point_city" is null and "orders"."point_address" is null and "orders"."point_landmark" is null and "orders"."point_hours" is null)),
 	CONSTRAINT "orders_gift_message" CHECK ("orders"."is_gift" or "orders"."gift_message" is null),
-	CONSTRAINT "orders_money" CHECK ("orders"."items_subtotal" >= 0 and "orders"."discount_amount" >= 0 and "orders"."delivery_fee" >= 0 and "orders"."total" >= 0 and "orders"."amount_due" >= 0 and "orders"."amount_due" <= "orders"."total")
+	CONSTRAINT "orders_money" CHECK ("orders"."items_subtotal" >= 0 and "orders"."discount_amount" >= 0 and "orders"."delivery_fee" >= 0 and "orders"."threshold_base_amount" >= 0 and "orders"."total" >= 0 and "orders"."amount_due" >= 0 and "orders"."amount_due" <= "orders"."total"),
+	CONSTRAINT "orders_total_adds_up" CHECK ("orders"."total" = "orders"."items_subtotal" - "orders"."discount_amount" + "orders"."delivery_fee")
 );
 --> statement-breakpoint
 ALTER TABLE "customers" ADD COLUMN "data_consent_at" timestamp with time zone;--> statement-breakpoint
@@ -74,4 +76,5 @@ ALTER TABLE "orders" ADD CONSTRAINT "orders_bts_point_id_bts_points_id_fk" FOREI
 CREATE UNIQUE INDEX "order_lines_order_position_idx" ON "order_lines" USING btree ("order_id","position");--> statement-breakpoint
 CREATE INDEX "order_lines_volume_idx" ON "order_lines" USING btree ("volume_id");--> statement-breakpoint
 CREATE INDEX "orders_customer_idx" ON "orders" USING btree ("customer_id","created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "orders_customer_idempotency_idx" ON "orders" USING btree ("customer_id","idempotency_key");--> statement-breakpoint
 CREATE INDEX "orders_status_idx" ON "orders" USING btree ("status");

@@ -1,3 +1,5 @@
+import type { Discount } from '@lummi/contracts';
+import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/client';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -13,6 +15,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core';
 
 /** Internal keys are `bigint identity` (ADR 0016); money columns elsewhere are `integer` so'm. */
@@ -487,19 +490,8 @@ export type CartLineRow = typeof cartLines.$inferSelect;
  * which prices, delivered where: later price, catalog or BTS point edits never change it. Its
  * status is the one linear status of ADR 0011; the status machine (#24) moves it after checkout.
  */
-export const ORDER_STATUS_VALUES = [
-  'awaiting_payment',
-  'receipt_review',
-  'payment_confirmed',
-  'accepted',
-  'assembling',
-  'handed_to_bts',
-  'delivered',
-  'returned',
-  'cancelled',
-] as const;
-export const orderStatusEnum = pgEnum('order_status', ORDER_STATUS_VALUES);
-export type OrderStatusValue = (typeof ORDER_STATUS_VALUES)[number];
+/** The one status list lives in the contracts (`ORDER_STATUSES`); the enum is built from it. */
+export const orderStatusEnum = pgEnum('order_status', ORDER_STATUSES);
 /**
  * The statuses whose lines hold a Reserve (ADR 0010): not yet handed to BTS (on hand drops then)
  * and not cancelled. Delivered and returned orders hold none either.
@@ -510,7 +502,7 @@ export const RESERVING_STATUSES = [
   'payment_confirmed',
   'accepted',
   'assembling',
-] as const satisfies readonly OrderStatusValue[];
+] as const satisfies readonly OrderStatus[];
 export const thresholdBaseEnum = pgEnum('threshold_base', ['before', 'after']);
 /** A single volume, or a builder set (five 10 ml volumes, ADR 0009). The Discovery set comes with #22. */
 export const orderLineKindEnum = pgEnum('order_line_kind', ['volume', 'builder_set']);
@@ -552,7 +544,7 @@ export const orders = pgTable(
     giftMessage: text('gift_message'),
     itemsSubtotal: integer('items_subtotal').notNull(),
     /** The quote's one Discount (type, source, amount); its line key is the order line position. */
-    discount: jsonb('discount').$type<Record<string, unknown>>(),
+    discount: jsonb('discount').$type<Discount>(),
     discountAmount: integer('discount_amount').notNull().default(0),
     deliveryFee: integer('delivery_fee').notNull(),
     thresholdBase: thresholdBaseEnum('threshold_base').notNull(),
@@ -560,29 +552,33 @@ export const orders = pgTable(
     total: integer('total').notNull(),
     /** What the customer transfers to the shop card; payment matching compares this (ADR 0012). */
     amountDue: integer('amount_due').notNull(),
+    /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
+    idempotencyKey: uuid('idempotency_key').notNull(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('orders_customer_idx').on(t.customerId, t.createdAt),
+    uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
     index('orders_status_idx').on(t.status),
+    // A chosen point is all there (code, name, city, address), or the address was typed instead.
     check(
       'orders_point_or_typed',
-      sql`(${t.pointCode} is not null and ${t.typedAddress} is null) or (${t.pointCode} is null and ${t.btsPointId} is null and ${t.typedAddress} is not null)`,
+      sql`(${t.typedAddress} is null and ${t.pointCode} is not null and ${t.pointName} is not null and ${t.pointCity} is not null and ${t.pointAddress} is not null) or (${t.typedAddress} is not null and ${t.btsPointId} is null and ${t.pointCode} is null and ${t.pointName} is null and ${t.pointCity} is null and ${t.pointAddress} is null and ${t.pointLandmark} is null and ${t.pointHours} is null)`,
     ),
     check('orders_gift_message', sql`${t.isGift} or ${t.giftMessage} is null`),
     check(
       'orders_money',
-      sql`${t.itemsSubtotal} >= 0 and ${t.discountAmount} >= 0 and ${t.deliveryFee} >= 0 and ${t.total} >= 0 and ${t.amountDue} >= 0 and ${t.amountDue} <= ${t.total}`,
+      sql`${t.itemsSubtotal} >= 0 and ${t.discountAmount} >= 0 and ${t.deliveryFee} >= 0 and ${t.thresholdBaseAmount} >= 0 and ${t.total} >= 0 and ${t.amountDue} >= 0 and ${t.amountDue} <= ${t.total}`,
+    ),
+    // «Итого» = items − the one discount + delivery (ADR 0001), whatever wrote the row.
+    check(
+      'orders_total_adds_up',
+      sql`${t.total} = ${t.itemsSubtotal} - ${t.discountAmount} + ${t.deliveryFee}`,
     ),
   ],
 );
 
-/**
- * A line of an order as bought. A volume line reserves its volume; a builder set line reserves one
- * 10 ml of each of its five fragrances (`set_volume_ids`, ADR 0009, 0010). Names are kept in both
- * languages, so the order reads the same after any catalog edit.
- */
 export const orderLines = pgTable(
   'order_lines',
   {
@@ -628,4 +624,5 @@ export const orderLines = pgTable(
 );
 
 export type OrderRow = typeof orders.$inferSelect;
+export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;

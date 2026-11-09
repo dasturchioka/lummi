@@ -82,6 +82,27 @@ export const settingDefinitions = {
       uz: 'Xaridor sovgʻa otkritkasiga nechta belgi yozishi mumkin.',
     },
   },
+  /**
+   * The countries a Recipient phone may be from, as calling codes without `+` (BTS hands parcels
+   * over in Uzbekistan; spec Changes 2026-11-10 checkout, an open question).
+   */
+  'orders.recipientPhoneCountryCodes': {
+    schema: z
+      .array(z.string().regex(/^[1-9][0-9]{0,2}$/, 'a calling code: 1-3 digits'))
+      .min(1)
+      .max(20),
+    default: ['998'] as string[],
+    area: 'shop',
+    unit: 'none',
+    label: {
+      ru: 'Страны номера получателя',
+      uz: 'Qabul qiluvchi raqami mamlakatlari',
+    },
+    hint: {
+      ru: 'Коды стран без «+», например 998 (Узбекистан). Номер получателя из другой страны не примем.',
+      uz: 'Mamlakat kodlari «+»siz, masalan 998 (Oʻzbekiston). Boshqa mamlakat raqami qabul qilinmaydi.',
+    },
+  },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
   'cart.suggestionsLimit': { schema: z.number().int().min(0).max(12), default: 3 },
   /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */

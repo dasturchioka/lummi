@@ -32,6 +32,8 @@ export class OrdersController {
           return { status: 403 as const, body: { code: 'phone_required' as const } };
         case 'conflict':
           return { status: 409 as const, body: { code: out.code, checkout: out.checkout } };
+        case 'try_again':
+          return { status: 409 as const, body: { code: 'try_again' as const } };
         case 'invalid':
           return { status: 422 as const, body: { code: out.code } };
       }
@@ -40,9 +42,9 @@ export class OrdersController {
 
   @TsRestHandler(contract.orders.list)
   list(@SessionCustomerId() customerId: number) {
-    return tsRestHandler(contract.orders.list, async () => ({
+    return tsRestHandler(contract.orders.list, async ({ query }) => ({
       status: 200 as const,
-      body: await this.orders.list(customerId),
+      body: await this.orders.list(customerId, query),
     }));
   }
 

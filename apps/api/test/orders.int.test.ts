@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,8 @@ import {
   orders,
   outbox,
   regions,
+  settings,
+  sql,
   volumes,
 } from '@lummi/db';
 import pg from 'pg';
@@ -118,6 +121,33 @@ async function whileTableLocked<T>(table: string, run: () => Promise<T>, holdMs 
   }
 }
 
+/**
+ * Makes every insert or update on `table` fail with `sqlstate` (40001 serialization failure,
+ * 40P01 deadlock), the first `times` writes only when given: the retry path, made deterministic.
+ */
+async function failWrites(table: string, sqlstate: '40001' | '40P01', times?: number) {
+  await t.db.execute(
+    sql.raw(`
+    create sequence if not exists test_fail_${table};
+    create or replace function test_fail_${table}() returns trigger language plpgsql as $$
+    begin
+      if ${times === undefined ? 'true' : `nextval('test_fail_${table}') <= ${times}`} then
+        raise exception 'test failure' using errcode = '${sqlstate}';
+      end if;
+      return new;
+    end $$;
+    create trigger test_fail_${table} before insert or update on ${table}
+      for each row execute function test_fail_${table}();`),
+  );
+}
+async function stopFailingWrites(table: string) {
+  await t.db.execute(
+    sql.raw(`drop trigger if exists test_fail_${table} on ${table};
+    drop function if exists test_fail_${table}();
+    drop sequence if exists test_fail_${table};`),
+  );
+}
+
 function body(over: Partial<CreateOrderBody> & { confirmedTotal: number; pointId?: number }) {
   const { pointId, ...rest } = over;
   return {
@@ -125,6 +155,7 @@ function body(over: Partial<CreateOrderBody> & { confirmedTotal: number; pointId
     recipientPhone: '+998 90 123 45 67',
     delivery: { kind: 'point' as const, pointId: pointId ?? 0 },
     consent: true,
+    idempotencyKey: randomUUID(),
     ...rest,
   } satisfies CreateOrderBody;
 }
@@ -234,11 +265,11 @@ describe('createOrder', () => {
       body: body({ pointId: point.id, confirmedTotal: 94_000 }),
     });
     expect(stale.status).toBe(409);
-    if (stale.status !== 409) return;
+    if (stale.status !== 409 || !('checkout' in stale.body)) throw new Error('no checkout');
     expect(stale.body.code).toBe('total_changed');
     expect(stale.body.checkout.quote).toMatchObject({ itemsSubtotal: 79_000, total: 104_000 });
     expect(stale.body.checkout.region?.id).toBe(region.id);
-    expect((await client.orders.list()).body).toEqual([]);
+    expect((await client.orders.list({ query: {} })).body).toEqual({ orders: [], next: null });
     const cart = await client.cart.get();
     expect(cart.status === 200 && cart.body.lines).toHaveLength(1);
 
@@ -260,12 +291,12 @@ describe('createOrder', () => {
     });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ code: 'phone_required' });
-    expect((await client.orders.list()).body).toEqual([]);
+    expect((await client.orders.list({ query: {} })).body).toEqual({ orders: [], next: null });
   });
 
   it('needs a session', async () => {
     expect((await t.client.checkout.get({ query: {} })).status).toBe(401);
-    expect((await t.client.orders.list()).status).toBe(401);
+    expect((await t.client.orders.list({ query: {} })).status).toBe(401);
   });
 });
 
@@ -292,7 +323,9 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
     const lost = results.find((r) => r.status === 409);
     expect(lost?.status === 409 && lost.body.code).toBe('nothing_to_order');
-    expect(lost?.status === 409 && lost.body.checkout.quote.itemsSubtotal).toBe(0);
+    expect(
+      lost?.status === 409 && 'checkout' in lost.body && lost.body.checkout.quote.itemsSubtotal,
+    ).toBe(0);
 
     const card = await a.client.catalog.fragrance({ params: { slug: s1! } });
     expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 50)?.available).toBe(0);
@@ -408,6 +441,10 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
         regionNameUz: region.nameUz,
         btsPointId: point.id,
         pointCode: point.code,
+        pointName: point.name,
+        pointCity: point.city,
+        pointAddress: point.address,
+        idempotencyKey: randomUUID(),
         itemsSubtotal: 2 * 299_000,
         deliveryFee: 0,
         thresholdBase: 'before',
@@ -586,26 +623,183 @@ describe('what the order records', () => {
     expect(region.status === 422 && region.body.code).toBe('unknown_region');
   });
 
-  it('validates the recipient phone on the server: an Uzbek number only, stored as E.164', async () => {
+  it('validates the recipient phone against the allowed countries (a setting), stored as E.164', async () => {
     const [s1] = await slugs();
     const { point } = await samarkandPoint(25_000);
     const { client, add } = await shopper();
     await add(s1!, 10);
-    // a body that fails the contract's schema is a 400 (outside the typed statuses)
-    await expect(
-      client.orders.create({
-        body: body({
-          pointId: point.id,
-          confirmedTotal: 94_000,
-          recipientPhone: '+7 912 000 00 00',
-        }),
-      }),
-    ).rejects.toThrow(/got: 400/);
-    expect((await client.orders.list()).body).toEqual([]);
+    const checkout = await client.checkout.get({ query: {} });
+    expect(checkout.status === 200 && checkout.body.recipientPhoneCountryCodes).toEqual(['998']);
+    const foreign = body({
+      pointId: point.id,
+      confirmedTotal: 94_000,
+      recipientPhone: '+7 912 000 00 00',
+    });
+    const refused = await client.orders.create({ body: foreign });
+    expect(refused.status === 422 && refused.body.code).toBe('invalid_recipient_phone');
+    expect((await client.orders.list({ query: {} })).body).toEqual({ orders: [], next: null });
+
+    // the owner allows Russia too: the same number now passes
+    await t.db
+      .insert(settings)
+      .values({ key: 'orders.recipientPhoneCountryCodes', value: ['998', '7'] });
+    const ok = await client.orders.create({ body: { ...foreign, idempotencyKey: randomUUID() } });
+    expect(ok.status === 201 && ok.body.recipient.phone).toBe('+79120000000');
+  });
+
+  it('reads a local Uzbek number without the country code', async () => {
+    const [s1] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    await add(s1!, 10);
     const ok = await client.orders.create({
       body: body({ pointId: point.id, confirmedTotal: 94_000, recipientPhone: '93 555-44-33' }),
     });
     expect(ok.status === 201 && ok.body.recipient.phone).toBe('+998935554433');
+  });
+
+  it('keeps the snapshot consistent: the database refuses a total that does not add up or a half-written point', async () => {
+    const { point, region } = await samarkandPoint();
+    await shopper();
+    const [c] = await t.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.telegramId, ali.id));
+    const order = {
+      customerId: c!.id,
+      reserveUntil: t.edges.clock.now(),
+      recipientName: 'Ali',
+      recipientPhone: '+998901234567',
+      regionId: region.id,
+      regionNameRu: region.nameRu,
+      regionNameUz: region.nameUz,
+      btsPointId: point.id,
+      pointCode: point.code,
+      pointName: point.name,
+      pointCity: point.city,
+      pointAddress: point.address,
+      idempotencyKey: randomUUID(),
+      itemsSubtotal: 100_000,
+      discountAmount: 10_000,
+      deliveryFee: 25_000,
+      thresholdBase: 'after' as const,
+      thresholdBaseAmount: 90_000,
+      total: 115_000,
+      amountDue: 115_000,
+    };
+    await expect(
+      t.db.insert(orders).values({ ...order, total: 125_000, amountDue: 125_000 }),
+    ).rejects.toThrow();
+    await expect(t.db.insert(orders).values({ ...order, pointAddress: null })).rejects.toThrow();
+    await expect(
+      t.db.insert(orders).values({ ...order, thresholdBaseAmount: -1 }),
+    ).rejects.toThrow();
+    await expect(t.db.insert(orders).values(order)).resolves.toBeDefined();
+  });
+});
+
+describe('retries and repeats', () => {
+  it('a repeated POST with the same idempotency key returns the same order, never a second one', async () => {
+    const [s1] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    await add(s1!, 10);
+    const req = body({ pointId: point.id, confirmedTotal: 94_000 });
+    const first = await client.orders.create({ body: req });
+    // the 201 was lost on the way: the Mini App sends the same request again
+    const again = await client.orders.create({ body: req });
+    expect(first.status).toBe(201);
+    expect(again.status).toBe(201);
+    expect(again.body).toEqual(first.body);
+    const list = await client.orders.list({ query: {} });
+    expect(list.status === 200 && list.body.orders.map((o) => o.number)).toEqual([1001]);
+  });
+
+  it('two concurrent POSTs with the same key make one order and both get it', async () => {
+    const [s1] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    await add(s1!, 10);
+    const req = body({ pointId: point.id, confirmedTotal: 94_000 });
+    const [a, b] = await whileTableLocked('order_lines', () =>
+      Promise.all([client.orders.create({ body: req }), client.orders.create({ body: req })]),
+    );
+    expect([a!.status, b!.status]).toEqual([201, 201]);
+    expect(a!.body).toEqual(b!.body);
+    const list = await client.orders.list({ query: {} });
+    expect(list.status === 200 && list.body.orders).toHaveLength(1);
+  });
+
+  it('retries a serialization failure once and then succeeds', async () => {
+    const [s1] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    await add(s1!, 10);
+    await failWrites('orders', '40001', 1);
+    try {
+      const res = await client.orders.create({
+        body: body({ pointId: point.id, confirmedTotal: 94_000 }),
+      });
+      expect(res.status).toBe(201);
+      const list = await client.orders.list({ query: {} });
+      expect(list.status === 200 && list.body.orders).toHaveLength(1);
+    } finally {
+      await stopFailingWrites('orders');
+    }
+  });
+
+  it('a deadlock that persists answers 409 try_again, never a 500, and writes nothing', async () => {
+    const [s1] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    await add(s1!, 10);
+    await failWrites('orders', '40P01');
+    try {
+      const res = await client.orders.create({
+        body: body({ pointId: point.id, confirmedTotal: 94_000 }),
+      });
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ code: 'try_again' });
+    } finally {
+      await stopFailingWrites('orders');
+    }
+    const cart = await client.cart.get();
+    expect(cart.status === 200 && cart.body.lines).toHaveLength(1);
+  });
+
+  it('the admin on-hand change answers 409 try_again on a deadlock that persists', async () => {
+    const [s1] = await slugs();
+    const v = await volumeOf(s1!, 10);
+    const manager = await t.managerSession();
+    await failWrites('volumes', '40P01');
+    try {
+      const res = await manager.client.admin.onHand.set({
+        params: { id: v.id },
+        body: { onHand: 5 },
+      });
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ code: 'try_again' });
+    } finally {
+      await stopFailingWrites('volumes');
+    }
+  });
+});
+
+describe('the «Заказы» list pages', () => {
+  it('pages the list newest first with a cursor', async () => {
+    const [s1, s2, s3] = await slugs();
+    const { point } = await samarkandPoint(25_000);
+    const { client, add } = await shopper();
+    for (const slug of [s1!, s2!, s3!]) {
+      await add(slug, 10);
+      await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 94_000 }) });
+    }
+    const page1 = await client.orders.list({ query: { limit: 2 } });
+    expect(page1.status === 200 && page1.body.orders.map((o) => o.number)).toEqual([1003, 1002]);
+    expect(page1.status === 200 && page1.body.next).toBe(1002);
+    const page2 = await client.orders.list({ query: { limit: 2, before: 1002 } });
+    expect(page2.status === 200 && page2.body).toMatchObject({ next: null });
+    expect(page2.status === 200 && page2.body.orders.map((o) => o.number)).toEqual([1001]);
   });
 });
 
@@ -622,10 +816,10 @@ describe('the «Заказы» tab', () => {
       body: body({ pointId: point.id, confirmedTotal: 174_000, gift: true }),
     });
 
-    const list = await client.orders.list();
+    const list = await client.orders.list({ query: {} });
     expect(
       list.status === 200 &&
-        list.body.map((o) => [o.number, o.itemCount, o.total, o.isGift, o.status]),
+        list.body.orders.map((o) => [o.number, o.itemCount, o.total, o.isGift, o.status]),
     ).toEqual([
       [1002, 1, 174_000, true, 'awaiting_payment'],
       [1001, 2, 163_000, false, 'awaiting_payment'],
@@ -633,7 +827,10 @@ describe('the «Заказы» tab', () => {
     expect((await client.orders.get({ params: { number: 1002 } })).status).toBe(200);
     const stranger = await shopper(vali, '998907654321');
     expect((await stranger.client.orders.get({ params: { number: 1001 } })).status).toBe(404);
-    expect((await stranger.client.orders.list()).body).toEqual([]);
+    expect((await stranger.client.orders.list({ query: {} })).body).toEqual({
+      orders: [],
+      next: null,
+    });
   });
 
   it('shows the order in the app even when the bot may not write to the customer', async () => {
@@ -646,7 +843,7 @@ describe('the «Заказы» tab', () => {
       (await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 94_000 }) }))
         .status,
     ).toBe(201);
-    const list = await client.orders.list();
-    expect(list.status === 200 && list.body.map((o) => o.number)).toEqual([1001]);
+    const list = await client.orders.list({ query: {} });
+    expect(list.status === 200 && list.body.orders.map((o) => o.number)).toEqual([1001]);
   });
 });

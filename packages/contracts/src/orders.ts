@@ -2,35 +2,27 @@ import { z } from 'zod';
 import { deliveryCitySchema, regionSchema } from './delivery';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
 import {
+  CHECKOUT_CONFLICTS,
+  ORDER_INPUT_ERRORS,
+  ORDER_STATUSES,
+  ORDERS_PAGE_DEFAULT,
+  ORDERS_PAGE_MAX,
+} from './order-status';
+import {
   GIFT_MESSAGE_HARD_MAX,
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
   RECIPIENT_PHONE_INPUT_MAX,
   TYPED_ADDRESS_MAX,
   TYPED_ADDRESS_MIN,
-  normalizeRecipientPhone,
 } from './recipient';
+
+export * from './order-status';
 
 const som = z.number().int().nonnegative();
 const bilingual = z.object({ ru: z.string(), uz: z.string() });
 
-/**
- * One linear order status (ADR 0011). Checkout creates «Ожидает оплаты»; the status machine (#24)
- * moves it on. The DB enum `order_status` lists the same values (the API asserts they match).
- */
-export const ORDER_STATUSES = [
-  'awaiting_payment',
-  'receipt_review',
-  'payment_confirmed',
-  'accepted',
-  'assembling',
-  'handed_to_bts',
-  'delivered',
-  'returned',
-  'cancelled',
-] as const;
 export const orderStatusSchema = z.enum(ORDER_STATUSES);
-export type OrderStatus = z.infer<typeof orderStatusSchema>;
 
 /**
  * What checkout shows before the shopper confirms: the cart's Quote with the delivery tariff of
@@ -52,6 +44,8 @@ export const checkoutSchema = z.object({
   needsConsent: z.boolean(),
   /** The greeting card's length limit (setting `orders.giftMessageMaxLength`). */
   giftMessageMax: z.number().int().positive(),
+  /** Countries a Recipient phone may be from, digits without `+` (setting `orders.recipientPhoneCountryCodes`). */
+  recipientPhoneCountryCodes: z.array(z.string()),
 });
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 
@@ -72,18 +66,11 @@ export const orderDeliveryInputSchema = z.discriminatedUnion('kind', [
 
 export const createOrderBodySchema = z.object({
   recipientName: z.string().trim().min(1).max(RECIPIENT_NAME_MAX),
-  /** As typed; stored as E.164. Only an Uzbek number passes (`normalizeRecipientPhone`). */
-  recipientPhone: z
-    .string()
-    .max(RECIPIENT_PHONE_INPUT_MAX)
-    .transform((v, ctx) => {
-      const phone = normalizeRecipientPhone(v);
-      if (phone === null) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'not an Uzbek phone number' });
-        return z.NEVER;
-      }
-      return phone;
-    }),
+  /**
+   * As typed; the server reads it with `normalizeRecipientPhone` against the allowed countries
+   * (a setting) and stores E.164, or answers 422 `invalid_recipient_phone`.
+   */
+  recipientPhone: z.string().trim().min(1).max(RECIPIENT_PHONE_INPUT_MAX),
   delivery: orderDeliveryInputSchema,
   comment: z.string().trim().max(ORDER_COMMENT_MAX).optional(),
   /** «Это подарок»: gift packaging, a greeting card, no receipt in the parcel; free of charge. */
@@ -94,6 +81,11 @@ export const createOrderBodySchema = z.object({
   consent: z.boolean().default(false),
   /** The «Итого» the shopper saw and confirmed: they will transfer exactly this (ADR 0001). */
   confirmedTotal: som,
+  /**
+   * One per checkout attempt, made by the Mini App and kept until an order comes back: a repeat
+   * (a lost 201, a double tap) returns the order this key already made instead of a second one.
+   */
+  idempotencyKey: z.string().uuid(),
 });
 export type CreateOrderBody = z.input<typeof createOrderBodySchema>;
 /** The body after validation: the phone is E.164, defaults are filled. */
@@ -171,14 +163,27 @@ export const orderSummarySchema = z.object({
 });
 export type OrderSummaryDto = z.infer<typeof orderSummarySchema>;
 
+export const ordersQuerySchema = z.object({
+  /** The cursor: orders numbered below this one (the previous page's `next`). */
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(ORDERS_PAGE_MAX).default(ORDERS_PAGE_DEFAULT),
+});
+export const ordersPageSchema = z.object({
+  orders: z.array(orderSummarySchema),
+  /** Pass as `before` for the next page; null on the last one. */
+  next: z.number().int().nullable(),
+});
+export type OrdersPageDto = z.infer<typeof ordersPageSchema>;
+
 export const orderErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_found']) });
 export const phoneRequiredSchema = z.object({ code: z.literal('phone_required') });
-/** The total changed since the shopper saw it, or nothing is left to order: the new checkout comes along. */
-export const checkoutConflictSchema = z.object({
-  code: z.enum(['total_changed', 'nothing_to_order']),
-  checkout: checkoutSchema,
-});
+/**
+ * 409: the total changed since the shopper saw it, or nothing is left to order (the new checkout
+ * comes along); or the database gave up twice on a deadlock or serialization failure.
+ */
+export const checkoutConflictSchema = z.union([
+  z.object({ code: z.enum(CHECKOUT_CONFLICTS), checkout: checkoutSchema }),
+  z.object({ code: z.literal('try_again') }),
+]);
 export type CheckoutConflict = z.infer<typeof checkoutConflictSchema>;
-export const orderInputErrorSchema = z.object({
-  code: z.enum(['consent_required', 'unknown_point', 'unknown_region', 'gift_message_too_long']),
-});
+export const orderInputErrorSchema = z.object({ code: z.enum(ORDER_INPUT_ERRORS) });

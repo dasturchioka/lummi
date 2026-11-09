@@ -63,7 +63,8 @@ import {
   orderErrorSchema,
   orderInputErrorSchema,
   orderSchema,
-  orderSummarySchema,
+  ordersPageSchema,
+  ordersQuerySchema,
   phoneRequiredSchema,
 } from './orders';
 import {
@@ -263,8 +264,9 @@ export const contract = c.router({
     list: {
       method: 'GET',
       path: '/orders',
-      responses: { 200: z.array(orderSummarySchema), 401: orderErrorSchema },
-      summary: "The customer's orders, newest first",
+      query: ordersQuerySchema,
+      responses: { 200: ordersPageSchema, 401: orderErrorSchema },
+      summary: "The customer's orders, newest first, a page at a time (cursor `before`)",
     },
     get: {
       method: 'GET',
@@ -518,6 +520,7 @@ const adminCore = c.router({
         401: catalogAdminErrorSchema,
         403: catalogAdminErrorSchema,
         404: catalogAdminErrorSchema,
+        409: catalogAdminErrorSchema,
       },
       summary: 'Owner and manager: set on hand for one volume (audited)',
     },

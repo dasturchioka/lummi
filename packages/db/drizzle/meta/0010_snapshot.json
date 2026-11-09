@@ -1,5 +1,5 @@
 {
-  "id": "bf2c8d6c-e0ab-49f5-b112-031b2f4f5306",
+  "id": "67b99aaa-52fd-4bd6-8c3d-0493077ee697",
   "prevId": "e889758a-7a1c-43c2-8e02-dc357eda4d89",
   "version": "7",
   "dialect": "postgresql",
@@ -1796,6 +1796,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1829,6 +1835,27 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "orders_customer_idempotency_idx": {
+          "name": "orders_customer_idempotency_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1904,7 +1931,7 @@
       "checkConstraints": {
         "orders_point_or_typed": {
           "name": "orders_point_or_typed",
-          "value": "(\"orders\".\"point_code\" is not null and \"orders\".\"typed_address\" is null) or (\"orders\".\"point_code\" is null and \"orders\".\"bts_point_id\" is null and \"orders\".\"typed_address\" is not null)"
+          "value": "(\"orders\".\"typed_address\" is null and \"orders\".\"point_code\" is not null and \"orders\".\"point_name\" is not null and \"orders\".\"point_city\" is not null and \"orders\".\"point_address\" is not null) or (\"orders\".\"typed_address\" is not null and \"orders\".\"bts_point_id\" is null and \"orders\".\"point_code\" is null and \"orders\".\"point_name\" is null and \"orders\".\"point_city\" is null and \"orders\".\"point_address\" is null and \"orders\".\"point_landmark\" is null and \"orders\".\"point_hours\" is null)"
         },
         "orders_gift_message": {
           "name": "orders_gift_message",
@@ -1912,7 +1939,11 @@
         },
         "orders_money": {
           "name": "orders_money",
-          "value": "\"orders\".\"items_subtotal\" >= 0 and \"orders\".\"discount_amount\" >= 0 and \"orders\".\"delivery_fee\" >= 0 and \"orders\".\"total\" >= 0 and \"orders\".\"amount_due\" >= 0 and \"orders\".\"amount_due\" <= \"orders\".\"total\""
+          "value": "\"orders\".\"items_subtotal\" >= 0 and \"orders\".\"discount_amount\" >= 0 and \"orders\".\"delivery_fee\" >= 0 and \"orders\".\"threshold_base_amount\" >= 0 and \"orders\".\"total\" >= 0 and \"orders\".\"amount_due\" >= 0 and \"orders\".\"amount_due\" <= \"orders\".\"total\""
+        },
+        "orders_total_adds_up": {
+          "name": "orders_total_adds_up",
+          "value": "\"orders\".\"total\" = \"orders\".\"items_subtotal\" - \"orders\".\"discount_amount\" + \"orders\".\"delivery_fee\""
         }
       },
       "isRLSEnabled": false

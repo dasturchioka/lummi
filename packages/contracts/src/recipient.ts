@@ -13,20 +13,30 @@ export const GIFT_MESSAGE_HARD_MAX = 1000;
 /** The longest phone text a body may carry before it is normalised. */
 export const RECIPIENT_PHONE_INPUT_MAX = 40;
 
+/** National significant digits where a country fixes them; elsewhere E.164's 8-15 digits apply. */
+const NATIONAL_DIGITS: Record<string, number> = { '998': 9 };
+
 /**
  * The recipient's phone as typed (`+998 90 123-45-67`, `998901234567`, `90 123 45 67`) to E.164,
- * or null when it is not an Uzbek number: BTS hands the parcel over in Uzbekistan, so the
- * recipient is reached on a `+998` number with nine national digits.
+ * or null when it is not a number of one of `countryCodes` (setting
+ * `orders.recipientPhoneCountryCodes`, digits without `+`). Nine digits without a `+` read as an
+ * Uzbek local number when `998` is allowed.
  */
-export function normalizeRecipientPhone(input: string): string | null {
+export function normalizeRecipientPhone(
+  input: string,
+  countryCodes: readonly string[],
+): string | null {
   const trimmed = input.trim();
   if (!/^\+?[\d\s()-]+$/.test(trimmed)) return null;
   const digits = trimmed.replace(/\D/g, '');
-  const national =
-    digits.length === 12 && digits.startsWith('998')
-      ? digits.slice(3)
-      : digits.length === 9 && !trimmed.startsWith('+')
-        ? digits
-        : null;
-  return national ? `+998${national}` : null;
+  if (!trimmed.startsWith('+') && digits.length === 9 && countryCodes.includes('998'))
+    return `+998${digits}`;
+  const code = [...countryCodes]
+    .sort((a, b) => b.length - a.length)
+    .find((c) => digits.startsWith(c));
+  if (code === undefined) return null;
+  const national = digits.length - code.length;
+  const fixed = NATIONAL_DIGITS[code];
+  const fits = fixed !== undefined ? national === fixed : digits.length >= 8 && digits.length <= 15;
+  return fits ? `+${digits}` : null;
 }
