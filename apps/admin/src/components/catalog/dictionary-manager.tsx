@@ -2,8 +2,8 @@
 
 import { dictionaryInputSchema, type DictionaryInput, type DictionaryItem } from '@lummi/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { Language } from '@lummi/i18n';
-import { ArrowLeft, Pencil, Plus } from 'lucide-react';
+import { plural, type Language } from '@lummi/i18n';
+import { ArrowLeft, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -22,16 +22,20 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { cn, fill } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 type Kind = 'notes' | 'families';
 type Editing = { kind: Kind; item: DictionaryItem | null };
 
-/** Notes and families: RU/UZ names and aliases, with how many fragrances use each entry. */
+/**
+ * Notes and families: RU/UZ names and aliases, with how many fragrances use each entry. A row (or
+ * its name) opens the editor, as on the BTS points list.
+ */
 export function DictionaryManager({
   notes,
   families,
@@ -49,23 +53,34 @@ export function DictionaryManager({
   const [editing, setEditing] = useState<Editing | null>(null);
   const items = tab === 'notes' ? notes : families;
 
+  const add = () => setEditing({ kind: tab, item: null });
+  const addLabel = tab === 'notes' ? d.addNote : d.addFamily;
+  const name = (i: DictionaryItem) => (language === 'uz' ? i.nameUz : i.nameRu);
+  const otherName = (i: DictionaryItem) => (language === 'uz' ? i.nameRu : i.nameUz);
+
   return (
     <>
-      <Link
-        href="/catalog"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" strokeWidth={1.5} aria-hidden />
-        {t.catalog.back}
-      </Link>
       <PageHeader
         title={d.title}
         description={d.description}
-        actions={
-          <Button onClick={() => setEditing({ kind: tab, item: null })} className="max-sm:w-full">
+        titleAction={
+          <Button size="icon" aria-label={addLabel} onClick={add}>
             <Plus strokeWidth={1.5} aria-hidden />
-            {tab === 'notes' ? d.addNote : d.addFamily}
           </Button>
+        }
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href="/catalog">
+                <ArrowLeft strokeWidth={1.5} aria-hidden />
+                {t.catalog.back}
+              </Link>
+            </Button>
+            <Button onClick={add} className="max-sm:hidden">
+              <Plus strokeWidth={1.5} aria-hidden />
+              {addLabel}
+            </Button>
+          </>
         }
       />
       <div role="tablist" className="mb-4 inline-flex gap-1 rounded-button bg-field p-1">
@@ -76,46 +91,54 @@ export function DictionaryManager({
             aria-selected={tab === k}
             onClick={() => setTab(k)}
             className={cn(
-              'h-9 rounded-[8px] px-4 text-sm font-semibold transition-colors',
+              'h-9 rounded-[7px] px-4 text-sm font-semibold transition-colors duration-150',
               tab === k ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {d[k]} · {(k === 'notes' ? notes : families).length}
+            {d[k]}
+            <span className="ml-1.5 font-medium tabular-nums opacity-70">
+              {(k === 'notes' ? notes : families).length}
+            </span>
           </button>
         ))}
       </div>
-      <Card>
-        {items.length === 0 ? (
-          <EmptyState title={d.empty} />
-        ) : (
+      {items.length === 0 ? (
+        <EmptyState title={d.empty} />
+      ) : (
+        <Card>
+          {/* a tap anywhere on an entry opens it; the name is the keyboard path */}
           <ul className="divide-y divide-border">
             {items.map((i) => (
-              <li key={i.id} className="flex items-start gap-3 px-4 py-3.5 sm:px-5">
+              <li
+                key={i.id}
+                onClick={() => setEditing({ kind: tab, item: i })}
+                className="flex cursor-pointer items-start gap-4 px-4 py-3.5 transition-colors duration-150 hover:bg-milk/60 active:bg-milk sm:px-5"
+              >
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold [overflow-wrap:anywhere]">
-                    {language === 'uz' ? i.nameUz : i.nameRu}
-                  </p>
-                  <p className="mt-0.5 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">
-                    {language === 'uz' ? i.nameRu : i.nameUz}
-                    {i.aliases.length > 0 && ` · ${i.aliases.join(', ')}`}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing({ kind: tab, item: i });
+                    }}
+                    aria-label={`${t.catalog.edit}: ${name(i)}`}
+                    className="rounded-sm text-left font-semibold break-words underline-offset-[3px] hover:underline"
+                  >
+                    {name(i)}
+                  </button>
+                  <MetaLine
+                    className="mt-0.5 text-small text-muted-foreground"
+                    parts={[otherName(i), ...i.aliases]}
+                  />
                 </div>
-                <span className="mt-1 shrink-0 text-[13px] whitespace-nowrap text-muted-foreground tabular-nums">
-                  {fill(d.usesCount, { n: String(i.uses) })}
+                <span className="shrink-0 pt-px text-small whitespace-nowrap text-muted-foreground tabular-nums">
+                  {i.uses > 0 ? plural(language, i.uses, d.usesCount) : d.unused}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`${t.catalog.edit}: ${i.nameRu}`}
-                  onClick={() => setEditing({ kind: tab, item: i })}
-                >
-                  <Pencil strokeWidth={1.5} />
-                </Button>
               </li>
             ))}
           </ul>
-        )}
-      </Card>
+        </Card>
+      )}
       <EditDialog
         editing={editing}
         t={t}
@@ -192,7 +215,15 @@ function EditContent({
   });
 
   return (
-    <DialogContent>
+    <DialogContent
+      // editing opens on the entry, not in its name field: no keyboard over the form on a phone,
+      // and the name is not pre-selected for an accidental overwrite
+      onOpenAutoFocus={(e) => {
+        if (!item) return;
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).focus();
+      }}
+    >
       <DialogTitle>{title}</DialogTitle>
       <DialogDescription className="sr-only">{d.description}</DialogDescription>
       <form className="mt-5 grid gap-4" onSubmit={submit} noValidate>
