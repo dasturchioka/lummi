@@ -82,8 +82,12 @@ export function Catalog() {
     setSheet(name);
   };
 
+  // The chip photos are the top seller of each type over the whole catalog, whatever the filters:
+  // keep the last ones while «Наборы» (which loads no list) or a failed request has none.
+  const [typePhotos, setTypePhotos] = useState(facets?.typePhotos);
+  if (facets?.typePhotos && facets.typePhotos !== typePhotos) setTypePhotos(facets.typePhotos);
   // «Наборы» has no bottle of its own: the box icon holds its circle until the sets ticket.
-  const typeOptions = typeChipOptions(TYPES, t.catalog.types, facets?.typePhotos).map((o) =>
+  const typeOptions = typeChipOptions(TYPES, t.catalog.types, typePhotos).map((o) =>
     o.value === 'sets' ? { ...o, icon: <BoxIcon size={16} /> } : o,
   );
 
