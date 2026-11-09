@@ -20,8 +20,9 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
-  // A fragrance card is a task screen: it carries its own dock, not the tab bar (also on its fixtures).
-  const showTabBar = !pathname.startsWith('/p/') && pathname !== '/dev/fragrance';
+  // A fragrance card and the search are task screens: it carries its own dock, not the tab bar (also on its fixtures).
+  const showTabBar =
+    !pathname.startsWith('/p/') && pathname !== '/search' && pathname !== '/dev/fragrance';
 
   // Telegram's native back button: visible on screens deeper than a tab root.
   useEffect(() => showBackButton(!isRoot, () => goBackOrCatalog(router)), [isRoot, router]);
@@ -71,6 +72,14 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     ...at('/catalog'),
     component: lazyRouteComponent(() => import('../screens/Tabs'), 'CatalogTab'),
+  }),
+  createRoute({
+    ...at('/search'),
+    validateSearch: (s: Record<string, unknown>): { q?: string; s?: number } => ({
+      ...(typeof s.q === 'string' && s.q !== '' ? { q: s.q.slice(0, 100) } : {}),
+      ...(Number(s.s) === 1 ? { s: 1 } : {}),
+    }),
+    component: lazyRouteComponent(() => import('../screens/Search'), 'Search'),
   }),
   createRoute({
     ...at('/p/$slug'),

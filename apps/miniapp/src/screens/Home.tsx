@@ -81,10 +81,10 @@ export function Home() {
         {/*
           The approved row: search left, avatar right, on white discs. The centre is where the
           delivery city selector goes (regions arrive with their ticket); until then the two
-          discs stand as a plain toolbar. Search opens the Catalog until search exists (#16).
+          discs stand as a plain toolbar. Search opens the search screen.
         */}
         <div className="flex h-11 items-center justify-between">
-          <Link to="/catalog" aria-label={t.home.search} className={DISC}>
+          <Link to="/search" aria-label={t.home.search} className={DISC}>
             <SearchIcon size={20} />
           </Link>
           <Link to="/profile" aria-label={t.tabs.profile} className={DISC}>

@@ -72,6 +72,13 @@ export const screens: ScreenDef[] = [
   { id: 'fragrance-worst', path: '/dev/fragrance?data=worst', fullPage: true },
   { id: 'fragrance-one-volume', path: '/dev/fragrance?data=one', fullPage: true },
   { id: 'fragrance-empty', path: '/dev/fragrance?data=empty', fullPage: true },
+  // Search (#16): suggestions while typing, the submitted result list, nothing found, a typo
+  // («megamar» for Megamare), and a UZ note («zanjabil» is ginger), all on the seed catalog.
+  { id: 'search-suggestions', path: '/search?q=bla' },
+  { id: 'search-results', path: '/search?q=vanil&s=1', fullPage: true },
+  { id: 'search-nothing-found', path: '/search?q=zzqx&s=1' },
+  { id: 'search-typo', path: '/search?q=aventuss&s=1' },
+  { id: 'search-uz-note', path: '/search?q=zanjabil&s=1' },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
   // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
   { id: 'ui-gallery', path: '/dev/ui', fullPage: true },

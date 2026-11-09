@@ -55,3 +55,29 @@ export const fragranceCardSchema = z.object({
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 
 export const catalogErrorSchema = z.object({ code: z.literal('not_found') });
+
+/**
+ * One fragrance as a list card shows it (search results now, the catalog list next): the lockup
+ * fields, the three key notes and the price to start from. Customer-safe only: no code, no remark.
+ */
+export const fragranceListItemSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  brand: z.string(),
+  type: z.enum(FRAGRANCE_TYPES),
+  family: bilingualSchema.nullable(),
+  keyNotes: z.object({ ru: z.array(z.string()), uz: z.array(z.string()) }),
+  isHit: z.boolean(),
+  isNew: z.boolean(),
+  /** The lowest price to pay over the volumes (a markdown counts while active); null without volumes. */
+  fromPrice: z.number().int().nullable(),
+  /** Every volume is out of stock. */
+  soldOut: z.boolean(),
+  /** Content hash of the smallest volume's photo set (`<media>/<hash>-<width>.webp`). */
+  photo: z.string().nullable(),
+});
+export type FragranceListItem = z.infer<typeof fragranceListItemSchema>;
+
+export const searchQuerySchema = z.object({ q: z.string().max(100) });
+export const searchResultSchema = z.object({ items: z.array(fragranceListItemSchema) });
+export type SearchResult = z.infer<typeof searchResultSchema>;

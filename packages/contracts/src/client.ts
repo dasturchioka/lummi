@@ -32,6 +32,8 @@ export const clientRoutes = {
   },
   catalog: {
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
+    suggest: route('GET', '/catalog/suggest', [200, 401]),
+    search: route('GET', '/catalog/search', [200, 401]),
   },
 };
 

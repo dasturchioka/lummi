@@ -10,6 +10,8 @@ import { usePrefs } from '../lib/prefs';
 import { Badge, FragranceBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card, CardList, ListRow } from '../ui/Card';
+import { FragranceListCard } from '../ui/FragranceListCard';
+import type { FragranceListItem } from '@lummi/contracts';
 import {
   AlertIcon,
   BagIcon,
@@ -39,6 +41,55 @@ import { TabBar } from '../ui/TabBar';
 import thumbA from './thumbs/symphony.webp';
 import thumbB from './thumbs/althair.webp';
 import thumbC from './thumbs/absolu-aventus.webp';
+
+const LIST_ITEMS: Record<'normal' | 'worst' | 'soldOut', FragranceListItem> = {
+  normal: {
+    slug: 'baccarat-rouge-540',
+    name: 'Baccarat Rouge 540',
+    brand: 'Maison Francis Kurkdjian',
+    type: 'unisex',
+    family: { ru: 'Амброво-древесный', uz: 'Ambrali yogʻochli' },
+    keyNotes: {
+      ru: ['шафран', 'амбровое дерево', 'кедр'],
+      uz: ['za’faron', 'ambra daraxti', 'kedr'],
+    },
+    isHit: true,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: false,
+    photo: '32c0930f6c672207',
+  },
+  // The realistic worst case: very long name and brand, no family, a seven-digit price, no photo.
+  worst: {
+    slug: 'long',
+    name: 'Elysium Pour Homme Parfum Extraordinaire',
+    brand: 'Maison Francis Kurkdjian Paris Collection',
+    type: 'homme',
+    family: null,
+    keyNotes: {
+      ru: ['грейпфрут', 'имбирь', 'бергамот'],
+      uz: ['greypfrut', 'zanjabil', 'bergamot'],
+    },
+    isHit: false,
+    isNew: true,
+    fromPrice: 1_249_000,
+    soldOut: false,
+    photo: null,
+  },
+  soldOut: {
+    slug: 'ink-mark',
+    name: 'Ink Mark',
+    brand: 'Nishane',
+    type: 'femme',
+    family: { ru: 'Цветочный', uz: 'Gulli' },
+    keyNotes: { ru: [], uz: [] },
+    isHit: false,
+    isNew: false,
+    fromPrice: 69_000,
+    soldOut: true,
+    photo: null,
+  },
+};
 
 const demo = {
   ru: {
@@ -378,6 +429,22 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <Card className="p-4">
             <p className="type-body">{t.home.emptyText}</p>
           </Card>
+        </Section>
+
+        <Section name="FragranceListCard · grid / row / compact (catalog, search results, suggestions)">
+          <div className="grid grid-cols-2 gap-2">
+            <FragranceListCard layout="grid" item={LIST_ITEMS.normal} />
+            <FragranceListCard layout="grid" item={LIST_ITEMS.worst} />
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <FragranceListCard item={LIST_ITEMS.normal} />
+            <FragranceListCard item={LIST_ITEMS.worst} />
+            <FragranceListCard item={LIST_ITEMS.soldOut} />
+          </div>
+          <div className="mt-3 flex flex-col divide-y divide-line">
+            <FragranceListCard compact item={LIST_ITEMS.normal} />
+            <FragranceListCard compact item={LIST_ITEMS.worst} />
+          </div>
         </Section>
 
         <Section name="Skeleton (loading)">

@@ -101,6 +101,23 @@ export const settingDefinitions = {
     schema: z.number().int().min(1000).max(120_000),
     default: 30_000,
   },
+  // Search (ADR 0019).
+  /** Ranking weights of the trigram score: name and aliases, original brand, notes, family. */
+  'search.weights': {
+    schema: z.object({
+      name: z.number().min(0).max(100),
+      brand: z.number().min(0).max(100),
+      notes: z.number().min(0).max(100),
+      family: z.number().min(0).max(100),
+    }),
+    default: { name: 3, brand: 1.5, notes: 1, family: 1 },
+  },
+  /** A field only counts when its trigram word similarity with the query reaches this (0..1). */
+  'search.minSimilarity': { schema: z.number().min(0).max(1), default: 0.3 },
+  /** Suggestions and results start at this many characters. */
+  'search.minQueryLength': { schema: z.number().int().min(1).max(10), default: 2 },
+  'search.suggestLimit': { schema: z.number().int().min(1).max(20), default: 5 },
+  'search.resultsLimit': { schema: z.number().int().min(1).max(100), default: 30 },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;

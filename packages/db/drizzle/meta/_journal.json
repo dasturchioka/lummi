@@ -43,6 +43,13 @@
       "when": 1794225835228,
       "tag": "0005_moaning_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794226230414,
+      "tag": "0006_absent_shape",
+      "breakpoints": true
     }
   ]
 }
