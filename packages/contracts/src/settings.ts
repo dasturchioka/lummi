@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 
 /**
  * Every rule value is a setting (CLAUDE.md invariant). Add a key here with its zod schema
@@ -39,6 +40,37 @@ export const settingDefinitions = {
   'outbox.requeueAfterSeconds': { schema: z.number().int().min(30).max(86_400), default: 300 },
   /** After this many consecutive failed ticks a sweep alerts the owner once (not every minute). */
   'worker.sweepFailureAlertAfter': { schema: z.number().int().min(1).max(1000), default: 3 },
+  /** Delivery is free once the threshold base reaches this many so'm (TZ §8). */
+  'pricing.freeDeliveryThreshold': {
+    schema: z.number().int().min(0).max(100_000_000),
+    default: 250_000,
+  },
+  /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */
+  'pricing.thresholdBase': {
+    schema: z.object({
+      upgradeRight: z.object({
+        set: thresholdBaseSchema,
+        single_10ml: thresholdBaseSchema,
+      } satisfies Record<UpgradeRightSource, typeof thresholdBaseSchema>),
+      promoCode: thresholdBaseSchema,
+      birthdayCoupon: thresholdBaseSchema,
+    }),
+    default: {
+      upgradeRight: { set: 'before', single_10ml: 'before' },
+      promoCode: 'after',
+      birthdayCoupon: 'after',
+    } as const,
+  },
+  /** Whether upgrade rights and birthday coupons also discount marked-down items; promo codes carry their own flag (ADR 0008). */
+  'pricing.discountsApplyToMarkedDown': {
+    schema: z.object({ upgradeRight: z.boolean(), birthdayCoupon: z.boolean() }),
+    default: { upgradeRight: false, birthdayCoupon: false },
+  },
+  /** The volumes an upgrade right can discount: Full size (TZ §3.4 «Полный объём»); never 10 ml. */
+  'pricing.fullSizeVolumesMl': {
+    schema: z.array(z.number().int().gt(10, 'Full size is above 10 ml')).min(1),
+    default: [30, 50] as number[],
+  },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;
