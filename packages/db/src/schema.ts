@@ -1,5 +1,16 @@
 import { LANGUAGES } from '@lummi/i18n';
-import { bigint, index, jsonb, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 
 /** Internal keys are `bigint identity` (ADR 0016); money columns elsewhere are `integer` so'm. */
 const id = () => bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity();
@@ -16,6 +27,8 @@ export const customers = pgTable('customers', {
   lastName: text('last_name'),
   username: text('username'),
   language: languageEnum('language').notNull(),
+  /** Telegram answered 403 to a send; /start clears it. Reports show such sends as "не доставлено". */
+  botBlocked: boolean('bot_blocked').notNull().default(false),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -45,5 +58,42 @@ export const auditLog = pgTable(
   ],
 );
 
+/** Telegram updates already handled, keyed by update_id (dedup for polling and webhook). Pruned by a sweep. */
+export const processedUpdates = pgTable('processed_updates', {
+  updateId: bigint('update_id', { mode: 'number' }).primaryKey(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Transactional outbox (ADR 0021): callers insert in the same transaction as the state change.
+ * Pending = neither sent_at nor failed_at. queued_at is the marker stamped when the worker hands the
+ * row to BullMQ; a row stuck queued past the requeue window is handed over again (jobId = id dedups).
+ * sending_at is the claim taken just before the Telegram call, so a slow retry cannot race a re-queue.
+ */
+export const outbox = pgTable(
+  'outbox',
+  {
+    id: id(),
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    threadId: integer('thread_id'),
+    text: text('text').notNull(),
+    options: jsonb('options').notNull().default({}),
+    queuedAt: timestamp('queued_at', { withTimezone: true }),
+    /** Claimed by a delivery attempt; a crashed attempt's claim expires after the requeue window. */
+    sendingAt: timestamp('sending_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    failedAt: timestamp('failed_at', { withTimezone: true }),
+    telegramMessageId: bigint('telegram_message_id', { mode: 'number' }),
+    error: text('error'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('outbox_pending_idx')
+      .on(t.createdAt)
+      .where(sql`sent_at is null and failed_at is null`),
+  ],
+);
+
+export type OutboxRow = typeof outbox.$inferSelect;
 export type CustomerRow = typeof customers.$inferSelect;
 export type ActorType = (typeof actorTypeEnum.enumValues)[number];

@@ -21,10 +21,15 @@ export class SettingsService {
     return def.schema.parse(row.value) as SettingValue<K>;
   }
 
-  /** The only way to change a setting: validates, writes, and audits old and new in one transaction. */
-  async set<K extends SettingKey>(key: K, value: SettingValue<K>, actor: Actor): Promise<void> {
+  /** The only way to change a setting: validates, writes, and audits old and new in one transaction (the caller's when `outer` is given). */
+  async set<K extends SettingKey>(
+    key: K,
+    value: SettingValue<K>,
+    actor: Actor,
+    outer?: DbOrTx,
+  ): Promise<void> {
     const parsed = settingDefinitions[key].schema.parse(value);
-    await this.db.transaction(async (tx) => {
+    const run = async (tx: DbOrTx) => {
       const old = await this.get(key, tx);
       await tx
         .insert(settings)
@@ -40,6 +45,8 @@ export class SettingsService {
         targetId: key,
         payload: { old, new: parsed },
       });
-    });
+    };
+    // With the caller's transaction the change commits or rolls back with it.
+    await (outer ? run(outer) : this.db.transaction(run));
   }
 }

@@ -6,7 +6,7 @@ Node 24+ and Docker are required. Several agents or branches may run on one mach
 |---|---|---|---|
 | API | `API_PORT` | 4000 | `41NN` |
 | Postgres (host port) | `POSTGRES_HOST_PORT` | 5432 | `25NN` |
-| Redis (later) | `REDIS_HOST_PORT` | 6379 | `26NN` |
+| Redis | `REDIS_HOST_PORT` | 6379 | `26NN` |
 | Mini App / admin (later) | `MINIAPP_PORT` / `ADMIN_PORT` | | `51NN` / `61NN` |
 
 ## Install
@@ -43,9 +43,16 @@ Edit `packages/db/src/schema.ts`, then `npm run db:generate` (writes SQL to `pac
 
 API tests come in two projects: `*.unit.test.ts` (no I/O) and `*.int.test.ts` (Seam 1, ADR 0028). The integration project starts **one** Postgres container per run (tmpfs, `fsync=off`, 32 MB buffers), migrates a template database once, and every test file clones its own database from it (`createTestApp()` in `apps/api/test/harness/test-app.ts`). Inside a file call `t.reset()` in `beforeEach` to truncate all tables. `t.signIn(user)` signs `initData` with the test bot token and returns a session-bound client; `t.edges` holds the fakes (`clock`, `telegram`, `receiptJudge`, `files`). To skip the container, set `TEST_DATABASE_URL` to an admin URL of a running Postgres (it needs `CREATE DATABASE` rights); only the template and per-file `t_*` databases are created and dropped.
 
+## Bot and worker
+
+- The bot is a module of the API. `BOT_MODE=polling` long-polls (one process per token, so run it briefly), `webhook` calls `setWebhook` at boot (needs `WEBHOOK_URL`, `WEBHOOK_SECRET`), `off` (default) does nothing; the webhook route `POST /telegram/webhook` always checks the secret header. `MINIAPP_URL` is the `web_app` button and menu button target (a tunnel hostname locally).
+- The worker is a separate process: `REDIS_HOST_PORT=2604 docker compose -f docker-compose.dev.yml -p lummi-4 up -d --wait redis`, then `REDIS_URL=redis://127.0.0.1:2604 npm run dev:worker -w @lummi/api`. The API also needs Redis now (same `REDIS_URL`, same `OUTBOX_QUEUE`): after a commit it queues the new rows at once; every minute `tick()` runs registered sweeps and queues whatever is still pending. The worker is the same Nest modules as an application context.
+- Producing a message: use `OutboxService.withTx(tx => …)` and inside it `enqueue(tx, {chatId, text, threadId?, options?})` or `AlertService.alertOwner(tx, text)`. A sweep registers with `WorkerRuntime.register({name, run(ctx)})` and stamps its marker and enqueues inside one `ctx.withTx`.
+- Group chat id, topic ids and alert recipients are settings (`bot.groupChatId`, `bot.topics`, `bot.alertRecipients`).
+- Tests: one Testcontainers Redis per run (`TEST_REDIS_URL` reuses a running one). `t.postUpdate(json)` posts to the webhook; `t.startWorker()` gives a worker whose sends land on `t.edges.telegram`.
+
 ## Hooks for later tickets
 
 - New app: add `apps/<name>` with `lint`, `typecheck`, `test` scripts and its own port env var; turbo picks it up.
 - Mini App, admin, bot, worker: add a `dev:<name>` script at the root and a row in the port table.
 - Seed: add `packages/db/src/seed.ts` and a `db:seed` script next to `db:migrate`.
-- Redis: add a service to `docker-compose.dev.yml` with `${REDIS_HOST_PORT:-6379}`.

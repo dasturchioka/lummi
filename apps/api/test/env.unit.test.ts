@@ -29,4 +29,17 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
     expect(() => parseEnv({ ...valid, API_PORT: 'abc' })).toThrow(/API_PORT/);
   });
+
+  it('defaults the bot to off and requires webhook settings in webhook mode', () => {
+    expect(parseEnv(valid).BOT_MODE).toBe('off');
+    expect(() => parseEnv({ ...valid, BOT_MODE: 'webhook' })).toThrow(/WEBHOOK_URL/);
+    expect(
+      parseEnv({
+        ...valid,
+        BOT_MODE: 'webhook',
+        WEBHOOK_URL: 'https://x.example/telegram/webhook',
+        WEBHOOK_SECRET: 'abc_123',
+      }).BOT_MODE,
+    ).toBe('webhook');
+  });
 });

@@ -1,5 +1,6 @@
 import { migrateDb } from '@lummi/db';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import pg from 'pg';
 import type { TestProject } from 'vitest/node';
 
@@ -9,11 +10,14 @@ declare module 'vitest' {
     pgAdminUrl: string;
     /** Name of the migrated template database each test file clones. */
     templateDb: string;
+    /** The shared test Redis (BullMQ); tests isolate with their own queue names. */
+    redisUrl: string;
   }
 }
 
 const TEMPLATE = 'lummi_template';
 let container: StartedPostgreSqlContainer | undefined;
+let redis: StartedRedisContainer | undefined;
 
 function withDb(url: string, db: string): string {
   const u = new URL(url);
@@ -50,10 +54,18 @@ export default async function setup(project: TestProject) {
   await admin.end();
   await migrateDb(withDb(adminUrl, TEMPLATE));
 
+  let redisUrl = process.env.TEST_REDIS_URL;
+  if (!redisUrl) {
+    redis = await new RedisContainer('redis:7-alpine').start();
+    redisUrl = redis.getConnectionUrl();
+  }
+  project.provide('redisUrl', redisUrl);
+
   project.provide('pgAdminUrl', adminUrl);
   project.provide('templateDb', TEMPLATE);
 
   return async () => {
+    if (redis) await redis.stop();
     if (container) await container.stop();
     else {
       const c = new pg.Client({ connectionString: adminUrl });
