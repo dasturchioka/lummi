@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEnv } from '../src/env';
+import { PLACEHOLDER_SESSION_SECRET, parseEnv } from '../src/env';
 
 const valid = {
   DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/db',
@@ -8,6 +8,15 @@ const valid = {
 };
 
 describe('parseEnv', () => {
+  it('refuses the .env.example placeholder secret in production only', () => {
+    const placeholder = { ...valid, SESSION_SECRET: PLACEHOLDER_SESSION_SECRET };
+    expect(() => parseEnv({ ...placeholder, NODE_ENV: 'production' })).toThrow(/SESSION_SECRET/);
+    expect(parseEnv({ ...placeholder, NODE_ENV: 'development' }).SESSION_SECRET).toBe(
+      PLACEHOLDER_SESSION_SECRET,
+    );
+    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+  });
+
   it('applies defaults and coerces the port', () => {
     expect(parseEnv({ ...valid, API_PORT: '4102' })).toMatchObject({
       API_PORT: 4102,

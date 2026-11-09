@@ -13,9 +13,21 @@ export const envSchema = z.object({
 });
 export type Env = z.infer<typeof envSchema>;
 
+/** `.env.example` placeholder; a production deploy that forgets to replace it must not boot. */
+export const PLACEHOLDER_SESSION_SECRET = 'change-me-change-me-change-me-change-me';
+
 /** Throws with a readable list of problems; main.ts lets that kill the process. */
 export function parseEnv(source: Record<string, string | undefined> = process.env): Env {
   const result = envSchema.safeParse(source);
+  if (
+    result.success &&
+    result.data.NODE_ENV === 'production' &&
+    result.data.SESSION_SECRET.startsWith('change-me')
+  ) {
+    throw new Error(
+      'Invalid environment:\n  SESSION_SECRET: placeholder value is not allowed in production',
+    );
+  }
   if (!result.success) {
     const lines = result.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Invalid environment:\n${lines.join('\n')}`);

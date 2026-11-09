@@ -8,7 +8,7 @@ let t: TestApp;
 let svc: SettingsService;
 beforeAll(async () => {
   t = await createTestApp();
-  svc = new SettingsService(t.db, new AuditService());
+  svc = new SettingsService(t.db, new AuditService(), t.edges);
 });
 afterAll(() => t.close());
 beforeEach(() => t.reset());

@@ -82,10 +82,54 @@ describe('POST /auth/telegram', () => {
     // settings are changed through SettingsService only; here via the same function the admin will use
     const { SettingsService } = await import('../src/settings/settings.service');
     const { AuditService } = await import('../src/audit/audit.service');
-    await new SettingsService(t.db, new AuditService()).set('auth.initDataMaxAgeSeconds', 7200, {
-      type: 'system',
-    });
+    await new SettingsService(t.db, new AuditService(), t.edges).set(
+      'auth.initDataMaxAgeSeconds',
+      7200,
+      {
+        type: 'system',
+      },
+    );
     expect((await t.client.auth.telegram({ body: { initData: old } })).status).toBe(200);
+  });
+});
+
+describe('POST /auth/refresh', () => {
+  it('swaps a valid session for a new one with a fresh expiry', async () => {
+    const { token, client } = await t.signIn({ id: 5, first_name: 'R' });
+    t.edges.clock.advance(1800 * 1000);
+    const res = await client.auth.refresh();
+    if (res.status !== 200) throw new Error('refresh failed');
+    expect(res.body.token).not.toBe(token);
+    expect(res.body.expiresAt).toBe(
+      new Date(t.edges.clock.now().getTime() + 3600 * 1000).toISOString(),
+    );
+    // the old session would have died at 3600 s; the new one lives on
+    t.edges.clock.advance(2400 * 1000);
+    const me = await t.client.me.get({
+      extraHeaders: { authorization: `Bearer ${res.body.token}` },
+    });
+    expect(me.status).toBe(200);
+    expect((await client.me.get()).status).toBe(401);
+  });
+
+  it('rejects expired, forged and missing sessions', async () => {
+    const { token } = await t.signIn();
+    expect((await t.client.auth.refresh()).status).toBe(401);
+    expect(
+      (
+        await t.client.auth.refresh({
+          extraHeaders: { authorization: 'Bearer nonsense' },
+        })
+      ).status,
+    ).toBe(401);
+    t.edges.clock.advance(3601 * 1000);
+    expect(
+      (
+        await t.client.auth.refresh({
+          extraHeaders: { authorization: `Bearer ${token}` },
+        })
+      ).status,
+    ).toBe(401);
   });
 });
 

@@ -12,6 +12,13 @@ export const contract = c.router({
       responses: { 200: sessionSchema, 401: authErrorSchema },
       summary: 'Exchange Telegram initData for our own short-lived customer session (ADR 0029)',
     },
+    refresh: {
+      method: 'POST',
+      path: '/auth/refresh',
+      body: c.noBody(),
+      responses: { 200: sessionSchema, 401: authErrorSchema },
+      summary: 'Swap a still-valid session (Bearer) for a new one with a fresh expiry',
+    },
   },
   me: {
     get: {

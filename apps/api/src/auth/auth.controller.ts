@@ -1,5 +1,5 @@
 import { contract } from '@lummi/contracts';
-import { Controller, Inject } from '@nestjs/common';
+import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { SettingsService } from '../settings/settings.service';
 import { EDGES, ENV } from '../tokens';
@@ -7,6 +7,7 @@ import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { CustomersService } from './customers.service';
 import { InitDataError, verifyInitData } from './init-data';
+import { SessionCustomerId, SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
 
 @Controller()
@@ -40,6 +41,22 @@ export class AuthController {
       }
       const customer = await this.customers.signIn(verified.user);
       const session = await this.sessions.issue(customer.id);
+      return {
+        status: 200 as const,
+        body: { token: session.token, expiresAt: session.expiresAt.toISOString() },
+      };
+    });
+  }
+
+  /** Identity comes only from the Bearer session; expiry comes from the clock. */
+  @TsRestHandler(contract.auth.refresh)
+  @UseGuards(SessionGuard)
+  refresh(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.auth.refresh, async () => {
+      if (!(await this.customers.getById(customerId))) {
+        return { status: 401 as const, body: { code: 'unauthorized' as const } };
+      }
+      const session = await this.sessions.issue(customerId);
       return {
         status: 200 as const,
         body: { token: session.token, expiresAt: session.expiresAt.toISOString() },

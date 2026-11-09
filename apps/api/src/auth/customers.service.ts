@@ -2,7 +2,8 @@ import { customers, eq, type CustomerRow, type Db } from '@lummi/db';
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { DB } from '../tokens';
+import type { Edges } from '../edges';
+import { DB, EDGES } from '../tokens';
 import type { InitDataUser } from './init-data';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class CustomersService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(EDGES) private readonly edges: Edges,
   ) {}
 
   /** First sign-in creates the customer (language from language_code); later ones refresh the profile only. */
@@ -40,10 +42,11 @@ export class CustomersService {
       }
       const [updated] = await tx
         .update(customers)
-        .set({ ...profile, updatedAt: new Date() })
+        .set({ ...profile, updatedAt: this.edges.clock.now() })
         .where(eq(customers.telegramId, user.id))
         .returning();
-      return updated!;
+      if (!updated) throw new Error('customer vanished during sign-in');
+      return updated;
     });
   }
 
