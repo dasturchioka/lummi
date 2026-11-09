@@ -39,6 +39,11 @@ export const envSchema = z
     DATABASE_URL: z.string().url(),
     BOT_TOKEN: z.string().min(1, 'BOT_TOKEN is required (signing key of initData)'),
     SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
+    /** Dev/test-only admin sign-in without the Login Widget; refused in production (see parseEnv). */
+    ADMIN_DEV_LOGIN: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
     FILES_DIR: z.string().min(1).default('./media'),
     /** polling: local dev (one poller per token); webhook: staging and production; off: tests, API-only runs. */
     BOT_MODE: z.enum(botModes).default('off'),
@@ -92,6 +97,11 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
   ) {
     throw new Error(
       'Invalid environment:\n  SESSION_SECRET: placeholder value is not allowed in production',
+    );
+  }
+  if (result.success && result.data.NODE_ENV === 'production' && result.data.ADMIN_DEV_LOGIN) {
+    throw new Error(
+      'Invalid environment:\n  ADMIN_DEV_LOGIN: the dev-only admin sign-in must not be enabled in production',
     );
   }
   if (!result.success) {

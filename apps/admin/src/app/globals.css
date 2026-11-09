@@ -1,0 +1,207 @@
+@import 'tailwindcss';
+
+/*
+ * Brandbook v2.0 tokens, exactly as DESIGN.md names them. The admin is light only.
+ * Flat: depth comes from tone (Milk ground, white cards, Milk Field fills) and 1 px hairlines,
+ * never from shadows. No red, burgundy or gold: errors are Graphite on a Milk Field plate.
+ */
+:root {
+  --milk: #f5f2ec;
+  --stone: #cfc6b8;
+  --graphite: #2a2a2a;
+  --sage: #9aa592;
+  --card-white: #ffffff;
+  --milk-field: #ece7df;
+  --ink-muted: #67625b;
+  --ink-faint: #a39d94;
+  --sage-ink: #5c6855;
+  --hairline: rgba(42, 42, 42, 0.11);
+  --hairline-strong: rgba(42, 42, 42, 0.22);
+  --sage-wash: rgba(154, 165, 146, 0.18);
+
+  --radius-card: 12px;
+  --radius-button: 10px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  --color-background: var(--milk);
+  --color-foreground: var(--graphite);
+  --color-card: var(--card-white);
+  --color-field: var(--milk-field);
+  --color-muted: var(--milk-field);
+  --color-muted-foreground: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-border: var(--hairline);
+  --color-border-strong: var(--hairline-strong);
+  --color-primary: var(--graphite);
+  --color-primary-foreground: var(--milk);
+  --color-milk: var(--milk);
+  --color-stone: var(--stone);
+  --color-graphite: var(--graphite);
+  --color-sage: var(--sage);
+  --color-sage-ink: var(--sage-ink);
+  --color-sage-wash: var(--sage-wash);
+  --radius-card: var(--radius-card);
+  --radius-button: var(--radius-button);
+  --ease-out: var(--ease-out);
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-display: var(--font-tenor), var(--font-manrope), sans-serif;
+  --font-name: var(--font-cormorant), Georgia, serif;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-color: var(--stone) transparent;
+  }
+  body {
+    background: var(--milk);
+    color: var(--graphite);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--graphite);
+  }
+  ::selection {
+    background: var(--stone);
+    color: var(--graphite);
+  }
+  /* Controls answer the tap at once (no double-tap-zoom wait) and never select their label. */
+  a,
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  /* Sage Ink, not Sage: Sage is about 2.6:1 on white, Sage Ink clears 3:1 on every surface. */
+  :focus-visible {
+    outline: 2px solid var(--sage-ink);
+    outline-offset: 2px;
+  }
+}
+
+/* Screen titles (DESIGN.md "Title"): Tenor Sans, caps, +0.2em. */
+.title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+/* Loading placeholders: a slow breathing tone, still for reduced motion. */
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+.skeleton {
+  background: var(--milk-field);
+  border-radius: 6px;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/*
+ * Overlay motion (Radix sets data-state; it waits for the closing animation before unmounting).
+ * Enter on the brand ease-out (sheets on the iOS drawer curve), exit faster on the same curves,
+ * never ease-in. Phones get a bottom sheet, wider screens a centred dialog (scales from its
+ * centre, it has no trigger anchor). Reduced motion keeps only the fades.
+ */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes rise-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes rise-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes slide-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+.motion-overlay[data-state='open'] {
+  animation: overlay-in 220ms var(--ease-out);
+}
+.motion-overlay[data-state='closed'] {
+  animation: overlay-out 160ms var(--ease-out) forwards;
+}
+.motion-dialog[data-state='open'] {
+  animation: rise-in 280ms var(--ease-drawer);
+}
+.motion-dialog[data-state='closed'] {
+  animation: rise-out 180ms var(--ease-drawer) forwards;
+}
+@media (min-width: 640px) {
+  .motion-dialog[data-state='open'] {
+    animation: dialog-in 220ms var(--ease-out);
+  }
+  .motion-dialog[data-state='closed'] {
+    animation: dialog-out 140ms var(--ease-out) forwards;
+  }
+}
+.motion-sheet[data-state='open'] {
+  animation: slide-in 280ms var(--ease-drawer);
+}
+.motion-sheet[data-state='closed'] {
+  animation: slide-out 180ms var(--ease-drawer) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-dialog[data-state='open'],
+  .motion-sheet[data-state='open'] {
+    animation: overlay-in 160ms var(--ease-out);
+  }
+  .motion-dialog[data-state='closed'],
+  .motion-sheet[data-state='closed'] {
+    animation: overlay-out 120ms var(--ease-out) forwards;
+  }
+}

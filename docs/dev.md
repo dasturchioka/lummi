@@ -7,7 +7,8 @@ Node 24+ and Docker are required. Several agents or branches may run on one mach
 | API | `API_PORT` | 4000 | `41NN` |
 | Postgres (host port) | `POSTGRES_HOST_PORT` | 5432 | `25NN` |
 | Redis | `REDIS_HOST_PORT` | 6379 | `26NN` |
-| Mini App / admin (later) | `MINIAPP_PORT` / `ADMIN_PORT` | | `51NN` / `61NN` |
+| Mini App | `MINIAPP_PORT` | | `51NN` |
+| Admin | `ADMIN_PORT` | 6000 | `61NN` |
 
 ## Install
 
@@ -50,6 +51,28 @@ API tests come in two projects: `*.unit.test.ts` (no I/O) and `*.int.test.ts` (S
 - Producing a message: use `OutboxService.withTx(tx => …)` and inside it `enqueue(tx, {chatId, text, threadId?, options?})` or `AlertService.alertOwner(tx, text)`. A sweep registers with `WorkerRuntime.register({name, run(ctx)})` and stamps its marker and enqueues inside one `ctx.withTx`.
 - Group chat id, topic ids and alert recipients are settings (`bot.groupChatId`, `bot.topics`, `bot.alertRecipients`).
 - Tests: one Testcontainers Redis per run (`TEST_REDIS_URL` reuses a running one). `t.postUpdate(json)` posts to the webhook; `t.startWorker()` gives a worker whose sends land on `t.edges.telegram`.
+
+## Admin panel
+
+`apps/admin` (Next.js, shadcn/ui on brand tokens). Seed the first owner, run the API with the dev sign-in, then the panel:
+
+```sh
+npm run seed:owner -- --telegram-id <your id> --name "<name>"      # idempotent
+ADMIN_DEV_LOGIN=true API_PORT=4106 npm run dev:api
+API_URL=http://127.0.0.1:4106 NEXT_PUBLIC_ADMIN_DEV_LOGIN=true ADMIN_PORT=6106 npm run dev:admin
+```
+
+`/api/*` is proxied to `API_URL` with the prefix stripped (Caddy does it at deploy). The real Login Widget needs `NEXT_PUBLIC_BOT_USERNAME` and the page served from the domain set with BotFather `/setdomain` (dev: the Cloudflare tunnel). `ADMIN_DEV_LOGIN=true` signs in by Telegram id with no widget; the API refuses to boot with it when `NODE_ENV=production`.
+
+### Admin screenshots
+
+```sh
+API_PORT=4106 ADMIN_PORT=6106 POSTGRES_HOST_PORT=2506 npm run shots -w @lummi/admin -- --out <dir> [--only login,staff]
+```
+
+Captures every screen in `apps/admin/shots/screens.ts` at 390 px and 1280 px wide, in RU and UZ (the admin is light only), as `<screen>-<width>-<lang>.png`: `login`, `no-access`, `home`, `home-manager`, `menu` (390 only), `staff`, `staff-add`, `staff-deactivate`, `staff-remove`, `not-found` (inside the panel), `not-found-guest` (signed out). It signs in through the dev path, so an API that is already running must have `ADMIN_DEV_LOGIN=true`; whatever is not running (Postgres as compose project `lummi-admin-shots`, the API, the admin) is started on the given ports and stopped again at the end. Shot staff (an owner, three managers, one of them switched off) are written through the seed CLI and the staff endpoints under reserved Telegram ids `9900000NN`, so they never collide with real dev accounts. A new admin screen adds an entry to `screens.ts` (`path`, `as: 'owner' | 'manager'`, and an `act` step to open a dialog or submit a form).
+
+Seam 1 helpers: `t.ownerSession()`, `t.managerSession()` (or `t.signInStaff(role, user?, { active })`) insert the staff row, sign in through the real widget path and return `{ staff, cookie, client }`; `t.widgetPayload(user)` builds a signed widget payload. Owner-only endpoints use `@UseGuards(StaffGuard, OwnerGuard)`.
 
 ## Humo feed (internal endpoints)
 

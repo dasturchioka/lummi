@@ -77,7 +77,7 @@ describe('internal endpoints refuse anything not internal and authenticated', ()
   });
 
   it('refuses a source address outside INTERNAL_ALLOWED_CIDRS, even with the secret', async () => {
-    const other = await createTestApp({ env: { INTERNAL_ALLOWED_CIDRS: '10.0.0.0/8' } });
+    const other = await createTestApp({ INTERNAL_ALLOWED_CIDRS: '10.0.0.0/8' });
     try {
       const res = await feed(other.baseUrl).humoMessage({
         body: { messageId: 1, text: creditText() },
@@ -90,7 +90,7 @@ describe('internal endpoints refuse anything not internal and authenticated', ()
   });
 
   it('does not exist while no secret is configured', async () => {
-    const other = await createTestApp({ env: { INTERNAL_API_SECRET: undefined } });
+    const other = await createTestApp({ INTERNAL_API_SECRET: undefined });
     try {
       const res = await fetch(`${other.baseUrl}/internal/humo/messages`, {
         method: 'POST',

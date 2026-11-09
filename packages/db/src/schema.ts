@@ -18,6 +18,7 @@ const id = () => bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAs
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
 export const languageEnum = pgEnum('language', LANGUAGES);
+export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
 export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
 
 /** A Customer is a Telegram account (ADR 0004). */
@@ -33,6 +34,33 @@ export const customers = pgTable('customers', {
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Staff (ADR 0017): gates the admin panel and the orders-group buttons; audit entries point here. */
+export const staff = pgTable('staff', {
+  id: id(),
+  telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
+  name: text('name').notNull(),
+  role: staffRoleEnum('role').notNull(),
+  active: boolean('active').notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Admin panel sessions: the cookie holds a random token, only its SHA-256 is stored; revocable. */
+export const staffSessions = pgTable(
+  'staff_sessions',
+  {
+    id: id(),
+    staffId: bigint('staff_id', { mode: 'number' })
+      .notNull()
+      .references(() => staff.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('staff_sessions_staff_idx').on(t.staffId)],
+);
 
 /** Admin-editable rule values; typed keys live in @lummi/contracts. Missing row = default. */
 export const settings = pgTable('settings', {
@@ -153,4 +181,6 @@ export const heartbeats = pgTable('heartbeats', {
 export type OutboxRow = typeof outbox.$inferSelect;
 export type CreditRow = typeof credits.$inferSelect;
 export type CustomerRow = typeof customers.$inferSelect;
+export type StaffRow = typeof staff.$inferSelect;
+export type StaffRole = (typeof staffRoleEnum.enumValues)[number];
 export type ActorType = (typeof actorTypeEnum.enumValues)[number];

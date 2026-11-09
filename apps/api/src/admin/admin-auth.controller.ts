@@ -1,0 +1,80 @@
+import { contract } from '@lummi/contracts';
+import type { StaffRow } from '@lummi/db';
+import { Controller, Inject, Req, Res, UseGuards } from '@nestjs/common';
+import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import type { Request, Response } from 'express';
+import type { Env } from '../env';
+import { readCookie } from '../staff/cookie';
+import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
+import { STAFF_COOKIE, StaffSessionService } from '../staff/staff-session.service';
+import { ENV } from '../tokens';
+import { AdminLoginService, type LoginResult } from './admin-login.service';
+import { toStaffDto } from './staff.dto';
+
+@Controller()
+export class AdminAuthController {
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    @Inject(AdminLoginService) private readonly login: AdminLoginService,
+    @Inject(StaffSessionService) private readonly sessions: StaffSessionService,
+  ) {}
+
+  @TsRestHandler(contract.admin.loginWidget)
+  loginWidget(@Res({ passthrough: true }) res: Response) {
+    return tsRestHandler(contract.admin.loginWidget, async ({ body }) =>
+      this.reply(res, await this.login.withWidget(body)),
+    );
+  }
+
+  /** Dev/test only; the env schema refuses to enable it in production. */
+  @TsRestHandler(contract.admin.devLogin)
+  devLogin(@Res({ passthrough: true }) res: Response) {
+    return tsRestHandler(contract.admin.devLogin, async ({ body }) => {
+      if (!this.env.ADMIN_DEV_LOGIN) {
+        return { status: 404 as const, body: { code: 'not_available' as const } };
+      }
+      return this.reply(res, await this.login.withTelegramId(body.telegramId));
+    });
+  }
+
+  @TsRestHandler(contract.admin.logout)
+  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return tsRestHandler(contract.admin.logout, async () => {
+      const token = readCookie(req.headers.cookie, STAFF_COOKIE);
+      if (token) await this.sessions.revoke(token);
+      res.cookie(STAFF_COOKIE, '', { ...this.cookieOptions(), maxAge: 0 });
+      return { status: 200 as const, body: { ok: true as const } };
+    });
+  }
+
+  @TsRestHandler(contract.admin.me)
+  @UseGuards(StaffGuard)
+  me(@CurrentStaff() member: StaffRow) {
+    return tsRestHandler(contract.admin.me, async () => ({
+      status: 200 as const,
+      body: toStaffDto(member),
+    }));
+  }
+
+  private reply(res: Response, result: LoginResult) {
+    if (!result.ok) {
+      return result.status === 401
+        ? { status: 401 as const, body: { code: result.code } }
+        : { status: 403 as const, body: { code: result.code } };
+    }
+    res.cookie(STAFF_COOKIE, result.token, {
+      ...this.cookieOptions(),
+      maxAge: result.maxAgeSeconds * 1000,
+    });
+    return { status: 200 as const, body: toStaffDto(result.staff) };
+  }
+
+  private cookieOptions() {
+    return {
+      httpOnly: true,
+      sameSite: 'lax' as const,
+      secure: this.env.NODE_ENV === 'production',
+      path: '/',
+    };
+  }
+}
