@@ -47,8 +47,7 @@ export class SettingsController {
         };
       }
       await this.settings.set(key, parsed.data as never, { type: 'staff', id: actor.id });
-      const state = (await this.settings.listAll()).find((s) => s.key === key) as SettingRowState;
-      return { status: 200 as const, body: toDto(state) };
+      return { status: 200 as const, body: toDto(await this.settings.state(key)) };
     });
   }
 }

@@ -32,10 +32,11 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   ]);
   if (list.status === 401 || options.status === 401) redirect('/login');
   if (list.status !== 200 || options.status !== 200) redirect('/'); // 403: managers have no audit page
-  const { t } = await getAdminMessages();
+  const { language, t } = await getAdminMessages();
   return (
     <AuditView
       t={t}
+      language={language}
       items={list.body.items}
       total={list.body.total}
       page={list.body.page}

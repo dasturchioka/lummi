@@ -1,14 +1,10 @@
 import { z } from 'zod';
+import type { Bilingual } from './catalog';
+import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 
-/** A string in both languages; the admin panel shows the one the owner picked. */
-export interface Localized {
-  ru: string;
-  uz: string;
-}
-
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
-export const SETTING_AREAS = ['shop', 'pricing', 'bot', 'auth', 'ai', 'worker'] as const;
+export const SETTING_AREAS = ['shop', 'pricing', 'auth', 'ai', 'worker', 'system'] as const;
 export type SettingArea = (typeof SETTING_AREAS)[number];
 
 /** What a number means; the label is in the admin messages (`settings.units`). */
@@ -22,14 +18,14 @@ export type SettingUnit = (typeof SETTING_UNITS)[number];
  */
 export interface SettingMeta {
   area: SettingArea;
-  label: Localized;
-  hint?: Localized;
+  label: Bilingual;
+  hint?: Bilingual;
   unit?: SettingUnit;
-  fields?: Record<string, Localized>;
-  optionLabels?: Record<string, Localized>;
+  fields?: Record<string, Bilingual>;
+  optionLabels?: Record<string, Bilingual>;
 }
 
-interface SettingDefinition extends SettingMeta {
+export interface SettingDefinition extends SettingMeta {
   schema: z.ZodTypeAny;
   default: unknown;
 }
@@ -44,9 +40,7 @@ export const settingDefinitions = {
   // ---- Shop
   /** Target of every «Написать менеджеру» in the Mini App (CLAUDE.md: Orders group manager account). */
   'shop.managerUsername': {
-    schema: z
-      .string()
-      .regex(/^@[A-Za-z][A-Za-z0-9_]{4,31}$/, 'Telegram username, like @lummi_manager'),
+    schema: telegramUsernameSchema,
     default: '@lummi_manager',
     area: 'shop',
     label: { ru: 'Аккаунт менеджера в Telegram', uz: 'Menejerning Telegram akkaunti' },
@@ -137,9 +131,10 @@ export const settingDefinitions = {
   // ---- Bot and orders group
   // Orders group (spec Changes 2026-11-07). Null until the group is set up; the bot follows migrate_to_chat_id.
   'bot.groupChatId': {
-    schema: z.number().int().nullable(),
+    /** Telegram supergroup ids are negative (-100…). */
+    schema: z.number().int().max(-1).nullable(),
     default: null,
-    area: 'bot',
+    area: 'system',
     label: { ru: 'ID группы заказов', uz: 'Buyurtmalar guruhining ID raqami' },
     hint: {
       ru: 'Пусто, пока группа не подключена. Бот обновляет значение сам, если группа переехала.',
@@ -148,13 +143,13 @@ export const settingDefinitions = {
   },
   'bot.topics': {
     schema: z.object({
-      orders: z.number().int().nullable(),
-      payments: z.number().int().nullable(),
-      reviews: z.number().int().nullable(),
-      system: z.number().int().nullable(),
+      orders: z.number().int().positive().nullable(),
+      payments: z.number().int().positive().nullable(),
+      reviews: z.number().int().positive().nullable(),
+      system: z.number().int().positive().nullable(),
     }),
     default: { orders: null, payments: null, reviews: null, system: null },
-    area: 'bot',
+    area: 'system',
     label: { ru: 'Темы группы заказов', uz: 'Buyurtmalar guruhi mavzulari' },
     hint: {
       ru: 'ID тем группы. Пусто, пока тема не создана.',
@@ -169,9 +164,9 @@ export const settingDefinitions = {
   },
   /** Telegram ids (owner, developer) who get alerts in DM as well as in the Системные topic. */
   'bot.alertRecipients': {
-    schema: z.array(z.number().int()),
+    schema: z.array(z.number().int().positive()),
     default: [] as number[],
-    area: 'bot',
+    area: 'system',
     label: { ru: 'Кому слать алерты в личные', uz: 'Ogohlantirishlar kimga shaxsiy yuboriladi' },
     hint: {
       ru: 'Telegram ID через запятую. Алерты приходят им в личные сообщения и в тему «Системные».',
@@ -321,9 +316,7 @@ export type SettingKey = keyof typeof settingDefinitions;
 export type SettingValue<K extends SettingKey> = z.infer<(typeof settingDefinitions)[K]['schema']>;
 export const settingKeys = Object.keys(settingDefinitions) as SettingKey[];
 
-/** The registry as the admin page walks it: every key with its metadata, in registry order. */
-export function settingMeta(
-  key: SettingKey,
-): SettingMeta & { schema: z.ZodTypeAny; default: unknown } {
-  return settingDefinitions[key] as SettingMeta & { schema: z.ZodTypeAny; default: unknown };
+/** One registry entry typed for generic code (the admin page, `displayValue`): schema, default and metadata. */
+export function settingMeta(key: SettingKey): SettingDefinition {
+  return settingDefinitions[key] as SettingDefinition;
 }

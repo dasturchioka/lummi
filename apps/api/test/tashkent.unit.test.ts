@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tashkentToUtc, utcToTashkent } from '../src/time/tashkent';
+import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
 
 describe('Asia/Tashkent wall clock ↔ UTC (UTC+5 all year)', () => {
   it.each([

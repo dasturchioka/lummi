@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { settingIssueSchema } from './setting-input';
+import { settingIssueSchema } from './setting-issues';
 import { tashkentToUtc } from './tashkent';
 
 export const staffRoleSchema = z.enum(['owner', 'manager']);
@@ -77,7 +77,7 @@ export const tashkentDaySchema = z
   }, 'not a calendar day');
 
 /** `staff:<id>`, or a bare actor type for everyone of that type. */
-export const auditActorFilterSchema = z.string().regex(/^(staff:\d+|customer|ai|system)$/);
+export const auditActorFilterSchema = z.string().regex(/^(staff:\d{1,15}|customer|ai|system)$/);
 
 export const auditQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

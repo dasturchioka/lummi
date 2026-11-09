@@ -148,11 +148,8 @@ export async function askWriteAccess(): Promise<boolean | null> {
   }
 }
 
-/** Until the customer record arrives; the owner changes the live value in the admin Settings. */
-export const DEFAULT_MANAGER_USERNAME = '@lummi_manager';
-
 /** Open the chat with the shop's manager (`@username`, from the customer's `config`) in Telegram; a new tab in a plain browser. */
-export function openManagerChat(username: string = DEFAULT_MANAGER_USERNAME): void {
+export function openManagerChat(username: string): void {
   const link = `https://t.me/${username.replace(/^@/, '')}`;
   try {
     if (openTelegramLink.isAvailable() && !mocked) return openTelegramLink(link);

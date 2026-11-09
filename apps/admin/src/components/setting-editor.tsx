@@ -1,10 +1,11 @@
 'use client';
 
-import type { Draft, InputSpec, Localized, SettingIssue } from '@lummi/contracts';
+import type { Bilingual, SettingIssue } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
+import type { Draft, InputSpec } from '@/lib/setting-input';
 import { issueMessage, pick } from '@/lib/setting-copy';
 import { cn } from '@/lib/utils';
 
@@ -15,8 +16,8 @@ export interface EditorMeta {
   language: Language;
   t: AdminMessages;
   unit?: string;
-  fields?: Record<string, Localized>;
-  optionLabels?: Record<string, Localized>;
+  fields?: Record<string, Bilingual>;
+  optionLabels?: Record<string, Bilingual>;
   issues: SettingIssue[];
 }
 
@@ -74,7 +75,7 @@ export function SettingEditor({
           {spec.fields.map((f) => {
             const p = [...path, f.name];
             const label = meta.fields?.[pathKey(p)]
-              ? pick(meta.fields[pathKey(p)] as Localized, meta.language)
+              ? pick(meta.fields[pathKey(p)] as Bilingual, meta.language)
               : f.name;
             const child = (draft as Record<string, Draft>)[f.name] ?? '';
             return f.spec.kind === 'boolean' ? (
@@ -137,7 +138,7 @@ export function SettingEditor({
             {spec.options.map((o) => (
               <option key={o} value={o}>
                 {meta.optionLabels?.[o]
-                  ? pick(meta.optionLabels[o] as Localized, meta.language)
+                  ? pick(meta.optionLabels[o] as Bilingual, meta.language)
                   : o}
               </option>
             ))}

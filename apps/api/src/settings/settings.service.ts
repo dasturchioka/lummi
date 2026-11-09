@@ -4,14 +4,21 @@ import {
   type SettingKey,
   type SettingValue,
 } from '@lummi/contracts';
-import { inArray, settings, type Db, type DbOrTx } from '@lummi/db';
-import { Inject, Injectable } from '@nestjs/common';
+import { eq, inArray, settings, type Db, type DbOrTx } from '@lummi/db';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { isDeepStrictEqual } from 'node:util';
 import { AuditService, type Actor } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 
-/** Reads several settings in one query; a missing row yields the default. Usable before the Nest container exists. */
+const log = new Logger('Settings');
+const warned = new Set<string>();
+
+/**
+ * Reads several settings in one query; a missing row, or a stored value the registry no longer
+ * accepts, yields the default (the second case is logged once per key), so one stale row never
+ * breaks a customer-facing read. Usable before the Nest container exists.
+ */
 export async function readSettings<K extends SettingKey>(
   db: DbOrTx,
   keys: readonly K[],
@@ -24,7 +31,19 @@ export async function readSettings<K extends SettingKey>(
   const out: Record<string, unknown> = {};
   for (const key of keys) {
     const def = settingDefinitions[key];
-    out[key] = byKey.has(key) ? def.schema.parse(byKey.get(key)) : def.default;
+    if (!byKey.has(key)) {
+      out[key] = def.default;
+      continue;
+    }
+    const parsed = def.schema.safeParse(byKey.get(key));
+    if (parsed.success) out[key] = parsed.data;
+    else {
+      if (!warned.has(key)) {
+        warned.add(key);
+        log.warn(`stored value of setting ${key} no longer fits the registry; using the default`);
+      }
+      out[key] = def.default;
+    }
   }
   return out as { [P in K]: SettingValue<P> };
 }
@@ -45,7 +64,7 @@ export class SettingsService {
     @Inject(EDGES) private readonly edges: Edges,
   ) {}
 
-  /** Typed read; a missing row yields the default, a stored value that fails its schema throws. */
+  /** Typed read; a missing row or a stale stored value yields the default. */
   async get<K extends SettingKey>(key: K, tx: DbOrTx = this.db): Promise<SettingValue<K>> {
     return (await readSettings(tx, [key]))[key];
   }
@@ -65,6 +84,11 @@ export class SettingsService {
     });
   }
 
+  /** One setting's state for the admin page. */
+  async state(key: SettingKey): Promise<SettingRowState> {
+    return (await this.listAll()).find((s) => s.key === key) as SettingRowState;
+  }
+
   /** The only way to change a setting: validates, writes, and audits old and new in one transaction (the caller's when `outer` is given). */
   async set<K extends SettingKey>(
     key: K,
@@ -74,7 +98,10 @@ export class SettingsService {
   ): Promise<void> {
     const parsed = settingDefinitions[key].schema.parse(value);
     const run = async (tx: DbOrTx) => {
-      const old = await this.get(key, tx);
+      // The raw stored value, locked: a stale value can still be replaced, and two concurrent
+      // saves can't both log the same old value.
+      const [row] = await tx.select().from(settings).where(eq(settings.key, key)).for('update');
+      const old = row ? row.value : settingDefinitions[key].default;
       if (isDeepStrictEqual(old, parsed)) return; // nothing changed: no write, no audit noise
       await tx
         .insert(settings)

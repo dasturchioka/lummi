@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { describeInput, fromDraft, toDraft, toSettingIssues } from './setting-input';
-import { settingDefinitions, settingKeys } from './settings';
+import { describeInput, fromDraft, toDraft } from './setting-input';
+import { settingDefinitions, settingKeys, toSettingIssues } from '@lummi/contracts';
 
 describe('describeInput', () => {
   it('describes numbers with bounds, nullable ids, lists and groups', () => {

@@ -1,18 +1,16 @@
 import {
-  settingDefinitions,
+  settingMeta,
   utcToTashkent,
-  type InputSpec,
-  type Localized,
+  type Bilingual,
   type SettingIssue,
   type SettingKey,
 } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
+import { formatMoney, type Language } from '@lummi/i18n';
 import type { AdminMessages } from './i18n';
+import type { InputSpec } from './setting-input';
 import { fill } from './utils';
 
-const NBSP = String.fromCharCode(160);
-
-export const pick = (l: Localized, language: Language) => l[language];
+export const pick = (l: Bilingual, language: Language) => l[language];
 
 /** `10.11.2026 14:05`, Asia/Tashkent, from a UTC instant (the shared helper, never the browser's zone). */
 export function formatTashkent(iso: string): string {
@@ -37,22 +35,32 @@ export function issueMessage(t: AdminMessages, issue: SettingIssue): string {
   }
 }
 
-/** The number's bounds as one sentence, or null when there are none worth showing. */
+/** Digits in groups of three with the language's separator, for any plain number. */
+const num = (n: number) => n.toLocaleString('ru-RU');
+
+/** The number's bounds as one sentence, or null when there are none. "Greater than 10" stays "greater than". */
 export function rangeText(t: AdminMessages, spec: InputSpec): string | null {
   const inner = spec.kind === 'nullable' ? spec.inner : spec;
   if (inner.kind !== 'integer' && inner.kind !== 'number') return null;
-  const { min, max } = inner;
-  if (min !== undefined && max !== undefined) {
-    return fill(t.settings.range, { min: String(min), max: String(max) });
+  const parts: string[] = [];
+  if (inner.min !== undefined) {
+    const key = inner.minExclusive ? t.settings.rangeMinExclusive : t.settings.rangeMin;
+    parts.push(fill(key, { min: num(inner.min) }));
   }
-  if (min !== undefined) return fill(t.settings.rangeMin, { min: String(min) });
-  if (max !== undefined) return fill(t.settings.rangeMax, { max: String(max) });
-  return null;
+  if (inner.max !== undefined) {
+    const key = inner.maxExclusive ? t.settings.rangeMaxExclusive : t.settings.rangeMax;
+    parts.push(fill(key, { max: num(inner.max) }));
+  }
+  return parts.length ? fill(t.settings.allowed, { parts: parts.join(' ') }) : null;
 }
 
-const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+/** The unit written after a number, or null when the setting has none (a ratio is explained by its hint). */
+export function unitText(key: SettingKey, t: AdminMessages): string | null {
+  const unit = settingMeta(key).unit;
+  return unit && unit !== 'none' && unit !== 'ratio' ? t.settings.units[unit] : null;
+}
 
-/** A stored value as a readable line (for "default" and the like). */
+/** A stored value as a readable line (for "default", the audit page and the like). */
 export function displayValue(
   key: SettingKey,
   spec: InputSpec,
@@ -61,15 +69,8 @@ export function displayValue(
   t: AdminMessages,
   path: string[] = [],
 ): string {
-  const meta = settingDefinitions[key] as {
-    unit?: keyof AdminMessages['settings']['units'];
-    fields?: Record<string, Localized>;
-    optionLabels?: Record<string, Localized>;
-  };
-  const unit =
-    meta.unit && meta.unit !== 'none' && meta.unit !== 'ratio'
-      ? `${NBSP}${t.settings.units[meta.unit]}`
-      : '';
+  const meta = settingMeta(key);
+  const suffix = unitText(key, t) ? ` ${unitText(key, t)}` : '';
   const inner = spec.kind === 'nullable' ? spec.inner : spec;
   if (value === null || value === undefined) return t.settings.notSet;
   switch (inner.kind) {
@@ -77,14 +78,16 @@ export function displayValue(
       return value ? t.settings.on : t.settings.off;
     case 'integer':
     case 'number':
-      return `${typeof value === 'number' && Number.isInteger(value) ? group(value) : String(value)}${unit}`;
+      if (typeof value !== 'number') return String(value);
+      if (meta.unit === 'sum' && Number.isSafeInteger(value)) return formatMoney(value, language);
+      return `${num(value)}${suffix}`;
     case 'enum':
       return meta.optionLabels?.[String(value)]?.[language] ?? String(value);
     case 'text':
       return String(value);
     case 'list':
       return Array.isArray(value) && value.length > 0
-        ? value.map(String).join(', ') + unit
+        ? value.map(String).join(', ') + suffix
         : t.settings.notSet;
     case 'group': {
       const obj = value as Record<string, unknown>;
@@ -92,9 +95,8 @@ export function displayValue(
         .map((f) => {
           const p = [...path, f.name];
           const label = meta.fields?.[p.join('.')]?.[language] ?? f.name;
-          return f.spec.kind === 'group'
-            ? `${label} (${displayValue(key, f.spec, obj[f.name], language, t, p)})`
-            : `${label}: ${displayValue(key, f.spec, obj[f.name], language, t, p)}`;
+          const shown = displayValue(key, f.spec, obj[f.name], language, t, p);
+          return f.spec.kind === 'group' ? `${label} (${shown})` : `${label}: ${shown}`;
         })
         .join('; ');
     }

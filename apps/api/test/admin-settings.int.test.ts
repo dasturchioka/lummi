@@ -122,6 +122,58 @@ describe('admin settings (owner only)', () => {
   });
 });
 
+describe('a stale stored value', () => {
+  it('can be replaced from the page, and the audit keeps the raw old value', async () => {
+    const owner = await t.ownerSession();
+    await t.db.insert(settings).values({ key: 'auth.sessionTtlSeconds', value: 'oops' });
+    const res = await owner.client.admin.settings.update({
+      params: { key: 'auth.sessionTtlSeconds' },
+      body: { value: 7200 },
+    });
+    expect(res.status).toBe(200);
+    expect(res.status === 200 && res.body).toMatchObject({ value: 7200, invalid: false });
+    const [entry] = await t.db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, 'setting.changed'));
+    expect(entry?.payload).toEqual({ old: 'oops', new: 7200 });
+  });
+
+  it('does not break customer responses: /me falls back to the default username', async () => {
+    const customer = await t.signIn();
+    await t.db.insert(settings).values({ key: 'shop.managerUsername', value: 42 });
+    const me = await customer.client.me.get();
+    expect(me.status === 200 && me.body.config.managerUsername).toBe('@lummi_manager');
+  });
+});
+
+describe('format checks', () => {
+  it('refuses usernames that Telegram would not accept and bot ids of the wrong sign', async () => {
+    const owner = await t.ownerSession();
+    const put = (key: string, value: unknown) =>
+      owner.client.admin.settings.update({ params: { key }, body: { value } });
+    for (const bad of ['@abcd', '@lummi_', '@1lummi', '@' + 'a'.repeat(33), 'lummi_manager']) {
+      expect((await put('shop.managerUsername', bad)).status, bad).toBe(400);
+    }
+    expect((await put('shop.managerUsername', '@lummi_help')).status).toBe(200);
+    expect((await put('bot.groupChatId', 123)).status).toBe(400);
+    expect((await put('bot.groupChatId', -1001234567890)).status).toBe(200);
+    expect(
+      (await put('bot.topics', { orders: -1, payments: null, reviews: null, system: null })).status,
+    ).toBe(400);
+    expect((await put('bot.alertRecipients', [-5])).status).toBe(400);
+    expect((await put('bot.alertRecipients', [12345])).status).toBe(200);
+  });
+
+  it('answers 400, not 500, to an actor id too long for a bigint', async () => {
+    const owner = await t.ownerSession();
+    const res = await fetch(`${t.baseUrl}/admin/audit?actor=staff:${'9'.repeat(20)}`, {
+      headers: { cookie: owner.cookie },
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('manager username reaches the Mini App', () => {
   it('defaults to @lummi_manager and follows the setting', async () => {
     const customer = await t.signIn();

@@ -2,17 +2,12 @@
 
 import {
   SETTING_AREAS,
-  describeInput,
-  fromDraft,
-  settingDefinitions,
   settingKeys,
-  toDraft,
-  toSettingIssues,
-  type Draft,
-  type Localized,
+  settingMeta,
   type SettingIssue,
   type SettingKey,
   type SettingState,
+  toSettingIssues,
 } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { useMemo, useState } from 'react';
@@ -24,15 +19,9 @@ import { Card } from '@/components/ui/card';
 import { Notice } from '@/components/ui/notice';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { displayValue, formatTashkent, pick, rangeText } from '@/lib/setting-copy';
+import { displayValue, formatTashkent, pick, rangeText, unitText } from '@/lib/setting-copy';
+import { describeInput, fromDraft, toDraft, type Draft } from '@/lib/setting-input';
 import { fill } from '@/lib/utils';
-
-type Meta = {
-  unit?: keyof AdminMessages['settings']['units'];
-  hint?: Localized;
-  fields?: Record<string, Localized>;
-  optionLabels?: Record<string, Localized>;
-};
 
 /**
  * The owner's settings page, generated from the registry in `@lummi/contracts`: every key, its
@@ -54,13 +43,19 @@ export function SettingsEditor({
       <PageHeader title={t.settings.title} description={t.settings.description} />
       <div className="grid gap-8">
         {SETTING_AREAS.map((area) => {
-          const keys = settingKeys.filter((k) => settingDefinitions[k].area === area);
+          const keys = settingKeys.filter((k) => settingMeta(k).area === area);
           if (keys.length === 0) return null;
           return (
             <section key={area} aria-labelledby={`area-${area}`}>
-              <h2 id={`area-${area}`} className="mb-3 text-[15px] font-semibold">
+              <h2 id={`area-${area}`} className="text-[15px] font-semibold">
                 {t.settings.areas[area]}
               </h2>
+              {area in t.settings.areaHints && (
+                <div className="mt-2">
+                  <Notice title={t.settings.areaHints[area as keyof typeof t.settings.areaHints]} />
+                </div>
+              )}
+              <div className="mb-3" />
               <Card>
                 <ul className="divide-y divide-border">
                   {keys.map((key) => (
@@ -93,8 +88,8 @@ function SettingRow({
   language: Language;
   t: AdminMessages;
 }) {
-  const def = settingDefinitions[settingKey];
-  const meta = def as Meta;
+  const def = settingMeta(settingKey);
+  const meta = def;
   const spec = useMemo(() => describeInput(def.schema), [def.schema]);
   const defaultDraft = useMemo(() => toDraft(spec, def.default), [spec, def.default]);
   const [saved, setSaved] = useState<{
@@ -119,10 +114,7 @@ function SettingRow({
   const range = rangeText(t, spec);
   const label = pick(def.label, language);
   const hint = meta.hint ? pick(meta.hint, language) : null;
-  const unitText =
-    meta.unit && meta.unit !== 'none' && meta.unit !== 'ratio'
-      ? t.settings.units[meta.unit]
-      : undefined;
+  const unit = unitText(settingKey, t) ?? undefined;
 
   const change = (next: Draft) => {
     setDraft(next);
@@ -195,7 +187,7 @@ function SettingRow({
             ariaLabel: label,
             language,
             t,
-            ...(unitText ? { unit: unitText } : {}),
+            ...(unit ? { unit } : {}),
             ...(meta.fields ? { fields: meta.fields } : {}),
             ...(meta.optionLabels ? { optionLabels: meta.optionLabels } : {}),
             issues,

@@ -1,4 +1,5 @@
-import type { AuditEntryDto } from '@lummi/contracts';
+import { settingKeys, settingMeta, type AuditEntryDto, type SettingKey } from '@lummi/contracts';
+import type { Language } from '@lummi/i18n';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
@@ -10,13 +11,15 @@ import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
-import { formatTashkent } from '@/lib/setting-copy';
+import { displayValue, formatTashkent, pick } from '@/lib/setting-copy';
+import { describeInput } from '@/lib/setting-input';
 import { fill } from '@/lib/utils';
 
 export type AuditFilters = { actor?: string; action?: string; from?: string; to?: string };
 
 type Props = {
   t: AdminMessages;
+  language: Language;
   items: AuditEntryDto[];
   total: number;
   page: number;
@@ -28,7 +31,14 @@ type Props = {
   };
 };
 
-const json = (v: unknown) => JSON.stringify(v);
+const knownKey = (id: string | null): id is SettingKey =>
+  id !== null && (settingKeys as string[]).includes(id);
+
+/** Readable action name; a code a later ticket adds shows as the code itself until it is labelled. */
+const actionLabel = (t: AdminMessages, code: string) =>
+  (t.audit.actions as Record<string, string>)[code] ?? code;
+const targetLabel = (t: AdminMessages, type: string) =>
+  (t.audit.targets as Record<string, string>)[type] ?? type;
 
 function who(t: AdminMessages, e: AuditEntryDto): string {
   if (e.actorType === 'staff') return e.actorName ?? t.audit.actors.unknownStaff;
@@ -36,20 +46,48 @@ function who(t: AdminMessages, e: AuditEntryDto): string {
   return t.audit.actors[e.actorType];
 }
 
-function Details({ t, payload }: { t: AdminMessages; payload: Record<string, unknown> }) {
-  if ('old' in payload && 'new' in payload) {
-    return (
-      <span className="[overflow-wrap:anywhere]">
-        <span className="text-muted-foreground">{t.audit.was}</span> {json(payload.old)}{' '}
-        <span className="text-muted-foreground">{t.audit.became}</span> {json(payload.new)}
-      </span>
-    );
+/** What the entry touched: a setting by its label, anything else by type and id. */
+function Target({ t, language, e }: { t: AdminMessages; language: Language; e: AuditEntryDto }) {
+  if (e.targetType === 'setting' && knownKey(e.targetId)) {
+    return <>{pick(settingMeta(e.targetId).label, language)}</>;
   }
-  const text = Object.keys(payload).length === 0 ? '' : json(payload);
   return (
-    <span className="[overflow-wrap:anywhere]" title={text}>
-      {text.length > 160 ? `${text.slice(0, 160)}…` : text}
-    </span>
+    <>
+      {targetLabel(t, e.targetType)}
+      {e.targetId ? ` ${e.targetId}` : ''}
+    </>
+  );
+}
+
+/** A setting change reads "было → стало" in the setting's own units; the raw payload sits behind «Подробнее». */
+function Details({ t, language, e }: { t: AdminMessages; language: Language; e: AuditEntryDto }) {
+  const { payload } = e;
+  const change =
+    e.action === 'setting.changed' && knownKey(e.targetId) && 'old' in payload && 'new' in payload
+      ? (() => {
+          const spec = describeInput(settingMeta(e.targetId).schema);
+          const show = (v: unknown) => displayValue(e.targetId as SettingKey, spec, v, language, t);
+          return (
+            <span className="[overflow-wrap:anywhere]">
+              <span className="text-muted-foreground">{t.audit.was}</span> {show(payload.old)}{' '}
+              <span className="text-muted-foreground">{t.audit.became}</span> {show(payload.new)}
+            </span>
+          );
+        })()
+      : null;
+  const raw = Object.keys(payload).length === 0 ? null : JSON.stringify(payload, null, 2);
+  return (
+    <div className="grid gap-1">
+      {change}
+      {raw && (
+        <details className="text-[13px]">
+          <summary className="cursor-pointer text-muted-foreground">{t.audit.more}</summary>
+          <pre className="mt-1 max-w-full overflow-x-auto whitespace-pre-wrap rounded-button bg-field p-2 font-mono text-xs [overflow-wrap:anywhere]">
+            {raw}
+          </pre>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -57,7 +95,7 @@ function Details({ t, payload }: { t: AdminMessages; payload: Record<string, unk
  * The audit trail: a plain GET form for the filters (the URL is the state, so a filtered view can
  * be linked and the page needs no client code) and numbered pages. Times are Asia/Tashkent.
  */
-export function AuditView({ t, items, total, page, pageSize, filters, options }: Props) {
+export function AuditView({ t, language, items, total, page, pageSize, filters, options }: Props) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const filtered = Boolean(filters.actor || filters.action || filters.from || filters.to);
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
@@ -96,7 +134,7 @@ export function AuditView({ t, items, total, page, pageSize, filters, options }:
               <option value="">{t.audit.filters.all}</option>
               {options.actions.map((a) => (
                 <option key={a} value={a}>
-                  {a}
+                  {actionLabel(t, a)}
                 </option>
               ))}
             </Select>
@@ -129,7 +167,9 @@ export function AuditView({ t, items, total, page, pageSize, filters, options }:
             {items.map((e) => (
               <li key={e.id} className="grid gap-1 px-4 py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="font-semibold [overflow-wrap:anywhere]">{e.action}</span>
+                  <span className="font-semibold [overflow-wrap:anywhere]">
+                    {actionLabel(t, e.action)}
+                  </span>
                   <time
                     dateTime={e.createdAt}
                     className="text-[13px] text-muted-foreground tabular-nums"
@@ -138,12 +178,11 @@ export function AuditView({ t, items, total, page, pageSize, filters, options }:
                   </time>
                 </div>
                 <p className="text-[13px] text-muted-foreground [overflow-wrap:anywhere]">
-                  {who(t, e)} · {e.targetType}
-                  {e.targetId ? ` ${e.targetId}` : ''}
+                  {who(t, e)} · <Target t={t} language={language} e={e} />
                 </p>
-                <p className="text-[13px]">
-                  <Details t={t} payload={e.payload} />
-                </p>
+                <div className="text-[13px]">
+                  <Details t={t} language={language} e={e} />
+                </div>
               </li>
             ))}
           </ul>
@@ -163,13 +202,14 @@ export function AuditView({ t, items, total, page, pageSize, filters, options }:
                   <TR key={e.id}>
                     <TD className="whitespace-nowrap">{formatTashkent(e.createdAt)}</TD>
                     <TD className="[overflow-wrap:anywhere]">{who(t, e)}</TD>
-                    <TD className="font-semibold [overflow-wrap:anywhere]">{e.action}</TD>
+                    <TD className="font-semibold [overflow-wrap:anywhere]">
+                      {actionLabel(t, e.action)}
+                    </TD>
                     <TD className="[overflow-wrap:anywhere]">
-                      {e.targetType}
-                      {e.targetId ? ` ${e.targetId}` : ''}
+                      <Target t={t} language={language} e={e} />
                     </TD>
                     <TD className="max-w-[28rem] py-3">
-                      <Details t={t} payload={e.payload} />
+                      <Details t={t} language={language} e={e} />
                     </TD>
                   </TR>
                 ))}
@@ -180,7 +220,7 @@ export function AuditView({ t, items, total, page, pageSize, filters, options }:
       )}
 
       <nav
-        aria-label={t.audit.page.replace('{page}', String(page)).replace('{pages}', String(pages))}
+        aria-label={fill(t.audit.page, { page: String(page), pages: String(pages) })}
         className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"
       >
         <span>{fill(t.audit.total, { total: String(total) })}</span>

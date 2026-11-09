@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import type { ZodTypeAny } from 'zod';
 
 /**
  * How a setting's value is edited, derived from its zod schema, so the admin Settings page is
@@ -6,7 +6,14 @@ import { z } from 'zod';
  * descriptor can't express (a list of objects, a nullable object) fall back to `json`.
  */
 export type InputSpec =
-  | { kind: 'integer' | 'number'; min?: number; max?: number }
+  | {
+      kind: 'integer' | 'number';
+      min?: number;
+      max?: number;
+      /** `gt` / `lt`: the bound itself is refused. */
+      minExclusive?: boolean;
+      maxExclusive?: boolean;
+    }
   | { kind: 'boolean' }
   | { kind: 'text'; pattern?: string }
   | { kind: 'enum'; options: string[] }
@@ -36,8 +43,14 @@ function leaf(def: any): Leaf | null {
       const checks: any[] = def.checks;
       const spec: Leaf = { kind: checks.some((c) => c.kind === 'int') ? 'integer' : 'number' };
       for (const c of checks) {
-        if (c.kind === 'min' && c.value > -SAFE) spec.min = c.value;
-        if (c.kind === 'max' && c.value < SAFE) spec.max = c.value;
+        if (c.kind === 'min' && c.value > -SAFE) {
+          spec.min = c.value;
+          if (!c.inclusive) spec.minExclusive = true;
+        }
+        if (c.kind === 'max' && c.value < SAFE) {
+          spec.max = c.value;
+          if (!c.inclusive) spec.maxExclusive = true;
+        }
       }
       return spec;
     }
@@ -54,7 +67,7 @@ function leaf(def: any): Leaf | null {
   }
 }
 
-export function describeInput(schema: z.ZodTypeAny): InputSpec {
+export function describeInput(schema: ZodTypeAny): InputSpec {
   const def = (schema as any)._def;
   const plain = leaf(def);
   if (plain) return plain;
@@ -69,7 +82,7 @@ export function describeInput(schema: z.ZodTypeAny): InputSpec {
     return minItems === undefined ? { kind: 'list', item } : { kind: 'list', item, minItems };
   }
   if (def.typeName === 'ZodObject') {
-    const shape = def.shape() as Record<string, z.ZodTypeAny>;
+    const shape = def.shape() as Record<string, ZodTypeAny>;
     return {
       kind: 'group',
       fields: Object.entries(shape).map(([name, s]) => ({ name, spec: describeInput(s) })),
@@ -147,51 +160,4 @@ export function fromDraft(spec: InputSpec, draft: Draft): unknown {
     default:
       return scalar(spec, String(draft));
   }
-}
-
-/** A refused value, language-free: the admin turns `code` (+ `min`/`max`) into RU or UZ text. */
-export const settingIssueSchema = z.object({
-  path: z.array(z.string()),
-  code: z.enum([
-    'required',
-    'not_integer',
-    'too_small',
-    'too_big',
-    'too_few_items',
-    'invalid_format',
-    'invalid_option',
-    'invalid',
-  ]),
-  min: z.number().optional(),
-  max: z.number().optional(),
-  /** For too_small / too_big: the bound itself is not allowed ("more than 10"). */
-  exclusive: z.boolean().optional(),
-});
-export type SettingIssue = z.infer<typeof settingIssueSchema>;
-
-/** One mapping, used by the API (the refusal it sends) and the admin form (its own check before sending). */
-export function toSettingIssues(error: z.ZodError): SettingIssue[] {
-  return error.issues.map((i): SettingIssue => {
-    const path = i.path.map(String);
-    switch (i.code) {
-      case 'invalid_type':
-        if (i.expected === 'integer') return { path, code: 'not_integer' };
-        return {
-          path,
-          code: i.received === 'undefined' || i.received === 'nan' ? 'required' : 'invalid',
-        };
-      case 'too_small':
-        return i.type === 'array'
-          ? { path, code: 'too_few_items', min: Number(i.minimum) }
-          : { path, code: 'too_small', min: Number(i.minimum), exclusive: !i.inclusive };
-      case 'too_big':
-        return { path, code: 'too_big', max: Number(i.maximum), exclusive: !i.inclusive };
-      case 'invalid_string':
-        return { path, code: 'invalid_format' };
-      case 'invalid_enum_value':
-        return { path, code: 'invalid_option' };
-      default:
-        return { path, code: 'invalid' };
-    }
-  });
 }
