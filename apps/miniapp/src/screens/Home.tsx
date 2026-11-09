@@ -1,5 +1,6 @@
 import type { Theme } from '@lummi/contracts';
 import { Link } from '@tanstack/react-router';
+import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
 import { BottleIcon, SearchIcon } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
@@ -79,14 +80,14 @@ export function Home() {
         }}
       >
         {/*
-          The approved row: search left, avatar right, on white discs. The centre is where the
-          delivery city selector goes (regions arrive with their ticket); until then the two
-          discs stand as a plain toolbar. Search opens the Catalog until search exists (#16).
+          The approved row: search left, avatar right, on white discs, the delivery city between
+          them. Search opens the Catalog until search exists (#16).
         */}
-        <div className="flex h-11 items-center justify-between">
+        <div className="flex h-11 items-center justify-between gap-2">
           <Link to="/catalog" aria-label={t.home.search} className={DISC}>
             <SearchIcon size={20} />
           </Link>
+          <DeliveryRow />
           <Link to="/profile" aria-label={t.tabs.profile} className={DISC}>
             <Monogram size={22} />
           </Link>

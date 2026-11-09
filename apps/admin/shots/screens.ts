@@ -98,6 +98,46 @@ export const screens: Screen[] = [
       await page.getByRole('alertdialog').waitFor();
     },
   },
+  // BTS points (ticket #11). The shot run loads the committed snapshot first (see run.ts).
+  { id: 'bts-points', path: '/bts-points', as: 'owner' },
+  { id: 'bts-points-manager', path: '/bts-points', as: 'manager' },
+  {
+    id: 'bts-points-filtered',
+    path: '/bts-points?region=3&status=active&q=%D0%B1%D0%BE%D0%B7%D0%BE%D1%80',
+    as: 'owner',
+  },
+  { id: 'bts-points-empty', path: '/bts-points?q=zzzzqqq', as: 'manager' },
+  {
+    id: 'bts-point-add',
+    path: '/bts-points',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.btsPoints.add }).click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    id: 'bts-point-edit',
+    path: '/bts-points',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.btsPoints.edit, exact: true }).first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  { id: 'bts-tariffs', path: '/bts-points/tariffs', as: 'owner' },
+  {
+    id: 'bts-tariff-edit',
+    path: '/bts-points/tariffs',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.tariffs.edit, exact: true }).first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];

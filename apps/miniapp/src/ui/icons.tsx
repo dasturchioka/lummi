@@ -95,3 +95,10 @@ export function Spinner({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+export const CheckIcon = (p: P) => <Icon d="m5 12.5 4.5 4.5L19 7.5" {...p} />;
+export const PinIcon = (p: P) => (
+  <Icon
+    d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM12 12.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4z"
+    {...p}
+  />
+);

@@ -7,6 +7,10 @@ import { StaffController } from './admin/staff.controller';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
 import { StaffService } from './staff/staff.service';
+import { BtsAdminController } from './delivery/bts-admin.controller';
+import { BtsAdminService } from './delivery/bts-admin.service';
+import { DeliveryController } from './delivery/delivery.controller';
+import { DeliveryService } from './delivery/delivery.service';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
 import { CustomersService } from './auth/customers.service';
@@ -43,6 +47,8 @@ export class AppModule {
         WebhookController,
         AdminAuthController,
         StaffController,
+        DeliveryController,
+        BtsAdminController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -56,6 +62,8 @@ export class AppModule {
         WorkerRuntime,
         SettingsService,
         CustomersService,
+        DeliveryService,
+        BtsAdminService,
         SessionService,
         SessionGuard,
         StaffService,
@@ -72,6 +80,7 @@ export class AppModule {
         BotService,
         WorkerRuntime,
         StaffService,
+        DeliveryService,
       ],
     };
   }
