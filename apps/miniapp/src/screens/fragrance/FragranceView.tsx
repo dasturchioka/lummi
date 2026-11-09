@@ -433,6 +433,8 @@ function Dock({
   const row = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(false);
+  const [shownNote, setShownNote] = useState(note);
+  if (note && note !== shownNote) setShownNote(note);
   const canBuy = volume !== undefined && volume.available > 0;
   useLayoutEffect(() => {
     const r = row.current;
@@ -463,12 +465,21 @@ function Dock({
     </span>
   );
   return (
-    <div>
-      {note ? (
-        <p role="status" className="type-caption mb-2 text-center text-muted">
-          {note}
-        </p>
-      ) : null}
+    <div className="relative">
+      {/*
+        The note («Осталось 3») rises above the dock as a small status pill and fades away again, so
+        the buttons never move under the customer's thumb. The last text stays while it fades.
+      */}
+      <span role="status" className="sr-only">
+        {note ?? ''}
+      </span>
+      <span
+        aria-hidden="true"
+        data-open={note ? '' : undefined}
+        className="type-caption pointer-events-none absolute bottom-full left-1/2 mb-[22px] -translate-x-1/2 translate-y-1 rounded-pill bg-btn px-3 py-1.5 font-semibold whitespace-nowrap text-btn-ink opacity-0 transition-[opacity,translate] duration-150 ease-out data-[open]:translate-y-0 data-[open]:opacity-100 data-[open]:duration-200"
+      >
+        {shownNote}
+      </span>
       <div ref={row} className="relative flex gap-2">
         {/* Clipped to the row, so the measuring copy never widens the page. */}
         <div
