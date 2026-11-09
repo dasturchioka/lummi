@@ -1,7 +1,7 @@
 import { createDb, staff, type Db, type StaffRole, type StaffRow } from '@lummi/db';
 import type { INestApplication } from '@nestjs/common';
 import { initClient } from '@ts-rest/core';
-import { contract } from '@lummi/contracts';
+import { apiContract } from '@lummi/contracts';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { inject } from 'vitest';
@@ -64,7 +64,7 @@ export interface TestApp {
 }
 
 function makeClient(baseUrl: string, token?: string, cookie?: string) {
-  return initClient(contract, {
+  return initClient(apiContract, {
     baseUrl,
     baseHeaders: {
       ...(token ? { authorization: `Bearer ${token}` } : {}),

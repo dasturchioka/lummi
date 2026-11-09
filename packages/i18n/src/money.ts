@@ -1,4 +1,4 @@
-import { dictionaries } from './dictionaries';
+import { sharedMessages } from './shared';
 import type { Language } from './language';
 
 const NNBSP = ' ';
@@ -8,5 +8,5 @@ export function formatMoney(amount: number, language: Language): string {
   if (!Number.isSafeInteger(amount)) throw new RangeError(`amount must be an integer: ${amount}`);
   const sign = amount < 0 ? '-' : '';
   const grouped = String(Math.abs(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, NNBSP);
-  return `${sign}${grouped}${NNBSP}${dictionaries[language].common.currency}`;
+  return `${sign}${grouped}${NNBSP}${sharedMessages[language].common.currency}`;
 }

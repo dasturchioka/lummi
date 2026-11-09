@@ -8,10 +8,17 @@ import {
   staffSchema,
   updateStaffBodySchema,
 } from './admin';
-import { authErrorSchema, customerSchema, sessionSchema, telegramAuthBodySchema } from './auth';
+import {
+  authErrorSchema,
+  customerSchema,
+  preferencesBodySchema,
+  sessionSchema,
+  telegramAuthBodySchema,
+} from './auth';
 
 const c = initContract();
 
+/** Customer-facing routes (Mini App). The Mini App client table must mirror exactly this router. */
 export const contract = c.router({
   auth: {
     telegram: {
@@ -36,82 +43,94 @@ export const contract = c.router({
       responses: { 200: customerSchema, 401: authErrorSchema },
       summary: 'The signed-in customer, identified only by the session',
     },
-  },
-  admin: {
-    loginWidget: {
-      method: 'POST',
-      path: '/admin/auth/telegram',
-      body: loginWidgetBodySchema,
-      responses: { 200: staffSchema, 401: adminErrorSchema, 403: adminErrorSchema },
-      summary: 'Telegram Login Widget sign-in; sets the httpOnly staff session cookie (ADR 0017)',
-    },
-    devLogin: {
-      method: 'POST',
-      path: '/admin/auth/dev',
-      body: devLoginBodySchema,
-      responses: { 200: staffSchema, 403: adminErrorSchema, 404: adminErrorSchema },
-      summary: 'Dev/test only: sign in as an active staff member without the widget',
-    },
-    logout: {
-      method: 'POST',
-      path: '/admin/auth/logout',
-      body: c.noBody(),
-      responses: { 200: z.object({ ok: z.literal(true) }) },
-      summary: 'Revoke the current staff session and clear the cookie',
-    },
-    me: {
-      method: 'GET',
-      path: '/admin/me',
-      responses: { 200: staffSchema, 401: adminErrorSchema },
-      summary: 'The signed-in staff member, identified only by the session cookie',
-    },
-    staff: {
-      list: {
-        method: 'GET',
-        path: '/admin/staff',
-        responses: { 200: z.array(staffSchema), 401: adminErrorSchema, 403: adminErrorSchema },
-        summary: 'Owner only: every staff member',
-      },
-      create: {
-        method: 'POST',
-        path: '/admin/staff',
-        body: createManagerBodySchema,
-        responses: {
-          201: staffSchema,
-          401: adminErrorSchema,
-          403: adminErrorSchema,
-          409: adminErrorSchema,
-        },
-        summary: 'Owner only: add a manager by Telegram id',
-      },
-      update: {
-        method: 'PATCH',
-        path: '/admin/staff/:id',
-        pathParams: z.object({ id: z.coerce.number().int().positive() }),
-        body: updateStaffBodySchema,
-        responses: {
-          200: staffSchema,
-          401: adminErrorSchema,
-          403: adminErrorSchema,
-          404: adminErrorSchema,
-          409: adminErrorSchema,
-        },
-        summary: 'Owner only: deactivate (revokes sessions) or reactivate a manager',
-      },
-      remove: {
-        method: 'DELETE',
-        path: '/admin/staff/:id',
-        pathParams: z.object({ id: z.coerce.number().int().positive() }),
-        body: c.noBody(),
-        responses: {
-          200: z.object({ ok: z.literal(true) }),
-          401: adminErrorSchema,
-          403: adminErrorSchema,
-          404: adminErrorSchema,
-          409: adminErrorSchema,
-        },
-        summary: 'Owner only: remove a manager',
-      },
+    updatePreferences: {
+      method: 'PATCH',
+      path: '/me/preferences',
+      body: preferencesBodySchema,
+      responses: { 200: customerSchema, 401: authErrorSchema },
+      summary: 'Save the customer language and/or theme (the bot reads the language too)',
     },
   },
 });
+
+/** Staff-facing routes (admin panel). Not part of the Mini App's client table (`./client`). */
+export const adminContract = c.router({
+  loginWidget: {
+    method: 'POST',
+    path: '/admin/auth/telegram',
+    body: loginWidgetBodySchema,
+    responses: { 200: staffSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+    summary: 'Telegram Login Widget sign-in; sets the httpOnly staff session cookie (ADR 0017)',
+  },
+  devLogin: {
+    method: 'POST',
+    path: '/admin/auth/dev',
+    body: devLoginBodySchema,
+    responses: { 200: staffSchema, 403: adminErrorSchema, 404: adminErrorSchema },
+    summary: 'Dev/test only: sign in as an active staff member without the widget',
+  },
+  logout: {
+    method: 'POST',
+    path: '/admin/auth/logout',
+    body: c.noBody(),
+    responses: { 200: z.object({ ok: z.literal(true) }) },
+    summary: 'Revoke the current staff session and clear the cookie',
+  },
+  me: {
+    method: 'GET',
+    path: '/admin/me',
+    responses: { 200: staffSchema, 401: adminErrorSchema },
+    summary: 'The signed-in staff member, identified only by the session cookie',
+  },
+  staff: {
+    list: {
+      method: 'GET',
+      path: '/admin/staff',
+      responses: { 200: z.array(staffSchema), 401: adminErrorSchema, 403: adminErrorSchema },
+      summary: 'Owner only: every staff member',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/staff',
+      body: createManagerBodySchema,
+      responses: {
+        201: staffSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        409: adminErrorSchema,
+      },
+      summary: 'Owner only: add a manager by Telegram id',
+    },
+    update: {
+      method: 'PATCH',
+      path: '/admin/staff/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: updateStaffBodySchema,
+      responses: {
+        200: staffSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+        409: adminErrorSchema,
+      },
+      summary: 'Owner only: deactivate (revokes sessions) or reactivate a manager',
+    },
+    remove: {
+      method: 'DELETE',
+      path: '/admin/staff/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: z.object({ ok: z.literal(true) }),
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+        409: adminErrorSchema,
+      },
+      summary: 'Owner only: remove a manager',
+    },
+  },
+});
+
+/** Both routers under one client, for tests that drive the whole API. */
+export const apiContract = c.router({ ...contract, admin: adminContract });

@@ -1,4 +1,4 @@
-import { contract } from '@lummi/contracts';
+import { adminContract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, Req, Res, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
@@ -19,17 +19,17 @@ export class AdminAuthController {
     @Inject(StaffSessionService) private readonly sessions: StaffSessionService,
   ) {}
 
-  @TsRestHandler(contract.admin.loginWidget)
+  @TsRestHandler(adminContract.loginWidget)
   loginWidget(@Res({ passthrough: true }) res: Response) {
-    return tsRestHandler(contract.admin.loginWidget, async ({ body }) =>
+    return tsRestHandler(adminContract.loginWidget, async ({ body }) =>
       this.reply(res, await this.login.withWidget(body)),
     );
   }
 
   /** Dev/test only; the env schema refuses to enable it in production. */
-  @TsRestHandler(contract.admin.devLogin)
+  @TsRestHandler(adminContract.devLogin)
   devLogin(@Res({ passthrough: true }) res: Response) {
-    return tsRestHandler(contract.admin.devLogin, async ({ body }) => {
+    return tsRestHandler(adminContract.devLogin, async ({ body }) => {
       if (!this.env.ADMIN_DEV_LOGIN) {
         return { status: 404 as const, body: { code: 'not_available' as const } };
       }
@@ -37,9 +37,9 @@ export class AdminAuthController {
     });
   }
 
-  @TsRestHandler(contract.admin.logout)
+  @TsRestHandler(adminContract.logout)
   logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    return tsRestHandler(contract.admin.logout, async () => {
+    return tsRestHandler(adminContract.logout, async () => {
       const token = readCookie(req.headers.cookie, STAFF_COOKIE);
       if (token) await this.sessions.revoke(token);
       res.cookie(STAFF_COOKIE, '', { ...this.cookieOptions(), maxAge: 0 });
@@ -47,10 +47,10 @@ export class AdminAuthController {
     });
   }
 
-  @TsRestHandler(contract.admin.me)
+  @TsRestHandler(adminContract.me)
   @UseGuards(StaffGuard)
   me(@CurrentStaff() member: StaffRow) {
-    return tsRestHandler(contract.admin.me, async () => ({
+    return tsRestHandler(adminContract.me, async () => ({
       status: 200 as const,
       body: toStaffDto(member),
     }));

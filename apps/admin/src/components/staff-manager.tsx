@@ -65,7 +65,7 @@ export function StaffManager({
   const activate = async (member: StaffDto) => {
     setRowError(null);
     setBusyId(member.id);
-    const res = await browserApi.admin.staff
+    const res = await browserApi.staff
       .update({ params: { id: member.id }, body: { active: true } })
       .catch(() => null);
     setBusyId(null);
@@ -275,8 +275,8 @@ function ConfirmContent({
     setError(null);
     const call =
       kind === 'remove'
-        ? browserApi.admin.staff.remove({ params: { id: member.id } })
-        : browserApi.admin.staff.update({ params: { id: member.id }, body: { active: false } });
+        ? browserApi.staff.remove({ params: { id: member.id } })
+        : browserApi.staff.update({ params: { id: member.id }, body: { active: false } });
     const res = await call.catch(() => null);
     setPending(false);
     if (res?.status === 200) onDone();
@@ -334,7 +334,7 @@ function AddManagerDialog({
             e.preventDefault();
             setPending(true);
             setError(null);
-            const res = await browserApi.admin.staff
+            const res = await browserApi.staff
               .create({ body: { telegramId: Number(telegramId), name } })
               .catch(() => null);
             setPending(false);

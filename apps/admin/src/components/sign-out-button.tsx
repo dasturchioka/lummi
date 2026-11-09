@@ -18,7 +18,7 @@ export function SignOutButton({ label }: { label: string }) {
       loading={pending}
       onClick={async () => {
         setPending(true);
-        await browserApi.admin.logout();
+        await browserApi.logout();
         router.replace('/login');
         router.refresh();
       }}

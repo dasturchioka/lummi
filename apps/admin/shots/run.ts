@@ -15,7 +15,7 @@ import net from 'node:net';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
-import { dictionaries } from '@lummi/i18n';
+import { adminMessages } from '@lummi/i18n/admin';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
@@ -219,7 +219,7 @@ async function main() {
   let count = 0;
   try {
     for (const lang of LANGS) {
-      const t = dictionaries[lang].admin;
+      const t = adminMessages[lang].admin;
       for (const screen of selected) {
         for (const width of screen.widths ?? WIDTHS) {
           const phone = width < 768;

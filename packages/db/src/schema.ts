@@ -18,6 +18,7 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 
 export const languageEnum = pgEnum('language', LANGUAGES);
 export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
+export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
 
 /** A Customer is a Telegram account (ADR 0004). */
@@ -28,6 +29,8 @@ export const customers = pgTable('customers', {
   lastName: text('last_name'),
   username: text('username'),
   language: languageEnum('language').notNull(),
+  /** Light by default whatever Telegram says; dark is a Profile option (spec 2026-11-07). */
+  theme: themeEnum('theme').notNull().default('light'),
   /** Telegram answered 403 to a send; /start clears it. Reports show such sends as "не доставлено". */
   botBlocked: boolean('bot_blocked').notNull().default(false),
   createdAt: createdAt(),

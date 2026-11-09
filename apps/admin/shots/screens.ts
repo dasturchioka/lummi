@@ -1,4 +1,4 @@
-import type { Messages } from '@lummi/i18n';
+import type { AdminMessages } from '@lummi/i18n/admin';
 import type { Page } from '@playwright/test';
 
 /** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
@@ -24,7 +24,7 @@ export const OUTSIDER_ID = 990000099;
 
 export type ScreenContext = {
   page: Page;
-  t: Messages['admin'];
+  t: AdminMessages;
   outsiderId: number;
   width: number;
 };

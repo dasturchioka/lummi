@@ -44,7 +44,7 @@ export function LoginForm({
   useEffect(() => {
     if (!botUsername || !widgetRef.current) return;
     window.onLummiTelegramAuth = async (user) => {
-      const res = await browserApi.admin.loginWidget({ body: user });
+      const res = await browserApi.loginWidget({ body: user });
       if (res.status === 200) {
         router.replace('/');
         router.refresh();
@@ -92,7 +92,7 @@ export function LoginForm({
             e.preventDefault();
             setError(null);
             setPending(true);
-            const res = await browserApi.admin
+            const res = await browserApi
               .devLogin({ body: { telegramId: Number(devId) } })
               .catch(() => null);
             if (res?.status === 200) {

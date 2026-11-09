@@ -1,4 +1,4 @@
-import { contract } from '@lummi/contracts';
+import { adminContract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
@@ -21,34 +21,34 @@ function failure(reason: 'not_found' | 'conflict') {
 export class StaffController {
   constructor(@Inject(StaffService) private readonly staff: StaffService) {}
 
-  @TsRestHandler(contract.admin.staff.list)
+  @TsRestHandler(adminContract.staff.list)
   list() {
-    return tsRestHandler(contract.admin.staff.list, async () => ({
+    return tsRestHandler(adminContract.staff.list, async () => ({
       status: 200 as const,
       body: (await this.staff.list()).map(toStaffDto),
     }));
   }
 
-  @TsRestHandler(contract.admin.staff.create)
+  @TsRestHandler(adminContract.staff.create)
   create(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(contract.admin.staff.create, async ({ body }) => {
+    return tsRestHandler(adminContract.staff.create, async ({ body }) => {
       const res = await this.staff.addManager(actor, body);
       return res.ok ? { status: 201 as const, body: toStaffDto(res.staff) } : conflict();
     });
   }
 
-  @TsRestHandler(contract.admin.staff.update)
+  @TsRestHandler(adminContract.staff.update)
   update(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(contract.admin.staff.update, async ({ params, body }) => {
+    return tsRestHandler(adminContract.staff.update, async ({ params, body }) => {
       const res = await this.staff.setActive(actor, params.id, body.active);
       if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
       return failure(res.reason);
     });
   }
 
-  @TsRestHandler(contract.admin.staff.remove)
+  @TsRestHandler(adminContract.staff.remove)
   remove(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(contract.admin.staff.remove, async ({ params }) => {
+    return tsRestHandler(adminContract.staff.remove, async ({ params }) => {
       const res = await this.staff.remove(actor, params.id);
       if (res.ok) return { status: 200 as const, body: { ok: true as const } };
       return failure(res.reason);

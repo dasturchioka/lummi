@@ -1,4 +1,4 @@
-import { contract } from '@lummi/contracts';
+import { adminContract } from '@lummi/contracts';
 import { initClient } from '@ts-rest/core';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
@@ -6,7 +6,7 @@ import { cache } from 'react';
 /** Server-component client: forwards the visitor's cookie. Reads only; writes go from the browser. */
 export async function serverApi() {
   const cookie = (await cookies()).toString();
-  return initClient(contract, {
+  return initClient(adminContract, {
     baseUrl: process.env.API_URL ?? 'http://127.0.0.1:4000',
     baseHeaders: { cookie },
     throwOnUnknownStatus: false,
@@ -14,4 +14,4 @@ export async function serverApi() {
 }
 
 /** `GET /admin/me` once per request, shared by the shell and the page it renders. */
-export const getMe = cache(async () => (await serverApi()).admin.me());
+export const getMe = cache(async () => (await serverApi()).me());

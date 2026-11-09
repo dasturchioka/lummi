@@ -7,7 +7,7 @@ Node 24+ and Docker are required. Several agents or branches may run on one mach
 | API | `API_PORT` | 4000 | `41NN` |
 | Postgres (host port) | `POSTGRES_HOST_PORT` | 5432 | `25NN` |
 | Redis | `REDIS_HOST_PORT` | 6379 | `26NN` |
-| Mini App | `MINIAPP_PORT` | | `51NN` |
+| Mini App | `MINIAPP_PORT` | 5173 | `51NN` |
 | Admin | `ADMIN_PORT` | 6000 | `61NN` |
 
 ## Install
@@ -30,6 +30,41 @@ docker compose -f docker-compose.dev.yml -p lummi-2 down -v                     
 ```
 
 Pass `-p <name>` (compose project) when two stacks share a machine, so containers and volumes do not collide.
+
+## Mini App (`apps/miniapp`)
+
+```sh
+API_PORT=4103 npm run dev:api            # the API, as above
+MINIAPP_PORT=5103 API_PORT=4103 npm run dev -w @lummi/miniapp
+```
+
+The browser only talks to `/api/*` on its own origin. Vite proxies that to `http://127.0.0.1:$API_PORT` and strips `/api` (production: Caddy does the same, so there is no CORS). Set `VITE_API_URL` to bypass the proxy.
+
+**In a plain desktop browser** (development, screenshots) there is no Telegram. Open the app with Telegram launch params in the URL hash and the SDK's mock environment takes over (dev server only, or a build with `VITE_BROWSER_MODE=1`):
+
+```
+http://127.0.0.1:5103/profile#tgWebAppData=<urlencoded initData>&tgWebAppVersion=8.0&tgWebAppPlatform=android&tgWebAppThemeParams={}
+```
+
+`initData` must be signed with the dev `BOT_TOKEN` (the API verifies it for real; `apps/miniapp/shots/api.ts` has `signInitData`). Add `tgWebAppStartParam=orders` to test a `startapp` link. The app sets `data-ready="1"` on `<html>` when the saved preferences are applied and fonts are loaded.
+
+**On a phone (dev bot, ADR 0023).** Telegram opens Mini Apps only over HTTPS, so use a named Cloudflare Tunnel on Sardor's account: `cloudflared tunnel run lummi-dev` with a hostname such as `dev.<domain>` pointing at `http://127.0.0.1:$MINIAPP_PORT` (add `server.allowedHosts` in `vite.config.ts` if Vite refuses the host). In BotFather: `/mybots` > `@lummi_dev_bot` > Bot Settings > Menu Button > set the URL to that hostname. Open the bot and tap the menu button. Staging and production use their own bot and domain.
+
+### Screenshots
+
+```sh
+npm run shots -w @lummi/miniapp -- --out <dir> [--only home,profile]
+```
+
+Captures every screen in `apps/miniapp/shots/registry.ts` at 390x844 (deviceScaleFactor 2), light and dark x RU and UZ, as `<screen>-<theme>-<lang>.png` in `<dir>`. It needs `BOT_TOKEN` (from `.env`). Services already running on `API_PORT`, `MINIAPP_PORT` and `POSTGRES_HOST_PORT` are used as they are; whatever is missing is started (dev Postgres through compose project `lummi-shots`, migrations, API, Vite) and stopped at the end. Theme and language are saved through `PATCH /me/preferences` as the screenshot customer, then each page opens with launch params in the URL, so the app runs through its real sign-in. First run: `npx playwright install chromium`.
+
+To add a screen, append to `registry.ts`: `{ id, path, setup?, initDataAgeSeconds?, fullPage? }`. `setup({ api })` runs before the capture with a client signed in as the screenshot customer (for example, add to the cart first). The run waits for `html[data-ready]`, for every `[data-skeleton]` to disappear (use the `Skeleton` component for loading states) and for fonts.
+
+**Component gallery** (dev server only): `/dev/ui` shows every base component in every state (pressed, disabled, loading, skeleton, empty, error), the type roles with the Uzbek `oʻ gʻ` glyphs, and the colour roles; `/dev/sheet` opens the sheet. Both are in the screenshot run (`ui-gallery`, `ui-sheet`). Add a new base component there with its states. The routes exist only under `import.meta.env.DEV`, and `npm run size` fails if the gallery reaches `dist`.
+
+### Bundle budget
+
+`npm run build -w @lummi/miniapp && npm run size -w @lummi/miniapp` fails above 150 KB gzip of initial JS (entry chunk and its static imports; lazy route chunks do not count). CI runs both. Load screens with `lazyRouteComponent` and keep heavy libraries (Radix Dialog is only in `Sheet`) off the entry path.
 
 ## Migrations
 

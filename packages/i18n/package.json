@@ -4,7 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./miniapp": "./src/miniapp.ts",
+    "./bot": "./src/bot.ts",
+    "./admin": "./src/admin.ts",
+    "./all": "./src/all.ts"
   },
   "scripts": {
     "lint": "eslint .",
