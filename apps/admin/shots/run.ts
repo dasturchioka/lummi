@@ -216,10 +216,13 @@ async function main() {
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
   mkdirSync(outDir, { recursive: true });
-  const browser = await chromium.launch();
   let count = 0;
-  try {
-    for (const lang of LANGS) {
+  for (const lang of LANGS) {
+    // one browser per language: `--lang` is what makes date fields show the local format
+    const browser = await chromium.launch({
+      args: [`--lang=${lang === 'uz' ? 'uz-UZ' : 'ru-RU'}`],
+    });
+    try {
       const t = adminMessages[lang].admin;
       for (const screen of selected) {
         for (const width of screen.widths ?? WIDTHS) {
@@ -257,9 +260,9 @@ async function main() {
           console.log(`  ${screen.id}-${width}-${lang}.png`);
         }
       }
+    } finally {
+      await browser.close();
     }
-  } finally {
-    await browser.close();
   }
   console.log(`${count} screenshots in ${outDir}`);
 }

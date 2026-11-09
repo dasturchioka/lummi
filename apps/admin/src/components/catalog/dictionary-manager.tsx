@@ -2,7 +2,7 @@
 
 import { dictionaryInputSchema, type DictionaryInput, type DictionaryItem } from '@lummi/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { plural, type Language } from '@lummi/i18n';
+import { plural, stripApostrophes, type Language } from '@lummi/i18n';
 import { ArrowLeft, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -27,7 +27,7 @@ import { Notice } from '@/components/ui/notice';
 import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, fill } from '@/lib/utils';
 
 type Kind = 'notes' | 'families';
 type Editing = { kind: Kind; item: DictionaryItem | null };
@@ -51,7 +51,15 @@ export function DictionaryManager({
   const router = useRouter();
   const [tab, setTab] = useState<Kind>('notes');
   const [editing, setEditing] = useState<Editing | null>(null);
-  const items = tab === 'notes' ? notes : families;
+  // the dictionaries load whole, so the search is client-side; apostrophe variants compare equal
+  const [draft, setDraft] = useState('');
+  const [q, setQ] = useState('');
+  const fold = (x: string) => stripApostrophes(x).toLocaleLowerCase();
+  const all = tab === 'notes' ? notes : families;
+  const needle = fold(q.trim());
+  const items = needle
+    ? all.filter((i) => [i.nameRu, i.nameUz, ...i.aliases].some((x) => fold(x).includes(needle)))
+    : all;
 
   const add = () => setEditing({ kind: tab, item: null });
   const addLabel = tab === 'notes' ? d.addNote : d.addFamily;
@@ -102,10 +110,53 @@ export function DictionaryManager({
           </button>
         ))}
       </div>
+      <Card className="mb-4 p-4">
+        <form
+          className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setQ(draft);
+          }}
+        >
+          <Field id="d-q" label={t.catalog.search}>
+            <Input
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={d.searchPlaceholder}
+            />
+          </Field>
+          <div className="flex items-end gap-2">
+            <Button type="submit" className="max-sm:flex-1">
+              {t.catalog.apply}
+            </Button>
+            {q && (
+              <Button
+                type="button"
+                variant="outline"
+                className="max-sm:flex-1"
+                onClick={() => {
+                  setDraft('');
+                  setQ('');
+                }}
+              >
+                {t.catalog.reset}
+              </Button>
+            )}
+          </div>
+        </form>
+      </Card>
       {items.length === 0 ? (
-        <EmptyState title={d.empty} />
+        <EmptyState title={q ? t.catalog.empty : d.empty}>
+          {q ? t.catalog.emptyFilteredText : null}
+        </EmptyState>
       ) : (
         <Card>
+          <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums sm:px-5">
+            {fill(t.catalog.total, { n: String(items.length) })}
+          </p>
           {/* a tap anywhere on an entry opens it; the name is the keyboard path */}
           <ul className="divide-y divide-border">
             {items.map((i) => (

@@ -300,6 +300,16 @@ export const screens: Screen[] = [
   }),
   { id: 'catalog-dictionaries', path: '/catalog/dictionaries', as: 'owner' },
   {
+    id: 'catalog-dictionaries-search',
+    path: '/catalog/dictionaries',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.getByRole('searchbox', { name: t.catalog.search }).fill("d'");
+      await page.getByRole('button', { name: t.catalog.apply, exact: true }).click();
+      await page.getByRole('button', { name: t.catalog.reset }).waitFor();
+    },
+  },
+  {
     id: 'catalog-dictionaries-families',
     path: '/catalog/dictionaries',
     as: 'owner',

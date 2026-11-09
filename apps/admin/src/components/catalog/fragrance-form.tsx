@@ -582,6 +582,12 @@ export function FragranceForm({
         </Section>
 
         <Section title={c.sectionVolumes}>
+          {/* the rules once, not repeated under every volume column */}
+          <ul className="-mt-2 grid gap-1 text-small text-pretty text-muted-foreground">
+            {[c.salePriceHint, c.saleEndsOnHint, c.onHandHint, c.photoHint].map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
           {/* three columns from 1024 px, split by hairlines (no box inside the card) */}
           <div className="grid divide-y divide-border lg:-mx-6 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
             {VOLUME_MLS.map((ml, i) => {
@@ -628,7 +634,7 @@ export function FragranceForm({
                       <Field
                         id={`f-sale-${ml}`}
                         label={c.salePrice}
-                        hint={priceEcho(typed.salePrice, language) ?? c.salePriceHint}
+                        hint={priceEcho(typed.salePrice, language)}
                         error={volumeErr(i, 'salePrice')}
                       >
                         <Input
@@ -640,7 +646,6 @@ export function FragranceForm({
                       <Field
                         id={`f-end-${ml}`}
                         label={c.saleEndsOn}
-                        hint={c.saleEndsOnHint}
                         error={volumeErr(i, 'saleEndsOn')}
                       >
                         <Input
@@ -649,12 +654,7 @@ export function FragranceForm({
                           {...reg(`volumes.${i}.saleEndsOn`, { setValueAs: textOrNull })}
                         />
                       </Field>
-                      <Field
-                        id={`f-hand-${ml}`}
-                        label={c.onHand}
-                        hint={c.onHandHint}
-                        error={volumeErr(i, 'onHand')}
-                      >
+                      <Field id={`f-hand-${ml}`} label={c.onHand} error={volumeErr(i, 'onHand')}>
                         <Input
                           inputMode="numeric"
                           className="tabular-nums"

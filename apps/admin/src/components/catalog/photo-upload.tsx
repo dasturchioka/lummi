@@ -116,7 +116,6 @@ export function PhotoUpload({
               <ImagePlus strokeWidth={1.5} aria-hidden />
               {shown ? c.photoReplace : c.photoChoose}
             </Button>
-            <p className="text-xs text-pretty text-muted-foreground">{c.photoHint}</p>
             {state.text && !busy && (
               <p
                 key={state.text}
