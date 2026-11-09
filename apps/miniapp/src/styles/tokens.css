@@ -27,6 +27,7 @@
   --c-bar-active-ink: #2a2a2a;
   --c-totals: #2a2a2a;
   --c-totals-ink: #f5f2ec;
+  --c-totals-accent: #aeb8a6; /* Dark Sage Ink: the discount and «Бесплатно» on the Graphite block */
   --c-photo: #f1ddd0; /* placeholder behind bottle photography */
   --c-overlay: rgba(42, 42, 42, 0.45);
   /*
@@ -72,6 +73,7 @@
   --c-bar-active-ink: #2a2a2a;
   --c-totals: #31302c;
   --c-totals-ink: #f5f2ec;
+  --c-totals-accent: #aeb8a6; /* unchanged */
   --c-photo: #3a322c;
   --c-overlay: rgba(0, 0, 0, 0.55);
   --c-on-sage: #2a2a2a; /* unchanged */
