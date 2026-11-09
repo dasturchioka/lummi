@@ -1,4 +1,5 @@
 import type { AdminMessages } from '@lummi/i18n/admin';
+import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { WORST_NAME } from './catalog-data';
 
@@ -44,6 +45,31 @@ function photoError(
       await slot.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     },
   };
+}
+
+/** A real bottle photo for the composer's image slot (kept in the repo under materials/). */
+const BROADCAST_IMAGE = resolve(
+  import.meta.dirname,
+  '../../../materials/flakons/absolu-aventus_30ml.webp',
+);
+
+/** Fills both texts, picks the image and the «Каталог» button, as an owner about to send. */
+async function fillComposer(page: Page, t: AdminMessages) {
+  await page
+    .locator('#bc-ru')
+    .fill('Новый аромат уже в LUMMI. Откройте каталог и выберите свой вечер.');
+  await page
+    .locator('#bc-uz')
+    .fill("LUMMI'da yangi atir bor. Katalogni oching va oʻz oqshomingizni tanlang.");
+  await page.locator('[data-image] input[type=file]').setInputFiles(BROADCAST_IMAGE);
+  await page.getByRole('button', { name: t.broadcasts.imageReplace }).waitFor();
+  await page.locator('#bc-target').selectOption('catalog');
+}
+
+/** Opens a broadcast from the history: the nth row (newest first; the shot data makes the order stable). */
+async function openBroadcast(page: Page, nth: number) {
+  await page.locator('main a[href^="/broadcasts/"]:not([href="/broadcasts/new"]):visible').nth(nth).click();
+  await page.locator('[data-count="sent"]').waitFor();
 }
 
 /** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
@@ -393,6 +419,88 @@ export const screens: Screen[] = [
     act: async ({ page, t }) => {
       await page.getByRole('button', { name: t.tariffs.edit, exact: true }).first().click();
       await page.getByRole('dialog').waitFor();
+    },
+  },
+  // Broadcasts (ticket #14). The shot data is written to the database (broadcast-data.ts); nothing is sent to Telegram.
+  { id: 'broadcasts', path: '/broadcasts', as: 'owner' },
+  { id: 'broadcast-new', path: '/broadcasts/new', as: 'owner' },
+  {
+    id: 'broadcast-new-filled',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+    },
+  },
+  {
+    id: 'broadcast-new-errors',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByText(t.broadcasts.fixErrors).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-new-caption',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page.locator('#bc-ru').fill('Тёплый вечер. '.repeat(90));
+      await page.locator('#bc-uz').fill('Iliq oqshom. '.repeat(90));
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByText(t.broadcasts.errors.captionTooLong).first().waitFor();
+    },
+  },
+  {
+    id: 'broadcast-new-warnings',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#bc-ru').fill('Копия известного аромата 🎉🎉🎉 за копейки.');
+      await page.getByText(t.broadcasts.warnings.title).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-test-sent',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      // the shot owner has no real Telegram chat: the answer is stubbed, so nothing reaches Telegram
+      await page.route('**/api/admin/broadcasts/test', (route) =>
+        route.fulfill({ status: 200, json: { sent: ['ru', 'uz'] } }),
+      );
+      await fillComposer(page, t);
+      await page.getByRole('button', { name: t.broadcasts.sendTest }).click();
+      await page.getByText(t.broadcasts.testSent).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-send-confirm',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    id: 'broadcast-running',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+    },
+  },
+  {
+    id: 'broadcast-done',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 1);
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

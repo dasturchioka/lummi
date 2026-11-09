@@ -27,7 +27,11 @@ export class FakeTelegramSender implements TelegramSender {
   readonly sent: OutboundMessage[] = [];
   /** Chats that answer 403, like a user who blocked the bot. */
   readonly blockedChats = new Set<number>();
+  /** One-shot errors per chat, thrown by the next sends to it (a 429, a 400, ...). */
+  readonly failures = new Map<number, Error[]>();
   async send(message: OutboundMessage): Promise<{ messageId: number }> {
+    const failure = this.failures.get(message.chatId)?.shift();
+    if (failure) throw failure;
     if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
     this.sent.push(message);
     return { messageId: this.sent.length };

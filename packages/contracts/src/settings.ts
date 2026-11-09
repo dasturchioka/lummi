@@ -40,6 +40,8 @@ export const settingDefinitions = {
   'outbox.requeueAfterSeconds': { schema: z.number().int().min(30).max(86_400), default: 300 },
   /** After this many consecutive failed ticks a sweep alerts the owner once (not every minute). */
   'worker.sweepFailureAlertAfter': { schema: z.number().int().min(1).max(1000), default: 3 },
+  /** Broadcast sends per second (area: messaging; unit: messages per second). Telegram allows about 30 per second to different chats, so 25 is the ceiling (ADR 0021). */
+  'broadcast.sendRatePerSecond': { schema: z.number().int().min(1).max(25), default: 25 },
   /** Delivery is free once the threshold base reaches this many so'm (TZ §8). */
   'pricing.freeDeliveryThreshold': {
     schema: z.number().int().min(0).max(100_000_000),

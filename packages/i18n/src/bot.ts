@@ -7,6 +7,8 @@ export const botMessages = defineMessages(
       greeting:
         'Добро пожаловать в LUMMI.\nExtrait de Parfum по мотивам известных ароматов. Откройте магазин и выберите свой.',
       openShop: 'Открыть магазин',
+      /** The link button under a broadcast. */
+      broadcastOpen: 'Открыть',
       alertPrefix: 'Системное сообщение',
     },
   },
@@ -15,6 +17,7 @@ export const botMessages = defineMessages(
       greeting:
         'LUMMI ga xush kelibsiz.\nMashhur atirlar asosidagi Extrait de Parfum. Doʻkonni oching va oʻzingizni tanlang.',
       openShop: 'Doʻkonni ochish',
+      broadcastOpen: 'Ochish',
       alertPrefix: 'Tizim xabari',
     },
   },

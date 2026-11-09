@@ -57,6 +57,10 @@ export const envSchema = z
     MINIAPP_URL: z.string().url().optional(),
     /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
+    /** BullMQ queue of broadcast deliveries; API and worker must agree. */
+    BROADCAST_QUEUE: z.string().min(1).default('broadcasts'),
+    /** The bot's link, no trailing slash; a broadcast button is `<link>?startapp=<target>` (dev bot locally, like the Mini App's VITE_BOT_LINK). */
+    BOT_LINK: z.string().url().default('https://t.me/Lummiuz_bot'),
     /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
     EVENTS_QUEUE: z.string().min(1).default('events'),
 

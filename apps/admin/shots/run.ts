@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { adminMessages } from '@lummi/i18n/admin';
+import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
 
@@ -215,6 +216,7 @@ async function main() {
   // staff after the slow seeds, so the owner's API connection is fresh for the shot rows
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
+  await seedShotBroadcasts(databaseUrl);
   mkdirSync(outDir, { recursive: true });
   let count = 0;
   for (const lang of LANGS) {

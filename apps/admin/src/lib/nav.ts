@@ -65,7 +65,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: 'promoCodes', icon: TicketPercent, href: null, roles: OWNER },
       { key: 'campaignLinks', icon: Link2, href: null, roles: OWNER },
-      { key: 'broadcasts', icon: Megaphone, href: null, roles: OWNER },
+      { key: 'broadcasts', icon: Megaphone, href: '/broadcasts', roles: OWNER },
     ],
   },
   {
