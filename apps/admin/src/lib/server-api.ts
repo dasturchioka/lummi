@@ -1,6 +1,7 @@
 import { contract } from '@lummi/contracts';
 import { initClient } from '@ts-rest/core';
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 
 /** Server-component client: forwards the visitor's cookie. Reads only; writes go from the browser. */
 export async function serverApi() {
@@ -11,3 +12,6 @@ export async function serverApi() {
     throwOnUnknownStatus: false,
   });
 }
+
+/** `GET /admin/me` once per request, shared by the shell and the page it renders. */
+export const getMe = cache(async () => (await serverApi()).admin.me());

@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Cormorant_Garamond, Manrope, Tenor_Sans } from 'next/font/google';
-import { getLanguage } from '@/lib/i18n';
+import { getAdminMessages, getLanguage } from '@/lib/i18n';
 import './globals.css';
 
 const manrope = Manrope({ subsets: ['latin', 'cyrillic'], variable: '--font-manrope' });
@@ -14,9 +14,20 @@ const cormorant = Cormorant_Garamond({
   style: 'italic',
   weight: '500',
   variable: '--font-cormorant',
+  preload: false, // fragrance names only; no admin screen shows one yet
 });
 
-export const metadata: Metadata = { title: 'LUMMI. Admin', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getAdminMessages();
+  return { title: `LUMMI. ${t.panel}`, robots: { index: false } };
+}
+// Light only: one theme colour (Milk, the top of every screen). The keyboard resizes the layout
+// so a bottom-sheet form stays above it on Android too.
+export const viewport: Viewport = {
+  themeColor: '#f5f2ec',
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
+};
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const lang = await getLanguage();

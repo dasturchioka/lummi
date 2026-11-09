@@ -1,41 +1,28 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { LanguageSwitch } from '@/components/language-switch';
-import { SignOutButton } from '@/components/sign-out-button';
-import { Badge } from '@/components/ui/badge';
+import { MobileBar } from '@/components/shell/mobile-bar';
+import { Sidebar } from '@/components/shell/sidebar';
 import { getAdminMessages } from '@/lib/i18n';
-import { serverApi } from '@/lib/server-api';
+import { getMe } from '@/lib/server-api';
 
+/**
+ * The panel shell every admin screen sits in: a sidebar from 1024 px, a top bar with a menu
+ * sheet below that, and a content column capped at 1120 px.
+ */
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  const api = await serverApi();
-  const me = await api.admin.me();
+  const me = await getMe();
   if (me.status !== 200) redirect('/login');
   const { language, t } = await getAdminMessages();
   const member = me.body;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pb-16">
-      <header className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-border py-5">
-        <span className="title">{t.brand}</span>
-        <nav className="flex gap-5 text-[15px] font-semibold">
-          <Link href="/" className="hover:underline underline-offset-4">
-            {t.nav.home}
-          </Link>
-          {member.role === 'owner' && (
-            <Link href="/staff" className="hover:underline underline-offset-4">
-              {t.nav.staff}
-            </Link>
-          )}
-        </nav>
-        <div className="ml-auto flex items-center gap-4">
-          <span className="text-sm">
-            {member.name} <Badge tone="sage">{t.roles[member.role]}</Badge>
-          </span>
-          <LanguageSwitch current={language} label={t.language} />
-          <SignOutButton label={t.nav.signOut} />
-        </div>
-      </header>
-      <main className="pt-8">{children}</main>
+    <div className="min-h-dvh lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
+      <Sidebar member={member} language={language} t={t} />
+      <div className="min-w-0">
+        <MobileBar member={member} language={language} t={t} />
+        <main className="mx-auto w-full max-w-[1120px] px-4 pt-6 pb-16 sm:px-6 lg:px-10 lg:pt-10">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

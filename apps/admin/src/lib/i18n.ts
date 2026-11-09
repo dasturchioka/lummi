@@ -1,12 +1,10 @@
 import { dictionaries, type Language } from '@lummi/i18n';
 import { cookies } from 'next/headers';
+import { LANG_COOKIE, languageFrom } from './lang-cookie';
 
-export const LANG_COOKIE = 'lummi_lang';
-
-/** Admin language: a plain cookie set by the switch in the header; RU by default. */
+/** Admin language: a plain cookie set by the switch in the panel; RU by default. */
 export async function getLanguage(): Promise<Language> {
-  const value = (await cookies()).get(LANG_COOKIE)?.value;
-  return value === 'uz' ? 'uz' : 'ru';
+  return languageFrom((await cookies()).get(LANG_COOKIE)?.value);
 }
 
 export async function getAdminMessages() {

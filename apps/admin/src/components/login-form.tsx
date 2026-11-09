@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 
@@ -28,6 +30,7 @@ export function LoginForm({
   const widgetRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [devId, setDevId] = useState('');
+  const [pending, setPending] = useState(false);
 
   const message = (status: number, code?: string) =>
     status === 403
@@ -63,52 +66,63 @@ export function LoginForm({
   }, [botUsername]);
 
   return (
-    <Card className="grid gap-5 p-6">
+    <Card className="grid gap-6 p-6 sm:p-8">
       <div>
         <h1 className="title">{t.login.title}</h1>
-        <p className="mt-2 text-muted-foreground">{t.login.hint}</p>
+        <p className="mt-2 text-sm text-pretty text-muted-foreground">{t.login.hint}</p>
       </div>
+      {error && (
+        <Notice
+          title={error}
+          icon={error === t.errors.noAccess ? 'blocked' : 'alert'}
+          className="-mt-1"
+        >
+          {error === t.errors.noAccess ? t.errors.noAccessHint : undefined}
+        </Notice>
+      )}
       {botUsername ? (
-        <div ref={widgetRef} />
+        <div ref={widgetRef} className="min-h-10" />
       ) : (
-        !devLogin && <p className="text-sm text-muted-foreground">{t.login.widgetMissing}</p>
+        !devLogin && <Notice title={t.login.widgetMissing} />
       )}
       {devLogin && (
         <form
-          className="grid gap-2 border-t border-border pt-4"
+          className="grid gap-4 border-t border-border pt-5"
           onSubmit={async (e) => {
             e.preventDefault();
             setError(null);
-            const res = await browserApi.admin.devLogin({ body: { telegramId: Number(devId) } });
-            if (res.status === 200) {
+            setPending(true);
+            const res = await browserApi.admin
+              .devLogin({ body: { telegramId: Number(devId) } })
+              .catch(() => null);
+            if (res?.status === 200) {
               router.replace('/');
               router.refresh();
-            } else {
-              setError(message(res.status));
+              return;
             }
+            setPending(false);
+            setError(res ? message(res.status) : t.errors.generic);
           }}
         >
-          <p className="text-sm text-muted-foreground">{t.login.devHint}</p>
-          <label className="grid gap-1 text-sm">
-            {t.login.devTelegramId}
+          <div>
+            <p className="text-[13px] font-semibold">{t.login.devTitle}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">{t.login.devHint}</p>
+          </div>
+          <Field id="dev-telegram-id" label={t.login.devTelegramId}>
             <Input
               inputMode="numeric"
               pattern="[0-9]+"
+              autoComplete="off"
               required
               value={devId}
+              aria-invalid={error === t.errors.noAccess || undefined}
               onChange={(e) => setDevId(e.target.value)}
             />
-          </label>
-          <Button type="submit">{t.login.devSubmit}</Button>
+          </Field>
+          <Button type="submit" loading={pending}>
+            {t.login.devSubmit}
+          </Button>
         </form>
-      )}
-      {error && (
-        <div role="alert">
-          <p className="font-semibold text-destructive">{error}</p>
-          {error === t.errors.noAccess && (
-            <p className="mt-1 text-sm text-muted-foreground">{t.errors.noAccessHint}</p>
-          )}
-        </div>
       )}
     </Card>
   );
