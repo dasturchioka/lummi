@@ -1,4 +1,4 @@
-import { contract } from '@lummi/contracts';
+import { internalContract } from '@lummi/contracts';
 import { credits, eq, humoMessages, outbox } from '@lummi/db';
 import { initClient } from '@ts-rest/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,11 +24,11 @@ beforeEach(async () => {
 });
 
 function feed(baseUrl = t.baseUrl, secret: string | null = TEST_INTERNAL_SECRET) {
-  return initClient(contract, {
+  return initClient(internalContract, {
     baseUrl,
     baseHeaders: secret === null ? {} : { 'x-internal-secret': secret },
     throwOnUnknownStatus: true,
-  }).internal;
+  });
 }
 
 /** The documented layout (spec Changes 2026-11-07) with ➕ and the given amount. */

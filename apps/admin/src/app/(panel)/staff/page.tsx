@@ -5,7 +5,7 @@ import { getMe, serverApi } from '@/lib/server-api';
 
 export default async function StaffPage() {
   const api = await serverApi();
-  const list = await api.admin.staff.list();
+  const list = await api.staff.list();
   if (list.status === 401) redirect('/login');
   if (list.status !== 200) redirect('/'); // 403: managers have no staff page
   const me = await getMe();

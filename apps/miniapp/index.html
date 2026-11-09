@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content"
+    />
+    <title>LUMMI.</title>
+    <link rel="icon" type="image/svg+xml" href="/brand/LUMMI_avatar_stone.svg" />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/Manrope-normal-cyrillic-3.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/Manrope-normal-latin-5.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/TenorSans-normal-cyrillic-6.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/TenorSans-normal-latin-8.woff2"
+    />
+    <!-- The Home slogan is set in the Cormorant italic, so it is a first-screen face too. -->
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/CormorantGaramond-italic-cyrillic-0.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/CormorantGaramond-italic-latin-2.woff2"
+    />
+    <style>
+      /* First paint before the stylesheet: no white flash on a dark phone. */
+      html {
+        background: %GROUND_LIGHT%;
+      }
+      html[data-theme='dark'] {
+        background: %GROUND_DARK%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

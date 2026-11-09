@@ -44,7 +44,7 @@ LUMMI makes Extrait de Parfum "по мотивам" (inspired by) famous fragran
 
 ## Brand Commitments
 
-- Brandbook v2.0 (`materials/brandbook/`) is binding: palette Milk / Stone / Graphite / Sage at 60 / 25 / 10 / 5, fonts Tenor Sans (caps, tracked) + Manrope + Cormorant Garamond Italic (fragrance names only), card radius 12 px, button radius 10 px, linear 1.5 px icons. Burgundy, rose gold and gold are forbidden. Tokens are listed in `CLAUDE.md`.
+- Brandbook v2.0 (`materials/brandbook/`) is binding: palette Milk / Stone / Graphite / Sage at 60 / 25 / 10 / 5, fonts Tenor Sans (caps, tracked) + Manrope + Cormorant Garamond Italic (fragrance names, plus the slogan in the Home top block (customer-approved comp)), card radius 12 px, button radius 10 px, linear 1.5 px icons. Burgundy, rose gold and gold are forbidden. Tokens are listed in `CLAUDE.md`.
 - Product name block (brandbook p.8): "ПО МОТИВАМ <BRAND>" in small Tenor caps above the Cormorant Italic name.
 - Copy is legal-sensitive: always "по мотивам <Brand> <Name>"; never "копия", "реплика", "оригинал", "Oil Perfume", "масляные духи", fragrance numbers, concentration %, or original brands' logos and packaging. Every product card shows the disclaimer «Аромат LUMMI по мотивам, не оригинальный парфюм» (text pending approval).
 - Voice: modern, warm, confident; about moments and feelings, not chemistry; «вы» / «siz»; at most 1–2 emoji in bot posts.

@@ -1,4 +1,4 @@
-import { contract } from '@lummi/contracts';
+import { internalContract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { InternalGuard } from '../internal/internal.guard';
@@ -10,25 +10,25 @@ import { HumoFeedService } from './humo-feed.service';
 export class HumoFeedController {
   constructor(@Inject(HumoFeedService) private readonly feed: HumoFeedService) {}
 
-  @TsRestHandler(contract.internal.humoMessage)
+  @TsRestHandler(internalContract.humoMessage)
   humoMessage() {
-    return tsRestHandler(contract.internal.humoMessage, async ({ body }) => ({
+    return tsRestHandler(internalContract.humoMessage, async ({ body }) => ({
       status: 200 as const,
       body: await this.feed.intake(body.messageId, body.text),
     }));
   }
 
-  @TsRestHandler(contract.internal.humoLastMessageId)
+  @TsRestHandler(internalContract.humoLastMessageId)
   humoLastMessageId() {
-    return tsRestHandler(contract.internal.humoLastMessageId, async () => ({
+    return tsRestHandler(internalContract.humoLastMessageId, async () => ({
       status: 200 as const,
       body: { messageId: await this.feed.lastMessageId() },
     }));
   }
 
-  @TsRestHandler(contract.internal.userbotHeartbeat)
+  @TsRestHandler(internalContract.userbotHeartbeat)
   userbotHeartbeat() {
-    return tsRestHandler(contract.internal.userbotHeartbeat, async () => {
+    return tsRestHandler(internalContract.userbotHeartbeat, async () => {
       await this.feed.userbotHeartbeat();
       return { status: 200 as const, body: { ok: true as const } };
     });

@@ -63,4 +63,32 @@ export class CustomersService {
     const [row] = await this.db.select().from(customers).where(eq(customers.id, id));
     return row ?? null;
   }
+
+  async updatePreferences(
+    id: number,
+    prefs: { language?: CustomerRow['language']; theme?: CustomerRow['theme'] },
+  ): Promise<CustomerRow | null> {
+    return this.db.transaction(async (tx) => {
+      const [before] = await tx.select().from(customers).where(eq(customers.id, id));
+      if (!before) return null;
+      const [row] = await tx
+        .update(customers)
+        .set({ ...prefs, updatedAt: this.edges.clock.now() })
+        .where(eq(customers.id, id))
+        .returning();
+      if (row && (row.language !== before.language || row.theme !== before.theme)) {
+        await this.audit.record(tx, {
+          actor: { type: 'customer', id },
+          action: 'customer.preferences_changed',
+          targetType: 'customer',
+          targetId: id,
+          payload: {
+            from: { language: before.language, theme: before.theme },
+            to: { language: row.language, theme: row.theme },
+          },
+        });
+      }
+      return row ?? null;
+    });
+  }
 }

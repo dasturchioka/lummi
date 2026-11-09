@@ -1,5 +1,6 @@
 import { processedUpdates, type DbOrTx } from '@lummi/db';
-import { dictionaries, type Language } from '@lummi/i18n';
+import type { Language } from '@lummi/i18n';
+import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Bot, type Context } from 'grammy';
 import type { UserFromGetMe, Update } from 'grammy/types';

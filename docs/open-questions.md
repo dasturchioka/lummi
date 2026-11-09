@@ -54,6 +54,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - «Pink Molécule 090.09»: a number in the name, while LUMMI never shows fragrance numbers; it is the original's name.
   - «Rain Tea»: the guide notes it is sold as «Tea Storm» from 2026.
 - **Banner slider dropped.** TZ §3.1 had an admin-managed banner slider; the approved Home has none. The Discovery set banner and the slogan are editable in admin instead.
+- **UZ label of the Home tab.** The tab bar reads «Asosiy» (main) in UZ: «Bosh sahifa» does not fit a 360 px phone beside four other labels. Ask Nurmuhammad to confirm it with the customer.
+- **Fabric photos for the Home top block** (light and dark, full resolution) are still needed; the shell shows a Stone stand-in in that slot. It is one 3:2 image per theme: set the two paths in `FABRIC` in `apps/miniapp/src/screens/Home.tsx` (WebP, at least 1170 px wide, a quiet upper third for the logo and slogan).
 
 ## Deferred to the next version
 

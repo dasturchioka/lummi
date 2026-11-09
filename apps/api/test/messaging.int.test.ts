@@ -1,5 +1,5 @@
 import { auditLog, customers, eq, outbox, processedUpdates } from '@lummi/db';
-import { dictionaries } from '@lummi/i18n';
+import { dictionaries } from '@lummi/i18n/all';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OutboxService } from '../src/outbox/outbox.service';
 import { AlertService } from '../src/outbox/alert.service';

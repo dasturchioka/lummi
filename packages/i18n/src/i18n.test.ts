@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, languageFromTelegram, normalizeUzbek, uz, type Messages } from './index';
+import { dictionaries } from './all';
+import { defineMessages, formatMoney, languageFromTelegram, normalizeUzbek } from './index';
 
 describe('formatMoney', () => {
   it('formats RU and UZ with narrow no-break spaces', () => {
@@ -40,10 +41,13 @@ describe('languageFromTelegram', () => {
 });
 
 describe('dictionary typing', () => {
-  it('rejects a dictionary with a missing key (checked by tsc)', () => {
-    // @ts-expect-error errors.sessionExpired is missing
-    const broken: Messages = { common: { currency: 'x' }, errors: { generic: 'x' } };
-    expect(broken).toBeDefined();
-    expect(uz.common.currency).toBe('soʻm');
+  it('rejects a namespace with a missing key (checked by tsc)', () => {
+    // @ts-expect-error uz.errors.b is missing
+    const broken = defineMessages({ errors: { a: 'x', b: 'y' } }, { errors: { a: 'x' } });
+    expect(broken.ru.errors.a).toBe('x');
+  });
+  it('merges the namespaces for server code', () => {
+    expect(dictionaries.uz.common.currency).toBe('soʻm');
+    expect(dictionaries.ru.bot.openShop).toBeTruthy();
   });
 });

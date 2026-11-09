@@ -1,6 +1,6 @@
 'use client';
 
-import { dictionaries } from '@lummi/i18n';
+import { adminMessages } from '@lummi/i18n/admin';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import { EmptyState } from '@/components/empty-state';
@@ -17,7 +17,7 @@ export function ErrorState({ reset, icon }: { reset: () => void; icon?: React.Re
   const [pending, start] = useTransition();
   const [lang, setLang] = useState<'ru' | 'uz'>('ru');
   useEffect(() => setLang(languageFromDocument()), []);
-  const t = dictionaries[lang].admin;
+  const t = adminMessages[lang].admin;
   return (
     <EmptyState
       tone="error"

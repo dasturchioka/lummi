@@ -26,8 +26,15 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1794222125959,
-      "tag": "0003_solid_starjammers",
+      "when": 1794222232737,
+      "tag": "0003_zippy_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794222434584,
+      "tag": "0004_rapid_norman_osborn",
       "breakpoints": true
     }
   ]

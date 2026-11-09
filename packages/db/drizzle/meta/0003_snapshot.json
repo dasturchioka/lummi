@@ -1,5 +1,5 @@
 {
-  "id": "e85de28d-25ec-4596-b9f9-d2ea77482f2c",
+  "id": "614f2257-fa15-4958-944e-4f9b4ffda436",
   "prevId": "2bbcef5e-af7a-4f6a-81b9-17e25579488f",
   "version": "7",
   "dialect": "postgresql",
@@ -116,113 +116,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.credits": {
-      "name": "credits",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "credits_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "humo_message_id": {
-          "name": "humo_message_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_tiyin": {
-          "name": "amount_tiyin",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_som": {
-          "name": "amount_som",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false,
-          "generated": {
-            "as": "case when amount_tiyin % 100 = 0 then amount_tiyin / 100 end",
-            "type": "stored"
-          }
-        },
-        "occurred_at": {
-          "name": "occurred_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "card_mask": {
-          "name": "card_mask",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "card_last4": {
-          "name": "card_last4",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "counterparty": {
-          "name": "counterparty",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "credits_humo_message_id_humo_messages_message_id_fk": {
-          "name": "credits_humo_message_id_humo_messages_message_id_fk",
-          "tableFrom": "credits",
-          "tableTo": "humo_messages",
-          "columnsFrom": [
-            "humo_message_id"
-          ],
-          "columnsTo": [
-            "message_id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "credits_humo_message_id_unique": {
-          "name": "credits_humo_message_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "humo_message_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "credits_amount_positive": {
-          "name": "credits_amount_positive",
-          "value": "\"credits\".\"amount_tiyin\" > 0"
-        },
-        "credits_card_last4": {
-          "name": "credits_card_last4",
-          "value": "\"credits\".\"card_last4\" ~ '^[0-9]{4}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.customers": {
       "name": "customers",
       "schema": "",
@@ -275,6 +168,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "theme": {
+          "name": "theme",
+          "type": "theme",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'light'"
+        },
         "bot_blocked": {
           "name": "bot_blocked",
           "type": "boolean",
@@ -309,68 +210,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.heartbeats": {
-      "name": "heartbeats",
-      "schema": "",
-      "columns": {
-        "component": {
-          "name": "component",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "seen_at": {
-          "name": "seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.humo_messages": {
-      "name": "humo_messages",
-      "schema": "",
-      "columns": {
-        "message_id": {
-          "name": "message_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "text": {
-          "name": "text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "parse_error": {
-          "name": "parse_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -751,6 +590,14 @@
       "values": [
         "owner",
         "manager"
+      ]
+    },
+    "public.theme": {
+      "name": "theme",
+      "schema": "public",
+      "values": [
+        "light",
+        "dark"
       ]
     }
   },
