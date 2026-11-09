@@ -1,5 +1,5 @@
 import { tashkentToUtc, type AuditEntryDto, type AuditQuery } from '@lummi/contracts';
-import { and, auditLog, customers, desc, eq, sql, staff, type Db } from '@lummi/db';
+import { alias, and, auditLog, customers, desc, eq, sql, staff, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { DB } from '../tokens';
 
@@ -18,6 +18,9 @@ function dayStart(day: string, plusDays = 0): Date {
 }
 
 type Parsed = { page: number; pageSize: number } & Omit<AuditQuery, 'page' | 'pageSize'>;
+
+/** The staff table a second time, for entries whose target is a staff member. */
+const targetStaff = alias(staff, 'target_staff');
 
 @Injectable()
 export class AuditQueryService {
@@ -45,6 +48,7 @@ export class AuditQueryService {
         row: auditLog,
         staffName: staff.name,
         customerName: customers.firstName,
+        targetName: targetStaff.name,
       })
       .from(auditLog)
       .leftJoin(staff, sql`${auditLog.actorType} = 'staff' and ${auditLog.actorId} = ${staff.id}`)
@@ -52,12 +56,16 @@ export class AuditQueryService {
         customers,
         sql`${auditLog.actorType} = 'customer' and ${auditLog.actorId} = ${customers.id}`,
       )
+      .leftJoin(
+        targetStaff,
+        sql`${auditLog.targetType} = 'staff' and ${auditLog.targetId} = ${targetStaff.id}::text`,
+      )
       .where(where)
       .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
       .limit(q.pageSize)
       .offset((q.page - 1) * q.pageSize);
 
-    const items: AuditEntryDto[] = rows.map(({ row, staffName, customerName }) => ({
+    const items: AuditEntryDto[] = rows.map(({ row, staffName, customerName, targetName }) => ({
       id: row.id,
       createdAt: row.createdAt.toISOString(),
       actorType: row.actorType,
@@ -66,6 +74,7 @@ export class AuditQueryService {
       action: row.action,
       targetType: row.targetType,
       targetId: row.targetId,
+      targetName: targetName ?? null,
       payload: row.payload as Record<string, unknown>,
     }));
     return { items, total, page: q.page, pageSize: q.pageSize };

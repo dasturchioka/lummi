@@ -1,13 +1,13 @@
 'use client';
 
-import type { Bilingual, SettingIssue } from '@lummi/contracts';
+import type { Bilingual, SettingIssue, SettingUnit } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { CircleAlert } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
 import { fromDraft, type Draft, type InputSpec } from '@/lib/setting-input';
-import { issueMessage, pick } from '@/lib/setting-copy';
+import { durationText, issueMessage, pick } from '@/lib/setting-copy';
 import { cn } from '@/lib/utils';
 
 export interface EditorMeta {
@@ -17,8 +17,11 @@ export interface EditorMeta {
   language: Language;
   t: AdminMessages;
   unit?: string;
-  /** So'm: the typed number is read back grouped («100 000 000 сум») under the field. */
-  money?: boolean;
+  /**
+   * What the number measures: so'm is read back grouped under the field («100 000 000 сум»),
+   * seconds and milliseconds as a duration («= 7 дней»).
+   */
+  unitKind?: SettingUnit;
   fields?: Record<string, Bilingual>;
   optionLabels?: Record<string, Bilingual>;
   issues: SettingIssue[];
@@ -219,12 +222,20 @@ export function SettingEditor({
           : leaf.kind === 'integer'
             ? 'numeric'
             : 'decimal';
-      // nine digits are hard to count in a field: the amount as the shop shows it
-      const typed = meta.money && !invalid ? fromDraft(spec, draft) : null;
-      const readout =
-        typeof typed === 'number' && Number.isSafeInteger(typed) && Math.abs(typed) >= 10_000
-          ? formatMoney(typed, meta.language)
+      // nine digits, or 604800 seconds, are hard to read in a field: say it as people would
+      const kind = meta.unitKind;
+      const typed =
+        !invalid && (kind === 'sum' || kind === 'seconds' || kind === 'ms')
+          ? fromDraft(spec, draft)
           : null;
+      const readout =
+        typeof typed !== 'number' || !Number.isFinite(typed)
+          ? null
+          : kind === 'sum'
+            ? Number.isSafeInteger(typed) && Math.abs(typed) >= 10_000
+              ? formatMoney(typed, meta.language)
+              : null
+            : durationText(typed, kind as 'seconds' | 'ms', meta.language, meta.t);
       return (
         <div>
           <div className="flex items-center gap-2">

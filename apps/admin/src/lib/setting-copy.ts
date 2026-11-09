@@ -5,7 +5,7 @@ import {
   type SettingIssue,
   type SettingKey,
 } from '@lummi/contracts';
-import { formatMoney, type Language } from '@lummi/i18n';
+import { formatMoney, plural, type Language } from '@lummi/i18n';
 import type { AdminMessages } from './i18n';
 import type { InputSpec } from './setting-input';
 import { fill } from './utils';
@@ -117,18 +117,64 @@ export function displayValue(
       return Array.isArray(value) && value.length > 0
         ? value.map(String).join(', ') + suffix
         : t.settings.notSet;
-    case 'group': {
-      const obj = value as Record<string, unknown>;
-      return inner.fields
-        .map((f) => {
-          const p = [...path, f.name];
-          const label = meta.fields?.[p.join('.')]?.[language] ?? f.name;
-          const shown = displayValue(key, f.spec, obj[f.name], language, t, p);
-          return f.spec.kind === 'group' ? `${label} (${shown})` : `${label}: ${shown}`;
-        })
-        .join('; ');
-    }
+    case 'group':
+      // a nested group's parts go in brackets with commas, the outer ones with « · », so a
+      // bracket never meets a semicolon («…до скидки) · Промокод»)
+      return groupParts(key, inner, value, language, t, path).join(path.length ? ', ' : ' · ');
     case 'json':
       return JSON.stringify(value);
   }
+}
+
+/** A group's parts as «Label: value» (a nested group as «Label (a: x, b: y)»), one per field. */
+export function groupParts(
+  key: SettingKey,
+  spec: Extract<InputSpec, { kind: 'group' }>,
+  value: unknown,
+  language: Language,
+  t: AdminMessages,
+  path: string[] = [],
+): string[] {
+  const meta = settingMeta(key);
+  const obj = (value ?? {}) as Record<string, unknown>;
+  return spec.fields.map((f) => {
+    const p = [...path, f.name];
+    const label = meta.fields?.[p.join('.')]?.[language] ?? f.name;
+    const shown = displayValue(key, f.spec, obj[f.name], language, t, p);
+    return f.spec.kind === 'group' ? `${label} (${shown})` : `${label}: ${shown}`;
+  });
+}
+
+const DURATION_UNITS = [
+  ['days', 86_400],
+  ['hours', 3_600],
+  ['minutes', 60],
+  ['seconds', 1],
+] as const;
+
+/**
+ * A duration field read back for people: the largest whole unit («= 7 дней», «= 20 секунд»), or,
+ * when no single unit is exact, every part («= 1 ч 30 мин»). Null where it would only repeat the
+ * field (under a minute of seconds) or the value is not a whole number of seconds.
+ */
+export function durationText(
+  value: number,
+  unit: 'seconds' | 'ms',
+  language: Language,
+  t: AdminMessages,
+): string | null {
+  const total = unit === 'ms' ? value / 1000 : value;
+  if (!Number.isSafeInteger(total) || total <= 0) return null;
+  if (unit === 'seconds' && total < 60) return null;
+  const d = t.settings.duration;
+  const [name, size] = DURATION_UNITS.find(([, s]) => total >= s) ?? DURATION_UNITS[3];
+  if (total % size === 0) return `= ${plural(language, total / size, d[name])}`;
+  let rest = total;
+  const parts: string[] = [];
+  for (const [part, s] of DURATION_UNITS) {
+    const n = Math.floor(rest / s);
+    if (n > 0) parts.push(`${n}\u00a0${d.short[part]}`);
+    rest -= n * s;
+  }
+  return `= ${parts.join(' ')}`;
 }

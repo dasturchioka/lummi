@@ -20,7 +20,14 @@ import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { displayValue, formatTashkent, pick, rangeText, unitText } from '@/lib/setting-copy';
+import {
+  displayValue,
+  formatTashkent,
+  groupParts,
+  pick,
+  rangeText,
+  unitText,
+} from '@/lib/setting-copy';
 import { describeInput, fromDraft, toDraft, type Draft } from '@/lib/setting-input';
 import { QUIET_ACTION } from '@/lib/ui-classes';
 import { fill } from '@/lib/utils';
@@ -136,7 +143,7 @@ function SettingRow({
   const same = (a: Draft, b: Draft) => JSON.stringify(a) === JSON.stringify(b);
   const dirty = !same(draft, savedDraft);
   const canReset = !same(draft, defaultDraft);
-  const range = rangeText(t, spec, settingKey, language);
+  const range = def.hideBounds ? null : rangeText(t, spec, settingKey, language);
   const label = pick(def.label, language);
   const hint = def.hint ? pick(def.hint, language) : null;
   const unit = unitText(settingKey, t) ?? undefined;
@@ -195,12 +202,26 @@ function SettingRow({
         )}
         <div className="mt-2.5 grid gap-0.5 text-small text-muted-foreground">
           <MetaLine parts={[t.settings.types[spec.kind], range]} />
-          <p className="break-words">
-            {t.settings.defaultValue}:{' '}
-            <span className="text-foreground">
-              {displayValue(settingKey, spec, def.default, language, t)}
-            </span>
-          </p>
+          {spec.kind === 'group' ? (
+            // several values: one per line, as the fields stand on the right
+            <div>
+              <p>{t.settings.defaultValue}:</p>
+              <ul className="text-foreground">
+                {groupParts(settingKey, spec, def.default, language, t).map((part) => (
+                  <li key={part} className="break-words">
+                    {part}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="break-words">
+              {t.settings.defaultValue}:{' '}
+              <span className="text-foreground">
+                {displayValue(settingKey, spec, def.default, language, t)}
+              </span>
+            </p>
+          )}
           <p className="break-words">
             {t.settings.key}: <code className="font-mono text-[12px]">{settingKey}</code>
           </p>
@@ -226,7 +247,7 @@ function SettingRow({
             language,
             t,
             ...(unit ? { unit } : {}),
-            money: def.unit === 'sum',
+            ...(def.unit ? { unitKind: def.unit } : {}),
             ...(def.fields ? { fields: def.fields } : {}),
             ...(def.optionLabels ? { optionLabels: def.optionLabels } : {}),
             issues,

@@ -46,11 +46,15 @@ function who(t: AdminMessages, e: AuditEntryDto): string {
   return t.audit.actors[e.actorType];
 }
 
-/** What the entry touched: a setting by its label, anything else by type and id. */
+/**
+ * What the entry touched: a setting by its label, a staff member by name (as the actor is shown),
+ * anything else by type and id.
+ */
 function Target({ t, language, e }: { t: AdminMessages; language: Language; e: AuditEntryDto }) {
   if (e.targetType === 'setting' && knownKey(e.targetId)) {
     return <>{pick(settingMeta(e.targetId).label, language)}</>;
   }
+  if (e.targetType === 'staff') return <>{e.targetName ?? t.audit.actors.unknownStaff}</>;
   return (
     <>
       {targetLabel(t, e.targetType)}

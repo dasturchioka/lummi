@@ -118,6 +118,19 @@ export const adminMessages = defineMessages(
           count: 'раз',
           ratio: 'от 0 до 1',
         },
+        /** A number of seconds read back as the largest whole unit («= 7 дней»), or exact parts («= 1 ч 30 мин»). */
+        duration: {
+          days: { one: '{n} день', few: '{n} дня', many: '{n} дней', other: '{n} дня' },
+          hours: { one: '{n} час', few: '{n} часа', many: '{n} часов', other: '{n} часа' },
+          minutes: { one: '{n} минута', few: '{n} минуты', many: '{n} минут', other: '{n} минуты' },
+          seconds: {
+            one: '{n} секунда',
+            few: '{n} секунды',
+            many: '{n} секунд',
+            other: '{n} секунды',
+          },
+          short: { days: 'дн', hours: 'ч', minutes: 'мин', seconds: 'сек' },
+        },
         types: {
           integer: 'Целое число',
           number: 'Число',
@@ -612,6 +625,23 @@ export const adminMessages = defineMessages(
           ml: 'ml',
           count: 'marta',
           ratio: '0 dan 1 gacha',
+        },
+        duration: {
+          days: { one: '{n} kun', few: '{n} kun', many: '{n} kun', other: '{n} kun' },
+          hours: { one: '{n} soat', few: '{n} soat', many: '{n} soat', other: '{n} soat' },
+          minutes: {
+            one: '{n} daqiqa',
+            few: '{n} daqiqa',
+            many: '{n} daqiqa',
+            other: '{n} daqiqa',
+          },
+          seconds: {
+            one: '{n} soniya',
+            few: '{n} soniya',
+            many: '{n} soniya',
+            other: '{n} soniya',
+          },
+          short: { days: 'kun', hours: 'soat', minutes: 'daqiqa', seconds: 'soniya' },
         },
         types: {
           integer: 'Butun son',

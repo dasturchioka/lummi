@@ -168,6 +168,16 @@ export const screens: Screen[] = [
     },
   },
   {
+    id: 'settings-duration',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page }) => {
+      // seconds read back as days and hours under the field («= 7 дней»)
+      await page.locator('#area-auth').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
     id: 'settings-error',
     path: '/settings',
     as: 'owner',
@@ -237,6 +247,8 @@ export const screens: Screen[] = [
       await raw.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     },
   },
+  // a staff member as the target is named like the actor
+  { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },

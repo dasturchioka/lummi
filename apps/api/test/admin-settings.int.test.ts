@@ -250,6 +250,44 @@ describe('audit log (owner only)', () => {
     expect(p2.status === 200 && p2.body).toMatchObject({ total: 4, page: 2, pageSize: 3 });
   });
 
+  it('names a staff target the way it names the actor, in the same query', async () => {
+    const owner = await t.ownerSession();
+    const manager = await t.managerSession();
+    await t.db.delete(auditLog);
+    await t.db.insert(auditLog).values([
+      {
+        actorType: 'staff',
+        actorId: owner.staff.id,
+        action: 'staff.created',
+        targetType: 'staff',
+        targetId: String(manager.staff.id),
+        createdAt: day('2026-11-10T10:00:00Z'),
+      },
+      // a removed staff member, and a target that is not staff but has the same id
+      {
+        actorType: 'staff',
+        actorId: owner.staff.id,
+        action: 'staff.removed',
+        targetType: 'staff',
+        targetId: '999999',
+        createdAt: day('2026-11-10T09:00:00Z'),
+      },
+      {
+        actorType: 'system',
+        action: 'payment.confirmed',
+        targetType: 'order',
+        targetId: String(manager.staff.id),
+        createdAt: day('2026-11-10T08:00:00Z'),
+      },
+    ]);
+    const res = await owner.client.admin.audit.list({ query: {} });
+    expect(res.status === 200 && res.body.items.map((i) => i.targetName)).toEqual([
+      manager.staff.name,
+      null,
+      null,
+    ]);
+  });
+
   it('filters by actor, action type and date range', async () => {
     const { owner, manager } = await seed();
     const q = (query: AuditQuery) => owner.client.admin.audit.list({ query }).then(ids);

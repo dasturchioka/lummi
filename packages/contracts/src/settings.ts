@@ -31,6 +31,8 @@ export interface SettingMeta {
   unit?: SettingUnit;
   fields?: Record<string, Bilingual>;
   optionLabels?: Record<string, Bilingual>;
+  /** Leave the «Допустимо: …» line out where the hint already says what fits (a group id). */
+  hideBounds?: boolean;
 }
 
 export interface SettingDefinition extends SettingMeta {
@@ -170,10 +172,13 @@ export const settingDefinitions = {
     default: null,
     area: 'system',
     label: { ru: 'ID группы заказов', uz: 'Buyurtmalar guruhining ID raqami' },
+    // The bot does not take the id when it is added to a group (it only follows a group that
+    // becomes a supergroup), so the hint asks for it by hand.
     hint: {
-      ru: 'Пусто, пока группа не подключена. Бот обновляет значение сам, если группа переехала.',
-      uz: 'Guruh ulanmaguncha boʻsh. Guruh koʻchsa, bot qiymatni oʻzi yangilaydi.',
+      ru: 'Пусто, пока группа не подключена. Введите ID вручную: отрицательное число вида -1001234567890. Если группа станет супергруппой, бот обновит ID сам.',
+      uz: 'Guruh ulanmaguncha boʻsh. ID ni qoʻlda kiriting: -1001234567890 kabi manfiy son. Guruh supergruppaga aylansa, bot ID ni oʻzi yangilaydi.',
     },
+    hideBounds: true,
   },
   'bot.topics': {
     schema: z.object({
@@ -201,9 +206,12 @@ export const settingDefinitions = {
     schema: z.array(z.number().int().positive()),
     default: [] as number[],
     area: 'system',
-    label: { ru: 'Кому слать алерты в личные', uz: 'Ogohlantirishlar kimga shaxsiy yuboriladi' },
+    label: {
+      ru: 'Кому присылать предупреждения в личные сообщения',
+      uz: 'Ogohlantirishlar kimga shaxsiy xabarda yuborilsin',
+    },
     hint: {
-      ru: 'Telegram ID через запятую. Алерты приходят им в личные сообщения и в тему «Системные».',
+      ru: 'Telegram ID через запятую. Предупреждения приходят им в личные сообщения и в тему «Системные».',
       uz: 'Telegram ID raqamlari vergul bilan. Ogohlantirishlar ularga shaxsiy xabarda va «Tizim» mavzusida keladi.',
     },
   },
@@ -299,10 +307,13 @@ export const settingDefinitions = {
     default: 20_000,
     area: 'ai',
     unit: 'ms',
-    label: { ru: 'Тайм-аут TypeSafe', uz: 'TypeSafe kutish vaqti' },
+    label: {
+      ru: 'Сколько ждать основную проверку чека',
+      uz: 'Asosiy tekshiruvni qancha kutish',
+    },
     hint: {
-      ru: 'По истечении проверку берёт OpenAI.',
-      uz: 'Vaqt tugasa, tekshiruvni OpenAI oladi.',
+      ru: 'По истечении чек передаётся запасной проверке.',
+      uz: 'Vaqt tugasa, chek zaxira tekshiruvga oʻtadi.',
     },
   },
   'ai.receipt.openaiTimeoutMs': {
@@ -310,7 +321,7 @@ export const settingDefinitions = {
     default: 30_000,
     area: 'ai',
     unit: 'ms',
-    label: { ru: 'Тайм-аут OpenAI', uz: 'OpenAI kutish vaqti' },
+    label: { ru: 'Сколько ждать запасную проверку', uz: 'Zaxira tekshiruvni qancha kutish' },
     hint: {
       ru: 'По истечении проверка считается неудавшейся.',
       uz: 'Vaqt tugasa, tekshiruv muvaffaqiyatsiz hisoblanadi.',
@@ -407,7 +418,7 @@ export const settingDefinitions = {
     default: 3,
     area: 'worker',
     unit: 'count',
-    label: { ru: 'Сбоев подряд до алерта', uz: 'Ogohlantirishgacha ketma-ket xatolar' },
+    label: { ru: 'Сбоев подряд до предупреждения', uz: 'Ogohlantirishgacha ketma-ket nosozliklar' },
     hint: {
       ru: 'Фоновая проверка предупредит владельца один раз после стольких неудач подряд.',
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',

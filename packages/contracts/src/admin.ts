@@ -101,6 +101,8 @@ export const auditEntrySchema = z.object({
   action: z.string(),
   targetType: z.string(),
   targetId: z.string().nullable(),
+  /** A staff target's name while the staff member still exists; null for any other target. */
+  targetName: z.string().nullable(),
   payload: z.record(z.unknown()),
 });
 export type AuditEntryDto = z.infer<typeof auditEntrySchema>;
