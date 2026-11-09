@@ -51,6 +51,12 @@
   --font-name: var(--font-cormorant), Georgia, serif;
 }
 
+/* DESIGN.md "Body small" (12.5 px / 1.45): meta lines, counts and secondary text under a value. */
+@theme {
+  --text-small: 12.5px;
+  --text-small--line-height: 1.45;
+}
+
 @layer base {
   html {
     color-scheme: light;

@@ -13,6 +13,8 @@
     "test:int": "vitest run --project integration",
     "dev:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx --watch src/worker.ts",
     "start:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/worker.ts",
+    "bts:fetch": "node --import tsx src/cli/bts-fetch.ts",
+    "bts:import": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/bts-import.ts",
     "seed:catalog": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-catalog.ts",
     "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
   },
