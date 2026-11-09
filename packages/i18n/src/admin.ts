@@ -128,6 +128,7 @@ export const adminMessages = defineMessages(
         next: 'Вперёд',
         empty: 'Пунктов нет.',
         emptyFiltered: 'По этим условиям ничего не найдено.',
+        emptyFilteredText: 'Выберите другой регион или статус, или измените текст поиска.',
         regionChoose: 'Выберите регион',
         errors: {
           codeTaken: 'Пункт с таким кодом уже есть.',
@@ -278,6 +279,8 @@ export const adminMessages = defineMessages(
         next: 'Oldinga',
         empty: 'Punktlar yoʻq.',
         emptyFiltered: 'Bu shartlar boʻyicha hech narsa topilmadi.',
+        emptyFilteredText:
+          'Boshqa viloyat yoki holatni tanlang yoxud qidiruv matnini oʻzgartiring.',
         regionChoose: 'Viloyatni tanlang',
         errors: {
           codeTaken: 'Bunday kodli punkt allaqachon bor.',

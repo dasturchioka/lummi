@@ -93,25 +93,47 @@ export function BtsPointsManager({
       {p.active ? t.btsPoints.visible : t.btsPoints.hidden}
     </Badge>
   );
+  // Quiet text buttons, as on Staff. Hide / show is as wide as the longer of its two labels, so
+  // the column does not jump when a point flips.
+  const toggleWidth = {
+    minWidth: `calc(${Math.max(t.btsPoints.hide.length, t.btsPoints.show.length)}ch + 1.5rem)`,
+  };
   const actions = (p: AdminBtsPointDto) => (
     <>
       <Button variant="ghost" size="sm" onClick={() => setDialog({ point: p })}>
         {t.btsPoints.edit}
       </Button>
-      <Button variant="ghost" size="sm" loading={busyId === p.id} onClick={() => toggle(p)}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="justify-start"
+        style={toggleWidth}
+        loading={busyId === p.id}
+        onClick={() => toggle(p)}
+      >
         {p.active ? t.btsPoints.hide : t.btsPoints.show}
       </Button>
     </>
+  );
+  const region = (p: AdminBtsPointDto) =>
+    regionName({ nameRu: p.regionNameRu, nameUz: p.regionNameUz });
+  const code = (p: AdminBtsPointDto) => (
+    <span className="tabular-nums">{`${t.btsPoints.code}\u00a0${p.code}`}</span>
   );
   const details = (p: AdminBtsPointDto) => (
     <>
       <p className="[overflow-wrap:anywhere]">{p.address}</p>
       {p.landmark && (
-        <p className="mt-0.5 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">
+        <p className="mt-0.5 text-small text-muted-foreground [overflow-wrap:anywhere]">
           {p.landmark}
         </p>
       )}
-      {p.hours && <p className="mt-0.5 text-[13px] text-muted-foreground">{p.hours}</p>}
+      {p.hours && (
+        // a time range never breaks across lines
+        <p className="mt-0.5 text-small text-muted-foreground">
+          {p.hours.replace(/(\d)-(\d)/g, '$1\u2011$2')}
+        </p>
+      )}
     </>
   );
 
@@ -197,13 +219,12 @@ export function BtsPointsManager({
       {rowError && <Notice title={rowError} className="mb-4" />}
 
       {data.items.length === 0 ? (
-        <EmptyState
-          title={filtered ? t.btsPoints.emptyFiltered : t.btsPoints.empty}
-          icon={MapPin}
-        />
+        <EmptyState title={filtered ? t.btsPoints.emptyFiltered : t.btsPoints.empty} icon={MapPin}>
+          {filtered ? t.btsPoints.emptyFilteredText : null}
+        </EmptyState>
       ) : (
         <Card className="@container">
-          <p className="border-b border-border px-4 py-3 text-[13px] text-muted-foreground @xl:px-5">
+          <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
             {fill(t.btsPoints.total, { n: String(data.total) })}
           </p>
           <ul className="divide-y divide-border @4xl:hidden">
@@ -212,9 +233,8 @@ export function BtsPointsManager({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold [overflow-wrap:anywhere]">{p.name}</p>
-                    <p className="mt-0.5 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">
-                      {regionName({ nameRu: p.regionNameRu, nameUz: p.regionNameUz })} · {p.city} ·{' '}
-                      {p.code}
+                    <p className="mt-0.5 text-small text-muted-foreground [overflow-wrap:anywhere]">
+                      {region(p)} · {p.city} · {code(p)}
                     </p>
                   </div>
                   <div className="shrink-0">{status(p)}</div>
@@ -228,9 +248,7 @@ export function BtsPointsManager({
             <Table>
               <THead>
                 <TR>
-                  <TH>{t.btsPoints.code}</TH>
                   <TH>{t.btsPoints.name}</TH>
-                  <TH>{t.btsPoints.city}</TH>
                   <TH>{t.btsPoints.address}</TH>
                   <TH>{t.btsPoints.status}</TH>
                   <TH>
@@ -240,21 +258,24 @@ export function BtsPointsManager({
               </THead>
               <TBody>
                 {data.items.map((p) => (
-                  <TR key={p.id} className="align-top">
-                    <TD className="whitespace-nowrap text-muted-foreground">{p.code}</TD>
-                    <TD className="min-w-[9rem] font-semibold [overflow-wrap:anywhere]">
-                      {p.name}
-                    </TD>
-                    <TD className="[overflow-wrap:anywhere]">
-                      {p.city}
-                      <p className="text-[13px] text-muted-foreground">
-                        {regionName({ nameRu: p.regionNameRu, nameUz: p.regionNameUz })}
+                  /*
+                    Every cell reads from its top line, so a wrapped address never floats the
+                    name. Where the point is and its code sit under the name, as in the list
+                    above: four columns leave room for the actions in UZ at 1280 px.
+                    break-words, not anywhere: a column is never squeezed to mid-word breaks.
+                  */
+                  <TR key={p.id} className="[&>td]:py-3.5 [&>td]:align-top [&>td]:break-words">
+                    <TD className="min-w-[12rem]">
+                      <p className="font-semibold">{p.name}</p>
+                      <p className="mt-0.5 text-small text-muted-foreground">
+                        {region(p)} · {p.city}
                       </p>
+                      <p className="text-small text-muted-foreground">{code(p)}</p>
                     </TD>
-                    <TD className="min-w-[18rem]">{details(p)}</TD>
+                    <TD className="min-w-[15rem]">{details(p)}</TD>
                     <TD>{status(p)}</TD>
                     <TD className="w-px">
-                      <div className="flex gap-1.5">{actions(p)}</div>
+                      <div className="-my-1.5 flex gap-1.5">{actions(p)}</div>
                     </TD>
                   </TR>
                 ))}
@@ -273,7 +294,7 @@ export function BtsPointsManager({
                   <span>{t.btsPoints.prev}</span>
                 )}
               </Button>
-              <span className="text-[13px] text-muted-foreground">
+              <span className="text-small text-muted-foreground tabular-nums">
                 {fill(t.btsPoints.page, { page: String(data.page), pages: String(pages) })}
               </span>
               <Button
@@ -294,7 +315,7 @@ export function BtsPointsManager({
       )}
 
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent>
+        <DialogContent className="sm:w-[min(560px,calc(100vw-32px))]">
           {dialog && (
             <PointForm
               key={dialog.point?.id ?? 'new'}
@@ -337,7 +358,7 @@ function PointForm({
       <DialogTitle>{point ? t.btsPoints.editTitle : t.btsPoints.addTitle}</DialogTitle>
       <DialogDescription className="sr-only">{t.btsPoints.description}</DialogDescription>
       <form
-        className="mt-5 grid gap-4"
+        className="mt-5 grid gap-4 sm:grid-cols-2 sm:items-start"
         onSubmit={async (e) => {
           e.preventDefault();
           const f = new FormData(e.currentTarget);
@@ -364,6 +385,7 @@ function PointForm({
           else setError(t.errors.generic);
         }}
       >
+        {/* Two columns from 640 px: code and name, region and city; the long texts span both. */}
         <Field id="p-code" label={t.btsPoints.code} hint={point ? undefined : t.btsPoints.codeHint}>
           <Input
             name="code"
@@ -405,7 +427,7 @@ function PointForm({
             defaultValue={point?.city}
           />
         </Field>
-        <Field id="p-address" label={t.btsPoints.address}>
+        <Field id="p-address" label={t.btsPoints.address} className="sm:col-span-2">
           <Input
             name="address"
             required
@@ -414,7 +436,7 @@ function PointForm({
             defaultValue={point?.address}
           />
         </Field>
-        <Field id="p-landmark" label={t.btsPoints.landmark}>
+        <Field id="p-landmark" label={t.btsPoints.landmark} className="sm:col-span-2">
           <Input
             name="landmark"
             maxLength={500}
@@ -422,7 +444,12 @@ function PointForm({
             defaultValue={point?.landmark ?? ''}
           />
         </Field>
-        <Field id="p-hours" label={t.btsPoints.hours} hint={t.btsPoints.hoursHint}>
+        <Field
+          id="p-hours"
+          label={t.btsPoints.hours}
+          hint={t.btsPoints.hoursHint}
+          className="sm:col-span-2"
+        >
           <Input
             name="hours"
             maxLength={300}
@@ -430,8 +457,8 @@ function PointForm({
             defaultValue={point?.hours ?? ''}
           />
         </Field>
-        {error && <Notice title={error} />}
-        <DialogFooter className="mt-2">
+        {error && <Notice title={error} className="sm:col-span-2" />}
+        <DialogFooter className="mt-2 sm:col-span-2">
           <DialogClose asChild>
             <Button type="button" variant="outline">
               {t.actions.cancel}
