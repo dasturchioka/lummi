@@ -13,6 +13,10 @@ import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
+import { CreditEvents } from './humo/credit-events';
+import { HumoFeedController } from './humo/humo-feed.controller';
+import { HumoFeedService } from './humo/humo-feed.service';
+import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
@@ -31,7 +35,7 @@ export class AppModule {
   static register(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [AuthController, MeController, WebhookController],
+      controllers: [AuthController, MeController, WebhookController, HumoFeedController],
       providers: [
         { provide: ENV, useValue: deps.env },
         { provide: DB, useValue: deps.db },
@@ -46,8 +50,13 @@ export class AppModule {
         CustomersService,
         SessionService,
         SessionGuard,
+        InternalGuard,
+        CreditEvents,
+        HumoFeedService,
       ],
       exports: [
+        CreditEvents,
+        HumoFeedService,
         SettingsService,
         AuditService,
         OutboxService,

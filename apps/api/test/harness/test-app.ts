@@ -15,6 +15,8 @@ export const TEST_BOT_TOKEN = '123456:TEST-bot-token-for-unit-tests';
 
 export const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
 export const TEST_MINIAPP_URL = 'https://miniapp.test.invalid/';
+/** Shared secret of the internal endpoints the userbot calls (ADR 0015). */
+export const TEST_INTERNAL_SECRET = 'test-internal-secret-test-internal-secret';
 
 export interface TestApp {
   app: INestApplication;
@@ -50,7 +52,12 @@ function makeClient(baseUrl: string, token?: string) {
  * Each call clones a private database from the migrated template of the shared test Postgres,
  * so test files can run in parallel without seeing each other's rows.
  */
-export async function createTestApp(): Promise<TestApp> {
+export async function createTestApp(
+  options: {
+    /** Env values to override; `undefined` removes the default (say, no internal secret). */
+    env?: Record<string, string | undefined>;
+  } = {},
+): Promise<TestApp> {
   const adminUrl = inject('pgAdminUrl');
   const template = inject('templateDb');
   const dbName = `t_${randomUUID().replace(/-/g, '')}`;
@@ -71,6 +78,8 @@ export async function createTestApp(): Promise<TestApp> {
     MINIAPP_URL: TEST_MINIAPP_URL,
     REDIS_URL: inject('redisUrl'),
     OUTBOX_QUEUE: `q_${dbName}`,
+    INTERNAL_API_SECRET: TEST_INTERNAL_SECRET,
+    ...options.env,
   });
   const { db, pool } = createDb(env.DATABASE_URL, 3);
   const edges = createFakeEdges();
