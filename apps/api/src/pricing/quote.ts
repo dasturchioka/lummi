@@ -134,13 +134,14 @@ export function quote(input: QuoteInput): Quote {
     .map((o) => {
       const t = totalsWith(itemsSubtotal, o, delivery);
       return {
+        option: o,
         discount: o.discount,
         deliveryFee: t.deliveryFee,
         total: t.total,
         cheaperBy: Math.max(0, totals.total - t.total),
       };
     })
-    .sort((a, b) => a.total - b.total);
+    .sort((a, b) => a.total - b.total || tieBreak(a.option, b.option));
 
   return {
     lines: priced.map(({ item: _item, ...line }) => line),
@@ -152,7 +153,7 @@ export function quote(input: QuoteInput): Quote {
     amountToFreeDelivery: amountToFreeDelivery(itemsSubtotal, applied, delivery.threshold),
     deliveryFee: totals.deliveryFee,
     total: totals.total,
-    alternatives,
+    alternatives: alternatives.map(({ option: _option, ...alternative }) => alternative),
     promoCode: input.promoCode
       ? { code: input.promoCode.code, invalid: promo?.invalid ?? null }
       : null,
@@ -181,11 +182,14 @@ function priceLine(line: QuoteLineInput, now: Date): PricedLine {
   };
 }
 
-/** A markdown is active while its price is below the regular one and its end instant hasn't come. */
+/**
+ * A markdown is active while its price is below the regular one, up to and including its end
+ * instant (admin stores «до <дата>» as 23:59:59 Asia/Tashkent that day, like promo expiry).
+ */
 function activeMarkdown(price: Price, now: Date): number | null {
   const markdown = price.markdown;
   if (!markdown || markdown.price >= price.regular) return null;
-  if (markdown.endsAt !== null && now.getTime() >= markdown.endsAt.getTime()) return null;
+  if (markdown.endsAt !== null && now.getTime() > markdown.endsAt.getTime()) return null;
   return markdown.price;
 }
 
@@ -292,30 +296,31 @@ function promoOutcome(
 }
 
 /**
- * ADR 0002: the entitlement giving the lowest total including delivery; equal totals go to the
- * one expiring first. An entitlement that doesn't lower the total below "no discount" (its
- * discount brings delivery back) stays unused, so the customer keeps it.
+ * ADR 0002: the entitlement giving the lowest total including delivery, ties broken by
+ * `tieBreak`. An entitlement that doesn't lower the total below "no discount" (its discount
+ * brings delivery back) stays unused, so the customer keeps it.
  */
 function automaticChoice(
   entitlements: DiscountOption[],
   itemsSubtotal: number,
   delivery: Delivery,
 ): DiscountOption | null {
-  let best: DiscountOption | null = null;
-  let bestTotal = totalsWith(itemsSubtotal, null, delivery).total;
-  for (const o of entitlements) {
-    const total = totalsWith(itemsSubtotal, o, delivery).total;
-    const sooner = best !== null && total === bestTotal && expiresBefore(o, best);
-    if (total < bestTotal || sooner) {
-      best = o;
-      bestTotal = total;
-    }
-  }
-  return best;
+  const [best] = entitlements
+    .map((option) => ({ option, total: totalsWith(itemsSubtotal, option, delivery).total }))
+    .sort((a, b) => a.total - b.total || tieBreak(a.option, b.option));
+  const withoutDiscount = totalsWith(itemsSubtotal, null, delivery).total;
+  return best && best.total < withoutDiscount ? best.option : null;
 }
 
-function expiresBefore(a: DiscountOption, b: DiscountOption): boolean {
-  return (a.expiresAt?.getTime() ?? Infinity) < (b.expiresAt?.getTime() ?? Infinity);
+/** Equal totals: the soonest expiry, then the lowest id, then the type; never the input order. */
+function tieBreak(a: DiscountOption, b: DiscountOption): number {
+  const key = (o: DiscountOption) => ({
+    expiry: o.expiresAt?.getTime() ?? Number.MAX_SAFE_INTEGER,
+    id: o.discount.type === 'promo_code' ? 0 : o.discount.id,
+  });
+  const ka = key(a);
+  const kb = key(b);
+  return ka.expiry - kb.expiry || ka.id - kb.id || a.discount.type.localeCompare(b.discount.type);
 }
 
 /** The threshold base, delivery fee and total once a discount (or none) is applied to the items. */

@@ -20,6 +20,8 @@ const TOMORROW = new Date('2026-11-11T07:00:00Z');
 const YESTERDAY = new Date('2026-11-09T07:00:00Z');
 const IN_10_DAYS = new Date('2026-11-20T07:00:00Z');
 const IN_20_DAYS = new Date('2026-11-30T07:00:00Z');
+/** «до 10.11.2026»: the end of that day in Asia/Tashkent, as admin stores it (spec Changes 2026-11-09). */
+const MARKDOWN_UNTIL_10_NOV = new Date('2026-11-10T23:59:59+05:00');
 
 const GUIDANCE = 1;
 const TYGAR = 2;
@@ -308,11 +310,26 @@ describe('quote(): markdown is the effective price (ADR 0008)', () => {
       },
     },
     {
-      name: 'a markdown has ended at the very instant of its end',
+      name: 'a markdown «до 10.11» is still active at 23:59:59 Tashkent that day',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: NOW } }),
+          volume('g50', GUIDANCE, 50, 219_000, {
+            markdown: { price: 175_000, endsAt: MARKDOWN_UNTIL_10_NOV },
+          }),
         ],
+        now: new Date('2026-11-10T23:59:59+05:00'),
+      },
+      expected: { lines: [{ unitPrice: 175_000, markedDown: true }] },
+    },
+    {
+      name: 'a markdown «до 10.11» is over at 00:00 Tashkent the next day',
+      given: {
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, {
+            markdown: { price: 175_000, endsAt: MARKDOWN_UNTIL_10_NOV },
+          }),
+        ],
+        now: new Date('2026-11-11T00:00:00+05:00'),
       },
       expected: { lines: [{ unitPrice: 219_000, markedDown: false }] },
     },
@@ -861,6 +878,49 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       expected: { discount: { amount: 29_900 }, deliveryFee: 0, total: 269_100 },
     },
     {
+      name: 'a marked-down set takes no code without "applies to marked-down"',
+      given: {
+        lines: [set('discovery', 299_000, { markdown: { price: 249_000, endsAt: TOMORROW } })],
+        promoCode: percentPromo('BLOGGER10', 10),
+      },
+      expected: {
+        discount: null,
+        deliveryFee: 25_000,
+        total: 274_000,
+        promoCode: { invalid: { reason: 'no_eligible_items' } },
+      },
+    },
+    {
+      name: 'a marked-down set takes a code flagged "applies to marked-down", on its markdown price',
+      given: {
+        lines: [set('discovery', 299_000, { markdown: { price: 249_000, endsAt: TOMORROW } })],
+        promoCode: percentPromo('BLOGGER10', 10, { appliesToMarkedDown: true }),
+      },
+      expected: {
+        discount: { type: 'promo_code', amount: 24_900 },
+        thresholdBaseAmount: 224_100,
+        deliveryFee: 25_000,
+        total: 249_100,
+        promoCode: { invalid: null },
+      },
+    },
+    {
+      name: 'marked-down items count toward the minimum even when the code skips them',
+      given: {
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
+          volume('t30', TYGAR, 30, 149_000),
+        ],
+        promoCode: percentPromo('MIN300', 10, { minOrderTotal: 300_000 }),
+      },
+      expected: {
+        itemsSubtotal: 324_000,
+        discount: { type: 'promo_code', amount: 14_900 },
+        total: 309_100,
+        promoCode: { code: 'MIN300', invalid: null },
+      },
+    },
+    {
       name: 'the minimum is checked on items before discount, so reaching it exactly applies the code',
       given: {
         lines: [volume('g30', GUIDANCE, 30, 125_000, { qty: 2 })],
@@ -974,6 +1034,18 @@ describe('quote(): one discount per order, chosen by ADR 0002', () => {
       },
     },
     {
+      name: 'an entered valid code stays applied even when it costs more than no discount',
+      given: { lines: lines260k, promoCode: fixedPromo('MINUS13', 13_000) },
+      expected: {
+        discount: { type: 'promo_code', code: 'MINUS13', amount: 13_000 },
+        thresholdBaseAmount: 247_000,
+        deliveryFee: 25_000,
+        total: 272_000,
+        alternatives: [],
+        promoCode: { code: 'MINUS13', invalid: null },
+      },
+    },
+    {
       name: 'alternatives are listed cheapest first',
       given: {
         lines: lines368k,
@@ -1052,6 +1124,36 @@ describe('quote(): one discount per order, chosen by ADR 0002', () => {
         discount: { type: 'upgrade_right', id: 2 },
         total: 200_200,
         alternatives: [{ discount: { id: 1 }, total: 200_200, cheaperBy: 0 }],
+      },
+    },
+    {
+      name: 'equal totals and expiries go to the lowest id, whatever the input order (shuffled)',
+      given: {
+        lines: [volume('g50', GUIDANCE, 50, 219_000)],
+        entitlements: [
+          setRight(3, [GUIDANCE], { expiresAt: IN_10_DAYS }),
+          setRight(1, [GUIDANCE], { expiresAt: IN_20_DAYS }),
+          setRight(2, [GUIDANCE], { expiresAt: IN_10_DAYS }),
+        ],
+      },
+      expected: {
+        discount: { type: 'upgrade_right', id: 2 },
+        alternatives: [{ discount: { id: 3 } }, { discount: { id: 1 } }],
+      },
+    },
+    {
+      name: 'equal totals and expiries go to the lowest id, whatever the input order (in another order)',
+      given: {
+        lines: [volume('g50', GUIDANCE, 50, 219_000)],
+        entitlements: [
+          setRight(2, [GUIDANCE], { expiresAt: IN_10_DAYS }),
+          setRight(3, [GUIDANCE], { expiresAt: IN_10_DAYS }),
+          setRight(1, [GUIDANCE], { expiresAt: IN_20_DAYS }),
+        ],
+      },
+      expected: {
+        discount: { type: 'upgrade_right', id: 2 },
+        alternatives: [{ discount: { id: 3 } }, { discount: { id: 1 } }],
       },
     },
     {
@@ -1239,5 +1341,14 @@ describe('quote(): integer so’m only (ADR 0016)', () => {
     ],
   ])('refuses %s', (_name, given) => {
     expect(() => quote(input(given))).toThrow(RangeError);
+  });
+});
+
+describe('pricing settings', () => {
+  it('refuses 10 ml as a Full size volume, which would let an upgrade right discount a 10 ml', () => {
+    const fullSize = settingDefinitions['pricing.fullSizeVolumesMl'].schema;
+    expect(fullSize.safeParse([10, 30, 50]).success).toBe(false);
+    expect(fullSize.safeParse([30, 50]).success).toBe(true);
+    expect(fullSize.safeParse([50]).success).toBe(true);
   });
 });

@@ -66,9 +66,9 @@ export const settingDefinitions = {
     schema: z.object({ upgradeRight: z.boolean(), birthdayCoupon: z.boolean() }),
     default: { upgradeRight: false, birthdayCoupon: false },
   },
-  /** The volumes an upgrade right can discount: Full size (TZ §3.4 «Полный объём»). */
+  /** The volumes an upgrade right can discount: Full size (TZ §3.4 «Полный объём»); never 10 ml. */
   'pricing.fullSizeVolumesMl': {
-    schema: z.array(z.number().int().positive()).min(1),
+    schema: z.array(z.number().int().gt(10, 'Full size is above 10 ml')).min(1),
     default: [30, 50] as number[],
   },
 } as const;
