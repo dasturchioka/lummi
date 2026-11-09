@@ -17,11 +17,12 @@ export class SessionService {
     this.key = new TextEncoder().encode(env.SESSION_SECRET);
   }
 
-  async issue(customerId: number): Promise<{ token: string; expiresAt: Date }> {
+  /** The token carries the Telegram id it was issued to, so a relinked customer's old account loses access. */
+  async issue(customerId: number, telegramId: number): Promise<{ token: string; expiresAt: Date }> {
     const ttl = await this.settings.get('auth.sessionTtlSeconds');
     const now = this.edges.clock.now();
     const expiresAt = new Date(now.getTime() + ttl * 1000);
-    const token = await new SignJWT({})
+    const token = await new SignJWT({ tg: telegramId })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(String(customerId))
       .setIssuedAt(Math.floor(now.getTime() / 1000))
@@ -30,15 +31,18 @@ export class SessionService {
     return { token, expiresAt };
   }
 
-  /** Returns the customer id, or null for a missing, forged or expired token. */
-  async verify(token: string): Promise<number | null> {
+  /** Returns the customer id and the Telegram id it was issued to, or null for a missing, forged or expired token. */
+  async verify(token: string): Promise<{ customerId: number; telegramId: number } | null> {
     try {
       const { payload } = await jwtVerify(token, this.key, {
         algorithms: ['HS256'],
         currentDate: this.edges.clock.now(),
       });
       const id = Number(payload.sub);
-      return Number.isSafeInteger(id) && id > 0 ? id : null;
+      const tg = payload.tg;
+      if (!Number.isSafeInteger(id) || id <= 0) return null;
+      if (typeof tg !== 'number' || !Number.isSafeInteger(tg)) return null;
+      return { customerId: id, telegramId: tg };
     } catch {
       return null;
     }

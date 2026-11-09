@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { InitDataError, verifyInitData } from '../src/auth/init-data';
+import { verifyInitData } from '../src/auth/init-data';
+import { SignedPayloadError } from '../src/auth/signed-payload';
 import { signInitData } from './harness/sign-init-data';
 
 const BOT = '123456:TEST-bot-token';
@@ -12,7 +13,7 @@ function reason(fn: () => unknown): string {
   try {
     fn();
   } catch (e) {
-    if (e instanceof InitDataError) return e.reason;
+    if (e instanceof SignedPayloadError) return e.reason;
     throw e;
   }
   return 'accepted';

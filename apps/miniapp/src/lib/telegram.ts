@@ -2,6 +2,7 @@ import {
   bindViewportCssVars,
   closeMiniApp,
   expandViewport,
+  isAccessDeniedError,
   init,
   isTMA,
   miniAppReady,
@@ -9,14 +10,19 @@ import {
   mountMiniAppSync,
   mountViewport,
   retrieveLaunchParams,
+  requestContactComplete,
+  requestWriteAccess,
   retrieveRawInitData,
   setMiniAppBackgroundColor,
   setMiniAppBottomBarColor,
   setMiniAppHeaderColor,
+  openTelegramLink,
 } from '@telegram-apps/sdk-react';
 import { languageFromTelegram, type Language } from '@lummi/i18n';
 
 const BROWSER_MODE = import.meta.env.DEV || import.meta.env.VITE_BROWSER_MODE === '1';
+/** The SDK's mock stands in for Telegram: client-only requests (contact) would never answer. */
+let mocked = false;
 
 /**
  * Plain browsers (development, screenshots) have no Telegram. With launch params in the URL
@@ -33,6 +39,7 @@ async function ensureEnvironment(): Promise<void> {
   if (!params.has('tgWebAppThemeParams')) params.set('tgWebAppThemeParams', '{}');
   console.info('[lummi] browser mode: Telegram is mocked'); // also the marker the dist check greps for
   mockTelegramEnv({ launchParams: params });
+  mocked = true;
 }
 
 /** Every Telegram call is best-effort: a missing feature must never keep the shop from opening. */
@@ -110,4 +117,46 @@ export function paintTelegramChrome(): void {
   void safely(() => setMiniAppHeaderColor.isAvailable() && setMiniAppHeaderColor(color));
   void safely(() => setMiniAppBackgroundColor.isAvailable() && setMiniAppBackgroundColor(color));
   void safely(() => setMiniAppBottomBarColor.isAvailable() && setMiniAppBottomBarColor(color));
+}
+
+export type ContactAnswer =
+  | { ok: true; proof: string }
+  | { ok: false; reason: 'denied' | 'unsupported' | 'browser' | 'failed' };
+
+/**
+ * Ask Telegram for the user's contact. `proof` is the raw signed string
+ * (`contact=...&auth_date=...&hash=...`); only the server can tell whether it is genuine.
+ */
+export async function askContact(): Promise<ContactAnswer> {
+  if (mocked) return { ok: false, reason: 'browser' };
+  if (!requestContactComplete.isAvailable()) return { ok: false, reason: 'unsupported' };
+  try {
+    const { raw } = await requestContactComplete();
+    return { ok: true, proof: raw };
+  } catch (e) {
+    return { ok: false, reason: isAccessDeniedError(e) ? 'denied' : 'failed' };
+  }
+}
+
+/** true = allowed, false = refused, null = could not ask (old client). Never throws. */
+export async function askWriteAccess(): Promise<boolean | null> {
+  if (mocked || !requestWriteAccess.isAvailable()) return null;
+  try {
+    return (await requestWriteAccess()) === 'allowed';
+  } catch {
+    return null;
+  }
+}
+
+/** The shop's manager account, the target of every «Написать менеджеру». */
+const MANAGER_LINK = 'https://t.me/lummi_manager';
+
+/** Open the chat with the manager in Telegram (a new tab in a plain browser). */
+export function openManagerChat(): void {
+  try {
+    if (openTelegramLink.isAvailable() && !mocked) return openTelegramLink(MANAGER_LINK);
+  } catch {
+    /* fall through */
+  }
+  window.open(MANAGER_LINK, '_blank', 'noopener');
 }

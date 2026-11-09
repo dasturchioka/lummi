@@ -3,6 +3,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useSyncExternalStore } from 'react';
 import { session } from '../lib/api';
 import { PrefsProvider, usePrefs } from '../lib/prefs';
+import { RegistrationProvider } from '../lib/registration';
 import { closeApp } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Monogram } from '../ui/Logo';
@@ -48,7 +49,11 @@ function Gate() {
       </Screen>
     );
   }
-  return <RouterProvider router={router} />;
+  return (
+    <RegistrationProvider>
+      <RouterProvider router={router} />
+    </RegistrationProvider>
+  );
 }
 
 export function App() {
