@@ -53,6 +53,17 @@ export const BottleIcon = (p: P) => (
   />
 );
 export const ArrowLeftIcon = (p: P) => <Icon d="m15 5-7 7 7 7" {...p} />;
+/** An "i" in a circle: the disclaimer plate. */
+export const InfoIcon = (p: P) => (
+  <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5.5M12 7.7v.1" {...p} />
+);
+/** Leaves the app (the Uzum shop): an arrow out of a corner. */
+export const ExternalIcon = (p: P) => (
+  <Icon
+    d="M13.5 4.5h6v6M19.5 4.5l-8 8M17 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1H10"
+    {...p}
+  />
+);
 export const ShareIcon = (p: P) => (
   <Icon d="M12 15.5V4M8 7.5 12 4l4 3.5M6 11v7.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V11" {...p} />
 );

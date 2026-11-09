@@ -1,15 +1,27 @@
 import type { Bilingual, FragranceCard, VolumeCard } from '@lummi/contracts';
-import { useState, type ReactNode } from 'react';
+import { fill } from '@lummi/i18n';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import { saleEndDate } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
+import { photoHeight } from '../../lib/photo-widths';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
+import { Badge, FragranceBadge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import {
   ArrowLeftIcon,
   BottleIcon,
   ClockIcon,
+  ExternalIcon,
+  InfoIcon,
   LeafIcon,
   MoonIcon,
   ShareIcon,
@@ -18,9 +30,7 @@ import {
   WaveIcon,
 } from '../../ui/icons';
 import { Money } from '../../ui/Money';
-
-const fill = (template: string, values: Record<string, string>) =>
-  template.replace(/\{(\w+)\}/g, (_m, k: string) => values[k] ?? '');
+import { Screen } from '../../ui/Screen';
 
 const TIME_ICON = {
   day: <SunIcon size={24} />,
@@ -29,48 +39,107 @@ const TIME_ICON = {
   everyday: <SunIcon size={24} />,
 } as const;
 
-/** 92% Milk disc over the photo: back and share. The one overlay the system allows (DESIGN.md Elevation). */
-const DISC =
-  'grid size-10 place-items-center rounded-pill bg-ground/92 text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
+/** The gallery is the full column: 488 px at most (520 minus the gutters). */
+const PHOTO_SIZES = '(min-width: 520px) 488px, calc(100vw - 32px)';
+const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
 
+/**
+ * The overlay disc on the photo (DESIGN.md Elevation): 92% Milk with a Graphite icon in both
+ * themes, because the bottle photo is light in both. 40 px, with a 48 px tap area around it.
+ */
+const DISC = `relative grid size-10 place-items-center rounded-pill bg-photo-disc text-photo-disc-ink transition-transform duration-150 ${EASE_OUT} after:absolute after:-inset-1 active:scale-95`;
+
+/**
+ * The photo of the chosen volume. Choosing another volume cross-fades: the new photo fades in over
+ * the one it replaces (0.32 s, DESIGN.md Volume selector) instead of flashing the placeholder. Once
+ * the first photo is in, the other volumes' photos load quietly, so a switch is instant.
+ */
 function Gallery({
   card,
-  volume,
+  hash,
   onBack,
   onShare,
 }: {
   card: FragranceCard;
-  volume: VolumeCard | undefined;
+  hash: string | null;
   onBack: () => void;
   onShare: () => void;
 }) {
   const { t } = usePrefs();
-  const hash = volume?.photo ?? null;
+  const [shown, setShown] = useState(hash);
+  const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
+  /** The photo being replaced: it stays under the new one until that has faded in. */
+  const [leaving, setLeaving] = useState<string | null>(null);
+  if (hash !== shown) {
+    setLeaving(ready && !failed ? shown : leaving);
+    setShown(hash);
+    setReady(false);
+    setFailed(false);
+  }
+
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (!ready || prefetched.current) return;
+    prefetched.current = true;
+    for (const v of card.volumes) {
+      if (!v.photo || v.photo === hash) continue;
+      const img = new Image();
+      img.decoding = 'async';
+      img.sizes = PHOTO_SIZES; // before srcset, so the browser picks the same candidate as the gallery
+      img.srcset = photoSrcSet(v.photo);
+    }
+  }, [ready, hash, card.volumes]);
+
+  // The first photo paints as it arrives; a replacement waits until it is decoded, then fades in.
+  const hidden = failed || (leaving !== null && !ready);
   return (
-    <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-photo">
-      {hash ? (
+    <div
+      className="relative aspect-[3/4] overflow-hidden rounded-card bg-photo"
+      // Screenshots wait for the photo, as they wait for skeletons.
+      data-skeleton={shown && !ready && !failed ? '' : undefined}
+    >
+      <div className="absolute inset-0 grid place-items-center text-faint" aria-hidden="true">
+        <BottleIcon size={56} />
+      </div>
+      {leaving ? (
         <img
-          // A new volume is a new image: it fades in over the Photo Blush placeholder.
-          key={hash}
-          src={photoUrl(hash, 800)}
-          srcSet={photoSrcSet(hash)}
-          sizes="(min-width: 520px) 488px, calc(100vw - 32px)"
+          key={`leaving-${leaving}`}
+          src={photoUrl(leaving, 800)}
+          srcSet={photoSrcSet(leaving)}
+          sizes={PHOTO_SIZES}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 size-full object-cover"
+        />
+      ) : null}
+      {shown ? (
+        <img
+          key={shown}
+          src={photoUrl(shown, 800)}
+          srcSet={photoSrcSet(shown)}
+          sizes={PHOTO_SIZES}
           alt={card.name}
-          width={1086}
-          height={1448}
+          width={800}
+          height={photoHeight(800)}
           decoding="async"
           fetchPriority="high"
-          className="absolute inset-0 size-full animate-[fade-in_0.32s_cubic-bezier(0.16,1,0.3,1)] object-cover"
+          onLoad={() => setReady(true)}
+          onError={() => {
+            setFailed(true);
+            setLeaving(null);
+          }}
+          onTransitionEnd={() => setLeaving(null)}
+          className={`absolute inset-0 size-full object-cover transition-opacity duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            hidden ? 'opacity-0' : 'opacity-100'
+          }`}
         />
-      ) : (
-        <div className="absolute inset-0 grid place-items-center text-faint">
-          <BottleIcon size={56} />
-        </div>
-      )}
+      ) : null}
       <div className="absolute inset-x-3 top-3 flex items-center justify-between">
         <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
           <ArrowLeftIcon size={20} />
         </button>
+        {/* The favourites ticket (#45) puts the heart left of share. */}
         <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
           <ShareIcon size={20} />
         </button>
@@ -82,7 +151,7 @@ function Gallery({
 /** Label divider (DESIGN.md Shapes): hairline, 4 px Sage diamond, hairline, 72 px wide. */
 function LabelDivider() {
   return (
-    <div aria-hidden="true" className="flex w-[72px] items-center gap-1.5 text-line-strong">
+    <div aria-hidden="true" className="mt-3 flex w-[72px] items-center gap-1.5 text-line-strong">
       <span className="h-px flex-1 bg-current" />
       <span className="size-1 rotate-45 bg-sage" />
       <span className="h-px flex-1 bg-current" />
@@ -90,34 +159,55 @@ function LabelDivider() {
   );
 }
 
-function Badge({ card }: { card: FragranceCard }) {
-  const { t } = usePrefs();
-  // At most one badge; a hit outranks a novelty.
-  if (card.isHit)
-    return (
-      <span className="type-label rounded-pill bg-sage px-2.5 py-0.5 text-[10px] text-[#2a2a2a]">
-        {t.card.hit}
-      </span>
-    );
-  if (card.isNew)
-    return (
-      <span className="type-label rounded-pill px-2.5 py-0.5 text-[10px] text-sage-ink shadow-[inset_0_0_0_1px_var(--c-sage)]">
-        {t.card.isNew}
-      </span>
-    );
-  return null;
+/**
+ * The label lockup (DESIGN.md Label Lockup Rule): attribution caps, the italic name, the divider,
+ * the key notes. Above it, the badge left and the type with the family right, as on list cards.
+ */
+function Lockup({ card }: { card: FragranceCard }) {
+  const { t, language } = usePrefs();
+  return (
+    <header className="flex flex-col">
+      <div className="flex min-h-5 items-center justify-between gap-3">
+        <FragranceBadge isHit={card.isHit} isNew={card.isNew} />
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-muted">
+          <span className="type-label">{t.card.type[card.type]}</span>
+          {card.family ? (
+            <>
+              <span aria-hidden="true" className="type-small">
+                ·
+              </span>
+              <span className="type-small">{card.family[language]}</span>
+            </>
+          ) : null}
+        </p>
+      </div>
+      <p className="type-label mt-4 text-muted [overflow-wrap:anywhere]">
+        {fill(t.card.basedOn, { brand: card.brand })}
+      </p>
+      <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
+        {card.name}
+      </h1>
+      <LabelDivider />
+      {card.keyNotes[language].length > 0 ? (
+        <p className="type-body mt-2.5 text-muted">{card.keyNotes[language].join(' · ')}</p>
+      ) : null}
+    </header>
+  );
 }
 
 function Trait({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <li className="flex min-w-0 flex-col items-center gap-1 px-1 text-center">
-      <span className="text-ink">{icon}</span>
-      <span className="text-[11px] leading-tight text-muted">{label}</span>
-      <span className="text-[13px] leading-tight font-semibold text-balance text-ink">{value}</span>
+    <li className="flex min-w-0 flex-col items-center px-0.5 text-center">
+      <span className="mb-2 text-ink">{icon}</span>
+      <span className="type-caption text-muted">{label}</span>
+      <span className="type-value mt-0.5 text-balance text-ink [overflow-wrap:anywhere]">
+        {value}
+      </span>
     </li>
   );
 }
 
+/** The characteristics icon row (approved, from variant 1): four equal columns between hairlines. */
 function Traits({ card }: { card: FragranceCard }) {
   const { t, language } = usePrefs();
   return (
@@ -146,61 +236,121 @@ function Traits({ card }: { card: FragranceCard }) {
   );
 }
 
+/**
+ * One volume: the volume over its price; a markdown strikes the regular price above the sale one,
+ * which is Sage Ink (a saving) on an unselected tile. Selected is the Graphite fill. Sold out is
+ * transparent with a faint outline and says so; a sold-out volume can still be chosen (to see its
+ * photo), and then carries an ink ring instead of the fill, so it never looks buyable.
+ */
+function VolumeTile({
+  volume: v,
+  selected,
+  onSelect,
+  onKeyDown,
+  tileRef,
+}: {
+  volume: VolumeCard;
+  selected: boolean;
+  onSelect: (ml: VolumeCard['ml']) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
+  tileRef: (el: HTMLButtonElement | null) => void;
+}) {
+  const { t } = usePrefs();
+  const soldOut = v.available === 0;
+  const look = soldOut
+    ? selected
+      ? 'bg-transparent text-muted shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+      : 'bg-transparent text-faint shadow-[inset_0_0_0_1px_var(--c-line)]'
+    : selected
+      ? 'bg-btn text-btn-ink'
+      : 'bg-card text-ink inset-line';
+  return (
+    <button
+      ref={tileRef}
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
+      data-sold-out={soldOut || undefined}
+      onClick={() => onSelect(v.ml)}
+      onKeyDown={onKeyDown}
+      className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-btn px-1 py-2.5 transition-[background-color,color,box-shadow,transform] duration-150 ${EASE_OUT} active:scale-[0.97] ${look}`}
+    >
+      <span className="type-price">
+        {v.ml} {t.card.ml}
+      </span>
+      {soldOut ? (
+        <span className="type-caption text-muted">{t.card.soldOut}</span>
+      ) : (
+        <span className={`flex flex-col items-center ${selected ? 'opacity-80' : 'text-muted'}`}>
+          {v.salePrice !== null ? (
+            <s className={selected ? 'opacity-75' : ''}>
+              <Money amount={v.price} size="small" />
+            </s>
+          ) : null}
+          <Money
+            amount={v.effectivePrice}
+            size="small"
+            className={v.salePrice !== null && !selected ? 'text-sage-ink' : ''}
+          />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** The 10 / 30 / 50 ml radio group: one tab stop, arrows move the choice (as `Segmented`). */
 function VolumeTiles({
   volumes,
   selected,
   onSelect,
 }: {
   volumes: VolumeCard[];
-  selected: number;
-  onSelect: (ml: number) => void;
+  selected: VolumeCard['ml'];
+  onSelect: (ml: VolumeCard['ml']) => void;
 }) {
   const { t } = usePrefs();
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const dir =
+      e.key === 'ArrowRight' || e.key === 'ArrowDown'
+        ? 1
+        : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+          ? -1
+          : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const next = (i + dir + volumes.length) % volumes.length;
+    const v = volumes[next];
+    if (v) {
+      onSelect(v.ml);
+      refs.current[next]?.focus();
+    }
+  };
   return (
     <div role="radiogroup" aria-label={t.card.volume} className="grid grid-cols-3 gap-2">
-      {volumes.map((v) => {
-        const isSelected = v.ml === selected;
-        const soldOut = v.available === 0;
-        return (
-          <button
-            key={v.ml}
-            type="button"
-            role="radio"
-            aria-checked={isSelected}
-            data-sold-out={soldOut || undefined}
-            onClick={() => onSelect(v.ml)}
-            className={`flex min-h-[64px] flex-col items-center justify-center gap-0.5 rounded-btn px-1 py-2 transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ${
-              isSelected
-                ? 'bg-btn text-btn-ink'
-                : soldOut
-                  ? 'bg-transparent text-faint shadow-[inset_0_0_0_1px_var(--c-line)]'
-                  : 'bg-card text-ink shadow-[inset_0_0_0_1px_var(--c-line-strong)]'
-            }`}
-          >
-            <span className="text-[15px] leading-none font-semibold">
-              {v.ml} {t.card.ml}
-            </span>
-            {soldOut ? (
-              <span className="text-[11px] leading-tight">{t.card.soldOut}</span>
-            ) : (
-              <>
-                <Money amount={v.effectivePrice} className="!text-[12.5px] !font-medium" />
-                {v.salePrice !== null ? (
-                  <s className="type-small !text-[11px] whitespace-nowrap opacity-70">
-                    <Money amount={v.price} className="!text-[11px] !font-normal" />
-                  </s>
-                ) : null}
-              </>
-            )}
-          </button>
-        );
-      })}
+      {volumes.map((v, i) => (
+        <VolumeTile
+          key={v.ml}
+          volume={v}
+          selected={v.ml === selected}
+          onSelect={onSelect}
+          onKeyDown={(e) => onKey(e, i)}
+          tileRef={(el) => {
+            refs.current[i] = el;
+          }}
+        />
+      ))}
     </div>
   );
 }
 
-/** Price of the chosen volume: Uzum-style markdown (ADR 0008), no timer, sold out said plainly. */
-function PriceLine({ volume }: { volume: VolumeCard }) {
+/**
+ * Under the tiles: availability of the chosen volume (a Sage dot when it can be bought) and, during
+ * a markdown, its badge and end date (ADR 0008: no timer). The price itself is on the tile and in
+ * the dock.
+ */
+function VolumeStatus({ volume }: { volume: VolumeCard }) {
   const { t, language } = usePrefs();
   const soldOut = volume.available === 0;
   const until =
@@ -208,42 +358,41 @@ function PriceLine({ volume }: { volume: VolumeCard }) {
       ? fill(t.card.saleUntil, { date: saleEndDate(volume.saleEndsAt, language) })
       : null;
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <Money amount={volume.effectivePrice} size="amount" />
-      {volume.salePrice !== null ? (
-        <>
-          <s className="text-muted">
-            <Money amount={volume.price} />
-          </s>
-          <span className="type-count rounded-pill bg-sage-wash px-2 py-1 text-[11px] text-sage-ink">
-            −{volume.salePercent}%
-          </span>
-          {until ? <span className="type-small whitespace-nowrap text-muted">{until}</span> : null}
-        </>
-      ) : null}
+    <div className="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
       <span
-        className={`type-small basis-full ${soldOut ? 'text-muted' : 'text-sage-ink'}`}
+        className="type-small flex items-center gap-2 text-muted"
         data-availability={soldOut ? 'sold-out' : 'in-stock'}
       >
+        <span
+          aria-hidden="true"
+          className={`size-1.5 shrink-0 rounded-pill ${soldOut ? 'bg-faint' : 'bg-sage'}`}
+        />
         {soldOut ? t.card.unavailable : t.card.inStock}
       </span>
+      {volume.salePrice !== null ? (
+        <span className="flex items-center gap-2">
+          <Badge tone="discount">−{volume.salePercent}%</Badge>
+          {until ? <span className="type-small whitespace-nowrap text-muted">{until}</span> : null}
+        </span>
+      ) : null}
     </div>
   );
 }
 
+/** The notes pyramid (top / heart / base); an empty level is left out, and with it no card at all. */
 function Pyramid({ card }: { card: FragranceCard }) {
   const { t, language } = usePrefs();
   const names = (l: Bilingual[]) => l.map((n) => n[language]).join(', ');
   const rows = (['top', 'heart', 'base'] as const).filter((k) => card.notes[k].length > 0);
   if (rows.length === 0) return null;
   return (
-    <Card className="divide-y divide-line px-4">
+    <Card as="dl" className="mt-7 divide-y divide-line px-4">
       {rows.map((k) => (
-        <div key={k} className="flex gap-4 py-3">
-          <span className="type-small w-[72px] shrink-0 text-muted">{t.card.notes[k]}</span>
-          <span className="type-body min-w-0 flex-1 [overflow-wrap:anywhere]">
+        <div key={k} className="flex items-baseline gap-4 py-3">
+          <dt className="type-body w-18 shrink-0 text-muted">{t.card.notes[k]}</dt>
+          <dd className="type-body min-w-0 flex-1 [overflow-wrap:anywhere]">
             {names(card.notes[k])}
-          </span>
+          </dd>
         </div>
       ))}
     </Card>
@@ -251,17 +400,106 @@ function Pyramid({ card }: { card: FragranceCard }) {
 }
 
 /**
- * The fragrance card (approved variant 2 with the icon row from variant 1). The reviews block, the
- * favourite heart and the cart dock arrive with their own tickets and slot in where DESIGN.md puts them.
+ * The dock (approved comp): «В корзину · <price>» and «Купить сейчас» for the chosen volume; a sold-out
+ * volume turns it into one disabled button with the reason. This is its final shape; the cart
+ * ticket (#18) wires «В корзину» and the purchase shortcuts ticket (#25) «Купить сейчас».
+ *
+ * The comp's single line needs about 356 px with a seven-digit UZ price; on a narrower phone
+ * (360 px Androids, 375 px iPhones) the price steps under «В корзину» instead of being clipped. An
+ * invisible copy of the single line measures what it needs, so the choice follows the real text.
+ */
+function Dock({
+  volume,
+  onAddToCart,
+  onBuyNow,
+}: {
+  volume: VolumeCard | undefined;
+  onAddToCart?: (ml: VolumeCard['ml']) => void;
+  onBuyNow?: (ml: VolumeCard['ml']) => void;
+}) {
+  const { t } = usePrefs();
+  const row = useRef<HTMLDivElement>(null);
+  const probe = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(false);
+  const canBuy = volume !== undefined && volume.available > 0;
+  useLayoutEffect(() => {
+    const r = row.current;
+    const p = probe.current;
+    if (!r || !p || typeof ResizeObserver === 'undefined') return;
+    const check = () => setStacked(p.scrollWidth > r.clientWidth);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(r);
+    observer.observe(p); // the fonts arriving change what the line needs
+    return () => observer.disconnect();
+  }, [canBuy]);
+
+  if (!canBuy)
+    return (
+      <Button block disabled>
+        {t.card.unavailable}
+      </Button>
+    );
+  const price = <Money amount={volume.effectivePrice} />;
+  const oneLine = (
+    <span className="flex items-center gap-1.5">
+      {t.card.toCart}
+      <span aria-hidden="true" className="opacity-60">
+        ·
+      </span>
+      {price}
+    </span>
+  );
+  return (
+    <div ref={row} className="relative flex gap-2">
+      {/* Clipped to the row, so the measuring copy never widens the page. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none invisible absolute inset-0 overflow-hidden"
+      >
+        <div ref={probe} className="type-button flex w-max gap-2">
+          <span className="px-3.5">{oneLine}</span>
+          <span className="px-3.5">{t.card.buyNow}</span>
+        </div>
+      </div>
+      <Button size="pair" className="min-w-0 flex-1" onClick={() => onAddToCart?.(volume.ml)}>
+        {stacked ? (
+          <span className="flex flex-col items-center gap-1">
+            {t.card.toCart}
+            <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
+          </span>
+        ) : (
+          oneLine
+        )}
+      </Button>
+      <Button
+        variant="tonal"
+        size="pair"
+        className="shrink-0"
+        onClick={() => onBuyNow?.(volume.ml)}
+      >
+        {t.card.buyNow}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The fragrance card (approved variant 2 with the icon row from variant 1), with its dock. The
+ * favourite heart (#45) and the reviews block under the notes (#41) slot in where DESIGN.md puts them.
  */
 export function FragranceView({
   card,
   onBack,
   onShare,
+  onAddToCart,
+  onBuyNow,
 }: {
   card: FragranceCard;
   onBack: () => void;
   onShare: () => void;
+  onAddToCart?: (ml: VolumeCard['ml']) => void;
+  onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
   const { t, language } = usePrefs();
   // Start on the smallest volume that can be bought; all sold out -> the smallest one.
@@ -269,57 +507,53 @@ export function FragranceView({
     () => (card.volumes.find((v) => v.available > 0) ?? card.volumes[0])?.ml,
   );
   const volume = card.volumes.find((v) => v.ml === ml) ?? card.volumes[0];
-  const keyNotes = card.keyNotes[language].join(' · ');
-  const attribution = fill(t.card.basedOn, { brand: card.brand });
 
   return (
-    <article className="flex flex-col gap-6 pt-3">
-      <Gallery card={card} volume={volume} onBack={onBack} onShare={onShare} />
+    <Screen
+      tabBar={false}
+      dock={<Dock volume={volume} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />}
+    >
+      <article className="flex flex-col pt-3 pb-7">
+        <Gallery card={card} hash={volume?.photo ?? null} onBack={onBack} onShare={onShare} />
 
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Badge card={card} />
-          <span className="type-label text-muted">
-            {t.card.type[card.type]}
-            {card.family ? ` · ${card.family[language]}` : ''}
-          </span>
+        <div className="mt-5">
+          <Lockup card={card} />
         </div>
-        <p className="type-label text-muted [overflow-wrap:anywhere]">{attribution}</p>
-        <h1 className="type-name text-[24px] [overflow-wrap:anywhere]">{card.name}</h1>
-        <LabelDivider />
-        <p className="type-body text-muted">{keyNotes}</p>
-      </header>
 
-      <section className="flex flex-col gap-3">
-        <p className="type-body">{card.description[language]}</p>
-        <p className="type-body">
-          <span className="font-semibold">{t.card.whenToWear}: </span>
-          {card.whenToWear[language]}
-        </p>
-      </section>
-
-      <Traits card={card} />
-
-      {volume ? (
-        <section className="flex flex-col gap-3">
-          <VolumeTiles
-            volumes={card.volumes}
-            selected={volume.ml}
-            onSelect={(next) => setMl(next as VolumeCard['ml'])}
-          />
-          <PriceLine volume={volume} />
+        <section className="mt-5 flex flex-col gap-2">
+          <p className="type-body text-ink">{card.description[language]}</p>
+          <p className="type-body text-muted">
+            <span className="font-semibold text-ink">{t.card.whenToWear}:</span>{' '}
+            {card.whenToWear[language]}
+          </p>
         </section>
-      ) : null}
 
-      <Pyramid card={card} />
+        <div className="mt-6">
+          <Traits card={card} />
+        </div>
 
-      {card.uzumUrl ? (
-        <Button variant="secondary" block onClick={() => openExternal(card.uzumUrl as string)}>
-          {t.card.uzum}
-        </Button>
-      ) : null}
+        {volume ? (
+          <section className="mt-6 flex flex-col gap-3">
+            <VolumeTiles volumes={card.volumes} selected={volume.ml} onSelect={setMl} />
+            <VolumeStatus volume={volume} />
+          </section>
+        ) : null}
 
-      <p className="type-small rounded-btn bg-field px-4 py-3 text-muted">{t.card.disclaimer}</p>
-    </article>
+        <Pyramid card={card} />
+
+        <div className="mt-7 flex flex-col gap-3">
+          <p className="type-small flex gap-2.5 rounded-btn bg-field px-3.5 py-3 text-muted">
+            <InfoIcon size={16} className="mt-px shrink-0" />
+            {t.card.disclaimer}
+          </p>
+          {card.uzumUrl ? (
+            <Button variant="secondary" block onClick={() => openExternal(card.uzumUrl as string)}>
+              {t.card.uzum}
+              <ExternalIcon size={16} />
+            </Button>
+          ) : null}
+        </div>
+      </article>
+    </Screen>
   );
 }

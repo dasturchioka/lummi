@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
+import { goBackOrCatalog } from '../lib/navigation';
 import { Home } from '../screens/Home';
 import { TabBar, TABS } from '../ui/TabBar';
 
@@ -19,19 +20,11 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
-  // A fragrance card is a task screen: it will carry its own dock (cart ticket), not the tab bar.
-  const showTabBar = !pathname.startsWith('/p/');
+  // A fragrance card is a task screen: it carries its own dock, not the tab bar (also on its fixtures).
+  const showTabBar = !pathname.startsWith('/p/') && pathname !== '/dev/fragrance';
 
   // Telegram's native back button: visible on screens deeper than a tab root.
-  useEffect(
-    () =>
-      showBackButton(!isRoot, () =>
-        router.history.canGoBack()
-          ? router.history.back()
-          : void router.navigate({ to: '/catalog', replace: true }),
-      ),
-    [isRoot, router],
-  );
+  useEffect(() => showBackButton(!isRoot, () => goBackOrCatalog(router)), [isRoot, router]);
 
   return (
     <>
@@ -58,6 +51,17 @@ const devRoutes = import.meta.env.DEV
       createRoute({
         ...at('/dev/sheet'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'GallerySheetOpen'),
+      }),
+      // The fragrance card on fixtures: `?data=demo|worst|one|empty` (worst by default).
+      createRoute({
+        ...at('/dev/fragrance'),
+        validateSearch: (s: Record<string, unknown>) => ({
+          data: (['demo', 'worst', 'one', 'empty'] as const).find((n) => n === s.data) ?? 'worst',
+        }),
+        component: lazyRouteComponent(
+          () => import('../dev/FragranceFixtures'),
+          'FragranceFixtures',
+        ),
       }),
     ]
   : [];

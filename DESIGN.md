@@ -24,6 +24,9 @@ colors:
   dark-hairline-strong: "rgba(245, 242, 236, .22)"
   dark-sage-wash: "rgba(154, 165, 146, .16)"
   dark-photo: "#3A322C"
+  on-sage: "#2A2A2A"
+  photo-disc: "rgba(245, 242, 236, .92)"
+  photo-disc-ink: "#2A2A2A"
 typography:
   title:
     fontFamily: "Tenor Sans, Manrope, sans-serif"
@@ -70,6 +73,16 @@ typography:
     fontSize: "12.5px"
     fontWeight: 400
     lineHeight: 1.45
+  caption:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.3
+  value:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 600
+    lineHeight: 1.3
   heading:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "17px"
@@ -84,6 +97,12 @@ typography:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "15px"
     fontWeight: 600
+    fontFeature: "tnum"
+  price-small:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "12.5px"
+    fontWeight: 500
+    lineHeight: 1.3
     fontFeature: "tnum"
   amount:
     fontFamily: "Manrope, system-ui, sans-serif"
@@ -135,6 +154,13 @@ components:
     typography: "{typography.button}"
     rounded: "{rounded.button}"
     height: "48px"
+  button-tonal:
+    backgroundColor: "{colors.stone}"
+    textColor: "{colors.graphite}"
+    typography: "{typography.button}"
+    rounded: "{rounded.button}"
+    padding: "0 14px"
+    height: "48px"
   button-disabled:
     backgroundColor: "{colors.milk-field}"
     textColor: "{colors.ink-muted}"
@@ -185,7 +211,7 @@ components:
     rounded: "{rounded.card}"
   badge-hit:
     backgroundColor: "{colors.sage}"
-    textColor: "{colors.graphite}"
+    textColor: "{colors.on-sage}"
     typography: "{typography.badge}"
     rounded: "{rounded.pill}"
     padding: "5px 8px 4px"
@@ -195,6 +221,12 @@ components:
     typography: "{typography.badge}"
     rounded: "{rounded.pill}"
     padding: "5px 8px 4px"
+  badge-discount:
+    backgroundColor: "{colors.sage-wash}"
+    textColor: "{colors.sage-ink}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.pill}"
+    padding: "0 8px"
   volume-option:
     backgroundColor: "{colors.card-white}"
     textColor: "{colors.graphite}"
@@ -274,7 +306,9 @@ The palette is a quiet paper-and-ink palette. Sage is the only accent, and it is
 - **Faint Ink** (ink-faint): non-text only, such as sold-out volume glyphs. It is never used for readable copy.
 - **Hairline / Hairline Strong** (hairline, hairline-strong): 1 px dividers, and inset outlines on secondary buttons, chips, steppers, volume tiles and empty slots.
 - **Sage Wash** (sage-wash): the tinted ground of the set-deal strip and the confirmed status pill.
-- **Photo Blush** (photo-blush; dark: dark-photo): placeholder behind bottle photography while it loads.
+- **Photo Blush** (photo-blush; dark: dark-photo): placeholder behind bottle photography while it loads, and the photo slot of the product page's loading state.
+- **On Sage** (on-sage): text on a Sage fill (the ХИТ badge). Graphite in both themes; it never flips.
+- **Photo Disc** (photo-disc, photo-disc-ink): the overlay discs on the product photo, 92% Milk with a Graphite icon in both themes, because the bottle photography is light in both.
 
 ### Dark theme (derived; approved 2026-11-07 via variant 2)
 Dark is the optional theme, switched in Profile. The Home top block uses the dark fabric photo. Dark tokens swap the same roles. The ground is Dark Room (dark-room). Cards use brand Graphite. The other roles map to Dark Field (dark-field), Dark Block (dark-block), Milk ink, Stone as secondary ink, and Dark Faint Ink (dark-ink-faint). Lines are Milk at 10% / 22%. The tab bar stays brand Graphite, as in the comp. Primary buttons invert to a Milk fill with Graphite text. Sage is unchanged. Badge text on a Sage fill stays Graphite in both themes.
@@ -302,7 +336,10 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Slogan** (Cormorant Italic 500, 21px, 1.2, sentence case, no trailing period): «Ароматы, которые освещают» / «Lahzalaringizni yorituvchi iforlar», one line under the logo in the Home top block. The one use of the italic beyond names (customer-approved comp).
 - **Heading** (Manrope 600, 17px, 1.35, sentence case): the title of an empty, error or sign-in state, and the profile name. Never tracked caps, so long UZ titles stay readable.
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
-- **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
+- **Caption** (Manrope 400, 11px, 1.3, `type-caption`): the smallest readable line, in Muted Ink: characteristic labels, a sold-out volume's «нет в наличии», the discount badge (at 600).
+- **Value** (Manrope 600, 13px, 1.3, `type-value`): a short value under a caption, in the characteristics row.
+- **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. A price inside a control (volume tiles) is **Price small** (Manrope 500, 12.5px, 1.3, tabular, `<Money size="small">`). The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
+- **Badge** (Tenor 400, 10px, +0.2em, caps, `type-badge`): ХИТ and НОВИНКА only.
 
 ### Named Rules
 **The Label Lockup Rule.** A fragrance is always named as: label caps attribution, then the italic name, then (in full cards) a 28 px Sage rule (18 px on list cards), then notes joined by " · ". The attribution line is mandatory legal wording, not a kicker. Never drop it, reword it or move it below the name.
@@ -317,11 +354,11 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 The app is a single 360 px-first column inside the Telegram WebView. Page gutters are 16 px. The product grid has two columns with an 8 px gap. Horizontal rows («Новинки», suggestions) scroll 158 px cards with an 8 px gap and a hidden scrollbar. Sections are separated by 28 px (26 px between checkout blocks). Within a block, elements stack at 12 px. Controls are 48 px tall (36 px small, 34 px chips, steppers and copy buttons). Every row and card is built to hold the longer of the RU and UZ strings.
 
-Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the floating five-tab bar (Главная, Каталог, Корзина, Заказы, Профиль; a 64 px Graphite pill 20 px from the sides and 12 px above the bottom safe area) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment). Content scrolls under the floating bar with enough bottom padding to clear it.
+Vertical order is fixed. Telegram's header comes first (not ours). Then the screen content scrolls. Then comes a bottom zone that is either the floating five-tab bar (Главная, Каталог, Корзина, Заказы, Профиль; a 64 px Graphite pill 20 px from the sides and 12 px above the bottom safe area) on browse screens, or a Milk dock with a top hairline that holds the primary action on task screens (product, set, checkout, payment). Content scrolls under the floating bar with enough bottom padding to clear it. The dock is `Screen`'s `dock` slot: edge to edge, sticky to the bottom while the content scrolls under it, 10 px above its buttons and the bottom safe area (at least 12 px) below them.
 
 ## Elevation & Depth
 
-The system is flat, with no box-shadows for depth. Depth is tonal: Milk ground, white card, Stone block, plus 1 px hairlines between rows. Inset 1 px outlines (drawn as inset box-shadow) are used as borders on secondary controls. A 2 px surface-coloured ring separates the cart count from the tab icon. Neither of these is elevation. The one overlay, the share button on the product gallery, sits on a 92% Milk disc.
+The system is flat, with no box-shadows for depth. Depth is tonal: Milk ground, white card, Stone block, plus 1 px hairlines between rows. Inset 1 px outlines (drawn as inset box-shadow) are used as borders on secondary controls. A 2 px surface-coloured ring separates the cart count from the tab icon. Neither of these is elevation. The one overlay is on the product gallery: the back, share (and later heart) buttons sit on 40 px Photo Disc circles, 92% Milk in both themes.
 
 ### Named Rules
 **The Flat Box Rule.** Nothing casts a shadow. If a surface needs separation, step it one tone or add a hairline. The one detached surface is the floating tab bar from the approved design, and it is flat too: a solid Graphite pill with no shadow.
@@ -339,6 +376,8 @@ Quiet, solid and decisive.
 - **Shape:** gently rounded (10px), 48px tall, Manrope 600 15px, no-wrap.
 - **Primary:** Graphite fill with Milk text (inverted in dark). One per screen, usually in the dock.
 - **Secondary:** transparent with a 1 px hairline-strong inset outline and Graphite text.
+- **Tonal:** Stone fill with Graphite text (Dark Block with Milk text in dark), the second action beside a primary in a dock («Купить сейчас», approved comp). Never alone, never the main action.
+- **Pair size:** 48 px with 14 px sides, for two actions sharing one dock row; the primary grows, the tonal one keeps its label width.
 - **Disabled / pending:** Milk Field fill with Muted Ink text, carrying the reason as its label ("Выберите ещё 2").
 - **Add "+":** a 32px Graphite square (30px on list cards) with a 10px radius. This is the list-card add-to-cart control per TZ §3.2. A 158 px card cannot hold "В корзину", which is a recorded deviation from bb-08.
 - **Focus:** a 2px Sage outline at a 2px offset on every focusable element.
@@ -375,6 +414,8 @@ This is the single progress and measure component: a 2 px track in hairline colo
 ### Badges
 - **ХИТ / Hit:** filled Sage with Graphite text, 10px Tenor, +0.2em, pill.
 - **НОВИНКА / Yangi:** transparent with a 1 px Sage inset outline and Sage Ink text.
+- **Discount «−20%»:** Sage Wash with Sage Ink, Caption 600 tabular, pill. It sits beside the markdown's end date, never on its own as a sticker.
+- **Shape:** a 20 px pill (`Badge`). The caps badges sit 1 px low and 2 px tighter on the right, so the tracked caps look centred.
 - **Rule:** at most one badge per card. It is hidden inside a row whose title already says it (no ХИТ inside "Топ продаж").
 
 ### Characteristics row (approved design, from variant 1)
@@ -384,7 +425,12 @@ Four equal columns under the description: longevity, sillage, season, time of da
 A Graphite block (Dark Block in dark) with Milk text: rows for items, the promo code discount in Dark Sage Ink with a "−" sign, delivery «Доставка BTS, <город>», then a hairline and «Итого» in 600. The primary «Оформить заказ» sits inside the block, inverted (Milk fill, Graphite text).
 
 ### Volume selector
-Three tiles in a grid (10 / 30 / 50 ml), each showing the volume in 600 and the price under it. The selected tile has a Graphite fill. A sold-out tile is transparent with a faint hairline and Faint Ink, and reads "нет в наличии". Choosing a volume cross-fades the gallery photo (0.32s, cubic-bezier(.16, 1, .3, 1)).
+Three tiles in a grid (10 / 30 / 50 ml; a volume that is not sold is simply absent), each showing the volume in Price and the price under it in Price small, Muted Ink. During a markdown the regular price is struck above the sale price, which is Sage Ink on an unselected tile. The selected tile has a Graphite fill (inverted in dark). A sold-out tile is transparent with a faint hairline, its volume in Faint Ink and "нет в наличии" in Caption, Muted Ink; a sold-out volume can still be chosen (to see its photo) and then carries a 1.5 px ink ring instead of the fill, so it never looks buyable. Under the tiles one line: a 6 px Sage dot with «В наличии» (Faint dot and «Нет в наличии» when sold out) and, during a markdown, the discount badge with «до 2 декабря» on the right. The arrows move the choice (one tab stop, like Segmented).
+
+Choosing a volume cross-fades the gallery photo (0.32s, cubic-bezier(.16, 1, .3, 1)): the new photo fades in over the old one, never over the placeholder. Once the first photo is in, the other volumes' photos load quietly.
+
+### Product page
+Photo (3:4, 12 px, Photo Blush behind it) with the back and share discs; the label lockup with the badge left and the type (Tenor caps) · family (Body small) on the line above the attribution; description, then «Когда носить:» in Muted Ink with its label in ink 600; the characteristics row; the volume tiles; the notes pyramid (a white card of rows, the level in Muted Ink on the same baseline as its notes); the disclaimer plate (Milk Field, 16 px info icon, Body small Muted); «Купить на Uzum» as a secondary button with an external icon when a link is set. The dock holds «В корзину · 149 000 сум» (primary, grows) and «Купить сейчас» (tonal). When that line does not fit (a 360 px Android, a 375 px iPhone, a seven-digit price) the price steps under «В корзину» in Price small instead of being clipped. A sold-out volume turns the dock into one disabled «Нет в наличии». While the card loads, a skeleton of the same shape stands in, with the photo slot in Photo Blush.
 
 ### Set box
 The Discovery box redrawn: a white 12px card. The lid has the logo, the "DISCOVERY SET" label caps at +0.3em, the label divider and "5 × 10 мл". Below it, five vial compartments sit on a Milk Field tray. The next empty slot has a 1.5 px ink outline. Italic names sit under the slots, and the Sage thread runs underneath.

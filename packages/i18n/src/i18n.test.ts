@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { dictionaries } from './all';
-import { defineMessages, formatMoney, languageFromTelegram, normalizeUzbek } from './index';
+import { defineMessages, fill, formatMoney, languageFromTelegram, normalizeUzbek } from './index';
 
 describe('formatMoney', () => {
   it('formats RU and UZ with narrow no-break spaces', () => {
@@ -12,6 +12,13 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('fill', () => {
+  it('fills named placeholders and leaves unknown ones visible', () => {
+    expect(fill('по мотивам {brand}', { brand: 'Louis Vuitton' })).toBe('по мотивам Louis Vuitton');
+    expect(fill('{brand} asosida', {})).toBe('{brand} asosida');
   });
 });
 
