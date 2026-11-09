@@ -6,7 +6,8 @@ import { EDGES, ENV } from '../tokens';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { CustomersService } from './customers.service';
-import { InitDataError, verifyInitData } from './init-data';
+import { verifyInitData } from './init-data';
+import { SignedPayloadError } from './signed-payload';
 import { SessionCustomerId, SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
 
@@ -32,7 +33,7 @@ export class AuthController {
           maxFutureSkewSeconds: await this.settings.get('auth.initDataMaxFutureSkewSeconds'),
         });
       } catch (e) {
-        if (!(e instanceof InitDataError)) throw e;
+        if (!(e instanceof SignedPayloadError)) throw e;
         const expired = e.reason === 'stale' || e.reason === 'future';
         return {
           status: 401 as const,
@@ -40,7 +41,7 @@ export class AuthController {
         };
       }
       const customer = await this.customers.signIn(verified.user);
-      const session = await this.sessions.issue(customer.id);
+      const session = await this.sessions.issue(customer.id, customer.telegramId);
       return {
         status: 200 as const,
         body: { token: session.token, expiresAt: session.expiresAt.toISOString() },
@@ -53,10 +54,9 @@ export class AuthController {
   @UseGuards(SessionGuard)
   refresh(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.auth.refresh, async () => {
-      if (!(await this.customers.getById(customerId))) {
-        return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      }
-      const session = await this.sessions.issue(customerId);
+      const customer = await this.customers.getById(customerId);
+      if (!customer) return { status: 401 as const, body: { code: 'unauthorized' as const } };
+      const session = await this.sessions.issue(customer.id, customer.telegramId);
       return {
         status: 200 as const,
         body: { token: session.token, expiresAt: session.expiresAt.toISOString() },

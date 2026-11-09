@@ -161,6 +161,12 @@ export class OutboxService implements OnApplicationShutdown {
       )
       .returning();
     if (!row) return 'skipped';
+    // Refused write access or a blocked bot: statuses stay in the app only. A private chat id is
+    // the customer's Telegram id; group chats (negative ids) are never suppressed.
+    if (row.chatId > 0 && !(await this.customers.canMessage(row.chatId))) {
+      await this.markFailed(id, 'suppressed: customer refused write access or blocked the bot');
+      return 'blocked';
+    }
     try {
       const { messageId } = await this.edges.telegram.send(toMessage(row));
       await this.db
