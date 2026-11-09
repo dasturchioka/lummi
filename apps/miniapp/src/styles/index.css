@@ -127,7 +127,21 @@
   line-height: 1.45;
   font-weight: 400;
 }
-/* The smallest readable line: characteristic labels, a sold-out volume's «нет в наличии». */
+/* The label of a tappable list row (Profile, region / city / point pickers); 600 for a point's name and the Home city. */
+@utility type-row {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+/* The Muted Ink hint under a field, and the count under the chosen point. */
+@utility type-hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+/* The smallest readable line: characteristic labels, «Доставка» over the Home city, a sold-out volume's «нет в наличии». */
 @utility type-caption {
   font-family: var(--font-ui);
   font-size: 11px;
@@ -285,6 +299,19 @@
 @keyframes fade-in {
   from {
     opacity: 0;
+  }
+}
+/* A picker step arrives from the side it was reached from: forward from the right, back from the left. */
+@keyframes step-forward {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
   }
 }
 /* An outcome replacing content in place: it settles up 6 px as it appears. */

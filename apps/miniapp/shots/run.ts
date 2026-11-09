@@ -132,6 +132,8 @@ async function ensureServices() {
     });
     await waitFor(apiPort, 'API');
   }
+  // The BTS points come from the committed snapshot (idempotent); delivery screens need them.
+  run('npm', ['run', 'bts:import', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
   if (!(await listening(appPort))) {
     console.log(`starting Mini App on ${appPort}`);
     spawnService('miniapp', 'npm', ['run', 'dev', '-w', '@lummi/miniapp'], {
@@ -220,8 +222,14 @@ async function main() {
             undefined,
             { timeout: 20_000 },
           );
+          await screen.act?.({ page });
+          await page.waitForFunction(
+            () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
+            undefined,
+            { timeout: 20_000 },
+          );
           await page.evaluate(() => document.fonts.ready);
-          await page.waitForTimeout(150);
+          await page.waitForTimeout(screen.act ? 450 : 150); // sheets finish rising
           if (screen.fullPage) {
             // Grow the viewport to the page so fixed parts (the tab bar) sit at its real bottom
             // instead of floating over the middle of a stitched capture.

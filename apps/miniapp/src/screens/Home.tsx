@@ -1,5 +1,6 @@
 import type { Theme } from '@lummi/contracts';
 import { Link } from '@tanstack/react-router';
+import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
 import { BottleIcon, SearchIcon } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
@@ -62,8 +63,9 @@ function TopBlock() {
   );
 }
 
+// shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
 const DISC =
-  'grid size-11 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
+  'grid size-11 shrink-0 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
 
 /** Home, no welcome screen (approved design): the top block, then the Milk sheet over its edge. */
 export function Home() {
@@ -79,14 +81,14 @@ export function Home() {
         }}
       >
         {/*
-          The approved row: search left, avatar right, on white discs. The centre is where the
-          delivery city selector goes (regions arrive with their ticket); until then the two
-          discs stand as a plain toolbar. Search opens the search screen.
+          The approved row: search left, avatar right, on white discs, the delivery city between
+          them. Search opens the search screen.
         */}
-        <div className="flex h-11 items-center justify-between">
+        <div className="flex h-11 items-center justify-between gap-2">
           <Link to="/search" aria-label={t.home.search} className={DISC}>
             <SearchIcon size={20} />
           </Link>
+          <DeliveryRow />
           <Link to="/profile" aria-label={t.tabs.profile} className={DISC}>
             <Monogram size={22} />
           </Link>

@@ -1,5 +1,6 @@
 export * from './admin';
 export * from './auth';
+export * from './delivery';
 export * from './internal';
 export * from './catalog';
 export * from './limits';

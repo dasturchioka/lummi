@@ -6,6 +6,7 @@
  * where a key exists, otherwise from the `demo` strings below (never shipped).
  */
 import { useState, type ReactNode } from 'react';
+import { ChosenPoint } from '../delivery/ChosenPoint';
 import { usePrefs } from '../lib/prefs';
 import { Badge, FragranceBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -149,6 +150,23 @@ const SWATCHES = [
 
 const UZ_GLYPHS = 'Oʻ oʻ Gʻ gʻ · Toʻlov · Yorugʻ · Qorongʻi';
 
+/** BTS data is Russian-only by source (docs/spec.md), so the demo point is too. */
+const DEMO_POINT = {
+  id: 0,
+  code: '3010',
+  regionId: 3,
+  city: 'Самарканд',
+  name: 'SAMARQAND YANGIBOZOR',
+  address: 'Г.Самарканд, ул.У. Джуракулова',
+  landmark: 'Задние ворота нового рынка',
+  hours: 'Пн: выходной; Вт-Вс: 09:00-18:00',
+};
+const DEMO_POINT_LONG = {
+  name: 'BTS PAYSHANBA SAVDO MAJMUASI (ESKI BOZOR YONIDAGI FILIAL)',
+  address:
+    'Каттакурганский район, посёлок Пайшанба, улица Амира Темура, дом 112А, второй этаж торгового комплекса',
+};
+
 function Section({ name, children }: { name: string; children: ReactNode }) {
   return (
     <section className="border-t border-line pt-4 pb-8">
@@ -226,6 +244,11 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <Specimen label="type-body · Manrope 400 14 · type-small 12.5 Muted">
             <p className="type-body">{t.session.reopenText}</p>
             <p className="type-small text-muted">{t.errors.loadFailedText}</p>
+          </Specimen>
+          <Specimen label="type-row · Manrope 15 (600 for a point name) · type-hint 12 Muted">
+            <p className="type-row">{t.delivery.cities}</p>
+            <p className="type-row font-semibold">{t.delivery.pointTitle}</p>
+            <p className="type-hint mt-1 text-muted">{t.delivery.typedTooShort}</p>
           </Specimen>
           <Specimen label="type-caption 11 Muted · type-value 600 13 (characteristics row)">
             <div className="flex flex-col items-start">
@@ -466,6 +489,14 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
             <FragranceListCard compact item={LIST_ITEMS.normal} />
             <FragranceListCard compact item={LIST_ITEMS.worst} />
           </div>
+        </Section>
+
+        <Section name="ChosenPoint (checkout: the BTS point, collapsed)">
+          <ChosenPoint point={DEMO_POINT} otherPoints={4} onChange={() => undefined} />
+          <ChosenPoint
+            point={{ ...DEMO_POINT, name: DEMO_POINT_LONG.name, address: DEMO_POINT_LONG.address }}
+            onChange={() => undefined}
+          />
         </Section>
 
         <Section name="Skeleton (loading)">
