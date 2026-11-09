@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:int": "vitest run --project integration"
+    "test:int": "vitest run --project integration",
+    "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
   },
   "dependencies": {
     "@lummi/contracts": "*",

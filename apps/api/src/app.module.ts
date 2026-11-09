@@ -1,5 +1,10 @@
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
+import { AdminAuthController } from './admin/admin-auth.controller';
+import { StaffController } from './admin/staff.controller';
+import { OwnerGuard, StaffGuard } from './staff/staff.guard';
+import { StaffSessionService } from './staff/staff-session.service';
+import { StaffService } from './staff/staff.service';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
 import { CustomersService } from './auth/customers.service';
@@ -23,7 +28,7 @@ export class AppModule {
   static register(deps: AppDeps): DynamicModule {
     return {
       module: AppModule,
-      controllers: [AuthController, MeController],
+      controllers: [AuthController, MeController, AdminAuthController, StaffController],
       providers: [
         { provide: ENV, useValue: deps.env },
         { provide: DB, useValue: deps.db },
@@ -33,8 +38,12 @@ export class AppModule {
         CustomersService,
         SessionService,
         SessionGuard,
+        StaffService,
+        StaffSessionService,
+        StaffGuard,
+        OwnerGuard,
       ],
-      exports: [SettingsService, AuditService],
+      exports: [SettingsService, AuditService, StaffService],
     };
   }
 }

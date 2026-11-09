@@ -22,6 +22,18 @@ export const settingDefinitions = {
       .max(7 * 86_400),
     default: 3600,
   },
+  'auth.loginWidgetMaxAgeSeconds': {
+    schema: z.number().int().min(10).max(86_400),
+    default: 300,
+  },
+  'auth.staffSessionTtlSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(300)
+      .max(30 * 86_400),
+    default: 7 * 86_400,
+  },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;

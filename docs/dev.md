@@ -7,7 +7,8 @@ Node 24+ and Docker are required. Several agents or branches may run on one mach
 | API | `API_PORT` | 4000 | `41NN` |
 | Postgres (host port) | `POSTGRES_HOST_PORT` | 5432 | `25NN` |
 | Redis (later) | `REDIS_HOST_PORT` | 6379 | `26NN` |
-| Mini App / admin (later) | `MINIAPP_PORT` / `ADMIN_PORT` | | `51NN` / `61NN` |
+| Mini App | `MINIAPP_PORT` | | `51NN` |
+| Admin | `ADMIN_PORT` | 6000 | `61NN` |
 
 ## Install
 
@@ -42,6 +43,20 @@ Edit `packages/db/src/schema.ts`, then `npm run db:generate` (writes SQL to `pac
 - Only fast tests (no Docker): `npm run test:unit -w @lummi/api`; only DB tests: `npm run test:int -w @lummi/api`
 
 API tests come in two projects: `*.unit.test.ts` (no I/O) and `*.int.test.ts` (Seam 1, ADR 0028). The integration project starts **one** Postgres container per run (tmpfs, `fsync=off`, 32 MB buffers), migrates a template database once, and every test file clones its own database from it (`createTestApp()` in `apps/api/test/harness/test-app.ts`). Inside a file call `t.reset()` in `beforeEach` to truncate all tables. `t.signIn(user)` signs `initData` with the test bot token and returns a session-bound client; `t.edges` holds the fakes (`clock`, `telegram`, `receiptJudge`, `files`). To skip the container, set `TEST_DATABASE_URL` to an admin URL of a running Postgres (it needs `CREATE DATABASE` rights); only the template and per-file `t_*` databases are created and dropped.
+
+## Admin panel
+
+`apps/admin` (Next.js, shadcn/ui on brand tokens). Seed the first owner, run the API with the dev sign-in, then the panel:
+
+```sh
+npm run seed:owner -- --telegram-id <your id> --name "<name>"      # idempotent
+ADMIN_DEV_LOGIN=true API_PORT=4106 npm run dev:api
+API_URL=http://127.0.0.1:4106 NEXT_PUBLIC_ADMIN_DEV_LOGIN=true ADMIN_PORT=6106 npm run dev:admin
+```
+
+`/api/*` is proxied to `API_URL` with the prefix stripped (Caddy does it at deploy). The real Login Widget needs `NEXT_PUBLIC_BOT_USERNAME` and the page served from the domain set with BotFather `/setdomain` (dev: the Cloudflare tunnel). `ADMIN_DEV_LOGIN=true` signs in by Telegram id with no widget; the API refuses to boot with it when `NODE_ENV=production`.
+
+Seam 1 helpers: `t.ownerSession()`, `t.managerSession()` (or `t.signInStaff(role, user?, { active })`) insert the staff row, sign in through the real widget path and return `{ staff, cookie, client }`; `t.widgetPayload(user)` builds a signed widget payload. Owner-only endpoints use `@UseGuards(StaffGuard, OwnerGuard)`.
 
 ## Hooks for later tickets
 

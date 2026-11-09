@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+/* Brandbook v2.0 tokens (CLAUDE.md). The admin is light only; no shadows, no burgundy or gold. */
+:root {
+  --milk: #f5f2ec;
+  --stone: #cfc6b8;
+  --graphite: #2a2a2a;
+  --sage: #9aa592;
+  --card: #ffffff;
+
+  --background: var(--milk);
+  --foreground: var(--graphite);
+  --card-background: var(--card);
+  --muted: color-mix(in srgb, var(--stone) 35%, var(--milk));
+  --muted-foreground: color-mix(in srgb, var(--graphite) 62%, var(--milk));
+  --border: var(--stone);
+  --primary: var(--graphite);
+  --primary-foreground: var(--milk);
+  --accent: var(--sage);
+  --destructive: #8c3b32;
+  --radius-card: 12px;
+  --radius-button: 10px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card-background);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-stone: var(--stone);
+  --color-sage: var(--sage);
+  --color-destructive: var(--destructive);
+  --radius-card: var(--radius-card);
+  --radius-button: var(--radius-button);
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-display: var(--font-tenor), serif;
+  --font-name: var(--font-cormorant), serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Screen titles: Tenor Sans, caps, wide tracking. */
+.title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
+}

@@ -29,4 +29,21 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, SESSION_SECRET: 'short' })).toThrow(/SESSION_SECRET/);
     expect(() => parseEnv({ ...valid, API_PORT: 'abc' })).toThrow(/API_PORT/);
   });
+
+  it('refuses the dev-only admin sign-in in production, allows it elsewhere', () => {
+    expect(() => parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'true' })).toThrow(
+      /ADMIN_DEV_LOGIN/,
+    );
+    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).ADMIN_DEV_LOGIN).toBe(false);
+    expect(
+      parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'false' }).ADMIN_DEV_LOGIN,
+    ).toBe(false);
+    expect(
+      parseEnv({ ...valid, NODE_ENV: 'development', ADMIN_DEV_LOGIN: 'true' }).ADMIN_DEV_LOGIN,
+    ).toBe(true);
+    expect(parseEnv({ ...valid, NODE_ENV: 'test', ADMIN_DEV_LOGIN: 'true' }).ADMIN_DEV_LOGIN).toBe(
+      true,
+    );
+    expect(parseEnv(valid).ADMIN_DEV_LOGIN).toBe(false);
+  });
 });

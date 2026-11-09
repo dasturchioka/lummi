@@ -1,0 +1,36 @@
+{
+  "name": "@lummi/admin",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port ${ADMIN_PORT:-6000}",
+    "build": "next build",
+    "start": "next start --port ${ADMIN_PORT:-6000}",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@lummi/contracts": "*",
+    "@lummi/i18n": "*",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@ts-rest/core": "~3.52.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.70.0",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@lummi/config": "*",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tailwindcss": "^4.3.5",
+    "vitest": "^5.1.0"
+  }
+}
