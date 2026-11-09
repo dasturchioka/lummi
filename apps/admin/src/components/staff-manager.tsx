@@ -4,6 +4,7 @@ import type { StaffDto } from '@lummi/contracts';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -72,19 +73,43 @@ export function StaffManager({
     else setRowError(res ? errorText(res.status) : t.errors.generic);
   };
 
+  // Row actions are quiet text buttons; the switch button is as wide as the longer of its two
+  // labels, so «Удалить» starts at the same x in every row. Outline and primary buttons are kept
+  // for the page header and dialogs.
+  const toggleWidth = {
+    minWidth: `calc(${Math.max(t.staff.deactivate.length, t.staff.activate.length)}ch + 1.5rem)`,
+  };
   const actions = (s: StaffDto) =>
     s.role === 'manager' && s.id !== meId ? (
       <>
         {s.active ? (
-          <Button variant="outline" size="sm" onClick={() => ask('deactivate', s)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            style={toggleWidth}
+            onClick={() => ask('deactivate', s)}
+          >
             {t.staff.deactivate}
           </Button>
         ) : (
-          <Button variant="outline" size="sm" loading={busyId === s.id} onClick={() => activate(s)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            style={toggleWidth}
+            loading={busyId === s.id}
+            onClick={() => activate(s)}
+          >
             {t.staff.activate}
           </Button>
         )}
-        <Button variant="ghost" size="sm" onClick={() => ask('remove', s)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start"
+          onClick={() => ask('remove', s)}
+        >
           {t.staff.remove}
         </Button>
       </>
@@ -122,13 +147,13 @@ export function StaffManager({
       {rowError && <Notice title={rowError} className="mb-4" />}
 
       {/*
-        The layout follows the card's width, not the viewport (the sidebar takes 256 px from
+        The layout follows the card's width, not the viewport (the sidebar takes 280 px from
         1024 up): a stacked list when narrow, one line per person from 576 px, a table from
         896 px, where every column has room.
       */}
       <Card className="@container">
         {initial.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-muted-foreground">{t.staff.empty}</p>
+          <EmptyState title={t.staff.empty} />
         ) : (
           <>
             <ul className="divide-y divide-border @4xl:hidden">
@@ -152,7 +177,7 @@ export function StaffManager({
                     {/* a fixed slot from 576 px keeps the status pills in one column */}
                     <div
                       className={cn(
-                        'flex basis-full flex-wrap gap-2 @xl:w-[17.5rem] @xl:shrink-0 @xl:basis-auto @xl:justify-end @xl:gap-1.5',
+                        '-ml-3 flex basis-full flex-wrap gap-1.5 @xl:ml-0 @xl:w-[16rem] @xl:shrink-0 @xl:basis-auto',
                         !rowActions && '@max-xl:hidden',
                       )}
                     >
@@ -186,7 +211,7 @@ export function StaffManager({
                       <TD className="whitespace-nowrap">{t.roles[s.role]}</TD>
                       <TD>{status(s)}</TD>
                       <TD className="w-px">
-                        <div className="flex justify-end gap-1.5">{actions(s)}</div>
+                        <div className="flex gap-1.5">{actions(s)}</div>
                       </TD>
                     </TR>
                   ))}

@@ -99,4 +99,5 @@ export const screens: Screen[] = [
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
+  { id: 'not-found-guest', path: '/no-such-page' },
 ];

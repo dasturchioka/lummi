@@ -1,10 +1,10 @@
 import type { StaffDto } from '@lummi/contracts';
 import { LanguageSwitch } from '@/components/language-switch';
 import type { AdminMessages } from '@/lib/i18n';
-import { HomeLogo, PanelAccount, PanelNav } from './panel-nav';
+import { HomeLogo, NavScroller, PanelAccount, PanelNav } from './panel-nav';
 
 /**
- * Desktop (≥1024 px): a fixed 256 px column on the Milk ground, a hairline from the content.
+ * Desktop (≥1024 px): a fixed 280 px column on the Milk ground, a hairline from the content.
  * Logo and RU/UZ on top, the menu (scrolls if it must), who is signed in at the foot.
  */
 export function Sidebar({
@@ -22,12 +22,13 @@ export function Sidebar({
         <HomeLogo />
         <LanguageSwitch current={language} label={t.language} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3">
+      <NavScroller
+        className="px-3 pb-3"
+        footerClassName="mx-3 mb-4"
+        footer={<PanelAccount member={member} t={t} />}
+      >
         <PanelNav role={member.role} t={t} />
-      </div>
-      <div className="px-3 pb-4">
-        <PanelAccount member={member} t={t} />
-      </div>
+      </NavScroller>
     </aside>
   );
 }

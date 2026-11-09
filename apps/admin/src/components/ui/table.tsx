@@ -37,5 +37,5 @@ export const TH = ({ className, ...p }: React.ComponentProps<'th'>) => (
   />
 );
 export const TD = ({ className, ...p }: React.ComponentProps<'td'>) => (
-  <td className={cn('h-14 px-4 py-2 align-middle first:pl-5 last:pr-5', className)} {...p} />
+  <td className={cn('h-12 px-4 py-2 align-middle first:pl-5 last:pr-5', className)} {...p} />
 );

@@ -3,7 +3,7 @@
 import type { StaffDto } from '@lummi/contracts';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { SignOutButton } from '@/components/sign-out-button';
 import type { AdminMessages } from '@/lib/i18n';
@@ -12,8 +12,9 @@ import { cn } from '@/lib/utils';
 
 /**
  * The panel menu: sections grouped by job, the active one in a Graphite fill (as a selected chip
- * in the Mini App). Sections a later ticket has not built yet stay visible in Muted Ink and are
- * not links, so the panel's shape is clear from day one.
+ * in the Mini App). Sections a later ticket has not built yet stay listed in Muted Ink with a
+ * «скоро» tag and are not links, so the panel's shape is clear from day one (a hover title alone
+ * would say nothing on touch).
  */
 export function PanelNav({
   role,
@@ -26,12 +27,12 @@ export function PanelNav({
 }) {
   const pathname = usePathname();
   const ref = useRef<HTMLElement>(null);
-  // the owner's 14 sections overflow a phone's sheet: keep the current one in view on open
+  // the owner's 14 sections can overflow a short phone: keep the current one in view on open
   useEffect(() => {
     ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
   }, [pathname]);
   return (
-    <nav ref={ref} aria-label={t.nav.label} className="grid gap-4">
+    <nav ref={ref} aria-label={t.nav.label} className="grid gap-2.5 lg:gap-4">
       {navFor(role).map((group) => (
         <div key={group.key ?? 'top'}>
           {group.key && (
@@ -42,15 +43,10 @@ export function PanelNav({
           <ul className="grid gap-0.5">
             {group.items.map(({ key, icon: Icon, href }) => {
               const label = t.nav[key];
-              const inner = (
-                <>
-                  <Icon className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />
-                  <span className="min-w-0 truncate">{label}</span>
-                </>
-              );
-              // 44 px rows for touch in the sheet, 32 px in the desktop sidebar (14 sections fit 768 px)
+              // 40 px rows in the sheet, 32 px in the desktop sidebar (14 sections fit 768 px)
               const base =
-                'flex h-11 items-center gap-3 rounded-button px-3 text-sm select-none lg:h-8';
+                'flex h-10 items-center gap-2.5 rounded-button px-3 text-sm select-none lg:h-8';
+              const icon = <Icon className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden />;
               if (!href) {
                 return (
                   <li key={key}>
@@ -59,7 +55,9 @@ export function PanelNav({
                       title={t.nav.soon}
                       className={cn(base, 'cursor-default text-muted-foreground')}
                     >
-                      {inner}
+                      {icon}
+                      <span className="min-w-0 truncate">{label}</span>
+                      <span className="ml-auto shrink-0 text-xs text-faint">{t.nav.soonTag}</span>
                     </span>
                   </li>
                 );
@@ -79,7 +77,8 @@ export function PanelNav({
                         : 'text-foreground hover:bg-field active:bg-field',
                     )}
                   >
-                    {inner}
+                    {icon}
+                    <span className="min-w-0 truncate">{label}</span>
                   </Link>
                 </li>
               );
@@ -88,6 +87,54 @@ export function PanelNav({
         </div>
       ))}
     </nav>
+  );
+}
+
+/**
+ * The scrolling menu with the account pinned under it. The hairline above the account appears
+ * only while menu items scroll underneath it.
+ */
+export function NavScroller({
+  children,
+  footer,
+  className,
+  footerClassName,
+}: {
+  children: React.ReactNode;
+  footer: React.ReactNode;
+  className?: string;
+  footerClassName?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [under, setUnder] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setUnder(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, []);
+  return (
+    <>
+      <div ref={ref} className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', className)}>
+        {children}
+      </div>
+      <div
+        className={cn(
+          'border-t pt-3 transition-colors duration-150',
+          under ? 'border-border' : 'border-transparent',
+          footerClassName,
+        )}
+      >
+        {footer}
+      </div>
+    </>
   );
 }
 
@@ -102,7 +149,7 @@ export function PanelAccount({ member, t }: { member: StaffDto; t: AdminMessages
     .join('')
     .toUpperCase();
   return (
-    <div className="flex min-w-0 items-center gap-3 border-t border-border pt-3 pl-3">
+    <div className="flex min-w-0 items-center gap-3 pl-3">
       <span
         aria-hidden
         className="grid size-9 shrink-0 place-items-center rounded-full bg-stone text-[13px] font-semibold"
@@ -122,15 +169,16 @@ export function PanelAccount({ member, t }: { member: StaffDto; t: AdminMessages
   );
 }
 
+/** The wordmark home link; 14 px tall (105 px wide, above the 80 px minimum) beside RU/UZ. */
 export function HomeLogo({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link
       href="/"
       onClick={onNavigate}
-      className="inline-flex h-11 items-center rounded-button px-3"
+      className="inline-flex h-11 shrink-0 items-center rounded-button px-3"
       aria-label="LUMMI."
     >
-      <Logo className="h-4" />
+      <Logo className="h-3.5" />
     </Link>
   );
 }

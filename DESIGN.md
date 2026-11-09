@@ -329,6 +329,7 @@ Quiet, solid and decisive.
 ### Inputs / Fields
 - **Style:** Milk Field fill, no border, 10px radius, 48px, 15px text. The label sits above in 12.5px Manrope 500, Muted Ink. Hints sit below in 12px.
 - **Search:** the same field with a leading 18px search icon and the placeholder "name or note".
+- **Admin panel only (deviation, 2026-11-09):** fields carry a resting 1 px hairline-strong inset outline on top of the Milk Field fill, because in dense forms on white cards and dialogs a borderless field reads as a blank plate. The admin's focus ring is Sage Ink, not Sage (Sage is about 2.6:1 on white). The Mini App keeps borderless fields and the Sage ring.
 
 ### Navigation
 - **Tab bar (approved design):** a floating Graphite pill with five tabs, 22px icon over an 11px label: Главная, Каталог, Корзина, Заказы, Профиль. The active tab sits in a Milk circle with Graphite icon and Milk label at 600. Inactive tabs use Stone. The cart count is a Milk pill with Graphite text. In the dark theme the pill is Dark Block.

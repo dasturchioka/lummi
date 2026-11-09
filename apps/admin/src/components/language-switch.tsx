@@ -5,7 +5,7 @@ import { useTransition } from 'react';
 import { LANG_COOKIE } from '@/lib/lang-cookie';
 import { cn } from '@/lib/utils';
 
-/** RU / UZ pill pair (DESIGN.md): Milk Field track, Graphite fill on the active option. */
+/** RU / UZ as a segmented control (DESIGN.md): Milk Field track, a white selected segment. */
 export function LanguageSwitch({
   current,
   label,
@@ -40,10 +40,10 @@ export function LanguageSwitch({
           onClick={() => set(lang)}
           aria-pressed={current === lang}
           className={cn(
-            'h-full min-w-11 rounded-full px-3 text-xs font-semibold tracking-wide uppercase transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.96]',
+            'h-full min-w-10 rounded-full px-2.5 text-xs tracking-wide uppercase transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.96]',
             current === lang
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground',
+              ? 'bg-card font-semibold text-foreground'
+              : 'font-medium text-muted-foreground hover:text-foreground',
           )}
         >
           {lang}

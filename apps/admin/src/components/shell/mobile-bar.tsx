@@ -7,12 +7,11 @@ import { useState } from 'react';
 import { LanguageSwitch } from '@/components/language-switch';
 import { Button } from '@/components/ui/button';
 import type { AdminMessages } from '@/lib/i18n';
-import { HomeLogo, PanelAccount, PanelNav } from './panel-nav';
+import { HomeLogo, NavScroller, PanelAccount, PanelNav } from './panel-nav';
 
 /**
  * Below 1024 px: a 56 px top bar (logo, RU/UZ, menu button) and the same menu in a sheet from
- * the left.
- * The sheet closes on a menu tap, Esc, or a tap on the dimmed page.
+ * the left. The sheet closes on a menu tap, Esc, or a tap on the dimmed page.
  */
 export function MobileBar({
   member,
@@ -54,12 +53,13 @@ export function MobileBar({
               </Button>
             </DialogPrimitive.Close>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-2 pb-6">
+          <NavScroller
+            className="px-3 pt-1 pb-3"
+            footerClassName="mx-3"
+            footer={<PanelAccount member={member} t={t} />}
+          >
             <PanelNav role={member.role} t={t} onNavigate={close} />
-          </div>
-          <div className="px-3">
-            <PanelAccount member={member} t={t} />
-          </div>
+          </NavScroller>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

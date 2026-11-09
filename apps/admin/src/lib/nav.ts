@@ -21,7 +21,7 @@ import type { AdminMessages } from './i18n';
 type Role = StaffDto['role'];
 type NavKey = Exclude<
   keyof AdminMessages['nav'],
-  'label' | 'menu' | 'close' | 'soon' | 'signOut' | 'groups'
+  'label' | 'menu' | 'close' | 'soon' | 'soonTag' | 'signOut' | 'groups'
 >;
 
 export type NavItem = {

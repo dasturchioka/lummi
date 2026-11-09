@@ -15,6 +15,7 @@ export default async function HomePage() {
       <PageHeader title={t.nav.home} />
       <EmptyState
         title={t.home.emptyTitle}
+        icon="monogram"
         action={
           owner && (
             <Button asChild variant="outline">
