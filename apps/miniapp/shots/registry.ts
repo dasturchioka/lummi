@@ -26,6 +26,8 @@ export interface ScreenDef {
   initDataAgeSeconds?: number;
   /** Capture the whole scrolling page instead of the 390x844 viewport. */
   fullPage?: boolean;
+  /** Viewport width in CSS px (default 390): 360 for the narrow Android check. */
+  width?: number;
   /** Take this screen as another customer (default `SHOT_USER`), e.g. one who never shared a phone. */
   user?: ShotUser;
 }
@@ -137,6 +139,51 @@ const catalogSheet =
     await sheet(page).getByTestId('option-row').first().waitFor();
   };
 
+/** Holds every catalog list request open, so the first load stays on its skeletons. */
+const holdCatalog = async ({ page }: { page: Page }) => {
+  await page.route('**/catalog/fragrances?*', () => undefined);
+  await page.reload();
+  await page.locator('[data-skeleton]').first().waitFor();
+};
+/** Fails every catalog list request, as a dropped connection does. */
+const failCatalog = async ({ page }: { page: Page }) => {
+  await page.route('**/catalog/fragrances?*', (route) => route.abort());
+  await page.reload();
+  await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+};
+
+/**
+ * The realistic worst case through the data (break-ui): the longest brands of the guide pinned to
+ * the top («Maison Francis Kurkdjian», «Boadicea the Victorious»), the longest name with a
+ * seven-digit price, and a hit sold out in every volume.
+ */
+const WORST_HITS = [
+  'elysium-pour-homme-parfum',
+  'baccarat-rouge-540',
+  'blue-sapphire',
+  'miss-dior-blooming-bouquet',
+];
+const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
+  setup: async ({ db }) => {
+    await db.query(`update fragrances set is_hit = true where slug = any($1)`, [WORST_HITS]);
+    await db.query(`update fragrances set is_new = true where slug = 'baccarat-rouge-540'`);
+    await db.query(
+      `update volumes set price = case ml when 10 then 1250000 when 30 then 2450000 else 3490000 end
+       where fragrance_id = (select id from fragrances where slug = 'elysium-pour-homme-parfum')`,
+    );
+    await db.setOnHand('blue-sapphire', 0);
+  },
+  teardown: async ({ db }) => {
+    await unflagHome(db);
+    // The seed's placeholder prices (one set for every fragrance).
+    await db.query(
+      `update volumes set price = case ml when 10 then 69000 when 30 then 149000 else 219000 end
+       where fragrance_id = (select id from fragrances where slug = 'elysium-pour-homme-parfum')`,
+    );
+    await db.restore('blue-sapphire');
+  },
+};
+
 export const screens: ScreenDef[] = [
   {
     id: 'home',
@@ -156,6 +203,19 @@ export const screens: ScreenDef[] = [
       await flagHome(db);
     },
     teardown: ({ db }) => unflagHome(db),
+  },
+  // The whole page: «Популярное» (no ХИТ badge: the title says it) and the «Новинки» rail.
+  { id: 'home-full', path: '/', ...withFlags, fullPage: true },
+  // A 360 px Android, the narrowest phone we build for.
+  { id: 'home-360', path: '/', ...withFlags, width: 360, fullPage: true },
+  { id: 'home-loading', path: '/', loading: true, act: holdCatalog },
+  { id: 'home-error', path: '/', act: failCatalog },
+  {
+    // Nothing visible in the catalog yet: one calm state instead of empty sections.
+    id: 'home-empty',
+    path: '/',
+    setup: async ({ db }) => void (await db.query(`update fragrances set hidden = true`)),
+    teardown: async ({ db }) => void (await db.query(`update fragrances set hidden = false`)),
   },
   {
     // «Популярное» with a chip selected: it filters in place.
@@ -325,6 +385,35 @@ export const screens: ScreenDef[] = [
     fullPage: true,
   },
   { id: 'catalog-nothing-found', path: '/catalog?min=9000000' },
+  {
+    // The longest family name of the guide, chosen: the chip shows it.
+    id: 'catalog-family-chosen',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await catalogSheet(/Семейство|Oila/)({ page });
+      await sheet(page)
+        .getByTestId('option-row')
+        .filter({ hasText: /Древесно-цветочный мускусный|Yogʻochli gulli mushkli/ })
+        .click();
+      await sheet(page).waitFor({ state: 'detached' });
+      await page
+        .getByRole('button', { name: /Древесно-цветочный мускусный|Yogʻochli gulli mushkli/ })
+        .waitFor();
+    },
+  },
+  {
+    // «Показать ещё»: the second page settles in under the first.
+    id: 'catalog-more',
+    path: '/catalog',
+    act: async ({ page }) => {
+      const cards = page.getByRole('list', { name: /^(Каталог|Katalog)$/ }).getByRole('listitem');
+      await page.getByRole('button', { name: /Показать ещё|Yana koʻrsatish/ }).click();
+      await cards.nth(24).waitFor();
+      await cards.nth(22).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  { id: 'catalog-360', path: '/catalog', width: 360 },
+  { id: 'catalog-worst-360', path: '/catalog', ...worstData, width: 360, fullPage: true },
   { id: 'catalog-sets', path: '/catalog?type=sets' },
   {
     // One fragrance sold out in every volume: its card says «Нет в наличии» in place of the price.
@@ -334,26 +423,9 @@ export const screens: ScreenDef[] = [
     teardown: async ({ db }) => db.restore('symphony'),
     ...{ fullPage: true },
   },
-  {
-    id: 'catalog-loading',
-    path: '/catalog',
-    loading: true,
-    act: async ({ page }) => {
-      // A filter change keeps the old list (dimmed); the skeleton is the first load.
-      await page.route('**/catalog/fragrances?*', () => undefined);
-      await page.reload();
-      await page.locator('[data-skeleton]').first().waitFor();
-    },
-  },
-  {
-    id: 'catalog-error',
-    path: '/catalog?type=homme',
-    act: async ({ page }) => {
-      await page.route('**/catalog/fragrances?*', (route) => route.abort());
-      await page.reload();
-      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
-    },
-  },
+  // A filter change keeps the old list (dimmed); the skeleton is the first load.
+  { id: 'catalog-loading', path: '/catalog', loading: true, act: holdCatalog },
+  { id: 'catalog-error', path: '/catalog?type=homme', act: failCatalog },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },
   {

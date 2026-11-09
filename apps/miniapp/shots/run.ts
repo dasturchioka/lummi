@@ -3,7 +3,7 @@
  *
  *   npm run shots -w @lummi/miniapp -- --out <dir> [--only home,profile]
  *
- * Captures each registered screen at 390x844 @2x, in light and dark x RU and UZ, as
+ * Captures each registered screen at 390x844 @2x (or its own `width`), in light and dark x RU and UZ, as
  * `<screen>-<theme>-<lang>.png`. It uses the API and dev Postgres (docs/dev.md): anything not
  * already running is started here and stopped again at the end. Theme and language are saved
  * through the real API (PATCH /me/preferences), then the page opens with launch params in the URL.
@@ -183,8 +183,9 @@ async function main() {
             if (own.status !== 200) throw new Error(`could not save preferences: ${own.status}`);
           }
           await screen.setup?.({ api: screenApi, db: shotDb });
+          const width = screen.width ?? 390;
           const context = await browser.newContext({
-            viewport: { width: 390, height: 844 },
+            viewport: { width, height: 844 },
             deviceScaleFactor: 2,
             isMobile: true,
             hasTouch: true,
@@ -235,7 +236,7 @@ async function main() {
             // Grow the viewport to the page so fixed parts (the tab bar) sit at its real bottom
             // instead of floating over the middle of a stitched capture.
             const height = await page.evaluate(() => document.documentElement.scrollHeight);
-            await page.setViewportSize({ width: 390, height: Math.max(844, height) });
+            await page.setViewportSize({ width, height: Math.max(844, height) });
             await page.waitForTimeout(100);
           }
           const file = resolve(outDir, `${screen.id}-${theme}-${lang}.png`);
