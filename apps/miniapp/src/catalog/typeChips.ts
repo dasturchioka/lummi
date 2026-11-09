@@ -11,6 +11,6 @@ export function typeChipOptions<V extends FragranceType | 'all' | 'sets'>(
 ) {
   return values.map((value) => {
     const hash = value === 'sets' ? null : photos?.[value as FragranceType | 'all'];
-    return { value, label: labels[value], thumb: hash ? photoUrl(hash, 400) : undefined };
+    return { value, label: labels[value], thumb: hash ? photoUrl(hash, 400) : null };
   });
 }

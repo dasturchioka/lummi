@@ -1,6 +1,6 @@
 import { fill, formatMoney } from '@lummi/i18n';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CatalogSearch, FragranceType } from '../catalog/filters';
 import { activeFilterCount } from '../catalog/request';
 import { useCatalogList } from '../catalog/infinite';
@@ -12,8 +12,9 @@ import { Button } from '../ui/Button';
 import { CHIP_ROW, Chip, TypeChips } from '../ui/Chips';
 import { FragranceGrid } from '../ui/FragranceGrid';
 import { GridSkeleton } from '../ui/GridSkeleton';
-import { BoxIcon, ChevronIcon, SearchIcon } from '../ui/icons';
+import { BoxIcon, ChevronIcon, GridIcon, SearchIcon } from '../ui/icons';
 import { Screen } from '../ui/Screen';
+import { ScreenHeader } from '../ui/ScreenHeader';
 import { SearchField } from '../ui/SearchField';
 import { EmptyState, ErrorState } from '../ui/States';
 
@@ -29,9 +30,10 @@ const chevron = (
 );
 
 /**
- * `/catalog`: the search field, the photo-circle type chips (both stay under the top edge), then
- * the four filter chips, the sort with «Найдено: N», and the two-column grid. The state lives in
- * the URL, so a way back from a fragrance card keeps the filters and the scroll.
+ * `/catalog`: the title, the search field and the photo-circle type chips (these two stay under the
+ * top edge once the title has scrolled away), then the four filter chips, the sort with
+ * «Найдено: N», and the two-column grid. The state lives in the URL, so a way back from a
+ * fragrance card keeps the filters and the scroll.
  */
 export function Catalog() {
   const { t, language } = usePrefs();
@@ -45,6 +47,17 @@ export function Catalog() {
   const list = useCatalogList(filters, !sets);
   const first = list.data?.pages[0];
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  // Cards already on screen (or there when the screen opened) stay still; only a page that
+  // «Показать ещё» added to the same list settles into place. A new filter is a new first page.
+  const pages = list.data?.pages;
+  const shown = useRef<{ first: unknown; count: number } | null>(null);
+  const appearFrom =
+    shown.current && pages?.[0] === shown.current.first && items.length > shown.current.count
+      ? shown.current.count
+      : undefined;
+  useEffect(() => {
+    shown.current = pages ? { first: pages[0], count: items.length } : null;
+  });
   const facets = first?.facets;
 
   const change = (patch: Partial<CatalogSearch>) =>
@@ -69,7 +82,10 @@ export function Catalog() {
     setSheet(name);
   };
 
-  const typeOptions = typeChipOptions(TYPES, t.catalog.types, facets?.typePhotos);
+  // «Наборы» has no bottle of its own: the box icon holds its circle until the sets ticket.
+  const typeOptions = typeChipOptions(TYPES, t.catalog.types, facets?.typePhotos).map((o) =>
+    o.value === 'sets' ? { ...o, icon: <BoxIcon size={16} /> } : o,
+  );
 
   const familyName = facets?.families.find((f) => f.id === filters.family)?.name[language];
   const priceLabel =
@@ -128,7 +144,7 @@ export function Catalog() {
       />
     ) : (
       <EmptyState
-        icon={<BoxIcon size={28} />}
+        icon={<GridIcon size={28} />}
         title={t.catalog.emptyTitle}
         text={t.catalog.emptyText}
       />
@@ -141,6 +157,7 @@ export function Catalog() {
           label={t.catalog.title}
           busy={list.isPlaceholderData}
           onSelect={open}
+          appearFrom={appearFrom}
         />
         {list.hasNextPage ? (
           <Button
@@ -162,8 +179,14 @@ export function Catalog() {
 
   return (
     <Screen
+      lead={
+        // The title's own 16 px under it, less the 8 px the stuck header keeps above the field.
+        <div className="-mb-2">
+          <ScreenHeader title={t.catalog.title} />
+        </div>
+      }
       header={
-        <div className="flex flex-col gap-3 pt-4 pb-3">
+        <div className="flex flex-col gap-3 pt-2 pb-3">
           <SearchField />
           <TypeChips
             options={typeOptions}
@@ -176,10 +199,11 @@ export function Catalog() {
     >
       {sets ? null : (
         <>
-          <div className={`${CHIP_ROW} mt-3`}>
+          <div className={`${CHIP_ROW} mt-1`}>
             {filterChips.map((c) => (
               <Chip
                 key={c.name}
+                variant="filter"
                 label={c.value ?? c.label}
                 selected={c.value !== undefined}
                 trailing={chevron}
@@ -187,7 +211,7 @@ export function Catalog() {
               />
             ))}
           </div>
-          <div className="mt-3 mb-3 flex min-h-11 items-center justify-between gap-3">
+          <div className="my-1 flex min-h-11 items-center justify-between gap-3">
             <p className="type-small text-muted" aria-live="polite">
               {first ? fill(t.catalog.found, { n: String(first.total) }) : ' '}
             </p>

@@ -8,7 +8,11 @@ import { CheckIcon } from '../ui/icons';
 import { Sheet } from '../ui/Sheet';
 import type { CatalogSearch } from './filters';
 
-/** One choice per row, the chosen one marked; a tap picks it and closes the sheet. */
+/**
+ * One choice per row, a tap picks it and closes the sheet. The same rows as the delivery picker's
+ * sheet: a white card of hairline-separated rows that wash to Milk Field while pressed; the current
+ * choice rests on Sage Wash with a Sage Ink check (DESIGN.md: Sage confirms).
+ */
 function OptionRows<V extends string | number>({
   options,
   value,
@@ -19,7 +23,10 @@ function OptionRows<V extends string | number>({
   onPick: (v: V | undefined) => void;
 }) {
   return (
-    <div role="radiogroup" className="flex flex-col divide-y divide-line">
+    <div
+      role="radiogroup"
+      className="flex flex-col divide-y divide-line overflow-hidden rounded-card bg-card"
+    >
       {options.map((o) => {
         const selected = o.value === value;
         return (
@@ -30,12 +37,12 @@ function OptionRows<V extends string | number>({
             aria-checked={selected}
             data-testid="option-row"
             onClick={() => onPick(o.value)}
-            className="type-row flex min-h-12 items-center justify-between gap-3 py-2 text-left transition-colors duration-150 active:bg-field"
+            className={`type-row flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2.5 text-left transition-colors duration-150 ${
+              selected ? 'bg-sage-wash' : 'hover:bg-field active:bg-field'
+            }`}
           >
-            <span className={`min-w-0 [overflow-wrap:anywhere] ${selected ? 'font-semibold' : ''}`}>
-              {o.label}
-            </span>
-            {selected ? <CheckIcon size={18} className="shrink-0" /> : null}
+            <span className="min-w-0 [overflow-wrap:anywhere]">{o.label}</span>
+            {selected ? <CheckIcon size={20} className="shrink-0 text-sage-ink" /> : null}
           </button>
         );
       })}
