@@ -40,7 +40,7 @@ export function ListRow({
     <>
       {leading ? <span className="-ml-0.5 shrink-0 text-ink">{leading}</span> : null}
       <span className="min-w-0 flex-1 text-left">
-        <span id={id} className="type-body block text-[15px] text-ink">
+        <span id={id} className="type-row block text-ink">
           {label}
         </span>
         {hint ? <span className="type-small mt-0.5 block text-muted">{hint}</span> : null}

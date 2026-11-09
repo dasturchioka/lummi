@@ -42,9 +42,56 @@ export const customers = pgTable('customers', {
   phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
   /** The answer to requestWriteAccess; null = not asked yet. Refused also sets botBlocked. */
   writeAccess: writeAccessEnum('write_access'),
+  /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
+  deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
+  deliveryCity: text('delivery_city'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The 14 delivery regions (spec §8). `delivery_tariff` is the per-region price in so'm (flat 25 000
+ * for now, spec Changes 2026-11-06); only the owner edits it, audited as `region.tariff_changed`.
+ */
+export const regions = pgTable('regions', {
+  id: id(),
+  /** Ours, stable. */
+  code: text('code').notNull().unique(),
+  /** bts.uz's own region id, used by the one-off import. */
+  btsId: integer('bts_id').notNull().unique(),
+  nameRu: text('name_ru').notNull(),
+  nameUz: text('name_uz').notNull(),
+  deliveryTariff: integer('delivery_tariff').notNull(),
+  /** Order in the picker. */
+  position: integer('position').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * A BTS pickup point. `code` is bts.uz's office number (the import's idempotency key; staff-added
+ * points use their own). `active = false` hides it from customers. `search_text` is the folded
+ * lower-case text the search matches, kept in sync by the service. Text is as BTS publishes it.
+ */
+export const btsPoints = pgTable(
+  'bts_points',
+  {
+    id: id(),
+    code: text('code').notNull().unique(),
+    regionId: bigint('region_id', { mode: 'number' })
+      .notNull()
+      .references(() => regions.id),
+    city: text('city').notNull(),
+    name: text('name').notNull(),
+    address: text('address').notNull(),
+    landmark: text('landmark'),
+    hours: text('hours'),
+    active: boolean('active').notNull().default(true),
+    searchText: text('search_text').notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('bts_points_region_city_idx').on(t.regionId, t.city)],
+);
 
 /** Staff (ADR 0017): gates the admin panel and the orders-group buttons; audit entries point here. */
 export const staff = pgTable('staff', {
@@ -355,6 +402,8 @@ export type VolumeRow = typeof volumes.$inferSelect;
 
 export type OutboxRow = typeof outbox.$inferSelect;
 export type CustomerRow = typeof customers.$inferSelect;
+export type RegionRow = typeof regions.$inferSelect;
+export type BtsPointRow = typeof btsPoints.$inferSelect;
 export type StaffRow = typeof staff.$inferSelect;
 export type StaffRole = (typeof staffRoleEnum.enumValues)[number];
 export type ActorType = (typeof actorTypeEnum.enumValues)[number];

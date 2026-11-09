@@ -7,6 +7,10 @@ import { StaffController } from './admin/staff.controller';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
 import { StaffService } from './staff/staff.service';
+import { BtsAdminController } from './delivery/bts-admin.controller';
+import { BtsAdminService } from './delivery/bts-admin.service';
+import { DeliveryController } from './delivery/delivery.controller';
+import { DeliveryService } from './delivery/delivery.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { MediaController } from './catalog/media.controller';
@@ -52,6 +56,8 @@ export class AppModule {
         WebhookController,
         AdminAuthController,
         StaffController,
+        DeliveryController,
+        BtsAdminController,
         HumoFeedController,
       ],
       providers: [
@@ -67,6 +73,8 @@ export class AppModule {
         SettingsService,
         CatalogService,
         CustomersService,
+        DeliveryService,
+        BtsAdminService,
         SessionService,
         SessionGuard,
         StaffService,
@@ -88,6 +96,7 @@ export class AppModule {
         BotService,
         WorkerRuntime,
         StaffService,
+        DeliveryService,
       ],
     };
   }
