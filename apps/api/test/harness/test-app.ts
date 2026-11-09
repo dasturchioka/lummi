@@ -16,6 +16,9 @@ export const TEST_BOT_TOKEN = '123456:TEST-bot-token-for-unit-tests';
 
 export const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
 export const TEST_MINIAPP_URL = 'https://miniapp.test.invalid/';
+/** Shared secret of the internal endpoints the userbot calls (ADR 0031). */
+export const TEST_INTERNAL_SECRET = 'test-internal-secret-test-internal-secret';
+
 export interface StaffSession {
   staff: StaffRow;
   /** Value of the `lummi_admin` cookie, ready for a `cookie` header. */
@@ -77,9 +80,12 @@ function makeClient(baseUrl: string, token?: string, cookie?: string) {
 /**
  * Seam 1 (ADR 0028): the real API in process over HTTP, a real Postgres, the four edges faked.
  * Each call clones a private database from the migrated template of the shared test Postgres,
- * so test files can run in parallel without seeing each other's rows.
+ * so test files can run in parallel without seeing each other's rows. `envOverrides` replace env
+ * values; `undefined` removes a default (say, no internal secret).
  */
-export async function createTestApp(envOverrides: Record<string, string> = {}): Promise<TestApp> {
+export async function createTestApp(
+  envOverrides: Record<string, string | undefined> = {},
+): Promise<TestApp> {
   const adminUrl = inject('pgAdminUrl');
   const template = inject('templateDb');
   const dbName = `t_${randomUUID().replace(/-/g, '')}`;
@@ -100,7 +106,9 @@ export async function createTestApp(envOverrides: Record<string, string> = {}): 
     MINIAPP_URL: TEST_MINIAPP_URL,
     REDIS_URL: inject('redisUrl'),
     OUTBOX_QUEUE: `q_${dbName}`,
+    EVENTS_QUEUE: `e_${dbName}`,
     ADMIN_DEV_LOGIN: 'true',
+    INTERNAL_API_SECRET: TEST_INTERNAL_SECRET,
     ...envOverrides,
   });
   const { db, pool } = createDb(env.DATABASE_URL, 3);

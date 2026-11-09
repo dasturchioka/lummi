@@ -81,7 +81,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - Humo userbot (see `docs/spec.md` → Changes 2026-11-07). Needed before payment auto-verification (days 6–10):
   - Which Telegram account receives the Humo notifications for the shop card? The card isn't opened yet.
   - A login session with the customer, who must enter the SMS code and 2FA password once.
-  - A sample **incoming** (➕) notification, P2P transfer to the card. So far we only have a debit sample.
+  - A sample **incoming** (➕) notification, P2P transfer to the card. So far we only have a debit sample. The parser (ticket #13) accepts only the variants listed in `docs/spec.md` → Changes 2026-11-09 «Humo credit intake» and alerts the owner on anything else. Add each real sample to `apps/api/test/fixtures/humo-messages.ts`, where a test waits for the first ➕. Check on that sample whether the shop card's notifications reach an account that holds other cards too, since matching filters on the card's last 4 digits.
   - Whether a P2P fee is ever deducted from the **recipient** (credit < amount sent). Matching needs credit = order total exactly; check on the first test transfer.
   - What the 3 inline buttons under the notification do. If one opens a detailed receipt with an operation id, the userbot can read it and restore the strongest match signal.
 - Off-site backup location inside Uzbekistan (ADR 0025): a separate PRO-DATA storage or a small second Uzbek VPS. Extra monthly cost for the customer; ask before launch.

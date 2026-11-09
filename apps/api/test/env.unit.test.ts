@@ -43,6 +43,31 @@ describe('parseEnv', () => {
     ).toBe('webhook');
   });
 
+  it('internal endpoints: loopback only by default, CIDRs validated, secret at least 32 chars', () => {
+    expect(parseEnv(valid).INTERNAL_API_SECRET).toBeUndefined();
+    expect(parseEnv(valid)).toMatchObject({
+      INTERNAL_ALLOWED_CIDRS: [
+        { address: '127.0.0.0', prefix: 8, family: 'ipv4' },
+        { address: '::1', prefix: 128, family: 'ipv6' },
+      ],
+    });
+    expect(
+      parseEnv({ ...valid, INTERNAL_ALLOWED_CIDRS: ' 127.0.0.1/32 , 172.18.0.0/16 ' })
+        .INTERNAL_ALLOWED_CIDRS,
+    ).toEqual([
+      { address: '127.0.0.1', prefix: 32, family: 'ipv4' },
+      { address: '172.18.0.0', prefix: 16, family: 'ipv4' },
+    ]);
+    for (const bad of ['10.0.0.0', '10.0.0.0/33', '::1/129', 'localhost/8', '10.0.0.0/x']) {
+      expect(() => parseEnv({ ...valid, INTERNAL_ALLOWED_CIDRS: bad })).toThrow(
+        /INTERNAL_ALLOWED_CIDRS/,
+      );
+    }
+    expect(() => parseEnv({ ...valid, INTERNAL_API_SECRET: 'short' })).toThrow(
+      /INTERNAL_API_SECRET/,
+    );
+  });
+
   it('refuses the dev-only admin sign-in in production, allows it elsewhere', () => {
     expect(() => parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'true' })).toThrow(
       /ADMIN_DEV_LOGIN/,

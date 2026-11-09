@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -123,6 +124,75 @@ export const outbox = pgTable(
       .on(t.createdAt)
       .where(sql`sent_at is null and failed_at is null`),
   ],
+);
+
+/**
+ * Every Humo bot message the userbot posted (ADR 0014), keyed by its Telegram message id so a repeat
+ * post changes nothing; the highest id is where the userbot's catch-up resumes. Debits (➖) are never
+ * stored. `parse_error` is null when the message became a credit; otherwise it names the field that
+ * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted. The raw text stays
+ * here either way.
+ */
+export const humoMessages = pgTable('humo_messages', {
+  messageId: bigint('message_id', { mode: 'number' }).primaryKey(),
+  text: text('text').notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+  parseError: text('parse_error'),
+});
+
+/**
+ * A Credit (GLOSSARY): an incoming transfer to the shop card, from a ➕ Humo notification.
+ * `amount_tiyin` is exact. `amount_som` is what payment matching compares with an order's amount
+ * due, in whole so'm; it is null when the credit has tiyin, which then can never match exactly.
+ * Payment matching adds the link to an order.
+ */
+export const credits = pgTable(
+  'credits',
+  {
+    id: id(),
+    humoMessageId: bigint('humo_message_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => humoMessages.messageId),
+    amountTiyin: bigint('amount_tiyin', { mode: 'number' }).notNull(),
+    amountSom: bigint('amount_som', { mode: 'number' }).generatedAlwaysAs(
+      sql`case when amount_tiyin % 100 = 0 then amount_tiyin / 100 end`,
+    ),
+    /**
+     * The notification's Asia/Tashkent time as UTC. Minute precision (Humo shows no seconds), so a
+     * transfer in the same minute as the order reads as up to 59 s before it.
+     */
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    /** The card line as Humo writes it, e.g. «HUMOCARD *1234». */
+    cardMask: text('card_mask').notNull(),
+    cardLast4: text('card_last4').notNull(),
+    /** The «📍» line, e.g. «CLICK P2P HUMO2UZCAR»; not used for matching. */
+    counterparty: text('counterparty'),
+    /**
+     * The "credit recorded" event (ADR 0021 pattern): the row itself is the event. Queued: handed
+     * to BullMQ (a marker, retaken after the requeue window). Handled: every subscriber ran.
+     */
+    eventQueuedAt: timestamp('event_queued_at', { withTimezone: true }),
+    eventHandledAt: timestamp('event_handled_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('credits_event_pending_idx')
+      .on(t.id)
+      .where(sql`event_handled_at is null`),
+    check('credits_amount_positive', sql`${t.amountTiyin} > 0`),
+    check('credits_card_last4', sql`${t.cardLast4} ~ '^[0-9]{4}$'`),
+  ],
+);
+
+/** The userbot's last heartbeat, one row; feeds the Humo-silence guard (ADR 0012). */
+export const userbotHeartbeat = pgTable(
+  'userbot_heartbeat',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [check('userbot_heartbeat_one_row', sql`${t.id}`)],
 );
 
 export type OutboxRow = typeof outbox.$inferSelect;
