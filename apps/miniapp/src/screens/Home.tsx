@@ -8,6 +8,7 @@ import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
 import { GridSkeleton } from '../ui/GridSkeleton';
+import { Skeleton } from '../ui/Skeleton';
 import { DiscoveryBanner } from './home/DiscoveryBanner';
 
 /** Below the fold: its own chunk, so the first screen carries less code. */
@@ -70,6 +71,29 @@ function TopBlock() {
   );
 }
 
+/**
+ * «Популярное» while its chunk arrives: the title line, the chip row and the grid in their real
+ * sizes, so the section that replaces it lands without moving anything.
+ */
+function PopularSkeleton() {
+  return (
+    <div aria-hidden="true">
+      <div className="mb-3 flex h-5 items-center justify-between">
+        <Skeleton className="h-3 w-32" rounded="pill" />
+        <Skeleton className="h-3 w-12" rounded="pill" />
+      </div>
+      <div className="flex gap-2 overflow-hidden">
+        {['w-[76px]', 'w-[100px]', 'w-[96px]', 'w-[100px]'].map((w, i) => (
+          <Skeleton key={i} className={`h-10 shrink-0 ${w}`} rounded="pill" />
+        ))}
+      </div>
+      <div className="mt-3">
+        <GridSkeleton />
+      </div>
+    </div>
+  );
+}
+
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
 const DISC =
   'grid size-11 shrink-0 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
@@ -103,7 +127,7 @@ export function Home() {
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
           <DiscoveryBanner />
-          <Suspense fallback={<GridSkeleton />}>
+          <Suspense fallback={<PopularSkeleton />}>
             <Popular />
           </Suspense>
           <Suspense fallback={null}>
