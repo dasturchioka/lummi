@@ -420,6 +420,8 @@ export const fragranceSearch = pgTable('fragrance_search', {
   notes: text('notes').notNull(),
   /** The family, RU and UZ. */
   family: text('family').notNull(),
+  /** The three key notes on the card, RU and UZ: a match here outranks a deeper level. */
+  keyNotes: text('key_notes').notNull().default(''),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

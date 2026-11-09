@@ -109,8 +109,10 @@ export const settingDefinitions = {
       brand: z.number().min(0).max(100),
       notes: z.number().min(0).max(100),
       family: z.number().min(0).max(100),
+      /** Added to a fragrance whose card key notes contain the query word, within its tier. */
+      keyNotes: z.number().min(0).max(100),
     }),
-    default: { name: 3, brand: 1.5, notes: 1, family: 1 },
+    default: { name: 3, brand: 1.5, notes: 1, family: 1, keyNotes: 10 },
   },
   /** A field only counts when its trigram word similarity with the query reaches this (0..1). */
   'search.minSimilarity': { schema: z.number().min(0).max(1), default: 0.3 },

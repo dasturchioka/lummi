@@ -120,6 +120,24 @@ describe('search', () => {
   });
 });
 
+describe('a note on the card outranks a note deeper down', () => {
+  it.each([
+    ['zanjabil', 'uz', 'zanjabil'],
+    ['имбирь', 'ru', 'имбирь'],
+    ['bergamot', 'uz', 'bergamot'],
+  ] as const)(
+    '«%s»: the first results carry it among the three key notes',
+    async (q, lang, note) => {
+      const items = await search(q);
+      // Every fragrance that has the note on its card comes before any that has it deeper only.
+      const onCard = items.map((i) => i.keyNotes[lang].some((n) => n.toLowerCase() === note));
+      expect(onCard[0], q).toBe(true);
+      const firstOff = onCard.indexOf(false);
+      if (firstOff !== -1) expect(onCard.slice(firstOff), q).not.toContain(true);
+    },
+  );
+});
+
 describe('search document stays current', () => {
   async function docOf(slug: string) {
     const [r] = await t.db

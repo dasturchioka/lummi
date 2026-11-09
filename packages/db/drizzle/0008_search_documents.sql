@@ -6,6 +6,7 @@ CREATE TABLE "fragrance_search" (
 	"brand" text NOT NULL,
 	"notes" text NOT NULL,
 	"family" text NOT NULL,
+	"key_notes" text DEFAULT '' NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

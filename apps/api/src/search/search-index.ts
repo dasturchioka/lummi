@@ -22,6 +22,7 @@ interface Doc {
   brand: string;
   notes: string;
   family: string;
+  keyNotes: string;
 }
 
 async function buildDocs(db: DbOrTx, ids?: readonly number[]): Promise<Doc[]> {
@@ -34,6 +35,8 @@ async function buildDocs(db: DbOrTx, ids?: readonly number[]): Promise<Doc[]> {
       familyRu: families.nameRu,
       familyUz: families.nameUz,
       familyAliases: families.aliases,
+      keyNotesRu: fragrances.keyNotesRu,
+      keyNotesUz: fragrances.keyNotesUz,
     })
     .from(fragrances)
     .leftJoin(families, eq(families.id, fragrances.familyId))
@@ -64,6 +67,7 @@ async function buildDocs(db: DbOrTx, ids?: readonly number[]): Promise<Doc[]> {
     brand: skeleton(r.brand),
     // Sorted: the join returns rows in no fixed order, and an unstable text would look changed.
     notes: skeletonOf((notesOf.get(r.id) ?? []).sort()),
+    keyNotes: skeletonOf([...r.keyNotesRu, ...r.keyNotesUz]),
     family: skeletonOf([r.familyRu ?? '', r.familyUz ?? '', ...(r.familyAliases ?? [])]),
   }));
 }
@@ -73,6 +77,7 @@ const same = (a: Doc, b: typeof fragranceSearch.$inferSelect): boolean =>
   a.brand === b.brand &&
   a.notes === b.notes &&
   a.family === b.family &&
+  a.keyNotes === b.keyNotes &&
   a.aliases.length === b.aliases.length &&
   a.aliases.every((x, i) => x === b.aliases[i]);
 
@@ -122,6 +127,7 @@ export async function reindexFragrances(tx: DbOrTx, ids?: readonly number[]): Pr
           brand: sql`excluded.brand`,
           notes: sql`excluded.notes`,
           family: sql`excluded.family`,
+          keyNotes: sql`excluded.key_notes`,
           updatedAt: sql`excluded.updated_at`,
         },
         // Never replace a document stamped later than this build.

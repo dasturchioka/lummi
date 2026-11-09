@@ -32,8 +32,8 @@ export class SearchService {
   /**
    * Ranking (ADR 0019): an exact name or alias first, then a name or alias word that starts with
    * the query, then a brand, note or family that is the query word for word (so «olcha» puts the
-   * fragrances that have that note ahead of a name that merely looks alike), then the weighted
-   * trigram score: name and aliases x3, brand x1.5, notes x1,
+   * fragrances that have that note ahead of a name that merely looks alike), then (within a tier) a match among the three key notes on the card before one only in the notes
+   * by level (`search.weights.keyNotes`), then the weighted trigram score: name and aliases x3, brand x1.5, notes x1,
    * family x1 (the weights are settings). `word_similarity` asks how well the query sits inside
    * the field, so «megamar» finds "megamare" and «ваниль» finds a field full of other notes.
    */
@@ -61,6 +61,7 @@ export class SearchService {
               or position(' ' || ${q}::text || ' ' in ' ' || s.family || ' ') > 0 then 1
             else 0
           end as tier,
+          position(' ' || ${q}::text || ' ' in ' ' || s.key_notes || ' ') > 0 as key_hit,
           greatest(word_similarity(${q}::text, s.name),
                    word_similarity(${q}::text, array_to_string(s.aliases, ' '))) as n_sim,
           word_similarity(${q}::text, s.brand) as b_sim,
@@ -72,7 +73,7 @@ export class SearchService {
       select id from scored
       where tier > 0 or n_sim >= ${min} or b_sim >= ${min} or o_sim >= ${min} or f_sim >= ${min}
       order by tier desc,
-        (${w.name}::float8 * n_sim + ${w.brand}::float8 * b_sim
+        (case when key_hit then ${w.keyNotes}::float8 else 0 end + ${w.name}::float8 * n_sim + ${w.brand}::float8 * b_sim
           + ${w.notes}::float8 * o_sim + ${w.family}::float8 * f_sim) desc,
         similarity(${q}::text, name) desc, name
       limit ${limit}
