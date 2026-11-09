@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import type { ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { showBackButton } from '../lib/back-button';
 import { CloseIcon } from './icons';
 
 /**
@@ -21,6 +22,13 @@ export function Sheet({
   closeLabel: string;
   children: ReactNode;
 }) {
+  // Telegram's back button (and Android's system back) closes an open sheet, not the screen or the app.
+  const change = useRef(onOpenChange);
+  useLayoutEffect(() => {
+    change.current = onOpenChange;
+  });
+  useEffect(() => (open ? showBackButton(true, () => change.current(false)) : undefined), [open]);
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
