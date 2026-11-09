@@ -29,6 +29,13 @@
       "when": 1794222232737,
       "tag": "0003_zippy_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794222487935,
+      "tag": "0004_wandering_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

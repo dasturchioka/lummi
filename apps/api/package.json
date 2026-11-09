@@ -13,6 +13,7 @@
     "test:int": "vitest run --project integration",
     "dev:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx --watch src/worker.ts",
     "start:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/worker.ts",
+    "seed:catalog": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-catalog.ts",
     "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
   },
   "dependencies": {
@@ -32,6 +33,7 @@
     "jose": "^6.2.16",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "zod": "^3.25.76"
   },

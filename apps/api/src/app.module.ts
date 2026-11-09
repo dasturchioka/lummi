@@ -7,6 +7,9 @@ import { StaffController } from './admin/staff.controller';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
 import { StaffService } from './staff/staff.service';
+import { CatalogController } from './catalog/catalog.controller';
+import { CatalogService } from './catalog/catalog.service';
+import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
 import { CustomersService } from './auth/customers.service';
@@ -40,6 +43,8 @@ export class AppModule {
       controllers: [
         AuthController,
         MeController,
+        CatalogController,
+        MediaController,
         WebhookController,
         AdminAuthController,
         StaffController,
@@ -55,6 +60,7 @@ export class AppModule {
         BotService,
         WorkerRuntime,
         SettingsService,
+        CatalogService,
         CustomersService,
         SessionService,
         SessionGuard,

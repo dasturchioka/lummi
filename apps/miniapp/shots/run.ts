@@ -14,6 +14,7 @@ import net from 'node:net';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
+import { connectShotDb } from './db';
 import { SHOT_USER, signInitData, signedInClient } from './api';
 import { screens } from './registry';
 
@@ -91,6 +92,19 @@ function spawnService(name: string, cmd: string, args: string[], env: NodeJS.Pro
   started.push(p);
 }
 
+/** The fragrance cards need the seed catalog and its photos; load it once (idempotent, slow the first time). */
+async function ensureCatalog(databaseUrl: string) {
+  const db = connectShotDb(databaseUrl);
+  try {
+    const { rows } = await db.query('select count(photo_hash)::int as n from volumes');
+    if (Number(rows[0]?.n ?? 0) >= 201) return;
+  } finally {
+    await db.end();
+  }
+  console.log('seeding the 67-fragrance catalog with photos (first run only)');
+  run('npm', ['run', 'seed:catalog', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
+}
+
 async function ensureServices() {
   const databaseUrl =
     process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`;
@@ -107,6 +121,7 @@ async function ensureServices() {
       startedDb = true;
     }
     run('npm', ['run', 'db:migrate'], { DATABASE_URL: databaseUrl });
+    await ensureCatalog(databaseUrl);
     console.log(`starting API on ${apiPort}`);
     spawnService('api', 'npm', ['run', 'start', '-w', '@lummi/api'], {
       API_PORT: String(apiPort),
@@ -140,6 +155,9 @@ function stopServices() {
 
 async function main() {
   await ensureServices();
+  const shotDb = connectShotDb(
+    process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`,
+  );
   mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch();
   let count = 0;
@@ -152,7 +170,7 @@ async function main() {
         if (saved.status !== 200) throw new Error(`could not save preferences: ${saved.status}`);
 
         for (const screen of selected) {
-          await screen.setup?.({ api });
+          await screen.setup?.({ api, db: shotDb });
           const context = await browser.newContext({
             viewport: { width: 390, height: 844 },
             deviceScaleFactor: 2,
@@ -208,6 +226,7 @@ async function main() {
           const file = resolve(outDir, `${screen.id}-${theme}-${lang}.png`);
           await page.screenshot({ path: file, fullPage: screen.fullPage ?? false });
           await context.close();
+          await screen.teardown?.({ api, db: shotDb });
           count += 1;
           console.log(`  ${screen.id}-${theme}-${lang}.png`);
         }
@@ -215,6 +234,7 @@ async function main() {
     }
   } finally {
     await browser.close();
+    await shotDb.end();
   }
   console.log(`${count} screenshots in ${outDir}`);
 }
