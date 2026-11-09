@@ -1,0 +1,8 @@
+{"_synthetic":"hand-built from the documented SystemOneResponse shape (docs.typesafe.ai /api/system-one); not a recorded real answer",
+ "model":"jev-1.14.0",
+ "answers":{
+  "isReceipt":{"type":"noul","noul":0.97},
+  "amountMatches":{"type":"noul","noul":0.93},
+  "recipientMatches":{"type":"noul","noul":0.9},
+  "time":{"type":"choice","choice":"c2","confidence":0.72,"probabilities":{"c1":0.15,"c2":0.8,"none":0.05}}},
+ "usage":{"input_tokens":900,"output_tokens":12}}

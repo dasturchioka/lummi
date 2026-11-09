@@ -30,9 +30,26 @@ export const envSchema = z
     MINIAPP_URL: z.string().url().optional(),
     /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
+    /** Receipt AI keys (ADR 0013). Optional outside production; a missing adapter counts as "failed". */
+    TYPESAFE_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    /** Overrides for tests and proxies only. */
+    TYPESAFE_BASE_URL: z.string().url().default('https://api.typesafe.ai'),
+    OPENAI_BASE_URL: z.string().url().default('https://api.openai.com'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production') {
+      for (const key of ['TYPESAFE_API_KEY', 'OPENAI_API_KEY'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: `${key} is required in production`,
+          });
+        }
+      }
+    }
     if (env.BOT_MODE === 'webhook') {
       for (const key of ['WEBHOOK_URL', 'WEBHOOK_SECRET'] as const) {
         if (!env[key]) {

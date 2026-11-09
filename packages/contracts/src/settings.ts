@@ -87,6 +87,20 @@ export const settingDefinitions = {
       .max(30 * 86_400),
     default: 7 * 86_400,
   },
+  // Receipt AI (ADR 0013). Defaults tuned later on 20-30 real receipts with the eval script.
+  /** Every predicate (is a receipt, amount, recipient) must reach this probability to confirm. */
+  'ai.receipt.probabilityThreshold': { schema: z.number().min(0).max(1), default: 0.8 },
+  /** The receipt's date-time choice must reach this confidence (and not be "none of these"). */
+  'ai.receipt.confidenceThreshold': { schema: z.number().min(0).max(1), default: 0.6 },
+  /** Per-call timeouts; on expiry TypeSafe falls back to OpenAI, OpenAI means "failed". */
+  'ai.receipt.typesafeTimeoutMs': {
+    schema: z.number().int().min(1000).max(120_000),
+    default: 20_000,
+  },
+  'ai.receipt.openaiTimeoutMs': {
+    schema: z.number().int().min(1000).max(120_000),
+    default: 30_000,
+  },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;

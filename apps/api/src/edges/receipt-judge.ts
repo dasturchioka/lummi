@@ -16,6 +16,26 @@ export interface ReceiptJudgement {
   /** Chosen candidate credit, or null for "none of these". */
   chosenCreditId: number | null;
   choiceConfidence: number;
+  /** Which adapter produced the answer; 'none' when every adapter failed (never confirms). */
+  provider?: 'typesafe' | 'openai' | 'none';
+  /** Why the adapters failed or were not trusted, for the audit trail and logs. */
+  failure?: string;
+}
+
+export interface ReceiptThresholds {
+  probability: number;
+  confidence: number;
+}
+
+/** ADR 0013: all predicates >= probability, and a real (non-"none") choice >= confidence. */
+export function confirmsReceipt(j: ReceiptJudgement, t: ReceiptThresholds): boolean {
+  return (
+    j.isReceipt >= t.probability &&
+    j.amountMatches >= t.probability &&
+    j.recipientMatches >= t.probability &&
+    j.chosenCreditId !== null &&
+    j.choiceConfidence >= t.confidence
+  );
 }
 
 export interface ReceiptJudge {

@@ -1,0 +1,7 @@
+{"_synthetic":"hand-built from the documented Decisions response shape (developers.openai.com decisions guide); not recorded",
+ "answers":[
+  {"type":"predicate","name":"isReceipt","probability":0.96},
+  {"type":"predicate","name":"amountMatches","probability":0.91},
+  {"type":"predicate","name":"recipientMatches","probability":0.88},
+  {"type":"choice","name":"time","choice":"c1","confidence":0.8,
+   "probabilities":[{"value":"c1","probability":0.85},{"value":"c2","probability":0.1},{"value":"none","probability":0.05}]}]}
