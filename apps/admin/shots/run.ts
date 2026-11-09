@@ -246,6 +246,15 @@ async function main() {
           const as =
             screen.as === 'owner' ? SHOT_STAFF[0] : SHOT_STAFF.find((s) => s.role === screen.as);
           if (as) await signIn(context, as.telegramId);
+          // Next's dev-mode indicator is not part of the design, on any page a screen opens
+          // (a string, not a function: tsx's name helpers do not exist in the page)
+          await context.addInitScript({
+            content: `document.addEventListener('DOMContentLoaded', () => {
+              const style = document.createElement('style');
+              style.textContent = 'nextjs-portal{display:none!important}';
+              document.head.append(style);
+            });`,
+          });
           const page = await context.newPage();
           page.on('pageerror', (e) => console.error(`  [${screen.id}] page error: ${e.message}`));
           page.on('console', (m) => {
@@ -255,8 +264,6 @@ async function main() {
             waitUntil: 'networkidle',
             timeout: 120_000,
           });
-          // Next's dev-mode indicator is not part of the design
-          await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
           await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width });
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle

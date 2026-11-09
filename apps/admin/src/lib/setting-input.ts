@@ -119,7 +119,8 @@ function scalar(spec: Leaf, raw: string): unknown {
   switch (spec.kind) {
     case 'integer':
     case 'number': {
-      const s = raw.trim().replace(',', '.');
+      // «250 000» as the panel shows money, and the decimal comma, both read as numbers
+      const s = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
       // an empty or non-numeric entry becomes NaN, which the number schema refuses as "required"
       return s === '' ? Number.NaN : Number(s);
     }

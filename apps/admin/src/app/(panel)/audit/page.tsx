@@ -31,7 +31,18 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     api.audit.filters(),
   ]);
   if (list.status === 401 || options.status === 401) redirect('/login');
-  if (list.status !== 200 || options.status !== 200) redirect('/'); // 403: managers have no audit page
+  if (list.status === 403 || options.status === 403) redirect('/'); // managers have no audit page
+  // anything else is a failed load: the panel's error state offers «Повторить»
+  if (list.status !== 200 || options.status !== 200) {
+    throw new Error(`audit failed to load: ${list.status} / ${options.status}`);
+  }
+  // a page past the end (an old link, fewer entries after a filter) opens the last one
+  const last = Math.max(1, Math.ceil(list.body.total / list.body.pageSize));
+  if (page > last) {
+    const q = new URLSearchParams(filters);
+    if (last > 1) q.set('page', String(last));
+    redirect(q.size ? `/audit?${q}` : '/audit');
+  }
   const { language, t } = await getAdminMessages();
   return (
     <AuditView

@@ -1,11 +1,12 @@
 'use client';
 
 import type { Bilingual, SettingIssue } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
+import { formatMoney, type Language } from '@lummi/i18n';
+import { CircleAlert } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
-import type { Draft, InputSpec } from '@/lib/setting-input';
+import { fromDraft, type Draft, type InputSpec } from '@/lib/setting-input';
 import { issueMessage, pick } from '@/lib/setting-copy';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,8 @@ export interface EditorMeta {
   language: Language;
   t: AdminMessages;
   unit?: string;
+  /** So'm: the typed number is read back grouped («100 000 000 сум») under the field. */
+  money?: boolean;
   fields?: Record<string, Bilingual>;
   optionLabels?: Record<string, Bilingual>;
   issues: SettingIssue[];
@@ -23,15 +26,25 @@ export interface EditorMeta {
 
 const pathKey = (p: string[]) => p.join('.');
 
+const isNumber = (spec: InputSpec): boolean =>
+  spec.kind === 'integer' ||
+  spec.kind === 'number' ||
+  (spec.kind === 'nullable' && isNumber(spec.inner));
+
 function Issues({ meta, path, prefix }: { meta: EditorMeta; path: string[]; prefix?: boolean }) {
   const here = meta.issues.filter((i) =>
     prefix ? pathKey(i.path).startsWith(pathKey(path)) : pathKey(i.path) === pathKey(path),
   );
   if (here.length === 0) return null;
+  // the message names the fix; the icon and the field's Graphite outline mark it (no red)
   return (
     <ul className="mt-1.5 grid gap-0.5" id={`${meta.settingKey}__${pathKey(path)}-error`}>
       {here.map((i, n) => (
-        <li key={n} className="text-[13px] font-medium text-foreground">
+        <li
+          key={n}
+          className="flex animate-[overlay-in_150ms_var(--ease-out)] items-start gap-1.5 text-[13px] leading-snug font-medium text-foreground"
+        >
+          <CircleAlert className="mt-px size-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
           {issueMessage(meta.t, i)}
         </li>
       ))}
@@ -65,13 +78,21 @@ export function SettingEditor({
   // a top-level control is named by the setting; group parts have their own visible labels
   const aria = path.length === 0 ? { 'aria-label': meta.ariaLabel } : {};
   const unit = meta.unit ? (
-    <span className="shrink-0 text-[13px] text-muted-foreground">{meta.unit}</span>
+    <span className="shrink-0 text-small whitespace-nowrap text-muted-foreground">{meta.unit}</span>
   ) : null;
 
   switch (spec.kind) {
-    case 'group':
+    case 'group': {
+      // short numbers side by side once there is room; anything else one per line
+      const numbers = spec.fields.every((f) => isNumber(f.spec));
       return (
-        <div className={cn('grid gap-3', path.length > 0 && 'border-l-2 border-stone pl-3')}>
+        <div
+          className={cn(
+            'grid gap-3',
+            numbers && 'sm:grid-cols-2 sm:items-end',
+            path.length > 0 && 'border-l border-border-strong pl-3.5',
+          )}
+        >
           {spec.fields.map((f) => {
             const p = [...path, f.name];
             const label = meta.fields?.[pathKey(p)]
@@ -108,6 +129,7 @@ export function SettingEditor({
           })}
         </div>
       );
+    }
     case 'boolean':
       return (
         <div>
@@ -154,7 +176,7 @@ export function SettingEditor({
             {...aria}
             rows={5}
             spellCheck={false}
-            className="w-full rounded-button bg-field px-3.5 py-2.5 font-mono text-[13px] shadow-[inset_0_0_0_1px_var(--hairline-strong)]"
+            className="w-full rounded-button bg-field px-3.5 py-2.5 font-mono text-base shadow-[inset_0_0_0_1px_var(--hairline-strong)] pointer-fine:text-[13px]"
             value={String(draft)}
             onChange={(e) => onChange(e.target.value)}
           />
@@ -169,7 +191,9 @@ export function SettingEditor({
               id={id}
               {...aria}
               autoComplete="off"
-              inputMode={spec.item.kind === 'text' ? 'text' : 'numeric'}
+              // a phone's number pad has no comma or space to separate entries
+              inputMode="text"
+              enterKeyHint="done"
               aria-invalid={
                 meta.issues.some((i) => pathKey(i.path).startsWith(pathKey(path))) || undefined
               }
@@ -184,7 +208,23 @@ export function SettingEditor({
       );
     default: {
       // integer, number, text and nullable of those
-      const numeric = (spec.kind === 'nullable' ? spec.inner.kind : spec.kind) !== 'text';
+      const leaf = spec.kind === 'nullable' ? spec.inner : spec;
+      // the phone keypad that can type the value: digits, digits and a decimal mark, or (for a
+      // number that may be negative, like a group id) the full keyboard, which has the minus
+      const keypad =
+        (leaf.kind !== 'integer' && leaf.kind !== 'number') ||
+        leaf.min === undefined ||
+        leaf.min < 0
+          ? 'text'
+          : leaf.kind === 'integer'
+            ? 'numeric'
+            : 'decimal';
+      // nine digits are hard to count in a field: the amount as the shop shows it
+      const typed = meta.money && !invalid ? fromDraft(spec, draft) : null;
+      const readout =
+        typeof typed === 'number' && Number.isSafeInteger(typed) && Math.abs(typed) >= 10_000
+          ? formatMoney(typed, meta.language)
+          : null;
       return (
         <div>
           <div className="flex items-center gap-2">
@@ -192,7 +232,8 @@ export function SettingEditor({
               id={id}
               {...aria}
               autoComplete="off"
-              inputMode={numeric ? 'decimal' : 'text'}
+              inputMode={keypad}
+              enterKeyHint="done"
               placeholder={spec.kind === 'nullable' ? meta.t.settings.notSet : undefined}
               aria-invalid={invalid || undefined}
               aria-describedby={describedBy}
@@ -201,6 +242,9 @@ export function SettingEditor({
             />
             {unit}
           </div>
+          {readout && (
+            <p className="mt-1.5 text-small text-muted-foreground tabular-nums">{readout}</p>
+          )}
           <Issues meta={meta} path={path} />
         </div>
       );

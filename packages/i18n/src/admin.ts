@@ -93,6 +93,7 @@ export const adminMessages = defineMessages(
       },
       settings: {
         title: 'Настройки',
+        sections: 'Разделы настроек',
         description:
           'Все числа и правила магазина в одном месте. Сохранённое значение действует сразу, а в журнал попадает, кто и что поменял.',
         areas: {
@@ -129,8 +130,6 @@ export const adminMessages = defineMessages(
           json: 'JSON',
         },
         key: 'Ключ',
-        type: 'Тип',
-        unit: 'Единица',
         defaultValue: 'По умолчанию',
         allowed: 'Допустимо: {parts}',
         rangeMin: 'от {min}',
@@ -140,15 +139,14 @@ export const adminMessages = defineMessages(
         notSet: 'не задано',
         on: 'Да',
         off: 'Нет',
-        emptyIsNotSet: 'Пусто означает «не задано».',
         save: 'Сохранить',
         saved: 'Сохранено',
         reset: 'По умолчанию',
         changedAt: 'Изменено {date}',
         neverChanged: 'Не менялось',
+        unsaved: 'Не сохранено',
         invalidStored:
           'Сохранённое значение не подходит под правила, поэтому действует значение по умолчанию. Сохраните новое.',
-        choose: 'Выберите',
         issues: {
           required: 'Введите значение.',
           not_integer: 'Нужно целое число.',
@@ -175,6 +173,7 @@ export const adminMessages = defineMessages(
           all: 'Все',
           apply: 'Показать',
           reset: 'Сбросить',
+          toggle: 'Фильтры',
         },
         actors: {
           customer: 'Клиенты',
@@ -190,7 +189,13 @@ export const adminMessages = defineMessages(
         details: 'Детали',
         empty: 'Записей пока нет.',
         emptyFiltered: 'По этим фильтрам записей нет.',
-        total: 'Записей: {total}',
+        emptyFilteredText: 'Измените фильтры или сбросьте их.',
+        total: {
+          one: '{total} запись',
+          few: '{total} записи',
+          many: '{total} записей',
+          other: '{total} записи',
+        },
         page: 'Страница {page} из {pages}',
         prev: 'Назад',
         next: 'Вперёд',
@@ -583,6 +588,7 @@ export const adminMessages = defineMessages(
       },
       settings: {
         title: 'Sozlamalar',
+        sections: 'Sozlamalar boʻlimlari',
         description:
           'Doʻkonning barcha raqamlari va qoidalari bir joyda. Saqlangan qiymat darhol amal qiladi, jurnalga esa kim nimani oʻzgartirgani yoziladi.',
         areas: {
@@ -619,8 +625,6 @@ export const adminMessages = defineMessages(
           json: 'JSON',
         },
         key: 'Kalit',
-        type: 'Turi',
-        unit: 'Birlik',
         defaultValue: 'Odatiy qiymat',
         allowed: 'Ruxsat etiladi: {parts}',
         rangeMin: '{min} dan',
@@ -630,15 +634,14 @@ export const adminMessages = defineMessages(
         notSet: 'belgilanmagan',
         on: 'Ha',
         off: 'Yoʻq',
-        emptyIsNotSet: 'Boʻsh qoldirilsa, «belgilanmagan» degani.',
         save: 'Saqlash',
         saved: 'Saqlandi',
         reset: 'Odatiy qiymat',
         changedAt: 'Oʻzgartirilgan: {date}',
         neverChanged: 'Oʻzgartirilmagan',
+        unsaved: 'Saqlanmagan',
         invalidStored:
           'Saqlangan qiymat qoidalarga mos kelmaydi, shuning uchun odatiy qiymat amal qilmoqda. Yangisini saqlang.',
-        choose: 'Tanlang',
         issues: {
           required: 'Qiymat kiriting.',
           not_integer: 'Butun son kerak.',
@@ -665,6 +668,7 @@ export const adminMessages = defineMessages(
           all: 'Hammasi',
           apply: 'Koʻrsatish',
           reset: 'Tozalash',
+          toggle: 'Filtrlar',
         },
         actors: {
           customer: 'Mijozlar',
@@ -680,7 +684,13 @@ export const adminMessages = defineMessages(
         details: 'Tafsilotlar',
         empty: 'Hozircha yozuvlar yoʻq.',
         emptyFiltered: 'Bu filtrlar boʻyicha yozuv yoʻq.',
-        total: 'Yozuvlar: {total}',
+        emptyFilteredText: 'Filtrlarni oʻzgartiring yoki tozalang.',
+        total: {
+          one: '{total} ta yozuv',
+          few: '{total} ta yozuv',
+          many: '{total} ta yozuv',
+          other: '{total} ta yozuv',
+        },
         page: '{page}-sahifa, jami {pages} ta',
         prev: 'Orqaga',
         next: 'Oldinga',

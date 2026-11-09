@@ -12,11 +12,14 @@ import { fill } from './utils';
 
 export const pick = (l: Bilingual, language: Language) => l[language];
 
-/** `10.11.2026 14:05`, Asia/Tashkent, from a UTC instant (the shared helper, never the browser's zone). */
+/**
+ * `10.11.2026 14:05`, Asia/Tashkent, from a UTC instant (the shared helper, never the browser's
+ * zone). A no-break space keeps the time on the line of its date.
+ */
 export function formatTashkent(iso: string): string {
   const d = utcToTashkent(new Date(iso));
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.day)}.${p(d.month)}.${d.year} ${p(d.hour)}:${p(d.minute)}`;
+  return `${p(d.day)}.${p(d.month)}.${d.year}\u00a0${p(d.hour)}:${p(d.minute)}`;
 }
 
 export function issueMessage(t: AdminMessages, issue: SettingIssue): string {
@@ -35,23 +38,48 @@ export function issueMessage(t: AdminMessages, issue: SettingIssue): string {
   }
 }
 
-/** Digits in groups of three with the language's separator, for any plain number. */
-const num = (n: number) => n.toLocaleString('ru-RU');
+/**
+ * Digits in groups of three with narrow no-break spaces, as `formatMoney` groups them, and the
+ * decimal comma («1,5»), for any plain number.
+ */
+export const num = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, '\u202f');
 
-/** The number's bounds as one sentence, or null when there are none. "Greater than 10" stays "greater than". */
-export function rangeText(t: AdminMessages, spec: InputSpec): string | null {
+/**
+ * The number's bounds as one sentence, or null when there are none. "Greater than 10" stays
+ * "greater than". The unit goes on the last bound, which reads right in both languages («от 0 до
+ * 100 000 000 сум», «0 dan 100 000 000 soʻm gacha»); so'm through `formatMoney`.
+ */
+export function rangeText(
+  t: AdminMessages,
+  spec: InputSpec,
+  key?: SettingKey,
+  language: Language = 'ru',
+): string | null {
   const inner = spec.kind === 'nullable' ? spec.inner : spec;
   if (inner.kind !== 'integer' && inner.kind !== 'number') return null;
-  const parts: string[] = [];
+  const bounds: { template: string; slot: 'min' | 'max'; value: number }[] = [];
   if (inner.min !== undefined) {
-    const key = inner.minExclusive ? t.settings.rangeMinExclusive : t.settings.rangeMin;
-    parts.push(fill(key, { min: num(inner.min) }));
+    const template = inner.minExclusive ? t.settings.rangeMinExclusive : t.settings.rangeMin;
+    bounds.push({ template, slot: 'min', value: inner.min });
   }
   if (inner.max !== undefined) {
-    const key = inner.maxExclusive ? t.settings.rangeMaxExclusive : t.settings.rangeMax;
-    parts.push(fill(key, { max: num(inner.max) }));
+    const template = inner.maxExclusive ? t.settings.rangeMaxExclusive : t.settings.rangeMax;
+    bounds.push({ template, slot: 'max', value: inner.max });
   }
-  return parts.length ? fill(t.settings.allowed, { parts: parts.join(' ') }) : null;
+  if (bounds.length === 0) return null;
+  const unit = key ? settingMeta(key).unit : undefined;
+  const suffix = key ? unitText(key, t) : null;
+  const parts = bounds.map((b, i) => {
+    const last = i === bounds.length - 1;
+    const shown =
+      last && unit === 'sum' && Number.isSafeInteger(b.value)
+        ? formatMoney(b.value, language)
+        : last && suffix
+          ? `${num(b.value)}\u00a0${suffix}`
+          : num(b.value);
+    return fill(b.template, { [b.slot]: shown });
+  });
+  return fill(t.settings.allowed, { parts: parts.join(' ') });
 }
 
 /** The unit written after a number, or null when the setting has none (a ratio is explained by its hint). */
@@ -80,7 +108,7 @@ export function displayValue(
     case 'number':
       if (typeof value !== 'number') return String(value);
       if (meta.unit === 'sum' && Number.isSafeInteger(value)) return formatMoney(value, language);
-      return `${num(value)}${suffix}`;
+      return `${num(value)}${suffix.replace(' ', '\u00a0')}`;
     case 'enum':
       return meta.optionLabels?.[String(value)]?.[language] ?? String(value);
     case 'text':
