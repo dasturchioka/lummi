@@ -129,9 +129,10 @@ function message(t: AdminMessages, e?: FieldError): string | undefined {
   return m.invalid;
 }
 
-const num = (v: string) => (v.trim() === '' ? Number.NaN : Number(v));
-const numOrNull = (v: string) => (v == null || String(v).trim() === '' ? null : Number(v));
-const textOrNull = (v: string) => (v ? v : null);
+// rhf also feeds setValueAs the default value (a number or null), not only typed strings
+const num = (v: unknown) => (v === '' || v == null ? Number.NaN : Number(v));
+const numOrNull = (v: unknown) => (v === '' || v == null ? null : Number(v));
+const textOrNull = (v: unknown) => (v ? String(v) : null);
 
 /**
  * Create and edit a fragrance: every field, RU/UZ side by side, notes by level from the
@@ -325,7 +326,7 @@ export function FragranceForm({
               </Select>
             </Field>
             <Field id="f-family" label={c.family} error={err(errors.familyId)}>
-              <Select {...reg('familyId', { setValueAs: (x: string) => (x ? Number(x) : null) })}>
+              <Select {...reg('familyId', { setValueAs: (x: unknown) => (x ? Number(x) : null) })}>
                 <option value="">{c.noFamily}</option>
                 {families.map((f) => (
                   <option key={f.id} value={f.id}>
