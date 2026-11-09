@@ -57,6 +57,8 @@ export const envSchema = z
     MINIAPP_URL: z.string().url().optional(),
     /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
+    /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
+    EVENTS_QUEUE: z.string().min(1).default('events'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
     /** Shared secret of the internal endpoints the userbot calls (ADR 0015); unset = they answer 404. */
     INTERNAL_API_SECRET: z

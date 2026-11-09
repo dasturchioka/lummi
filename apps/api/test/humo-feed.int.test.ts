@@ -4,6 +4,7 @@ import { initClient } from '@ts-rest/core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreditEvents, type CreditRecorded } from '../src/humo/credit-events';
 import { SettingsService } from '../src/settings/settings.service';
+import type { WorkerRuntime } from '../src/worker/runtime';
 import { userbotLastSeenAt } from './harness/humo';
 import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/test-app';
@@ -11,11 +12,12 @@ import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/tes
 /** Seam 1 (ADR 0028): the userbot's side of the Humo feed (ADR 0014, ADR 0015) over HTTP. */
 
 let t: TestApp;
+let worker: WorkerRuntime;
 const OWNER = 4242;
 
 beforeAll(async () => {
   t = await createTestApp();
-  t.startWorker();
+  worker = t.startWorker();
 });
 afterAll(() => t.close());
 beforeEach(async () => {
@@ -203,14 +205,15 @@ describe('Humo message intake', () => {
   });
 });
 
-describe('the "credit recorded" hook', () => {
+describe('the "credit recorded" event: durable, handled in the worker (ADR 0021)', () => {
   let unsubscribe: Array<() => void> = [];
   afterEach(() => {
     unsubscribe.forEach((u) => u());
     unsubscribe = [];
   });
+  const handledAt = async () => (await t.db.select().from(credits))[0]?.eventHandledAt ?? null;
 
-  it('fires once per new credit, after commit, with the credit', async () => {
+  it('reaches the handlers once per new credit, after commit, with the credit', async () => {
     const seen: { event: CreditRecorded; committed: boolean }[] = [];
     unsubscribe.push(
       t.app.get(CreditEvents).onCreditRecorded(async (event) => {
@@ -221,7 +224,8 @@ describe('the "credit recorded" hook', () => {
     await post(601, creditText('250.000,00'));
     await post(601, creditText('250.000,00'));
     await post(602, DEBIT_TEXT);
-    await post(603, 'not a notification');
+    await post(603, 'not an operation');
+    await vi.waitFor(async () => expect(await handledAt()).not.toBeNull(), { timeout: 10_000 });
     expect(seen).toEqual([
       {
         event: {
@@ -235,20 +239,45 @@ describe('the "credit recorded" hook', () => {
     ]);
   });
 
-  it('a failing subscriber neither fails the intake nor stops the others', async () => {
-    const events = t.app.get(CreditEvents);
+  it('a credit committed but never dispatched is picked up by the sweep, exactly once', async () => {
     const seen: number[] = [];
     unsubscribe.push(
-      events.onCreditRecorded(() => {
-        throw new Error('matching is down');
-      }),
-      events.onCreditRecorded((e) => {
+      t.app.get(CreditEvents).onCreditRecorded((e) => {
         seen.push(e.creditId);
+      }),
+    );
+    // As after a crash between the commit and the dispatch: the rows exist, nothing was queued.
+    await t.db
+      .insert(humoMessages)
+      .values({ messageId: 901, text: creditText(), receivedAt: t.edges.clock.now() });
+    await t.db.insert(credits).values({
+      humoMessageId: 901,
+      amountTiyin: 7_575_000,
+      occurredAt: new Date('2025-06-22T15:54:00Z'),
+      cardMask: 'HUMOCARD *1234',
+      cardLast4: '1234',
+    });
+    await worker.tick();
+    await vi.waitFor(async () => expect(await handledAt()).not.toBeNull(), { timeout: 10_000 });
+    await worker.tick();
+    t.edges.clock.advance(3600_000); // past any requeue window
+    await worker.tick();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(seen).toEqual([1]);
+  });
+
+  it('a failing handler does not fail the intake; the queue retries until it succeeds', async () => {
+    let calls = 0;
+    unsubscribe.push(
+      t.app.get(CreditEvents).onCreditRecorded(() => {
+        calls += 1;
+        if (calls === 1) throw new Error('matching is down');
       }),
     );
     const res = await post(604, creditText());
     expect(res).toMatchObject({ status: 200, body: { outcome: 'credit', creditId: 1 } });
-    expect(seen).toEqual([1]);
+    await vi.waitFor(async () => expect(await handledAt()).not.toBeNull(), { timeout: 15_000 });
+    expect(calls).toBe(2);
   });
 });
 

@@ -20,6 +20,7 @@ import type { Env } from '../env';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
+import { withTimeout } from '../util/with-timeout';
 
 export interface OutboxMessage {
   chatId: number;
@@ -29,7 +30,7 @@ export interface OutboxMessage {
 }
 
 /** Give up waiting for Redis after this long; the minute tick is the safety net. */
-const DISPATCH_TIMEOUT_MS = 3000;
+export const DISPATCH_TIMEOUT_MS = 3000;
 
 /**
  * The transactional outbox (ADR 0021).
@@ -217,14 +218,4 @@ function toMessage(row: OutboxRow): OutboundMessage {
     text: row.text,
     options: row.options as Record<string, unknown>,
   };
-}
-
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: NodeJS.Timeout;
-  return Promise.race([
-    p,
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
-    }),
-  ]).finally(() => clearTimeout(timer));
 }

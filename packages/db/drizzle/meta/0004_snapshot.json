@@ -1,5 +1,5 @@
 {
-  "id": "5a07b591-b166-4ba8-beff-0ee6dc9cc6b0",
+  "id": "ddbb7e4d-6b3e-4e87-8685-eab127eb3be3",
   "prevId": "614f2257-fa15-4958-944e-4f9b4ffda436",
   "version": "7",
   "dialect": "postgresql",
@@ -182,9 +182,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "event_queued_at": {
+          "name": "event_queued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_handled_at": {
+          "name": "event_handled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "credits_event_pending_idx": {
+          "name": "credits_event_pending_idx",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "event_handled_at is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "credits_humo_message_id_humo_messages_message_id_fk": {
           "name": "credits_humo_message_id_humo_messages_message_id_fk",

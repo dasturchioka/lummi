@@ -5,7 +5,7 @@ import type { Edges } from '../edges';
 import { AlertService } from '../outbox/alert.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { DB, EDGES } from '../tokens';
-import { CreditEvents, type CreditRecorded } from './credit-events';
+import { CreditEvents } from './credit-events';
 import { parseHumoMessage, type HumoParseError } from './humo-parser';
 
 /** What did not fit, for the owner alert. Staff-facing, so Russian (like every owner alert). */
@@ -18,8 +18,8 @@ const WHAT_FAILED: Record<HumoParseError, string> = {
 
 /**
  * The API side of the Humo feed (ADR 0014): the userbot posts every message of the Humo bot chat;
- * this records ➕ credits, keeps the raw text, flags what does not fit the template, and tells
- * payment matching through `CreditEvents`.
+ * this records ➕ credits, keeps the raw text, flags what does not fit the template, and queues
+ * the "credit recorded" event for payment matching (`CreditEvents`).
  */
 @Injectable()
 export class HumoFeedService {
@@ -39,7 +39,7 @@ export class HumoFeedService {
     const parsed = parseHumoMessage(text);
     if (parsed.kind === 'debit') return { outcome: 'debit', duplicate: false, creditId: null };
 
-    const { result, event } = await this.outbox.withTx(async (tx) => {
+    const result = await this.outbox.withTx(async (tx): Promise<HumoMessageResult> => {
       const [stored] = await tx
         .insert(humoMessages)
         .values({
@@ -50,7 +50,7 @@ export class HumoFeedService {
         })
         .onConflictDoNothing()
         .returning({ messageId: humoMessages.messageId });
-      if (!stored) return { result: await this.previousResult(tx, messageId), event: null };
+      if (!stored) return this.previousResult(tx, messageId);
 
       if (parsed.kind === 'unparseable') {
         await this.alerts.alertOwner(
@@ -59,29 +59,20 @@ export class HumoFeedService {
             `${WHAT_FAILED[parsed.reason]}. Если это поступление, оно не записано и не подтвердит ` +
             `заказ автоматически. Формат сообщений мог измениться: сообщите разработчику.`,
         );
-        return {
-          result: { outcome: 'unparseable', duplicate: false, creditId: null } as const,
-          event: null,
-        };
+        return { outcome: 'unparseable', duplicate: false, creditId: null };
       }
 
+      // The credit row is also the "credit recorded" event, pending until the worker handles it.
       const [credit] = await tx
         .insert(credits)
         .values({ humoMessageId: messageId, ...parsed.credit })
-        .returning();
-      const recorded: CreditRecorded = {
-        creditId: credit!.id,
-        amountSom: credit!.amountSom,
-        occurredAt: credit!.occurredAt,
-        cardLast4: credit!.cardLast4,
-      };
-      return {
-        result: { outcome: 'credit', duplicate: false, creditId: credit!.id } as const,
-        event: recorded,
-      };
+        .returning({ id: credits.id });
+      return { outcome: 'credit', duplicate: false, creditId: credit!.id };
     });
 
-    if (event) await this.events.emitCreditRecorded(event);
+    if (result.outcome === 'credit' && !result.duplicate) {
+      await this.events.dispatchAfterCommit(result.creditId!);
+    }
     return result;
   }
 

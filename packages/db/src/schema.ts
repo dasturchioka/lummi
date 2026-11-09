@@ -168,8 +168,17 @@ export const credits = pgTable(
     cardLast4: text('card_last4').notNull(),
     /** The «📍» line, e.g. «CLICK P2P HUMO2UZCAR»; not used for matching. */
     counterparty: text('counterparty'),
+    /**
+     * The "credit recorded" event (ADR 0021 pattern): the row itself is the event. Queued: handed
+     * to BullMQ (a marker, retaken after the requeue window). Handled: every subscriber ran.
+     */
+    eventQueuedAt: timestamp('event_queued_at', { withTimezone: true }),
+    eventHandledAt: timestamp('event_handled_at', { withTimezone: true }),
   },
   (t) => [
+    index('credits_event_pending_idx')
+      .on(t.id)
+      .where(sql`event_handled_at is null`),
     check('credits_amount_positive', sql`${t.amountTiyin} > 0`),
     check('credits_card_last4', sql`${t.cardLast4} ~ '^[0-9]{4}$'`),
   ],
