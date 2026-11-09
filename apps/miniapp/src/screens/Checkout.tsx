@@ -312,7 +312,8 @@ export function Checkout() {
         block
         data-testid="submit"
         disabled={!!reason}
-        loading={create.isPending && !conflict}
+        // while another region is being quoted, the total on the button is the last one: wait for it
+        loading={(create.isPending && !conflict) || checkout.isPlaceholderData}
         onClick={() => submit(total)}
       >
         {reason ?? (

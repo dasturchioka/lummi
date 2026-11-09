@@ -177,11 +177,13 @@ export class OrdersService {
       const now = this.edges.clock.now();
       const loaded = await loadCartQuote(tx, now, c.id, { deliveryTariff: region.deliveryTariff });
       const { quote } = loaded;
-      const bought = loaded.lines.filter((l) => !l.soldOut && l.qty > 0 && l.qty <= l.available);
+      const bought = loaded.lines.filter((l) => !l.soldOut);
       const conflict = async (code: 'total_changed' | 'nothing_to_order') =>
         ({ kind: 'conflict', code, checkout: await this.checkoutOf(tx, c, region) }) as const;
       if (quote.itemsSubtotal === 0 || bought.length === 0) return conflict('nothing_to_order');
       if (quote.total !== input.confirmedTotal) return conflict('total_changed');
+      // The check under the lock: every line fits in what is available (the quote capped them).
+      if (bought.some((l) => l.qty > l.available)) return conflict('total_changed');
 
       // 3. The snapshot.
       const reserveUntil = new Date(now.getTime() + settings['orders.reserveTtlSeconds'] * 1000);
