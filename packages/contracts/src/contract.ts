@@ -1,5 +1,10 @@
 import { initContract } from '@ts-rest/core';
-import { authErrorSchema, customerSchema, sessionSchema, telegramAuthBodySchema } from './auth';
+import {
+  authErrorSchema,
+  customerSchema,
+  preferencesBodySchema,   sessionSchema,
+  telegramAuthBodySchema,
+} from './auth';
 
 const c = initContract();
 
@@ -26,6 +31,13 @@ export const contract = c.router({
       path: '/me',
       responses: { 200: customerSchema, 401: authErrorSchema },
       summary: 'The signed-in customer, identified only by the session',
+    },
+    updatePreferences: {
+      method: 'PATCH',
+      path: '/me/preferences',
+      body: preferencesBodySchema,
+      responses: { 200: customerSchema, 401: authErrorSchema },
+      summary: 'Save the customer language and/or theme (the bot reads the language too)',
     },
   },
 });

@@ -8,6 +8,13 @@
       "when": 1794218211378,
       "tag": "0000_thick_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794218781462,
+      "tag": "0001_flashy_zeigeist",
+      "breakpoints": true
     }
   ]
 }

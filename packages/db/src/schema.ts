@@ -6,6 +6,7 @@ const id = () => bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAs
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
 export const languageEnum = pgEnum('language', LANGUAGES);
+export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
 
 /** A Customer is a Telegram account (ADR 0004). */
@@ -16,6 +17,8 @@ export const customers = pgTable('customers', {
   lastName: text('last_name'),
   username: text('username'),
   language: languageEnum('language').notNull(),
+  /** Light by default whatever Telegram says; dark is a Profile option (spec 2026-11-07). */
+  theme: themeEnum('theme').notNull().default('light'),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
