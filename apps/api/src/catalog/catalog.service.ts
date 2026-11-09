@@ -31,6 +31,9 @@ export async function reservedByVolume(
   return new Map(volumeIds.map((id) => [id, 0]));
 }
 
+/** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
+export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
+
 /**
  * "Top sellers" order, the one definition (spec §3.2, Changes 2026-11-10): owner-pinned (hit)
  * fragrances first, then the newest. Until orders exist there are no sales; #15 adds paid-order
@@ -54,7 +57,7 @@ export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeC
     salePercent: sale === null ? null : Math.round(((v.price - sale) / v.price) * 100),
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
-    available: Math.max(0, v.onHand - reserved),
+    available: available(v.onHand, reserved),
     photo: v.photoHash,
   };
 }

@@ -8,6 +8,7 @@ import {
   languageFromTelegram,
   normalizeUzbek,
   plural,
+  stripApostrophes,
 } from './index';
 
 describe('formatMoney', () => {
@@ -96,5 +97,12 @@ describe('dictionary typing', () => {
   it('merges the namespaces for server code', () => {
     expect(dictionaries.uz.common.currency).toBe('soʻm');
     expect(dictionaries.ru.bot.openShop).toBeTruthy();
+  });
+});
+
+describe('stripApostrophes', () => {
+  it('makes every apostrophe variant compare equal', () => {
+    expect(stripApostrophes("Devil's Intrigue")).toBe(stripApostrophes('Devil’s Intrigue'));
+    expect(stripApostrophes("Bal d'Afrique")).toBe('Bal dAfrique');
   });
 });

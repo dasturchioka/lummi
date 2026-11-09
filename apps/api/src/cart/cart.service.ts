@@ -13,7 +13,7 @@ import {
   type DbOrTx,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { reservedByVolume, topSellersOrder } from '../catalog/catalog.service';
+import { available, reservedByVolume, topSellersOrder } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
 import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
@@ -131,15 +131,15 @@ export class CartService {
         .where(and(eq(fragrances.slug, slug), eq(fragrances.hidden, false), eq(volumes.ml, ml)));
       if (!v) return 'not_found' as const;
       const reserved = await reservedByVolume(tx, [v.id]);
-      const available = Math.max(0, v.onHand - (reserved.get(v.id) ?? 0));
-      if (available === 0) return 'sold_out' as const;
+      const left = available(v.onHand, reserved.get(v.id) ?? 0);
+      if (left === 0) return 'sold_out' as const;
       await this.touch(tx, customerId);
       await tx
         .insert(cartLines)
-        .values({ customerId, volumeId: v.id, qty: Math.min(qty, available) })
+        .values({ customerId, volumeId: v.id, qty: Math.min(qty, left) })
         .onConflictDoUpdate({
           target: [cartLines.customerId, cartLines.volumeId],
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${available})` },
+          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left})` },
         });
       return 'ok' as const;
     });
@@ -156,14 +156,12 @@ export class CartService {
         .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));
       if (!row) return false;
       const reserved = await reservedByVolume(tx, [row.volumeId]);
-      const available = row.hidden
-        ? 0
-        : Math.max(0, row.onHand - (reserved.get(row.volumeId) ?? 0));
+      const left = row.hidden ? 0 : available(row.onHand, reserved.get(row.volumeId) ?? 0);
       // a sold-out line keeps what the customer asked for; restocking brings it back
-      if (available > 0) {
+      if (left > 0) {
         await tx
           .update(cartLines)
-          .set({ qty: Math.min(qty, available) })
+          .set({ qty: Math.min(qty, left) })
           .where(eq(cartLines.id, lineId));
       }
       await this.touch(tx, customerId);

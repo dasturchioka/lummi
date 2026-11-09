@@ -9,7 +9,7 @@ import {
   type CartRow,
   type DbOrTx,
 } from '@lummi/db';
-import { reservedByVolume } from '../catalog/catalog.service';
+import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
@@ -81,7 +81,7 @@ export async function loadCartQuote(
     saleEndsAt: Date | null;
   })[] = rows.map((r) => {
     // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-    const available = r.hidden ? 0 : Math.max(0, r.onHand - (reserved.get(r.volumeId) ?? 0));
+    const left = r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0);
     return {
       lineId: r.lineId,
       volumeId: r.volumeId,
@@ -91,10 +91,10 @@ export async function loadCartQuote(
       ml: r.ml,
       photo: r.photo,
       wanted: r.qty,
-      available,
-      soldOut: available === 0,
-      qty: available === 0 ? r.qty : Math.min(r.qty, available),
-      limited: available > 0 && r.qty > available,
+      available: left,
+      soldOut: left === 0,
+      qty: left === 0 ? r.qty : Math.min(r.qty, left),
+      limited: left > 0 && r.qty > left,
       price: r.price,
       salePrice: r.salePrice,
       saleEndsAt: r.saleEndsAt,

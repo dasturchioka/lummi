@@ -28,6 +28,7 @@ import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
+import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
 import { cn, fill } from '@/lib/utils';
 
 type Status = 'all' | 'active' | 'hidden';
@@ -48,14 +49,6 @@ const href = (f: PointFilters, page: number) => {
   const qs = p.toString();
   return qs ? `/bts-points?${qs}` : '/bts-points';
 };
-
-/** Row actions are quiet: Muted Ink 500, Ink on hover and focus (the row itself opens the editor). */
-export const QUIET_ACTION =
-  'font-medium text-muted-foreground hover:text-foreground focus-visible:text-foreground';
-
-/** A text link in the page header or a form (DESIGN.md link: Ink 500, hairline underline). */
-const TEXT_LINK =
-  'rounded-sm text-sm font-medium underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current';
 
 /**
  * BTS points for staff (owner and manager): filter by region, status and text, add, edit, and
