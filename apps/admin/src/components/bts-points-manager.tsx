@@ -3,10 +3,10 @@
 import type { AdminBtsPointDto, AdminRegionDto } from '@lummi/contracts';
 import { ADMIN_POINTS_PAGE_SIZE } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
-import { MapPin, Plus, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, MapPin, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -153,8 +153,7 @@ export function BtsPointsManager({
       <p className="break-words">{p.address}</p>
       <MetaLine
         className="mt-0.5 text-small text-muted-foreground"
-        // a time range never breaks across lines
-        parts={[p.landmark, p.hours?.replace(/(\d)-(\d)/g, '$1\u2011$2')]}
+        parts={[p.landmark, p.hours ? <Hours key="hours" text={p.hours} /> : null]}
       />
     </>
   );
@@ -379,7 +378,16 @@ export function BtsPointsManager({
       )}
 
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
-        <DialogContent className="sm:w-[min(560px,calc(100vw-32px))]">
+        <DialogContent
+          className="sm:w-[min(560px,calc(100vw-32px))]"
+          // editing opens on the point, not in its name field: no keyboard over the form on a
+          // phone, and the name is not pre-selected for an accidental overwrite
+          onOpenAutoFocus={(e) => {
+            if (!dialog?.point) return;
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).focus();
+          }}
+        >
           {dialog && (
             <PointForm
               key={dialog.point?.id ?? 'new'}
@@ -397,6 +405,64 @@ export function BtsPointsManager({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Opening hours as BTS writes them ("Пн-Сб: 09:00-18:00; Вс: выходной; обед 13:00-14:00"): a line
+ * breaks only between the parts, never inside a day range or a time range.
+ */
+function Hours({ text }: { text: string }) {
+  const parts = text
+    .replace(/(\d)-(\d)/g, '$1\u2011$2')
+    .split(/;\s*/)
+    .filter(Boolean);
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 ? '; ' : null}
+      {part.length <= 24 ? <span className="whitespace-nowrap">{part}</span> : part}
+    </Fragment>
+  ));
+}
+
+/**
+ * «Город или район»: a text field with the region's cities as suggestions (a native combobox, so
+ * a new city can still be typed). The browser's own list arrow stays clickable but invisible
+ * under a chevron drawn like the selects'.
+ */
+function CityCombobox({
+  cities,
+  defaultValue,
+  ...field
+}: {
+  cities: string[];
+  defaultValue?: string;
+  id?: string;
+  'aria-describedby'?: string;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        {...field}
+        name="city"
+        required
+        maxLength={200}
+        autoComplete="off"
+        list="p-city-options"
+        defaultValue={defaultValue}
+        className="pr-10 [&::-webkit-calendar-picker-indicator]:opacity-0"
+      />
+      <ChevronDown
+        strokeWidth={1.5}
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-3 size-[18px] -translate-y-1/2 text-muted-foreground"
+      />
+      <datalist id="p-city-options">
+        {cities.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+    </div>
   );
 }
 
@@ -526,20 +592,8 @@ function PointForm({
         </Field>
         {/* A combobox: the region's cities as suggestions, a new one still allowed. */}
         <Field id="p-city" label={t.btsPoints.city} hint={t.btsPoints.cityHint}>
-          <Input
-            name="city"
-            required
-            maxLength={200}
-            autoComplete="off"
-            list="p-city-options"
-            defaultValue={point?.city}
-          />
+          <CityCombobox cities={cities} defaultValue={point?.city} />
         </Field>
-        <datalist id="p-city-options">
-          {cities.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
         <Field id="p-address" label={t.btsPoints.address} className="sm:col-span-2">
           <Input
             name="address"
