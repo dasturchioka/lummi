@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { saleEndDate } from '../../lib/format';
+import { keepNumberWithWord, saleEndDate } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
 import { usePrefs } from '../../lib/prefs';
@@ -21,7 +21,6 @@ import {
   BottleIcon,
   ClockIcon,
   ExternalIcon,
-  InfoIcon,
   LeafIcon,
   MoonIcon,
   ShareIcon,
@@ -160,36 +159,30 @@ function LabelDivider() {
 }
 
 /**
- * The label lockup (DESIGN.md Label Lockup Rule): attribution caps, the italic name, the divider,
- * the key notes. Above it, the badge left and the type with the family right, as on list cards.
+ * The label lockup (DESIGN.md Label Lockup Rule), as the brandbook's product name block: attribution
+ * caps, the italic name, the divider, one muted meta line (the badge inline at its start, then the
+ * type and the family), then the key notes.
  */
 function Lockup({ card }: { card: FragranceCard }) {
   const { t, language } = usePrefs();
   return (
     <header className="flex flex-col">
-      <div className="flex min-h-5 items-center justify-between gap-3">
-        <FragranceBadge isHit={card.isHit} isNew={card.isNew} />
-        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-muted">
-          <span className="type-label">{t.card.type[card.type]}</span>
-          {card.family ? (
-            <>
-              <span aria-hidden="true" className="type-small">
-                ·
-              </span>
-              <span className="type-small">{card.family[language]}</span>
-            </>
-          ) : null}
-        </p>
-      </div>
-      <p className="type-label mt-4 text-muted [overflow-wrap:anywhere]">
+      <p className="type-label text-muted [overflow-wrap:anywhere]">
         {fill(t.card.basedOn, { brand: card.brand })}
       </p>
       <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
         {card.name}
       </h1>
       <LabelDivider />
+      <p className="type-small mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
+        <FragranceBadge isHit={card.isHit} isNew={card.isNew} />
+        <span>
+          <span className="tracking-[0.04em] uppercase">{t.card.type[card.type]}</span>
+          {card.family ? ` · ${card.family[language]}` : null}
+        </span>
+      </p>
       {card.keyNotes[language].length > 0 ? (
-        <p className="type-body mt-2.5 text-muted">{card.keyNotes[language].join(' · ')}</p>
+        <p className="type-body mt-1.5 text-muted">{card.keyNotes[language].join(' · ')}</p>
       ) : null}
     </header>
   );
@@ -200,9 +193,7 @@ function Trait({ icon, label, value }: { icon: ReactNode; label: string; value: 
     <li className="flex min-w-0 flex-col items-center px-0.5 text-center">
       <span className="mb-2 text-ink">{icon}</span>
       <span className="type-caption text-muted">{label}</span>
-      <span className="type-value mt-0.5 text-balance text-ink [overflow-wrap:anywhere]">
-        {value}
-      </span>
+      <span className="type-value mt-0.5 text-balance text-ink">{keepNumberWithWord(value)}</span>
     </li>
   );
 }
@@ -237,33 +228,40 @@ function Traits({ card }: { card: FragranceCard }) {
 }
 
 /**
- * One volume: the volume over its price; a markdown strikes the regular price above the sale one,
- * which is Sage Ink (a saving) on an unselected tile. Selected is the Graphite fill. Sold out is
- * transparent with a faint outline and says so; a sold-out volume can still be chosen (to see its
- * photo), and then carries an ink ring instead of the fill, so it never looks buyable.
+ * One volume, top-aligned so «10 мл / 30 мл / 50 мл» share one baseline whatever sits under them:
+ * the volume, then (when any tile shows a markdown) the struck regular price or an empty slot of
+ * the same height, then the price to pay, Sage Ink on an unselected tile during a markdown.
+ * Selected is the Graphite fill. Sold out is transparent with a faint outline and says so; a
+ * sold-out volume can still be chosen (to see its photo), and then gets the selected fill at
+ * reduced emphasis (Muted Ink), so it reads as chosen but never as buyable.
  */
 function VolumeTile({
   volume: v,
   selected,
+  strikeSlot,
   onSelect,
   onKeyDown,
   tileRef,
 }: {
   volume: VolumeCard;
   selected: boolean;
+  /** Some tile shows a struck regular price: every tile keeps a line for it. */
+  strikeSlot: boolean;
   onSelect: (ml: VolumeCard['ml']) => void;
   onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
   tileRef: (el: HTMLButtonElement | null) => void;
 }) {
   const { t } = usePrefs();
   const soldOut = v.available === 0;
+  const struck = !soldOut && v.salePrice !== null;
   const look = soldOut
     ? selected
-      ? 'bg-transparent text-muted shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+      ? 'bg-muted text-btn-ink'
       : 'bg-transparent text-faint shadow-[inset_0_0_0_1px_var(--c-line)]'
     : selected
       ? 'bg-btn text-btn-ink'
       : 'bg-card text-ink inset-line';
+  const quiet = selected ? 'opacity-80' : 'text-muted';
   return (
     <button
       ref={tileRef}
@@ -274,26 +272,30 @@ function VolumeTile({
       data-sold-out={soldOut || undefined}
       onClick={() => onSelect(v.ml)}
       onKeyDown={onKeyDown}
-      className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-btn px-1 py-2.5 transition-[background-color,color,box-shadow,transform] duration-150 ${EASE_OUT} active:scale-[0.97] ${look}`}
+      className={`flex min-h-16 min-w-0 flex-col items-center justify-start rounded-btn px-1 pt-3 pb-2.5 transition-[background-color,color,box-shadow,transform] duration-150 ${EASE_OUT} active:scale-[0.97] ${look}`}
     >
-      <span className="type-price">
+      <span className="type-price leading-5">
         {v.ml} {t.card.ml}
       </span>
-      {soldOut ? (
-        <span className="type-caption text-muted">{t.card.soldOut}</span>
-      ) : (
-        <span className={`flex flex-col items-center ${selected ? 'opacity-80' : 'text-muted'}`}>
-          {v.salePrice !== null ? (
-            <s className={selected ? 'opacity-75' : ''}>
-              <Money amount={v.price} size="small" />
-            </s>
-          ) : null}
-          <Money
-            amount={v.effectivePrice}
-            size="small"
-            className={v.salePrice !== null && !selected ? 'text-sage-ink' : ''}
-          />
+      {struck ? (
+        <s className={`mt-0.5 ${selected ? 'opacity-60' : 'text-muted'}`}>
+          <Money amount={v.price} size="small" />
+        </s>
+      ) : strikeSlot ? (
+        <span aria-hidden="true" className="type-price-sm invisible mt-0.5">
+          0
         </span>
+      ) : null}
+      {soldOut ? (
+        <span className={`type-caption mt-1 ${quiet}`}>{t.card.soldOut}</span>
+      ) : (
+        <Money
+          amount={v.effectivePrice}
+          size="small"
+          className={`${strikeSlot ? '' : 'mt-0.5'} ${
+            struck && !selected ? 'text-sage-ink' : quiet
+          }`}
+        />
       )}
     </button>
   );
@@ -311,6 +313,7 @@ function VolumeTiles({
 }) {
   const { t } = usePrefs();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const strikeSlot = volumes.some((v) => v.available > 0 && v.salePrice !== null);
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     const dir =
       e.key === 'ArrowRight' || e.key === 'ArrowDown'
@@ -334,6 +337,7 @@ function VolumeTiles({
           key={v.ml}
           volume={v}
           selected={v.ml === selected}
+          strikeSlot={strikeSlot}
           onSelect={onSelect}
           onKeyDown={(e) => onKey(e, i)}
           tileRef={(el) => {
@@ -346,34 +350,37 @@ function VolumeTiles({
 }
 
 /**
- * Under the tiles: availability of the chosen volume (a Sage dot when it can be bought) and, during
- * a markdown, its badge and end date (ADR 0008: no timer). The price itself is on the tile and in
- * the dock.
+ * Under the tiles, for the chosen volume that can be bought: «В наличии» with a Sage dot and,
+ * during a markdown, a row that names the volume it belongs to («10 мл · −20% · до 15 ноября»;
+ * ADR 0008: no timer). A sold-out volume shows nothing here: its tile and the dock already say it.
  */
 function VolumeStatus({ volume }: { volume: VolumeCard }) {
   const { t, language } = usePrefs();
-  const soldOut = volume.available === 0;
+  if (volume.available === 0) return null;
   const until =
     volume.saleEndsAt !== null
       ? fill(t.card.saleUntil, { date: saleEndDate(volume.saleEndsAt, language) })
       : null;
   return (
-    <div className="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-      <span
-        className="type-small flex items-center gap-2 text-muted"
-        data-availability={soldOut ? 'sold-out' : 'in-stock'}
-      >
-        <span
-          aria-hidden="true"
-          className={`size-1.5 shrink-0 rounded-pill ${soldOut ? 'bg-faint' : 'bg-sage'}`}
-        />
-        {soldOut ? t.card.unavailable : t.card.inStock}
+    <div className="type-small flex flex-col gap-1.5 text-muted">
+      <span className="flex items-center gap-2" data-availability="in-stock">
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-pill bg-sage" />
+        {t.card.inStock}
       </span>
       {volume.salePrice !== null ? (
-        <span className="flex items-center gap-2">
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="text-ink">
+            {volume.ml} {t.card.ml}
+          </span>
+          <span aria-hidden="true">·</span>
           <Badge tone="discount">−{volume.salePercent}%</Badge>
-          {until ? <span className="type-small whitespace-nowrap text-muted">{until}</span> : null}
-        </span>
+          {until ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="whitespace-nowrap">{until}</span>
+            </>
+          ) : null}
+        </p>
       ) : null}
     </div>
   );
@@ -436,7 +443,7 @@ function Dock({
 
   if (!canBuy)
     return (
-      <Button block disabled>
+      <Button block disabled data-availability="sold-out">
         {t.card.unavailable}
       </Button>
     );
@@ -526,6 +533,7 @@ export function FragranceView({
             <span className="font-semibold text-ink">{t.card.whenToWear}:</span>{' '}
             {card.whenToWear[language]}
           </p>
+          <p className="type-small text-muted">{t.card.disclaimer}</p>
         </section>
 
         <div className="mt-6">
@@ -541,18 +549,17 @@ export function FragranceView({
 
         <Pyramid card={card} />
 
-        <div className="mt-7 flex flex-col gap-3">
-          <p className="type-small flex gap-2.5 rounded-btn bg-field px-3.5 py-3 text-muted">
-            <InfoIcon size={16} className="mt-px shrink-0" />
-            {t.card.disclaimer}
-          </p>
-          {card.uzumUrl ? (
-            <Button variant="secondary" block onClick={() => openExternal(card.uzumUrl as string)}>
-              {t.card.uzum}
-              <ExternalIcon size={16} />
-            </Button>
-          ) : null}
-        </div>
+        {card.uzumUrl ? (
+          <Button
+            variant="secondary"
+            block
+            className="mt-7"
+            onClick={() => openExternal(card.uzumUrl as string)}
+          >
+            {t.card.uzum}
+            <ExternalIcon size={16} />
+          </Button>
+        ) : null}
       </article>
     </Screen>
   );

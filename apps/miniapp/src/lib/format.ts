@@ -49,3 +49,10 @@ export function saleEndDate(iso: string, language: Language): string {
   const name = MONTHS[language][month - 1] ?? '';
   return language === 'uz' ? `${day}-${name}gacha` : `${day} ${name}`;
 }
+
+/**
+ * A number never ends a line apart from the word it counts: «24 soatgacha», «до 24 часов». The
+ * longevity text is catalog data (the seed and the admin), so the card glues it where it shows it.
+ */
+export const keepNumberWithWord = (text: string): string =>
+  text.replace(/(\d) +(?=\p{L})/gu, '$1 ');
