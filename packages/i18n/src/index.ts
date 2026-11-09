@@ -3,4 +3,5 @@ export { sharedMessages, type SharedMessages } from './shared';
 export { defineMessages } from './define';
 export { formatMoney } from './money';
 export { plural, type PluralForms } from './plural';
+export { fill } from './fill';
 export { normalizeUzbek } from './uzbek';

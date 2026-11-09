@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { dictionaries } from './all';
-import { defineMessages, formatMoney, languageFromTelegram, normalizeUzbek, plural } from './index';
+import {
+  defineMessages,
+  fill,
+  formatMoney,
+  languageFromTelegram,
+  normalizeUzbek,
+  plural,
+} from './index';
 
 describe('formatMoney', () => {
   it('formats RU and UZ with narrow no-break spaces', () => {
@@ -37,6 +44,13 @@ describe('plural', () => {
   it('has one Uzbek form', () => {
     expect(plural('uz', 1, uz)).toBe('1 ta punkt');
     expect(plural('uz', 88, uz)).toBe('88 ta punkt');
+  });
+});
+
+describe('fill', () => {
+  it('fills named placeholders and leaves unknown ones visible', () => {
+    expect(fill('по мотивам {brand}', { brand: 'Louis Vuitton' })).toBe('по мотивам Louis Vuitton');
+    expect(fill('{brand} asosida', {})).toBe('{brand} asosida');
   });
 });
 

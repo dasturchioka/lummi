@@ -124,7 +124,10 @@ export const screens: Screen[] = [
     fullPage: false,
     act: async ({ page, t }) => {
       // the point's name is the editor's button («Изменить: <name>»)
-      await page.getByRole('button', { name: `${t.btsPoints.edit}: ` }).first().click();
+      await page
+        .getByRole('button', { name: `${t.btsPoints.edit}: ` })
+        .first()
+        .click();
       await page.getByRole('dialog').waitFor();
     },
   },

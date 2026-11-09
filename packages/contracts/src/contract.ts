@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { catalogErrorSchema, fragranceCardSchema } from './catalog';
 import {
   adminErrorSchema,
   createManagerBodySchema,
@@ -119,6 +120,15 @@ export const contract = c.router({
       query: pointsQuerySchema,
       responses: { 200: z.array(btsPointSchema), 401: deliveryErrorSchema },
       summary: 'Offered BTS points of a city (regionId + city), or a search across all regions (q)',
+    },
+  },
+  catalog: {
+    fragrance: {
+      method: 'GET',
+      path: '/catalog/fragrances/:slug',
+      pathParams: z.object({ slug: z.string().min(1).max(100) }),
+      responses: { 200: fragranceCardSchema, 401: authErrorSchema, 404: catalogErrorSchema },
+      summary: 'A fragrance card by slug; hidden and unknown fragrances are 404',
     },
   },
 });

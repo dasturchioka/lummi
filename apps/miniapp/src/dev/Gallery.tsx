@@ -8,6 +8,7 @@
 import { useState, type ReactNode } from 'react';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { usePrefs } from '../lib/prefs';
+import { Badge, FragranceBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card, CardList, ListRow } from '../ui/Card';
 import {
@@ -90,6 +91,8 @@ const SWATCHES = [
   'bar',
   'totals',
   'photo',
+  'on-sage',
+  'photo-disc',
 ] as const;
 
 const UZ_GLYPHS = 'Oʻ oʻ Gʻ gʻ · Toʻlov · Yorugʻ · Qorongʻi';
@@ -177,6 +180,9 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
               <p className="type-small text-muted">{d.notes}</p>
             </div>
           </Specimen>
+          <Specimen label="type-name-lg · Cormorant Italic 24 (the fragrance card)">
+            <p className="type-name-lg">Baccarat Rouge 540</p>
+          </Specimen>
           <Specimen label="type-heading · Manrope 600 17">
             <p className="type-heading">{t.home.emptyTitle}</p>
           </Specimen>
@@ -184,16 +190,23 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
             <p className="type-body">{t.session.reopenText}</p>
             <p className="type-small text-muted">{t.errors.loadFailedText}</p>
           </Specimen>
-          <Specimen label="type-row · Manrope 15 (600 for a point name) · type-caption 11 Muted">
+          <Specimen label="type-row · Manrope 15 (600 for a point name) · type-hint 12 Muted">
             <p className="type-row">{t.delivery.cities}</p>
             <p className="type-row font-semibold">{t.delivery.pointTitle}</p>
-            <p className="type-caption mt-1 text-muted">{t.home.delivery}</p>
+            <p className="type-hint mt-1 text-muted">{t.delivery.typedTooShort}</p>
           </Specimen>
-          <Specimen label="type-price 15 · type-amount 28 (tabular)">
+          <Specimen label="type-caption 11 Muted · type-value 600 13 (characteristics row)">
+            <div className="flex flex-col items-start">
+              <span className="type-caption text-muted">{t.card.traits.longevity}</span>
+              <span className="type-value">{t.card.season.autumn_winter}</span>
+            </div>
+          </Specimen>
+          <Specimen label="Money · price 15 · small 12.5 (in a control) · amount 28 (tabular)">
             <div className="flex items-baseline justify-between gap-3">
               <Money amount={149000} />
               <Money amount={1250000} size="amount" />
             </div>
+            <Money amount={69000} size="small" className="text-muted" />
           </Specimen>
           <Specimen label="Uzbek Latin oʻ gʻ (U+02BB) in every face">
             <div className="flex flex-col gap-1">
@@ -272,6 +285,49 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
                 {d.catalog}
               </Button>
             </Specimen>
+          </div>
+        </Section>
+
+        <Section name="Button · tonal · size pair (a dock row of two)">
+          <div className="flex gap-2">
+            <Button size="pair" className="min-w-0 flex-1">
+              {t.card.toCart}
+            </Button>
+            <Button variant="tonal" size="pair" className="shrink-0">
+              {t.card.buyNow}
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Specimen label="pressed">
+              <Button block variant="tonal" data-pressed="">
+                {t.card.buyNow}
+              </Button>
+            </Specimen>
+            <Specimen label="disabled">
+              <Button block variant="tonal" disabled>
+                {t.card.buyNow}
+              </Button>
+            </Specimen>
+            <Specimen label="loading">
+              <Button block variant="tonal" loading>
+                {t.card.buyNow}
+              </Button>
+            </Specimen>
+          </div>
+        </Section>
+
+        <Section name="Badge (at most one flag per card; a hit outranks a novelty)">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="hit">{t.card.hit}</Badge>
+            <Badge tone="new">{t.card.isNew}</Badge>
+            <Badge tone="discount">−20%</Badge>
+            <FragranceBadge isHit isNew />
+            <span className="rounded-btn bg-card p-2">
+              <Badge tone="new">{t.card.isNew}</Badge>
+            </span>
+            <span className="rounded-btn bg-btn p-2">
+              <Badge tone="hit">{t.card.hit}</Badge>
+            </span>
           </div>
         </Section>
 
@@ -359,7 +415,7 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <CardList>
             {[0, 1].map((i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <Skeleton className="size-12 shrink-0 rounded-thumb" />
+                <Skeleton className="size-12 shrink-0" rounded="thumb" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-3.5 w-2/3" />
                   <Skeleton className="h-3 w-1/3" />
@@ -370,7 +426,7 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <div className="grid grid-cols-2 gap-2">
             {[0, 1].map((i) => (
               <Card key={i} className="p-2 pb-3">
-                <Skeleton className="aspect-[3/4] w-full rounded-photo" />
+                <Skeleton className="aspect-[3/4] w-full" rounded="photo" />
                 <Skeleton className="mt-3 h-2.5 w-1/2" />
                 <Skeleton className="mt-2 h-4 w-3/4" />
                 <Skeleton className="mt-3 h-3.5 w-2/5" />

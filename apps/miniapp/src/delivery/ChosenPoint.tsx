@@ -1,6 +1,5 @@
 import type { BtsPointDto } from '@lummi/contracts';
-import { plural } from '@lummi/i18n';
-import { fill } from '../lib/fill';
+import { fill, plural } from '@lummi/i18n';
 import { usePrefs } from '../lib/prefs';
 import { MetaLine } from '../ui/MetaLine';
 import { PinIcon } from '../ui/icons';

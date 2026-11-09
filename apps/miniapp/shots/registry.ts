@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import type { ApiClient } from './api';
+import type { ShotDb } from './db';
 
 /**
  * Every screen the screenshot run captures, in one place. Each UI ticket adds its screens here
@@ -13,7 +14,9 @@ export interface ScreenDef {
   id: string;
   path: string;
   /** Prepare server state for this screen, as the signed-in screenshot customer. */
-  setup?: (ctx: { api: ApiClient }) => Promise<void>;
+  setup?: (ctx: { api: ApiClient; db: ShotDb }) => Promise<void>;
+  /** Undo what `setup` changed in the database, so the next run starts from the seed. */
+  teardown?: (ctx: { api: ApiClient; db: ShotDb }) => Promise<void>;
   /** Interact with the loaded page (open a sheet, type in a search) before the capture. */
   act?: (ctx: { page: Page }) => Promise<void>;
   /** Sign in with initData this many seconds old (shows the "reopen the app" state). */
@@ -168,13 +171,60 @@ export const screens: ScreenDef[] = [
       await pickCityRow(page, 'Самарканд');
       await sheet(page).getByTestId('point-row').nth(6).click();
       await sheet(page).waitFor({ state: 'detached' });
-      await page.getByTestId('chosen-point').getByText(/ещё|yana/).waitFor();
+      await page
+        .getByTestId('chosen-point')
+        .getByText(/ещё|yana/)
+        .waitFor();
     },
   },
   { id: 'catalog', path: '/catalog' },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },
   { id: 'profile', path: '/profile' },
+  // Fragrance card (#8): the seed catalog, real fragrances. The long ones stress the lockup.
+  { id: 'fragrance', path: '/p/symphony', fullPage: true },
+  { id: 'fragrance-long-name', path: '/p/elysium-pour-homme-parfum', fullPage: true },
+  { id: 'fragrance-long-brand', path: '/p/baccarat-rouge-540', fullPage: true },
+  {
+    // The seed has no markdown: put one on the 10 ml bottle of Tygar (the volume the card opens on).
+    id: 'fragrance-sale',
+    path: '/p/tygar',
+    fullPage: true,
+    setup: async ({ db }) => db.markdown('tygar', 10, 55_200, 5),
+    teardown: async ({ db }) => db.restore('tygar'),
+  },
+  {
+    // Every volume sold out: the card still opens and says so.
+    id: 'fragrance-sold-out',
+    path: '/p/ink-mark',
+    fullPage: true,
+    setup: async ({ db }) => db.setOnHand('ink-mark', 0),
+    teardown: async ({ db }) => db.restore('ink-mark'),
+  },
+  {
+    // The seed has no hits and no Uzum links: a hit with the longest family and «Купить на Uzum».
+    id: 'fragrance-hit-uzum',
+    path: '/p/power-of-you',
+    fullPage: true,
+    setup: async ({ db }) => {
+      await db.query(
+        `update fragrances set is_hit = true, uzum_url = 'https://uzum.uz/ru/shop/lummi' where slug = $1`,
+        ['power-of-you'],
+      );
+    },
+    teardown: async ({ db }) => {
+      await db.query(`update fragrances set is_hit = false, uzum_url = null where slug = $1`, [
+        'power-of-you',
+      ]);
+    },
+  },
+  { id: 'fragrance-not-found', path: '/p/no-such-scent' },
+  // The card on dev fixtures (src/dev/fragrance-fixtures.ts): the realistic worst case (long name
+  // and brand, no family, every volume on sale, a seven-digit price, a missing photo), a fragrance
+  // sold in one volume, and one with nothing optional (no volumes, notes or key notes).
+  { id: 'fragrance-worst', path: '/dev/fragrance?data=worst', fullPage: true },
+  { id: 'fragrance-one-volume', path: '/dev/fragrance?data=one', fullPage: true },
+  { id: 'fragrance-empty', path: '/dev/fragrance?data=empty', fullPage: true },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
   // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
   { id: 'ui-gallery', path: '/dev/ui', fullPage: true },

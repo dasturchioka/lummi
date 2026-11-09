@@ -102,7 +102,8 @@ export const adminMessages = defineMessages(
         show: 'Показать',
         tariffs: 'Тарифы доставки',
         code: 'Код',
-        codeHint: 'Номер офиса BTS. У добавленного вручную пункта придумайте свой, например M-001. Потом не меняется.',
+        codeHint:
+          'Номер офиса BTS. У добавленного вручную пункта придумайте свой, например M-001. Потом не меняется.',
         name: 'Название',
         region: 'Регион',
         city: 'Город или район',
@@ -266,7 +267,8 @@ export const adminMessages = defineMessages(
         show: 'Koʻrsatish',
         tariffs: 'Yetkazish tariflari',
         code: 'Kod',
-        codeHint: 'BTS ofisining raqami. Qoʻlda qoʻshilgan punkt uchun oʻzingiz kod oʻylab toping, masalan M-001. Keyin oʻzgarmaydi.',
+        codeHint:
+          'BTS ofisining raqami. Qoʻlda qoʻshilgan punkt uchun oʻzingiz kod oʻylab toping, masalan M-001. Keyin oʻzgarmaydi.',
         name: 'Nomi',
         region: 'Viloyat',
         city: 'Shahar yoki tuman',
