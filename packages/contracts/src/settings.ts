@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 
 /**
  * Every rule value is a setting (CLAUDE.md invariant). Add a key here with its zod schema
@@ -47,14 +48,15 @@ export const settingDefinitions = {
   /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */
   'pricing.thresholdBase': {
     schema: z.object({
-      upgradeRightSet: z.enum(['before', 'after']),
-      upgradeRightSingle10ml: z.enum(['before', 'after']),
-      promoCode: z.enum(['before', 'after']),
-      birthdayCoupon: z.enum(['before', 'after']),
+      upgradeRight: z.object({
+        set: thresholdBaseSchema,
+        single_10ml: thresholdBaseSchema,
+      } satisfies Record<UpgradeRightSource, typeof thresholdBaseSchema>),
+      promoCode: thresholdBaseSchema,
+      birthdayCoupon: thresholdBaseSchema,
     }),
     default: {
-      upgradeRightSet: 'before',
-      upgradeRightSingle10ml: 'before',
+      upgradeRight: { set: 'before', single_10ml: 'before' },
       promoCode: 'after',
       birthdayCoupon: 'after',
     } as const,

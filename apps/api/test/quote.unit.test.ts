@@ -36,7 +36,7 @@ const TARIFF = 25_000;
 
 interface LineOpts {
   qty?: number;
-  sale?: { price: number; endsAt: Date | null };
+  markdown?: { price: number; endsAt: Date | null };
   soldOut?: boolean;
 }
 function volume(
@@ -50,7 +50,7 @@ function volume(
     key,
     item: { kind: 'volume', fragranceId, volumeMl },
     qty: o.qty ?? 1,
-    price: { regular, sale: o.sale ?? null },
+    price: { regular, markdown: o.markdown ?? null },
     soldOut: o.soldOut ?? false,
   };
 }
@@ -59,7 +59,7 @@ function set(key: string, regular: number, o: LineOpts = {}): QuoteLineInput {
     key,
     item: { kind: 'set' },
     qty: o.qty ?? 1,
-    price: { regular, sale: o.sale ?? null },
+    price: { regular, markdown: o.markdown ?? null },
     soldOut: o.soldOut ?? false,
   };
 }
@@ -267,7 +267,7 @@ describe('quote(): markdown is the effective price (ADR 0008)', () => {
       name: 'an active markdown is the unit price, the regular price stays for display',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
         ],
       },
       expected: {
@@ -282,7 +282,10 @@ describe('quote(): markdown is the effective price (ADR 0008)', () => {
       name: 'a markdown without an end date stays active',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { qty: 2, sale: { price: 175_000, endsAt: null } }),
+          volume('g50', GUIDANCE, 50, 219_000, {
+            qty: 2,
+            markdown: { price: 175_000, endsAt: null },
+          }),
         ],
       },
       expected: {
@@ -296,7 +299,7 @@ describe('quote(): markdown is the effective price (ADR 0008)', () => {
       name: 'a markdown past its end reverts to the regular price on its own',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: YESTERDAY } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: YESTERDAY } }),
         ],
       },
       expected: {
@@ -307,20 +310,26 @@ describe('quote(): markdown is the effective price (ADR 0008)', () => {
     {
       name: 'a markdown has ended at the very instant of its end',
       given: {
-        lines: [volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: NOW } })],
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: NOW } }),
+        ],
       },
       expected: { lines: [{ unitPrice: 219_000, markedDown: false }] },
     },
     {
-      name: 'a sale price not below the regular price is no markdown',
+      name: 'a markdown price not below the regular price is no markdown',
       given: {
-        lines: [volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 219_000, endsAt: null } })],
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 219_000, endsAt: null } }),
+        ],
       },
       expected: { lines: [{ unitPrice: 219_000, markedDown: false }] },
     },
     {
       name: 'a set can be marked down like a volume',
-      given: { lines: [set('discovery', 299_000, { sale: { price: 249_000, endsAt: TOMORROW } })] },
+      given: {
+        lines: [set('discovery', 299_000, { markdown: { price: 249_000, endsAt: TOMORROW } })],
+      },
       expected: {
         lines: [{ unitPrice: 249_000, regularUnitPrice: 299_000, markedDown: true }],
         itemsSubtotal: 249_000,
@@ -387,7 +396,7 @@ describe('quote(): upgrade right (ADR 0003, 0007, 0009)', () => {
       name: 'skips a marked-down bottle by default and takes the next covered unit',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('g30', GUIDANCE, 30, 149_000),
         ],
         entitlements: [setRight(1, [GUIDANCE])],
@@ -399,10 +408,10 @@ describe('quote(): upgrade right (ADR 0003, 0007, 0009)', () => {
       },
     },
     {
-      name: 'discounts the sale price when the upgrade-right marked-down setting is on',
+      name: 'discounts the markdown price when the upgrade-right marked-down setting is on',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('g30', GUIDANCE, 30, 149_000),
         ],
         entitlements: [setRight(1, [GUIDANCE])],
@@ -417,7 +426,7 @@ describe('quote(): upgrade right (ADR 0003, 0007, 0009)', () => {
       name: 'does not apply when its only covered bottle is marked down',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
         ],
         entitlements: [setRight(1, [GUIDANCE])],
       },
@@ -498,7 +507,10 @@ describe('quote(): free-delivery threshold base per discount source', () => {
         entitlements: [setRight(1, [GUIDANCE])],
         settings: {
           ...DEFAULTS,
-          thresholdBase: { ...DEFAULTS.thresholdBase, upgradeRightSet: 'after' },
+          thresholdBase: {
+            ...DEFAULTS.thresholdBase,
+            upgradeRight: { ...DEFAULTS.thresholdBase.upgradeRight, set: 'after' },
+          },
         },
       },
       expected: {
@@ -517,7 +529,10 @@ describe('quote(): free-delivery threshold base per discount source', () => {
         entitlements: [tenMlRight(7, GUIDANCE)],
         settings: {
           ...DEFAULTS,
-          thresholdBase: { ...DEFAULTS.thresholdBase, upgradeRightSingle10ml: 'after' },
+          thresholdBase: {
+            ...DEFAULTS.thresholdBase,
+            upgradeRight: { ...DEFAULTS.thresholdBase.upgradeRight, single_10ml: 'after' },
+          },
         },
       },
       expected: {
@@ -559,7 +574,7 @@ describe('quote(): birthday coupon (ADR 0007, 0008, 0009)', () => {
       name: 'skips marked-down items by default',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('t30', TYGAR, 30, 149_000),
         ],
         entitlements: [birthday(5, 20, 100_000)],
@@ -576,7 +591,7 @@ describe('quote(): birthday coupon (ADR 0007, 0008, 0009)', () => {
       name: 'covers marked-down items when the birthday marked-down setting is on',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('t30', TYGAR, 30, 149_000),
         ],
         entitlements: [birthday(5, 20, 100_000)],
@@ -591,7 +606,7 @@ describe('quote(): birthday coupon (ADR 0007, 0008, 0009)', () => {
       name: 'does not apply when every item is marked down',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
         ],
         entitlements: [birthday(5, 20, 100_000)],
       },
@@ -705,7 +720,7 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       name: 'a fixed code stops at the eligible items, leaving marked-down items alone',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('t10', TYGAR, 10, 69_000),
         ],
         promoCode: fixedPromo('MINUS100', 100_000),
@@ -716,7 +731,7 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       name: 'a % code skips marked-down items unless the code allows them',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('t30', TYGAR, 30, 149_000),
         ],
         promoCode: percentPromo('BLOGGER10', 10),
@@ -727,7 +742,7 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       name: 'a code flagged "applies to marked-down" covers them',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
           volume('t30', TYGAR, 30, 149_000),
         ],
         promoCode: percentPromo('BLOGGER10', 10, { appliesToMarkedDown: true }),
@@ -784,7 +799,7 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       name: 'with no eligible items the code is not applied and says why',
       given: {
         lines: [
-          volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 175_000, endsAt: TOMORROW } }),
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
         ],
         promoCode: percentPromo('BLOGGER10', 10),
       },
@@ -1088,7 +1103,9 @@ describe('quote(): integer so’m only (ADR 0016)', () => {
     [
       'a markdown price with tiyin',
       {
-        lines: [volume('g50', GUIDANCE, 50, 219_000, { sale: { price: 174_999.9, endsAt: null } })],
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 174_999.9, endsAt: null } }),
+        ],
       },
     ],
     ['a negative price', { lines: [volume('g50', GUIDANCE, 50, -1)] }],
