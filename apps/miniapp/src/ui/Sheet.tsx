@@ -12,6 +12,7 @@ export function Sheet({
   title,
   description,
   closeLabel,
+  tall = false,
   children,
 }: {
   open: boolean;
@@ -19,8 +20,14 @@ export function Sheet({
   title: string;
   description?: string;
   closeLabel: string;
+  /**
+   * Hold the full height whatever the content: for pickers whose steps and search results
+   * change length, so the sheet and its search field never jump while the customer types.
+   */
+  tall?: boolean;
   children: ReactNode;
 }) {
+  const height = 'min(85dvh, calc(var(--tg-viewport-stable-height, 100dvh) - 48px))';
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -31,7 +38,8 @@ export function Sheet({
             e.preventDefault();
             (e.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
           }}
-          className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[min(85dvh,calc(var(--tg-viewport-stable-height,100dvh)-48px))] w-full max-w-[520px] flex-col overscroll-contain rounded-t-card bg-ground text-ink outline-none data-[state=closed]:animate-[sheet-out_0.2s_cubic-bezier(0.32,0.72,0,1)_forwards] data-[state=open]:animate-[sheet-in_0.32s_cubic-bezier(0.32,0.72,0,1)]"
+          style={tall ? { height } : { maxHeight: height }}
+          className="fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-[520px] flex-col overscroll-contain rounded-t-card bg-ground text-ink outline-none data-[state=closed]:animate-[sheet-out_0.2s_cubic-bezier(0.32,0.72,0,1)_forwards] data-[state=open]:animate-[sheet-in_0.32s_cubic-bezier(0.32,0.72,0,1)]"
         >
           <div
             className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-pill bg-line-strong"

@@ -26,6 +26,7 @@ export default function DeliverySheet({
       title={t.delivery.cityTitle}
       description={t.delivery.cityText}
       closeLabel={t.common.close}
+      tall
     >
       <DeliveryPicker
         mode="city"

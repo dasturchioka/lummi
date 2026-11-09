@@ -31,6 +31,7 @@ export function DeliveryDev() {
         title={t.delivery.pointTitle}
         description={t.delivery.pointText}
         closeLabel={t.common.close}
+        tall
       >
         <DeliveryPicker
           mode="point"

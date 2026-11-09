@@ -63,8 +63,9 @@ function TopBlock() {
   );
 }
 
+// shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
 const DISC =
-  'grid size-11 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
+  'grid size-11 shrink-0 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
 
 /** Home, no welcome screen (approved design): the top block, then the Milk sheet over its edge. */
 export function Home() {

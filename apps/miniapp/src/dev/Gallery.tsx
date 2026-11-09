@@ -166,6 +166,11 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
             <p className="type-body">{t.session.reopenText}</p>
             <p className="type-small text-muted">{t.errors.loadFailedText}</p>
           </Specimen>
+          <Specimen label="type-row · Manrope 15 (600 for a point name) · type-caption 11 Muted">
+            <p className="type-row">{t.delivery.cities}</p>
+            <p className="type-row font-semibold">{t.delivery.pointTitle}</p>
+            <p className="type-caption mt-1 text-muted">{t.home.delivery}</p>
+          </Specimen>
           <Specimen label="type-price 15 · type-amount 28 (tabular)">
             <div className="flex items-baseline justify-between gap-3">
               <Money amount={149000} />

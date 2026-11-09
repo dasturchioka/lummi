@@ -1,11 +1,19 @@
 import type { BtsPointDto, RegionDto } from '@lummi/contracts';
 import { POINT_SEARCH_MIN } from '@lummi/contracts';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { fill } from '../lib/fill';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card, CardList } from '../ui/Card';
-import { CheckIcon, ChevronIcon, PinIcon, SearchIcon } from '../ui/icons';
+import {
+  AlertIcon,
+  CheckIcon,
+  ChevronIcon,
+  CloseIcon,
+  PinIcon,
+  SearchIcon,
+  Spinner,
+} from '../ui/icons';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { regionName, useCities, usePoints, useRegions, type Picked } from './queries';
@@ -25,8 +33,17 @@ export interface DeliveryPickerProps {
   error?: string | null;
 }
 
-const FIELD =
-  'h-11 w-full rounded-btn bg-field pr-3 pl-10 text-base text-ink placeholder:text-muted outline-none transition-shadow focus-visible:shadow-[inset_0_0_0_1.5px_var(--c-ink)]';
+/* Milk Field, borderless, 16 px text (no iOS zoom); focus is a Graphite inset ring. */
+const FIELD_BASE =
+  'w-full rounded-btn bg-field text-base text-ink placeholder:text-muted outline-none transition-shadow duration-150 focus-visible:shadow-[inset_0_0_0_1.5px_var(--c-ink)]';
+/*
+ * No iOS search-field chrome, and the browser's own clear (a blue ✕ in WebKit) is hidden: ours is
+ * drawn in the brand ink.
+ */
+const SEARCH = `${FIELD_BASE} h-12 appearance-none pl-10 text-ellipsis [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none`;
+const LABEL = 'type-small mb-1.5 block font-medium text-muted';
+const ROW =
+  'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-field active:bg-field';
 
 /** Waits for the typing to settle so a search is not sent per keystroke. */
 function useDebounced<T>(value: T, ms = 250): T {
@@ -38,20 +55,66 @@ function useDebounced<T>(value: T, ms = 250): T {
   return v;
 }
 
+/**
+ * Scrolls the nearest scrolling box (the sheet body, or the page) so `el` sits at the top of it
+ * (only when it is above) or in its middle. Never the page behind a sheet.
+ */
+function scrollWithin(el: HTMLElement, at: 'top' | 'center') {
+  let box = el.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+  const r = el.getBoundingClientRect();
+  const top = box ? box.getBoundingClientRect().top : 0;
+  const height = box ? box.clientHeight : window.innerHeight;
+  const delta = at === 'top' ? Math.min(0, r.top - top) : r.top + r.height / 2 - (top + height / 2);
+  if (!delta) return;
+  if (box) box.scrollTop += delta;
+  else window.scrollBy(0, delta);
+}
+
 function List({ children }: { children: ReactNode }) {
   return <CardList>{children}</CardList>;
 }
 
-function Loading() {
+/** Placeholder rows shaped like what will load: one line for regions and cities, a point's name and address for points. */
+function Loading({ points = false }: { points?: boolean }) {
   return (
-    <Card className="space-y-px overflow-hidden p-0" aria-busy="true">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex min-h-14 items-center px-4">
-          <Skeleton className="h-4 w-44" />
-        </div>
-      ))}
+    <Card className="divide-y divide-line overflow-hidden" aria-busy="true">
+      {[0, 1, 2, 3, 4].map((i) =>
+        points ? (
+          <div key={i} className="flex gap-3 px-4 py-3.5">
+            <Skeleton className="size-5 shrink-0 rounded-pill" />
+            <div className="flex-1 space-y-2 pt-0.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3.5 w-52" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+          </div>
+        ) : (
+          <div key={i} className="flex min-h-14 items-center px-4">
+            <Skeleton className="h-4 w-44" />
+          </div>
+        ),
+      )}
     </Card>
   );
+}
+
+/**
+ * Opening hours as BTS writes them ("Пн-Сб: 09:00-18:00; Вс: выходной; обед 13:00-14:00"): a
+ * line breaks only between the parts, never inside a day range or a time range.
+ */
+function Hours({ text }: { text: string }) {
+  const parts = text
+    .replace(/(\d)-(\d)/g, '$1\u2011$2')
+    .split(/;\s*/)
+    .filter(Boolean);
+  return parts.map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 ? '; ' : null}
+      {/* a hand-typed part longer than a line may still wrap */}
+      {part.length <= 24 ? <span className="whitespace-nowrap">{part}</span> : part}
+    </Fragment>
+  ));
 }
 
 function PointRow({
@@ -59,46 +122,48 @@ function PointRow({
   selected,
   context,
   onClick,
+  ref,
 }: {
   point: BtsPointDto;
   selected: boolean;
   context?: string;
   onClick: () => void;
+  ref?: Ref<HTMLButtonElement>;
 }) {
   const { t } = usePrefs();
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       aria-pressed={selected}
       data-testid="point-row"
       className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-field active:bg-field"
     >
-      <span className="mt-0.5 shrink-0 text-sage-ink">
+      <span className="mt-px shrink-0 text-muted">
         <PinIcon size={20} />
       </span>
       <span className="min-w-0 flex-1">
-        {context ? <span className="type-small mb-0.5 block text-muted">{context}</span> : null}
-        <span className="type-body block text-[15px] font-semibold [overflow-wrap:anywhere]">
-          {point.name}
-        </span>
-        <span className="type-body mt-0.5 block text-[14px] [overflow-wrap:anywhere]">
-          {point.address}
-        </span>
+        {context ? (
+          <span className="type-small mb-0.5 block text-muted [overflow-wrap:anywhere]">
+            {context}
+          </span>
+        ) : null}
+        <span className="type-row block font-semibold [overflow-wrap:anywhere]">{point.name}</span>
+        <span className="type-body mt-0.5 block [overflow-wrap:anywhere]">{point.address}</span>
         {point.landmark ? (
-          <span className="type-small mt-0.5 block text-muted [overflow-wrap:anywhere]">
+          <span className="type-small mt-1 block text-muted [overflow-wrap:anywhere]">
             {fill(t.delivery.landmark, { text: point.landmark })}
           </span>
         ) : null}
         {point.hours ? (
           <span className="type-small mt-0.5 block text-muted">
-            {/* a time range never breaks across lines */}
-            {point.hours.replace(/(\d)-(\d)/g, '$1\u2011$2')}
+            <Hours text={point.hours} />
           </span>
         ) : null}
       </span>
       {selected ? (
-        <span className="mt-0.5 shrink-0 text-ink" role="img" aria-label={t.delivery.selected}>
+        <span className="mt-px shrink-0 text-sage-ink" role="img" aria-label={t.delivery.selected}>
           <CheckIcon size={20} />
         </span>
       ) : null}
@@ -128,6 +193,18 @@ export function DeliveryPicker({
     initial ? (mode === 'point' ? 'points' : 'cities') : 'regions',
   );
   const [query, setQuery] = useState('');
+  // which way the last step change went; null until the first one (the opening step does not slide)
+  const [moved, setMoved] = useState<'forward' | 'back' | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const shownStep = useRef(step);
+  // Opened on the saved choice: bring its row into view once, so the check is not off-screen.
+  const revealPending = useRef(!!initial);
+  const reveal = (el: HTMLElement | null) => {
+    if (!el || !revealPending.current) return;
+    revealPending.current = false;
+    scrollWithin(el, 'center');
+  };
   const [typedText, setTypedText] = useState('');
   const [typedRegionId, setTypedRegionId] = useState<number | undefined>(initial?.regionId);
 
@@ -150,15 +227,23 @@ export function DeliveryPicker({
     return all.filter((c) => c.city.toLowerCase().replaceAll('ё', 'е').includes(needle));
   }, [cities.data, mode, q]);
 
-  const go = (next: Step) => {
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    // a new step starts at its top, not where the last list was scrolled to
+    if (rootRef.current) scrollWithin(rootRef.current, 'top');
+  }, [step]);
+
+  const go = (next: Step, way: 'forward' | 'back' = 'forward') => {
     setStep(next);
+    setMoved(way);
     setQuery('');
   };
   const back = () => {
-    if (step === 'typed') return go(city ? 'points' : regionId ? 'cities' : 'regions');
-    if (step === 'points') return go('cities');
+    if (step === 'typed') return go(city ? 'points' : regionId ? 'cities' : 'regions', 'back');
+    if (step === 'points') return go('cities', 'back');
     setCity(undefined);
-    go('regions');
+    go('regions', 'back');
   };
   const pickRegion = (r: RegionDto) => {
     setRegionId(r.id);
@@ -200,29 +285,37 @@ export function DeliveryPicker({
       >
         <p className="type-body text-muted">{t.delivery.typedText}</p>
         <label className="block">
-          <span className="type-small mb-1 block text-muted">{t.delivery.typedRegion}</span>
-          <select
-            value={typedRegionId ?? ''}
-            onChange={(e) => setTypedRegionId(Number(e.target.value) || undefined)}
-            className="h-11 w-full rounded-btn bg-field px-3 text-base text-ink outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--c-ink)]"
-          >
-            <option value="" disabled />
-            {regions.data.map((r) => (
-              <option key={r.id} value={r.id}>
-                {name(r)}
-              </option>
-            ))}
-          </select>
+          <span className={LABEL}>{t.delivery.typedRegion}</span>
+          {/* the native picker is the right control on a phone; only its arrow is ours */}
+          <span className="relative block">
+            <select
+              value={typedRegionId ?? ''}
+              onChange={(e) => setTypedRegionId(Number(e.target.value) || undefined)}
+              className={`${FIELD_BASE} h-12 appearance-none truncate pr-11 pl-3.5`}
+            >
+              <option value="" disabled />
+              {regions.data.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {name(r)}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 rotate-90 text-muted">
+              <ChevronIcon size={18} />
+            </span>
+          </span>
         </label>
-        <textarea
-          value={typedText}
-          onChange={(e) => setTypedText(e.target.value)}
-          rows={3}
-          maxLength={300}
-          placeholder={t.delivery.typedPlaceholder}
-          aria-label={t.delivery.typedTitle}
-          className="w-full resize-none rounded-btn bg-field px-3 py-3 text-base text-ink placeholder:text-muted outline-none focus-visible:shadow-[inset_0_0_0_1.5px_var(--c-ink)]"
-        />
+        <label className="block">
+          <span className={LABEL}>{t.delivery.typedLabel}</span>
+          <textarea
+            value={typedText}
+            onChange={(e) => setTypedText(e.target.value)}
+            rows={3}
+            maxLength={300}
+            placeholder={t.delivery.typedPlaceholder}
+            className={`${FIELD_BASE} block resize-none px-3.5 py-3 leading-snug`}
+          />
+        </label>
         <Button type="submit" block disabled={!canSubmitTyped} loading={busy}>
           {canSubmitTyped ? t.delivery.typedSubmit : t.delivery.typedTooShort}
         </Button>
@@ -233,7 +326,7 @@ export function DeliveryPicker({
     body = found.isError ? (
       <ErrorState onRetry={() => void found.refetch()} retrying={found.isFetching} />
     ) : !found.data || (stale && found.isPending) ? (
-      <Loading />
+      <Loading points />
     ) : found.data.length === 0 ? (
       <EmptyState
         icon={<SearchIcon size={28} />}
@@ -265,9 +358,9 @@ export function DeliveryPicker({
             type="button"
             data-testid="region-row"
             onClick={() => pickRegion(r)}
-            className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-field active:bg-field"
+            className={ROW}
           >
-            <span className="type-body min-w-0 flex-1 text-[15px]">{name(r)}</span>
+            <span className="type-row min-w-0 flex-1 [overflow-wrap:anywhere]">{name(r)}</span>
             <span className="shrink-0 text-muted">
               <ChevronIcon size={18} />
             </span>
@@ -297,21 +390,31 @@ export function DeliveryPicker({
         {shownCities.map((c) => (
           <button
             key={c.city}
+            ref={
+              mode === 'city' && c.city === initial?.city && regionId === initial.regionId
+                ? reveal
+                : undefined
+            }
             type="button"
             data-testid="city-row"
             onClick={() => pickCity(c.city)}
-            className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-field active:bg-field"
+            className={ROW}
           >
             <span className="min-w-0 flex-1">
-              <span className="type-body block text-[15px] [overflow-wrap:anywhere]">{c.city}</span>
+              <span className="type-row block [overflow-wrap:anywhere]">{c.city}</span>
               {mode === 'point' ? (
-                <span className="type-small block text-muted">
+                <span className="type-small mt-0.5 block text-muted">
                   {fill(t.delivery.pointsCount, { n: c.pointCount })}
                 </span>
               ) : null}
             </span>
-            {mode === 'city' && c.city === initial?.city && regionId === initial.regionId ? (
-              <span className="shrink-0 text-ink" role="img" aria-label={t.delivery.selected}>
+            {busy && c.city === city ? (
+              // the city being saved: the one row that answers the tap while the rest wait
+              <span className="shrink-0 text-ink">
+                <Spinner size={20} />
+              </span>
+            ) : mode === 'city' && c.city === initial?.city && regionId === initial.regionId ? (
+              <span className="shrink-0 text-sage-ink" role="img" aria-label={t.delivery.selected}>
                 <CheckIcon size={20} />
               </span>
             ) : (
@@ -327,12 +430,13 @@ export function DeliveryPicker({
     body = points.isError ? (
       <ErrorState onRetry={() => void points.refetch()} retrying={points.isFetching} />
     ) : points.isPending ? (
-      <Loading />
+      <Loading points />
     ) : (
       <List>
         {points.data.map((p) => (
           <PointRow
             key={p.id}
+            ref={p.id === selectedPointId ? reveal : undefined}
             point={p}
             selected={p.id === selectedPointId}
             onClick={() => pickPoint(p)}
@@ -355,7 +459,7 @@ export function DeliveryPicker({
   const showSearch = step !== 'typed' && (mode === 'point' || step === 'cities');
 
   return (
-    <div className="pb-2">
+    <div ref={rootRef} className="pb-2">
       {showSearch || heading ? (
         <div className="sticky top-0 z-10 -mx-4 bg-ground px-4 pt-1 pb-3">
           {heading ? (
@@ -374,31 +478,68 @@ export function DeliveryPicker({
             </div>
           ) : null}
           {showSearch ? (
-            <label className="relative block">
-              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted">
-                <SearchIcon size={20} />
+            <div className="relative">
+              <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted">
+                <SearchIcon size={18} />
               </span>
               <input
+                ref={searchRef}
                 type="search"
                 inputMode="search"
                 enterKeyHint="search"
                 autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  // «Найти» on the keyboard: the results are already live, so just put it away
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
                 placeholder={mode === 'point' ? t.delivery.searchPoints : t.delivery.searchCities}
                 aria-label={mode === 'point' ? t.delivery.searchPoints : t.delivery.searchCities}
-                className={FIELD}
+                className={`${SEARCH} ${query ? 'pr-12' : 'pr-3.5'}`}
               />
-            </label>
+              {query ? (
+                <button
+                  type="button"
+                  aria-label={t.delivery.clearSearch}
+                  onClick={() => {
+                    setQuery('');
+                    searchRef.current?.focus();
+                  }}
+                  className="absolute top-0 right-0 grid size-12 place-items-center rounded-btn text-muted transition-[color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:text-ink active:scale-95"
+                >
+                  <CloseIcon size={18} />
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="type-small mb-2 text-ink">
-          {error}
+        <p
+          role="alert"
+          className="type-small mb-3 flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+        >
+          <span className="shrink-0">
+            <AlertIcon size={18} />
+          </span>
+          <span className="pt-px">{error}</span>
         </p>
       ) : null}
-      <div aria-busy={busy || undefined} className={busy ? 'pointer-events-none opacity-60' : ''}>
+      <div
+        // remounts per step, so the new step slides in once (not on every search keystroke)
+        key={step}
+        aria-busy={busy || undefined}
+        className={`transition-opacity duration-150 ${busy ? 'pointer-events-none opacity-60' : ''} ${
+          moved === 'forward'
+            ? 'animate-[step-forward_0.22s_cubic-bezier(0.23,1,0.32,1)]'
+            : moved === 'back'
+              ? 'animate-[step-back_0.22s_cubic-bezier(0.23,1,0.32,1)]'
+              : ''
+        }`}
+      >
         {body}
       </div>
       {notFoundLink ? (

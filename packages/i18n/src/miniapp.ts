@@ -59,9 +59,11 @@ export const miniappMessages = defineMessages(
       typedText:
         'Напишите город или район и ближайший ориентир. Менеджер подберёт пункт BTS и свяжется с вами.',
       typedRegion: 'Регион',
+      typedLabel: 'Адрес',
       typedPlaceholder: 'Город или район, улица, ориентир',
       typedSubmit: 'Готово',
-      typedTooShort: 'Напишите хотя бы несколько слов.',
+      typedTooShort: 'Напишите хотя бы несколько слов',
+      clearSearch: 'Очистить поиск',
       saveFailed: 'Не удалось сохранить город. Попробуйте ещё раз.',
     },
     profile: {
@@ -133,9 +135,11 @@ export const miniappMessages = defineMessages(
       typedText:
         'Shahar yoki tumanni va yaqin moʻljalni yozing. Menejer BTS punktini tanlab, siz bilan bogʻlanadi.',
       typedRegion: 'Viloyat',
+      typedLabel: 'Manzil',
       typedPlaceholder: 'Shahar yoki tuman, koʻcha, moʻljal',
       typedSubmit: 'Tayyor',
-      typedTooShort: 'Kamida bir necha soʻz yozing.',
+      typedTooShort: 'Kamida bir necha soʻz yozing',
+      clearSearch: 'Qidiruvni tozalash',
       saveFailed: 'Shaharni saqlab boʻlmadi. Qaytadan urinib koʻring.',
     },
     profile: {

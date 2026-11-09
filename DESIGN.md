@@ -70,6 +70,16 @@ typography:
     fontSize: "12.5px"
     fontWeight: 400
     lineHeight: 1.45
+  row:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.4
+  caption:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.2
   heading:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "17px"
@@ -302,6 +312,8 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Slogan** (Cormorant Italic 500, 21px, 1.2, sentence case, no trailing period): «Ароматы, которые освещают» / «Lahzalaringizni yorituvchi iforlar», one line under the logo in the Home top block. The one use of the italic beyond names (customer-approved comp).
 - **Heading** (Manrope 600, 17px, 1.35, sentence case): the title of an empty, error or sign-in state, and the profile name. Never tracked caps, so long UZ titles stay readable.
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
+- **Row** (Manrope 400, 15px, 1.4): the label of a tappable list row (Profile rows, the region, city and point pickers). At 600 it is a BTS point's name and the Home delivery city.
+- **Caption** (Manrope 400, 11px, 1.2, Muted Ink): a small label over a value, such as «Доставка» over the Home city and the characteristics row labels. The tab bar label is the same size at 500.
 - **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
 
 ### Named Rules

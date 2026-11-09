@@ -28,12 +28,12 @@ export function DeliveryRow() {
         }}
         className="flex h-11 min-w-0 flex-col items-center justify-center rounded-btn px-3 transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97]"
       >
-        <span className="text-[11px] leading-none text-muted">{t.home.delivery}</span>
-        <span className="mt-1 flex max-w-full items-center gap-1">
+        <span className="type-caption text-muted">{t.home.delivery}</span>
+        <span className="mt-0.5 flex max-w-full items-center gap-1">
           {city.isPending ? (
-            <Skeleton className="h-4 w-24" />
+            <Skeleton className="my-0.5 h-4 w-24" />
           ) : (
-            <span className="truncate text-[15px] leading-tight font-semibold">
+            <span className="type-row truncate font-semibold">
               {city.data?.city ?? t.home.chooseCity}
             </span>
           )}
