@@ -68,6 +68,7 @@ export const processedUpdates = pgTable('processed_updates', {
  * Transactional outbox (ADR 0021): callers insert in the same transaction as the state change.
  * Pending = neither sent_at nor failed_at. queued_at is the marker stamped when the worker hands the
  * row to BullMQ; a row stuck queued past the requeue window is handed over again (jobId = id dedups).
+ * sending_at is the claim taken just before the Telegram call, so a slow retry cannot race a re-queue.
  */
 export const outbox = pgTable(
   'outbox',
@@ -78,6 +79,8 @@ export const outbox = pgTable(
     text: text('text').notNull(),
     options: jsonb('options').notNull().default({}),
     queuedAt: timestamp('queued_at', { withTimezone: true }),
+    /** Claimed by a delivery attempt; a crashed attempt's claim expires after the requeue window. */
+    sendingAt: timestamp('sending_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     failedAt: timestamp('failed_at', { withTimezone: true }),
     telegramMessageId: bigint('telegram_message_id', { mode: 'number' }),

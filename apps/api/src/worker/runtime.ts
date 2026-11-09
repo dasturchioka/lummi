@@ -1,56 +1,62 @@
-import { lt, processedUpdates, type Db } from '@lummi/db';
-import { Queue, Worker, type Job } from 'bullmq';
+import { lt, processedUpdates, type Db, type DbOrTx } from '@lummi/db';
+import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
+import { Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
-import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
-import { OutboxService } from '../outbox/outbox.service';
+import { AlertService } from '../outbox/alert.service';
+import { OutboxService, SEND_ATTEMPTS } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
+import { DB, EDGES, ENV } from '../tokens';
 
 /** Telegram sends per second for the whole queue (ADR 0021: broadcasts at <= 25 msg/s). */
 const SEND_RATE_PER_SECOND = 25;
-const SEND_ATTEMPTS = 5;
 /** update_id is only an identity; after a long idle gap Telegram may restart the counter. */
 const PROCESSED_UPDATES_KEEP_MS = 72 * 3600 * 1000;
 
+/** What `tick()` hands every sweep, so it can keep the marker rule below. */
+export interface SweepContext {
+  now: Date;
+  db: Db;
+  /** Run a transaction; messages enqueued in it are dispatched to the queue right after the commit. */
+  withTx<T>(fn: (tx: DbOrTx) => Promise<T>): Promise<T>;
+  outbox: OutboxService;
+  alerts: AlertService;
+}
+
 /**
- * A periodic DB sweep (ADR 0021). It selects what is due straight from the DB and, in the same
- * transaction that queues a message, stamps a marker (reminder_7d_sent_at, ...), so running twice
- * sends nothing twice.
+ * A periodic DB sweep (ADR 0021). It selects what is due straight from the DB and, inside ONE
+ * `ctx.withTx` transaction, stamps the marker (reminder_7d_sent_at, ...) and calls
+ * `ctx.outbox.enqueue(tx, …)`, so running twice sends nothing twice. A sweep that throws on
+ * `sweepFailureAlertAfter` consecutive ticks alerts the owner once.
  */
 export interface Sweep {
   name: string;
-  run(ctx: { now: Date }): Promise<void>;
+  run(ctx: SweepContext): Promise<void>;
 }
 
-export interface WorkerDeps {
-  env: Env;
-  db: Db;
-  edges: Edges;
-  /** BullMQ queue name; tests use a unique one per run. */
-  queueName?: string;
-  log?: (message: string) => void;
-}
-
-/** The worker process: `tick()` runs sweeps and queues the outbox; `start()` begins sending. */
-export class WorkerRuntime {
-  readonly outbox: OutboxService;
+/** The worker process (built from a Nest application context, like the API). */
+@Injectable()
+export class WorkerRuntime implements OnApplicationShutdown {
+  private readonly log = new Logger('Worker');
   private readonly sweeps: Sweep[] = [];
-  private readonly connection: Redis;
-  private readonly queue: Queue;
+  private readonly failures = new Map<string, number>();
+  private ticking = false;
   private worker?: Worker;
-  private readonly log: (message: string) => void;
+  private connection?: Redis;
 
-  constructor(private readonly deps: WorkerDeps) {
-    const settings = new SettingsService(deps.db, new AuditService(), deps.edges);
-    this.outbox = new OutboxService(deps.db, deps.edges, settings);
-    this.log = deps.log ?? ((m) => console.log(m));
-    this.connection = new Redis(deps.env.REDIS_URL, { maxRetriesPerRequest: null });
-    this.queue = new Queue(deps.queueName ?? 'outbox', { connection: this.connection });
+  constructor(
+    @Inject(ENV) private readonly env: Env,
+    @Inject(DB) private readonly db: Db,
+    @Inject(EDGES) private readonly edges: Edges,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(AlertService) private readonly alerts: AlertService,
+    @Inject(SettingsService) private readonly settings: SettingsService,
+  ) {
     this.register({
       name: 'prune-processed-updates',
-      run: async ({ now }) => {
-        await deps.db
+      run: async ({ now, db: d }) => {
+        await d
           .delete(processedUpdates)
           .where(
             lt(processedUpdates.createdAt, new Date(now.getTime() - PROCESSED_UPDATES_KEEP_MS)),
@@ -63,41 +69,56 @@ export class WorkerRuntime {
     this.sweeps.push(sweep);
   }
 
-  /** One minute of work: every sweep, then hand pending outbox rows to the queue. */
+  /** One minute of work: every sweep, then queue pending outbox rows. A tick still running is not stacked. */
   async tick(): Promise<void> {
-    const now = this.deps.edges.clock.now();
-    for (const sweep of this.sweeps) {
-      try {
-        await sweep.run({ now });
-      } catch (e) {
-        this.log(`sweep ${sweep.name} failed: ${(e as Error).message}`);
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      const ctx: SweepContext = {
+        now: this.edges.clock.now(),
+        db: this.db,
+        withTx: (fn) => this.outbox.withTx(fn),
+        outbox: this.outbox,
+        alerts: this.alerts,
+      };
+      for (const sweep of this.sweeps) await this.runSweep(sweep, ctx);
+      await this.outbox.dispatch();
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async runSweep(sweep: Sweep, ctx: SweepContext): Promise<void> {
+    try {
+      await sweep.run(ctx);
+      this.failures.delete(sweep.name);
+    } catch (e) {
+      const count = (this.failures.get(sweep.name) ?? 0) + 1;
+      this.failures.set(sweep.name, count);
+      this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${(e as Error).message}`);
+      const limit = await this.settings.get('worker.sweepFailureAlertAfter');
+      if (count === limit) {
+        await ctx
+          .withTx((tx) =>
+            this.alerts.alertOwner(
+              tx,
+              `Сбой задачи «${sweep.name}» ${count} раз подряд: ${(e as Error).message}`,
+            ),
+          )
+          .catch((err: Error) => this.log.error(`could not queue the alert: ${err.message}`));
       }
     }
-    const ids = await this.outbox.claimForQueue();
-    if (ids.length === 0) return;
-    await this.queue.addBulk(
-      ids.map((id) => ({
-        name: 'send',
-        data: { id },
-        opts: {
-          jobId: `outbox-${id}`, // the outbox id: the same row is never queued twice
-          attempts: SEND_ATTEMPTS,
-          backoff: { type: 'exponential', delay: 5000 },
-          removeOnComplete: true,
-          removeOnFail: true,
-        },
-      })),
-    );
   }
 
   /** Begin delivering queued jobs. */
   start(): void {
-    this.worker = new Worker(this.queue.name, (job) => this.process(job), {
-      connection: this.connection.duplicate(),
+    this.connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
+    this.worker = new Worker(this.env.OUTBOX_QUEUE, (job) => this.process(job), {
+      connection: this.connection,
       concurrency: 5,
       limiter: { max: SEND_RATE_PER_SECOND, duration: 1000 },
     });
-    this.worker.on('error', (e) => this.log(`queue error: ${e.message}`));
+    this.worker.on('error', (e) => this.log.error(`queue error: ${e.message}`));
   }
 
   private async process(job: Job<{ id: number }>): Promise<void> {
@@ -111,10 +132,8 @@ export class WorkerRuntime {
     }
   }
 
-  async close(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     await this.worker?.close();
-    await this.queue.obliterate({ force: true }).catch(() => undefined);
-    await this.queue.close();
-    this.connection.disconnect();
+    this.connection?.disconnect();
   }
 }

@@ -13,6 +13,7 @@ import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
+import { WorkerRuntime } from './worker/runtime';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
 
@@ -40,12 +41,20 @@ export class AppModule {
         OutboxService,
         AlertService,
         BotService,
+        WorkerRuntime,
         SettingsService,
         CustomersService,
         SessionService,
         SessionGuard,
       ],
-      exports: [SettingsService, AuditService, OutboxService, AlertService, BotService],
+      exports: [
+        SettingsService,
+        AuditService,
+        OutboxService,
+        AlertService,
+        BotService,
+        WorkerRuntime,
+      ],
     };
   }
 }

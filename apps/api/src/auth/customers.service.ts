@@ -1,13 +1,10 @@
-import { customers, eq, type CustomerRow, type Db } from '@lummi/db';
+import { customers, eq, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import type { InitDataUser } from './init-data';
-
-/** A transaction handle; the bot opens one per update and passes it down. */
-export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 @Injectable()
 export class CustomersService {
@@ -18,13 +15,8 @@ export class CustomersService {
   ) {}
 
   /** First sign-in creates the customer (language from language_code); later ones refresh the profile only. */
-  async signIn(user: InitDataUser, outer?: Tx): Promise<CustomerRow> {
-    if (outer) return this.signInIn(outer, user);
-    return this.db.transaction((tx) => this.signInIn(tx, user));
-  }
-
-  private async signInIn(tx: Tx, user: InitDataUser): Promise<CustomerRow> {
-    {
+  async signIn(user: InitDataUser, outer?: DbOrTx): Promise<CustomerRow> {
+    const run = async (tx: DbOrTx): Promise<CustomerRow> => {
       const profile = {
         firstName: user.first_name,
         lastName: user.last_name ?? null,
@@ -55,7 +47,16 @@ export class CustomersService {
         .returning();
       if (!updated) throw new Error('customer vanished during sign-in');
       return updated;
-    }
+    };
+    return outer ? run(outer) : this.db.transaction(run);
+  }
+
+  /** Telegram said the user blocked (403 / my_chat_member kicked) or unblocked the bot. */
+  async markBotBlocked(telegramId: number, blocked: boolean, tx: DbOrTx = this.db): Promise<void> {
+    await tx
+      .update(customers)
+      .set({ botBlocked: blocked })
+      .where(eq(customers.telegramId, telegramId));
   }
 
   async getById(id: number): Promise<CustomerRow | null> {

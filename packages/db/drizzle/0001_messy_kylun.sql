@@ -5,6 +5,7 @@ CREATE TABLE "outbox" (
 	"text" text NOT NULL,
 	"options" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"queued_at" timestamp with time zone,
+	"sending_at" timestamp with time zone,
 	"sent_at" timestamp with time zone,
 	"failed_at" timestamp with time zone,
 	"telegram_message_id" bigint,

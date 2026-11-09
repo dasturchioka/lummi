@@ -37,6 +37,8 @@ export const settingDefinitions = {
   'bot.alertRecipients': { schema: z.array(z.number().int()), default: [] as number[] },
   /** A queued outbox row that was not sent within this window is handed to the queue again. */
   'outbox.requeueAfterSeconds': { schema: z.number().int().min(30).max(86_400), default: 300 },
+  /** After this many consecutive failed ticks a sweep alerts the owner once (not every minute). */
+  'worker.sweepFailureAlertAfter': { schema: z.number().int().min(1).max(1000), default: 3 },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;

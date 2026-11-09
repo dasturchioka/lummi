@@ -1,5 +1,5 @@
 {
-  "id": "541d164d-87fe-40f3-9473-a08bc388b1bc",
+  "id": "80bb1322-002b-43aa-9cef-6cb98669c869",
   "prevId": "42bf6579-1188-4f11-badf-761cd6ba9cbc",
   "version": "7",
   "dialect": "postgresql",
@@ -254,6 +254,12 @@
         },
         "queued_at": {
           "name": "queued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sending_at": {
+          "name": "sending_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

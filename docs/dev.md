@@ -46,8 +46,8 @@ API tests come in two projects: `*.unit.test.ts` (no I/O) and `*.int.test.ts` (S
 ## Bot and worker
 
 - The bot is a module of the API. `BOT_MODE=polling` long-polls (one process per token, so run it briefly), `webhook` calls `setWebhook` at boot (needs `WEBHOOK_URL`, `WEBHOOK_SECRET`), `off` (default) does nothing; the webhook route `POST /telegram/webhook` always checks the secret header. `MINIAPP_URL` is the `web_app` button and menu button target (a tunnel hostname locally).
-- The worker is a separate process: `REDIS_HOST_PORT=2604 docker compose -f docker-compose.dev.yml -p lummi-4 up -d --wait redis`, then `REDIS_URL=redis://127.0.0.1:2604 npm run dev:worker -w @lummi/api`. Every minute `tick()` runs registered sweeps and hands pending outbox rows to BullMQ.
-- Producing a message: inside your own transaction call `OutboxService.enqueue(tx, {chatId, text, threadId?, options?})` or `AlertService.alertOwner(tx, text)`. A sweep registers with `WorkerRuntime.register({name, run})` and must stamp its marker in the transaction that enqueues.
+- The worker is a separate process: `REDIS_HOST_PORT=2604 docker compose -f docker-compose.dev.yml -p lummi-4 up -d --wait redis`, then `REDIS_URL=redis://127.0.0.1:2604 npm run dev:worker -w @lummi/api`. The API also needs Redis now (same `REDIS_URL`, same `OUTBOX_QUEUE`): after a commit it queues the new rows at once; every minute `tick()` runs registered sweeps and queues whatever is still pending. The worker is the same Nest modules as an application context.
+- Producing a message: use `OutboxService.withTx(tx => …)` and inside it `enqueue(tx, {chatId, text, threadId?, options?})` or `AlertService.alertOwner(tx, text)`. A sweep registers with `WorkerRuntime.register({name, run(ctx)})` and stamps its marker and enqueues inside one `ctx.withTx`.
 - Group chat id, topic ids and alert recipients are settings (`bot.groupChatId`, `bot.topics`, `bot.alertRecipients`).
 - Tests: one Testcontainers Redis per run (`TEST_REDIS_URL` reuses a running one). `t.postUpdate(json)` posts to the webhook; `t.startWorker()` gives a worker whose sends land on `t.edges.telegram`.
 

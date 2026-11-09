@@ -23,6 +23,8 @@ export const envSchema = z
       .optional(),
     /** The Mini App https URL behind the web_app button and the menu button (ADR 0023: a tunnel hostname locally). */
     MINIAPP_URL: z.string().url().optional(),
+    /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
+    OUTBOX_QUEUE: z.string().min(1).default('outbox'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
   })
   .superRefine((env, ctx) => {

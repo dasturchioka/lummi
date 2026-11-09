@@ -1,6 +1,7 @@
 import { auditLog, customers, eq, outbox, processedUpdates } from '@lummi/db';
 import { dictionaries } from '@lummi/i18n';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { OutboxService } from '../src/outbox/outbox.service';
 import { AlertService } from '../src/outbox/alert.service';
 import { SettingsService } from '../src/settings/settings.service';
 import { AuditService } from '../src/audit/audit.service';
@@ -11,13 +12,15 @@ let t: TestApp;
 let worker: WorkerRuntime;
 let settings: SettingsService;
 let alerts: AlertService;
+let outboxSvc: OutboxService;
 let updateId = 1000;
 
 beforeAll(async () => {
   t = await createTestApp();
   worker = t.startWorker();
   settings = new SettingsService(t.db, new AuditService(), t.edges);
-  alerts = new AlertService(worker.outbox, settings);
+  alerts = t.app.get(AlertService);
+  outboxSvc = t.app.get(OutboxService);
 });
 afterAll(() => t.close());
 beforeEach(async () => {
@@ -55,8 +58,7 @@ describe('/start through the webhook', () => {
     expect(res.status).toBe(200);
     const [c] = await t.db.select().from(customers);
     expect(c).toMatchObject({ telegramId: 77, language: 'uz', botBlocked: false });
-    await worker.tick();
-    await delivered(1);
+    await delivered(1); // no tick: dispatched right after the commit
     expect(t.edges.telegram.sent[0]).toMatchObject({
       chatId: 77,
       text: dictionaries.uz.bot.greeting,
@@ -73,7 +75,6 @@ describe('/start through the webhook', () => {
   it('greets an existing customer in the saved language, not the Telegram one', async () => {
     await t.postUpdate(startUpdate(78, 'uz'));
     await t.postUpdate(startUpdate(78, 'en'));
-    await worker.tick();
     await delivered(2);
     expect(t.edges.telegram.sent.every((m) => m.text === dictionaries.uz.bot.greeting)).toBe(true);
   });
@@ -103,9 +104,8 @@ describe('/start through the webhook', () => {
 
 describe('bot_blocked', () => {
   it('a 403 marks the customer blocked and /start clears it', async () => {
-    await t.postUpdate(startUpdate(90, 'ru'));
     t.edges.telegram.blockedChats.add(90);
-    await worker.tick();
+    await t.postUpdate(startUpdate(90, 'ru')); // the greeting is dispatched at once and gets a 403
     await vi.waitFor(async () => {
       const [c] = await t.db.select().from(customers);
       expect(c!.botBlocked).toBe(true);
@@ -118,6 +118,29 @@ describe('bot_blocked', () => {
     await t.postUpdate(startUpdate(90, 'ru'));
     const [c] = await t.db.select().from(customers);
     expect(c!.botBlocked).toBe(false);
+    await delivered(1);
+  });
+
+  it('my_chat_member kicked sets bot_blocked and member clears it', async () => {
+    await t.postUpdate(startUpdate(91, 'ru'));
+    await delivered(1);
+    const change = (status: string) => ({
+      update_id: ++updateId,
+      my_chat_member: {
+        chat: { id: 91, type: 'private', first_name: 'Ali' },
+        from: { id: 91, is_bot: false, first_name: 'Ali' },
+        date: 1_700_000_000,
+        old_chat_member: {
+          status: 'member',
+          user: { id: 123456, is_bot: true, first_name: 'Test' },
+        },
+        new_chat_member: { status, user: { id: 123456, is_bot: true, first_name: 'Test' } },
+      },
+    });
+    await t.postUpdate(change('kicked'));
+    expect((await t.db.select().from(customers))[0]!.botBlocked).toBe(true);
+    await t.postUpdate(change('member'));
+    expect((await t.db.select().from(customers))[0]!.botBlocked).toBe(false);
   });
 });
 
@@ -126,21 +149,22 @@ describe('worker tick', () => {
     let calls = 0;
     worker.register({
       name: 'demo-reminder',
-      run: async () => {
-        // The pattern of ADR 0021: select what is due, stamp the marker and queue in one transaction.
+      run: async (ctx) => {
+        // The pattern of ADR 0021: stamp the marker and queue in one transaction.
         calls++;
-        await t.db.transaction(async (tx) => {
+        await ctx.withTx(async (tx) => {
           const stamped = await tx.execute(
             `UPDATE settings SET value = 'true' WHERE key = 'demo.marker' AND value <> 'true' RETURNING key` as never,
           );
-          if (stamped.rowCount) await worker.outbox.enqueue(tx, { chatId: 5, text: 'reminder' });
+          if (stamped.rowCount) await ctx.outbox.enqueue(tx, { chatId: 5, text: 'reminder' });
         });
       },
     });
     await t.db.execute(
       `INSERT INTO settings (key, value) VALUES ('demo.marker', 'false')` as never,
     );
-    await worker.outbox.enqueue(t.db, { chatId: 6, text: 'direct' });
+    // inserted without withTx: only the tick can queue it
+    await outboxSvc.enqueue(t.db, { chatId: 6, text: 'direct' });
 
     await worker.tick();
     await worker.tick();
@@ -153,13 +177,34 @@ describe('worker tick', () => {
   });
 
   it('requeues a row stuck queued past the window, and still sends once', async () => {
-    const [id] = await worker.outbox.enqueue(t.db, { chatId: 7, text: 'late' });
+    const [id] = await outboxSvc.enqueue(t.db, { chatId: 7, text: 'late' });
     await t.db.update(outbox).set({ queuedAt: t.edges.clock.now() }).where(eq(outbox.id, id!));
     await worker.tick();
     expect(t.edges.telegram.sent).toHaveLength(0); // already marked queued
     t.edges.clock.advance(6 * 60 * 1000);
     await worker.tick();
     await delivered(1);
+  });
+
+  it('two concurrent deliveries of one row send once', async () => {
+    const [id] = await outboxSvc.enqueue(t.db, { chatId: 8, text: 'once' });
+    const results = await Promise.all([outboxSvc.deliver(id!), outboxSvc.deliver(id!)]);
+    expect(results.sort()).toEqual(['sent', 'skipped']);
+    expect(t.edges.telegram.sent).toHaveLength(1);
+  });
+
+  it('a failing sweep alerts the owner once, after N consecutive failures', async () => {
+    await settings.set('bot.alertRecipients', [11], { type: 'system' });
+    await settings.set('worker.sweepFailureAlertAfter', 2, { type: 'system' });
+    worker.register({
+      name: 'broken',
+      run: () => Promise.reject(new Error('boom')),
+    });
+    for (let i = 0; i < 4; i++) await worker.tick();
+    await delivered(1);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(t.edges.telegram.sent).toHaveLength(1);
+    expect(t.edges.telegram.sent[0]!.text).toContain('broken');
   });
 });
 
@@ -206,8 +251,7 @@ describe('alertOwner', () => {
       { type: 'system' },
     );
     await settings.set('bot.alertRecipients', [11, 22], { type: 'system' });
-    await alerts.alertOwner(t.db, 'Платёж не найден');
-    await worker.tick();
+    await outboxSvc.withTx((tx) => alerts.alertOwner(tx, 'Платёж не найден'));
     await delivered(3);
     const sent = t.edges.telegram.sent;
     expect(sent.find((m) => m.chatId === -1001)).toMatchObject({ threadId: 5 });

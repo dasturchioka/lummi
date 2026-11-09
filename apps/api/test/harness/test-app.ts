@@ -17,6 +17,7 @@ export const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
 export const TEST_MINIAPP_URL = 'https://miniapp.test.invalid/';
 
 export interface TestApp {
+  app: INestApplication;
   baseUrl: string;
   db: Db;
   env: Env;
@@ -29,7 +30,7 @@ export interface TestApp {
   signIn(user?: TestUser): Promise<{ token: string; client: ReturnType<typeof makeClient> }>;
   /** POST a raw Telegram update to the webhook route. */
   postUpdate(update: object, secret?: string): Promise<Response>;
-  /** A worker over this app's db and edges, with its own queue; closed by `close()`. Delivery is started. */
+  /** The app's WorkerRuntime with delivery started (the API dispatches to the same queue); closed by `close()`. */
   startWorker(): WorkerRuntime;
   /** Per-test isolation: empties every table (identity restarted). Call in beforeEach. */
   reset(): Promise<void>;
@@ -69,6 +70,7 @@ export async function createTestApp(): Promise<TestApp> {
     WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
     MINIAPP_URL: TEST_MINIAPP_URL,
     REDIS_URL: inject('redisUrl'),
+    OUTBOX_QUEUE: `q_${dbName}`,
   });
   const { db, pool } = createDb(env.DATABASE_URL, 3);
   const edges = createFakeEdges();
@@ -103,8 +105,8 @@ export async function createTestApp(): Promise<TestApp> {
     });
 
   const client = makeClient(baseUrl);
-  const workers: WorkerRuntime[] = [];
   return {
+    app,
     baseUrl,
     db,
     env,
@@ -119,15 +121,8 @@ export async function createTestApp(): Promise<TestApp> {
       });
     },
     startWorker() {
-      const w = new WorkerRuntime({
-        env,
-        db,
-        edges,
-        queueName: `q_${dbName}`,
-        log: () => undefined,
-      });
+      const w = app.get(WorkerRuntime);
       w.start();
-      workers.push(w);
       return w;
     },
     async signIn(user) {
@@ -143,7 +138,6 @@ export async function createTestApp(): Promise<TestApp> {
       if (tables) await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
     },
     async close() {
-      for (const w of workers) await w.close();
       await app.close();
       await pool.end();
       const a = new pg.Client({ connectionString: adminUrl });
