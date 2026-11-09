@@ -21,7 +21,7 @@ export function PageHeader({
     <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-8">
       <div className="min-w-0">
         <div className="flex items-start justify-between gap-3">
-          <h1 className="title min-w-0">{title}</h1>
+          <h1 className="title min-w-0 break-words">{title}</h1>
           {titleAction && <div className="-my-1.5 shrink-0 sm:hidden">{titleAction}</div>}
         </div>
         {description && (
