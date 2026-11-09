@@ -18,8 +18,11 @@ import { askContact, askWriteAccess, openManagerChat } from './telegram';
 // The sheet (and Radix Dialog behind it) loads only when an action first needs a phone.
 const RegistrationSheet = lazy(() => import('../ui/RegistrationSheet'));
 
-/** How long the sheet shows «Номер сохранён» before it closes and the caller carries on. */
-const DONE_BEAT_MS = 1600;
+/**
+ * How long the sheet shows «Номер сохранён» before it closes and the caller carries on: long
+ * enough to read the number and where statuses will arrive.
+ */
+const DONE_BEAT_MS = 2600;
 
 /** `ready`: the account has a verified phone. `cancelled`: the customer closed the sheet. */
 export type RegistrationResult = 'ready' | 'cancelled';

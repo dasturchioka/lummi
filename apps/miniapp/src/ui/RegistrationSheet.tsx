@@ -3,7 +3,7 @@ import { formatPhone } from '@lummi/i18n';
 import { usePrefs } from '../lib/prefs';
 import { Button } from './Button';
 import { AlertIcon, ChatIcon, CheckIcon, PhoneIcon, RefreshIcon, UserIcon } from './icons';
-import { Sheet } from './Sheet';
+import { Sheet, SheetDescription } from './Sheet';
 
 /**
  * Where the step stands. The ask (purpose, two numbered steps, the buttons) shows for `idle`,
@@ -79,9 +79,18 @@ export default function RegistrationSheet({
       title: update ? r.updateTitle : r.browserTitle,
       text: update ? r.updateText : r.browserText,
       actions: (
-        <Button block onClick={onClose}>
-          {r.understood}
-        </Button>
+        <>
+          <Button block onClick={onClose}>
+            {r.understood}
+          </Button>
+          {/* An old Telegram cannot share the number; the manager can still take the order. */}
+          {update ? (
+            <Button block variant="secondary" onClick={onWriteManager}>
+              <ChatIcon size={20} />
+              {r.writeManager}
+            </Button>
+          ) : null}
+        </>
       ),
     };
   }
@@ -104,6 +113,8 @@ export default function RegistrationSheet({
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title={r.title}
+      // The purpose paragraph describes the dialog while the ask shows, and leaves with it.
+      ownDescription
       closeLabel={t.common.close}
     >
       <p className="sr-only" aria-live="polite" aria-atomic="true">
@@ -133,14 +144,15 @@ function Ask({
 }) {
   const { t } = usePrefs();
   const r = t.registration;
-  // A refusal is the customer's choice, not a fault: it reads calm, with no alert icon.
   const fault = status === 'failed' || status === 'foreign' || status === 'expired';
+  // Waiting is not news, and a refusal is the customer's choice, not a fault: both read as a quiet line.
+  const quiet = status === 'busy' || status === 'denied';
   const retry = status === 'failed' || status === 'expired';
 
   return (
     <div>
       {/* The purpose sits in the sheet's description slot and leaves with the ask. */}
-      <p className="type-small pb-3 text-muted">{r.text}</p>
+      <SheetDescription className="type-small pb-3 text-muted">{r.text}</SheetDescription>
       <ol className="flex flex-col gap-4 pt-1 pb-6">
         <Step n={1} title={r.contactTitle} text={r.contactText} />
         <Step n={2} title={r.writeTitle} text={r.writeText} />
@@ -149,8 +161,8 @@ function Ask({
         <p
           key={status}
           className={`type-small mb-3 flex animate-[fade-in_0.2s_ease-out] gap-2.5 ${
-            // Waiting is not news: a quiet line. A refusal or a fault sits on a Milk Field plate.
-            status === 'busy'
+            // A fault that a retry can fix sits on a Milk Field plate with the alert icon.
+            quiet
               ? 'justify-center text-center text-muted'
               : 'rounded-btn bg-field px-3 py-2.5 text-ink'
           }`}
