@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';
 import { Home } from '../screens/Home';
+import { useCartCount } from '../cart/queries';
 import { TabBar, TABS } from '../ui/TabBar';
 
 const TAB_ROOTS: string[] = TABS.map((t) => t.to);
@@ -21,7 +22,9 @@ function Shell() {
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
   // A fragrance card is a task screen: it carries its own dock, not the tab bar (also on its fixtures).
-  const showTabBar = !pathname.startsWith('/p/') && pathname !== '/dev/fragrance';
+  const showTabBar =
+    !pathname.startsWith('/p/') && pathname !== '/dev/fragrance' && pathname !== '/checkout';
+  const cartCount = useCartCount();
 
   // Telegram's native back button: visible on screens deeper than a tab root.
   useEffect(() => showBackButton(!isRoot, () => goBackOrCatalog(router)), [isRoot, router]);
@@ -29,7 +32,7 @@ function Shell() {
   return (
     <>
       <Outlet />
-      {showTabBar ? <TabBar /> : null}
+      {showTabBar ? <TabBar badges={{ cart: cartCount }} /> : null}
     </>
   );
 }
@@ -86,7 +89,11 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/cart'),
-    component: lazyRouteComponent(() => import('../screens/Tabs'), 'CartTab'),
+    component: lazyRouteComponent(() => import('../screens/Cart'), 'Cart'),
+  }),
+  createRoute({
+    ...at('/checkout'),
+    component: lazyRouteComponent(() => import('../screens/Checkout'), 'Checkout'),
   }),
   createRoute({
     ...at('/orders'),

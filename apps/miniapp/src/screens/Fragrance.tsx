@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
+import { useAddToCart, useCart } from '../cart/queries';
 import { api } from '../lib/api';
 import { goBackOrCatalog } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
@@ -51,6 +52,9 @@ export function Fragrance() {
   const { slug } = useParams({ from: '/p/$slug' });
   const { t } = usePrefs();
   const router = useRouter();
+  const qc = useQueryClient();
+  const cart = useCart();
+  const add = useAddToCart();
 
   const query = useQuery({
     queryKey: ['fragrance', slug],
@@ -93,6 +97,24 @@ export function Fragrance() {
       card={card}
       onBack={() => goBackOrCatalog(router)}
       onShare={() => void shareFragrance(card.slug, card.name)}
+      inCart={(ml) =>
+        cart.data?.lines.find((l) => l.slug === card.slug && l.ml === ml && !l.soldOut)?.qty ?? 0
+      }
+      adding={add.isPending}
+      onAddToCart={(ml) => {
+        const inCart = cart.data?.lines.some(
+          (l) => l.slug === card.slug && l.ml === ml && !l.soldOut,
+        );
+        if (inCart) {
+          void router.navigate({ to: '/cart' });
+          return;
+        }
+        // Stock moved under the customer (409/404): re-read the card so the dock tells the truth.
+        add.mutate(
+          { slug: card.slug, ml },
+          { onError: () => void qc.invalidateQueries({ queryKey: ['fragrance', card.slug] }) },
+        );
+      }}
     />
   );
 }

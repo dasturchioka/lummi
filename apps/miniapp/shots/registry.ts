@@ -54,6 +54,22 @@ async function pickCityRow(page: Page, text: string) {
   await sheet(page).getByTestId('point-row').first().waitFor();
 }
 
+/** Empties the screenshot customer's cart, then adds the given volumes (slug, ml, qty). */
+async function fillCart(api: ApiClient, items: [slug: string, ml: 10 | 30 | 50, qty?: number][]) {
+  const now = await api.cart.get();
+  if (now.status !== 200) throw new Error(`cart: HTTP ${now.status}`);
+  for (const line of now.body.lines) await api.cart.removeLine({ params: { lineId: line.id } });
+  for (const [slug, ml, qty = 1] of items) {
+    const res = await api.cart.addLine({ body: { slug, ml, qty } });
+    if (res.status !== 200) throw new Error(`add ${slug} ${ml}: HTTP ${res.status}`);
+  }
+}
+const CART_SLUGS = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'baccarat-rouge-540'];
+const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+  await fillCart(api, []);
+  for (const slug of CART_SLUGS) await db.restore(slug);
+};
+
 /** A customer who has not shared the contact yet (Profile shows the «Добавить» row). */
 const NO_PHONE_USER: ShotUser = {
   id: 700_000_002,
@@ -228,6 +244,66 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
+  {
+    id: 'cart-lines',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-nudge',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await forgetCity(api);
+      await fillCart(api, [['symphony', 10]]);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-sold-out',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await chooseCity(api);
+      await db.restore('power-of-you');
+      await fillCart(api, [
+        ['symphony', 10, 2],
+        ['power-of-you', 10],
+      ]);
+      await db.setOnHand('power-of-you', 0);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-free-delivery',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: emptyCart,
+  },
+  { id: 'cart-empty', path: '/cart', setup: emptyCart },
+  // The fragrance card's dock once the volume is in the cart.
+  {
+    id: 'fragrance-in-cart',
+    path: '/p/symphony',
+    setup: ({ api }) => fillCart(api, [['symphony', 10]]),
+    teardown: emptyCart,
+  },
   // Fragrance card (#8): the seed catalog, real fragrances. The long ones stress the lockup.
   { id: 'fragrance', path: '/p/symphony', fullPage: true },
   { id: 'fragrance-long-name', path: '/p/elysium-pour-homme-parfum', fullPage: true },

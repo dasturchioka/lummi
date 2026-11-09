@@ -43,6 +43,8 @@ if (unknown.length) {
 }
 
 const repoRoot = resolve(import.meta.dirname, '../../..');
+/** Parallel checkouts give each run its own compose project, so the containers and volume never collide. */
+const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-shots';
 const apiPort = Number(process.env.API_PORT ?? 4000);
 const appPort = Number(process.env.MINIAPP_PORT ?? 5173);
 const dbPort = Number(process.env.POSTGRES_HOST_PORT ?? 5432);
@@ -110,10 +112,10 @@ async function ensureServices() {
     process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`;
   if (!(await listening(apiPort))) {
     if (!(await listening(dbPort))) {
-      console.log(`starting dev Postgres on ${dbPort} (docker compose project lummi-shots)`);
+      console.log(`starting dev Postgres on ${dbPort} (docker compose project ${composeProject})`);
       run(
         'docker',
-        ['compose', '-f', 'docker-compose.dev.yml', '-p', 'lummi-shots', 'up', '-d', '--wait'],
+        ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'up', '-d', '--wait'],
         {
           POSTGRES_HOST_PORT: String(dbPort),
         },
@@ -147,7 +149,7 @@ function stopServices() {
   // each service leads its own process group, so npm's node children stop with it
   for (const p of started) if (p.pid) process.kill(-p.pid, 'SIGTERM');
   if (startedDb) {
-    spawnSync('docker', ['compose', '-f', 'docker-compose.dev.yml', '-p', 'lummi-shots', 'down'], {
+    spawnSync('docker', ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'down'], {
       cwd: repoRoot,
       stdio: 'ignore',
       env: { ...process.env, POSTGRES_HOST_PORT: String(dbPort) },

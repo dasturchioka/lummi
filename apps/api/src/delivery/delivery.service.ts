@@ -1,15 +1,6 @@
 import type { BtsPointDto, CityDto, DeliveryCityDto, RegionDto } from '@lummi/contracts';
 import { POINT_SEARCH_LIMIT } from '@lummi/contracts';
-import {
-  and,
-  asc,
-  btsPoints,
-  customers,
-  eq,
-  regions,
-  sql,
-  type Db,
-} from '@lummi/db';
+import { and, asc, btsPoints, customers, eq, regions, sql, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { toPointDto, toRegionDto } from './dto';
 import { AuditService } from '../audit/audit.service';
@@ -83,8 +74,8 @@ export class DeliveryService implements OnApplicationBootstrap {
     return rows.map(toPointDto);
   }
 
-  async getDeliveryCity(customerId: number): Promise<DeliveryCityDto | null> {
-    const [row] = await this.db
+  async getDeliveryCity(customerId: number, tx: DbOrTx = this.db): Promise<DeliveryCityDto | null> {
+    const [row] = await tx
       .select({ region: regions, city: customers.deliveryCity })
       .from(customers)
       .innerJoin(regions, eq(regions.id, customers.deliveryRegionId))

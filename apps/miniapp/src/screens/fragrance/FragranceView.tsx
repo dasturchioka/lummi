@@ -417,10 +417,15 @@ function Pyramid({ card }: { card: FragranceCard }) {
  */
 function Dock({
   volume,
+  inCart = 0,
+  adding = false,
   onAddToCart,
   onBuyNow,
 }: {
   volume: VolumeCard | undefined;
+  /** How many of this volume are in the cart; the primary button then opens the cart. */
+  inCart?: number;
+  adding?: boolean;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -469,8 +474,16 @@ function Dock({
           <span className="px-3.5">{t.card.buyNow}</span>
         </div>
       </div>
-      <Button size="pair" className="min-w-0 flex-1" onClick={() => onAddToCart?.(volume.ml)}>
-        {stacked ? (
+      <Button
+        size="pair"
+        className="min-w-0 flex-1"
+        loading={adding}
+        data-in-cart={inCart > 0}
+        onClick={() => onAddToCart?.(volume.ml)}
+      >
+        {inCart > 0 ? (
+          fill(t.card.inCart, { n: String(inCart) })
+        ) : stacked ? (
           <span className="flex flex-col items-center gap-1">
             {t.card.toCart}
             <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
@@ -499,12 +512,17 @@ export function FragranceView({
   card,
   onBack,
   onShare,
+  inCart,
+  adding,
   onAddToCart,
   onBuyNow,
 }: {
   card: FragranceCard;
   onBack: () => void;
   onShare: () => void;
+  /** Units of a volume already in the cart, by ml. */
+  inCart?: (ml: VolumeCard['ml']) => number;
+  adding?: boolean;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
@@ -518,7 +536,15 @@ export function FragranceView({
   return (
     <Screen
       tabBar={false}
-      dock={<Dock volume={volume} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />}
+      dock={
+        <Dock
+          volume={volume}
+          inCart={volume ? inCart?.(volume.ml) : 0}
+          adding={adding}
+          onAddToCart={onAddToCart}
+          onBuyNow={onBuyNow}
+        />
+      }
     >
       <article className="flex flex-col pt-3 pb-7">
         <Gallery card={card} hash={volume?.photo ?? null} onBack={onBack} onShare={onShare} />

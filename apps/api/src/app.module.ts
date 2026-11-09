@@ -11,6 +11,8 @@ import { BtsAdminController } from './delivery/bts-admin.controller';
 import { BtsAdminService } from './delivery/bts-admin.service';
 import { DeliveryController } from './delivery/delivery.controller';
 import { DeliveryService } from './delivery/delivery.service';
+import { CartController } from './cart/cart.controller';
+import { CartService } from './cart/cart.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { MediaController } from './catalog/media.controller';
@@ -52,6 +54,7 @@ export class AppModule {
         AuthController,
         MeController,
         CatalogController,
+        CartController,
         MediaController,
         WebhookController,
         AdminAuthController,
@@ -72,6 +75,7 @@ export class AppModule {
         WorkerRuntime,
         SettingsService,
         CatalogService,
+        CartService,
         CustomersService,
         DeliveryService,
         BtsAdminService,

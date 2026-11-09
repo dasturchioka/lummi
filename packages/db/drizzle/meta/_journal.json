@@ -57,6 +57,13 @@
       "when": 1794253484228,
       "tag": "0007_red_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794254526966,
+      "tag": "0008_nosy_ted_forrester",
+      "breakpoints": true
     }
   ]
 }

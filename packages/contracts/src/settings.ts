@@ -45,6 +45,11 @@ export const settingDefinitions = {
     schema: z.number().int().min(0).max(100_000_000),
     default: 250_000,
   },
+  /** The delivery fee before the free-delivery threshold when the customer has no delivery city; a region's own tariff wins (spec Changes 2026-11-10). */
+  'delivery.defaultTariff': {
+    schema: z.number().int().min(0).max(100_000_000),
+    default: 25_000,
+  },
   /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */
   'pricing.thresholdBase': {
     schema: z.object({

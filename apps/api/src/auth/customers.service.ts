@@ -2,6 +2,7 @@ import { customers, eq, sql, type CustomerRow, type Db, type DbOrTx } from '@lum
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { moveCartData } from '../cart/move-cart';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import type { InitDataUser } from './init-data';
@@ -229,13 +230,11 @@ export class CustomersService {
 /**
  * Everything that hangs on a customer record moves here when a fresh record is merged into the
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
- * (the cart, #18, moves its lines). Today only preferences exist and the fresh record has none worth keeping.
+ * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
  */
-export async function moveCustomerData(
-  _tx: DbOrTx,
-  _fromId: number,
-  _toId: number,
-): Promise<void> {}
+export async function moveCustomerData(tx: DbOrTx, fromId: number, toId: number): Promise<void> {
+  await moveCartData(tx, fromId, toId);
+}
 
 /** A lost race on the phone's unique index, or a deadlock between two relinks: run the transaction again. */
 function isRetryable(e: unknown): boolean {
