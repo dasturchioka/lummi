@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { adminMessages } from '@lummi/i18n/admin';
+import { seedShotCatalog } from './catalog-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
@@ -48,6 +49,8 @@ const apiUrl = `http://127.0.0.1:${apiPort}`;
 // `localhost`, not 127.0.0.1: next dev refuses its dev assets and HMR to other origins
 const adminUrl = `http://localhost:${adminPort}`;
 const databaseUrl = process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`;
+// parallel worktrees each take their own compose project (and volume)
+const composeProject = process.env.SHOTS_COMPOSE_PROJECT ?? 'lummi-admin-shots';
 
 const started: ChildProcess[] = [];
 let startedDb = false;
@@ -91,19 +94,10 @@ function spawnService(name: string, args: string[], env: Record<string, string>)
 async function ensureServices() {
   if (!(await listening(apiPort))) {
     if (!(await listening(dbPort))) {
-      console.log(`starting dev Postgres on ${dbPort} (docker compose project lummi-admin-shots)`);
+      console.log(`starting dev Postgres on ${dbPort} (docker compose project ${composeProject})`);
       run(
         'docker',
-        [
-          'compose',
-          '-f',
-          'docker-compose.dev.yml',
-          '-p',
-          'lummi-admin-shots',
-          'up',
-          '-d',
-          '--wait',
-        ],
+        ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'up', '-d', '--wait'],
         {
           POSTGRES_HOST_PORT: String(dbPort),
         },
@@ -137,7 +131,7 @@ function stopServices() {
   if (startedDb) {
     spawnSync(
       'docker',
-      ['compose', '-f', 'docker-compose.dev.yml', '-p', 'lummi-admin-shots', 'down', '-v'],
+      ['compose', '-f', 'docker-compose.dev.yml', '-p', composeProject, 'down', '-v'],
       {
         cwd: repoRoot,
         stdio: 'ignore',
@@ -200,6 +194,7 @@ async function seedStaff() {
       if (res.status !== 200) throw new Error(`could not update ${member.name}: ${res.status}`);
     }
   }
+  return call;
 }
 
 /** Signs the browser in through the same dev path the login form uses (same-origin cookie). */
@@ -213,14 +208,21 @@ async function signIn(context: BrowserContext, telegramId: number) {
 
 async function main() {
   await ensureServices();
-  await seedStaff();
   // The BTS points come from the committed snapshot (idempotent); the points screens need them.
   run('npm', ['run', 'bts:import', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
+  // the catalog screens need the 67 seeded fragrances (idempotent)
+  run('npm', ['run', 'seed:catalog', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
+  // staff after the slow seeds, so the owner's API connection is fresh for the shot rows
+  const ownerCall = await seedStaff();
+  await seedShotCatalog(ownerCall);
   mkdirSync(outDir, { recursive: true });
-  const browser = await chromium.launch();
   let count = 0;
-  try {
-    for (const lang of LANGS) {
+  for (const lang of LANGS) {
+    // one browser per language: `--lang` is what makes date fields show the local format
+    const browser = await chromium.launch({
+      args: [`--lang=${lang === 'uz' ? 'uz-UZ' : 'ru-RU'}`],
+    });
+    try {
       const t = adminMessages[lang].admin;
       for (const screen of selected) {
         for (const width of screen.widths ?? WIDTHS) {
@@ -258,9 +260,9 @@ async function main() {
           console.log(`  ${screen.id}-${width}-${lang}.png`);
         }
       }
+    } finally {
+      await browser.close();
     }
-  } finally {
-    await browser.close();
   }
   console.log(`${count} screenshots in ${outDir}`);
 }

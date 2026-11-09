@@ -11,3 +11,8 @@ export function normalizeUzbek(input: string): string {
     /[oOgG]/.test(letter) ? `${letter}\u02BB` : `${letter}\u2019`,
   );
 }
+
+/** Drops every apostrophe variant, for comparing «Devil's» with «Devil’s» (search on both sides). */
+export function stripApostrophes(input: string): string {
+  return input.replace(new RegExp(APOSTROPHE_CLASS, 'gu'), '');
+}

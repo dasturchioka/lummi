@@ -6,7 +6,6 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { QUIET_ACTION } from '@/components/bts-points-manager';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -25,6 +24,7 @@ import { Notice } from '@/components/ui/notice';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
+import { QUIET_ACTION } from '@/lib/ui-classes';
 import { fill } from '@/lib/utils';
 
 /** Owner-only: the delivery tariff of every region. A change is audited by the API. */
