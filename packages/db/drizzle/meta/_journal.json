@@ -36,6 +36,13 @@
       "when": 1794223215129,
       "tag": "0004_spicy_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794225835228,
+      "tag": "0005_moaning_stranger",
+      "breakpoints": true
     }
   ]
 }

@@ -186,7 +186,7 @@ function priceLine(line: QuoteLineInput, now: Date): PricedLine {
  * A markdown is active while its price is below the regular one, up to and including its end
  * instant (admin stores «до <дата>» as 23:59:59 Asia/Tashkent that day, like promo expiry).
  */
-function activeMarkdown(price: Price, now: Date): number | null {
+export function activeMarkdown(price: Price, now: Date): number | null {
   const markdown = price.markdown;
   if (!markdown || markdown.price >= price.regular) return null;
   if (markdown.endsAt !== null && now.getTime() > markdown.endsAt.getTime()) return null;

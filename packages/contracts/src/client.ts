@@ -30,6 +30,9 @@ export const clientRoutes = {
     get: route('GET', '/me', [200, 401]),
     updatePreferences: route('PATCH', '/me/preferences', [200, 401]),
   },
+  catalog: {
+    fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
+  },
 };
 
 type Meta<T> = {

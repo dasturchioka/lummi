@@ -5,7 +5,5 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Fills `{name}`-style placeholders in a dictionary string. */
-export function fill(template: string, values: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (m, key: string) => values[key] ?? m);
-}
+/** Fills `{name}`-style placeholders in a dictionary string (shared with the Mini App). */
+export { fill } from '@lummi/i18n';
