@@ -12,7 +12,8 @@
     "test:unit": "vitest run --project unit",
     "test:int": "vitest run --project integration",
     "dev:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx --watch src/worker.ts",
-    "start:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/worker.ts"
+    "start:worker": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/worker.ts",
+    "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
   },
   "dependencies": {
     "@grammyjs/auto-retry": "^2.0.2",

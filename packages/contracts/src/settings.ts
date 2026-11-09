@@ -71,6 +71,22 @@ export const settingDefinitions = {
     schema: z.array(z.number().int().gt(10, 'Full size is above 10 ml')).min(1),
     default: [30, 50] as number[],
   },
+  'auth.loginWidgetMaxAgeSeconds': {
+    schema: z.number().int().min(10).max(86_400),
+    default: 300,
+  },
+  'auth.loginWidgetMaxFutureSkewSeconds': {
+    schema: z.number().int().min(0).max(300),
+    default: 30,
+  },
+  'auth.staffSessionTtlSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(300)
+      .max(30 * 86_400),
+    default: 7 * 86_400,
+  },
 } as const;
 
 export type SettingKey = keyof typeof settingDefinitions;

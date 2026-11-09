@@ -27,3 +27,5 @@ materials/_archives/
 # Impeccable design tool cache and review screenshots
 .impeccable/
 .worktrees/
+*.tsbuildinfo
+next-env.d.ts
