@@ -45,7 +45,9 @@ export interface QueueProcessor {
   concurrency?: number;
   /** Jobs per second for this queue, read once when the worker starts (a setting, so it can change). Unlimited when absent. */
   ratePerSecond?: () => Promise<number>;
-  process(job: Job): Promise<void>;
+  /** Used (with one warning in the log) when `ratePerSecond` fails at start, so deliveries never wait on a broken read. */
+  fallbackRatePerSecond?: number;
+  process(job: Job, worker: Worker): Promise<void>;
 }
 
 /** The worker process (built from a Nest application context, like the API). */
@@ -148,9 +150,19 @@ export class WorkerRuntime implements OnApplicationShutdown {
   }
 
   private async startQueue(p: QueueProcessor): Promise<void> {
-    const rate = p.ratePerSecond ? await p.ratePerSecond() : null;
+    let rate: number | null = null;
+    if (p.ratePerSecond) {
+      try {
+        rate = await p.ratePerSecond();
+      } catch (e) {
+        rate = p.fallbackRatePerSecond ?? null;
+        this.log.warn(
+          `queue ${p.queue}: could not read its rate (${describeError(e)}); starting at ${rate ?? 'no limit'}/s`,
+        );
+      }
+    }
     const connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
-    const worker = new Worker(p.queue, (job) => p.process(job), {
+    const worker: Worker = new Worker(p.queue, (job) => p.process(job, worker), {
       connection,
       concurrency: p.concurrency ?? 1,
       ...(rate ? { limiter: { max: rate, duration: 1000 } } : {}),

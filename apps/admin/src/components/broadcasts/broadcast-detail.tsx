@@ -18,6 +18,14 @@ import { formatWhen } from './format';
 
 const POLL_MS = 2000;
 
+/** «Каталог», or «Карточка аромата: Tygar» for a `p_<slug>` target. */
+function targetLabel(b: BroadcastDto, m: AdminMessages['broadcasts']): string {
+  const target = b.buttonTarget ?? '';
+  if (target.startsWith('p_'))
+    return `${m.targets.fragrance}: ${b.buttonFragrance ?? target.slice(2)}`;
+  return (m.targets as Record<string, string>)[target] ?? target;
+}
+
 /** One broadcast: its counts (refreshed every two seconds while it sends) and the two texts as sent. */
 export function BroadcastDetail({
   initial,
@@ -59,8 +67,8 @@ export function BroadcastDetail({
             parts={[
               formatWhen(b.createdAt, language),
               m.audiences[b.audience],
-              plural(language, b.counts.total, m.recipients),
-              b.buttonTarget && fill(m.buttonTo, { target: b.buttonTarget }),
+              plural(language, b.counts.total, m.addressees),
+              b.buttonTarget && fill(m.buttonTo, { target: targetLabel(b, m) }),
               b.hasImage && (
                 <span className="inline-flex items-center gap-1">
                   <ImageIcon className="size-3.5" strokeWidth={1.5} aria-hidden />

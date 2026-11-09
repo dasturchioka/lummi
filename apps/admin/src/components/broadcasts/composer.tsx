@@ -46,7 +46,7 @@ type Status = { kind: 'ok' | 'error'; text: string } | null;
 /**
  * The owner's composer: RU and UZ text, an optional image and link button, the audience with a
  * live recipient count, «Отправить себе» and «Отправить» (behind a confirmation that names the
- * recipients). The server checks everything again; here the checks only save a round trip.
+ * audience). The server checks everything again; here the checks only save a round trip.
  */
 export function BroadcastComposer({
   initialCount,
@@ -170,7 +170,7 @@ export function BroadcastComposer({
     else setTestStatus({ kind: 'error', text: b.testFailed });
   };
 
-  // «Отправить»: validate, confirm with the recipients, send
+  // «Отправить»: validate, confirm with the audience size, send
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -198,7 +198,7 @@ export function BroadcastComposer({
     } else setSendError(b.sendFailed);
   };
 
-  const recipients = count ? plural(language, count.reachable, b.recipients) : null;
+  const addressees = count ? plural(language, count.reachable, b.addressees) : null;
   const blockedCount = count ? count.total - count.reachable : 0;
   const shownImage = preview;
 
@@ -355,15 +355,15 @@ export function BroadcastComposer({
               ))}
             </Select>
           </Field>
-          <div role="status" aria-live="polite" className="text-sm" data-recipients>
+          <div role="status" aria-live="polite" className="text-sm" data-audience-size>
             {count === null ? (
               <span className="text-muted-foreground">{b.countLoading}</span>
             ) : (
               <>
-                <p className="font-semibold">{recipients}</p>
+                <p className="font-semibold">{addressees}</p>
                 {blockedCount > 0 && (
                   <p className="mt-0.5 text-[13px] text-muted-foreground">
-                    {fill(b.recipientsBlocked, { n: String(blockedCount) })}
+                    {fill(b.addresseesBlocked, { n: String(blockedCount) })}
                   </p>
                 )}
               </>
@@ -405,7 +405,7 @@ export function BroadcastComposer({
         <AlertDialogContent>
           <AlertDialogTitle>{b.sendTitle}</AlertDialogTitle>
           <AlertDialogDescription>
-            {fill(b.sendText, { recipients: recipients ?? '' })}
+            {fill(b.sendText, { addressees: addressees ?? '' })}
           </AlertDialogDescription>
           <DialogFooter>
             <AlertDialogCancel asChild>

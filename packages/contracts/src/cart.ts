@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { deliveryCitySchema } from './delivery';
-import { CART_MAX_QTY } from './limits';
+import { CART_MAX_QTY } from './constants';
 import { quoteSchema } from './quote';
 
 /**

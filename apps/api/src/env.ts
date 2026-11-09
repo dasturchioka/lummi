@@ -59,8 +59,12 @@ export const envSchema = z
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
     /** BullMQ queue of broadcast deliveries; API and worker must agree. */
     BROADCAST_QUEUE: z.string().min(1).default('broadcasts'),
-    /** The bot's link, no trailing slash; a broadcast button is `<link>?startapp=<target>` (dev bot locally, like the Mini App's VITE_BOT_LINK). */
-    BOT_LINK: z.string().url().default('https://t.me/Lummiuz_bot'),
+    /** The bot's link; a broadcast button is `<link>?startapp=<target>`. Required in production (the customer's bot, never a default, ADR 0023); locally the dev bot's link. */
+    BOT_LINK: z
+      .string()
+      .url()
+      .refine((v) => v.startsWith('https://'), 'must be an https:// link')
+      .optional(),
     /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
     EVENTS_QUEUE: z.string().min(1).default('events'),
 
@@ -88,6 +92,13 @@ export const envSchema = z
         code: 'custom',
         path: ['TYPESAFE_API_KEY'],
         message: 'TYPESAFE_API_KEY is required in production',
+      });
+    }
+    if (env.NODE_ENV === 'production' && !env.BOT_LINK) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BOT_LINK'],
+        message: 'BOT_LINK is required in production (https://t.me/<bot>)',
       });
     }
     if (env.BOT_MODE === 'webhook') {
@@ -130,3 +141,6 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
   }
   return result.data;
 }
+
+/** Where a dev or test run points broadcast buttons when `BOT_LINK` is unset. */
+export const DEV_BOT_LINK = 'https://t.me/lummi_dev_bot';

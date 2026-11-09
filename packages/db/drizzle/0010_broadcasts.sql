@@ -18,6 +18,7 @@ CREATE TABLE "broadcasts" (
 	"text_uz" text NOT NULL,
 	"image_key" text,
 	"button_target" text,
+	"photo_file_id" text,
 	"created_by" bigint,
 	"created_by_name" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL

@@ -1,5 +1,5 @@
 {
-  "id": "28d03deb-3458-42ee-97d4-8455a3c618e0",
+  "id": "b1c59f67-6161-45aa-9d90-5c39bec18be8",
   "prevId": "e889758a-7a1c-43c2-8e02-dc357eda4d89",
   "version": "7",
   "dialect": "postgresql",
@@ -273,6 +273,12 @@
         },
         "button_target": {
           "name": "button_target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_file_id": {
+          "name": "photo_file_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false

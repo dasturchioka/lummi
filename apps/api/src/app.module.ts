@@ -3,11 +3,14 @@ import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
 import { AdminLoginService } from './admin/admin-login.service';
+import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
 import { BroadcastController } from './broadcast/broadcast.controller';
 import { BroadcastService } from './broadcast/broadcast.service';
+import { SettingsController } from './admin/settings.controller';
 import { StaffController } from './admin/staff.controller';
+import { AuditQueryService } from './audit/audit-query.service';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
 import { StaffService } from './staff/staff.service';
@@ -64,6 +67,8 @@ export class AppModule {
         WebhookController,
         AdminAuthController,
         StaffController,
+        SettingsController,
+        AuditController,
         CatalogAdminController,
         OnHandController,
         DeliveryController,
@@ -77,6 +82,7 @@ export class AppModule {
         { provide: EDGES, useValue: deps.edges },
         { provide: BOT_INFO, useValue: deps.botInfo },
         AuditService,
+        AuditQueryService,
         OutboxService,
         AlertService,
         BotService,

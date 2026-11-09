@@ -8,7 +8,7 @@ import {
   redirect,
   useRouter,
 } from '@tanstack/react-router';
-import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';

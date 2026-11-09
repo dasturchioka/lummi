@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { POINT_SEARCH_LIMIT, POINT_SEARCH_MIN } from './constants';
 
 const som = z.number().int().min(0).max(100_000_000);
 
@@ -27,8 +28,7 @@ export const btsPointSchema = z.object({
 });
 export type BtsPointDto = z.infer<typeof btsPointSchema>;
 
-export const POINT_SEARCH_MIN = 2;
-export const POINT_SEARCH_LIMIT = 50;
+export { POINT_SEARCH_LIMIT, POINT_SEARCH_MIN };
 
 /** Either a city of a region, or a text search across every region; at least one is required. */
 export const pointsQuerySchema = z

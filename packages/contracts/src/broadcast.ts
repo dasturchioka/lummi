@@ -55,6 +55,8 @@ export const broadcastSchema = z.object({
   textUz: z.string(),
   hasImage: z.boolean(),
   buttonTarget: z.string().nullable(),
+  /** The fragrance's name behind a `p_<slug>` target, for the label. */
+  buttonFragrance: z.string().nullable(),
   /** Still sending while any delivery is pending. */
   status: z.enum(['sending', 'done']),
   counts: broadcastCountsSchema,
@@ -83,16 +85,25 @@ export const broadcastErrorSchema = z.object({
   fields: z.array(z.string()).optional(),
 });
 
-/** Words the brand rules ban (CLAUDE.md "Brand and copy rules"). The composer warns; it never blocks. */
+/**
+ * Soft copy-rule checks (CLAUDE.md "Brand and copy rules"): banned words, fragrance numbers,
+ * concentration percentages, more than two emoji. The required disclaimer «не оригинальный
+ * парфюм» is allowed, so it is taken out before the banned words are looked for. The composer
+ * warns; it never blocks.
+ */
+const DISCLAIMER = /не\s+оригинальн\p{L}*\s+парфюм|asl\s+atir\s+emas|original\s+atir\s+emas/giu;
 const BANNED = /копи[яюией]|реплик|оригинал|oil perfume|масляные духи|nusxa|replika|original/iu;
+const NUMBER = /\bNo\.?\s?\d+|№\s?\d+/iu;
+const CONCENTRATION = /\d\s?%/u;
 const EMOJI = /\p{Extended_Pictographic}/gu;
 export const MAX_EMOJI = 2;
 
-export type CopyWarning = 'banned' | 'emoji';
-/** Soft copy-rule checks for one text: banned words and more than two emoji. */
+export type CopyWarning = 'banned' | 'numbers' | 'emoji';
 export function copyWarnings(text: string): CopyWarning[] {
   const out: CopyWarning[] = [];
-  if (BANNED.test(text)) out.push('banned');
-  if ((text.match(EMOJI) ?? []).length > MAX_EMOJI) out.push('emoji');
+  const body = text.replace(DISCLAIMER, ' ');
+  if (BANNED.test(body)) out.push('banned');
+  if (NUMBER.test(body) || CONCENTRATION.test(body)) out.push('numbers');
+  if ((body.match(EMOJI) ?? []).length > MAX_EMOJI) out.push('emoji');
   return out;
 }

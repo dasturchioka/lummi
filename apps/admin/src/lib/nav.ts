@@ -8,6 +8,7 @@ import {
   MapPin,
   Megaphone,
   MessageSquareText,
+  ScrollText,
   ShoppingBag,
   SlidersHorizontal,
   TicketPercent,
@@ -72,7 +73,8 @@ export const NAV: NavGroup[] = [
     key: 'manage',
     items: [
       { key: 'reports', icon: ChartColumn, href: null, roles: OWNER },
-      { key: 'settings', icon: SlidersHorizontal, href: null, roles: OWNER },
+      { key: 'settings', icon: SlidersHorizontal, href: '/settings', roles: OWNER },
+      { key: 'audit', icon: ScrollText, href: '/audit', roles: OWNER },
       { key: 'staff', icon: UserCog, href: '/staff', roles: OWNER },
     ],
   },

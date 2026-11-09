@@ -1,5 +1,6 @@
 import {
   BROADCAST_IMAGE_KEY,
+  settingDefinitions,
   MAX_PHOTO_BYTES,
   type BroadcastAudience,
   type BroadcastBody,
@@ -26,16 +27,16 @@ import {
 import { dictionaries } from '@lummi/i18n/all';
 import { normalizeUzbek, type Language } from '@lummi/i18n';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
-import { Queue, type Job } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import { createHash } from 'node:crypto';
 import { Redis } from 'ioredis';
 import sharp, { type Metadata } from 'sharp';
 import { AuditService } from '../audit/audit.service';
-import { CustomersService } from '../auth/customers.service';
+import { CustomersService, broadcastReachableSql } from '../auth/customers.service';
 import { looksLikeImage } from '../catalog/photo-pipeline';
-import type { Edges, OutboundMessage } from '../edges';
-import { BotBlockedError } from '../edges';
-import type { Env } from '../env';
+import type { Edges, OutboundMessage, SendResult } from '../edges';
+import { BotBlockedError, InvalidFileIdError, RateLimitedError } from '../edges';
+import { DEV_BOT_LINK, type Env } from '../env';
 import { describeError } from '../logging/describe-error';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
@@ -46,6 +47,11 @@ import { withTimeout } from '../util/with-timeout';
 export const BROADCAST_ATTEMPTS = 6;
 const DISPATCH_TIMEOUT_MS = 3000;
 const BULK_CHUNK = 500;
+/** The minute sweep re-queues at most this many deliveries per tick, so a big stuck audience trickles back instead of being re-stamped at once. */
+const SWEEP_CAP = 2000;
+/** Why a customer the bot may not write to is counted «не доставлено» without a job. */
+const SUPPRESSED = 'suppressed: not started, refused write access or blocked the bot';
+const CANNOT_INITIATE = 'cannot initiate: the customer never started the bot';
 /** Telegram's sendPhoto limits: width + height at most 10 000 px, ratio at most 20. */
 const MAX_SIDE_SUM = 10_000;
 const MAX_RATIO = 20;
@@ -78,12 +84,19 @@ export class BroadcastService implements OnApplicationShutdown {
     @Inject(CustomersService) private readonly customers: CustomersService,
     @Inject(WorkerRuntime) runtime: WorkerRuntime,
   ) {
-    runtime.register({ name: 'broadcast-dispatch', run: async () => void (await this.dispatch()) });
+    runtime.register({
+      name: 'broadcast-dispatch',
+      run: async () => void (await this.dispatch(undefined, SWEEP_CAP)),
+    });
     runtime.registerQueue({
       queue: env.BROADCAST_QUEUE,
       concurrency: 5,
       ratePerSecond: () => this.settings.get('broadcast.sendRatePerSecond'),
-      process: (job: Job<{ broadcastId: number; customerId: number }>) => this.process(job),
+      fallbackRatePerSecond: settingDefinitions['broadcast.sendRatePerSecond'].default,
+      process: (
+        job: Job<{ broadcastId: number; customerId: number }>,
+        worker: Pick<Worker, 'rateLimit'>,
+      ) => this.process(job, worker),
     });
   }
 
@@ -118,7 +131,7 @@ export class BroadcastService implements OnApplicationShutdown {
     const [row] = await this.db
       .select({
         total: sql<number>`count(*)::int`,
-        reachable: sql<number>`(count(*) filter (where ${reachableSql}))::int`,
+        reachable: sql<number>`(count(*) filter (where ${broadcastReachableSql}))::int`,
       })
       .from(customers)
       .where(audienceSql(audience));
@@ -145,11 +158,13 @@ export class BroadcastService implements OnApplicationShutdown {
     const sent: Language[] = [];
     try {
       for (const lang of ['ru', 'uz'] as const) {
-        await this.edges.telegram.send(await this.message(body, lang, actor.telegramId));
+        await this.edges.telegram.send(
+          await this.message({ ...body, photoFileId: null }, lang, actor.telegramId),
+        );
         sent.push(lang);
       }
     } catch (e) {
-      this.log.warn(`test send failed: ${describeError(e)}`);
+      this.log.warn(`test send failed: ${e instanceof Error ? e.name : 'error'}`);
       return { ok: false, reason: e instanceof BotBlockedError ? 'test_blocked' : 'test_failed' };
     }
     await this.audit.record(this.db, {
@@ -166,7 +181,7 @@ export class BroadcastService implements OnApplicationShutdown {
 
   async send(actor: StaffRow, body: BroadcastBody): Promise<BroadcastDto> {
     const id = await this.db.transaction(async (tx) => {
-      const [row] = await tx
+      const [inserted] = await tx
         .insert(broadcasts)
         .values({
           audience: body.audience,
@@ -178,12 +193,12 @@ export class BroadcastService implements OnApplicationShutdown {
           createdByName: actor.name,
         })
         .returning({ id: broadcasts.id });
-      const broadcastId = (row as { id: number }).id;
+      const broadcastId = (inserted as { id: number }).id;
       await tx.execute(sql`
         insert into broadcast_deliveries (broadcast_id, customer_id, status, error)
         select ${broadcastId}::bigint, ${customers.id},
-          case when ${reachableSql} then 'pending'::broadcast_delivery_status else 'blocked'::broadcast_delivery_status end,
-          case when ${reachableSql} then null else 'suppressed: refused write access or blocked the bot' end
+          case when ${broadcastReachableSql} then 'pending'::broadcast_delivery_status else 'blocked'::broadcast_delivery_status end,
+          case when ${broadcastReachableSql} then null else ${SUPPRESSED} end
         from customers
         where ${audienceSql(body.audience)}`);
       const counts = await countsFor(tx, [broadcastId]);
@@ -194,7 +209,7 @@ export class BroadcastService implements OnApplicationShutdown {
         targetId: broadcastId,
         payload: {
           audience: body.audience,
-          recipients: counts.get(broadcastId)?.total ?? 0,
+          audienceSize: counts.get(broadcastId)?.total ?? 0,
           sender: actor.name,
           hasImage: body.imageKey !== null,
           buttonTarget: body.buttonTarget,
@@ -211,32 +226,36 @@ export class BroadcastService implements OnApplicationShutdown {
   }
 
   /**
-   * Queue every pending delivery that is not queued, or was queued longer ago than the requeue
+   * Queue pending deliveries that are not queued, or were queued longer ago than the requeue
    * window (jobId = broadcast x customer, so a duplicate add is ignored). One stamping statement,
-   * so two callers never queue the same delivery inside the window.
+   * so two callers never queue the same delivery inside the window. `limit` caps one call (the
+   * minute sweep), oldest first, so a big stuck audience trickles back instead of being re-stamped at once.
    */
-  async dispatch(broadcastId?: number): Promise<number> {
+  async dispatch(broadcastId?: number, limit?: number): Promise<number> {
     const now = this.edges.clock.now();
     const window = await this.settings.get('outbox.requeueAfterSeconds');
     const stale = new Date(now.getTime() - window * 1000);
-    const rows = await this.db
-      .update(broadcastDeliveries)
-      .set({ queuedAt: now })
-      .where(
-        and(
-          eq(broadcastDeliveries.status, 'pending'),
-          or(isNull(broadcastDeliveries.queuedAt), lt(broadcastDeliveries.queuedAt, stale)),
-          broadcastId ? eq(broadcastDeliveries.broadcastId, broadcastId) : undefined,
-        ),
-      )
-      .returning({ b: broadcastDeliveries.broadcastId, c: broadcastDeliveries.customerId });
+    const result = await this.db.execute<{ b: number; c: number }>(sql`
+      update broadcast_deliveries d set queued_at = ${now}
+      from (
+        select broadcast_id, customer_id from broadcast_deliveries
+        where status = 'pending'
+          and (queued_at is null or queued_at < ${stale})
+          ${broadcastId ? sql`and broadcast_id = ${broadcastId}` : sql``}
+        order by broadcast_id, customer_id
+        ${limit ? sql`limit ${limit}` : sql``}
+        for update skip locked
+      ) due
+      where d.broadcast_id = due.broadcast_id and d.customer_id = due.customer_id
+      returning d.broadcast_id as b, d.customer_id as c`);
+    const rows = result.rows;
     if (rows.length === 0) return 0;
     try {
       for (let i = 0; i < rows.length; i += BULK_CHUNK) {
         await this.getQueue().addBulk(
           rows.slice(i, i + BULK_CHUNK).map((r) => ({
             name: 'send',
-            data: { broadcastId: r.b, customerId: r.c },
+            data: { broadcastId: Number(r.b), customerId: Number(r.c) },
             opts: {
               jobId: `bc-${r.b}-${r.c}`,
               attempts: BROADCAST_ATTEMPTS,
@@ -255,7 +274,7 @@ export class BroadcastService implements OnApplicationShutdown {
         .where(
           and(
             eq(broadcastDeliveries.status, 'pending'),
-            inArray(broadcastDeliveries.broadcastId, [...new Set(rows.map((r) => r.b))]),
+            inArray(broadcastDeliveries.broadcastId, [...new Set(rows.map((r) => Number(r.b)))]),
           ),
         );
       throw e;
@@ -263,12 +282,23 @@ export class BroadcastService implements OnApplicationShutdown {
     return rows.length;
   }
 
-  /** One queue job. A job that throws is retried; its last attempt marks the delivery failed. */
-  async process(job: Job<{ broadcastId: number; customerId: number }>): Promise<void> {
+  /**
+   * One queue job. A flood wait (429) pauses the whole queue for Telegram's `retry_after` and
+   * puts the job back without using an attempt; any other error is retried with backoff and
+   * counts failed on the last attempt.
+   */
+  async process(
+    job: Job<{ broadcastId: number; customerId: number }>,
+    worker: Pick<Worker, 'rateLimit'>,
+  ): Promise<void> {
     const { broadcastId, customerId } = job.data;
     try {
       await this.deliver(broadcastId, customerId);
     } catch (e) {
+      if (e instanceof RateLimitedError) {
+        await worker.rateLimit(e.retryAfterSeconds * 1000);
+        throw Worker.RateLimitError();
+      }
       if (job.attemptsMade + 1 >= BROADCAST_ATTEMPTS) {
         await this.finish(broadcastId, customerId, 'failed', describeError(e));
         return;
@@ -284,62 +314,91 @@ export class BroadcastService implements OnApplicationShutdown {
   async deliver(broadcastId: number, customerId: number): Promise<DeliveryOutcome> {
     const now = this.edges.clock.now();
     const window = await this.settings.get('outbox.requeueAfterSeconds');
-    const d = broadcastDeliveries;
+    const delivery = broadcastDeliveries;
     const [claimed] = await this.db
-      .update(d)
+      .update(delivery)
       .set({ sendingAt: now })
       .where(
         and(
-          eq(d.broadcastId, broadcastId),
-          eq(d.customerId, customerId),
-          eq(d.status, 'pending'),
-          or(isNull(d.sendingAt), lt(d.sendingAt, new Date(now.getTime() - window * 1000))),
+          eq(delivery.broadcastId, broadcastId),
+          eq(delivery.customerId, customerId),
+          eq(delivery.status, 'pending'),
+          or(
+            isNull(delivery.sendingAt),
+            lt(delivery.sendingAt, new Date(now.getTime() - window * 1000)),
+          ),
         ),
       )
-      .returning({ customerId: d.customerId });
+      .returning({ customerId: delivery.customerId });
     if (!claimed) return 'skipped';
 
-    const [b] = await this.db.select().from(broadcasts).where(eq(broadcasts.id, broadcastId));
-    const [c] = await this.db.select().from(customers).where(eq(customers.id, customerId));
-    if (!b || !c) {
+    const [broadcast] = await this.db
+      .select()
+      .from(broadcasts)
+      .where(eq(broadcasts.id, broadcastId));
+    const [customer] = await this.db.select().from(customers).where(eq(customers.id, customerId));
+    if (!broadcast || !customer) {
       await this.finish(broadcastId, customerId, 'failed', 'broadcast or customer is gone');
       return 'skipped';
     }
-    if (!(await this.customers.canMessage(c.telegramId))) {
-      await this.finish(
-        broadcastId,
-        customerId,
-        'blocked',
-        'suppressed: refused write access or blocked the bot',
-      );
+    // The audience rule again, for a customer who blocked the bot or refused since the broadcast was written.
+    if (customer.botBlocked || customer.writeAccess !== 'granted') {
+      await this.finish(broadcastId, customerId, 'blocked', SUPPRESSED);
       return 'blocked';
     }
     let message: OutboundMessage;
     try {
-      message = await this.message(b, c.language, c.telegramId);
+      message = await this.message(broadcast, customer.language, customer.telegramId);
     } catch (e) {
       await this.finish(broadcastId, customerId, 'failed', describeError(e));
       return 'skipped';
     }
     try {
-      await this.edges.telegram.send(message);
+      const sent = await this.sendPhotoById(broadcast, message);
+      if (sent.photoFileId && !broadcast.photoFileId) {
+        // the first upload: later sends go by this id, with no upload
+        await this.db
+          .update(broadcasts)
+          .set({ photoFileId: sent.photoFileId })
+          .where(and(eq(broadcasts.id, broadcastId), isNull(broadcasts.photoFileId)));
+      }
     } catch (e) {
       if (e instanceof BotBlockedError) {
         await this.db.transaction(async (tx) => {
-          await this.finish(broadcastId, customerId, 'blocked', 'blocked (403)', tx);
-          await this.customers.markBotBlocked(c.telegramId, true, tx);
+          if (e.cannotInitiate) {
+            // Never started the bot: not delivered, but not a block either, so order messages still try.
+            await this.finish(broadcastId, customerId, 'blocked', CANNOT_INITIATE, tx);
+          } else {
+            await this.finish(broadcastId, customerId, 'blocked', 'blocked (403)', tx);
+            await this.customers.markBotBlocked(customer.telegramId, true, tx);
+          }
         });
         return 'blocked';
       }
-      // A 429, a timeout, a 5xx: release the claim so the queue's next attempt can take it.
+      // A flood wait, a timeout, a 5xx: release the claim so the queue's next attempt can take it.
       await this.db
-        .update(d)
+        .update(delivery)
         .set({ sendingAt: null })
-        .where(and(eq(d.broadcastId, broadcastId), eq(d.customerId, customerId)));
+        .where(and(eq(delivery.broadcastId, broadcastId), eq(delivery.customerId, customerId)));
       throw e;
     }
     await this.finish(broadcastId, customerId, 'sent', null);
     return 'sent';
+  }
+
+  /** Send by the cached `file_id` when there is one; if Telegram rejects it, upload the image again. */
+  private async sendPhotoById(
+    broadcast: Pick<BroadcastRow, 'imageKey' | 'photoFileId'>,
+    message: OutboundMessage,
+  ): Promise<SendResult> {
+    try {
+      return await this.edges.telegram.send(message);
+    } catch (e) {
+      if (!(e instanceof InvalidFileIdError) || !broadcast.imageKey) throw e;
+      const bytes = await this.edges.files.get(broadcast.imageKey);
+      if (!bytes) throw new Error(`broadcast image ${broadcast.imageKey} is missing`);
+      return this.edges.telegram.send({ ...message, photo: { bytes } });
+    }
   }
 
   private async finish(
@@ -349,39 +408,54 @@ export class BroadcastService implements OnApplicationShutdown {
     error: string | null,
     tx: Pick<Db, 'update'> = this.db,
   ): Promise<void> {
-    const d = broadcastDeliveries;
+    const delivery = broadcastDeliveries;
     await tx
-      .update(d)
+      .update(delivery)
       .set({
         status,
         error: error?.slice(0, 500) ?? null,
         sentAt: status === 'sent' ? this.edges.clock.now() : null,
       })
       .where(
-        and(eq(d.broadcastId, broadcastId), eq(d.customerId, customerId), eq(d.status, 'pending')),
+        and(
+          eq(delivery.broadcastId, broadcastId),
+          eq(delivery.customerId, customerId),
+          eq(delivery.status, 'pending'),
+        ),
       );
   }
 
   /** The customer's version: text in their language, the image as a photo, the optional startapp button. */
   private async message(
-    b: Pick<BroadcastRow, 'textRu' | 'textUz' | 'imageKey' | 'buttonTarget'>,
+    broadcast: Pick<
+      BroadcastRow,
+      'textRu' | 'textUz' | 'imageKey' | 'buttonTarget' | 'photoFileId'
+    >,
     language: Language,
     chatId: number,
   ): Promise<OutboundMessage> {
-    const m: OutboundMessage = { chatId, text: language === 'uz' ? b.textUz : b.textRu };
-    if (b.imageKey) {
-      const bytes = await this.edges.files.get(b.imageKey);
-      if (!bytes) throw new Error(`broadcast image ${b.imageKey} is missing`);
-      m.photo = bytes;
+    const m: OutboundMessage = {
+      chatId,
+      text: language === 'uz' ? broadcast.textUz : broadcast.textRu,
+    };
+    if (broadcast.imageKey) {
+      if (broadcast.photoFileId) {
+        m.photo = { fileId: broadcast.photoFileId };
+      } else {
+        const bytes = await this.edges.files.get(broadcast.imageKey);
+        if (!bytes) throw new Error(`broadcast image ${broadcast.imageKey} is missing`);
+        m.photo = { bytes };
+      }
     }
-    if (b.buttonTarget) {
+    if (broadcast.buttonTarget) {
+      const link = (this.env.BOT_LINK ?? DEV_BOT_LINK).replace(/\/$/, '');
       m.options = {
         reply_markup: {
           inline_keyboard: [
             [
               {
                 text: dictionaries[language].bot.broadcastOpen,
-                url: `${this.env.BOT_LINK.replace(/\/$/, '')}?startapp=${b.buttonTarget}`,
+                url: `${link}?startapp=${broadcast.buttonTarget}`,
               },
             ],
           ],
@@ -399,13 +473,29 @@ export class BroadcastService implements OnApplicationShutdown {
       this.db,
       rows.map((r) => r.id),
     );
-    return rows.map((r) => toDto(r, counts.get(r.id)));
+    const names = await this.fragranceNames(rows);
+    return rows.map((r) => toDto(r, counts.get(r.id), names));
   }
 
   async get(id: number): Promise<BroadcastDto | null> {
     const [row] = await this.db.select().from(broadcasts).where(eq(broadcasts.id, id));
     if (!row) return null;
-    return toDto(row, (await countsFor(this.db, [id])).get(id));
+    return toDto(row, (await countsFor(this.db, [id])).get(id), await this.fragranceNames([row]));
+  }
+
+  /** Names of the fragrances that `p_<slug>` button targets point to, by slug. */
+  private async fragranceNames(rows: BroadcastRow[]): Promise<Map<string, string>> {
+    const slugs = [
+      ...new Set(
+        rows.flatMap((r) => (r.buttonTarget?.startsWith('p_') ? [r.buttonTarget.slice(2)] : [])),
+      ),
+    ];
+    if (slugs.length === 0) return new Map();
+    const found = await this.db
+      .select({ slug: fragrances.slug, name: fragrances.name })
+      .from(fragrances)
+      .where(inArray(fragrances.slug, slugs));
+    return new Map(found.map((f) => [f.slug, f.name]));
   }
 
   getQueue(): Queue {
@@ -426,9 +516,6 @@ export class BroadcastService implements OnApplicationShutdown {
 /** Customers in an audience; `ru` and `uz` are the language the customer has saved. */
 const audienceSql = (audience: BroadcastAudience) =>
   audience === 'all' ? sql`true` : sql`${customers.language} = ${audience}`;
-
-/** The bot may write to them: not blocked, and they did not refuse write access. */
-const reachableSql = sql`(${customers.botBlocked} = false and ${customers.writeAccess} is distinct from 'refused')`;
 
 async function countsFor(
   db: Pick<Db, 'select'>,
@@ -451,7 +538,11 @@ async function countsFor(
   return out;
 }
 
-function toDto(row: BroadcastRow, counts?: BroadcastCounts): BroadcastDto {
+function toDto(
+  row: BroadcastRow,
+  counts: BroadcastCounts | undefined,
+  fragranceNames: Map<string, string>,
+): BroadcastDto {
   const c = counts ?? { total: 0, sent: 0, blocked: 0, failed: 0, pending: 0 };
   return {
     id: row.id,
@@ -462,6 +553,9 @@ function toDto(row: BroadcastRow, counts?: BroadcastCounts): BroadcastDto {
     textUz: row.textUz,
     hasImage: row.imageKey !== null,
     buttonTarget: row.buttonTarget,
+    buttonFragrance: row.buttonTarget?.startsWith('p_')
+      ? (fragranceNames.get(row.buttonTarget.slice(2)) ?? null)
+      : null,
     status: c.pending > 0 ? 'sending' : 'done',
     counts: c,
   };

@@ -11,8 +11,12 @@ import {
 import type { Job } from 'bullmq';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RateLimitedError } from '../src/edges';
+import { BotBlockedError, RateLimitedError } from '../src/edges';
+import { OutboxService } from '../src/outbox/outbox.service';
+import { CustomersService } from '../src/auth/customers.service';
+import { moveCustomerData } from '../src/auth/customers.service';
 import { BROADCAST_ATTEMPTS, BroadcastService } from '../src/broadcast/broadcast.service';
+import { SettingsService } from '../src/settings/settings.service';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -44,6 +48,7 @@ async function customer(over: Partial<typeof customers.$inferInsert> = {}): Prom
       telegramId: ++nextTelegramId,
       firstName: 'Ali',
       language: 'ru',
+      writeAccess: 'granted',
       ...over,
     })
     .returning();
@@ -82,6 +87,7 @@ async function seed(customerIds: number[], over: Partial<typeof broadcasts.$infe
     .values(customerIds.map((customerId) => ({ broadcastId: b!.id, customerId })));
   return b!;
 }
+const worker = { rateLimit: vi.fn(async () => {}) };
 const job = (broadcastId: number, customerId: number, attemptsMade = 0) =>
   ({ data: { broadcastId, customerId }, attemptsMade }) as Job<{
     broadcastId: number;
@@ -149,8 +155,9 @@ describe('sending', () => {
     await customer({ language: 'ru' });
     await customer({ language: 'ru', writeAccess: 'refused' });
     await customer({ language: 'uz', botBlocked: true });
+    await customer({ language: 'uz', writeAccess: null }); // opened the Mini App, never started the bot
     const all = await owner.client.admin.broadcasts.audience({ query: { audience: 'all' } });
-    expect(all.body).toEqual({ total: 3, reachable: 1 });
+    expect(all.body).toEqual({ total: 4, reachable: 1 });
     const ru = await owner.client.admin.broadcasts.audience({ query: { audience: 'ru' } });
     expect(ru.body).toEqual({ total: 2, reachable: 1 });
   });
@@ -201,14 +208,15 @@ describe('sending', () => {
     expect(res.status).toBe(201);
     await finished(res.body.id as number);
     const to = (id: number) => t.edges.telegram.sent.find((m) => m.chatId === id)!;
-    expect(Buffer.from(to(ru.telegramId).photo!).equals(png)).toBe(true);
+    const photo = to(ru.telegramId).photo as { bytes: Uint8Array };
+    expect(Buffer.from(photo.bytes).equals(png)).toBe(true);
     expect(to(ru.telegramId).options).toEqual({
       reply_markup: {
         inline_keyboard: [
           [
             {
               text: dictionaries.ru.bot.broadcastOpen,
-              url: 'https://t.me/Lummiuz_bot?startapp=catalog',
+              url: 'https://t.me/lummi_dev_bot?startapp=catalog',
             },
           ],
         ],
@@ -257,7 +265,7 @@ describe('sending', () => {
       actorId: owner.staff.id,
       targetType: 'broadcast',
       targetId: String(res.body.id),
-      payload: { audience: 'all', recipients: 2, sender: owner.staff.name },
+      payload: { audience: 'all', audienceSize: 2, sender: owner.staff.name },
     });
     await finished(res.body.id as number);
     expect(res.body.createdByName).toBe(owner.staff.name);
@@ -268,8 +276,8 @@ describe('jobs', () => {
   it('is idempotent: a retried job after a send sends nothing', async () => {
     const c = await customer();
     const b = await seed([c.id]);
-    await svc.process(job(b.id, c.id));
-    await svc.process(job(b.id, c.id)); // the queue redelivers it
+    await svc.process(job(b.id, c.id), worker);
+    await svc.process(job(b.id, c.id), worker); // the queue redelivers it
     expect(await svc.deliver(b.id, c.id)).toBe('skipped');
     expect(t.edges.telegram.sent).toHaveLength(1);
   });
@@ -281,16 +289,21 @@ describe('jobs', () => {
     expect(t.edges.telegram.sent).toHaveLength(1);
   });
 
-  it('retries after a 429 and then sends once', async () => {
+  it('pauses the whole queue for a flood wait beyond 60 s and keeps the attempt', async () => {
     const c = await customer();
     const b = await seed([c.id]);
-    t.edges.telegram.failures.set(c.telegramId, [new RateLimitedError(3)]);
-    await expect(svc.process(job(b.id, c.id))).rejects.toBeInstanceOf(RateLimitedError);
+    t.edges.telegram.failures.set(c.telegramId, [new RateLimitedError(120)]);
+    worker.rateLimit.mockClear();
+    await expect(svc.process(job(b.id, c.id, 2), worker)).rejects.toThrow(
+      'bullmq:rateLimitExceeded',
+    );
+    expect(worker.rateLimit).toHaveBeenCalledWith(120_000);
     expect((await t.db.select().from(broadcastDeliveries))[0]).toMatchObject({
       status: 'pending',
       sendingAt: null,
     });
-    await svc.process(job(b.id, c.id, 1));
+    // after the wait the same job sends once, and counts no failure even on its last attempt
+    await svc.process(job(b.id, c.id, BROADCAST_ATTEMPTS - 1), worker);
     expect(t.edges.telegram.sent).toHaveLength(1);
     expect((await t.db.select().from(broadcastDeliveries))[0]?.status).toBe('sent');
   });
@@ -302,9 +315,9 @@ describe('jobs', () => {
       new Error('chat not found'),
       new Error('chat not found'),
     ]);
-    await expect(svc.process(job(b.id, c.id, 0))).rejects.toThrow('chat not found');
+    await expect(svc.process(job(b.id, c.id, 0), worker)).rejects.toThrow('chat not found');
     expect((await t.db.select().from(broadcastDeliveries))[0]?.status).toBe('pending');
-    await svc.process(job(b.id, c.id, BROADCAST_ATTEMPTS - 1));
+    await svc.process(job(b.id, c.id, BROADCAST_ATTEMPTS - 1), worker);
     const [d] = await t.db.select().from(broadcastDeliveries);
     expect(d).toMatchObject({ status: 'failed', error: expect.stringContaining('chat not found') });
     const [cust] = await t.db.select().from(customers).where(eq(customers.id, c.id));
@@ -324,7 +337,7 @@ describe('jobs', () => {
     const c = await customer();
     const b = await seed([c.id]);
     await t.db.update(customers).set({ writeAccess: 'refused' }).where(eq(customers.id, c.id));
-    await svc.process(job(b.id, c.id));
+    await svc.process(job(b.id, c.id), worker);
     expect(t.edges.telegram.sent).toHaveLength(0);
     expect((await t.db.select().from(broadcastDeliveries))[0]?.status).toBe('blocked');
   });
@@ -370,5 +383,163 @@ describe('results', () => {
     expect((list.body as { textRu: string }[]).map((x) => x.textRu)).toEqual(['Вторая', 'Первая']);
     expect((list.body as { counts: { sent: number } }[])[0]?.counts.sent).toBe(1);
     expect(c.id).toBeGreaterThan(0);
+  });
+});
+
+describe('order messages after a broadcast', () => {
+  it('a customer who never started the bot gets no job, and their order messages still go out', async () => {
+    const lurker = await customer({ writeAccess: null });
+    const res = await create(body());
+    expect(res.body.counts).toMatchObject({ total: 1, blocked: 1, pending: 0 });
+    expect(t.edges.telegram.sent).toHaveLength(0);
+    const [row] = await t.db.select().from(customers).where(eq(customers.id, lurker.id));
+    expect(row?.botBlocked).toBe(false);
+    await t.app
+      .get(OutboxService)
+      .withTx((tx) =>
+        t.app
+          .get(OutboxService)
+          .enqueue(tx, { chatId: lurker.telegramId, text: 'Заказ собирается' }),
+      );
+    await vi.waitFor(() =>
+      expect(t.edges.telegram.sent.map((m) => m.text)).toEqual(['Заказ собирается']),
+    );
+  });
+
+  it("a 403 «can't initiate» counts not delivered without flagging the customer", async () => {
+    const c = await customer(); // granted, but Telegram still refuses to start the chat
+    t.edges.telegram.failures.set(c.telegramId, [new BotBlockedError(c.telegramId, true)]);
+    const b = await seed([c.id]);
+    await svc.process(job(b.id, c.id), worker);
+    expect((await t.db.select().from(broadcastDeliveries))[0]).toMatchObject({ status: 'blocked' });
+    const [row] = await t.db.select().from(customers).where(eq(customers.id, c.id));
+    expect(row?.botBlocked).toBe(false);
+    await t.app
+      .get(OutboxService)
+      .withTx((tx) =>
+        t.app.get(OutboxService).enqueue(tx, { chatId: c.telegramId, text: 'Заказ создан' }),
+      );
+    await vi.waitFor(() =>
+      expect(t.edges.telegram.sent.map((m) => m.text)).toEqual(['Заказ создан']),
+    );
+  });
+
+  it('a real block (403 «blocked by the user») flags the customer', async () => {
+    const c = await customer();
+    t.edges.telegram.failures.set(c.telegramId, [new BotBlockedError(c.telegramId)]);
+    const b = await seed([c.id]);
+    await svc.process(job(b.id, c.id), worker);
+    const [row] = await t.db.select().from(customers).where(eq(customers.id, c.id));
+    expect(row?.botBlocked).toBe(true);
+  });
+
+  it('never reaches a customer the order messages would skip', async () => {
+    const people = [
+      await customer({ writeAccess: 'granted' }),
+      await customer({ writeAccess: 'granted', botBlocked: true }),
+      await customer({ writeAccess: 'refused' }),
+      await customer({ writeAccess: null }),
+    ];
+    const res = await create(body());
+    const sendable = await t.db
+      .select()
+      .from(broadcastDeliveries)
+      .where(eq(broadcastDeliveries.status, 'pending'));
+    for (const d of sendable) {
+      const p = people.find((x) => x.id === d.customerId)!;
+      expect(await t.app.get(CustomersService).canMessage(p.telegramId)).toBe(true);
+    }
+    await finished(res.body.id);
+  });
+});
+
+describe('the photo', () => {
+  async function withImage() {
+    const png = await sharp({
+      create: { width: 600, height: 800, channels: 3, background: '#CFC6B8' },
+    })
+      .png()
+      .toBuffer();
+    t.edges.files.files.set('broadcasts/0123456789abcdef.png', new Uint8Array(png));
+    return 'broadcasts/0123456789abcdef.png';
+  }
+
+  it("uploads once, keeps Telegram's file_id, and sends by id afterwards", async () => {
+    const key = await withImage();
+    const people = [await customer(), await customer(), await customer()];
+    const b = await seed(
+      people.map((p) => p.id),
+      { imageKey: key },
+    );
+    await svc.process(job(b.id, people[0]!.id), worker);
+    const [first] = await t.db.select().from(broadcasts).where(eq(broadcasts.id, b.id));
+    expect(first?.photoFileId).toBe('file-1');
+    await svc.process(job(b.id, people[1]!.id), worker);
+    await svc.process(job(b.id, people[2]!.id), worker);
+    expect(t.edges.telegram.sent.map((m) => m.photo)).toEqual([
+      { bytes: expect.anything() },
+      { fileId: 'file-1' },
+      { fileId: 'file-1' },
+    ]);
+  });
+
+  it('uploads again when Telegram rejects the file_id', async () => {
+    const key = await withImage();
+    const c = await customer();
+    const b = await seed([c.id], { imageKey: key, photoFileId: 'stale' });
+    t.edges.telegram.rejectedFileIds.add('stale');
+    await svc.process(job(b.id, c.id), worker);
+    expect(t.edges.telegram.sent).toHaveLength(1);
+    expect(t.edges.telegram.sent[0]?.photo).toEqual({ bytes: expect.anything() });
+    expect((await t.db.select().from(broadcastDeliveries))[0]?.status).toBe('sent');
+  });
+});
+
+describe('relink (ADR 0032)', () => {
+  it('moves the deliveries to the surviving customer without changing the counts', async () => {
+    const older = await customer();
+    const fresh = await customer();
+    const other = await customer();
+    const b1 = await seed([older.id, fresh.id, other.id]);
+    const b2 = await seed([fresh.id]);
+    await t.db.update(broadcastDeliveries).set({ status: 'sent' });
+    const before = (await counts(b1.id)).counts;
+    await t.db.transaction((tx) => moveCustomerData(tx, fresh.id, older.id, new Date()));
+    // the clash on b1 keeps the older customer's row, so b1 loses only the duplicate
+    expect((await counts(b1.id)).counts.total).toBe(before.total - 1);
+    expect((await counts(b2.id)).counts).toMatchObject({ total: 1, sent: 1 });
+    const rows = await t.db.select().from(broadcastDeliveries);
+    expect(rows.some((r) => r.customerId === fresh.id)).toBe(false);
+  });
+});
+
+describe('the worker', () => {
+  it('starts even when the rate setting cannot be read, and still delivers', async () => {
+    const t2 = await createTestApp();
+    try {
+      await t2.reset();
+      const settings = t2.app.get(SettingsService);
+      const real = settings.get.bind(settings);
+      vi.spyOn(settings, 'get').mockImplementation(((key: string, ...rest: unknown[]) =>
+        key === 'broadcast.sendRatePerSecond'
+          ? Promise.reject(new Error('settings table unreadable'))
+          : (real as (...a: unknown[]) => unknown)(key, ...rest)) as never);
+      t2.startWorker();
+      const owner2 = await t2.ownerSession();
+      const [c] = await t2.db
+        .insert(customers)
+        .values({ telegramId: 777001, firstName: 'Ali', language: 'ru', writeAccess: 'granted' })
+        .returning();
+      const res = await owner2.client.admin.broadcasts.create({ body: body() });
+      expect(res.status).toBe(201);
+      await vi.waitFor(
+        () => expect(t2.edges.telegram.sent.map((m) => m.chatId)).toEqual([c!.telegramId]),
+        {
+          timeout: 10_000,
+        },
+      );
+    } finally {
+      await t2.close();
+    }
   });
 });

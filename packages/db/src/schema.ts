@@ -502,6 +502,8 @@ export const broadcasts = pgTable('broadcasts', {
   textUz: text('text_uz').notNull(),
   imageKey: text('image_key'),
   buttonTarget: text('button_target'),
+  /** Telegram's file_id of the image after its first upload; later sends go by id. */
+  photoFileId: text('photo_file_id'),
   createdBy: bigint('created_by', { mode: 'number' }).references(() => staff.id, {
     onDelete: 'set null',
   }),

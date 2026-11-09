@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SEARCH_QUERY_MAX } from './limits';
+import { SEARCH_QUERY_MAX } from './constants';
 
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });

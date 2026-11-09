@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
+import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
 import { useNavigate, useRouter, useSearch } from '@tanstack/react-router';
 import { useRef, useState, type FormEvent } from 'react';
 import { api, unwrap } from '../lib/api';

@@ -29,6 +29,12 @@ import {
 } from './broadcast';
 import {
   adminErrorSchema,
+  auditFiltersSchema,
+  auditPageSchema,
+  auditQuerySchema,
+  settingErrorSchema,
+  settingStateSchema,
+  updateSettingBodySchema,
   createManagerBodySchema,
   devLoginBodySchema,
   loginWidgetBodySchema,
@@ -308,6 +314,44 @@ const adminCore = c.router({
         409: adminErrorSchema,
       },
       summary: 'Owner only: remove a manager',
+    },
+  },
+  settings: {
+    list: {
+      method: 'GET',
+      path: '/admin/settings',
+      responses: { 200: z.array(settingStateSchema), 401: adminErrorSchema, 403: adminErrorSchema },
+      summary: 'Owner only: the current value of every registered setting',
+    },
+    update: {
+      method: 'PUT',
+      path: '/admin/settings/:key',
+      pathParams: z.object({ key: z.string().min(1).max(100) }),
+      body: updateSettingBodySchema,
+      responses: {
+        200: settingStateSchema,
+        400: settingErrorSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+      },
+      summary: 'Owner only: validate against the registry, store, and audit actor, old and new',
+    },
+  },
+  audit: {
+    list: {
+      method: 'GET',
+      path: '/admin/audit',
+      query: auditQuerySchema,
+      responses: { 200: auditPageSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+      summary:
+        'Owner only: the audit trail, newest first, filtered by actor, action and Tashkent dates',
+    },
+    filters: {
+      method: 'GET',
+      path: '/admin/audit/filters',
+      responses: { 200: auditFiltersSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+      summary: 'Owner only: the actors and action types the audit filters offer',
     },
   },
   catalog: {
