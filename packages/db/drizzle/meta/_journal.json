@@ -47,8 +47,15 @@
     {
       "idx": 6,
       "version": "7",
-      "when": 1794226230414,
-      "tag": "0006_absent_shape",
+      "when": 1794252725827,
+      "tag": "0006_cheerful_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794253451155,
+      "tag": "0007_search_documents",
       "breakpoints": true
     }
   ]

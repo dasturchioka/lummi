@@ -65,6 +65,11 @@ export class SessionManager {
     return this.token;
   }
 
+  /** Take a session the server issued outside sign-in (a relinked account, ADR 0004). */
+  adopt(token: string, expiresAt: number): void {
+    this.accept({ ok: true, token, expiresAt });
+  }
+
   /** The server refused our token (401): the session is gone, sign in again. */
   async recover(rejected: string): Promise<string> {
     if (this.state === 'reopen') throw new SessionUnavailableError(this.state);

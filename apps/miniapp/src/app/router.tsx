@@ -54,6 +54,10 @@ const devRoutes = import.meta.env.DEV
         ...at('/dev/sheet'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'GallerySheetOpen'),
       }),
+      createRoute({
+        ...at('/dev/registration'),
+        component: lazyRouteComponent(() => import('../dev/Gallery'), 'GalleryRegistrationOpen'),
+      }),
       // The fragrance card on fixtures: `?data=demo|worst|one|empty` (worst by default).
       createRoute({
         ...at('/dev/fragrance'),
