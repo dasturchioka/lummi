@@ -35,7 +35,7 @@ const NBSP = ' ';
  * «по мотивам <brand>» / «<brand> asosida» with the template's own words held together, so a long
  * brand wraps between its own words and «по мотивам» never splits across lines.
  */
-function attribution(template: string, brand: string): string {
+export function attribution(template: string, brand: string): string {
   return template
     .split('{brand}')
     .map((part) => part.replace(/(\S) (?=\S)/g, `$1${NBSP}`))

@@ -2,6 +2,7 @@ import type { FragranceCard, FragranceListItem, VolumeCard } from '@lummi/contra
 import {
   and,
   asc,
+  desc,
   eq,
   families,
   fragranceNotes,
@@ -32,6 +33,13 @@ export async function reservedByVolume(
 
 /** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
 export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
+
+/**
+ * "Top sellers" order, the one definition (spec §3.2, Changes 2026-11-10): owner-pinned (hit)
+ * fragrances first, then the newest. Until orders exist there are no sales; #15 adds paid-order
+ * counts over the window ahead of the newest tier, here, for every list that ranks by it.
+ */
+export const topSellersOrder = () => [desc(fragrances.isHit), desc(fragrances.id)];
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {

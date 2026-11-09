@@ -157,3 +157,8 @@ export const PinIcon = (p: P) => (
     {...p}
   />
 );
+export const PlusIcon = (p: P) => <Icon d="M12 5.5v13M5.5 12h13" {...p} />;
+export const MinusIcon = (p: P) => <Icon d="M5.5 12h13" {...p} />;
+export const TrashIcon = (p: P) => (
+  <Icon d="M4.5 7h15M9.5 7V5h5v2M6.5 7l.8 12h9.4l.8-12M10 10.5v5.5M14 10.5v5.5" {...p} />
+);

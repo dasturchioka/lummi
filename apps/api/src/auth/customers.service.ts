@@ -2,6 +2,7 @@ import { customers, eq, sql, type CustomerRow, type Db, type DbOrTx } from '@lum
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { moveCartData } from '../cart/move-cart';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import type { InitDataUser } from './init-data';
@@ -147,7 +148,7 @@ export class CustomersService {
     // Another Telegram id held this phone: the person moved to a new account, phone wins.
     // Only a fresh record may be absorbed; one with its own phone (and so history) may not.
     if (current.phone !== null) return { kind: 'taken' as const };
-    await moveCustomerData(tx, current.id, holder.id);
+    await moveCustomerData(tx, current.id, holder.id, now);
     await tx.delete(customers).where(eq(customers.id, current.id));
     const [row] = await tx
       .update(customers)
@@ -229,13 +230,16 @@ export class CustomersService {
 /**
  * Everything that hangs on a customer record moves here when a fresh record is merged into the
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
- * (the cart, #18, moves its lines). Today only preferences exist and the fresh record has none worth keeping.
+ * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
  */
 export async function moveCustomerData(
-  _tx: DbOrTx,
-  _fromId: number,
-  _toId: number,
-): Promise<void> {}
+  tx: DbOrTx,
+  fromId: number,
+  toId: number,
+  now: Date,
+): Promise<void> {
+  await moveCartData(tx, fromId, toId, now);
+}
 
 /** A lost race on the phone's unique index, or a deadlock between two relinks: run the transaction again. */
 function isRetryable(e: unknown): boolean {

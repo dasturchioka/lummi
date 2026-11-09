@@ -70,6 +70,32 @@ export const settingDefinitions = {
       uz: 'Tovarlar shu summadan boshlab yetkazib berish bepul.',
     },
   },
+  /** The delivery fee before the free-delivery threshold when the customer has no delivery city; a region's own tariff wins (spec Changes 2026-11-10). */
+  'delivery.defaultTariff': {
+    schema: z.number().int().min(0).max(100_000_000),
+    default: 25_000,
+    area: 'pricing',
+    unit: 'sum',
+    label: { ru: 'Стоимость доставки по умолчанию', uz: 'Odatiy yetkazib berish narxi' },
+    hint: {
+      ru: 'Пока клиент не выбрал город. Если у региона свой тариф, действует он.',
+      uz: 'Mijoz shaharni tanlamaguncha. Viloyatning oʻz tarifi boʻlsa, oʻsha amal qiladi.',
+    },
+  },
+  /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
+  'cart.suggestionsLimit': {
+    schema: z.number().int().min(0).max(12),
+    default: 3,
+    area: 'shop',
+    label: {
+      ru: 'Сколько ароматов 10 мл предлагать в корзине',
+      uz: 'Savatda nechta 10 ml atir taklif qilinadi',
+    },
+    hint: {
+      ru: 'Подсказки под полосой бесплатной доставки. 0 — не показывать.',
+      uz: 'Bepul yetkazib berish chizigʻi ostidagi takliflar. 0 — koʻrsatilmaydi.',
+    },
+  },
   /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */
   'pricing.thresholdBase': {
     schema: z.object({

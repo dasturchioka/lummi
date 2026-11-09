@@ -435,3 +435,47 @@ export type BtsPointRow = typeof btsPoints.$inferSelect;
 export type StaffRow = typeof staff.$inferSelect;
 export type StaffRole = (typeof staffRoleEnum.enumValues)[number];
 export type ActorType = (typeof actorTypeEnum.enumValues)[number];
+
+/**
+ * A Customer's cart (spec 2026-11-07): one row per customer, created with the first line. It holds
+ * the discount the customer switched to and the link-prefilled promo code for the discount tickets
+ * (ADR 0002); the lines are in `cart_lines`. The cart never expires.
+ */
+/** The discount the customer switched to (ADR 0002); the pricing module's `DiscountChoice` has this same shape. */
+export type StoredDiscountChoice =
+  { type: 'upgrade_right' | 'birthday_coupon'; id: number } | { type: 'promo_code' };
+
+export const carts = pgTable('carts', {
+  customerId: bigint('customer_id', { mode: 'number' })
+    .primaryKey()
+    .references(() => customers.id, { onDelete: 'cascade' }),
+  /** `{ type: 'upgrade_right' | 'birthday_coupon', id } | { type: 'promo_code' }`; cleared when a code is typed. */
+  discountChoice: jsonb('discount_choice').$type<StoredDiscountChoice>(),
+  /** An entered or link-prefilled promo code, upper-case; judged by the quote, never blocks the order. */
+  promoCode: text('promo_code'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One volume x quantity in a cart. Quantity is what the customer asked for; the server caps it at available on read. */
+export const cartLines = pgTable(
+  'cart_lines',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    volumeId: bigint('volume_id', { mode: 'number' })
+      .notNull()
+      .references(() => volumes.id, { onDelete: 'cascade' }),
+    qty: integer('qty').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
+    index('cart_lines_volume_idx').on(t.volumeId),
+    check('cart_lines_qty_check', sql`${t.qty} > 0`),
+  ],
+);
+
+export type CartRow = typeof carts.$inferSelect;
+export type CartLineRow = typeof cartLines.$inferSelect;

@@ -40,6 +40,12 @@ export const clientRoutes = {
     cities: route('GET', '/delivery/regions/:regionId/cities', [200, 401, 404]),
     points: route('GET', '/delivery/points', [200, 401]),
   },
+  cart: {
+    get: route('GET', '/cart', [200, 401]),
+    addLine: route('POST', '/cart/lines', [200, 401, 404, 409]),
+    setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
+    removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
+  },
   catalog: {
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
     suggest: route('GET', '/catalog/suggest', [200, 401]),
