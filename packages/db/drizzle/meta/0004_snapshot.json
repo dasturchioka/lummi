@@ -1,5 +1,5 @@
 {
-  "id": "98f69d24-f9ab-445f-ae4d-0a15da0ea42c",
+  "id": "ddbb7e4d-6b3e-4e87-8685-eab127eb3be3",
   "prevId": "614f2257-fa15-4958-944e-4f9b4ffda436",
   "version": "7",
   "dialect": "postgresql",
@@ -116,8 +116,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.bts_points": {
-      "name": "bts_points",
+    "public.credits": {
+      "name": "credits",
       "schema": "",
       "columns": {
         "id": {
@@ -127,7 +127,7 @@
           "notNull": true,
           "identity": {
             "type": "always",
-            "name": "bts_points_id_seq",
+            "name": "credits_id_seq",
             "schema": "public",
             "increment": "1",
             "startWith": "1",
@@ -137,109 +137,93 @@
             "cycle": false
           }
         },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "region_id": {
-          "name": "region_id",
+        "humo_message_id": {
+          "name": "humo_message_id",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true
         },
-        "city": {
-          "name": "city",
+        "amount_tiyin": {
+          "name": "amount_tiyin",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_som": {
+          "name": "amount_som",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "case when amount_tiyin % 100 = 0 then amount_tiyin / 100 end",
+            "type": "stored"
+          }
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "card_mask": {
+          "name": "card_mask",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "card_last4": {
+          "name": "card_last4",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "address": {
-          "name": "address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "landmark": {
-          "name": "landmark",
+        "counterparty": {
+          "name": "counterparty",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "hours": {
-          "name": "hours",
-          "type": "text",
+        "event_queued_at": {
+          "name": "event_queued_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "search_text": {
-          "name": "search_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
+        "event_handled_at": {
+          "name": "event_handled_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
+          "notNull": false
         }
       },
       "indexes": {
-        "bts_points_region_city_idx": {
-          "name": "bts_points_region_city_idx",
+        "credits_event_pending_idx": {
+          "name": "credits_event_pending_idx",
           "columns": [
             {
-              "expression": "region_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "city",
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
+          "where": "event_handled_at is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "bts_points_region_id_regions_id_fk": {
-          "name": "bts_points_region_id_regions_id_fk",
-          "tableFrom": "bts_points",
-          "tableTo": "regions",
+        "credits_humo_message_id_humo_messages_message_id_fk": {
+          "name": "credits_humo_message_id_humo_messages_message_id_fk",
+          "tableFrom": "credits",
+          "tableTo": "humo_messages",
           "columnsFrom": [
-            "region_id"
+            "humo_message_id"
           ],
           "columnsTo": [
-            "id"
+            "message_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -247,16 +231,25 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "bts_points_code_unique": {
-          "name": "bts_points_code_unique",
+        "credits_humo_message_id_unique": {
+          "name": "credits_humo_message_id_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "code"
+            "humo_message_id"
           ]
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "credits_amount_positive": {
+          "name": "credits_amount_positive",
+          "value": "\"credits\".\"amount_tiyin\" > 0"
+        },
+        "credits_card_last4": {
+          "name": "credits_card_last4",
+          "value": "\"credits\".\"card_last4\" ~ '^[0-9]{4}$'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.customers": {
@@ -326,18 +319,6 @@
           "notNull": true,
           "default": false
         },
-        "delivery_region_id": {
-          "name": "delivery_region_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "delivery_city": {
-          "name": "delivery_city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -354,21 +335,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "customers_delivery_region_id_regions_id_fk": {
-          "name": "customers_delivery_region_id_regions_id_fk",
-          "tableFrom": "customers",
-          "tableTo": "regions",
-          "columnsFrom": [
-            "delivery_region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "customers_telegram_id_unique": {
@@ -379,6 +346,43 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.humo_messages": {
+      "name": "humo_messages",
+      "schema": "",
+      "columns": {
+        "message_id": {
+          "name": "message_id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parse_error": {
+          "name": "parse_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -520,94 +524,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.regions": {
-      "name": "regions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "regions_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bts_id": {
-          "name": "bts_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_ru": {
-          "name": "name_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_uz": {
-          "name": "name_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "delivery_tariff": {
-          "name": "delivery_tariff",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "regions_code_unique": {
-          "name": "regions_code_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
-        },
-        "regions_bts_id_unique": {
-          "name": "regions_bts_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "bts_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -819,6 +735,37 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.userbot_heartbeat": {
+      "name": "userbot_heartbeat",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "seen_at": {
+          "name": "seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "userbot_heartbeat_one_row": {
+          "name": "userbot_heartbeat_one_row",
+          "value": "\"userbot_heartbeat\".\"id\""
+        }
+      },
       "isRLSEnabled": false
     }
   },

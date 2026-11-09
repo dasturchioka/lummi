@@ -6,7 +6,7 @@ Telegram Mini App + bot + admin panel for **LUMMI.**, a perfume brand selling Ex
 
 ## Docs
 
-- `docs/adr/` — design decisions (0001–0029) locked in the 2026-11-07 grilling session; read the relevant ADR before changing money, payment, stock or architecture code.
+- `docs/adr/` — design decisions (0001 onward) locked in the 2026-11-07 grilling session; read the relevant ADR before changing money, payment, stock or architecture code.
 - `GLOSSARY.md` — the domain vocabulary; use its terms in code and docs.
 
 - `docs/spec.md` — business rules digest of the TZ (screens, set discount, birthday, payment and reconciliation, bot, manager group, admin, promo, delivery, acceptance). Read the relevant section before implementing or estimating any feature.

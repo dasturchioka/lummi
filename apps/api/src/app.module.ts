@@ -23,6 +23,10 @@ import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
+import { CreditEvents } from './humo/credit-events';
+import { HumoFeedController } from './humo/humo-feed.controller';
+import { HumoFeedService } from './humo/humo-feed.service';
+import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
@@ -49,6 +53,7 @@ export class AppModule {
         StaffController,
         DeliveryController,
         BtsAdminController,
+        HumoFeedController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -71,8 +76,13 @@ export class AppModule {
         StaffSessionService,
         StaffGuard,
         OwnerGuard,
+        InternalGuard,
+        CreditEvents,
+        HumoFeedService,
       ],
       exports: [
+        CreditEvents,
+        HumoFeedService,
         SettingsService,
         AuditService,
         OutboxService,

@@ -5,6 +5,7 @@ import { OutboxService } from '../src/outbox/outbox.service';
 import { AlertService } from '../src/outbox/alert.service';
 import { SettingsService } from '../src/settings/settings.service';
 import { AuditService } from '../src/audit/audit.service';
+import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_MINIAPP_URL, type TestApp } from './harness/test-app';
 import type { WorkerRuntime } from '../src/worker/runtime';
 
@@ -264,8 +265,19 @@ describe('alertOwner', () => {
     expect(sent.every((m) => m.text.includes('Платёж не найден'))).toBe(true);
   });
 
-  it('with nothing configured it queues nothing', async () => {
-    await alerts.alertOwner(t.db, 'x');
+  it('with nothing configured it queues nothing and warns in the log', async () => {
+    const logs = captureLogs();
+    try {
+      await alerts.alertOwner(t.db, 'Платёж не найден');
+    } finally {
+      logs.stop();
+    }
     expect(await t.db.select().from(outbox)).toHaveLength(0);
+    expect(logs.entries).toEqual([
+      expect.objectContaining({
+        level: 'warn',
+        text: expect.stringContaining('bot.alertRecipients'),
+      }),
+    ]);
   });
 });

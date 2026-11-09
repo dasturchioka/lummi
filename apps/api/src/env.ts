@@ -1,6 +1,33 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 const port = z.coerce.number().int().min(0).max(65535);
+
+export interface Cidr {
+  address: string;
+  prefix: number;
+  family: 'ipv4' | 'ipv6';
+}
+
+/** «127.0.0.0/8,::1/128» → subnets; a malformed entry fails the env check, so the API refuses to boot. */
+const cidrList = z.string().transform((value, ctx): Cidr[] => {
+  const list: Cidr[] = [];
+  for (const entry of value
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean)) {
+    const [address = '', prefixText = ''] = entry.split('/');
+    const version = isIP(address);
+    const prefix = Number(prefixText);
+    const max = version === 6 ? 128 : 32;
+    if (version === 0 || !/^\d{1,3}$/.test(prefixText) || prefix > max) {
+      ctx.addIssue({ code: 'custom', message: `not a CIDR: «${entry}»` });
+      return z.NEVER;
+    }
+    list.push({ address, prefix, family: version === 6 ? 'ipv6' : 'ipv4' });
+  }
+  return list;
+});
 
 const botModes = ['polling', 'webhook', 'off'] as const;
 
@@ -30,9 +57,35 @@ export const envSchema = z
     MINIAPP_URL: z.string().url().optional(),
     /** BullMQ queue of the outbox; API and worker must agree (tests use a unique one). */
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
+    /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
+    EVENTS_QUEUE: z.string().min(1).default('events'),
+
+    /** Receipt AI keys (ADR 0013). TypeSafe is required in production; OpenAI (the fallback) is optional everywhere and fails as not-configured. */
+    TYPESAFE_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    /** Overrides for tests and proxies only. */
+    TYPESAFE_BASE_URL: z.string().url().default('https://api.typesafe.ai'),
+    OPENAI_BASE_URL: z.string().url().default('https://api.openai.com'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
+    /** Shared secret of the internal endpoints the userbot calls (ADR 0031); unset = they answer 404. */
+    INTERNAL_API_SECRET: z
+      .string()
+      .min(32, 'INTERNAL_API_SECRET must be at least 32 characters')
+      .optional(),
+    /**
+     * Source networks allowed to call the internal endpoints. Loopback only by default (ADR 0031);
+     * a Compose deploy where the userbot is its own container adds that network's subnet.
+     */
+    INTERNAL_ALLOWED_CIDRS: cidrList.default('127.0.0.0/8,::1/128'),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.TYPESAFE_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TYPESAFE_API_KEY'],
+        message: 'TYPESAFE_API_KEY is required in production',
+      });
+    }
     if (env.BOT_MODE === 'webhook') {
       for (const key of ['WEBHOOK_URL', 'WEBHOOK_SECRET'] as const) {
         if (!env[key]) {

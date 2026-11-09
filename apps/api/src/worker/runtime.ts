@@ -8,6 +8,7 @@ import { AlertService } from '../outbox/alert.service';
 import { OutboxService, SEND_ATTEMPTS } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
+import { describeError } from '../logging/describe-error';
 
 /** Telegram sends per second for the whole queue (ADR 0021: broadcasts at <= 25 msg/s). */
 const SEND_RATE_PER_SECOND = 25;
@@ -35,11 +36,23 @@ export interface Sweep {
   run(ctx: SweepContext): Promise<void>;
 }
 
+/**
+ * A BullMQ queue whose jobs the worker executes (ADR 0021: BullMQ only executes). A job that throws
+ * is retried by its own attempts and backoff; the producer's sweep is the safety net beyond that.
+ */
+export interface QueueProcessor {
+  queue: string;
+  concurrency?: number;
+  process(job: Job): Promise<void>;
+}
+
 /** The worker process (built from a Nest application context, like the API). */
 @Injectable()
 export class WorkerRuntime implements OnApplicationShutdown {
   private readonly log = new Logger('Worker');
   private readonly sweeps: Sweep[] = [];
+  private readonly processors: QueueProcessor[] = [];
+  private readonly extraWorkers: { worker: Worker; connection: Redis }[] = [];
   private readonly failures = new Map<string, number>();
   private ticking = false;
   private worker?: Worker;
@@ -69,6 +82,11 @@ export class WorkerRuntime implements OnApplicationShutdown {
     this.sweeps.push(sweep);
   }
 
+  /** Execute this queue's jobs in the worker process, from `start()` on. */
+  registerQueue(processor: QueueProcessor): void {
+    this.processors.push(processor);
+  }
+
   /** One minute of work: every sweep, then queue pending outbox rows. A tick still running is not stacked. */
   async tick(): Promise<void> {
     if (this.ticking) return;
@@ -95,17 +113,19 @@ export class WorkerRuntime implements OnApplicationShutdown {
     } catch (e) {
       const count = (this.failures.get(sweep.name) ?? 0) + 1;
       this.failures.set(sweep.name, count);
-      this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${(e as Error).message}`);
+      this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${describeError(e)}`);
       const limit = await this.settings.get('worker.sweepFailureAlertAfter');
       if (count === limit) {
         await ctx
           .withTx((tx) =>
             this.alerts.alertOwner(
               tx,
-              `Сбой задачи «${sweep.name}» ${count} раз подряд: ${(e as Error).message}`,
+              `Сбой задачи «${sweep.name}» ${count} раз подряд: ${describeError(e)}`,
             ),
           )
-          .catch((err: Error) => this.log.error(`could not queue the alert: ${err.message}`));
+          .catch((err: unknown) =>
+            this.log.error(`could not queue the alert: ${describeError(err)}`),
+          );
       }
     }
   }
@@ -118,7 +138,16 @@ export class WorkerRuntime implements OnApplicationShutdown {
       concurrency: 5,
       limiter: { max: SEND_RATE_PER_SECOND, duration: 1000 },
     });
-    this.worker.on('error', (e) => this.log.error(`queue error: ${e.message}`));
+    this.worker.on('error', (e) => this.log.error(`queue error: ${describeError(e)}`));
+    for (const p of this.processors) {
+      const connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
+      const worker = new Worker(p.queue, (job) => p.process(job), {
+        connection,
+        concurrency: p.concurrency ?? 1,
+      });
+      worker.on('error', (e) => this.log.error(`queue ${p.queue} error: ${describeError(e)}`));
+      this.extraWorkers.push({ worker, connection });
+    }
   }
 
   private async process(job: Job<{ id: number }>): Promise<void> {
@@ -126,7 +155,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
       await this.outbox.deliver(job.data.id);
     } catch (e) {
       if (job.attemptsMade + 1 >= SEND_ATTEMPTS) {
-        await this.outbox.markFailed(job.data.id, (e as Error).message);
+        await this.outbox.markFailed(job.data.id, describeError(e));
       }
       throw e;
     }
@@ -135,5 +164,9 @@ export class WorkerRuntime implements OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     await this.worker?.close();
     this.connection?.disconnect();
+    for (const { worker, connection } of this.extraWorkers) {
+      await worker.close();
+      connection.disconnect();
+    }
   }
 }

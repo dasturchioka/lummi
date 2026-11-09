@@ -136,12 +136,16 @@ _Avoid_: Check, чек (in code), payment proof, fiscal receipt
 The part of an order's total the customer must transfer to the shop card. Equals the total in stage 1.
 _Avoid_: Payable, balance, sum to pay
 
+**Humo message**:
+A message from the official Humo bot in the account that receives the shop card's notifications, as the userbot posts it to the API. One with a ➕ line becomes a credit; one with a ➖ line (a debit) is ignored and not stored; anything else is stored raw and flagged.
+_Avoid_: notification (in code), Humo notification, SMS
+
 **Credit**:
 An incoming transfer to the shop card, as reported by the official Humo bot. Can be linked to at most one order.
 _Avoid_: Payment, transaction, поступление (in code), notification
 
 **Candidate credit**:
-A credit that could pay a given order: not linked to any order, same amount as the order's amount due, arrived after the order was created.
+A credit that could pay a given order: on the shop card (same last 4 digits), not linked to any order, same amount as the order's amount due, arrived after the order was created.
 _Avoid_: Possible match, suggestion
 
 **Payment not found**:

@@ -10,11 +10,26 @@ const valid = {
 describe('parseEnv', () => {
   it('refuses the .env.example placeholder secret in production only', () => {
     const placeholder = { ...valid, SESSION_SECRET: PLACEHOLDER_SESSION_SECRET };
-    expect(() => parseEnv({ ...placeholder, NODE_ENV: 'production' })).toThrow(/SESSION_SECRET/);
+    expect(() =>
+      parseEnv({
+        ...placeholder,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(/SESSION_SECRET/);
     expect(parseEnv({ ...placeholder, NODE_ENV: 'development' }).SESSION_SECRET).toBe(
       PLACEHOLDER_SESSION_SECRET,
     );
-    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+    const keys = { TYPESAFE_API_KEY: 'k' };
+    expect(parseEnv({ ...valid, ...keys, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+  });
+
+  it('requires the TypeSafe key in production and never the OpenAI one', () => {
+    expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/TYPESAFE_API_KEY/);
+    expect(
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).OPENAI_API_KEY,
+    ).toBeUndefined();
   });
 
   it('applies defaults and coerces the port', () => {
@@ -43,13 +58,52 @@ describe('parseEnv', () => {
     ).toBe('webhook');
   });
 
-  it('refuses the dev-only admin sign-in in production, allows it elsewhere', () => {
-    expect(() => parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'true' })).toThrow(
-      /ADMIN_DEV_LOGIN/,
-    );
-    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).ADMIN_DEV_LOGIN).toBe(false);
+  it('internal endpoints: loopback only by default, CIDRs validated, secret at least 32 chars', () => {
+    expect(parseEnv(valid).INTERNAL_API_SECRET).toBeUndefined();
+    expect(parseEnv(valid)).toMatchObject({
+      INTERNAL_ALLOWED_CIDRS: [
+        { address: '127.0.0.0', prefix: 8, family: 'ipv4' },
+        { address: '::1', prefix: 128, family: 'ipv6' },
+      ],
+    });
     expect(
-      parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'false' }).ADMIN_DEV_LOGIN,
+      parseEnv({ ...valid, INTERNAL_ALLOWED_CIDRS: ' 127.0.0.1/32 , 172.18.0.0/16 ' })
+        .INTERNAL_ALLOWED_CIDRS,
+    ).toEqual([
+      { address: '127.0.0.1', prefix: 32, family: 'ipv4' },
+      { address: '172.18.0.0', prefix: 16, family: 'ipv4' },
+    ]);
+    for (const bad of ['10.0.0.0', '10.0.0.0/33', '::1/129', 'localhost/8', '10.0.0.0/x']) {
+      expect(() => parseEnv({ ...valid, INTERNAL_ALLOWED_CIDRS: bad })).toThrow(
+        /INTERNAL_ALLOWED_CIDRS/,
+      );
+    }
+    expect(() => parseEnv({ ...valid, INTERNAL_API_SECRET: 'short' })).toThrow(
+      /INTERNAL_API_SECRET/,
+    );
+  });
+
+  it('refuses the dev-only admin sign-in in production, allows it elsewhere', () => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+        ADMIN_DEV_LOGIN: 'true',
+      }),
+    ).toThrow(/ADMIN_DEV_LOGIN/);
+    expect(
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).ADMIN_DEV_LOGIN,
+    ).toBe(false);
+    expect(
+      parseEnv({
+        ...valid,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+        ADMIN_DEV_LOGIN: 'false',
+      }).ADMIN_DEV_LOGIN,
     ).toBe(false);
     expect(
       parseEnv({ ...valid, NODE_ENV: 'development', ADMIN_DEV_LOGIN: 'true' }).ADMIN_DEV_LOGIN,
