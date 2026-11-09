@@ -1,7 +1,7 @@
 import { customers, eq, processedUpdates, type Db } from '@lummi/db';
 import { dictionaries } from '@lummi/i18n';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
-import { Bot, Context } from 'grammy';
+import { Bot, type Context } from 'grammy';
 import type { UserFromGetMe, Update } from 'grammy/types';
 import { CustomersService, type Tx } from '../auth/customers.service';
 import type { Env } from '../env';

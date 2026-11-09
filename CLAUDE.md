@@ -60,15 +60,15 @@ AI payment verification matches receipts against credit notifications from the *
 
 ## Design tokens (Brandbook v2.0 pp.4–8)
 
-| Token | Value | Use |
-|---|---|---|
-| Milk | `#F5F2EC` (60%) | App background |
-| Stone | `#CFC6B8` (25%) | Secondary surfaces, blocks, avatar bg |
-| Graphite | `#2A2A2A` (10%) | Text, headings, buttons (button text = Milk), icons |
-| Sage | `#9AA592` (5%) | Accent: badges "Хит"/"Новинка", thin lines, icons |
-| Card bg | `#FFFFFF` | Product cards |
-| Radius | cards 12 px, buttons 10 px | |
-| Icons | linear, 1.5 px stroke, Graphite | |
+| Token    | Value                           | Use                                                 |
+| -------- | ------------------------------- | --------------------------------------------------- |
+| Milk     | `#F5F2EC` (60%)                 | App background                                      |
+| Stone    | `#CFC6B8` (25%)                 | Secondary surfaces, blocks, avatar bg               |
+| Graphite | `#2A2A2A` (10%)                 | Text, headings, buttons (button text = Milk), icons |
+| Sage     | `#9AA592` (5%)                  | Accent: badges "Хит"/"Новинка", thin lines, icons   |
+| Card bg  | `#FFFFFF`                       | Product cards                                       |
+| Radius   | cards 12 px, buttons 10 px      |                                                     |
+| Icons    | linear, 1.5 px stroke, Graphite |                                                     |
 
 - Burgundy, rose gold, and gold are forbidden. No shadows, outlines, or effects on the logo.
 - Fonts (Google Fonts, self-host for the < 2 s first screen):
