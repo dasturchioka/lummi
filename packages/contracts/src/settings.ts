@@ -50,6 +50,38 @@ export const settingDefinitions = {
     schema: z.number().int().min(0).max(100_000_000),
     default: 25_000,
   },
+  /**
+   * How long a new order's reserve lives without a receipt (TZ §4: 12 h, ADR 0012); the order
+   * stores the instant as `reserve_until`. The metadata (area, label, unit, hint) is in the shape
+   * of the admin settings page (#9).
+   */
+  'orders.reserveTtlSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(15 * 60)
+      .max(7 * 86_400),
+    default: 12 * 3600,
+    area: 'shop',
+    unit: 'seconds',
+    label: { ru: 'Бронь товаров без чека', uz: 'Chek yuborilmaguncha mahsulotlar bandligi' },
+    hint: {
+      ru: 'Сколько заказ держит товары, пока не загружен чек. 43 200 секунд = 12 часов.',
+      uz: 'Chek yuklanmaguncha buyurtma mahsulotlarni qancha vaqt band qilib turadi. 43 200 soniya = 12 soat.',
+    },
+  },
+  /** The longest greeting card text of a gift order («Это подарок», spec Changes 2026-11-07). */
+  'orders.giftMessageMaxLength': {
+    schema: z.number().int().min(10).max(1000),
+    default: 250,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Длина текста открытки', uz: 'Otkritka matni uzunligi' },
+    hint: {
+      ru: 'Сколько символов покупатель может написать на открытке к подарку.',
+      uz: 'Xaridor sovgʻa otkritkasiga nechta belgi yozishi mumkin.',
+    },
+  },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
   'cart.suggestionsLimit': { schema: z.number().int().min(0).max(12), default: 3 },
   /** Per discount source: is the threshold compared with items before or after the discount (spec Changes 2026-11-07). */

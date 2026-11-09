@@ -45,6 +45,8 @@ export const customers = pgTable('customers', {
   /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
   deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
   deliveryCity: text('delivery_city'),
+  /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
+  dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -479,3 +481,151 @@ export const cartLines = pgTable(
 
 export type CartRow = typeof carts.$inferSelect;
 export type CartLineRow = typeof cartLines.$inferSelect;
+
+/*
+ * Orders (ADR 0001, 0010, 0011, 0012). An order is an immutable snapshot of what was bought, at
+ * which prices, delivered where: later price, catalog or BTS point edits never change it. Its
+ * status is the one linear status of ADR 0011; the status machine (#24) moves it after checkout.
+ */
+export const ORDER_STATUS_VALUES = [
+  'awaiting_payment',
+  'receipt_review',
+  'payment_confirmed',
+  'accepted',
+  'assembling',
+  'handed_to_bts',
+  'delivered',
+  'returned',
+  'cancelled',
+] as const;
+export const orderStatusEnum = pgEnum('order_status', ORDER_STATUS_VALUES);
+export type OrderStatusValue = (typeof ORDER_STATUS_VALUES)[number];
+/**
+ * The statuses whose lines hold a Reserve (ADR 0010): not yet handed to BTS (on hand drops then)
+ * and not cancelled. Delivered and returned orders hold none either.
+ */
+export const RESERVING_STATUSES = [
+  'awaiting_payment',
+  'receipt_review',
+  'payment_confirmed',
+  'accepted',
+  'assembling',
+] as const satisfies readonly OrderStatusValue[];
+export const thresholdBaseEnum = pgEnum('threshold_base', ['before', 'after']);
+/** A single volume, or a builder set (five 10 ml volumes, ADR 0009). The Discovery set comes with #22. */
+export const orderLineKindEnum = pgEnum('order_line_kind', ['volume', 'builder_set']);
+
+export const orders = pgTable(
+  'orders',
+  {
+    id: id(),
+    /** The customer-facing number (ADR 0016): its own sequence, starting at 1001. */
+    number: integer('number').notNull().unique().generatedAlwaysAsIdentity({ startWith: 1001 }),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    status: orderStatusEnum('status').notNull().default('awaiting_payment'),
+    /** Without a receipt the reserve ends here (setting `orders.reserveTtlSeconds`, ADR 0012). */
+    reserveUntil: timestamp('reserve_until', { withTimezone: true }).notNull(),
+    /** The Recipient: who collects at the BTS point; the phone is E.164 and grants nothing (ADR 0004). */
+    recipientName: text('recipient_name').notNull(),
+    recipientPhone: text('recipient_phone').notNull(),
+    /** The delivery region decides the fee; from the point, or chosen with a typed address. */
+    regionId: bigint('region_id', { mode: 'number' })
+      .notNull()
+      .references(() => regions.id),
+    regionNameRu: text('region_name_ru').notNull(),
+    regionNameUz: text('region_name_uz').notNull(),
+    /** The chosen BTS point and its text as it was then; all null when the address was typed. */
+    btsPointId: bigint('bts_point_id', { mode: 'number' }).references(() => btsPoints.id),
+    pointCode: text('point_code'),
+    pointName: text('point_name'),
+    pointCity: text('point_city'),
+    pointAddress: text('point_address'),
+    pointLandmark: text('point_landmark'),
+    pointHours: text('point_hours'),
+    /** «Не нашёл свой пункт»: the customer's own text; a manager picks the point (spec 2026-11-07). */
+    typedAddress: text('typed_address'),
+    comment: text('comment'),
+    /** «Это подарок»: gift packaging, a greeting card, no receipt in the parcel; free of charge. */
+    isGift: boolean('is_gift').notNull().default(false),
+    giftMessage: text('gift_message'),
+    itemsSubtotal: integer('items_subtotal').notNull(),
+    /** The quote's one Discount (type, source, amount); its line key is the order line position. */
+    discount: jsonb('discount').$type<Record<string, unknown>>(),
+    discountAmount: integer('discount_amount').notNull().default(0),
+    deliveryFee: integer('delivery_fee').notNull(),
+    thresholdBase: thresholdBaseEnum('threshold_base').notNull(),
+    thresholdBaseAmount: integer('threshold_base_amount').notNull(),
+    total: integer('total').notNull(),
+    /** What the customer transfers to the shop card; payment matching compares this (ADR 0012). */
+    amountDue: integer('amount_due').notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('orders_customer_idx').on(t.customerId, t.createdAt),
+    index('orders_status_idx').on(t.status),
+    check(
+      'orders_point_or_typed',
+      sql`(${t.pointCode} is not null and ${t.typedAddress} is null) or (${t.pointCode} is null and ${t.btsPointId} is null and ${t.typedAddress} is not null)`,
+    ),
+    check('orders_gift_message', sql`${t.isGift} or ${t.giftMessage} is null`),
+    check(
+      'orders_money',
+      sql`${t.itemsSubtotal} >= 0 and ${t.discountAmount} >= 0 and ${t.deliveryFee} >= 0 and ${t.total} >= 0 and ${t.amountDue} >= 0 and ${t.amountDue} <= ${t.total}`,
+    ),
+  ],
+);
+
+/**
+ * A line of an order as bought. A volume line reserves its volume; a builder set line reserves one
+ * 10 ml of each of its five fragrances (`set_volume_ids`, ADR 0009, 0010). Names are kept in both
+ * languages, so the order reads the same after any catalog edit.
+ */
+export const orderLines = pgTable(
+  'order_lines',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    /** 0-based place in the order; the discount's line key. */
+    position: smallint('position').notNull(),
+    kind: orderLineKindEnum('kind').notNull().default('volume'),
+    volumeId: bigint('volume_id', { mode: 'number' }).references(() => volumes.id),
+    fragranceId: bigint('fragrance_id', { mode: 'number' }).references(() => fragrances.id),
+    slug: text('slug'),
+    nameRu: text('name_ru').notNull(),
+    nameUz: text('name_uz').notNull(),
+    brand: text('brand'),
+    ml: smallint('ml').notNull(),
+    photo: text('photo'),
+    unitPrice: integer('unit_price').notNull(),
+    regularUnitPrice: integer('regular_unit_price').notNull(),
+    markedDown: boolean('marked_down').notNull().default(false),
+    qty: integer('qty').notNull(),
+    lineTotal: integer('line_total').notNull(),
+    /** A builder set's five 10 ml volumes: the reserve takes one of each per set unit. */
+    setVolumeIds: bigint('set_volume_ids', { mode: 'number' }).array(),
+    /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
+    setComposition:
+      jsonb('set_composition').$type<{ fragranceId: number; name: string; brand: string }[]>(),
+  },
+  (t) => [
+    uniqueIndex('order_lines_order_position_idx').on(t.orderId, t.position),
+    index('order_lines_volume_idx').on(t.volumeId),
+    check('order_lines_qty_check', sql`${t.qty} > 0`),
+    check(
+      'order_lines_kind_check',
+      sql`(${t.kind} = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind} = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5)`,
+    ),
+    check(
+      'order_lines_money_check',
+      sql`${t.unitPrice} >= 0 and ${t.regularUnitPrice} >= 0 and ${t.lineTotal} >= 0`,
+    ),
+  ],
+);
+
+export type OrderRow = typeof orders.$inferSelect;
+export type OrderLineRow = typeof orderLines.$inferSelect;

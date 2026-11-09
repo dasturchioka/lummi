@@ -56,6 +56,17 @@ import {
   telegramAuthBodySchema,
 } from './auth';
 import {
+  checkoutConflictSchema,
+  checkoutQuerySchema,
+  checkoutSchema,
+  createOrderBodySchema,
+  orderErrorSchema,
+  orderInputErrorSchema,
+  orderSchema,
+  orderSummarySchema,
+  phoneRequiredSchema,
+} from './orders';
+import {
   humoLastMessageIdSchema,
   humoMessageBodySchema,
   humoMessageResultSchema,
@@ -222,6 +233,45 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: cartSchema, 401: cartErrorSchema },
       summary: 'Remove a line',
+    },
+  },
+  checkout: {
+    get: {
+      method: 'GET',
+      path: '/checkout',
+      query: checkoutQuerySchema,
+      responses: { 200: checkoutSchema, 401: orderErrorSchema },
+      summary:
+        'The cart quoted with the chosen region tariff, plus what checkout asks (phone, consent, gift limit)',
+    },
+  },
+  orders: {
+    create: {
+      method: 'POST',
+      path: '/orders',
+      body: createOrderBodySchema,
+      responses: {
+        201: orderSchema,
+        401: orderErrorSchema,
+        403: phoneRequiredSchema,
+        409: checkoutConflictSchema,
+        422: orderInputErrorSchema,
+      },
+      summary:
+        'Create the order in one transaction: re-quote, lock and reserve, snapshot (ADR 0001, 0010); 409 with the new checkout when the confirmed total is stale',
+    },
+    list: {
+      method: 'GET',
+      path: '/orders',
+      responses: { 200: z.array(orderSummarySchema), 401: orderErrorSchema },
+      summary: "The customer's orders, newest first",
+    },
+    get: {
+      method: 'GET',
+      path: '/orders/:number',
+      pathParams: z.object({ number: z.coerce.number().int().positive() }),
+      responses: { 200: orderSchema, 401: orderErrorSchema, 404: orderErrorSchema },
+      summary: "One of the customer's orders by its number, as its snapshot froze it",
     },
   },
 });

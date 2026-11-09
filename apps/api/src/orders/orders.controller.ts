@@ -1,0 +1,58 @@
+import { contract } from '@lummi/contracts';
+import { Controller, Inject, UseGuards } from '@nestjs/common';
+import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
+import { OrdersService } from './orders.service';
+
+const unauthorized = { status: 401 as const, body: { code: 'unauthorized' as const } };
+
+/** Checkout and the «Заказы» tab. The customer is always the session's (ADR 0029). */
+@Controller()
+@UseGuards(SessionGuard)
+export class OrdersController {
+  constructor(@Inject(OrdersService) private readonly orders: OrdersService) {}
+
+  @TsRestHandler(contract.checkout.get)
+  checkout(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.checkout.get, async ({ query }) => {
+      const dto = await this.orders.checkout(customerId, query.regionId);
+      return dto ? { status: 200 as const, body: dto } : unauthorized;
+    });
+  }
+
+  @TsRestHandler(contract.orders.create)
+  create(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.orders.create, async ({ body }) => {
+      const out = await this.orders.create(customerId, body);
+      if (!out) return unauthorized;
+      switch (out.kind) {
+        case 'created':
+          return { status: 201 as const, body: out.order };
+        case 'phone_required':
+          return { status: 403 as const, body: { code: 'phone_required' as const } };
+        case 'conflict':
+          return { status: 409 as const, body: { code: out.code, checkout: out.checkout } };
+        case 'invalid':
+          return { status: 422 as const, body: { code: out.code } };
+      }
+    });
+  }
+
+  @TsRestHandler(contract.orders.list)
+  list(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.orders.list, async () => ({
+      status: 200 as const,
+      body: await this.orders.list(customerId),
+    }));
+  }
+
+  @TsRestHandler(contract.orders.get)
+  get(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.orders.get, async ({ params }) => {
+      const order = await this.orders.get(customerId, params.number);
+      return order
+        ? { status: 200 as const, body: order }
+        : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
+  }
+}
