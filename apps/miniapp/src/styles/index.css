@@ -45,7 +45,7 @@
   --font-name: 'Cormorant Garamond', Georgia, serif;
 }
 
-/* Type roles from DESIGN.md. Italic is for fragrance names only (`type-name`). */
+/* Type roles from DESIGN.md. Italic is for fragrance and set names (`type-name`) and the Home slogan. */
 @utility type-title {
   font-family: var(--font-display);
   font-size: 22px;

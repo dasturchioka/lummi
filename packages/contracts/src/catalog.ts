@@ -1,15 +1,19 @@
 import { z } from 'zod';
-import { SEARCH_QUERY_MAX } from './constants';
+import {
+  CATALOG_PAGE_MAX,
+  CATALOG_PAGE_SIZE,
+  CATALOG_SORTS,
+  FRAGRANCE_TYPES,
+  SEARCH_QUERY_MAX,
+  SEASONS,
+  SILLAGES,
+  TIMES_OF_DAY,
+  VOLUMES_ML,
+} from './constants';
 
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });
 export type Bilingual = z.infer<typeof bilingualSchema>;
-
-export const FRAGRANCE_TYPES = ['homme', 'femme', 'unisex'] as const;
-export const SILLAGES = ['medium', 'noticeable', 'strong'] as const;
-export const SEASONS = ['spring_summer', 'autumn_winter', 'all_year', 'spring_autumn'] as const;
-export const TIMES_OF_DAY = ['day', 'evening', 'day_evening', 'everyday'] as const;
-export const NOTE_LEVELS = ['top', 'heart', 'base'] as const;
 
 export const volumeCardSchema = z.object({
   ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
@@ -70,7 +74,7 @@ export const fragranceListItemSchema = z.object({
   keyNotes: z.object({ ru: z.array(z.string()), uz: z.array(z.string()) }),
   isHit: z.boolean(),
   isNew: z.boolean(),
-  /** The lowest price to pay over the volumes (a markdown counts while active); null without volumes. */
+  /** The lowest price to pay over the volumes in stock (a markdown counts while active); null when nothing is in stock. */
   fromPrice: z.number().int().nullable(),
   /** Every volume is out of stock. */
   soldOut: z.boolean(),
@@ -90,3 +94,55 @@ export const searchResultSchema = z.object({
   tooShort: z.boolean(),
 });
 export type SearchResult = z.infer<typeof searchResultSchema>;
+
+/** The same ceiling the other so'm schemas use. */
+const MAX_PRICE = 100_000_000;
+
+const volumeFilter = z.coerce
+  .number()
+  .pipe(z.union([z.literal(VOLUMES_ML[0]), z.literal(VOLUMES_ML[1]), z.literal(VOLUMES_ML[2])]));
+
+/**
+ * The catalog list (spec Changes 2026-11-10): every filter is optional and they combine with AND.
+ * `volume` keeps fragrances that have that volume in stock and judges `priceMin`/`priceMax` and the
+ * price sorts by that volume; without it the price is the lowest available effective price.
+ */
+export const catalogQuerySchema = z.object({
+  type: z.enum(FRAGRANCE_TYPES).optional(),
+  family: z.coerce.number().int().positive().optional(),
+  volume: volumeFilter.optional(),
+  priceMin: z.coerce.number().int().min(0).max(MAX_PRICE).optional(),
+  priceMax: z.coerce.number().int().min(0).max(MAX_PRICE).optional(),
+  season: z.enum(SEASONS).optional(),
+  /** Only the owner-flagged new fragrances («Новинки»). */
+  isNew: z.enum(['1']).optional(),
+  sort: z.enum(CATALOG_SORTS).default('top'),
+  limit: z.coerce.number().int().min(1).max(CATALOG_PAGE_MAX).default(CATALOG_PAGE_SIZE),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+/** What a caller may send (defaults optional) and what the service receives (defaults applied). */
+export type CatalogQuery = z.input<typeof catalogQuerySchema>;
+export type CatalogParams = z.output<typeof catalogQuerySchema>;
+
+export const catalogResultSchema = z.object({
+  items: z.array(fragranceListItemSchema),
+  /** Every fragrance the filters keep, not just this page: «Найдено: N». */
+  total: z.number().int(),
+  /** What the filter sheets offer; the whole visible catalog, whatever is filtered now. */
+  facets: z.object({
+    families: z.array(z.object({ id: z.number().int(), name: bilingualSchema })),
+    /** Lowest and highest from-price over the visible catalog, so'm; null when nothing is priced. */
+    price: z.object({ min: z.number().int(), max: z.number().int() }).nullable(),
+    /** The bottle photo hash on each type chip: the top seller of that type that has a photo. */
+    typePhotos: z.object({
+      all: z.string().nullable(),
+      homme: z.string().nullable(),
+      femme: z.string().nullable(),
+      unisex: z.string().nullable(),
+    }),
+  }),
+});
+export type CatalogResult = z.infer<typeof catalogResultSchema>;
+
+export const similarResultSchema = z.object({ items: z.array(fragranceListItemSchema) });
+export type SimilarResult = z.infer<typeof similarResultSchema>;

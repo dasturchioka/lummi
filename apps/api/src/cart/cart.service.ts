@@ -13,7 +13,7 @@ import {
   type DbOrTx,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { available, reservedByVolume, topSellersOrder } from '../catalog/catalog.service';
+import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
 import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
@@ -28,6 +28,7 @@ export class CartService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
+    @Inject(CatalogService) private readonly catalog: CatalogService,
   ) {}
 
   /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
@@ -66,9 +67,9 @@ export class CartService {
 
   /**
    * Available 10 ml bottles not in the cart whose price alone closes the gap, so «Подойдёт любой
-   * аромат 10 мл» is true. Ranked by the catalog's top-sellers order. The price test goes through
-   * `activeMarkdown` (one markdown rule); SQL pre-filters on the regular price, which a markdown
-   * can only lower.
+   * аромат 10 мл» is true. Ranked by the catalog's top-sellers order (`CatalogService`, the one
+   * definition). The price test goes through `activeMarkdown` (one markdown rule); SQL pre-filters
+   * on the regular price, which a markdown can only lower.
    */
   private async suggestions(
     tx: DbOrTx,
@@ -78,36 +79,42 @@ export class CartService {
   ): Promise<CartSuggestionDto[]> {
     const { 'cart.suggestionsLimit': limit } = await readSettings(tx, ['cart.suggestionsLimit']);
     if (limit === 0) return [];
-    const rows = await tx
-      .select({
-        volumeId: volumes.id,
-        slug: fragrances.slug,
-        name: fragrances.name,
-        brand: fragrances.originalBrand,
-        photo: volumes.photoHash,
-        price: volumes.price,
-        salePrice: volumes.salePrice,
-        saleEndsAt: volumes.saleEndsAt,
-        onHand: volumes.onHand,
-      })
-      .from(volumes)
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(
-        and(
-          eq(volumes.ml, 10),
-          eq(fragrances.hidden, false),
-          gte(volumes.price, gap),
-          inCart.length > 0 ? notInArray(volumes.id, inCart) : undefined,
+    const [rank, found] = await Promise.all([
+      this.catalog.topSellersOrder(tx),
+      tx
+        .select({
+          fragranceId: fragrances.id,
+          volumeId: volumes.id,
+          slug: fragrances.slug,
+          name: fragrances.name,
+          brand: fragrances.originalBrand,
+          photo: volumes.photoHash,
+          price: volumes.price,
+          salePrice: volumes.salePrice,
+          saleEndsAt: volumes.saleEndsAt,
+          onHand: volumes.onHand,
+        })
+        .from(volumes)
+        .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+        .where(
+          and(
+            eq(volumes.ml, 10),
+            eq(fragrances.hidden, false),
+            gte(volumes.price, gap),
+            inCart.length > 0 ? notInArray(volumes.id, inCart) : undefined,
+          ),
         ),
-      )
-      .orderBy(...topSellersOrder());
+    ]);
+    const position = new Map(rank.map((id, i) => [id, i]));
+    const at = (id: number) => position.get(id) ?? Number.MAX_SAFE_INTEGER;
+    const rows = found.sort((a, b) => at(a.fragranceId) - at(b.fragranceId));
     const reserved = await reservedByVolume(
       tx,
       rows.map((r) => r.volumeId),
     );
     const out: CartSuggestionDto[] = [];
     for (const r of rows) {
-      if (r.onHand - (reserved.get(r.volumeId) ?? 0) <= 0) continue;
+      if (available(r.onHand, reserved.get(r.volumeId) ?? 0) === 0) continue;
       const price =
         activeMarkdown(
           {
