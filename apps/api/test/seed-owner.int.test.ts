@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { auditLog, staff } from '@lummi/db';
 import { parseSeedOwnerArgs } from '../src/cli/seed-owner-args';
-import { StaffService } from '../src/staff/staff.service';
-import { AuditService } from '../src/audit/audit.service';
+import { seedOwner } from '../src/staff/seed-owner';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -23,8 +22,8 @@ describe('seed owner CLI', () => {
   });
 
   it('creates the first owner who can sign in, and is idempotent (reactivates, never duplicates)', async () => {
-    const svc = new StaffService(t.db, t.edges, new AuditService(), undefined as never);
-    const first = await svc.seedOwner({ telegramId: 900001, name: 'Owner' });
+    const now = () => t.edges.clock.now();
+    const first = await seedOwner(t.db, now(), { telegramId: 900001, name: 'Owner' });
     expect(first).toMatchObject({ role: 'owner', active: true });
     expect(
       (
@@ -35,7 +34,7 @@ describe('seed owner CLI', () => {
     ).toBe(200);
 
     await t.db.update(staff).set({ active: false });
-    const again = await svc.seedOwner({ telegramId: 900001, name: 'Owner' });
+    const again = await seedOwner(t.db, now(), { telegramId: 900001, name: 'Owner' });
     expect(again.id).toBe(first.id);
     expect(again.active).toBe(true);
     expect(await t.db.select().from(staff)).toHaveLength(1);

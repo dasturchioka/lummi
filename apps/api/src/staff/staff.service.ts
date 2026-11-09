@@ -1,4 +1,4 @@
-import { and, asc, eq, staff, type Db, type StaffRow } from '@lummi/db';
+import { asc, eq, staff, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
@@ -52,13 +52,13 @@ export class StaffService {
   /** Deactivation and the revocation of every session of that manager commit together. */
   async setActive(actor: StaffRow, id: number, active: boolean): Promise<StaffOutcome> {
     return this.db.transaction(async (tx) => {
-      const [target] = await tx.select().from(staff).where(eq(staff.id, id)).for('update');
-      if (!target) return { ok: false, reason: 'not_found' } as const;
-      if (target.role !== 'manager') return { ok: false, reason: 'conflict' } as const;
+      const locked = await this.lockManager(tx, id);
+      if (!locked.ok) return locked;
+      const target = locked.staff;
       const [updated] = await tx
         .update(staff)
         .set({ active, updatedAt: this.edges.clock.now() })
-        .where(and(eq(staff.id, id)))
+        .where(eq(staff.id, id))
         .returning();
       if (!active) await this.sessions.revokeAll(tx, id);
       await this.audit.record(tx, {
@@ -75,9 +75,9 @@ export class StaffService {
   /** Sessions go with the row (FK cascade). The audit entry keeps the name for the history. */
   async remove(actor: StaffRow, id: number): Promise<StaffOutcome> {
     return this.db.transaction(async (tx) => {
-      const [target] = await tx.select().from(staff).where(eq(staff.id, id)).for('update');
-      if (!target) return { ok: false, reason: 'not_found' } as const;
-      if (target.role !== 'manager') return { ok: false, reason: 'conflict' } as const;
+      const locked = await this.lockManager(tx, id);
+      if (!locked.ok) return locked;
+      const target = locked.staff;
       await tx.delete(staff).where(eq(staff.id, id));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
@@ -90,29 +90,11 @@ export class StaffService {
     });
   }
 
-  /** CLI: create the first owner, or promote/reactivate an existing record. Idempotent. */
-  async seedOwner(input: { telegramId: number; name: string }): Promise<StaffRow> {
-    return this.db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(staff)
-        .where(eq(staff.telegramId, input.telegramId));
-      const [row] = await tx
-        .insert(staff)
-        .values({ telegramId: input.telegramId, name: input.name, role: 'owner', active: true })
-        .onConflictDoUpdate({
-          target: staff.telegramId,
-          set: { name: input.name, role: 'owner', active: true, updatedAt: this.edges.clock.now() },
-        })
-        .returning();
-      await this.audit.record(tx, {
-        actor: { type: 'system' },
-        action: existing ? 'staff.owner_updated' : 'staff.owner_seeded',
-        targetType: 'staff',
-        targetId: row!.id,
-        payload: { telegramId: input.telegramId, name: input.name },
-      });
-      return row!;
-    });
+  /** Locks the row for the rest of the transaction; the panel only ever changes managers. */
+  private async lockManager(tx: DbOrTx, id: number): Promise<StaffOutcome> {
+    const [target] = await tx.select().from(staff).where(eq(staff.id, id)).for('update');
+    if (!target) return { ok: false, reason: 'not_found' };
+    if (target.role !== 'manager') return { ok: false, reason: 'conflict' };
+    return { ok: true, staff: target };
   }
 }

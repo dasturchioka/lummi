@@ -6,6 +6,15 @@ import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { StaffService } from '../staff/staff.service';
 import { toStaffDto } from './staff.dto';
 
+/** One mapping for service failures: unknown id is 404, a refused change is 409. */
+const conflict = () => ({ status: 409 as const, body: { code: 'conflict' as const } });
+
+function failure(reason: 'not_found' | 'conflict') {
+  return reason === 'not_found'
+    ? { status: 404 as const, body: { code: 'not_found' as const } }
+    : { status: 409 as const, body: { code: 'conflict' as const } };
+}
+
 /** Everything here is owner-only; later owner-only endpoints use the same two guards. */
 @Controller()
 @UseGuards(StaffGuard, OwnerGuard)
@@ -24,9 +33,7 @@ export class StaffController {
   create(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(contract.admin.staff.create, async ({ body }) => {
       const res = await this.staff.addManager(actor, body);
-      return res.ok
-        ? { status: 201 as const, body: toStaffDto(res.staff) }
-        : { status: 409 as const, body: { code: 'conflict' as const } };
+      return res.ok ? { status: 201 as const, body: toStaffDto(res.staff) } : conflict();
     });
   }
 
@@ -35,9 +42,7 @@ export class StaffController {
     return tsRestHandler(contract.admin.staff.update, async ({ params, body }) => {
       const res = await this.staff.setActive(actor, params.id, body.active);
       if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
-      return res.reason === 'not_found'
-        ? { status: 404 as const, body: { code: 'not_found' as const } }
-        : { status: 409 as const, body: { code: 'conflict' as const } };
+      return failure(res.reason);
     });
   }
 
@@ -46,9 +51,7 @@ export class StaffController {
     return tsRestHandler(contract.admin.staff.remove, async ({ params }) => {
       const res = await this.staff.remove(actor, params.id);
       if (res.ok) return { status: 200 as const, body: { ok: true as const } };
-      return res.reason === 'not_found'
-        ? { status: 404 as const, body: { code: 'not_found' as const } }
-        : { status: 409 as const, body: { code: 'conflict' as const } };
+      return failure(res.reason);
     });
   }
 }

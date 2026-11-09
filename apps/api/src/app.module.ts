@@ -1,6 +1,7 @@
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
+import { AdminLoginService } from './admin/admin-login.service';
 import { StaffController } from './admin/staff.controller';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
@@ -39,6 +40,7 @@ export class AppModule {
         SessionService,
         SessionGuard,
         StaffService,
+        AdminLoginService,
         StaffSessionService,
         StaffGuard,
         OwnerGuard,

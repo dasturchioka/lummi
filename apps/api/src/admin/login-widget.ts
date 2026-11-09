@@ -38,8 +38,8 @@ export function verifyLoginWidget(
   }
   const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
   const checkString = entries
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${String(v)}`)
-    .sort()
     .join('\n');
   const key = createHash('sha256').update(opts.botToken).digest();
   const expected = createHmac('sha256', key).update(checkString).digest();

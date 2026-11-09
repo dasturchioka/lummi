@@ -26,6 +26,10 @@ export const settingDefinitions = {
     schema: z.number().int().min(10).max(86_400),
     default: 300,
   },
+  'auth.loginWidgetMaxFutureSkewSeconds': {
+    schema: z.number().int().min(0).max(300),
+    default: 30,
+  },
   'auth.staffSessionTtlSeconds': {
     schema: z
       .number()

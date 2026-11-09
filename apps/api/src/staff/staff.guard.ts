@@ -8,17 +8,10 @@ import {
   createParamDecorator,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { readCookie } from './cookie';
 import { STAFF_COOKIE, StaffSessionService } from './staff-session.service';
 
 export type StaffRequest = Request & { staff?: StaffRow };
-
-export function readCookie(header: string | undefined, name: string): string | null {
-  for (const part of (header ?? '').split(';')) {
-    const i = part.indexOf('=');
-    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim() || null;
-  }
-  return null;
-}
 
 /** Any active staff member with a live session cookie. */
 @Injectable()
