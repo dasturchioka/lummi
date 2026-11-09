@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CatalogSearch, FragranceType } from '../catalog/filters';
 import { activeFilterCount } from '../catalog/request';
 import { useCatalogList } from '../catalog/infinite';
+import { useCatalogPage } from '../catalog/queries';
 import { typeChipOptions } from '../catalog/typeChips';
 import type { SheetName } from '../catalog/CatalogSheets';
 import { useOpenFragrance } from '../lib/navigation';
@@ -45,6 +46,9 @@ export function Catalog() {
 
   const sets = filters.type === 'sets';
   const list = useCatalogList(filters, !sets);
+  // «Наборы» lists nothing yet, but its chip row still shows the other types' bottles: one row of
+  // the whole catalog brings the facets (the Discovery banner links straight here).
+  const facetsOnly = useCatalogPage({}, 1, sets);
   const first = list.data?.pages[0];
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   // Cards already on screen (or there when the screen opened) stay still; only a page that
@@ -58,7 +62,7 @@ export function Catalog() {
   useEffect(() => {
     shown.current = pages ? { first: pages[0], count: items.length } : null;
   });
-  const facets = first?.facets;
+  const facets = sets ? facetsOnly.data?.facets : first?.facets;
 
   const change = (patch: Partial<CatalogSearch>) =>
     void navigate({
