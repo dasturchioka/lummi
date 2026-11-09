@@ -1,5 +1,5 @@
 {
-  "id": "171d35b8-3df6-4e4d-a56b-49fa5b3772c9",
+  "id": "a830a07b-e636-438e-bffd-9efa32e029a1",
   "prevId": "47d087f3-06a5-421a-aec7-94a0ae09ca19",
   "version": "7",
   "dialect": "postgresql",
@@ -112,149 +112,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bts_points": {
-      "name": "bts_points",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "bts_points_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "region_id": {
-          "name": "region_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "address": {
-          "name": "address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "landmark": {
-          "name": "landmark",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "hours": {
-          "name": "hours",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "search_text": {
-          "name": "search_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bts_points_region_city_idx": {
-          "name": "bts_points_region_city_idx",
-          "columns": [
-            {
-              "expression": "region_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "city",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bts_points_region_id_regions_id_fk": {
-          "name": "bts_points_region_id_regions_id_fk",
-          "tableFrom": "bts_points",
-          "tableTo": "regions",
-          "columnsFrom": [
-            "region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bts_points_code_unique": {
-          "name": "bts_points_code_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -462,15 +319,22 @@
           "notNull": true,
           "default": false
         },
-        "delivery_region_id": {
-          "name": "delivery_region_id",
-          "type": "bigint",
+        "phone": {
+          "name": "phone",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "delivery_city": {
-          "name": "delivery_city",
-          "type": "text",
+        "phone_verified_at": {
+          "name": "phone_verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "write_access": {
+          "name": "write_access",
+          "type": "write_access",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -490,21 +354,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "customers_delivery_region_id_regions_id_fk": {
-          "name": "customers_delivery_region_id_regions_id_fk",
-          "tableFrom": "customers",
-          "tableTo": "regions",
-          "columnsFrom": [
-            "delivery_region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "customers_telegram_id_unique": {
@@ -512,6 +362,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "telegram_id"
+          ]
+        },
+        "customers_phone_unique": {
+          "name": "customers_phone_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "phone"
           ]
         }
       },
@@ -1215,94 +1072,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.regions": {
-      "name": "regions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "regions_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bts_id": {
-          "name": "bts_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_ru": {
-          "name": "name_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_uz": {
-          "name": "name_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "delivery_tariff": {
-          "name": "delivery_tariff",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "regions_code_unique": {
-          "name": "regions_code_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
-        },
-        "regions_bts_id_unique": {
-          "name": "regions_bts_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "bts_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.settings": {
       "name": "settings",
       "schema": "",
@@ -1749,6 +1518,14 @@
         "evening",
         "day_evening",
         "everyday"
+      ]
+    },
+    "public.write_access": {
+      "name": "write_access",
+      "schema": "public",
+      "values": [
+        "granted",
+        "refused"
       ]
     }
   },

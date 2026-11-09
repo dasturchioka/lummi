@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import type { ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { showBackButton } from '../lib/back-button';
 import { CloseIcon } from './icons';
 
 /**
@@ -11,6 +12,7 @@ export function Sheet({
   onOpenChange,
   title,
   description,
+  ownDescription = false,
   closeLabel,
   tall = false,
   children,
@@ -19,6 +21,8 @@ export function Sheet({
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  /** The content renders its own `SheetDescription`, one that comes and goes with a step. */
+  ownDescription?: boolean;
   closeLabel: string;
   /**
    * Hold the full height whatever the content: for pickers whose steps and search results
@@ -27,6 +31,13 @@ export function Sheet({
   tall?: boolean;
   children: ReactNode;
 }) {
+  // Telegram's back button (and Android's system back) closes an open sheet, not the screen or the app.
+  const change = useRef(onOpenChange);
+  useLayoutEffect(() => {
+    change.current = onOpenChange;
+  });
+  useEffect(() => (open ? showBackButton(true, () => change.current(false)) : undefined), [open]);
+
   const height = 'min(85dvh, calc(var(--tg-viewport-stable-height, 100dvh) - 48px))';
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -58,7 +69,7 @@ export function Sheet({
             <Dialog.Description className="type-small shrink-0 px-4 pb-3 text-muted">
               {description}
             </Dialog.Description>
-          ) : (
+          ) : ownDescription ? null : (
             <Dialog.Description className="sr-only">{title}</Dialog.Description>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(16px,var(--safe-b,0px))]">
@@ -69,3 +80,6 @@ export function Sheet({
     </Dialog.Root>
   );
 }
+
+/** The sheet's description (`aria-describedby`), placed inside the content; pair it with `ownDescription`. */
+export const SheetDescription = Dialog.Description;

@@ -22,6 +22,7 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 export const languageEnum = pgEnum('language', LANGUAGES);
 export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
 export const themeEnum = pgEnum('theme', ['light', 'dark']);
+export const writeAccessEnum = pgEnum('write_access', ['granted', 'refused']);
 export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
 
 /** A Customer is a Telegram account (ADR 0004). */
@@ -36,6 +37,11 @@ export const customers = pgTable('customers', {
   theme: themeEnum('theme').notNull().default('light'),
   /** Telegram answered 403 to a send; /start clears it. Reports show such sends as "не доставлено". */
   botBlocked: boolean('bot_blocked').notNull().default(false),
+  /** Account phone (ADR 0004): only from Telegram's signed shared contact, `+` and digits, unique. */
+  phone: text('phone').unique(),
+  phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+  /** The answer to requestWriteAccess; null = not asked yet. Refused also sets botBlocked. */
+  writeAccess: writeAccessEnum('write_access'),
   /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
   deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
   deliveryCity: text('delivery_city'),

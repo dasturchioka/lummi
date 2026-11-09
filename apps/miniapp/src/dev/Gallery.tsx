@@ -32,6 +32,8 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Chip, TypeChips } from '../ui/Chips';
 import { Segmented } from '../ui/Segmented';
+import { useRegistration } from '../lib/registration';
+import RegistrationSheet, { type RegistrationStatus } from '../ui/RegistrationSheet';
 import { Sheet } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
@@ -138,6 +140,8 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
   const [sheet, setSheet] = useState(sheetOpen);
   const [type, setType] = useState('0');
   const [busy, setBusy] = useState(false);
+  const { ensurePhone } = useRegistration();
+  const [phoneResult, setPhoneResult] = useState('-');
 
   return (
     <Screen>
@@ -379,6 +383,23 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           </Specimen>
         </Section>
 
+        <Section name="Registration · useRegistration().ensurePhone()">
+          <Specimen label="opens the sheet unless the account has a phone; resolves 'ready' | 'cancelled'">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void ensurePhone().then(setPhoneResult)}
+              >
+                Ask for phone
+              </Button>
+              <span className="type-small text-muted" data-testid="phone-result">
+                {phoneResult}
+              </span>
+            </div>
+          </Specimen>
+        </Section>
+
         <Section name="Card · CardList · ListRow">
           <CardList>
             <ListRow label={t.profile.language} trailing="RU" />
@@ -520,3 +541,42 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
 
 /** `/dev/sheet`: the gallery with the sheet already open, for the screenshot run. */
 export const GallerySheetOpen = () => <Gallery sheetOpen />;
+
+const REGISTRATION_STATES: readonly RegistrationStatus[] = [
+  'idle',
+  'busy',
+  'denied',
+  'failed',
+  'foreign',
+  'expired',
+  'done',
+  'taken',
+  'unsupported',
+  'browser',
+];
+
+/**
+ * `/dev/registration?state=<status>[&bot=1|0][&phone=+...]`: the registration sheet open in one
+ * state, for the screenshot run (no Telegram call). `bot` is the write-access answer and `phone`
+ * the saved number that `done` shows.
+ */
+export function GalleryRegistrationOpen() {
+  const params = new URLSearchParams(window.location.search);
+  const asked = params.get('state') as RegistrationStatus | null;
+  const status = asked && REGISTRATION_STATES.includes(asked) ? asked : 'idle';
+  const bot = params.get('bot');
+  const phone = params.get('phone') ?? '+998901234567';
+  return (
+    <Screen>
+      <RegistrationSheet
+        open
+        status={status}
+        phone={phone}
+        botWrites={bot === '1' ? true : bot === '0' ? false : null}
+        onShare={() => undefined}
+        onClose={() => undefined}
+        onWriteManager={() => undefined}
+      />
+    </Screen>
+  );
+}

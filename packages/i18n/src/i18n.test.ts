@@ -4,6 +4,7 @@ import {
   defineMessages,
   fill,
   formatMoney,
+  formatPhone,
   languageFromTelegram,
   normalizeUzbek,
   plural,
@@ -44,6 +45,13 @@ describe('plural', () => {
   it('has one Uzbek form', () => {
     expect(plural('uz', 1, uz)).toBe('1 ta punkt');
     expect(plural('uz', 88, uz)).toBe('88 ta punkt');
+  });
+});
+
+describe('formatPhone', () => {
+  it('groups Uzbek numbers with no-break spaces and leaves others as stored', () => {
+    expect(formatPhone('+998901234567')).toBe('+998\u00a090\u00a0123\u00a045\u00a067');
+    expect(formatPhone('+79161234567')).toBe('+79161234567');
   });
 });
 

@@ -129,7 +129,7 @@ export class BotService implements OnApplicationShutdown {
   private async onStart(ctx: BotContext): Promise<void> {
     if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return;
     const customer = await this.customers.signIn(ctx.from, ctx.tx);
-    if (customer.botBlocked) await this.customers.markBotBlocked(ctx.from.id, false, ctx.tx);
+    await this.customers.markStarted(ctx.from.id, ctx.tx);
     ctx.afterCommit.push(() => this.setMenuButton(ctx.from!.id, customer.language));
     const t = dictionaries[customer.language].bot;
     const url = this.env.MINIAPP_URL;

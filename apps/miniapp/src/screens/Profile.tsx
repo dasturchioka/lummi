@@ -1,6 +1,8 @@
+import { formatPhone } from '@lummi/i18n';
 import { usePrefs } from '../lib/prefs';
+import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
-import { ContrastIcon, GlobeIcon } from '../ui/icons';
+import { ChevronIcon, ContrastIcon, GlobeIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -9,6 +11,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/States';
 
 export function Profile() {
+  const { ensurePhone } = useRegistration();
   const { t, language, theme, setLanguage, setTheme, customer, customerQuery } = usePrefs();
 
   if (customerQuery.isError) {
@@ -51,6 +54,30 @@ export function Profile() {
         )}
       </div>
       <CardList>
+        {/* The account phone, verified from Telegram; without one the row starts the registration step. */}
+        <ListRow
+          id="row-phone"
+          leading={<PhoneIcon size={20} />}
+          label={t.profile.phone}
+          hint={customer ? (customer.phone ? t.profile.phoneFrom : t.profile.phoneWhy) : undefined}
+          onClick={customer && !customer.phone ? () => void ensurePhone() : undefined}
+          trailing={
+            customer?.phone ? (
+              <span className="type-body text-[15px] whitespace-nowrap text-ink tabular-nums">
+                {formatPhone(customer.phone)}
+              </span>
+            ) : customer ? (
+              <span className="-mr-1 flex items-center gap-0.5">
+                <span className="type-body text-[15px] font-medium whitespace-nowrap text-ink">
+                  {t.profile.phoneAdd}
+                </span>
+                <ChevronIcon size={18} />
+              </span>
+            ) : (
+              <Skeleton className="h-4 w-32" />
+            )
+          }
+        />
         <ListRow
           id="row-language"
           leading={<GlobeIcon size={20} />}

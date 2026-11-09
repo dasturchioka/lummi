@@ -172,7 +172,15 @@ async function main() {
         if (saved.status !== 200) throw new Error(`could not save preferences: ${saved.status}`);
 
         for (const screen of selected) {
-          await screen.setup?.({ api, db: shotDb });
+          const user = screen.user ?? SHOT_USER;
+          // Another customer signs in (and saves the same preferences) as themselves.
+          const screenApi =
+            user === SHOT_USER ? api : await signedInClient(apiUrl, botToken as string, user);
+          if (screenApi !== api) {
+            const own = await screenApi.me.updatePreferences({ body: { theme, language: lang } });
+            if (own.status !== 200) throw new Error(`could not save preferences: ${own.status}`);
+          }
+          await screen.setup?.({ api: screenApi, db: shotDb });
           const context = await browser.newContext({
             viewport: { width: 390, height: 844 },
             deviceScaleFactor: 2,
@@ -192,11 +200,7 @@ async function main() {
               console.error(`  [${screen.id}] ${m.type()}: ${m.text()}`);
           });
           page.on('pageerror', (e) => console.error(`  [${screen.id}] page error: ${e.message}`));
-          const initData = signInitData(
-            botToken as string,
-            SHOT_USER,
-            screen.initDataAgeSeconds ?? 0,
-          );
+          const initData = signInitData(botToken as string, user, screen.initDataAgeSeconds ?? 0);
           const hash = new URLSearchParams({
             tgWebAppData: initData,
             tgWebAppVersion: '8.0',
@@ -234,7 +238,7 @@ async function main() {
           const file = resolve(outDir, `${screen.id}-${theme}-${lang}.png`);
           await page.screenshot({ path: file, fullPage: screen.fullPage ?? false });
           await context.close();
-          await screen.teardown?.({ api, db: shotDb });
+          await screen.teardown?.({ api: screenApi, db: shotDb });
           count += 1;
           console.log(`  ${screen.id}-${theme}-${lang}.png`);
         }

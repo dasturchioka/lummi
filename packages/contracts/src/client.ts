@@ -29,6 +29,8 @@ export const clientRoutes = {
   me: {
     get: route('GET', '/me', [200, 401]),
     updatePreferences: route('PATCH', '/me/preferences', [200, 401]),
+    shareContact: route('POST', '/me/contact', [200, 400, 401, 403, 409]),
+    writeAccess: route('POST', '/me/write-access', [200, 401]),
     getDeliveryCity: route('GET', '/me/delivery-city', [200, 401]),
     setDeliveryCity: route('PUT', '/me/delivery-city', [200, 401, 404, 422]),
     clearDeliveryCity: route('DELETE', '/me/delivery-city', [200, 401]),
