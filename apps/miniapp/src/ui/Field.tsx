@@ -113,11 +113,14 @@ export function Checkbox({
   onChange,
   children,
   testId,
+  invalid = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   children: ReactNode;
   testId?: string;
+  /** Left unchecked where it is required: an ink outline, and the caller says why below. */
+  invalid?: boolean;
 }) {
   return (
     <label className="flex min-h-11 cursor-pointer items-start gap-3 py-1" data-testid={testId}>
@@ -125,12 +128,17 @@ export function Checkbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
+        aria-invalid={invalid || undefined}
         className="peer sr-only"
       />
       <span
         aria-hidden="true"
         className={`mt-px grid size-[22px] shrink-0 place-items-center rounded-[6px] transition-[background-color,box-shadow] duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-sage ${
-          checked ? 'bg-btn text-btn-ink' : 'inset-line bg-transparent text-transparent'
+          checked
+            ? 'bg-btn text-btn-ink'
+            : invalid
+              ? 'bg-transparent text-transparent shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+              : 'inset-line bg-transparent text-transparent'
         }`}
       >
         <CheckIcon size={16} strokeWidth={2} />

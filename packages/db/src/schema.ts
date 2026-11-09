@@ -1,5 +1,5 @@
 import type { Discount } from '@lummi/contracts';
-import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/client';
+import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {

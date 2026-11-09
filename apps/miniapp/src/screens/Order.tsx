@@ -131,7 +131,6 @@ function Loading() {
  * whatever happened to prices or points since, and whether or not the bot may write.
  */
 export function Order() {
-  const { language } = usePrefs();
   const o = useOrdersText();
   const router = useRouter();
   const { number } = useParams({ from: '/orders/$number' });
@@ -164,7 +163,14 @@ export function Order() {
         />
       </Screen>
     );
+  return <OrderView order={order} />;
+}
 
+/** One order as its snapshot froze it; «Написать менеджеру» goes to the shop's manager account (setting `shop.managerUsername`, via the customer's config). */
+export function OrderView({ order }: { order: OrderDto }) {
+  const { language, customer } = usePrefs();
+  const o = useOrdersText();
+  const managerUsername = customer?.config.managerUsername;
   const place = order.delivery.point?.city ?? order.delivery.region[language];
   const itemCount = order.lines.reduce((sum, l) => sum + l.qty, 0);
   return (
@@ -243,17 +249,19 @@ export function Order() {
         </Block>
       ) : null}
 
-      <p className="type-small mt-6 mb-2 text-center">
-        <span className="text-muted">{o.orders.question}</span>{' '}
-        <button
-          type="button"
-          onClick={openManagerChat}
-          data-testid="write-manager"
-          className="-my-3 rounded-btn px-1 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
-        >
-          {o.orders.writeManager}
-        </button>
-      </p>
+      {managerUsername ? (
+        <p className="type-small mt-6 mb-2 text-center">
+          <span className="text-muted">{o.orders.question}</span>{' '}
+          <button
+            type="button"
+            onClick={() => openManagerChat(managerUsername)}
+            data-testid="write-manager"
+            className="-my-3 rounded-btn px-1 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
+          >
+            {o.orders.writeManager}
+          </button>
+        </p>
+      ) : null}
     </Screen>
   );
 }

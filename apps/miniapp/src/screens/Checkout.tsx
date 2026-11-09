@@ -4,7 +4,7 @@ import {
   RECIPIENT_NAME_MAX,
   RECIPIENT_PHONE_INPUT_MAX,
   normalizeRecipientPhone,
-} from '@lummi/contracts/client';
+} from '@lummi/contracts/constants';
 import { fill, formatPhone } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
@@ -81,7 +81,7 @@ function TypedPlace({
 }
 
 /** «Пункт BTS» before one is chosen: a field-like row that opens the picker. */
-function ChoosePoint({ onOpen }: { onOpen: () => void }) {
+function ChoosePoint({ onOpen, error }: { onOpen: () => void; error: string | null }) {
   const { t } = usePrefs();
   const o = useOrdersText();
   return (
@@ -92,16 +92,33 @@ function ChoosePoint({ onOpen }: { onOpen: () => void }) {
       <button
         type="button"
         data-testid="choose-point"
+        data-invalid={error ? true : undefined}
         onClick={onOpen}
-        className="type-row flex h-12 w-full items-center justify-between gap-3 rounded-btn bg-field px-3.5 text-left text-ink transition-[background-color,transform] duration-150 active:scale-[0.99]"
+        className={`type-row flex h-12 w-full items-center justify-between gap-3 rounded-btn bg-field px-3.5 text-left text-ink transition-[background-color,transform] duration-150 active:scale-[0.99] ${error ? 'shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''}`}
       >
         <span className="min-w-0 truncate">{o.checkout.choosePoint}</span>
         <span className="shrink-0 text-muted">
           <ChevronIcon size={18} />
         </span>
       </button>
+      {error ? (
+        <p role="alert" className="type-hint mt-1.5 font-medium text-ink">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
+}
+
+/** A fresh idempotency key for one checkout attempt (the API keeps one order per key). */
+function newAttemptKey(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // older WebViews: a v4 UUID from the same random source
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 function Loading() {
@@ -150,6 +167,9 @@ export function Checkout() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [phoneRefused, setPhoneRefused] = useState(false);
+  const attemptKey = useRef<string | null>(null);
 
   const data = checkout.data;
   const noPhone = !!data && data.phone === null;
@@ -218,21 +238,36 @@ export function Checkout() {
       </Screen>
     );
 
+  const codes = data.recipientPhoneCountryCodes;
+  // The account phone is the default Recipient only when it is from an allowed country.
+  const accountPhoneFits =
+    data.phone !== null && normalizeRecipientPhone(data.phone, codes) !== null;
   const nameValue = name ?? data.recipientName;
-  const phoneValue = phone ?? (data.phone ? formatPhone(data.phone) : '');
-  const phoneOk = normalizeRecipientPhone(phoneValue) !== null;
+  const phoneValue = phone ?? (accountPhoneFits && data.phone ? formatPhone(data.phone) : '');
+  const phoneOk = !phoneRefused && normalizeRecipientPhone(phoneValue, codes) !== null;
+  const codesText = codes.map((c) => `+${c}`).join(', ');
+  const onlyUzbekistan = codes.length === 1 && codes[0] === '998';
   const giftTooLong = gift && giftMessage.trim().length > data.giftMessageMax;
-  const reason = !dest
-    ? o.checkout.needPoint
-    : !nameValue.trim()
-      ? o.checkout.needName
-      : !phoneOk
-        ? o.checkout.needPhone
-        : data.needsConsent && !consent
-          ? o.checkout.needConsent
-          : giftTooLong
-            ? fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) })
-            : null;
+
+  // Field errors show once the field was left or a submit was tried (and a server refusal).
+  const errors = {
+    point: attempted && !dest ? o.checkout.needPoint : null,
+    name: attempted && !nameValue.trim() ? o.checkout.needName : null,
+    phone:
+      (attempted || phoneBlurred) && !phoneOk
+        ? phoneValue.trim() === ''
+          ? onlyUzbekistan
+            ? o.checkout.phoneInUzbekistan
+            : fill(o.checkout.phoneWithCodes, { codes: codesText })
+          : onlyUzbekistan
+            ? o.checkout.phoneInvalid
+            : fill(o.checkout.phoneNotAllowed, { codes: codesText })
+        : null,
+    consent: attempted && data.needsConsent && !consent ? o.checkout.needConsent : null,
+    gift: giftTooLong ? fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }) : null,
+  };
+  const invalid =
+    !dest || !nameValue.trim() || !phoneOk || (data.needsConsent && !consent) || giftTooLong;
 
   const place =
     dest?.kind === 'point'
@@ -246,8 +281,21 @@ export function Checkout() {
       : 0;
 
   const submit = (confirmedTotal: number) => {
-    if (!dest || reason) return;
+    if (!dest || invalid) {
+      // show every field's error and bring the first one into view
+      setAttempted(true);
+      setError(o.checkout.fixErrors);
+      requestAnimationFrame(() => {
+        const first = document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid]');
+        first?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (first instanceof HTMLInputElement || first instanceof HTMLTextAreaElement)
+          first.focus({ preventScroll: true });
+      });
+      return;
+    }
     setError(null);
+    // one key per attempt, kept until an order comes back: a repeat returns that order (no second one)
+    attemptKey.current ??= newAttemptKey();
     const body: CreateOrderBody = {
       recipientName: nameValue.trim(),
       recipientPhone: phoneValue,
@@ -260,11 +308,13 @@ export function Checkout() {
       giftMessage: gift && giftMessage.trim() ? giftMessage.trim() : undefined,
       consent,
       confirmedTotal,
+      idempotencyKey: attemptKey.current,
     };
     create.mutate(body, {
       onSuccess: (r) => {
         if (r.kind === 'created') {
           setConflict(null);
+          attemptKey.current = null;
           hapticSuccess();
           void router.navigate({
             to: '/orders/$number',
@@ -275,18 +325,24 @@ export function Checkout() {
           // the new numbers replace the old ones on the screen too
           qc.setQueryData(checkoutKey(regionId), r.checkout);
           setConflict({ code: r.code, was: confirmedTotal, checkout: r.checkout });
+        } else if (r.kind === 'try_again') {
+          setConflict(null);
+          setError(o.checkout.tryAgain);
         } else if (r.kind === 'phone_required') {
           void askPhone();
         } else {
           setConflict(null);
+          setAttempted(true);
           if (r.code === 'unknown_point' || r.code === 'unknown_region') {
             setDest(null);
             setError(o.checkout.unknownPoint);
           } else if (r.code === 'gift_message_too_long') {
             setError(fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }));
           } else {
+            // the allowed countries or the consent changed meanwhile: re-read what checkout asks
+            if (r.code === 'invalid_recipient_phone') setPhoneRefused(true);
             void qc.invalidateQueries({ queryKey: ['checkout'] });
-            setError(o.checkout.needConsent);
+            setError(o.checkout.fixErrors);
           }
         }
       },
@@ -311,18 +367,13 @@ export function Checkout() {
       <Button
         block
         data-testid="submit"
-        disabled={!!reason}
         // while another region is being quoted, the total on the button is the last one: wait for it
         loading={(create.isPending && !conflict) || checkout.isPlaceholderData}
         onClick={() => submit(total)}
       >
-        {reason ?? (
-          <>
-            <span className="min-w-0 truncate">{o.checkout.submit}</span>
-            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
-            <Money amount={total} className="text-current" />
-          </>
-        )}
+        <span className="min-w-0 truncate">{o.checkout.submit}</span>
+        <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
+        <Money amount={total} className="text-current" />
       </Button>
     </div>
   );
@@ -339,6 +390,7 @@ export function Checkout() {
           onChange={(e) => setName(e.target.value)}
           autoComplete="name"
           maxLength={RECIPIENT_NAME_MAX}
+          error={errors.name}
         />
         {data.phone ? (
           <TextField
@@ -358,15 +410,25 @@ export function Checkout() {
         <TextField
           label={o.checkout.recipientPhone}
           value={phoneValue}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => {
+            setPhone(e.target.value);
+            setPhoneRefused(false);
+          }}
           onBlur={() => setPhoneBlurred(true)}
           type="tel"
           inputMode="tel"
           autoComplete="tel"
           maxLength={RECIPIENT_PHONE_INPUT_MAX}
           className="tabular-nums"
-          hint={o.checkout.recipientPhoneHint}
-          error={phoneBlurred && !phoneOk ? o.checkout.phoneInvalid : null}
+          placeholder={onlyUzbekistan ? '+998 90 123 45 67' : undefined}
+          hint={
+            accountPhoneFits
+              ? o.checkout.recipientPhoneHint
+              : onlyUzbekistan
+                ? o.checkout.phoneInUzbekistan
+                : fill(o.checkout.phoneWithCodes, { codes: codesText })
+          }
+          error={errors.phone}
         />
       </section>
 
@@ -393,7 +455,7 @@ export function Checkout() {
             onChange={() => setPickerOpen(true)}
           />
         ) : (
-          <ChoosePoint onOpen={() => setPickerOpen(true)} />
+          <ChoosePoint onOpen={() => setPickerOpen(true)} error={errors.point} />
         )}
       </section>
 
@@ -428,6 +490,7 @@ export function Checkout() {
                 placeholder={o.checkout.giftMessagePlaceholder}
                 maxLength={data.giftMessageMax}
                 rows={3}
+                error={errors.gift}
                 hint={
                   <span className="block text-right tabular-nums">
                     {fill(o.checkout.giftMessageCount, {
@@ -456,9 +519,14 @@ export function Checkout() {
 
       {data.needsConsent ? (
         <section className="mt-5" data-testid="consent">
-          <Checkbox checked={consent} onChange={setConsent}>
+          <Checkbox checked={consent} onChange={setConsent} invalid={!!errors.consent}>
             {o.checkout.consent}
           </Checkbox>
+          {errors.consent ? (
+            <p role="alert" className="type-hint mt-1 pl-[34px] font-medium text-ink">
+              {errors.consent}
+            </p>
+          ) : null}
         </section>
       ) : null}
       <div className="h-6" />

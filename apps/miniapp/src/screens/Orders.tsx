@@ -99,7 +99,8 @@ export function Orders() {
       </Screen>
     );
   if (!orders.data) return <Loading />;
-  if (orders.data.length === 0)
+  const all = orders.data.pages.flatMap((p) => p.orders);
+  if (all.length === 0)
     return (
       <Screen>
         <ScreenHeader title={o.orders.title} />
@@ -120,7 +121,7 @@ export function Orders() {
     <Screen>
       <ScreenHeader title={o.orders.title} />
       <Card as="ul" className="divide-y divide-line overflow-hidden" data-testid="orders">
-        {orders.data.map((order) => (
+        {all.map((order) => (
           <li key={order.number}>
             <OrderRow
               order={order}
@@ -134,6 +135,19 @@ export function Orders() {
           </li>
         ))}
       </Card>
+      {orders.hasNextPage ? (
+        <div className="mt-3">
+          <Button
+            block
+            variant="secondary"
+            data-testid="orders-more"
+            loading={orders.isFetchingNextPage}
+            onClick={() => void orders.fetchNextPage()}
+          >
+            {o.orders.more}
+          </Button>
+        </div>
+      ) : null}
     </Screen>
   );
 }

@@ -1,4 +1,4 @@
-import { tashkentToUtc } from '../time/tashkent';
+import { tashkentToUtc } from '@lummi/contracts';
 
 /**
  * The Humo message parser (ADR 0014; layout in spec Changes 2026-11-07 «Humo credit feed», the

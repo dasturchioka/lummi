@@ -1,6 +1,18 @@
-import type { CheckoutDto, CreateOrderBody, OrderDto } from '@lummi/contracts';
+import type {
+  CheckoutConflictCode,
+  CheckoutDto,
+  CreateOrderBody,
+  OrderDto,
+  OrderInputError,
+} from '@lummi/contracts';
 import { ordersMessages } from '@lummi/i18n/orders';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { CART_KEY } from '../cart/queries';
 import { api, unwrap } from '../lib/api';
 import { usePrefs } from '../lib/prefs';
@@ -30,12 +42,10 @@ export function useCheckout(regionId: number | undefined) {
 
 export type CreateResult =
   | { kind: 'created'; order: OrderDto }
-  | { kind: 'conflict'; code: 'total_changed' | 'nothing_to_order'; checkout: CheckoutDto }
+  | { kind: 'conflict'; code: CheckoutConflictCode; checkout: CheckoutDto }
+  | { kind: 'try_again' }
   | { kind: 'phone_required' }
-  | {
-      kind: 'invalid';
-      code: 'consent_required' | 'unknown_point' | 'unknown_region' | 'gift_message_too_long';
-    };
+  | { kind: 'invalid'; code: OrderInputError };
 
 /** POST /orders. A created order empties the ordered cart lines, so the cart is re-read. */
 export function useCreateOrder() {
@@ -45,7 +55,9 @@ export function useCreateOrder() {
       const res = await api.orders.create({ body });
       if (res.status === 201) return { kind: 'created', order: res.body };
       if (res.status === 409)
-        return { kind: 'conflict', code: res.body.code, checkout: res.body.checkout };
+        return 'checkout' in res.body
+          ? { kind: 'conflict', code: res.body.code, checkout: res.body.checkout }
+          : { kind: 'try_again' };
       if (res.status === 403) return { kind: 'phone_required' };
       if (res.status === 422) return { kind: 'invalid', code: res.body.code };
       throw new Error(`HTTP ${res.status}`);
@@ -63,12 +75,15 @@ export function useCreateOrder() {
 export const ORDERS_KEY = ['orders'] as const;
 export const orderKey = (number: number) => ['orders', number] as const;
 
-/** The «Заказы» list, newest first; statuses come from the server, never from the bot. */
+/** The «Заказы» list, newest first, a page at a time; statuses come from the server, never the bot. */
 export function useOrders() {
-  return useQuery({
-    queryKey: ORDERS_KEY,
+  return useInfiniteQuery({
+    queryKey: [...ORDERS_KEY, 'list'],
     refetchOnMount: 'always',
-    queryFn: async () => unwrap(await api.orders.list(), 200),
+    initialPageParam: undefined as number | undefined,
+    queryFn: async ({ pageParam }) =>
+      unwrap(await api.orders.list({ query: { before: pageParam } }), 200),
+    getNextPageParam: (page) => page.next ?? undefined,
   });
 }
 

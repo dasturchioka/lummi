@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
@@ -91,6 +92,14 @@ const NO_PHONE_USER: ShotUser = {
   language_code: 'uz',
 };
 
+/** A customer whose Telegram phone is Russian: not an allowed Recipient country by default. */
+const FOREIGN_PHONE_USER: ShotUser = {
+  id: 700_000_003,
+  first_name: 'Anna',
+  last_name: 'Sokolova',
+  language_code: 'ru',
+};
+
 /** Every state of the registration sheet, on its dev route (no Telegram call). */
 const registrationStates: ScreenDef[] = (
   [
@@ -109,13 +118,13 @@ const registrationStates: ScreenDef[] = (
 ).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
 
 /** The screenshot customer's account phone from a signed contact, as the registration step saves it. */
-async function sharePhone(api: ApiClient, userId = SHOT_USER.id) {
+async function sharePhone(api: ApiClient, userId = SHOT_USER.id, phone = '+998901234567') {
   const res = await api.me.shareContact({
     body: {
       proof: signContact({
         botToken: process.env.BOT_TOKEN ?? '',
         userId,
-        phone: '+998901234567',
+        phone,
         authDate: Math.floor(Date.now() / 1000),
       }),
     },
@@ -125,7 +134,7 @@ async function sharePhone(api: ApiClient, userId = SHOT_USER.id) {
 
 /** Removes the shot customers' orders (their lines are the reserve) and, optionally, their consent. */
 async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none' } = {}) {
-  const ids = [SHOT_USER.id, NO_PHONE_USER.id];
+  const ids = [SHOT_USER.id, NO_PHONE_USER.id, FOREIGN_PHONE_USER.id];
   await db.query(
     `delete from orders where customer_id in (select id from customers where telegram_id = any($1))`,
     [ids],
@@ -164,6 +173,7 @@ async function placeOrder(
       delivery: { kind: 'point', pointId: point.id },
       consent: true,
       confirmedTotal: checkout.body.quote.total,
+      idempotencyKey: randomUUID(),
       ...extra,
     },
   });
@@ -337,7 +347,37 @@ export const screens: ScreenDef[] = [
     teardown: checkoutDone,
   },
   {
-    // the first order: the consent check, and the dock says what is still missing
+    // the Telegram phone is not from an allowed country: the Recipient phone starts empty, with the hint
+    id: 'checkout-foreign-phone',
+    path: '/checkout',
+    user: FOREIGN_PHONE_USER,
+    setup: async ({ api, db }) => {
+      await sharePhone(api, FOREIGN_PHONE_USER.id, '+79161234567');
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await fillCart(api, [['symphony', 10]]);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: async ({ api, db }) => {
+      await clearOrders(db);
+      await fillCart(api, []);
+    },
+  },
+  {
+    // «Перейти к оплате» with nothing chosen on a first order: every field says what it needs
+    id: 'checkout-errors',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'none'),
+    act: async ({ page }) => {
+      await page.getByTestId('submit').click();
+      await page.getByTestId('consent').getByRole('alert').waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // the first order: the consent check
     id: 'checkout-consent',
     path: '/checkout',
     fullPage: true,

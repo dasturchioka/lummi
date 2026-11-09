@@ -43,7 +43,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - "без чека" = no price slip or receipt in the parcel: does this interact with the fiscal receipt procedure (accountant)?
 - **Checkout (ticket #23, 2026-11-10).**
   - Consent wording: built as the mockup's «Согласен(на) на обработку персональных данных, включая дату рождения.» (TZ §9 asks consent incl. birthday on the first order); the lawyer should approve it with the public offer, and say whether it needs a link to a privacy page.
-  - The Recipient phone is accepted only as an Uzbek number (+998). Should a foreign number be allowed for a recipient collecting at a BTS point?
+  - The Recipient phone is accepted only from the countries in the setting `orders.recipientPhoneCountryCodes` (default +998 only). Should a foreign number be allowed for a recipient collecting at a BTS point?
 - **Favourites.** Not in the TZ; it comes from the approved design (heart on cards). The list lives in Profile → «Избранное».
 - **Delivery city on Home.**
   - Region + city from the BTS list, saved per customer.

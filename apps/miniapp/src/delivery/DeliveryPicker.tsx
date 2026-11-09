@@ -1,5 +1,5 @@
 import type { BtsPointDto, RegionDto } from '@lummi/contracts';
-import { POINT_SEARCH_MIN } from '@lummi/contracts';
+import { POINT_SEARCH_MIN } from '@lummi/contracts/constants';
 import { plural } from '@lummi/i18n';
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { usePrefs } from '../lib/prefs';

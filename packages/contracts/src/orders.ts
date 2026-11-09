@@ -17,8 +17,6 @@ import {
   TYPED_ADDRESS_MIN,
 } from './recipient';
 
-export * from './order-status';
-
 const som = z.number().int().nonnegative();
 const bilingual = z.object({ ru: z.string(), uz: z.string() });
 

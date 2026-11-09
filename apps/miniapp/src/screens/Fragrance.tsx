@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import type { CartDto } from '@lummi/contracts';
-import { CART_MAX_QTY } from '@lummi/contracts/client';
+import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { fill } from '@lummi/i18n';
 import { useEffect, useState } from 'react';
 import { CART_KEY, useAddToCart } from '../cart/queries';

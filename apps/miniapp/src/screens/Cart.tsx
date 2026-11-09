@@ -5,7 +5,7 @@ import type {
   Discount,
   QuoteLine,
 } from '@lummi/contracts';
-import { CART_MAX_QTY } from '@lummi/contracts/client';
+import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
