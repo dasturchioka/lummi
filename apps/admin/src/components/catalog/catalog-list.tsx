@@ -1,6 +1,6 @@
 'use client';
 
-import type { DictionaryItem, FragranceListItem } from '@lummi/contracts';
+import type { DictionaryItem, AdminFragranceListItem } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { ImageOff, Plus, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
@@ -46,7 +46,7 @@ export function CatalogList({
   language,
   t,
 }: {
-  items: FragranceListItem[];
+  items: AdminFragranceListItem[];
   families: DictionaryItem[];
   filters: Filters;
   filtered: boolean;
@@ -62,9 +62,9 @@ export function CatalogList({
   ).length;
   // phones show only the search; the four selects open behind «Фильтры» (open when in use)
   const [showFilters, setShowFilters] = useState(activeFilters > 0);
-  const open = (f: FragranceListItem) => router.push(`/catalog/${f.id}`);
+  const open = (f: AdminFragranceListItem) => router.push(`/catalog/${f.id}`);
 
-  const toggle = async (f: FragranceListItem) => {
+  const toggle = async (f: AdminFragranceListItem) => {
     setError(null);
     setBusy(f.id);
     const res = await browserApi.catalog.fragrances
@@ -75,12 +75,12 @@ export function CatalogList({
     else setError(t.errors.generic);
   };
 
-  const status = (f: FragranceListItem) => (
+  const status = (f: AdminFragranceListItem) => (
     <Badge tone={f.hidden ? 'neutral' : 'sage'}>{f.hidden ? c.hidden : c.visible}</Badge>
   );
   // as wide as the longer label, so the column does not jump when a fragrance flips
   const toggleWidth = { minWidth: `calc(${Math.max(c.hide.length, c.unhide.length)}ch + 1.5rem)` };
-  const hideAction = (f: FragranceListItem) => (
+  const hideAction = (f: AdminFragranceListItem) => (
     <Button
       variant="ghost"
       size="sm"
@@ -96,7 +96,7 @@ export function CatalogList({
     </Button>
   );
   /** The name (the keyboard path to the editor) with the flags the shop shows beside it. */
-  const title = (f: FragranceListItem) => (
+  const title = (f: AdminFragranceListItem) => (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <Link
         href={`/catalog/${f.id}`}
@@ -109,14 +109,14 @@ export function CatalogList({
       {f.isNew && <FlagBadge kind="new">{c.isNew}</FlagBadge>}
     </div>
   );
-  const meta = (f: FragranceListItem) => (
+  const meta = (f: AdminFragranceListItem) => (
     <MetaLine
       className="mt-0.5 text-small text-muted-foreground"
       parts={[f.originalBrand, c.options.type[f.type], language === 'uz' ? f.familyUz : f.familyRu]}
     />
   );
   /** One line per volume: the volume, its price (a markdown strikes the regular one), on hand. */
-  const volumes = (f: FragranceListItem) => (
+  const volumes = (f: AdminFragranceListItem) => (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-[13px] leading-snug tabular-nums">
       {f.volumes.map((v) => (
         <Fragment key={v.ml}>

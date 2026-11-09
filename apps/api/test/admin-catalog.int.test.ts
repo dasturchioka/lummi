@@ -815,3 +815,53 @@ describe('admin search and apostrophes', () => {
     expect(await names("bal d'afrique")).toEqual(['Bal d’Afrique']);
   });
 });
+
+describe('the customer search follows admin edits', () => {
+  const found = async (q: string) => {
+    const { client } = await t.signIn();
+    const res = await client.catalog.search({ query: { q } });
+    if (res.status !== 200) throw new Error(`search ${q}: HTTP ${res.status}`);
+    return res.body.items.map((i) => i.slug);
+  };
+
+  it('finds a renamed fragrance by its new name, in the same save', async () => {
+    const f = await created();
+    expect(await found('Nuit Blanche')).toContain('nuit-blanche');
+    const res = await owner.client.admin.catalog.fragrances.update({
+      params: { id: f.id },
+      body: baseInput({ name: 'Aurore Boreale' }),
+    });
+    expect(res.status).toBe(200);
+    expect(await found('Aurore Boreale')).toContain('nuit-blanche');
+    expect(await found('Nuit Blanche')).not.toContain('nuit-blanche');
+  });
+
+  it('finds fragrances by a renamed note', async () => {
+    const [note] = await t.db.select().from(notes).limit(1);
+    const f = await created({ notes: { top: [note!.id], heart: [], base: [] } });
+    expect(await found('Zorbaxyl')).toEqual([]);
+    const res = await owner.client.admin.catalog.notes.update({
+      params: { id: note!.id },
+      body: { nameRu: 'Зорбаксил', nameUz: 'Zorbaksil', aliases: ['Zorbaxyl'] },
+    });
+    expect(res.status).toBe(200);
+    expect(await found('Zorbaxyl')).toContain('nuit-blanche');
+    expect(await found('Зорбаксил')).toContain('nuit-blanche');
+    expect(f.slug).toBe('nuit-blanche');
+  });
+
+  it('stops returning a hidden fragrance, and returns it again when unhidden', async () => {
+    const f = await created();
+    expect(await found('Nuit Blanche')).toContain('nuit-blanche');
+    await owner.client.admin.catalog.fragrances.setHidden({
+      params: { id: f.id },
+      body: { hidden: true },
+    });
+    expect(await found('Nuit Blanche')).not.toContain('nuit-blanche');
+    await owner.client.admin.catalog.fragrances.setHidden({
+      params: { id: f.id },
+      body: { hidden: false },
+    });
+    expect(await found('Nuit Blanche')).toContain('nuit-blanche');
+  });
+});

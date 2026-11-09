@@ -142,7 +142,7 @@ export const fragranceAdminSchema = z.object({
 });
 export type FragranceAdmin = z.infer<typeof fragranceAdminSchema>;
 
-export const fragranceListItemSchema = z.object({
+export const adminFragranceListItemSchema = z.object({
   id: z.number().int(),
   slug: z.string(),
   code: z.string(),
@@ -166,7 +166,7 @@ export const fragranceListItemSchema = z.object({
     }),
   ),
 });
-export type FragranceListItem = z.infer<typeof fragranceListItemSchema>;
+export type AdminFragranceListItem = z.infer<typeof adminFragranceListItemSchema>;
 
 export const fragranceListQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),

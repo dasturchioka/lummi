@@ -13,6 +13,7 @@ import { slugify } from './slug';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FileStore } from '../edges';
+import { reindexFragrances } from '../search/search-index';
 import { storePhoto } from './photo-pipeline';
 
 /**
@@ -56,6 +57,22 @@ function pick<T extends Record<string, string>>(map: T, key: string, what: strin
   if (!v) throw new Error(`catalog guide: unknown ${what} "${key}"`);
   return v as T[keyof T];
 }
+
+/**
+ * Spelling variants (aliases) for names whose Cyrillic or phonetic reading does not follow from
+ * the Latin spelling (French and English). Provisional: the customer's list and the admin panel
+ * replace them. Written only while a fragrance has no aliases, so an admin's edits are kept.
+ */
+export const SEED_ALIASES: Record<string, string[]> = {
+  'sauvage-edt': ['Соваж', 'Саваж', 'Sovaj'],
+  'bleu-de-chanel': ['Блю де Шанель', 'Blyu de Shanel'],
+  'baccarat-rouge-540': ['Баккара Руж', 'Bakara Ruj'],
+  meteore: ['Метеор', 'Meteor'],
+  'good-girl-gone-bad': ['Гуд Гёрл Ган Бэд', 'Gud Gerl Gon Bed'],
+  'miss-dior-blooming-bouquet': ['Мисс Диор Блуминг Букет'],
+  'bal-dafrique': ['Баль д’Африк', 'Bal Dafrik'],
+  'oud-wood': ['Уд Вуд', 'Oud Vud'],
+};
 
 const list = (s: string, sep: string | RegExp) =>
   s
@@ -139,12 +156,19 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
         keyNotesRu: list(r.ru.klyuchevye_noty!, '·'),
         keyNotesUz: list(normalizeUzbek(r.uz.asosiy_notalar!), '·'),
         internalRemark: r.ru.primechanie || null,
+        aliases: SEED_ALIASES[slug] ?? [],
         updatedAt: new Date(),
       };
       const [row] = await tx
         .insert(fragrances)
         .values(values)
-        .onConflictDoUpdate({ target: fragrances.slug, set: values })
+        .onConflictDoUpdate({
+          target: fragrances.slug,
+          set: {
+            ...values,
+            aliases: sql`case when cardinality(${fragrances.aliases}) = 0 then excluded.aliases else ${fragrances.aliases} end`,
+          },
+        })
         .returning({ id: fragrances.id });
       const fid = row!.id;
       idBySlug.set(slug, fid);
@@ -197,6 +221,8 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
       });
       if (rows.length) await tx.insert(fragranceSimilar).values(rows);
     }
+    // The search documents follow the rows just written (ADR 0019).
+    await reindexFragrances(tx, [...idByGuideId.values()]);
   });
   return { fragrances: guide.length };
 }

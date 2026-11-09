@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { LocalFileStore, SystemClock, GrammySender, createReceiptJudge } from './edges';
 import { BotService } from './bot/bot.service';
 import { parseEnv } from './env';
+import { syncSearchIndex } from './search/search-index';
 
 // A bad config throws here and the process refuses to boot.
 const env = parseEnv();
@@ -18,6 +19,9 @@ const app = await createApp({
   },
 });
 app.enableShutdownHooks();
+// The search documents are rebuilt here, in the API process only (the worker boots the same module).
+const rebuilt = await syncSearchIndex(db);
+if (rebuilt > 0) console.log(`search index: rebuilt ${rebuilt} document(s)`);
 await app.get(BotService).start();
 await app.listen(env.API_PORT, env.API_HOST);
 console.log(`API listening on http://${env.API_HOST}:${env.API_PORT}`);

@@ -3,7 +3,7 @@ import type {
   DictionaryItem,
   FragranceAdmin,
   FragranceInput,
-  FragranceListItem,
+  AdminFragranceListItem,
   OnHandItem,
   VolumeInput,
 } from '@lummi/contracts';
@@ -28,6 +28,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { AuditService } from '../audit/audit.service';
 import { available, reservedByVolume } from '../catalog/catalog.service';
+import { reindexFragrances } from '../search/search-index';
 import { storePhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
@@ -82,13 +83,6 @@ function saleEndDay(at: Date | null): string | null {
   return `${t.year}-${pad(t.month)}-${pad(t.day)}`;
 }
 
-/**
- * THE search-index seam. Every mutation of fragrance content (fragrance fields, notes, aliases,
- * hidden, dictionary names) calls this inside its transaction. Ticket #16 replaces the body with
- * `reindexFragrances(tx, ids)`; `null` means "all fragrances" (a dictionary entry changed).
- */
-export async function onCatalogContentChanged(_tx: DbOrTx, _fragranceIds: number[] | null) {}
-
 @Injectable()
 export class CatalogAdminService {
   constructor(
@@ -105,7 +99,7 @@ export class CatalogAdminService {
     familyId?: number;
     visibility?: 'visible' | 'hidden';
     flag?: 'hit' | 'new';
-  }): Promise<FragranceListItem[]> {
+  }): Promise<AdminFragranceListItem[]> {
     const where = [];
     if (query.q) {
       // apostrophes are ignored on both sides: «Devil's» finds «Devil’s Intrigue» and the reverse
@@ -255,7 +249,7 @@ export class CatalogAdminService {
         const id = row!.id;
         await this.writeLinks(tx, id, input);
         for (const v of input.volumes) await this.insertVolume(tx, id, v);
-        await onCatalogContentChanged(tx, [id]);
+        await reindexFragrances(tx, [id]);
         await this.audit.record(tx, {
           actor: { type: 'staff', id: actor.id },
           action: 'catalog.fragrance_created',
@@ -331,7 +325,7 @@ export class CatalogAdminService {
         if (diff) volumeChanges.push({ ml: v.ml, ...diff });
       }
 
-      await onCatalogContentChanged(tx, [id]);
+      await reindexFragrances(tx, [id]);
       const after = (await this.get(id, tx))!;
       const changed = (Object.keys(after) as (keyof FragranceAdmin)[]).filter(
         (k) => k !== 'volumes' && JSON.stringify(before[k]) !== JSON.stringify(after[k]),
@@ -355,7 +349,7 @@ export class CatalogAdminService {
         .where(eq(fragrances.id, id))
         .returning({ id: fragrances.id, name: fragrances.name });
       if (!updated) return fail('not_found');
-      await onCatalogContentChanged(tx, [id]);
+      await reindexFragrances(tx, [id]);
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
         action: hidden ? 'catalog.fragrance_hidden' : 'catalog.fragrance_unhidden',
@@ -527,7 +521,23 @@ export class CatalogAdminService {
             .returning({ id: table.id });
           if (!row) return fail('not_found');
         }
-        await onCatalogContentChanged(tx, id === null ? [] : null);
+        if (id !== null) {
+          // every fragrance that shows this note or family is searchable by its new name
+          const used =
+            kind === 'families'
+              ? await tx
+                  .select({ id: fragrances.id })
+                  .from(fragrances)
+                  .where(eq(fragrances.familyId, id))
+              : await tx
+                  .selectDistinct({ id: fragranceNotes.fragranceId })
+                  .from(fragranceNotes)
+                  .where(eq(fragranceNotes.noteId, id));
+          await reindexFragrances(
+            tx,
+            used.map((u) => u.id),
+          );
+        }
         await this.audit.record(tx, {
           actor: { type: 'staff', id: actor.id },
           action: `catalog.${target}_${id === null ? 'created' : 'updated'}`,

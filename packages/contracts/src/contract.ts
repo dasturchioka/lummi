@@ -1,13 +1,18 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
-import { catalogErrorSchema, fragranceCardSchema } from './catalog';
+import {
+  catalogErrorSchema,
+  fragranceCardSchema,
+  searchQuerySchema,
+  searchResultSchema,
+} from './catalog';
 import {
   catalogAdminErrorSchema,
   dictionaryInputSchema,
   dictionaryItemSchema,
   fragranceAdminSchema,
   fragranceInputSchema,
-  fragranceListItemSchema,
+  adminFragranceListItemSchema,
   fragranceListQuerySchema,
   hiddenBodySchema,
   onHandBodySchema,
@@ -166,6 +171,21 @@ export const contract = c.router({
       responses: { 200: fragranceCardSchema, 401: authErrorSchema, 404: catalogErrorSchema },
       summary: 'A fragrance card by slug; hidden and unknown fragrances are 404',
     },
+    suggest: {
+      method: 'GET',
+      path: '/catalog/suggest',
+      query: searchQuerySchema,
+      responses: { 200: searchResultSchema, 401: authErrorSchema },
+      summary:
+        'Suggestions while typing: the top few fragrances for a name or note, typos and either alphabet tolerated; empty under the minimum length (ADR 0019)',
+    },
+    search: {
+      method: 'GET',
+      path: '/catalog/search',
+      query: searchQuerySchema,
+      responses: { 200: searchResultSchema, 401: authErrorSchema },
+      summary: 'Search results as list cards, best match first (ADR 0019)',
+    },
   },
 });
 
@@ -252,7 +272,7 @@ const adminCore = c.router({
         path: '/admin/catalog/fragrances',
         query: fragranceListQuerySchema,
         responses: {
-          200: z.array(fragranceListItemSchema),
+          200: z.array(adminFragranceListItemSchema),
           401: catalogAdminErrorSchema,
           403: catalogAdminErrorSchema,
         },

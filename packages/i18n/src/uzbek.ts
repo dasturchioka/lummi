@@ -1,7 +1,6 @@
-/** Every apostrophe-like character a keyboard or a copy-paste can produce (a regex character class). */
-export const APOSTROPHE_CLASS = "['‘’ʻʼ`´′]";
-const APOSTROPHES = APOSTROPHE_CLASS;
-const AFTER_LETTER = new RegExp(`(\\p{L})${APOSTROPHES}`, 'gu');
+/** Every character a customer types as an apostrophe in Uzbek Latin: one source for the normaliser and search. */
+export const APOSTROPHE_CLASS = "['‘’ʻʼ`´′ʹ]";
+const AFTER_LETTER = new RegExp(`(\\p{L})${APOSTROPHE_CLASS}`, 'gu');
 
 /**
  * Normalise Uzbek Latin apostrophes. Run it on every input path (search, forms, bot text).

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SEARCH_QUERY_MAX } from './limits';
 
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });
@@ -55,3 +56,37 @@ export const fragranceCardSchema = z.object({
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 
 export const catalogErrorSchema = z.object({ code: z.literal('not_found') });
+
+/**
+ * One fragrance as a list card shows it (search results now, the catalog list next): the lockup
+ * fields, the three key notes and the price to start from. Customer-safe only: no code, no remark.
+ */
+export const fragranceListItemSchema = z.object({
+  slug: z.string(),
+  name: z.string(),
+  brand: z.string(),
+  type: z.enum(FRAGRANCE_TYPES),
+  family: bilingualSchema.nullable(),
+  keyNotes: z.object({ ru: z.array(z.string()), uz: z.array(z.string()) }),
+  isHit: z.boolean(),
+  isNew: z.boolean(),
+  /** The lowest price to pay over the volumes (a markdown counts while active); null without volumes. */
+  fromPrice: z.number().int().nullable(),
+  /** Every volume is out of stock. */
+  soldOut: z.boolean(),
+  /** Content hash of the smallest volume's photo set (`<media>/<hash>-<width>.webp`). */
+  photo: z.string().nullable(),
+});
+export type FragranceListItem = z.infer<typeof fragranceListItemSchema>;
+
+export const searchQuerySchema = z.object({ q: z.string().max(SEARCH_QUERY_MAX) });
+export const searchResultSchema = z.object({
+  items: z.array(fragranceListItemSchema),
+  /**
+   * The text is shorter than `search.minQueryLength` once reduced to its skeleton (`'a` is one
+   * letter): the client shows its hint, not «nothing found». The minimum is a setting, so the
+   * server says it.
+   */
+  tooShort: z.boolean(),
+});
+export type SearchResult = z.infer<typeof searchResultSchema>;
