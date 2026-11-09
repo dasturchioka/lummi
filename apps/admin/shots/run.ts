@@ -214,6 +214,8 @@ async function signIn(context: BrowserContext, telegramId: number) {
 async function main() {
   await ensureServices();
   await seedStaff();
+  // The BTS points come from the committed snapshot (idempotent); the points screens need them.
+  run('npm', ['run', 'bts:import', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
   // the catalog screens need the 67 seeded fragrances (idempotent)
   run('npm', ['run', 'seed:catalog', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
   mkdirSync(outDir, { recursive: true });

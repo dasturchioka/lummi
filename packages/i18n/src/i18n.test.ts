@@ -7,6 +7,7 @@ import {
   formatPhone,
   languageFromTelegram,
   normalizeUzbek,
+  plural,
   stripApostrophes,
 } from './index';
 
@@ -20,6 +21,31 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('plural', () => {
+  const ru = { one: '{n} пункт', few: '{n} пункта', many: '{n} пунктов', other: '{n} пункта' };
+  const uz = {
+    one: '{n} ta punkt',
+    few: '{n} ta punkt',
+    many: '{n} ta punkt',
+    other: '{n} ta punkt',
+  };
+  it('picks the Russian form by count', () => {
+    expect([1, 3, 5, 11, 21, 22, 25].map((n) => plural('ru', n, ru))).toEqual([
+      '1 пункт',
+      '3 пункта',
+      '5 пунктов',
+      '11 пунктов',
+      '21 пункт',
+      '22 пункта',
+      '25 пунктов',
+    ]);
+  });
+  it('has one Uzbek form', () => {
+    expect(plural('uz', 1, uz)).toBe('1 ta punkt');
+    expect(plural('uz', 88, uz)).toBe('88 ta punkt');
   });
 });
 

@@ -1,6 +1,7 @@
 export * from './admin';
 export * from './admin-catalog';
 export * from './auth';
+export * from './delivery';
 export * from './internal';
 export * from './catalog';
 export * from './quote';

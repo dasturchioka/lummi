@@ -10,7 +10,7 @@ export function Select({ className, children, ...props }: React.ComponentProps<'
         className={cn(
           'h-11 w-full min-w-0 appearance-none rounded-button bg-field pr-10 pl-3.5 text-base text-foreground pointer-fine:text-[15px]',
           'shadow-[inset_0_0_0_1px_var(--hairline-strong)] transition-shadow duration-150',
-          'hover:shadow-[inset_0_0_0_1px_var(--ink-faint)] aria-invalid:shadow-[inset_0_0_0_1.5px_var(--graphite)]',
+          'hover:shadow-[inset_0_0_0_1px_var(--ink-faint)] aria-invalid:shadow-[inset_0_0_0_1.5px_var(--graphite)] disabled:text-muted-foreground',
           className,
         )}
         {...props}

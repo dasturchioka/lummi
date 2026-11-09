@@ -5,6 +5,7 @@ import { apiContract } from '@lummi/contracts';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { inject } from 'vitest';
+import { seedRegions } from '../../src/bts/seed-regions';
 import { createApp } from '../../src/app';
 import { WorkerRuntime } from '../../src/worker/runtime';
 import { parseEnv, type Env } from '../../src/env';
@@ -61,7 +62,7 @@ export interface TestApp {
   ownerSession(): Promise<StaffSession>;
   /** Shortcut for `signInStaff('manager')` with a stable test user. */
   managerSession(): Promise<StaffSession>;
-  /** Per-test isolation: empties every table (identity restarted). Call in beforeEach. */
+  /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions. Call in beforeEach. */
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -203,6 +204,8 @@ export async function createTestApp(
       );
       const tables = rows.map((r) => `"${r.tablename}"`).join(', ');
       if (tables) await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+      // reference data, like the migrated schema itself
+      await seedRegions(db);
     },
     async close() {
       await app.close();

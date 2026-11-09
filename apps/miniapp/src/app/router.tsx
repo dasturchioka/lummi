@@ -38,7 +38,7 @@ const rootRoute = createRootRoute({ component: Shell });
 const at = (path: string) => ({ getParentRoute: () => rootRoute, path });
 
 /*
- * Component gallery, development only: `/dev/ui`, and `/dev/sheet` with the sheet open.
+ * Component gallery, development only: `/dev/ui`, `/dev/sheet` with the sheet open, and `/dev/delivery` hosting the BTS point picker.
  * `import.meta.env.DEV` is `false` in a build, so these routes and their lazy chunk are dropped;
  * `npm run size` fails if the gallery ever reaches dist.
  */
@@ -47,6 +47,10 @@ const devRoutes = import.meta.env.DEV
       createRoute({
         ...at('/dev/ui'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'Gallery'),
+      }),
+      createRoute({
+        ...at('/dev/delivery'),
+        component: lazyRouteComponent(() => import('../dev/Delivery'), 'DeliveryDev'),
       }),
       createRoute({
         ...at('/dev/sheet'),

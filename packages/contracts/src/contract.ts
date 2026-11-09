@@ -22,6 +22,23 @@ import {
   updateStaffBodySchema,
 } from './admin';
 import {
+  adminBtsPointSchema,
+  adminDeliveryErrorSchema,
+  adminPointsPageSchema,
+  adminPointsQuerySchema,
+  adminRegionSchema,
+  btsPointSchema,
+  citySchema,
+  createBtsPointBodySchema,
+  deliveryCityResponseSchema,
+  deliveryErrorSchema,
+  pointsQuerySchema,
+  regionSchema,
+  setDeliveryCityBodySchema,
+  setTariffBodySchema,
+  updateBtsPointBodySchema,
+} from './delivery';
+import {
   authErrorSchema,
   contactBodySchema,
   contactErrorSchema,
@@ -93,6 +110,53 @@ export const contract = c.router({
       responses: { 200: customerSchema, 401: authErrorSchema },
       summary: 'Record the answer to requestWriteAccess; a refusal keeps statuses in the app',
     },
+    getDeliveryCity: {
+      method: 'GET',
+      path: '/me/delivery-city',
+      responses: { 200: deliveryCityResponseSchema, 401: deliveryErrorSchema },
+      summary: 'The delivery city shown on Home, with its region and tariff; null until chosen',
+    },
+    setDeliveryCity: {
+      method: 'PUT',
+      path: '/me/delivery-city',
+      body: setDeliveryCityBodySchema,
+      responses: {
+        200: deliveryCityResponseSchema,
+        401: deliveryErrorSchema,
+        404: deliveryErrorSchema,
+        422: deliveryErrorSchema,
+      },
+      summary: 'Save region + city (a city that has an offered BTS point); never changes a price',
+    },
+    clearDeliveryCity: {
+      method: 'DELETE',
+      path: '/me/delivery-city',
+      body: c.noBody(),
+      responses: { 200: deliveryCityResponseSchema, 401: deliveryErrorSchema },
+      summary: 'Forget the delivery city',
+    },
+  },
+  delivery: {
+    regions: {
+      method: 'GET',
+      path: '/delivery/regions',
+      responses: { 200: z.array(regionSchema), 401: deliveryErrorSchema },
+      summary: 'The 14 regions with their delivery tariff, in picker order',
+    },
+    cities: {
+      method: 'GET',
+      path: '/delivery/regions/:regionId/cities',
+      pathParams: z.object({ regionId: z.coerce.number().int().positive() }),
+      responses: { 200: z.array(citySchema), 401: deliveryErrorSchema, 404: deliveryErrorSchema },
+      summary: 'Cities and districts of a region that have at least one offered BTS point',
+    },
+    points: {
+      method: 'GET',
+      path: '/delivery/points',
+      query: pointsQuerySchema,
+      responses: { 200: z.array(btsPointSchema), 401: deliveryErrorSchema },
+      summary: 'Offered BTS points of a city (regionId + city), or a search across all regions (q)',
+    },
   },
   catalog: {
     fragrance: {
@@ -105,8 +169,7 @@ export const contract = c.router({
   },
 });
 
-/** Staff-facing routes (admin panel). Not part of the Mini App's client table (`./client`). */
-export const adminContract = c.router({
+const adminCore = c.router({
   loginWidget: {
     method: 'POST',
     path: '/admin/auth/telegram',
@@ -353,6 +416,68 @@ export const adminContract = c.router({
     },
   },
 });
+
+/** Staff routes for BTS points and delivery tariffs. */
+const adminDelivery = c.router({
+  regions: {
+    list: {
+      method: 'GET',
+      path: '/admin/regions',
+      responses: { 200: z.array(adminRegionSchema), 401: adminDeliveryErrorSchema },
+      summary: 'Staff: regions with tariff and point counts',
+    },
+    setTariff: {
+      method: 'PATCH',
+      path: '/admin/regions/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: setTariffBodySchema,
+      responses: {
+        200: adminRegionSchema,
+        401: adminDeliveryErrorSchema,
+        403: adminDeliveryErrorSchema,
+        404: adminDeliveryErrorSchema,
+      },
+      summary: 'Owner only: change a region delivery tariff (audited)',
+    },
+  },
+  btsPoints: {
+    list: {
+      method: 'GET',
+      path: '/admin/bts-points',
+      query: adminPointsQuerySchema,
+      responses: { 200: adminPointsPageSchema, 401: adminDeliveryErrorSchema },
+      summary: 'Staff: BTS points with region, status and text filters, 50 per page',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/bts-points',
+      body: createBtsPointBodySchema,
+      responses: {
+        201: adminBtsPointSchema,
+        401: adminDeliveryErrorSchema,
+        409: adminDeliveryErrorSchema,
+        422: adminDeliveryErrorSchema,
+      },
+      summary: 'Staff: add a BTS point',
+    },
+    update: {
+      method: 'PATCH',
+      path: '/admin/bts-points/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: updateBtsPointBodySchema,
+      responses: {
+        200: adminBtsPointSchema,
+        401: adminDeliveryErrorSchema,
+        404: adminDeliveryErrorSchema,
+        422: adminDeliveryErrorSchema,
+      },
+      summary: 'Staff: edit a BTS point or hide/show it (active); there is no delete',
+    },
+  },
+});
+
+/** Staff-facing routes (admin panel). Not part of the Mini App's client table (`./client`). */
+export const adminContract = c.router({ ...adminCore, ...adminDelivery });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
 export const internalContract = c.router({
