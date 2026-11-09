@@ -15,6 +15,7 @@
   --c-ink-faint: #a39d94; /* non-text only */
   --c-sage: #9aa592;
   --c-sage-ink: #5c6855; /* Sage deepened for text and icons */
+  --c-on-sage: #2a2a2a; /* Graphite on a Sage fill (badge, confirmed disc), in both themes */
   --c-sage-wash: rgba(154, 165, 146, 0.18);
   --c-line: rgba(42, 42, 42, 0.11);
   --c-line-strong: rgba(42, 42, 42, 0.22);

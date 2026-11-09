@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { dictionaries } from './all';
-import { defineMessages, formatMoney, languageFromTelegram, normalizeUzbek } from './index';
+import {
+  defineMessages,
+  formatMoney,
+  formatPhone,
+  languageFromTelegram,
+  normalizeUzbek,
+} from './index';
 
 describe('formatMoney', () => {
   it('formats RU and UZ with narrow no-break spaces', () => {
@@ -12,6 +18,13 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('formatPhone', () => {
+  it('groups Uzbek numbers with no-break spaces and leaves others as stored', () => {
+    expect(formatPhone('+998901234567')).toBe('+998\u00a090\u00a0123\u00a045\u00a067');
+    expect(formatPhone('+79161234567')).toBe('+79161234567');
   });
 });
 

@@ -1,5 +1,5 @@
 import { signContact } from '@lummi/contracts/sign-contact';
-import { SHOT_USER, type ApiClient } from './api';
+import { SHOT_USER, type ApiClient, type ShotUser } from './api';
 
 /**
  * Every screen the screenshot run captures, in one place. Each UI ticket adds its screens here
@@ -18,7 +18,34 @@ export interface ScreenDef {
   initDataAgeSeconds?: number;
   /** Capture the whole scrolling page instead of the 390x844 viewport. */
   fullPage?: boolean;
+  /** Take this screen as another customer (default `SHOT_USER`), e.g. one who never shared a phone. */
+  user?: ShotUser;
 }
+
+/** A customer who has not shared the contact yet (Profile shows the «Добавить» row). */
+const NO_PHONE_USER: ShotUser = {
+  id: 700_000_002,
+  first_name: 'Javohir',
+  username: 'javohir_t',
+  language_code: 'uz',
+};
+
+/** Every state of the registration sheet, on its dev route (no Telegram call). */
+const registrationStates: ScreenDef[] = (
+  [
+    ['initial', 'idle'],
+    ['waiting', 'busy'],
+    ['done', 'done&bot=1'],
+    ['done-in-app', 'done&bot=0'],
+    ['denied', 'denied'],
+    ['failed', 'failed'],
+    ['foreign', 'foreign'],
+    ['expired', 'expired'],
+    ['taken', 'taken'],
+    ['update-telegram', 'unsupported'],
+    ['browser', 'browser'],
+  ] as const
+).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
 
 export const screens: ScreenDef[] = [
   { id: 'home', path: '/' },
@@ -44,10 +71,11 @@ export const screens: ScreenDef[] = [
       if (res.status !== 200) throw new Error(`profile shot: share contact failed ${res.status}`);
     },
   },
+  { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
   { id: 'session-reopen', path: '/', initDataAgeSeconds: 3600 },
   // Dev-only component gallery (src/dev/Gallery.tsx): every base component in every state.
   { id: 'ui-gallery', path: '/dev/ui', fullPage: true },
   { id: 'ui-sheet', path: '/dev/sheet' },
-  // The registration step (contact + write access), dev trigger in the gallery.
-  { id: 'registration-sheet', path: '/dev/registration' },
+  // The registration step (contact + write access); its dev trigger is in the gallery.
+  ...registrationStates,
 ];

@@ -13,6 +13,7 @@
   --color-faint: var(--c-ink-faint);
   --color-sage: var(--c-sage);
   --color-sage-ink: var(--c-sage-ink);
+  --color-on-sage: var(--c-on-sage);
   --color-sage-wash: var(--c-sage-wash);
   --color-line: var(--c-line);
   --color-line-strong: var(--c-line-strong);
@@ -240,6 +241,13 @@
 @keyframes fade-in {
   from {
     opacity: 0;
+  }
+}
+/* An outcome replacing content in place: it settles up 6 px as it appears. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
   }
 }
 @keyframes fade-out {

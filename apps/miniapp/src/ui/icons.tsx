@@ -40,6 +40,18 @@ export const UserIcon = (p: P) => (
 export const PhoneIcon = (p: P) => (
   <Icon d="M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2" {...p} />
 );
+export const CheckIcon = (p: P) => <Icon d="m5.5 12.5 4 4 9-9" {...p} />;
+/** Circular arrow: update / refresh (the "update Telegram" state). */
+export const RefreshIcon = (p: P) => (
+  <Icon d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4v3.5H16" {...p} />
+);
+/** Speech bubble: «Написать менеджеру». */
+export const ChatIcon = (p: P) => (
+  <Icon
+    d="M5 5h14a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1h-7.5L7 20v-3.5H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"
+    {...p}
+  />
+);
 export const AlertIcon = (p: P) => (
   <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.3v.1" {...p} />
 );
