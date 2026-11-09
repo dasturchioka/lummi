@@ -19,3 +19,4 @@ export {
   notInArray,
   DrizzleQueryError,
 } from 'drizzle-orm';
+export { alias } from 'drizzle-orm/pg-core';

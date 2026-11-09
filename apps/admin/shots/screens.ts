@@ -1,3 +1,4 @@
+import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import type { Page } from '@playwright/test';
 import { WORST_NAME } from './catalog-data';
@@ -70,6 +71,7 @@ export const OUTSIDER_ID = 990000099;
 export type ScreenContext = {
   page: Page;
   t: AdminMessages;
+  language: 'ru' | 'uz';
   outsiderId: number;
   width: number;
 };
@@ -143,6 +145,111 @@ export const screens: Screen[] = [
       await page.getByRole('alertdialog').waitFor();
     },
   },
+  // Settings and audit (ticket #9): owner only, so the manager's menu and sidebar lack both.
+  {
+    id: 'menu-manager',
+    path: '/',
+    as: 'manager',
+    widths: [390],
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.nav.menu }).click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  { id: 'settings', path: '/settings', as: 'owner' },
+  {
+    id: 'settings-system',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('#area-system').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'settings-duration',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page }) => {
+      // seconds read back as days and hours under the field («= 7 дней»)
+      await page.locator('#area-auth').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'settings-error',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, language }) => {
+      // a fraction where a whole number of so'm is required, and an out-of-range number of seconds
+      const threshold = page.getByLabel(
+        settingDefinitions['pricing.freeDeliveryThreshold'].label[language],
+        { exact: true },
+      );
+      await threshold.fill('250000.5');
+      await threshold.press('Enter');
+      await page.locator('[aria-invalid="true"]').first().waitFor();
+      const ttl = page.getByLabel(settingDefinitions['auth.sessionTtlSeconds'].label[language], {
+        exact: true,
+      });
+      await ttl.fill('5');
+      await ttl.press('Enter');
+      await page.locator('[aria-invalid="true"]').nth(1).waitFor();
+      await threshold.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  {
+    id: 'settings-saving',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, language }) => {
+      // the save is held, so the row shows its pending state
+      await page.route(/\/api\/admin\/settings\//, () => undefined);
+      const label = settingDefinitions['pricing.freeDeliveryThreshold'].label[language];
+      const field = page.getByLabel(label, { exact: true });
+      await field.fill('275000');
+      await field.press('Enter');
+      await page.locator('form[aria-busy="true"] button[aria-busy="true"]').waitFor();
+      await field.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  { id: 'audit', path: '/audit', as: 'owner' },
+  {
+    id: 'audit-filtered',
+    path: '/audit',
+    as: 'owner',
+    act: async ({ page, t, width }) => {
+      // phones keep the fields behind «Фильтры»
+      if (width < 640) await page.getByRole('button', { name: t.audit.filters.toggle }).click();
+      await page.getByLabel(t.audit.filters.actor).selectOption({ label: SHOT_STAFF[0]!.name });
+      await page.getByLabel(t.audit.filters.action).selectOption('setting.changed');
+      await page.getByLabel(t.audit.filters.from).fill('2026-01-01');
+      await page
+        .getByLabel(t.audit.filters.to)
+        .fill(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tashkent' }));
+      await page.getByRole('button', { name: t.audit.filters.apply }).click();
+      await page.waitForURL(/action=setting\.changed/);
+      await page.getByRole('link', { name: t.audit.filters.reset }).first().waitFor();
+    },
+  },
+  {
+    id: 'audit-details',
+    path: '/audit?action=setting.changed',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('summary:visible').first().click();
+      const raw = page.locator('details[open] pre:visible').first();
+      await raw.waitFor();
+      await raw.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  // a staff member as the target is named like the actor
+  { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
+  { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },
   {
