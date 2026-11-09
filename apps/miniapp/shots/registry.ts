@@ -56,12 +56,32 @@ async function pickCityRow(page: Page, text: string) {
   await sheet(page).getByTestId('point-row').first().waitFor();
 }
 
+/** Empties the screenshot customer's cart, then adds the given volumes (slug, ml, qty). */
+async function fillCart(api: ApiClient, items: [slug: string, ml: 10 | 30 | 50, qty?: number][]) {
+  const now = await api.cart.get();
+  if (now.status !== 200) throw new Error(`cart: HTTP ${now.status}`);
+  for (const line of now.body.lines) await api.cart.removeLine({ params: { lineId: line.id } });
+  for (const [slug, ml, qty = 1] of items) {
+    const res = await api.cart.addLine({ body: { slug, ml, qty } });
+    if (res.status !== 200) throw new Error(`add ${slug} ${ml}: HTTP ${res.status}`);
+  }
+}
+const CART_SLUGS = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'baccarat-rouge-540'];
+const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+  await fillCart(api, []);
+  for (const slug of CART_SLUGS) await db.restore(slug);
+};
+
 /** Types a search and submits it, as the keyboard's «Найти» does. */
 async function searchFor(page: Page, text: string) {
   const box = page.getByRole('searchbox');
   await box.fill(text);
   await box.press('Enter');
 }
+
+/** The dev fixture routes carry a data toggle; it is chrome, not part of the screen. */
+const hideFixtureToggle = async ({ page }: { page: Page }) =>
+  void (await page.addStyleTag({ content: 'nav[aria-label="fixture"] { display: none }' }));
 
 /** A customer who has not shared the contact yet (Profile shows the «Добавить» row). */
 const NO_PHONE_USER: ShotUser = {
@@ -356,6 +376,130 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
+  {
+    id: 'cart-lines',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-nudge',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await forgetCity(api);
+      // 218 000: a gap of 32 000, so 10 ml bottles can close it and the suggestions show.
+      await fillCart(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-sold-out',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await chooseCity(api);
+      await db.restore('power-of-you');
+      await fillCart(api, [
+        ['symphony', 10, 2],
+        ['power-of-you', 10],
+      ]);
+      await db.setOnHand('power-of-you', 0);
+    },
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-free-delivery',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api }) => {
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: emptyCart,
+  },
+  // An applied discount and a line capped at what is left, on fixtures (no discount source exists yet).
+  { id: 'cart-discount', path: '/dev/cart?data=discount', fullPage: true, act: hideFixtureToggle },
+  { id: 'cart-empty', path: '/cart', setup: emptyCart },
+  // The worst case on fixtures (src/dev/CartFixtures.tsx): twelve lines, a 40-character name,
+  // quantity 99, a seven-digit total, the longest city. In the viewport, mid-scroll, the totals stay
+  // above the tab bar while the lines run under them; the full page shows every line.
+  {
+    id: 'cart-worst',
+    path: '/dev/cart?data=worst',
+    act: async ({ page }) => {
+      await hideFixtureToggle({ page });
+      await page.evaluate(() => window.scrollTo(0, 700));
+    },
+  },
+  { id: 'cart-worst-full', path: '/dev/cart?data=worst', fullPage: true, act: hideFixtureToggle },
+  {
+    id: 'cart-worst-nudge',
+    path: '/dev/cart?data=worst-nudge',
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
+  { id: 'cart-unavailable', path: '/dev/cart?data=unavailable', act: hideFixtureToggle },
+  {
+    // The cart request never answers: the cart's own skeleton.
+    id: 'cart-loading',
+    path: '/cart',
+    setup: emptyCart,
+    loading: true,
+    act: async ({ page }) => {
+      await page.route('**/api/cart*', () => undefined);
+      await page.reload();
+      await page.locator('[data-skeleton]').first().waitFor();
+    },
+  },
+  {
+    id: 'cart-error',
+    path: '/cart',
+    setup: emptyCart,
+    act: async ({ page }) => {
+      await page.route('**/api/cart*', (route) => route.abort());
+      await page.reload();
+      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+    },
+  },
+  // The fragrance card's dock once the volume is in the cart.
+  {
+    id: 'fragrance-in-cart',
+    path: '/p/symphony',
+    setup: ({ api }) => fillCart(api, [['symphony', 10]]),
+    teardown: emptyCart,
+  },
+  {
+    // «В корзину» once the last unit is already in the cart: the server caps it, «Осталось 1» shows.
+    id: 'fragrance-capped',
+    path: '/p/symphony',
+    setup: async ({ api, db }) => {
+      await db.setOnHand('symphony', 1);
+      await fillCart(api, [['symphony', 10]]);
+    },
+    teardown: emptyCart,
+    act: async ({ page }) => {
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page
+        .getByRole('status')
+        .filter({ hasText: /Осталось|Qoldi/ })
+        .waitFor();
+    },
+  },
   // Fragrance card (#8): the seed catalog, real fragrances. The long ones stress the lockup.
   { id: 'fragrance', path: '/p/symphony', fullPage: true },
   { id: 'fragrance-long-name', path: '/p/elysium-pour-homme-parfum', fullPage: true },

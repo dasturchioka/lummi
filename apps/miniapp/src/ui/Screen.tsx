@@ -17,6 +17,11 @@ const GUTTER_R = 'max(var(--gutter), var(--safe-r, 0px))';
  * `header` is its mirror at the top (the search field): edge to edge on the Milk ground, it stays
  * put while the content scrolls under it, so the field is never scrolled away when the keyboard
  * has shrunk the viewport. A hairline appears under it once something is under it.
+ * `footer` closes a tab screen whose last block carries its action (the cart's totals with
+ * «Оформить заказ»): it follows the content and, on a phone tall enough to spare the room, stays
+ * above the floating tab bar while the content scrolls under it. It paints the Milk ground down to
+ * the screen edge, so nothing scrolls visibly around the bar or under the home indicator, and a
+ * hairline appears over it once something is under it.
  */
 export function Screen({
   children,
@@ -24,18 +29,21 @@ export function Screen({
   tabBar = true,
   dock,
   header,
+  footer,
 }: {
   children: ReactNode;
   bleed?: boolean;
   tabBar?: boolean;
   dock?: ReactNode;
   header?: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <main
       className="mx-auto flex min-h-[var(--tg-viewport-stable-height,100dvh)] w-full max-w-[520px] flex-col"
       style={{
-        paddingBottom: dock ? 0 : tabBar ? 'var(--tabbar-clear)' : 'max(16px, var(--safe-b, 0px))',
+        paddingBottom:
+          dock || footer ? 0 : tabBar ? 'var(--tabbar-clear)' : 'max(16px, var(--safe-b, 0px))',
         ...(bleed
           ? undefined
           : {
@@ -48,6 +56,11 @@ export function Screen({
     >
       {header ? <StickyHeader bleed={bleed}>{header}</StickyHeader> : null}
       {children}
+      {footer ? (
+        <StickyFooter bleed={bleed} tabBar={tabBar}>
+          {footer}
+        </StickyFooter>
+      ) : null}
       {dock ? (
         <div
           className="sticky bottom-0 z-20 mt-auto border-t border-line bg-ground pt-2.5"
@@ -89,6 +102,73 @@ function StickyHeader({ children, bleed }: { children: ReactNode; bleed: boolean
           paddingTop: 'var(--safe-t, 0px)',
           paddingLeft: GUTTER_L,
           paddingRight: GUTTER_R,
+          ...(bleed
+            ? undefined
+            : { marginLeft: `calc(-1 * ${GUTTER_L})`, marginRight: `calc(-1 * ${GUTTER_R})` }),
+        }}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The `footer` slot: in the flow after the content, sticky at the bottom from a 680 px viewport
+ * (below that it would leave too little room for the content). The hairline shows while the
+ * content runs on under it, that is while the footer sits above its own place in the flow.
+ */
+function StickyFooter({
+  children,
+  bleed,
+  tabBar,
+}: {
+  children: ReactNode;
+  bleed: boolean;
+  tabBar: boolean;
+}) {
+  const mark = useRef<HTMLDivElement>(null);
+  const footer = useRef<HTMLDivElement>(null);
+  const [under, setUnder] = useState(false);
+  useEffect(() => {
+    const m = mark.current;
+    const f = footer.current;
+    if (!m || !f) return;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      setUnder(m.getBoundingClientRect().top > f.getBoundingClientRect().top + 1);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    // Lines added or removed move the footer's place without a scroll.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    if (f.parentElement) ro?.observe(f.parentElement);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      ro?.disconnect();
+    };
+  }, []);
+  return (
+    <>
+      <div ref={mark} aria-hidden="true" />
+      <div
+        ref={footer}
+        data-under={under || undefined}
+        className="relative bottom-0 z-20 bg-ground pt-3 before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-line before:opacity-0 before:transition-opacity before:duration-200 data-[under]:before:opacity-100 [@media(min-height:680px)]:sticky"
+        style={{
+          paddingLeft: GUTTER_L,
+          paddingRight: GUTTER_R,
+          // Above the floating bar with a 20 px gap (the bar's own side inset), or the bottom safe area.
+          paddingBottom: tabBar
+            ? 'calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b, 0px) + 20px)'
+            : 'max(16px, var(--safe-b, 0px))',
           ...(bleed
             ? undefined
             : { marginLeft: `calc(-1 * ${GUTTER_L})`, marginRight: `calc(-1 * ${GUTTER_R})` }),

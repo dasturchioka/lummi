@@ -1,15 +1,6 @@
 import type { BtsPointDto, CityDto, DeliveryCityDto, RegionDto } from '@lummi/contracts';
 import { POINT_SEARCH_LIMIT } from '@lummi/contracts';
-import {
-  and,
-  asc,
-  btsPoints,
-  customers,
-  eq,
-  regions,
-  sql,
-  type Db,
-} from '@lummi/db';
+import { and, asc, btsPoints, customers, eq, regions, sql, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { toPointDto, toRegionDto } from './dto';
 import { AuditService } from '../audit/audit.service';
@@ -83,13 +74,8 @@ export class DeliveryService implements OnApplicationBootstrap {
     return rows.map(toPointDto);
   }
 
-  async getDeliveryCity(customerId: number): Promise<DeliveryCityDto | null> {
-    const [row] = await this.db
-      .select({ region: regions, city: customers.deliveryCity })
-      .from(customers)
-      .innerJoin(regions, eq(regions.id, customers.deliveryRegionId))
-      .where(eq(customers.id, customerId));
-    return row?.city ? { region: toRegionDto(row.region), city: row.city } : null;
+  getDeliveryCity(customerId: number, tx: DbOrTx = this.db): Promise<DeliveryCityDto | null> {
+    return readDeliveryCity(tx, customerId);
   }
 
   /** Region + city must come from the offered list, so the saved city always has points to pick from. */
@@ -145,4 +131,17 @@ export class DeliveryService implements OnApplicationBootstrap {
       .set({ deliveryRegionId: null, deliveryCity: null, updatedAt: this.edges.clock.now() })
       .where(eq(customers.id, customerId));
   }
+}
+
+/** The customer's saved delivery city with its region (and so its tariff); null until chosen. */
+export async function readDeliveryCity(
+  tx: DbOrTx,
+  customerId: number,
+): Promise<DeliveryCityDto | null> {
+  const [row] = await tx
+    .select({ region: regions, city: customers.deliveryCity })
+    .from(customers)
+    .innerJoin(regions, eq(regions.id, customers.deliveryRegionId))
+    .where(eq(customers.id, customerId));
+  return row?.city ? { region: toRegionDto(row.region), city: row.city } : null;
 }

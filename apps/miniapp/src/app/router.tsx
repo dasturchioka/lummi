@@ -14,6 +14,7 @@ import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';
 import { parseCatalogSearch } from '../catalog/filters';
 import { Home } from '../screens/Home';
+import { useCartCount } from '../cart/queries';
 import { TabBar, TABS } from '../ui/TabBar';
 
 const TAB_ROOTS: string[] = TABS.map((t) => t.to);
@@ -22,9 +23,13 @@ function Shell() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
   const isRoot = TAB_ROOTS.includes(pathname);
-  // The fragrance card (it carries its own dock, also on its fixtures) and the search are task screens: no tab bar.
+  // The fragrance card (it carries its own dock, also on its fixtures), the search and the checkout are task screens: no tab bar.
   const showTabBar =
-    !pathname.startsWith('/p/') && pathname !== '/search' && pathname !== '/dev/fragrance';
+    !pathname.startsWith('/p/') &&
+    pathname !== '/search' &&
+    pathname !== '/dev/fragrance' &&
+    pathname !== '/checkout';
+  const cartCount = useCartCount();
 
   // Telegram's native back button: visible on screens deeper than a tab root.
   useEffect(() => showBackButton(!isRoot, () => goBackOrCatalog(router)), [isRoot, router]);
@@ -32,7 +37,7 @@ function Shell() {
   return (
     <>
       <Outlet />
-      {showTabBar ? <TabBar /> : null}
+      {showTabBar ? <TabBar badges={{ cart: cartCount }} /> : null}
     </>
   );
 }
@@ -66,6 +71,16 @@ const devRoutes = import.meta.env.DEV
       createRoute({
         ...at('/dev/registration'),
         component: lazyRouteComponent(() => import('../dev/Gallery'), 'GalleryRegistrationOpen'),
+      }),
+      createRoute({
+        ...at('/dev/cart'),
+        validateSearch: (s: Record<string, unknown>) => ({
+          data:
+            (['discount', 'plain', 'worst', 'worst-nudge', 'unavailable'] as const).find(
+              (n) => n === s.data,
+            ) ?? 'discount',
+        }),
+        component: lazyRouteComponent(() => import('../dev/CartFixtures'), 'CartFixtures'),
       }),
       // The fragrance card on fixtures: `?data=demo|worst|one|empty` (worst by default).
       createRoute({
@@ -102,7 +117,11 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/cart'),
-    component: lazyRouteComponent(() => import('../screens/Tabs'), 'CartTab'),
+    component: lazyRouteComponent(() => import('../screens/Cart'), 'Cart'),
+  }),
+  createRoute({
+    ...at('/checkout'),
+    component: lazyRouteComponent(() => import('../screens/Checkout'), 'Checkout'),
   }),
   createRoute({
     ...at('/orders'),

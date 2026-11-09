@@ -15,5 +15,7 @@ export {
   isNull,
   inArray,
   gt,
+  gte,
+  notInArray,
   DrizzleQueryError,
 } from 'drizzle-orm';

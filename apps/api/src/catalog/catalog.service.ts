@@ -144,12 +144,12 @@ export class CatalogService {
   /**
    * Ids of every visible fragrance in «Популярное» order: owner-pinned (hit) first, then the paid
    * order count over `catalog.topSalesWindowDays` (nothing until orders exist), then newest. One
-   * function, so Home, the catalog sort and the similar fallback agree.
+   * function, so Home, the catalog sort, the similar fallback and the cart suggestions agree.
    */
-  async topSellersOrder(): Promise<number[]> {
+  async topSellersOrder(db: DbOrTx = this.db): Promise<number[]> {
     const [cfg, rows] = await Promise.all([
-      readSettings(this.db, ['catalog.topSalesWindowDays']),
-      this.db
+      readSettings(db, ['catalog.topSalesWindowDays']),
+      db
         .select({ id: fragrances.id, isHit: fragrances.isHit, createdAt: fragrances.createdAt })
         .from(fragrances)
         .where(eq(fragrances.hidden, false))
@@ -157,7 +157,7 @@ export class CatalogService {
     ]);
     const days = cfg['catalog.topSalesWindowDays'];
     const since = new Date(this.edges.clock.now().getTime() - days * 86_400_000);
-    const sold = await paidOrderCounts(this.db, since);
+    const sold = await paidOrderCounts(db, since);
     // `rows` is already newest first and the sort is stable, so equal keys keep that order.
     return [...rows]
       .sort(
