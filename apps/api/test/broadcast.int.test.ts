@@ -1,4 +1,4 @@
-import type { BroadcastBody } from '@lummi/contracts';
+import type { BroadcastBody, BroadcastDto } from '@lummi/contracts';
 import { dictionaries } from '@lummi/i18n/all';
 import {
   auditLog,
@@ -59,8 +59,9 @@ const body = (over: Partial<BroadcastBody> = {}): BroadcastBody => ({
   ...over,
 });
 
-const create = (b: BroadcastBody, as: StaffSession = owner) =>
-  as.client.admin.broadcasts.create({ body: b });
+/** The typed client's unions include an unvalidated 400; these tests read the documented bodies. */
+const create = async (b: BroadcastBody, as: StaffSession = owner) =>
+  (await as.client.admin.broadcasts.create({ body: b })) as { status: number; body: BroadcastDto };
 
 async function counts(id: number) {
   const res = await owner.client.admin.broadcasts.get({ params: { id } });
