@@ -1,0 +1,15 @@
+{
+  "name": "@lummi/config",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    "./eslint": "./eslint.js",
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "echo no sources",
+    "test": "echo no tests"
+  }
+}
