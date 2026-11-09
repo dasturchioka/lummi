@@ -3,7 +3,7 @@ import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
 import { AdminLoginService } from './admin/admin-login.service';
-import { CatalogAdminController, StockController } from './admin/catalog-admin.controller';
+import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
 import { StaffController } from './admin/staff.controller';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
@@ -55,7 +55,7 @@ export class AppModule {
         AdminAuthController,
         StaffController,
         CatalogAdminController,
-        StockController,
+        OnHandController,
         HumoFeedController,
       ],
       providers: [

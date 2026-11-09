@@ -4,7 +4,7 @@ import type {
   FragranceAdmin,
   FragranceInput,
   FragranceListItem,
-  StockItem,
+  OnHandItem,
   VolumeInput,
 } from '@lummi/contracts';
 import {
@@ -23,20 +23,20 @@ import {
   type DbOrTx,
   type StaffRow,
 } from '@lummi/db';
-import { normalizeUzbek } from '@lummi/i18n';
+import { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 import { AuditService } from '../audit/audit.service';
-import { reservedByVolume } from '../catalog/catalog.service';
+import { available, reservedByVolume } from '../catalog/catalog.service';
 import { storePhoto } from '../catalog/photo-pipeline';
-import { slugify } from '../catalog/seed';
+import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
 import { tashkentToUtc, utcToTashkent } from '../time/tashkent';
 import { DB, EDGES } from '../tokens';
 
 export type Failure = {
   ok: false;
-  reason: 'not_found' | 'conflict' | 'invalid';
+  reason: 'not_found' | 'conflict' | 'invalid' | 'on_hand_changed';
   fields?: string[];
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
@@ -52,6 +52,8 @@ function isUniqueViolation(e: unknown): boolean {
   return code.code === '23505' || code.cause?.code === '23505';
 }
 
+/** Advisory lock that serialises handing out internal product codes. */
+const PRODUCT_CODE_LOCK = 1701;
 const MIN_PHOTO = { width: 400, height: 533 } as const;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null : s.trim());
@@ -106,11 +108,13 @@ export class CatalogAdminService {
   }): Promise<FragranceListItem[]> {
     const where = [];
     if (query.q) {
-      const like = `%${escapeLike(normalizeUzbek(query.q))}%`;
+      // apostrophes are ignored on both sides: «Devil's» finds «Devil’s Intrigue» and the reverse
+      const like = `%${escapeLike(stripApostrophes(normalizeUzbek(query.q)))}%`;
+      const plain = (col: unknown) => sql`regexp_replace(${col}, ${APOSTROPHE_CLASS}, '', 'g')`;
       where.push(
-        sql`(${fragrances.name} ilike ${like} or ${fragrances.originalBrand} ilike ${like}
+        sql`(${plain(fragrances.name)} ilike ${like} or ${plain(fragrances.originalBrand)} ilike ${like}
           or ${fragrances.code} ilike ${like}
-          or exists (select 1 from unnest(${fragrances.aliases}) a where a ilike ${like}))`,
+          or exists (select 1 from unnest(${fragrances.aliases}) a where ${plain(sql`a`)} ilike ${like}))`,
       );
     }
     if (query.type) where.push(eq(fragrances.type, query.type));
@@ -180,6 +184,10 @@ export class CatalogAdminService {
         .orderBy(asc(fragranceSimilar.position)),
       db.select().from(volumes).where(eq(volumes.fragranceId, id)).orderBy(asc(volumes.ml)),
     ]);
+    const reserved = await reservedByVolume(
+      db,
+      volumeRows.map((v) => v.id),
+    );
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => n.noteId);
     return {
@@ -216,6 +224,8 @@ export class CatalogAdminService {
         salePrice: v.salePrice,
         saleEndsOn: saleEndDay(v.saleEndsAt),
         onHand: v.onHand,
+        reserved: reserved.get(v.id) ?? 0,
+        belowReserve: v.onHand < (reserved.get(v.id) ?? 0),
         photo: v.photoHash,
         isPlaceholder: v.isPlaceholder,
       })),
@@ -231,7 +241,7 @@ export class CatalogAdminService {
         const bad = await this.checkReferences(tx, input, null);
         if (bad.length) return fail('invalid', bad);
         // Codes are handed out one after another; the lock keeps two creates from taking the same.
-        await tx.execute(sql`select pg_advisory_xact_lock(1701)`);
+        await tx.execute(sql`select pg_advisory_xact_lock(${PRODUCT_CODE_LOCK})`);
         const [{ next }] = (
           await tx.execute<{ next: number }>(
             sql`select coalesce(max(code::int), 0) + 1 as next from fragrances where code ~ '^[0-9]+$'`,
@@ -272,7 +282,22 @@ export class CatalogAdminService {
       if (!locked) return fail('not_found');
       const bad = await this.checkReferences(tx, input, id);
       if (bad.length) return fail('invalid', bad);
+      // The volume rows are locked before they are read: a count made meanwhile (a manager's, or
+      // the BTS handover's) is either seen here or waits for this save (ADR 0010).
+      await tx
+        .select({ id: volumes.id })
+        .from(volumes)
+        .where(eq(volumes.fragranceId, id))
+        .for('update');
       const before = (await this.get(id, tx))!;
+      // On hand is compare-and-set: the owner's form carries the count it loaded; a changed
+      // count is written only if the stored one still equals it. Nothing is written otherwise.
+      for (const v of input.volumes) {
+        const old = before.volumes.find((x) => x.ml === v.ml);
+        if (old && this.onHandEdited(v) && old.onHand !== v.loadedOnHand) {
+          return fail('on_hand_changed', [`volumes.${input.volumes.indexOf(v)}.onHand`]);
+        }
+      }
 
       await tx
         .update(fragrances)
@@ -290,18 +315,19 @@ export class CatalogAdminService {
           continue;
         }
         const end = v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null;
-        const touched = old.price !== v.price || old.onHand !== v.onHand;
+        const writeOnHand = this.onHandEdited(v);
+        const touched = old.price !== v.price || writeOnHand;
         await tx
           .update(volumes)
           .set({
             price: v.price,
             salePrice: v.salePrice,
             saleEndsAt: end,
-            onHand: v.onHand,
+            ...(writeOnHand ? { onHand: v.onHand } : {}),
             ...(touched ? { isPlaceholder: false } : {}),
           })
           .where(eq(volumes.id, old.id));
-        const diff = this.volumeDiff(old, v);
+        const diff = this.volumeDiff(old, v, writeOnHand);
         if (diff) volumeChanges.push({ ml: v.ml, ...diff });
       }
 
@@ -392,12 +418,17 @@ export class CatalogAdminService {
     });
   }
 
-  private volumeDiff(old: FragranceAdmin['volumes'][number], v: VolumeInput) {
+  /** The owner typed a new count for an existing volume (it differs from the one the form loaded). */
+  private onHandEdited(v: VolumeInput) {
+    return v.loadedOnHand != null && v.loadedOnHand !== v.onHand;
+  }
+
+  private volumeDiff(old: FragranceAdmin['volumes'][number], v: VolumeInput, writeOnHand: boolean) {
     const out: Record<string, [unknown, unknown]> = {};
     if (old.price !== v.price) out.price = [old.price, v.price];
     if (old.salePrice !== v.salePrice) out.salePrice = [old.salePrice, v.salePrice];
     if (old.saleEndsOn !== v.saleEndsOn) out.saleEndsOn = [old.saleEndsOn, v.saleEndsOn];
-    if (old.onHand !== v.onHand) out.onHand = [old.onHand, v.onHand];
+    if (writeOnHand && old.onHand !== v.onHand) out.onHand = [old.onHand, v.onHand];
     return Object.keys(out).length ? out : null;
   }
 
@@ -513,9 +544,9 @@ export class CatalogAdminService {
     }
   }
 
-  // ---- stock and photos ----
+  // ---- on hand and photos ----
 
-  async stockList(q?: string): Promise<StockItem[]> {
+  async onHandList(q?: string): Promise<OnHandItem[]> {
     const where = q ? sql`${fragrances.name} ilike ${'%' + escapeLike(q) + '%'}` : undefined;
     const rows = await this.db
       .select({
@@ -533,10 +564,10 @@ export class CatalogAdminService {
       this.db,
       rows.map((r) => r.volumeId),
     );
-    return rows.map((r) => this.stockItem(r, reserved.get(r.volumeId) ?? 0));
+    return rows.map((r) => this.onHandItem(r, reserved.get(r.volumeId) ?? 0));
   }
 
-  async setStock(actor: StaffRow, volumeId: number, onHand: number): Promise<Outcome<StockItem>> {
+  async setOnHand(actor: StaffRow, volumeId: number, onHand: number): Promise<Outcome<OnHandItem>> {
     return this.db.transaction(async (tx) => {
       const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');
       if (!old) return fail('not_found');
@@ -550,15 +581,15 @@ export class CatalogAdminService {
         .where(eq(fragrances.id, old.fragranceId));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
-        action: 'catalog.stock_changed',
+        action: 'catalog.on_hand_changed',
         targetType: 'volume',
         targetId: volumeId,
         payload: { fragrance: f!.name, ml: old.ml, onHand: [old.onHand, onHand] },
       });
-      const reserved = (await reservedByVolume(tx as Db, [volumeId])).get(volumeId) ?? 0;
+      const reserved = (await reservedByVolume(tx, [volumeId])).get(volumeId) ?? 0;
       return {
         ok: true,
-        value: this.stockItem(
+        value: this.onHandItem(
           { volumeId, fragranceId: f!.id, name: f!.name, ml: old.ml, onHand },
           reserved,
         ),
@@ -566,17 +597,25 @@ export class CatalogAdminService {
     });
   }
 
-  private stockItem(
+  private onHandItem(
     r: { volumeId: number; fragranceId: number; name: string; ml: number; onHand: number },
     reserved: number,
-  ): StockItem {
-    return { ...r, reserved, available: Math.max(0, r.onHand - reserved) };
+  ): OnHandItem {
+    return {
+      ...r,
+      reserved,
+      available: available(r.onHand, reserved),
+      belowReserve: r.onHand < reserved,
+    };
   }
 
   /** Runs the upload through the WebP pipeline (the original bytes are kept) and points the volume at it. */
   async setPhoto(actor: StaffRow, volumeId: number, bytes: Uint8Array): Promise<Outcome<string>> {
-    const [old] = await this.db.select().from(volumes).where(eq(volumes.id, volumeId));
-    if (!old) return fail('not_found');
+    const [exists] = await this.db
+      .select({ id: volumes.id })
+      .from(volumes)
+      .where(eq(volumes.id, volumeId));
+    if (!exists) return fail('not_found');
     let hash: string;
     try {
       // The 400 px rendition must not be an upscale: refuse anything smaller than that.
@@ -588,7 +627,10 @@ export class CatalogAdminService {
     } catch {
       return fail('invalid', ['photo']);
     }
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
+      // read the previous photo under the lock, so the audit pair is never stale
+      const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');
+      if (!old) return fail('not_found');
       await tx.update(volumes).set({ photoHash: hash }).where(eq(volumes.id, volumeId));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
@@ -597,7 +639,7 @@ export class CatalogAdminService {
         targetId: volumeId,
         payload: { ml: old.ml, fragranceId: old.fragranceId, photo: [old.photoHash, hash] },
       });
+      return { ok: true, value: hash } as const;
     });
-    return { ok: true, value: hash };
   }
 }

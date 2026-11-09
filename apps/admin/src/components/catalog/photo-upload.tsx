@@ -75,11 +75,7 @@ export function PhotoUpload({
       ) : (
         <>
           <div className="grid aspect-[3/4] w-32 place-items-center overflow-hidden rounded-button bg-field text-xs text-muted-foreground">
-            {shown ? (
-              <img src={shown} alt="" className="size-full object-cover" />
-            ) : (
-              c.noPhoto
-            )}
+            {shown ? <img src={shown} alt="" className="size-full object-cover" /> : c.noPhoto}
           </div>
           <input
             ref={input}

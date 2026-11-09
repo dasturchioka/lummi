@@ -26,6 +26,12 @@ export const volumeInputSchema = z
     salePrice: som.nullable(),
     saleEndsOn: dateOnly.nullable(),
     onHand: z.number().int().min(0).max(1_000_000),
+    /**
+     * The on hand the form was loaded with. On an existing volume the server writes `onHand` only
+     * when it differs from this, and only if the stored count still equals it (ADR 0010: a count
+     * made by a manager in between must survive the owner saving the form). Omitted: not written.
+     */
+    loadedOnHand: z.number().int().min(0).nullable().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.salePrice !== null && v.salePrice >= v.price) {
@@ -90,6 +96,10 @@ export const volumeAdminSchema = z.object({
   salePrice: z.number().int().nullable(),
   saleEndsOn: dateOnly.nullable(),
   onHand: z.number().int(),
+  /** Held by orders (ADR 0010). */
+  reserved: z.number().int(),
+  /** A count below the reserve is allowed (a count is ground truth) but flagged: available shows 0. */
+  belowReserve: z.boolean(),
   /** Content hash of the photo set, or null before the first upload. */
   photo: z.string().nullable(),
   isPlaceholder: z.boolean(),
@@ -167,7 +177,7 @@ export const fragranceListQuerySchema = z.object({
 });
 
 export const hiddenBodySchema = z.object({ hidden: z.boolean() });
-export const stockBodySchema = z.object({ onHand: z.number().int().min(0).max(1_000_000) });
+export const onHandBodySchema = z.object({ onHand: z.number().int().min(0).max(1_000_000) });
 
 /** Dictionary entries (families and notes): RU/UZ names and aliases. */
 export const dictionaryInputSchema = z.object({
@@ -183,7 +193,7 @@ export const dictionaryItemSchema = dictionaryInputSchema.extend({
 });
 export type DictionaryItem = z.infer<typeof dictionaryItemSchema>;
 
-export const stockItemSchema = z.object({
+export const onHandItemSchema = z.object({
   volumeId: z.number().int(),
   fragranceId: z.number().int(),
   name: z.string(),
@@ -191,14 +201,22 @@ export const stockItemSchema = z.object({
   onHand: z.number().int(),
   reserved: z.number().int(),
   available: z.number().int(),
+  belowReserve: z.boolean(),
 });
-export type StockItem = z.infer<typeof stockItemSchema>;
+export type OnHandItem = z.infer<typeof onHandItemSchema>;
 
 export const photoResultSchema = z.object({ photo: z.string() });
 
 /** Field-level validation failures come back as 422 with the offending paths. */
 export const catalogAdminErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'conflict', 'invalid']),
+  code: z.enum([
+    'unauthorized',
+    'forbidden',
+    'not_found',
+    'conflict',
+    'invalid',
+    'on_hand_changed',
+  ]),
   /** Dotted field paths that failed a rule the schema cannot see (unknown ids, taken names). */
   fields: z.array(z.string()).optional(),
 });

@@ -9,6 +9,7 @@ import {
   type Db,
 } from '@lummi/db';
 import { normalizeUzbek } from '@lummi/i18n';
+import { slugify } from './slug';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FileStore } from '../edges';
@@ -54,17 +55,6 @@ function pick<T extends Record<string, string>>(map: T, key: string, what: strin
   const v = map[key];
   if (!v) throw new Error(`catalog guide: unknown ${what} "${key}"`);
   return v as T[keyof T];
-}
-
-/** The name in ASCII kebab case: `Angels' Share` -> `angels-share`, `Météore` -> `meteore`. */
-export function slugify(name: string): string {
-  return name
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase()
-    .replace(/['’ʻʼ`]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 const list = (s: string, sep: string | RegExp) =>

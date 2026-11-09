@@ -4,4 +4,4 @@ export { defineMessages } from './define';
 export { formatMoney } from './money';
 export { formatPhone } from './phone';
 export { fill } from './fill';
-export { normalizeUzbek } from './uzbek';
+export { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from './uzbek';

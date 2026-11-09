@@ -10,8 +10,8 @@ import {
   fragranceListItemSchema,
   fragranceListQuerySchema,
   hiddenBodySchema,
-  stockBodySchema,
-  stockItemSchema,
+  onHandBodySchema,
+  onHandItemSchema,
 } from './admin-catalog';
 import {
   adminErrorSchema,
@@ -326,13 +326,13 @@ export const adminContract = c.router({
       },
     },
   },
-  stock: {
+  onHand: {
     list: {
       method: 'GET',
-      path: '/admin/stock',
+      path: '/admin/on-hand',
       query: z.object({ q: z.string().trim().max(100).optional() }),
       responses: {
-        200: z.array(stockItemSchema),
+        200: z.array(onHandItemSchema),
         401: catalogAdminErrorSchema,
         403: catalogAdminErrorSchema,
       },
@@ -340,11 +340,11 @@ export const adminContract = c.router({
     },
     set: {
       method: 'PATCH',
-      path: '/admin/volumes/:id/stock',
+      path: '/admin/volumes/:id/on-hand',
       pathParams: z.object({ id: z.coerce.number().int().positive() }),
-      body: stockBodySchema,
+      body: onHandBodySchema,
       responses: {
-        200: stockItemSchema,
+        200: onHandItemSchema,
         401: catalogAdminErrorSchema,
         403: catalogAdminErrorSchema,
         404: catalogAdminErrorSchema,

@@ -12,23 +12,26 @@ import {
 } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
+import { looksLikeImage } from '../catalog/photo-pipeline';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { CatalogAdminService, type Failure } from './catalog-admin.service';
 
 /** One mapping for service failures; the field paths ride along so the form can mark them. */
 function failure(f: Failure) {
-  const body = { code: f.reason === 'invalid' ? ('invalid' as const) : f.reason, fields: f.fields };
+  const fields = f.fields;
   switch (f.reason) {
     case 'not_found':
       return { status: 404 as const, body: { code: 'not_found' as const } };
     case 'conflict':
-      return { status: 409 as const, body: { ...body, code: 'conflict' as const } };
-    default:
-      return { status: 422 as const, body: { ...body, code: 'invalid' as const } };
+      return { status: 409 as const, body: { code: 'conflict' as const, fields } };
+    case 'on_hand_changed':
+      return { status: 409 as const, body: { code: 'on_hand_changed' as const, fields } };
+    case 'invalid':
+      return { status: 422 as const, body: { code: 'invalid' as const, fields } };
   }
 }
 
-/** The catalog is the owner's (ADR 0017). Stock is the one thing a manager may also change. */
+/** The catalog is the owner's (ADR 0017). On hand is the one thing a manager may also change. */
 @Controller()
 @UseGuards(StaffGuard, OwnerGuard)
 export class CatalogAdminController {
@@ -56,7 +59,7 @@ export class CatalogAdminController {
   create(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.fragrances.create, async ({ body }) => {
       const res = await this.catalog.create(actor, body);
-      return res.ok ? { status: 201 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 201 as const, body: res.value } : failure(res);
     });
   }
 
@@ -64,7 +67,7 @@ export class CatalogAdminController {
   update(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.fragrances.update, async ({ params, body }) => {
       const res = await this.catalog.update(actor, params.id, body);
-      return res.ok ? { status: 200 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
@@ -72,7 +75,7 @@ export class CatalogAdminController {
   setHidden(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.fragrances.setHidden, async ({ params, body }) => {
       const res = await this.catalog.setHidden(actor, params.id, body.hidden);
-      return res.ok ? { status: 200 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
@@ -88,7 +91,7 @@ export class CatalogAdminController {
   createFamily(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.families.create, async ({ body }) => {
       const res = await this.catalog.saveDictionary(actor, 'families', null, body);
-      return res.ok ? { status: 201 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 201 as const, body: res.value } : failure(res);
     });
   }
 
@@ -96,7 +99,7 @@ export class CatalogAdminController {
   updateFamily(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.families.update, async ({ params, body }) => {
       const res = await this.catalog.saveDictionary(actor, 'families', params.id, body);
-      return res.ok ? { status: 200 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
@@ -112,7 +115,7 @@ export class CatalogAdminController {
   createNote(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.notes.create, async ({ body }) => {
       const res = await this.catalog.saveDictionary(actor, 'notes', null, body);
-      return res.ok ? { status: 201 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 201 as const, body: res.value } : failure(res);
     });
   }
 
@@ -120,7 +123,7 @@ export class CatalogAdminController {
   updateNote(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.notes.update, async ({ params, body }) => {
       const res = await this.catalog.saveDictionary(actor, 'notes', params.id, body);
-      return res.ok ? { status: 200 as const, body: res.value } : (failure(res) as never);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
@@ -153,40 +156,24 @@ export class CatalogAdminController {
   }
 }
 
-/** JPEG, PNG or WebP by their first bytes. */
-export function looksLikeImage(b: Uint8Array): boolean {
-  const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
-  const png = b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
-  const webp =
-    b[0] === 0x52 &&
-    b[1] === 0x49 &&
-    b[2] === 0x46 &&
-    b[3] === 0x46 &&
-    b[8] === 0x57 &&
-    b[9] === 0x45 &&
-    b[10] === 0x42 &&
-    b[11] === 0x50;
-  return jpeg || png || webp;
-}
-
-/** Stock: any active staff member (owner and manager), audited with the actor. */
+/** On hand: any active staff member (owner and manager), audited with the actor. */
 @Controller()
 @UseGuards(StaffGuard)
-export class StockController {
+export class OnHandController {
   constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
 
-  @TsRestHandler(adminContract.stock.list)
+  @TsRestHandler(adminContract.onHand.list)
   list() {
-    return tsRestHandler(adminContract.stock.list, async ({ query }) => ({
+    return tsRestHandler(adminContract.onHand.list, async ({ query }) => ({
       status: 200 as const,
-      body: await this.catalog.stockList(query.q),
+      body: await this.catalog.onHandList(query.q),
     }));
   }
 
-  @TsRestHandler(adminContract.stock.set)
+  @TsRestHandler(adminContract.onHand.set)
   set(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.stock.set, async ({ params, body }) => {
-      const res = await this.catalog.setStock(actor, params.id, body.onHand);
+    return tsRestHandler(adminContract.onHand.set, async ({ params, body }) => {
+      const res = await this.catalog.setOnHand(actor, params.id, body.onHand);
       return res.ok
         ? { status: 200 as const, body: res.value }
         : { status: 404 as const, body: { code: 'not_found' as const } };

@@ -8,6 +8,7 @@ import {
   notes,
   volumes,
   type Db,
+  type DbOrTx,
   type VolumeRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
@@ -20,9 +21,15 @@ import { DB, EDGES } from '../tokens';
  * checkout ticket; until then nothing is reserved. Keep this the one place that knows, so
  * "available" is on hand minus reserve everywhere.
  */
-export async function reservedByVolume(_db: Db, volumeIds: number[]): Promise<Map<number, number>> {
+export async function reservedByVolume(
+  _db: DbOrTx,
+  volumeIds: number[],
+): Promise<Map<number, number>> {
   return new Map(volumeIds.map((id) => [id, 0]));
 }
+
+/** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
+export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {
@@ -40,7 +47,7 @@ export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeC
     salePercent: sale === null ? null : Math.round(((v.price - sale) / v.price) * 100),
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
-    available: Math.max(0, v.onHand - reserved),
+    available: available(v.onHand, reserved),
     photo: v.photoHash,
   };
 }

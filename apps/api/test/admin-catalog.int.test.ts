@@ -147,7 +147,16 @@ describe('create and edit a fragrance', () => {
         isHit: true,
         sillage: 'medium',
         uzumUrl: 'https://uzum.uz/ru/product/x',
-        volumes: [{ ml: 10, price: 80_000, salePrice: null, saleEndsOn: null, onHand: 3 }],
+        volumes: [
+          {
+            ml: 10,
+            price: 80_000,
+            salePrice: null,
+            saleEndsOn: null,
+            onHand: 3,
+            loadedOnHand: 5,
+          },
+        ],
       }),
     });
     expect(res.status).toBe(200);
@@ -183,7 +192,7 @@ describe('create and edit a fragrance', () => {
     expect(res.status === 200 && res.body.volumes.map((v) => v.ml)).toEqual([10, 30, 50]);
   });
 
-  it('clears the placeholder flag only on a volume whose price or stock was set', async () => {
+  it('clears the placeholder flag only on a volume whose price or on hand was set', async () => {
     const [seeded] = await t.db.select().from(fragrances).limit(1);
     const before = await owner.client.admin.catalog.fragrances.get({ params: { id: seeded!.id } });
     if (before.status !== 200) throw new Error('get');
@@ -238,7 +247,7 @@ describe('validation', () => {
       { volumes: [{ ml: 10, price: 70_000.5, salePrice: null, saleEndsOn: null, onHand: 1 }] },
     ],
     [
-      'a negative stock',
+      'a negative on hand',
       { volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: -1 }] },
     ],
     [
@@ -268,6 +277,23 @@ describe('validation', () => {
       expect(await audits('catalog.fragrance_created')).toHaveLength(0);
     },
   );
+
+  it.each([
+    ['a sale price equal to the price', { price: 70_000, salePrice: 70_000, saleEndsOn: null }],
+    ['a sale price above the price', { price: 70_000, salePrice: 90_000, saleEndsOn: null }],
+    [
+      'a sale end date with no sale price',
+      { price: 70_000, salePrice: null, saleEndsOn: '2026-12-01' },
+    ],
+    ['a fractional price', { price: 70_000.5, salePrice: null, saleEndsOn: null }],
+  ])('rejects %s on an edit with 400 and changes nothing', async (_n, v) => {
+    const f = await created();
+    const body = baseInput({ volumes: [{ ml: 10, onHand: 5, ...v }] });
+    expect(await send('PUT', `/admin/catalog/fragrances/${f.id}`, body)).toBe(400);
+    const [vol] = await t.db.select().from(volumes).where(eq(volumes.fragranceId, f.id));
+    expect(vol?.price).toBe(70_000);
+    expect(await audits('catalog.fragrance_updated')).toHaveLength(0);
+  });
 
   it('names the fields whose ids do not exist or whose date is not real (422)', async () => {
     const res = await create({
@@ -415,7 +441,7 @@ describe('hide and the list', () => {
 describe('permissions (ADR 0017)', () => {
   it('rejects a signed-out caller with 401', async () => {
     expect((await t.client.admin.catalog.fragrances.list({ query: {} })).status).toBe(401);
-    expect((await t.client.admin.stock.list({ query: {} })).status).toBe(401);
+    expect((await t.client.admin.onHand.list({ query: {} })).status).toBe(401);
   });
 
   it('keeps the whole catalog away from a manager (403) and writes nothing', async () => {
@@ -448,7 +474,7 @@ describe('permissions (ADR 0017)', () => {
   it('lets a manager (and the owner) set on hand, audited with the actor', async () => {
     const f = await created();
     const vol = f.volumes[0]!;
-    const res = await manager.client.admin.stock.set({
+    const res = await manager.client.admin.onHand.set({
       params: { id: vol.id },
       body: { onHand: 12 },
     });
@@ -459,7 +485,7 @@ describe('permissions (ADR 0017)', () => {
     });
     const c = await card('nuit-blanche');
     expect(c.status === 200 && c.body.volumes[0]?.available).toBe(12);
-    const [row] = await audits('catalog.stock_changed');
+    const [row] = await audits('catalog.on_hand_changed');
     expect(row).toMatchObject({
       actorType: 'staff',
       actorId: manager.staff.id,
@@ -467,12 +493,12 @@ describe('permissions (ADR 0017)', () => {
     });
     expect(row?.payload).toMatchObject({ ml: 10, onHand: [5, 12] });
 
-    const ownerRes = await owner.client.admin.stock.set({
+    const ownerRes = await owner.client.admin.onHand.set({
       params: { id: vol.id },
       body: { onHand: 0 },
     });
     expect(ownerRes.status === 200 && ownerRes.body.available).toBe(0);
-    expect((await audits('catalog.stock_changed')).map((r) => r.actorId)).toEqual([
+    expect((await audits('catalog.on_hand_changed')).map((r) => r.actorId)).toEqual([
       manager.staff.id,
       owner.staff.id,
     ]);
@@ -481,17 +507,17 @@ describe('permissions (ADR 0017)', () => {
   it('refuses a negative or fractional on hand and an unknown volume', async () => {
     const f = await created();
     const id = f.volumes[0]!.id;
-    const stock = `/admin/volumes/${id}/stock`;
-    expect(await send('PATCH', stock, { onHand: -1 }, manager)).toBe(400);
-    expect(await send('PATCH', stock, { onHand: 1.5 }, manager)).toBe(400);
+    const path = `/admin/volumes/${id}/on-hand`;
+    expect(await send('PATCH', path, { onHand: -1 }, manager)).toBe(400);
+    expect(await send('PATCH', path, { onHand: 1.5 }, manager)).toBe(400);
     expect(
-      (await manager.client.admin.stock.set({ params: { id: 9999 }, body: { onHand: 1 } })).status,
+      (await manager.client.admin.onHand.set({ params: { id: 9999 }, body: { onHand: 1 } })).status,
     ).toBe(404);
   });
 
-  it('lists stock for a manager', async () => {
+  it('lists on hand for a manager', async () => {
     await created();
-    const res = await manager.client.admin.stock.list({ query: { q: 'nuit' } });
+    const res = await manager.client.admin.onHand.list({ query: { q: 'nuit' } });
     expect(res.status === 200 && res.body.map((s) => [s.ml, s.onHand, s.available])).toEqual([
       [10, 5, 5],
       [30, 5, 5],
@@ -683,5 +709,109 @@ describe('dictionaries', () => {
     expect(
       await send('POST', '/admin/catalog/notes', { nameRu: 'Ваниль 2', nameUz: ' ', aliases: [] }),
     ).toBe(400);
+  });
+});
+
+describe('on hand and a stale form (ADR 0010)', () => {
+  const editBody = (f: Awaited<ReturnType<typeof created>>, onHand: number, loaded: number) =>
+    baseInput({
+      name: 'Nuit Blanche Edit',
+      volumes: [
+        { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand, loadedOnHand: loaded },
+        { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null, onHand: 5, loadedOnHand: 5 },
+      ],
+    });
+  const stored = async (id: number) =>
+    (await t.db.select().from(volumes).where(eq(volumes.id, id))).map((v) => v.onHand);
+
+  it("keeps a manager's count when the owner saves a form loaded before it", async () => {
+    const f = await created();
+    const vol = f.volumes[0]!;
+    await manager.client.admin.onHand.set({ params: { id: vol.id }, body: { onHand: 12 } });
+    // the owner's form still carries the old count, 5, and did not touch it
+    const res = await owner.client.admin.catalog.fragrances.update({
+      params: { id: f.id },
+      body: editBody(f, 5, 5),
+    });
+    expect(res.status).toBe(200);
+    expect(await stored(vol.id)).toEqual([12]);
+    expect(res.status === 200 && res.body.volumes[0]?.onHand).toBe(12);
+    const [row] = await audits('catalog.fragrance_updated');
+    expect((row?.payload as { volumes: unknown[] }).volumes).toEqual([]);
+  });
+
+  it('refuses with 409 when the owner changes a count that moved meanwhile', async () => {
+    const f = await created();
+    const vol = f.volumes[0]!;
+    await manager.client.admin.onHand.set({ params: { id: vol.id }, body: { onHand: 12 } });
+    const res = await owner.client.admin.catalog.fragrances.update({
+      params: { id: f.id },
+      body: editBody(f, 8, 5),
+    });
+    expect(res.status).toBe(409);
+    expect(res.status === 409 && res.body).toEqual({
+      code: 'on_hand_changed',
+      fields: ['volumes.0.onHand'],
+    });
+    expect(await stored(vol.id)).toEqual([12]);
+    // nothing else of that save went through either
+    const [name] = await t.db
+      .select({ n: fragrances.name })
+      .from(fragrances)
+      .where(eq(fragrances.id, f.id));
+    expect(name?.n).toBe('Nuit Blanche');
+  });
+
+  it('writes a count the owner changed from the loaded value', async () => {
+    const f = await created();
+    const res = await owner.client.admin.catalog.fragrances.update({
+      params: { id: f.id },
+      body: editBody(f, 9, 5),
+    });
+    expect(res.status).toBe(200);
+    expect(await stored(f.volumes[0]!.id)).toEqual([9]);
+  });
+
+  it('takes the first count of a new volume, and never writes one omitted loadedOnHand', async () => {
+    const f = await created();
+    const body = baseInput({
+      volumes: [
+        { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 99 },
+        { ml: 50, price: 250_000, salePrice: null, saleEndsOn: null, onHand: 7 },
+      ],
+    });
+    const res = await owner.client.admin.catalog.fragrances.update({ params: { id: f.id }, body });
+    expect(res.status === 200 && res.body.volumes.map((v) => [v.ml, v.onHand])).toEqual([
+      [10, 5],
+      [30, 5],
+      [50, 7],
+    ]);
+  });
+
+  it('allows a count below the reserve but flags it', async () => {
+    // the reserve is 0 until order lines exist (#23), so only the flag's shape is checked here
+    const f = await created();
+    const res = await manager.client.admin.onHand.set({
+      params: { id: f.volumes[0]!.id },
+      body: { onHand: 0 },
+    });
+    expect(res.status === 200 && res.body).toMatchObject({ belowReserve: false, available: 0 });
+  });
+});
+
+describe('admin search and apostrophes', () => {
+  it("finds «Devil's» and «Devil’s» whichever way the name was typed", async () => {
+    await created({ name: "Devil's Intrigue" });
+    await created({ name: 'Bal d’Afrique', originalBrand: 'Byredo' });
+    const names = async (q: string) =>
+      (
+        (await owner.client.admin.catalog.fragrances.list({ query: { q } })).body as {
+          name: string;
+        }[]
+      ).map((f) => f.name);
+    expect(await names("Devil's")).toEqual(["Devil's Intrigue"]);
+    expect(await names('Devil’s')).toEqual(["Devil's Intrigue"]);
+    expect(await names('devils')).toEqual(["Devil's Intrigue"]);
+    expect(await names("bal d'afrique")).toEqual(['Bal d’Afrique']);
   });
 });

@@ -62,6 +62,7 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
           salePrice: v.salePrice,
           saleEndsOn: v.saleEndsOn,
           onHand: v.onHand,
+          loadedOnHand: v.onHand,
         }
       : emptyVolume(ml);
   });
@@ -168,6 +169,9 @@ export function FragranceForm({
   const [photos, setPhotos] = useState<Record<number, string | null>>(() =>
     Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.photo])),
   );
+  const reservedByMl: Record<number, number> = Object.fromEntries(
+    (initial?.volumes ?? []).map((x) => [x.ml, x.reserved]),
+  );
   const volumeIds = useMemo(
     () => Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.id])),
     [initial],
@@ -237,7 +241,11 @@ export function FragranceForm({
         router.refresh();
         return;
       }
-      if (res?.status === 409) {
+      if (res?.status === 409 && (res.body as { code?: string }).code === 'on_hand_changed') {
+        for (const f of (res.body as { fields?: string[] }).fields ?? [])
+          setError(f as never, { type: 'server', message: 'server' });
+        setBanner({ kind: 'error', text: c.onHandChanged });
+      } else if (res?.status === 409) {
         setError('name', { type: 'server', message: 'server' });
         setBanner({ kind: 'error', text: c.nameTaken });
       } else if (res?.status === 422) {
@@ -614,6 +622,11 @@ export function FragranceForm({
                           {...reg(`volumes.${i}.onHand`, { setValueAs: num })}
                         />
                       </Field>
+                      {(reservedByMl[ml] ?? 0) > v.volumes[i]!.onHand && (
+                        <p role="status" className="text-xs leading-snug font-medium">
+                          {c.belowReserve} {fill(c.reserved, { n: String(reservedByMl[ml]) })}
+                        </p>
+                      )}
                       <PhotoUpload
                         ml={ml}
                         volumeId={volumeIds[ml] ?? null}
