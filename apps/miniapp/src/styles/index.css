@@ -112,6 +112,13 @@
   line-height: 1.4;
   font-weight: 400;
 }
+/* The Muted Ink hint under a field, and the count under the chosen point. */
+@utility type-hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 400;
+}
 /* A small Muted Ink label over a value: «Доставка» over the Home city, the characteristics row labels. */
 @utility type-caption {
   font-family: var(--font-ui);

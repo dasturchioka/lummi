@@ -116,7 +116,7 @@ export const screens: ScreenDef[] = [
       await pickCityRow(page, 'Самарканд');
       await sheet(page)
         .locator('button.type-button, button')
-        .filter({ hasText: /Не нашёл|topa olmadim/ })
+        .filter({ hasText: /Нет вашего пункта|Punktingiz yoʻqmi/ })
         .click();
       await sheet(page).getByRole('textbox').waitFor();
     },
@@ -155,8 +155,20 @@ export const screens: ScreenDef[] = [
       await pickCityRow(page, 'Самарканд');
       await sheet(page).getByTestId('point-row').nth(6).click();
       await sheet(page).waitFor({ state: 'detached' });
-      await page.getByTestId('picked').click();
+      await page.getByRole('button', { name: /Сменить|Oʻzgartirish/ }).click();
       await sheet(page).locator('[data-testid="point-row"][aria-pressed="true"]').waitFor();
+    },
+  },
+  {
+    // checkout's collapsed choice (#23 embeds it): name, address · hours, «Сменить», the city count
+    id: 'delivery-point-card',
+    path: '/dev/delivery',
+    act: async ({ page }) => {
+      await pickRegion(page, 2);
+      await pickCityRow(page, 'Самарканд');
+      await sheet(page).getByTestId('point-row').nth(6).click();
+      await sheet(page).waitFor({ state: 'detached' });
+      await page.getByTestId('chosen-point').getByText(/ещё|yana/).waitFor();
     },
   },
   { id: 'catalog', path: '/catalog' },

@@ -1,7 +1,7 @@
 import type { BtsPointDto, RegionDto } from '@lummi/contracts';
 import { POINT_SEARCH_MIN } from '@lummi/contracts';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
-import { fill } from '../lib/fill';
+import { plural } from '@lummi/i18n';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card, CardList } from '../ui/Card';
@@ -14,8 +14,10 @@ import {
   SearchIcon,
   Spinner,
 } from '../ui/icons';
+import { MetaLine } from '../ui/MetaLine';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
+import { PointMeta } from './Hours';
 import { regionName, useCities, usePoints, useRegions, type Picked } from './queries';
 
 type Step = 'regions' | 'cities' | 'points' | 'typed';
@@ -33,9 +35,11 @@ export interface DeliveryPickerProps {
   error?: string | null;
 }
 
-/* Milk Field, borderless, 16 px text (no iOS zoom); focus is a Graphite inset ring. */
-const FIELD_BASE =
-  'w-full rounded-btn bg-field text-base text-ink placeholder:text-muted outline-none transition-shadow duration-150 focus-visible:shadow-[inset_0_0_0_1.5px_var(--c-ink)]';
+/*
+ * Milk Field, borderless, 16 px text (no iOS zoom). Focus is the global 2 px Sage outline at a
+ * 2 px offset (DESIGN.md); a Graphite outline would read as "selected".
+ */
+const FIELD_BASE = 'w-full rounded-btn bg-field text-base text-ink placeholder:text-muted';
 /*
  * No iOS search-field chrome, and the browser's own clear (a blue ✕ in WebKit) is hidden: ours is
  * drawn in the brand ink.
@@ -87,13 +91,10 @@ function Loading({ points = false }: { points?: boolean }) {
     <Card className="divide-y divide-line overflow-hidden" aria-busy="true">
       {[0, 1, 2, 3, 4].map((i) =>
         points ? (
-          <div key={i} className="flex gap-3 px-4 py-3.5">
-            <Skeleton className="size-5 shrink-0 rounded-pill" />
-            <div className="flex-1 space-y-2 pt-0.5">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3.5 w-52" />
-              <Skeleton className="h-3 w-40" />
-            </div>
+          <div key={i} className="space-y-2 px-4 py-3.5">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3.5 w-52" />
+            <Skeleton className="h-3 w-44" />
           </div>
         ) : (
           <div key={i} className="flex min-h-14 items-center px-4">
@@ -105,24 +106,6 @@ function Loading({ points = false }: { points?: boolean }) {
   );
 }
 
-/**
- * Opening hours as BTS writes them ("Пн-Сб: 09:00-18:00; Вс: выходной; обед 13:00-14:00"): a
- * line breaks only between the parts, never inside a day range or a time range.
- */
-function Hours({ text }: { text: string }) {
-  const parts = text
-    .replace(/(\d)-(\d)/g, '$1\u2011$2')
-    .split(/;\s*/)
-    .filter(Boolean);
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {i > 0 ? '; ' : null}
-      {/* a hand-typed part longer than a line may still wrap */}
-      {part.length <= 24 ? <span className="whitespace-nowrap">{part}</span> : part}
-    </Fragment>
-  ));
-}
-
 function PointRow({
   point,
   selected,
@@ -132,7 +115,8 @@ function PointRow({
 }: {
   point: BtsPointDto;
   selected: boolean;
-  context?: string;
+  /** Where the point is (search results across regions): region, city. */
+  context?: string[];
   onClick: () => void;
   ref?: Ref<HTMLButtonElement>;
 }) {
@@ -144,29 +128,18 @@ function PointRow({
       onClick={onClick}
       aria-pressed={selected}
       data-testid="point-row"
-      className={`flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors duration-150 ${rowTone(selected)}`}
+      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-150 ${rowTone(selected)}`}
     >
-      <span className="mt-px shrink-0 text-muted">
-        <PinIcon size={20} />
-      </span>
+      {/* name / address / landmark · hours: three lines, the shape checkout embeds */}
       <span className="min-w-0 flex-1">
-        {context ? (
-          <span className="type-small mb-0.5 block text-muted [overflow-wrap:anywhere]">
-            {context}
-          </span>
-        ) : null}
-        <span className="type-row block font-semibold [overflow-wrap:anywhere]">{point.name}</span>
-        <span className="type-body mt-0.5 block [overflow-wrap:anywhere]">{point.address}</span>
-        {point.landmark ? (
-          <span className="type-small mt-1 block text-muted [overflow-wrap:anywhere]">
-            {fill(t.delivery.landmark, { text: point.landmark })}
-          </span>
-        ) : null}
-        {point.hours ? (
-          <span className="type-small mt-0.5 block text-muted">
-            <Hours text={point.hours} />
-          </span>
-        ) : null}
+        {context ? <MetaLine className="type-small mb-0.5 text-muted" parts={context} /> : null}
+        <span className="type-row block font-semibold break-words">{point.name}</span>
+        <span className="type-body block break-words">{point.address}</span>
+        <PointMeta
+          className="type-small mt-0.5 text-muted"
+          landmark={point.landmark}
+          hours={point.hours}
+        />
       </span>
       {selected ? (
         <span className="mt-px shrink-0 text-sage-ink" role="img" aria-label={t.delivery.selected}>
@@ -179,7 +152,7 @@ function PointRow({
 
 /**
  * Region -> city/district -> BTS point, with a search across all points, address, landmark and
- * hours on every point, and «Не нашёл свой пункт» falling back to region + free text (flagged as
+ * hours on every point, and «Нет вашего пункта?» falling back to region + free text (flagged as
  * typed). `mode="city"` stops one step earlier: it is the Home delivery city, a place and never a
  * price. Built standalone for a Sheet or a screen; checkout embeds the `point` mode.
  */
@@ -315,9 +288,13 @@ export function DeliveryPicker({
             </span>
           </span>
         </label>
-        <label className="block">
-          <span className={LABEL}>{t.delivery.typedLabel}</span>
+        <div>
+          <label htmlFor="typed-address" className={LABEL}>
+            {t.delivery.typedLabel}
+          </label>
           <textarea
+            id="typed-address"
+            aria-describedby="typed-address-hint"
             value={typedText}
             onChange={(e) => setTypedText(e.target.value)}
             rows={3}
@@ -325,9 +302,12 @@ export function DeliveryPicker({
             placeholder={t.delivery.typedPlaceholder}
             className={`${FIELD_BASE} block resize-none px-3.5 py-3 leading-snug`}
           />
-        </label>
+          <p id="typed-address-hint" className="type-hint mt-1.5 text-muted">
+            {t.delivery.typedTooShort}
+          </p>
+        </div>
         <Button type="submit" block disabled={!canSubmitTyped} loading={busy}>
-          {canSubmitTyped ? t.delivery.typedSubmit : t.delivery.typedTooShort}
+          {t.delivery.typedSubmit}
         </Button>
       </form>
     );
@@ -352,7 +332,7 @@ export function DeliveryPicker({
               key={p.id}
               point={p}
               selected={p.id === selectedPointId}
-              context={r ? `${name(r)} · ${p.city}` : p.city}
+              context={r ? [name(r), p.city] : [p.city]}
               onClick={() => pickPoint(p)}
             />
           );
@@ -370,7 +350,7 @@ export function DeliveryPicker({
             onClick={() => pickRegion(r)}
             className={`${ROW} ${rowTone(false)}`}
           >
-            <span className="type-row min-w-0 flex-1 [overflow-wrap:anywhere]">{name(r)}</span>
+            <span className="type-row min-w-0 flex-1 break-words">{name(r)}</span>
             <span className="shrink-0 text-muted">
               <ChevronIcon size={18} />
             </span>
@@ -408,10 +388,10 @@ export function DeliveryPicker({
             className={`${ROW} ${rowTone(savedCity(c.city))}`}
           >
             <span className="min-w-0 flex-1">
-              <span className="type-row block [overflow-wrap:anywhere]">{c.city}</span>
+              <span className="type-row block break-words">{c.city}</span>
               {mode === 'point' ? (
                 <span className="type-small mt-0.5 block text-muted">
-                  {fill(t.delivery.pointsCount, { n: c.pointCount })}
+                  {plural(language, c.pointCount, t.delivery.pointsCount)}
                 </span>
               ) : null}
             </span>
@@ -424,11 +404,12 @@ export function DeliveryPicker({
               <span className="shrink-0 text-sage-ink" role="img" aria-label={t.delivery.selected}>
                 <CheckIcon size={20} />
               </span>
-            ) : (
+            ) : mode === 'point' ? (
+              // a city leads on to its points; in city mode choosing it ends the flow
               <span className="shrink-0 text-muted">
                 <ChevronIcon size={18} />
               </span>
-            )}
+            ) : null}
           </button>
         ))}
       </List>
@@ -455,7 +436,7 @@ export function DeliveryPicker({
 
   const heading =
     step === 'typed'
-      ? t.delivery.typedTitle
+      ? null
       : step === 'cities'
         ? region
           ? name(region)
@@ -467,9 +448,21 @@ export function DeliveryPicker({
 
   return (
     <div ref={rootRef} className="pb-2">
-      {showSearch || heading ? (
-        <div className="sticky top-0 z-10 -mx-4 bg-ground px-4 pt-1 pb-3">
-          {heading ? (
+      {showSearch || heading || step === 'typed' ? (
+        <div className="sticky top-0 z-10 -mx-4 bg-ground px-4 pt-1.5 pb-3">
+          {step === 'typed' ? (
+            // the sheet already says what this is for: only the way back, named
+            <button
+              type="button"
+              onClick={back}
+              className="type-row -ml-2 flex min-h-11 items-center gap-1 rounded-pill pr-3 pl-2.5 text-ink transition-[background-color,transform] duration-150 hover:bg-field active:scale-[0.97] active:bg-field"
+            >
+              <span className="rotate-180">
+                <ChevronIcon size={20} />
+              </span>
+              {t.delivery.back}
+            </button>
+          ) : heading ? (
             <div className="mb-2 flex min-h-11 items-center gap-1">
               <button
                 type="button"
@@ -481,7 +474,7 @@ export function DeliveryPicker({
                   <ChevronIcon size={20} />
                 </span>
               </button>
-              <p className="type-heading min-w-0 [overflow-wrap:anywhere]">{heading}</p>
+              <p className="type-heading min-w-0 break-words">{heading}</p>
             </div>
           ) : null}
           {showSearch ? (
@@ -550,10 +543,15 @@ export function DeliveryPicker({
         {body}
       </div>
       {notFoundLink ? (
-        <div className="mt-3">
-          <Button variant="secondary" block onClick={() => go('typed')}>
+        // a quiet way out, as in mockup 06: underlined text, a 44 px tap target
+        <div className="mt-2 flex justify-center">
+          <button
+            type="button"
+            onClick={() => go('typed')}
+            className="type-small min-h-11 rounded-btn px-2 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
+          >
             {t.delivery.notFound}
-          </Button>
+          </button>
         </div>
       ) : null}
     </div>

@@ -6,6 +6,7 @@
  * where a key exists, otherwise from the `demo` strings below (never shipped).
  */
 import { useState, type ReactNode } from 'react';
+import { ChosenPoint } from '../delivery/ChosenPoint';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card, CardList, ListRow } from '../ui/Card';
@@ -92,6 +93,23 @@ const SWATCHES = [
 ] as const;
 
 const UZ_GLYPHS = 'Oʻ oʻ Gʻ gʻ · Toʻlov · Yorugʻ · Qorongʻi';
+
+/** BTS data is Russian-only by source (docs/spec.md), so the demo point is too. */
+const DEMO_POINT = {
+  id: 0,
+  code: '3010',
+  regionId: 3,
+  city: 'Самарканд',
+  name: 'SAMARQAND YANGIBOZOR',
+  address: 'Г.Самарканд, ул.У. Джуракулова',
+  landmark: 'Задние ворота нового рынка',
+  hours: 'Пн: выходной; Вт-Вс: 09:00-18:00',
+};
+const DEMO_POINT_LONG = {
+  name: 'BTS PAYSHANBA SAVDO MAJMUASI (ESKI BOZOR YONIDAGI FILIAL)',
+  address:
+    'Каттакурганский район, посёлок Пайшанба, улица Амира Темура, дом 112А, второй этаж торгового комплекса',
+};
 
 function Section({ name, children }: { name: string; children: ReactNode }) {
   return (
@@ -327,6 +345,14 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
           <Card className="p-4">
             <p className="type-body">{t.home.emptyText}</p>
           </Card>
+        </Section>
+
+        <Section name="ChosenPoint (checkout: the BTS point, collapsed)">
+          <ChosenPoint point={DEMO_POINT} otherPoints={4} onChange={() => undefined} />
+          <ChosenPoint
+            point={{ ...DEMO_POINT, name: DEMO_POINT_LONG.name, address: DEMO_POINT_LONG.address }}
+            onChange={() => undefined}
+          />
         </Section>
 
         <Section name="Skeleton (loading)">

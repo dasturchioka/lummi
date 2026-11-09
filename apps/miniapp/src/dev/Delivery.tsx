@@ -3,8 +3,9 @@
  * component gallery: the route exists only under `import.meta.env.DEV`.
  */
 import { useState } from 'react';
+import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
-import type { Picked } from '../delivery/queries';
+import { useCities, type Picked } from '../delivery/queries';
 import { usePrefs } from '../lib/prefs';
 import { Card } from '../ui/Card';
 import { Screen } from '../ui/Screen';
@@ -15,24 +16,31 @@ export function DeliveryDev() {
   const { t } = usePrefs();
   const [open, setOpen] = useState(true);
   const [picked, setPicked] = useState<Picked | null>(null);
+  const point = picked?.kind === 'point' ? picked.point : null;
+  // the city list the picker already loaded holds the count for «ещё N пунктов»
+  const cities = useCities(point?.regionId);
+  const inCity = cities.data?.find((c) => c.city === point?.city)?.pointCount ?? 0;
   return (
     <Screen>
       <ScreenHeader title={t.delivery.pointTitle} />
-      {/* Tapping the choice reopens the picker on it, as checkout's «Сменить» will. */}
-      <button
-        type="button"
-        data-testid="picked"
-        onClick={() => setOpen(true)}
-        className="block w-full text-left"
-      >
-        <Card className="type-body p-4">
-          {picked?.kind === 'point'
-            ? `${picked.point.name} · ${picked.point.address}`
-            : picked?.kind === 'typed'
-              ? `typed: ${picked.text}`
-              : '-'}
-        </Card>
-      </button>
+      {point ? (
+        <ChosenPoint
+          point={point}
+          otherPoints={Math.max(0, inCity - 1)}
+          onChange={() => setOpen(true)}
+        />
+      ) : (
+        <button
+          type="button"
+          data-testid="picked"
+          onClick={() => setOpen(true)}
+          className="block w-full text-left"
+        >
+          <Card className="type-body p-4">
+            {picked?.kind === 'typed' ? `typed: ${picked.text}` : '-'}
+          </Card>
+        </button>
+      )}
       <Sheet
         open={open}
         onOpenChange={setOpen}
@@ -48,7 +56,7 @@ export function DeliveryDev() {
               ? { regionId: picked.region.id, city: picked.point.city }
               : null
           }
-          selectedPointId={picked?.kind === 'point' ? picked.point.id : undefined}
+          selectedPointId={point?.id}
           onPick={(p) => {
             setPicked(p);
             setOpen(false);
