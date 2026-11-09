@@ -25,5 +25,10 @@ Sources: [Decisions guide](https://developers.openai.com/api/docs/guides/decisio
 
 ## Choices we made
 
-- Candidate options are opaque keys `c1..cN` plus `none`; times are written in Tashkent local time (UTC+5), minute precision, as receipts show them. Internal credit ids are never sent.
+- Candidate options are opaque keys `c1..cN` plus `none`, each described by its own credit amount and time (Tashkent local time, UTC+5, minute precision). The order amount due is a separate question. Internal credit ids are never sent.
 - Fixtures in `test/fixtures/receipt-ai/` are hand-built from the shapes above and marked `_synthetic`.
+
+## Privacy and image size
+- The receipt image leaves Uzbekistan for TypeSafe and OpenAI. ADR 0013 and CLAUDE.md allow this: the AI gets only the image, candidate credits (amount and time), the shop card's last-4 and the holder name, never a phone or address. The stored original and the DB stay on the Tashkent VPS (ADR 0020).
+- TypeSafe rejects images whose sides are outside 280-1568 px (total 78 400-2 458 624 px). The receipt-upload ticket (#28) downscales into that range.
+- Only `confirmed` on the result counts; see the `ReceiptJudge` interface.

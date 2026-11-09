@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { ReceiptJudgeInput, ReceiptJudgement } from '../receipt-judge';
+import type { ProviderAnswer, ReceiptJudgeInput } from '../receipt-judge';
 import {
   JudgeFailure,
-  NONE_OPTION,
   buildQuestions,
-  candidateKey,
   postJson,
-  sniffImage,
+  requireImage,
+  resolveChoice,
+  type ProviderOptions,
   type ProviderJudge,
 } from './questions';
 
@@ -29,18 +29,10 @@ const response = z.object({ answers: z.array(answer) });
 /** OpenAI Decisions, POST /v1/decisions, model gpt-6-luna. See ./API-NOTES.md. */
 export class OpenAiDecisionsJudge implements ProviderJudge {
   readonly name = 'openai' as const;
-  constructor(
-    private readonly opts: {
-      apiKey: string;
-      baseUrl?: string;
-      model?: string;
-      fetch?: typeof fetch;
-    },
-  ) {}
+  constructor(private readonly opts: ProviderOptions) {}
 
   buildRequest(input: ReceiptJudgeInput) {
-    const kind = sniffImage(input.image);
-    if (!kind) throw new JudgeFailure('bad-input', 'image is not PNG or JPEG');
+    const kind = requireImage(input.image);
     const q = buildQuestions(input);
     return {
       model: this.opts.model ?? 'gpt-6-luna',
@@ -70,7 +62,7 @@ export class OpenAiDecisionsJudge implements ProviderJudge {
     };
   }
 
-  async judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ReceiptJudgement> {
+  async judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ProviderAnswer> {
     const raw = await postJson(
       this.opts.fetch ?? fetch,
       `${this.opts.baseUrl ?? 'https://api.openai.com'}/v1/decisions`,
@@ -90,13 +82,11 @@ export class OpenAiDecisionsJudge implements ProviderJudge {
     };
     const time = byName.get('time');
     if (time?.type !== 'choice') throw new JudgeFailure('error', 'missing answer time');
-    const index = input.candidates.findIndex((_, i) => candidateKey(i) === time.choice);
     return {
       isReceipt: p('isReceipt'),
       amountMatches: p('amountMatches'),
       recipientMatches: p('recipientMatches'),
-      chosenCreditId:
-        time.choice === NONE_OPTION || index < 0 ? null : input.candidates[index]!.creditId,
+      chosenCreditId: resolveChoice(input, time.choice),
       choiceConfidence: time.confidence,
       provider: 'openai',
     };

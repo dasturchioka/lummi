@@ -44,6 +44,8 @@ export class FakeReceiptJudge implements ReceiptJudge {
       recipientMatches: 0,
       chosenCreditId: null,
       choiceConfidence: 0,
+      confirmed: false,
+      provider: 'none',
     },
   ];
   async judge(input: ReceiptJudgeInput): Promise<ReceiptJudgement> {

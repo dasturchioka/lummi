@@ -21,13 +21,15 @@ describe('parseEnv', () => {
     expect(parseEnv({ ...placeholder, NODE_ENV: 'development' }).SESSION_SECRET).toBe(
       PLACEHOLDER_SESSION_SECRET,
     );
-    const keys = { TYPESAFE_API_KEY: 'k', OPENAI_API_KEY: 'k' };
+    const keys = { TYPESAFE_API_KEY: 'k' };
     expect(parseEnv({ ...valid, ...keys, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
   });
 
-  it('requires both receipt AI keys in production only', () => {
+  it('requires the TypeSafe key in production and never the OpenAI one', () => {
     expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/TYPESAFE_API_KEY/);
-    expect(parseEnv({ ...valid, NODE_ENV: 'development' }).OPENAI_API_KEY).toBeUndefined();
+    expect(
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).OPENAI_API_KEY,
+    ).toBeUndefined();
   });
 
   it('applies defaults and coerces the port', () => {
@@ -67,8 +69,7 @@ describe('parseEnv', () => {
       }),
     ).toThrow(/ADMIN_DEV_LOGIN/);
     expect(
-      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', OPENAI_API_KEY: 'k', NODE_ENV: 'production' })
-        .ADMIN_DEV_LOGIN,
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).ADMIN_DEV_LOGIN,
     ).toBe(false);
     expect(
       parseEnv({

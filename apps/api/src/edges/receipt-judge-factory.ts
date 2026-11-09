@@ -1,6 +1,6 @@
-import { settingDefinitions, type SettingKey, type SettingValue } from '@lummi/contracts';
-import { eq, settings, type Db } from '@lummi/db';
+import type { Db } from '@lummi/db';
 import type { Env } from '../env';
+import { readSettings } from '../settings/settings.service';
 import {
   FallbackReceiptJudge,
   OpenAiDecisionsJudge,
@@ -9,24 +9,26 @@ import {
 } from './receipt-ai';
 import type { ReceiptJudge } from './receipt-judge';
 
-/** Read-only settings access that does not need the Nest container (edges are built before it). */
-function reader(db: Db) {
-  return async <K extends SettingKey>(key: K): Promise<SettingValue<K>> => {
-    const def = settingDefinitions[key];
-    const [row] = await db.select().from(settings).where(eq(settings.key, key));
-    return (row ? def.schema.parse(row.value) : def.default) as SettingValue<K>;
-  };
-}
-
-/** Production wiring of the ReceiptJudge edge; a missing key leaves that adapter out ("failed"). */
+/**
+ * Production wiring of the ReceiptJudge edge. Settings are read through the same definitions as
+ * SettingsService (edges are built before the Nest container, so it cannot be injected), in one query
+ * per judgement. A missing key leaves that adapter out, and it fails as `not-configured`.
+ */
 export function createReceiptJudge(env: Env, db: Db): ReceiptJudge {
-  const get = reader(db);
-  const config = async (): Promise<JudgeConfig> => ({
-    probability: await get('ai.receipt.probabilityThreshold'),
-    confidence: await get('ai.receipt.confidenceThreshold'),
-    typesafeTimeoutMs: await get('ai.receipt.typesafeTimeoutMs'),
-    openaiTimeoutMs: await get('ai.receipt.openaiTimeoutMs'),
-  });
+  const config = async (): Promise<JudgeConfig> => {
+    const s = await readSettings(db, [
+      'ai.receipt.probabilityThreshold',
+      'ai.receipt.confidenceThreshold',
+      'ai.receipt.typesafeTimeoutMs',
+      'ai.receipt.openaiTimeoutMs',
+    ]);
+    return {
+      probability: s['ai.receipt.probabilityThreshold'],
+      confidence: s['ai.receipt.confidenceThreshold'],
+      typesafeTimeoutMs: s['ai.receipt.typesafeTimeoutMs'],
+      openaiTimeoutMs: s['ai.receipt.openaiTimeoutMs'],
+    };
+  };
   return new FallbackReceiptJudge(
     env.TYPESAFE_API_KEY
       ? new TypeSafeJudge({ apiKey: env.TYPESAFE_API_KEY, baseUrl: env.TYPESAFE_BASE_URL })

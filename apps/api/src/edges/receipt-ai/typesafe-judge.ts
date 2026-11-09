@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { ReceiptJudgeInput, ReceiptJudgement } from '../receipt-judge';
+import type { ProviderAnswer, ReceiptJudgeInput } from '../receipt-judge';
 import {
   JudgeFailure,
-  NONE_OPTION,
   buildQuestions,
-  candidateKey,
   postJson,
-  sniffImage,
+  requireImage,
+  resolveChoice,
+  type ProviderOptions,
   type ProviderJudge,
 } from './questions';
 
@@ -22,18 +22,10 @@ const answers = z.object({
 /** TypeSafe Jev, POST /v1/systemone. See ./API-NOTES.md for the sources. */
 export class TypeSafeJudge implements ProviderJudge {
   readonly name = 'typesafe' as const;
-  constructor(
-    private readonly opts: {
-      apiKey: string;
-      baseUrl?: string;
-      model?: string;
-      fetch?: typeof fetch;
-    },
-  ) {}
+  constructor(private readonly opts: ProviderOptions) {}
 
   buildRequest(input: ReceiptJudgeInput) {
-    const kind = sniffImage(input.image);
-    if (!kind) throw new JudgeFailure('bad-input', 'image is not PNG or JPEG');
+    const kind = requireImage(input.image);
     const q = buildQuestions(input);
     const ref = 'receipt-image';
     return {
@@ -59,7 +51,7 @@ export class TypeSafeJudge implements ProviderJudge {
     };
   }
 
-  async judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ReceiptJudgement> {
+  async judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ProviderAnswer> {
     const body = this.buildRequest(input);
     const raw = await postJson(
       this.opts.fetch ?? fetch,
@@ -75,13 +67,11 @@ export class TypeSafeJudge implements ProviderJudge {
     const parsed = answers.safeParse(raw);
     if (!parsed.success) throw new JudgeFailure('error', 'unexpected response shape');
     const a = parsed.data.answers;
-    const index = input.candidates.findIndex((_, i) => candidateKey(i) === a.time.choice);
     return {
       isReceipt: a.isReceipt.noul,
       amountMatches: a.amountMatches.noul,
       recipientMatches: a.recipientMatches.noul,
-      chosenCreditId:
-        a.time.choice === NONE_OPTION || index < 0 ? null : input.candidates[index]!.creditId,
+      chosenCreditId: resolveChoice(input, a.time.choice),
       choiceConfidence: a.time.confidence,
       provider: 'typesafe',
     };

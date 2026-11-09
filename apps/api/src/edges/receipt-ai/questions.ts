@@ -1,9 +1,9 @@
-import type { ReceiptJudgeInput, ReceiptJudgement } from '../receipt-judge';
+import type { ProviderAnswer, ReceiptJudgeInput } from '../receipt-judge';
 
 /** Thrown by an adapter on error, timeout, refusal or an unreadable answer; the composite then falls back. */
 export class JudgeFailure extends Error {
   constructor(
-    readonly reason: 'error' | 'timeout' | 'refusal' | 'not-configured' | 'bad-input',
+    readonly reason: 'error' | 'timeout' | 'refusal' | 'not-configured',
     detail: string,
   ) {
     super(`${reason}: ${detail}`);
@@ -13,7 +13,7 @@ export class JudgeFailure extends Error {
 /** One provider, one request. `timeoutMs` is read from settings by the composite. */
 export interface ProviderJudge {
   readonly name: 'typesafe' | 'openai';
-  judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ReceiptJudgement>;
+  judge(input: ReceiptJudgeInput, timeoutMs: number): Promise<ProviderAnswer>;
 }
 
 export const NONE_OPTION = 'none';
@@ -44,7 +44,7 @@ export function buildQuestions(input: ReceiptJudgeInput) {
       options: [
         ...input.candidates.map((c, i) => ({
           key: candidateKey(i),
-          description: `Transfer of ${input.amountDue} so'm at ${formatTashkent(c.at)}`,
+          description: `Credit of ${c.amount} so'm at ${formatTashkent(c.at)}`,
         })),
         { key: NONE_OPTION, description: 'The receipt shows none of these date-times.' },
       ],
@@ -97,4 +97,24 @@ export async function postJson(
   } catch {
     throw new JudgeFailure('error', 'response is not JSON');
   }
+}
+
+export interface ProviderOptions {
+  apiKey: string;
+  baseUrl?: string;
+  model?: string;
+  fetch?: typeof fetch;
+}
+
+/** Both adapters: only PNG/JPEG go out (normalisation happens upstream). Returns the sniffed kind. */
+export function requireImage(bytes: Uint8Array): ImageKind {
+  const kind = sniffImage(bytes);
+  if (!kind) throw new JudgeFailure('error', 'image is not PNG or JPEG');
+  return kind;
+}
+
+/** The provider's chosen option key -> credit id; "none" or an unknown key -> null. */
+export function resolveChoice(input: ReceiptJudgeInput, choice: string): number | null {
+  const i = input.candidates.findIndex((_, n) => candidateKey(n) === choice);
+  return choice === NONE_OPTION || i < 0 ? null : input.candidates[i]!.creditId;
 }

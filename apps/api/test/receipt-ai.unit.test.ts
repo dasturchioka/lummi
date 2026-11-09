@@ -4,7 +4,6 @@ import {
   FallbackReceiptJudge,
   OpenAiDecisionsJudge,
   TypeSafeJudge,
-  confirmsReceipt,
   type JudgeConfig,
   type ReceiptJudgeInput,
 } from '../src/edges';
@@ -23,8 +22,8 @@ const input: ReceiptJudgeInput = {
   cardLast4: '4242',
   holderName: 'LUMMI HOLDER',
   candidates: [
-    { creditId: 501, at: new Date('2026-11-09T09:30:00Z') }, // 14:30 Tashkent
-    { creditId: 502, at: new Date('2026-11-09T09:41:00Z') },
+    { creditId: 501, amount: 120000, at: new Date('2026-11-09T09:30:00Z') }, // 14:30 Tashkent
+    { creditId: 502, amount: 119500, at: new Date('2026-11-09T09:41:00Z') },
   ],
 };
 const cfg: JudgeConfig = {
@@ -33,7 +32,6 @@ const cfg: JudgeConfig = {
   typesafeTimeoutMs: 1000,
   openaiTimeoutMs: 1000,
 };
-const t = { probability: 0.8, confidence: 0.6 };
 
 const json = (body: unknown, status = 200) =>
   vi.fn(async () => new Response(JSON.stringify(body), { status }));
@@ -93,7 +91,7 @@ describe('FallbackReceiptJudge', () => {
     const oa = json(fixture('openai-ok'));
     const j = await make(json(fixture('typesafe-ok')), oa).judge(input);
     expect(j.provider).toBe('typesafe');
-    expect(confirmsReceipt(j, t)).toBe(true);
+    expect(j.confirmed).toBe(true);
     expect(oa).not.toHaveBeenCalled();
   });
 
@@ -109,6 +107,7 @@ describe('FallbackReceiptJudge', () => {
   ])('falls back to OpenAI on TypeSafe %s', async (_n, ts) => {
     const j = await make(ts() as unknown as typeof fetch, json(fixture('openai-ok'))).judge(input);
     expect(j.provider).toBe('openai');
+    expect(j.confirmed).toBe(true);
     expect(j.chosenCreditId).toBe(501);
   });
 
@@ -130,15 +129,15 @@ describe('FallbackReceiptJudge', () => {
   it('never confirms when both fail, and says why', async () => {
     const j = await make(json({}, 500), json(fixture('openai-refusal'))).judge(input);
     expect(j.provider).toBe('none');
-    expect(confirmsReceipt(j, t)).toBe(false);
-    expect(j.failure).toMatch(/typesafe: error: HTTP 500; openai: refusal/);
+    expect(j.confirmed).toBe(false);
+    expect(j.reason).toMatch(/typesafe: error: HTTP 500; openai: refusal/);
   });
 
   it('counts a missing OpenAI key as failed: weak TypeSafe answer never confirms', async () => {
     const { ts } = judges(json(fixture('typesafe-low')), json({}));
     const j = await new FallbackReceiptJudge(ts, null, async () => cfg).judge(input);
-    expect(confirmsReceipt(j, t)).toBe(false);
-    expect(j.failure).toMatch(/not configured/);
+    expect(j.confirmed).toBe(false);
+    expect(j.reason).toMatch(/not-configured/);
   });
 
   it('with no adapters at all, never confirms and makes no call', async () => {
@@ -153,6 +152,19 @@ describe('FallbackReceiptJudge', () => {
     expect(ts).not.toHaveBeenCalled();
   });
 
+  it('confirms through OpenAI alone when TypeSafe is not configured', async () => {
+    const { oa } = judges(json({}), json(fixture('openai-ok')));
+    const j = await new FallbackReceiptJudge(null, oa, async () => cfg).judge(input);
+    expect(j).toMatchObject({ confirmed: true, provider: 'openai', chosenCreditId: 501 });
+  });
+
+  it('a missing OpenAI key fails as not-configured and waits for a person', async () => {
+    const { ts } = judges(json({}, 500), json({}));
+    const j = await new FallbackReceiptJudge(ts, null, async () => cfg).judge(input);
+    expect(j.confirmed).toBe(false);
+    expect(j.reason).toMatch(/openai: not-configured/);
+  });
+
   it('applies thresholds from config', async () => {
     const strict = new FallbackReceiptJudge(
       new TypeSafeJudge({ apiKey: 'k', fetch: json(fixture('typesafe-ok')) }),
@@ -160,7 +172,16 @@ describe('FallbackReceiptJudge', () => {
       async () => ({ ...cfg, probability: 0.95 }),
     );
     const j = await strict.judge(input);
-    expect(confirmsReceipt(j, { probability: 0.95, confidence: 0.6 })).toBe(false);
+    expect(j.confirmed).toBe(false);
+  });
+});
+
+describe('candidate text', () => {
+  it("carries each candidate's own amount and time, and the amount due is asked separately", () => {
+    const q = new TypeSafeJudge({ apiKey: 'k' }).buildRequest(input).questions;
+    expect(q.time.criteria.c1).toBe("Credit of 120000 so'm at 2026-11-09 14:30");
+    expect(q.time.criteria.c2).toBe("Credit of 119500 so'm at 2026-11-09 14:41");
+    expect(q.amountMatches.instructions).toContain('exactly 120000');
   });
 });
 
@@ -194,6 +215,7 @@ describe('payload privacy (ADR 0013)', () => {
       expect(body).toContain('4242');
       expect(body).toContain('LUMMI HOLDER');
       expect(body).toContain('120000');
+      expect(body).toContain('119500');
       expect(body).toContain('2026-11-09 14:30');
       // Internal credit ids are not sent either; options are opaque keys.
       expect(body).not.toContain('501');

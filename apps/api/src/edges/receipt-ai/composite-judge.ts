@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import {
-  confirmsReceipt,
+  passesThresholds,
   type ReceiptJudge,
   type ReceiptJudgeInput,
   type ReceiptJudgement,
 } from '../receipt-judge';
-import { JudgeFailure, sniffImage, type ProviderJudge } from './questions';
+import { JudgeFailure, requireImage, type ProviderJudge } from './questions';
 
 export interface JudgeConfig {
   probability: number;
@@ -14,19 +14,21 @@ export interface JudgeConfig {
   openaiTimeoutMs: number;
 }
 
-const FAILED: ReceiptJudgement = {
+const NOT_CONFIRMED = {
   isReceipt: 0,
   amountMatches: 0,
   recipientMatches: 0,
   chosenCreditId: null,
   choiceConfidence: 0,
+  confirmed: false,
   provider: 'none',
-};
+} as const;
 
 /**
  * TypeSafe first; OpenAI when TypeSafe errors, times out, refuses, or answers below threshold (ADR 0013).
- * When neither gives a trustworthy answer the result never confirms and says why in `failure`.
- * A missing adapter (no API key) counts as failed.
+ * `confirmed` is true only when one provider's answer passed the thresholds. Otherwise it is false and
+ * `reason` says why; the receipt then waits for a person. A missing adapter (no API key) fails as
+ * `not-configured`.
  */
 export class FallbackReceiptJudge implements ReceiptJudge {
   private readonly log = new Logger('ReceiptJudge');
@@ -37,40 +39,44 @@ export class FallbackReceiptJudge implements ReceiptJudge {
   ) {}
 
   async judge(input: ReceiptJudgeInput): Promise<ReceiptJudgement> {
-    if (!sniffImage(input.image)) return this.fail('image is not PNG or JPEG');
+    try {
+      requireImage(input.image);
+    } catch (e) {
+      return this.notConfirmed((e as Error).message);
+    }
     const cfg = await this.config();
     const t = { probability: cfg.probability, confidence: cfg.confidence };
     const problems: string[] = [];
     let weak: ReceiptJudgement | null = null;
-    for (const [p, timeout] of [
-      [this.primary, cfg.typesafeTimeoutMs],
-      [this.fallback, cfg.openaiTimeoutMs],
+    for (const [name, p, timeout] of [
+      ['typesafe', this.primary, cfg.typesafeTimeoutMs],
+      ['openai', this.fallback, cfg.openaiTimeoutMs],
     ] as const) {
       if (!p) {
-        problems.push('adapter not configured');
+        problems.push(`${name}: ${new JudgeFailure('not-configured', 'no API key').message}`);
         continue;
       }
       try {
-        const j = await p.judge(input, timeout);
-        if (confirmsReceipt(j, t)) return j;
-        problems.push(`${p.name}: below threshold`);
-        weak = j;
+        const a = await p.judge(input, timeout);
+        if (passesThresholds(a, t)) return { ...a, confirmed: true };
+        problems.push(`${name}: below threshold`);
+        weak = { ...a, confirmed: false };
       } catch (e) {
         problems.push(
           e instanceof JudgeFailure
-            ? `${p.name}: ${e.message}`
-            : `${p.name}: error: ${(e as Error).message}`,
+            ? `${name}: ${e.message}`
+            : `${name}: error: ${(e as Error).message}`,
         );
       }
     }
-    // Both ran but neither convinced: report the last real answer (it will not confirm). Both failed: zeros.
-    const failure = problems.join('; ');
-    this.log.warn(`receipt not confirmed by AI: ${failure}`);
-    return weak ? { ...weak, failure } : this.fail(failure);
+    // Neither convinced. Keep the last real answer for the audit trail (it is not confirmed).
+    const reason = problems.join('; ');
+    this.log.warn(`receipt not confirmed by AI: ${reason}`);
+    return weak ? { ...weak, reason } : this.notConfirmed(reason);
   }
 
-  private fail(failure: string): ReceiptJudgement {
-    this.log.warn(`receipt AI failed: ${failure}`);
-    return { ...FAILED, failure };
+  private notConfirmed(reason: string): ReceiptJudgement {
+    this.log.warn(`receipt AI failed: ${reason}`);
+    return { ...NOT_CONFIRMED, reason };
   }
 }

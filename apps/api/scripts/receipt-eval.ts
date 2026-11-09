@@ -6,7 +6,7 @@
  *
  * <dir> holds receipt images (png/jpg) and a labels.json:
  *   { "file.png": { "amountDue": 120000, "cardLast4": "4242", "holderName": "NAME",
- *                   "candidates": [{ "creditId": 1, "at": "2026-11-09T09:30:00Z" }],
+ *                   "candidates": [{ "creditId": 1, "amount": 120000, "at": "2026-11-09T09:30:00Z" }],
  *                   "expect": { "confirm": true, "creditId": 1 } } }
  * "expect.confirm": a correct system confirms this receipt with `creditId` (null/false = must not confirm).
  * Each receipt is judged once per provider; thresholds are then swept offline over the raw answers.
@@ -16,9 +16,9 @@ import { join } from 'node:path';
 import {
   OpenAiDecisionsJudge,
   TypeSafeJudge,
-  confirmsReceipt,
+  passesThresholds,
   type ProviderJudge,
-  type ReceiptJudgement,
+  type ProviderAnswer,
 } from '../src/edges';
 
 const dir = process.argv[2];
@@ -27,7 +27,7 @@ type Label = {
   amountDue: number;
   cardLast4: string;
   holderName: string;
-  candidates: { creditId: number; at: string }[];
+  candidates: { creditId: number; amount: number; at: string }[];
   expect: { confirm: boolean; creditId?: number | null };
 };
 const labels = JSON.parse(readFileSync(join(dir, 'labels.json'), 'utf8')) as Record<string, Label>;
@@ -43,7 +43,7 @@ const probs = [0.6, 0.7, 0.8, 0.9, 0.95];
 const confs = [0.4, 0.5, 0.6, 0.7, 0.8];
 
 for (const p of providers) {
-  const answers: { label: Label; j: ReceiptJudgement | null }[] = [];
+  const answers: { label: Label; j: ProviderAnswer | null }[] = [];
   for (const [file, label] of Object.entries(labels)) {
     const bytes = new Uint8Array(readFileSync(join(dir, file)));
     const j = await p
@@ -52,7 +52,11 @@ for (const p of providers) {
           image: bytes,
           mimeType: file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
           ...label,
-          candidates: label.candidates.map((c) => ({ creditId: c.creditId, at: new Date(c.at) })),
+          candidates: label.candidates.map((c) => ({
+            creditId: c.creditId,
+            amount: c.amount,
+            at: new Date(c.at),
+          })),
         },
         60_000,
       )
@@ -72,7 +76,7 @@ for (const p of providers) {
         falseConfirm = 0,
         missed = 0;
       for (const { label, j } of answers) {
-        const confirmed = !!j && confirmsReceipt(j, { probability, confidence });
+        const confirmed = !!j && passesThresholds(j, { probability, confidence });
         const right = confirmed
           ? label.expect.confirm && j!.chosenCreditId === (label.expect.creditId ?? null)
           : !label.expect.confirm;

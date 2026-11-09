@@ -1,9 +1,27 @@
 import { settingDefinitions, type SettingKey, type SettingValue } from '@lummi/contracts';
-import { eq, settings, type Db, type DbOrTx } from '@lummi/db';
+import { inArray, settings, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService, type Actor } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
+
+/** Reads several settings in one query; a missing row yields the default. Usable before the Nest container exists. */
+export async function readSettings<K extends SettingKey>(
+  db: DbOrTx,
+  keys: readonly K[],
+): Promise<{ [P in K]: SettingValue<P> }> {
+  const rows = await db
+    .select()
+    .from(settings)
+    .where(inArray(settings.key, [...keys]));
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const def = settingDefinitions[key];
+    out[key] = byKey.has(key) ? def.schema.parse(byKey.get(key)) : def.default;
+  }
+  return out as { [P in K]: SettingValue<P> };
+}
 
 @Injectable()
 export class SettingsService {
@@ -15,10 +33,7 @@ export class SettingsService {
 
   /** Typed read; a missing row yields the default, a stored value that fails its schema throws. */
   async get<K extends SettingKey>(key: K, tx: DbOrTx = this.db): Promise<SettingValue<K>> {
-    const def = settingDefinitions[key];
-    const [row] = await tx.select().from(settings).where(eq(settings.key, key));
-    if (!row) return def.default as SettingValue<K>;
-    return def.schema.parse(row.value) as SettingValue<K>;
+    return (await readSettings(tx, [key]))[key];
   }
 
   /** The only way to change a setting: validates, writes, and audits old and new in one transaction (the caller's when `outer` is given). */
