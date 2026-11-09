@@ -5,7 +5,6 @@ import { CatalogService } from '../catalog/catalog.service';
 import { readSettings } from '../settings/settings.service';
 import { DB } from '../tokens';
 import { skeleton } from './normalize';
-import { syncSearchIndex } from './search-index';
 
 interface RankedRow extends Record<string, unknown> {
   id: string | number;

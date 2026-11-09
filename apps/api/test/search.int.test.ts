@@ -186,9 +186,8 @@ describe('search document stays current', () => {
   it('two syncs at once leave one consistent index', async () => {
     await t.db.delete(fragranceSearch);
     await Promise.all([syncSearchIndex(t.db), syncSearchIndex(t.db)]);
-    const [{ n }] = (
-      await t.db.execute<{ n: string }>(sql`select count(*) as n from fragrance_search`)
-    ).rows;
+    const n = (await t.db.execute<{ n: string }>(sql`select count(*) as n from fragrance_search`))
+      .rows[0]!.n;
     expect(Number(n)).toBe(67);
   });
 });
