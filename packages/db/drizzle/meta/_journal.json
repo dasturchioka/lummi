@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1794223861380,
-      "tag": "0005_flaky_power_man",
+      "when": 1794225835228,
+      "tag": "0005_moaning_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794252725827,
+      "tag": "0006_cheerful_giant_man",
       "breakpoints": true
     }
   ]

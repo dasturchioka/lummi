@@ -27,6 +27,9 @@
   --color-totals-ink: var(--c-totals-ink);
   --color-photo: var(--c-photo);
   --color-overlay: var(--c-overlay);
+  --color-on-sage: var(--c-on-sage);
+  --color-photo-disc: var(--c-photo-disc);
+  --color-photo-disc-ink: var(--c-photo-disc-ink);
   --color-transparent: transparent;
 
   --radius-*: initial;
@@ -74,6 +77,24 @@
   line-height: 1.1;
   letter-spacing: 0.005em;
 }
+/* The name on the fragrance card itself. */
+@utility type-name-lg {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+}
+/* ХИТ / НОВИНКА: Tenor caps on a pill (`Badge`). */
+@utility type-badge {
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
 /*
  * The Home slogan, and the one use of the Cormorant italic beyond fragrance names
  * (customer-approved comp, 2026-11-07): sentence case, one line under the logo.
@@ -106,10 +127,33 @@
   line-height: 1.45;
   font-weight: 400;
 }
+/* The smallest readable line: characteristic labels, a sold-out volume's «нет в наличии». */
+@utility type-caption {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 400;
+}
+/* A short value under a caption: the characteristics row («до 24 часов», «Сильный»). */
+@utility type-value {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 600;
+}
 @utility type-price {
   font-family: var(--font-ui);
   font-size: 15px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A price inside a control (volume tiles): `<Money size="small">`. */
+@utility type-price-sm {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

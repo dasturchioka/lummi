@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dictionaries } from './all';
 import {
   defineMessages,
+  fill,
   formatMoney,
   formatPhone,
   languageFromTelegram,
@@ -25,6 +26,13 @@ describe('formatPhone', () => {
   it('groups Uzbek numbers with no-break spaces and leaves others as stored', () => {
     expect(formatPhone('+998901234567')).toBe('+998\u00a090\u00a0123\u00a045\u00a067');
     expect(formatPhone('+79161234567')).toBe('+79161234567');
+  });
+});
+
+describe('fill', () => {
+  it('fills named placeholders and leaves unknown ones visible', () => {
+    expect(fill('по мотивам {brand}', { brand: 'Louis Vuitton' })).toBe('по мотивам Louis Vuitton');
+    expect(fill('{brand} asosida', {})).toBe('{brand} asosida');
   });
 });
 

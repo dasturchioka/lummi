@@ -32,6 +32,9 @@ export const clientRoutes = {
     shareContact: route('POST', '/me/contact', [200, 400, 401, 403, 409]),
     writeAccess: route('POST', '/me/write-access', [200, 401]),
   },
+  catalog: {
+    fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
+  },
 };
 
 type Meta<T> = {

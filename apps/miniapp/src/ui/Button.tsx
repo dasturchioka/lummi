@@ -1,8 +1,8 @@
 import type { ButtonHTMLAttributes, MouseEvent } from 'react';
 import { Spinner } from './icons';
 
-type Variant = 'primary' | 'secondary';
-type Size = 'md' | 'sm';
+type Variant = 'primary' | 'secondary' | 'tonal';
+type Size = 'md' | 'sm' | 'pair';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -23,10 +23,20 @@ const variants: Record<Variant, string> = {
   primary: 'bg-btn text-btn-ink enabled:hover:opacity-90 disabled:bg-field disabled:text-muted',
   secondary:
     'bg-transparent text-ink inset-line enabled:hover:bg-field enabled:active:bg-field data-[pressed]:bg-field disabled:text-muted disabled:shadow-[inset_0_0_0_1px_var(--c-line)]',
+  /* The second action beside a primary in a dock («Купить сейчас», approved comp). */
+  tonal: 'bg-block text-ink enabled:hover:opacity-90 disabled:bg-field disabled:text-muted',
 };
-const sizes: Record<Size, string> = { md: 'h-12 px-5', sm: 'h-9 px-3.5' };
+const sizes: Record<Size, string> = {
+  md: 'h-12 px-5',
+  sm: 'h-9 px-3.5',
+  /* 48 px with 14 px sides: two actions sharing one dock row («В корзину» + «Купить сейчас»). */
+  pair: 'h-12 px-3.5',
+};
 
-/** Primary is Graphite on Milk (inverted in dark); a disabled button carries the reason as its label. */
+/**
+ * Primary is Graphite on Milk (inverted in dark); tonal is Stone (Dark Block in dark) with ink text.
+ * A disabled button carries the reason as its label.
+ */
 export function Button({
   variant = 'primary',
   size = 'md',

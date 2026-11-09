@@ -67,6 +67,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 - **Tell the customer about our TZ deviations** (2026-11-07, via Nurmuhammad). The internal decisions in `docs/spec.md` → Changes alter visible behaviour: status «Возвращён» and refunds; customer can cancel an unpaid order; orders reach the group only once paid; group topics; fully automatic payment matching and "payment not found" instead of manual review; account phone only via Telegram contact; BTS point list instead of street address. None needs approval to build, but acceptance runs against the TZ.
 
+- **UZ disclaimer text (2026-11-09).** The approved RU line is «Аромат LUMMI по мотивам, не оригинальный парфюм». Our UZ version on the card is «LUMMI ifori ilhom asosida yaratilgan, asl parfyum emas» (we avoid «original» in UZ too). Needs the customer's or a native reviewer's approval, with the RU text.
+
 ## Bracketed values to confirm (TZ placeholders)
 
 - Discovery set price (expected after 2026-11-09).

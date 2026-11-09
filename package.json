@@ -18,6 +18,7 @@
     "format": "prettier --write .",
     "dev:api": "npm run dev -w @lummi/api",
     "dev:admin": "npm run dev -w @lummi/admin",
+    "seed:catalog": "npm run seed:catalog -w @lummi/api",
     "seed:owner": "npm run seed:owner -w @lummi/api --",
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
