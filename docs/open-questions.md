@@ -54,6 +54,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - «Pink Molécule 090.09»: a number in the name, while LUMMI never shows fragrance numbers; it is the original's name.
   - «Rain Tea»: the guide notes it is sold as «Tea Storm» from 2026.
 - **Banner slider dropped.** TZ §3.1 had an admin-managed banner slider; the approved Home has none. The Discovery set banner and the slogan are editable in admin instead.
+- **UZ Home slogan.** The customer gave «Ароматы, которые освещают» in RU only. The UZ line «Yoritadigan xushboʻyliklar» in the shell is our translation; ask Nurmuhammad to confirm it with the customer.
+- **Fabric photos for the Home top block** (light and dark, full resolution) are still needed; the shell shows a Stone block in that slot (`data-slot="fabric"`).
 
 ## Deferred to the next version
 
