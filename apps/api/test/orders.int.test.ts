@@ -48,7 +48,12 @@ const nowSec = () => Math.floor(t.edges.clock.now().getTime() / 1000);
 async function shopper(user: TestUser = ali, phone: string | null = '998901234567') {
   const { client } = await t.signIn(user);
   if (phone) {
-    const proof = signContact({ botToken: TEST_BOT_TOKEN, userId: user.id, phone, authDate: nowSec() });
+    const proof = signContact({
+      botToken: TEST_BOT_TOKEN,
+      userId: user.id,
+      phone,
+      authDate: nowSec(),
+    });
     const res = await client.me.shareContact({ body: { proof } });
     if (res.status !== 200) throw new Error(`contact: ${res.status}`);
   }
@@ -136,7 +141,11 @@ describe('createOrder', () => {
     expect(checkout.status).toBe(200);
     if (checkout.status !== 200) return;
     // 2 x 69 000 + 149 000 = 287 000: free delivery, whatever the tariff
-    expect(checkout.body.quote).toMatchObject({ itemsSubtotal: 287_000, deliveryFee: 0, total: 287_000 });
+    expect(checkout.body.quote).toMatchObject({
+      itemsSubtotal: 287_000,
+      deliveryFee: 0,
+      total: 287_000,
+    });
     expect(checkout.body).toMatchObject({
       itemCount: 3,
       phone: '+998901234567',
@@ -182,7 +191,9 @@ describe('createOrder', () => {
   it('prices delivery with the chosen point region tariff, not the saved delivery city', async () => {
     const [s1] = await slugs();
     const { region, point } = await samarkandPoint(31_000);
-    const [tashkent] = (await t.db.select().from(regions)).filter((r) => r.code === 'tashkent-city');
+    const [tashkent] = (await t.db.select().from(regions)).filter(
+      (r) => r.code === 'tashkent-city',
+    );
     await t.db.update(regions).set({ deliveryTariff: 20_000 }).where(eq(regions.id, tashkent!.id));
     const { client, add } = await shopper();
     const [city] = await t.db
@@ -204,7 +215,9 @@ describe('createOrder', () => {
       deliveryFee: 31_000,
       total: 100_000,
     });
-    const res = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 100_000 }) });
+    const res = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 100_000 }),
+    });
     expect(res.status === 201 && [res.body.deliveryFee, res.body.total]).toEqual([31_000, 100_000]);
   });
 
@@ -217,7 +230,9 @@ describe('createOrder', () => {
     const v = await volumeOf(s1!, 10);
     await t.db.update(volumes).set({ price: 79_000 }).where(eq(volumes.id, v.id));
 
-    const stale = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 94_000 }) });
+    const stale = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 94_000 }),
+    });
     expect(stale.status).toBe(409);
     if (stale.status !== 409) return;
     expect(stale.body.code).toBe('total_changed');
@@ -227,7 +242,9 @@ describe('createOrder', () => {
     const cart = await client.cart.get();
     expect(cart.status === 200 && cart.body.lines).toHaveLength(1);
 
-    const again = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 104_000 }) });
+    const again = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 104_000 }),
+    });
     expect(again.status === 201 && again.body.total).toBe(104_000);
   });
 
@@ -238,7 +255,9 @@ describe('createOrder', () => {
     await add(s1!, 10);
     const checkout = await client.checkout.get({ query: {} });
     expect(checkout.status === 200 && checkout.body.phone).toBeNull();
-    const res = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 94_000 }) });
+    const res = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 94_000 }),
+    });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ code: 'phone_required' });
     expect((await client.orders.list()).body).toEqual([]);
@@ -327,7 +346,10 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     });
     expect(created.status).toBe(201);
     const v = await volumeOf(s1!, 30);
-    await t.db.update(volumes).set({ price: 199_000, salePrice: 99_000 }).where(eq(volumes.id, v.id));
+    await t.db
+      .update(volumes)
+      .set({ price: 199_000, salePrice: 99_000 })
+      .where(eq(volumes.id, v.id));
     await t.db.update(fragrances).set({ name: 'Renamed' }).where(eq(fragrances.slug, s1!));
     await t.db
       .update(btsPoints)
@@ -353,7 +375,10 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     ).toBe(201);
     const v = await volumeOf(s1!, 10);
     const manager = await t.managerSession();
-    const res = await manager.client.admin.onHand.set({ params: { id: v.id }, body: { onHand: 2 } });
+    const res = await manager.client.admin.onHand.set({
+      params: { id: v.id },
+      body: { onHand: 2 },
+    });
     expect(res.status === 200 && res.body).toMatchObject({
       onHand: 2,
       reserved: 4,
@@ -366,7 +391,10 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     const five = await slugs(5);
     const vols = await Promise.all(five.map((s) => volumeOf(s, 10)));
     const { client } = await shopper();
-    const [c] = await t.db.select({ id: customers.id }).from(customers).where(eq(customers.telegramId, ali.id));
+    const [c] = await t.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.telegramId, ali.id));
     const { point, region } = await samarkandPoint();
     const [order] = await t.db
       .insert(orders)
@@ -463,7 +491,12 @@ describe('what the order records', () => {
     expect(rows[0]!.options).toEqual({
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Buyurtmani ochish', web_app: { url: 'https://miniapp.test.invalid/orders/1001' } }],
+          [
+            {
+              text: 'Buyurtmani ochish',
+              web_app: { url: 'https://miniapp.test.invalid/orders/1001' },
+            },
+          ],
         ],
       },
     });
@@ -496,7 +529,12 @@ describe('what the order records', () => {
     const checkout = await client.checkout.get({ query: {} });
     expect(checkout.status === 200 && checkout.body.giftMessageMax).toBe(250);
     const tooLong = await client.orders.create({
-      body: body({ pointId: point.id, confirmedTotal: 94_000, gift: true, giftMessage: 'a'.repeat(251) }),
+      body: body({
+        pointId: point.id,
+        confirmedTotal: 94_000,
+        gift: true,
+        giftMessage: 'a'.repeat(251),
+      }),
     });
     expect(tooLong.status === 422 && tooLong.body.code).toBe('gift_message_too_long');
 
@@ -529,14 +567,21 @@ describe('what the order records', () => {
     const [s1] = await slugs();
     const { point } = await samarkandPoint(25_000);
     const { client, add } = await shopper();
-    const empty = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 0 }) });
+    const empty = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 0 }),
+    });
     expect(empty.status === 409 && empty.body.code).toBe('nothing_to_order');
     await add(s1!, 10);
     await t.db.update(btsPoints).set({ active: false }).where(eq(btsPoints.id, point.id));
-    const hidden = await client.orders.create({ body: body({ pointId: point.id, confirmedTotal: 94_000 }) });
+    const hidden = await client.orders.create({
+      body: body({ pointId: point.id, confirmedTotal: 94_000 }),
+    });
     expect(hidden.status === 422 && hidden.body.code).toBe('unknown_point');
     const region = await client.orders.create({
-      body: { ...body({ confirmedTotal: 94_000 }), delivery: { kind: 'typed', regionId: 999, text: 'Где-то' } },
+      body: {
+        ...body({ confirmedTotal: 94_000 }),
+        delivery: { kind: 'typed', regionId: 999, text: 'Где-то' },
+      },
     });
     expect(region.status === 422 && region.body.code).toBe('unknown_region');
   });
@@ -549,7 +594,11 @@ describe('what the order records', () => {
     // a body that fails the contract's schema is a 400 (outside the typed statuses)
     await expect(
       client.orders.create({
-        body: body({ pointId: point.id, confirmedTotal: 94_000, recipientPhone: '+7 912 000 00 00' }),
+        body: body({
+          pointId: point.id,
+          confirmedTotal: 94_000,
+          recipientPhone: '+7 912 000 00 00',
+        }),
       }),
     ).rejects.toThrow(/got: 400/);
     expect((await client.orders.list()).body).toEqual([]);
@@ -574,7 +623,10 @@ describe('the «Заказы» tab', () => {
     });
 
     const list = await client.orders.list();
-    expect(list.status === 200 && list.body.map((o) => [o.number, o.itemCount, o.total, o.isGift, o.status])).toEqual([
+    expect(
+      list.status === 200 &&
+        list.body.map((o) => [o.number, o.itemCount, o.total, o.isGift, o.status]),
+    ).toEqual([
       [1002, 1, 174_000, true, 'awaiting_payment'],
       [1001, 2, 163_000, false, 'awaiting_payment'],
     ]);
