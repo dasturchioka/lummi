@@ -80,6 +80,11 @@ typography:
     fontSize: "11px"
     fontWeight: 400
     lineHeight: 1.2
+  hint:
+    fontFamily: "Manrope, system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.45
   heading:
     fontFamily: "Manrope, system-ui, sans-serif"
     fontSize: "17px"
@@ -314,6 +319,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
 - **Row** (Manrope 400, 15px, 1.4): the label of a tappable list row (Profile rows, the region, city and point pickers). At 600 it is a BTS point's name and the Home delivery city.
 - **Caption** (Manrope 400, 11px, 1.2, Muted Ink): a small label over a value, such as «Доставка» over the Home city and the characteristics row labels. The tab bar label is the same size at 500.
+- **Hint** (Manrope 400, 12px, 1.45, Muted Ink): the hint under a field, and secondary counts such as «Самарканд: ещё 4 пункта» under the chosen point.
 - **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
 
 ### Named Rules
