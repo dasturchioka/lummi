@@ -12,6 +12,7 @@ import { SEARCH_QUERY_MAX } from '@lummi/contracts/client';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
 import { goBackOrCatalog } from '../lib/navigation';
+import { parseCatalogSearch } from '../catalog/filters';
 import { Home } from '../screens/Home';
 import { TabBar, TABS } from '../ui/TabBar';
 
@@ -84,7 +85,8 @@ const routeTree = rootRoute.addChildren([
   createRoute({ ...at('/'), component: Home }),
   createRoute({
     ...at('/catalog'),
-    component: lazyRouteComponent(() => import('../screens/Tabs'), 'CatalogTab'),
+    validateSearch: parseCatalogSearch,
+    component: lazyRouteComponent(() => import('../screens/Catalog'), 'Catalog'),
   }),
   createRoute({
     ...at('/search'),

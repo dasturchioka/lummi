@@ -2,10 +2,11 @@ import type { Theme } from '@lummi/contracts';
 import { Link } from '@tanstack/react-router';
 import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
-import { BottleIcon, SearchIcon } from '../ui/icons';
+import { SearchIcon } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
-import { EmptyState } from '../ui/States';
+import { SearchField } from '../ui/SearchField';
+import { DiscoveryBanner, Novelties, Popular } from './home/Sections';
 
 /**
  * The fabric photos of the top block (approved variant 2), one per theme. To ship them, put the
@@ -93,12 +94,12 @@ export function Home() {
             <Monogram size={22} />
           </Link>
         </div>
-        <EmptyState
-          fill
-          icon={<BottleIcon size={28} />}
-          title={t.home.emptyTitle}
-          text={t.home.emptyText}
-        />
+        <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
+          <SearchField />
+          <DiscoveryBanner />
+          <Popular />
+          <Novelties />
+        </div>
       </div>
     </Screen>
   );

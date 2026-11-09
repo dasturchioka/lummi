@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 
 /**
  * The approved filter chip (variant 2): a 40 px pill with a round 3:4 bottle photo cropped to a
@@ -9,6 +9,7 @@ import { useRef, type KeyboardEvent } from 'react';
 export function Chip({
   label,
   thumb,
+  trailing,
   selected = false,
   onClick,
   pressed,
@@ -20,6 +21,8 @@ export function Chip({
   label: string;
   /** A bottle photo URL; without it the chip is a plain label pill. */
   thumb?: string;
+  /** After the label: the chevron of a chip that opens a sheet. */
+  trailing?: ReactNode;
   selected?: boolean;
   onClick?: () => void;
   /** Force the pressed look (component gallery). */
@@ -54,9 +57,14 @@ export function Chip({
         />
       ) : null}
       {label}
+      {trailing}
     </button>
   );
 }
+
+/** A horizontal row of chips that scrolls under the screen gutters with no visible scrollbar. */
+export const CHIP_ROW =
+  '-mx-[var(--gutter)] flex gap-2 overflow-x-auto overscroll-x-contain px-[var(--gutter)] py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
 
 export interface TypeChipOption<V extends string> {
   value: V;
@@ -92,11 +100,7 @@ export function TypeChips<V extends string>({
     }
   };
   return (
-    <div
-      role="radiogroup"
-      aria-label={label}
-      className="-mx-[var(--gutter)] flex gap-2 overflow-x-auto overscroll-x-contain px-[var(--gutter)] py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
+    <div role="radiogroup" aria-label={label} className={CHIP_ROW}>
       {options.map((o, i) => (
         <Chip
           key={o.value}

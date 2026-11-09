@@ -88,10 +88,69 @@ const registrationStates: ScreenDef[] = (
   ] as const
 ).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
 
+/** The seed has no hits and no new flags: pin three hits and flag six novelties for Home and the catalog. */
+const HITS = ['symphony', 'aventus', 'tygar'];
+const NEWS = [
+  'althair',
+  'power-of-you',
+  'ink-mark',
+  'rain-tea',
+  'safran-secret',
+  'baccarat-rouge-540',
+];
+async function flagHome(db: ShotDb) {
+  await db.query(`update fragrances set is_hit = true where slug = any($1)`, [HITS]);
+  await db.query(`update fragrances set is_new = true where slug = any($1)`, [NEWS]);
+}
+async function unflagHome(db: ShotDb) {
+  await db.query(`update fragrances set is_hit = false, is_new = false`);
+}
+const withFlags: Pick<ScreenDef, 'setup' | 'teardown'> = {
+  setup: ({ db }) => flagHome(db),
+  teardown: ({ db }) => unflagHome(db),
+};
+const catalogSheet =
+  (name: RegExp): NonNullable<ScreenDef['act']> =>
+  async ({ page }) => {
+    await page.getByRole('button', { name }).first().click();
+    await sheet(page).waitFor();
+    await sheet(page).getByTestId('option-row').first().waitFor();
+  };
+
 export const screens: ScreenDef[] = [
-  { id: 'home', path: '/', setup: ({ api }) => forgetCity(api) },
+  {
+    id: 'home',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+    },
+    teardown: ({ db }) => unflagHome(db),
+  },
   // Home with the delivery city chosen, and the sheet that changes it.
-  { id: 'home-delivery', path: '/', setup: ({ api }) => chooseCity(api) },
+  {
+    id: 'home-delivery',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await chooseCity(api);
+      await flagHome(db);
+    },
+    teardown: ({ db }) => unflagHome(db),
+  },
+  {
+    // «Популярное» with a chip selected: it filters in place.
+    id: 'home-popular-femme',
+    path: '/',
+    ...withFlags,
+    act: async ({ page }) => {
+      await page.getByRole('radio', { name: 'Femme' }).click();
+      await page.waitForFunction(
+        () =>
+          !document.querySelector('[data-skeleton]') &&
+          !document.querySelector('[aria-busy="true"]'),
+      );
+    },
+  },
   {
     id: 'delivery-regions',
     path: '/',
@@ -214,7 +273,67 @@ export const screens: ScreenDef[] = [
         .waitFor();
     },
   },
-  { id: 'catalog', path: '/catalog' },
+  // Catalog (#15): the default, each filter sheet, the sort, a combination, and the states.
+  { id: 'catalog', path: '/catalog', fullPage: true },
+  { id: 'catalog-sheet-family', path: '/catalog', act: catalogSheet(/Семейство|Oila/) },
+  { id: 'catalog-sheet-volume', path: '/catalog', act: catalogSheet(/Объём|Hajm/) },
+  { id: 'catalog-sheet-season', path: '/catalog', act: catalogSheet(/Сезон|Mavsum/) },
+  {
+    id: 'catalog-sheet-price',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await page
+        .getByRole('button', { name: /Цена|Narx/ })
+        .first()
+        .click();
+      await sheet(page).getByRole('textbox').first().waitFor();
+    },
+  },
+  {
+    id: 'catalog-sheet-sort',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await page.getByRole('button', { name: /Топ продаж|Koʻp sotilganlar/ }).click();
+      await sheet(page).getByTestId('option-row').first().waitFor();
+    },
+  },
+  { id: 'catalog-sort-price-asc', path: '/catalog?sort=price_asc', fullPage: true },
+  { id: 'catalog-sort-new', path: '/catalog?sort=new', ...withFlags, fullPage: true },
+  {
+    id: 'catalog-filtered',
+    path: '/catalog?type=femme&volume=30&season=autumn_winter&min=100000&max=200000',
+    fullPage: true,
+  },
+  { id: 'catalog-nothing-found', path: '/catalog?min=9000000' },
+  { id: 'catalog-sets', path: '/catalog?type=sets' },
+  {
+    // One fragrance sold out in every volume: its card says «Нет в наличии» in place of the price.
+    id: 'catalog-sold-out',
+    path: '/catalog',
+    setup: async ({ db }) => db.setOnHand('symphony', 0),
+    teardown: async ({ db }) => db.restore('symphony'),
+    ...{ fullPage: true },
+  },
+  {
+    id: 'catalog-loading',
+    path: '/catalog',
+    loading: true,
+    act: async ({ page }) => {
+      // A filter change keeps the old list (dimmed); the skeleton is the first load.
+      await page.route('**/catalog/fragrances?*', () => undefined);
+      await page.reload();
+      await page.locator('[data-skeleton]').first().waitFor();
+    },
+  },
+  {
+    id: 'catalog-error',
+    path: '/catalog?type=homme',
+    act: async ({ page }) => {
+      await page.route('**/catalog/fragrances?*', (route) => route.abort());
+      await page.reload();
+      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+    },
+  },
   { id: 'cart', path: '/cart' },
   { id: 'orders', path: '/orders' },
   {
@@ -275,6 +394,18 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'fragrance-not-found', path: '/p/no-such-scent' },
+  {
+    // «Похожие ароматы» at the foot of the card (the curated ones, then the same family and type).
+    id: 'fragrance-similar',
+    path: '/p/symphony',
+    act: async ({ page }) => {
+      const heading = page.getByRole('heading', { name: /Похожие ароматы|Oʻxshash iforlar/ });
+      await heading.waitFor();
+      await page.locator('[data-skeleton]').first().waitFor({ state: 'detached' });
+      await heading.scrollIntoViewIfNeeded();
+      await heading.evaluate((h) => h.scrollIntoView({ block: 'start' }));
+    },
+  },
   // The card on dev fixtures (src/dev/fragrance-fixtures.ts): the realistic worst case (long name
   // and brand, no family, every volume on sale, a seven-digit price, a missing photo), a fragrance
   // sold in one volume, and one with nothing optional (no volumes, notes or key notes).

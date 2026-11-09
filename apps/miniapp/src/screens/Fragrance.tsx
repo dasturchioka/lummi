@@ -10,6 +10,7 @@ import { Screen } from '../ui/Screen';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { FragranceView } from './fragrance/FragranceView';
+import { Similar } from './fragrance/Similar';
 
 /** The card's own shape while it loads (photo, lockup, text, icon row, tiles, dock), so nothing jumps. */
 function Loading() {
@@ -93,6 +94,7 @@ export function Fragrance() {
       card={card}
       onBack={() => goBackOrCatalog(router)}
       onShare={() => void shareFragrance(card.slug, card.name)}
+      footer={<Similar slug={card.slug} />}
     />
   );
 }
