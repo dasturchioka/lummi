@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { usePrefs } from '../lib/prefs';
 import { Logo, Monogram } from '../ui/Logo';
+import { Screen } from '../ui/Screen';
 import { EmptyState } from '../ui/States';
 
 /**
@@ -10,13 +11,7 @@ import { EmptyState } from '../ui/States';
 export function Home() {
   const { t } = usePrefs();
   return (
-    <main
-      className="mx-auto w-full max-w-[520px]"
-      style={{
-        paddingBottom:
-          'calc(var(--tabbar-h) + var(--tabbar-inset) * 2 + var(--safe-b, 0px) + 16px)',
-      }}
-    >
+    <Screen bleed>
       <section
         data-slot="fabric"
         className="relative flex h-[216px] flex-col items-center justify-center gap-3 bg-block px-6 text-center text-ink"
@@ -36,6 +31,6 @@ export function Home() {
       <div className="relative -mt-5 rounded-t-card bg-ground px-4 pt-6">
         <EmptyState title={t.home.emptyTitle} text={t.home.emptyText} />
       </div>
-    </main>
+    </Screen>
   );
 }

@@ -1,5 +1,6 @@
 import type { CustomerDto, Theme } from '@lummi/contracts';
-import { dictionaries, type Language, type Messages } from '@lummi/i18n';
+import { sharedMessages, type Language, type SharedMessages } from '@lummi/i18n';
+import { miniappMessages, type MiniappMessages } from '@lummi/i18n/miniapp';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createContext,
@@ -45,6 +46,9 @@ function writeHint(hint: Hint) {
 export function applyInitialTheme() {
   document.documentElement.dataset.theme = readHint().theme ?? 'light';
 }
+
+/** Shared strings plus this app's own; the bot's and admin's are never bundled here. */
+export type Messages = SharedMessages & MiniappMessages;
 
 interface PrefsValue {
   language: Language;
@@ -123,7 +127,7 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     () => ({
       language,
       theme,
-      t: dictionaries[language],
+      t: { ...sharedMessages[language], ...miniappMessages[language] },
       customer: me.data,
       customerQuery: {
         isError: me.isError,

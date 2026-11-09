@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { session } from '../lib/api';
 import { PrefsProvider, usePrefs } from '../lib/prefs';
 import { EmptyState, ErrorState } from '../ui/States';
@@ -13,18 +13,16 @@ const queryClient = new QueryClient({
 function Gate() {
   const { t } = usePrefs();
   const state = useSyncExternalStore(session.subscribe, session.getState);
-  const [, retry] = useState(0);
 
   // Stale initData: nothing to retry. A calm instruction instead of a broken app.
   if (state === 'reopen') {
-    return <EmptyState title={t.errors.reopenTitle} text={t.errors.reopenText} />;
+    return <EmptyState title={t.session.reopenTitle} text={t.session.reopenText} />;
   }
   if (state === 'failed') {
     return (
       <ErrorState
         onRetry={() => {
           void session.start().catch(() => undefined);
-          retry((n) => n + 1);
         }}
       />
     );

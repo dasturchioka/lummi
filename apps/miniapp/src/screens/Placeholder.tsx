@@ -1,5 +1,6 @@
 import { usePrefs } from '../lib/prefs';
-import { Screen, ScreenHeader } from '../ui/ScreenHeader';
+import { Screen } from '../ui/Screen';
+import { ScreenHeader } from '../ui/ScreenHeader';
 import { EmptyState } from '../ui/States';
 import type { TabId } from '../ui/TabBar';
 

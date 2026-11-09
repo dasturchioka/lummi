@@ -101,6 +101,19 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+@utility type-tab {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 13px;
+  font-weight: 500;
+}
+@utility type-count {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 @utility type-button {
   font-family: var(--font-ui);
   font-size: 15px;
@@ -155,6 +168,8 @@
   --safe-b: max(env(safe-area-inset-bottom, 0px), var(--tg-viewport-safe-area-inset-bottom, 0px));
   --safe-l: max(env(safe-area-inset-left, 0px), var(--tg-viewport-safe-area-inset-left, 0px));
   --safe-r: max(env(safe-area-inset-right, 0px), var(--tg-viewport-safe-area-inset-right, 0px));
+  /* What the floating tab bar covers at the bottom; `Screen` pads by it. */
+  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) * 2 + var(--safe-b) + 16px);
   min-height: var(--tg-viewport-stable-height, 100dvh);
 }
 

@@ -45,12 +45,12 @@ export function TabBar({ badges = {} }: { badges?: Partial<Record<TabId, number>
             <span className="relative grid size-8 place-items-center rounded-pill transition-colors duration-150 group-data-[status=active]:bg-bar-active group-data-[status=active]:text-bar-active-ink">
               {tab.icon}
               {count > 0 ? (
-                <span className="absolute -top-0.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-pill bg-bar-active px-1 text-[10px] leading-none font-semibold text-bar-active-ink ring-2 ring-bar">
+                <span className="absolute -top-0.5 -right-1.5 grid h-4 min-w-4 place-items-center rounded-pill bg-bar-active px-1 type-count text-bar-active-ink ring-2 ring-bar">
                   {count}
                 </span>
               ) : null}
             </span>
-            <span className="max-w-full truncate text-[11px] leading-[13px] font-medium group-data-[status=active]:font-semibold">
+            <span className="max-w-full truncate type-tab group-data-[status=active]:font-semibold">
               {t.tabs[tab.id]}
             </span>
           </Link>

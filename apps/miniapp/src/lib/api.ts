@@ -1,12 +1,11 @@
-import { contract } from '@lummi/contracts';
-import { initClient, tsRestFetchApi, type ApiFetcherArgs } from '@ts-rest/core';
+import { createClient, type Sender } from './client';
 import { SessionManager, type AuthResult } from './session';
 import { rawInitData } from './telegram';
 
 /** Same-origin `/api/*` (Vite proxy in dev, Caddy in production): no CORS, no absolute URLs. */
 const baseUrl = import.meta.env.VITE_API_URL ?? '/api';
 
-const anonymous = initClient(contract, { baseUrl, baseHeaders: {} });
+const anonymous = createClient(baseUrl);
 
 const expiry = (iso: string) => Date.parse(iso);
 
@@ -32,16 +31,16 @@ export const session = new SessionManager({
 });
 
 /** Attaches the session to every request; a 401 means the session is gone, so sign in once more. */
-async function authedFetch(args: ApiFetcherArgs) {
+const authedSend: Sender = async (req) => {
   const send = (token: string) =>
-    tsRestFetchApi({ ...args, headers: { ...args.headers, authorization: `Bearer ${token}` } });
+    fetch(req.url, { ...req, headers: { ...req.headers, authorization: `Bearer ${token}` } });
   const token = await session.getToken();
   const res = await send(token);
   if (res.status !== 401) return res;
   return send(await session.recover(token));
-}
+};
 
-export const api = initClient(contract, { baseUrl, baseHeaders: {}, api: authedFetch });
+export const api = createClient(baseUrl, authedSend);
 
 /** Query helper: only the success status is data; anything else is an error to show and retry. */
 export function unwrap<T extends { status: number; body: unknown }, S extends number>(

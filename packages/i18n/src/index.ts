@@ -1,4 +1,5 @@
 export { LANGUAGES, DEFAULT_LANGUAGE, type Language, languageFromTelegram } from './language';
-export { ru, uz, dictionaries, type Messages } from './dictionaries';
+export { sharedMessages, type SharedMessages } from './shared';
+export { defineMessages } from './define';
 export { formatMoney } from './money';
 export { normalizeUzbek } from './uzbek';

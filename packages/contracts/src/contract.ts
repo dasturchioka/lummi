@@ -2,7 +2,8 @@ import { initContract } from '@ts-rest/core';
 import {
   authErrorSchema,
   customerSchema,
-  preferencesBodySchema,   sessionSchema,
+  preferencesBodySchema,
+  sessionSchema,
   telegramAuthBodySchema,
 } from './auth';
 

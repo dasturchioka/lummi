@@ -1,7 +1,8 @@
 import { usePrefs } from '../lib/prefs';
 import { CardList, ListRow } from '../ui/Card';
 import { Monogram } from '../ui/Logo';
-import { Screen, ScreenHeader } from '../ui/ScreenHeader';
+import { Screen } from '../ui/Screen';
+import { ScreenHeader } from '../ui/ScreenHeader';
 import { Segmented } from '../ui/Segmented';
 import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/States';

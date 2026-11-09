@@ -1,5 +1,5 @@
 import type { DbOrTx } from '@lummi/db';
-import { dictionaries } from '@lummi/i18n';
+import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { OutboxService, type OutboxMessage } from './outbox.service';

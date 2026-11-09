@@ -27,6 +27,23 @@ for (const key of seen) {
   total += gz;
   console.log(`${(gz / 1000).toFixed(1).padStart(7)} KB  ${file}`);
 }
+// Browser mode (a mocked Telegram) must never ship: refuse the build if it did.
+if (process.env.VITE_BROWSER_MODE) {
+  console.error('VITE_BROWSER_MODE is set; production builds must not use it.');
+  process.exit(1);
+}
+const { readdirSync } = await import('node:fs');
+for (const file of readdirSync(join(dist, 'assets')).filter((f) => f.endsWith('.js'))) {
+  const text = readFileSync(join(dist, 'assets', file), 'utf8');
+  for (const marker of ['mockTelegramEnv', 'browser mode: Telegram is mocked']) {
+    if (text.includes(marker)) {
+      console.error(
+        `dist/assets/${file} contains "${marker}": browser mode leaked into the build.`,
+      );
+      process.exit(1);
+    }
+  }
+}
 const kb = total / 1000; // decimal KB, the unit Vite prints
 console.log(`${kb.toFixed(1).padStart(7)} KB  initial JS gzip (budget ${BUDGET_KB} KB)`);
 if (kb > BUDGET_KB) {
