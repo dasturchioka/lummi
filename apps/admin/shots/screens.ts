@@ -1,6 +1,15 @@
 import type { AdminMessages } from '@lummi/i18n/admin';
 import type { Page } from '@playwright/test';
 
+/** Opens the first fragrance of the catalog list (the seed gives the list a stable first row). */
+async function openFirstFragrance(page: Page) {
+  await page
+    .locator('a[href^="/catalog/"]:not([href="/catalog/dictionaries"]):not([href="/catalog/new"])')
+    .first()
+    .click();
+  await page.locator('form [data-volume]').first().waitFor();
+}
+
 /** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
 export type ShotStaff = {
   telegramId: number;
@@ -96,6 +105,59 @@ export const screens: Screen[] = [
     act: async ({ page, t }) => {
       await page.getByRole('button', { name: t.staff.remove, exact: true }).first().click();
       await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  { id: 'catalog', path: '/catalog', as: 'owner' },
+  {
+    id: 'catalog-edit',
+    path: '/catalog',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openFirstFragrance(page);
+    },
+  },
+  {
+    id: 'catalog-volumes',
+    path: '/catalog',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page }) => {
+      await openFirstFragrance(page);
+      await page.locator('[data-volume="10"]').scrollIntoViewIfNeeded();
+      await page
+        .locator('[data-volume="10"]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'catalog-photo',
+    path: '/catalog',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await openFirstFragrance(page);
+      const slot = page.locator('[data-photo="10"]');
+      const src = await slot.locator('img').getAttribute('src');
+      // upload the fragrance's own picture again (a larger rendition), so no photo is swapped for a stranger
+      const bytes = await (
+        await page.request.get(new URL((src ?? '').replace('-400.', '-1200.'), page.url()).href)
+      ).body();
+      await slot
+        .locator('input[type=file]')
+        .setInputFiles({ name: 'photo.webp', mimeType: 'image/webp', buffer: bytes });
+      await slot.getByText(t.catalog.photoUploaded).waitFor();
+      await slot.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  { id: 'catalog-dictionaries', path: '/catalog/dictionaries', as: 'owner' },
+  {
+    id: 'catalog-dictionary-edit',
+    path: '/catalog/dictionaries',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.catalog.edit, exact: false }).first().click();
+      await page.getByRole('dialog').waitFor();
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

@@ -1,0 +1,680 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  DEFAULT_LONGEVITY,
+  FRAGRANCE_TYPES,
+  MAX_SIMILAR,
+  SEASONS,
+  SILLAGES,
+  TIMES_OF_DAY,
+  VOLUME_MLS,
+  fragranceInputSchema,
+  type DictionaryItem,
+  type FragranceAdmin,
+  type FragranceInput,
+} from '@lummi/contracts';
+import type { Language } from '@lummi/i18n';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, X } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import {
+  useForm,
+  type FieldError,
+  type FieldErrors,
+  type Resolver,
+  type UseFormRegisterReturn,
+} from 'react-hook-form';
+import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { browserApi } from '@/lib/api';
+import type { AdminMessages } from '@/lib/i18n';
+import { fill } from '@/lib/utils';
+import { PhotoUpload } from './photo-upload';
+
+type Level = 'top' | 'heart' | 'base';
+const LEVELS: Level[] = ['top', 'heart', 'base'];
+type Mls = (typeof VOLUME_MLS)[number];
+
+const emptyVolume = (ml: Mls) => ({
+  ml,
+  price: 0,
+  salePrice: null,
+  saleEndsOn: null,
+  onHand: 0,
+});
+
+function toForm(f: FragranceAdmin | null): FragranceInput {
+  const volumes = VOLUME_MLS.map((ml) => {
+    const v = f?.volumes.find((x) => x.ml === ml);
+    return v
+      ? {
+          ml,
+          price: v.price,
+          salePrice: v.salePrice,
+          saleEndsOn: v.saleEndsOn,
+          onHand: v.onHand,
+        }
+      : emptyVolume(ml);
+  });
+  if (!f) {
+    return {
+      name: '',
+      originalBrand: '',
+      type: 'unisex',
+      familyId: null,
+      season: 'all_year',
+      timeOfDay: 'everyday',
+      sillage: 'noticeable',
+      longevityRu: DEFAULT_LONGEVITY.ru,
+      longevityUz: DEFAULT_LONGEVITY.uz,
+      descriptionRu: '',
+      descriptionUz: '',
+      whenToWearRu: '',
+      whenToWearUz: '',
+      keyNotesRu: ['', '', ''],
+      keyNotesUz: ['', '', ''],
+      internalRemark: '',
+      aliases: [],
+      uzumUrl: '',
+      isHit: false,
+      isNew: false,
+      hidden: false,
+      notes: { top: [], heart: [], base: [] },
+      similarIds: [],
+      volumes,
+    };
+  }
+  return {
+    ...f,
+    internalRemark: f.internalRemark ?? '',
+    uzumUrl: f.uzumUrl ?? '',
+    keyNotesRu: [0, 1, 2].map((i) => f.keyNotesRu[i] ?? ''),
+    keyNotesUz: [0, 1, 2].map((i) => f.keyNotesUz[i] ?? ''),
+    volumes,
+  };
+}
+
+/** Maps a form error to its RU/UZ text: our own codes first, then the zod rule that failed. */
+function message(t: AdminMessages, e?: FieldError): string | undefined {
+  if (!e) return undefined;
+  const m = t.catalog.errors;
+  switch (e.message) {
+    case 'sale_below_price':
+      return m.salePriceBelow;
+    case 'end_without_sale':
+      return m.endWithoutSale;
+    case 'url':
+      return m.url;
+    case 'duplicate_note':
+      return m.duplicateNote;
+    case 'duplicate_similar':
+      return m.duplicateSimilar;
+    case 'duplicate_volume':
+      return m.invalid;
+    case 'server':
+      return m.invalid;
+  }
+  if (e.type === 'too_small' || e.type === 'too_big')
+    return e.message?.includes('exactly') ? m.keyNotes : m.required;
+  if (e.type === 'invalid_type') return e.message === 'Required' ? m.required : m.number;
+  return m.invalid;
+}
+
+const num = (v: string) => (v.trim() === '' ? Number.NaN : Number(v));
+const numOrNull = (v: string) => (v == null || String(v).trim() === '' ? null : Number(v));
+const textOrNull = (v: string) => (v ? v : null);
+
+/**
+ * Create and edit a fragrance: every field, RU/UZ side by side, notes by level from the
+ * dictionary, ordered similar fragrances, and the volume editor with a photo per volume.
+ * Validation is the API's own zod schema (shared via contracts); the server checks it again.
+ */
+export function FragranceForm({
+  initial,
+  families,
+  notes,
+  others,
+  language,
+  t,
+}: {
+  initial: FragranceAdmin | null;
+  families: DictionaryItem[];
+  notes: DictionaryItem[];
+  others: { id: number; name: string }[];
+  language: Language;
+  t: AdminMessages;
+}) {
+  const c = t.catalog;
+  const router = useRouter();
+  const [enabled, setEnabled] = useState<Record<Mls, boolean>>(() => ({
+    10: initial ? initial.volumes.some((v) => v.ml === 10) : true,
+    30: initial ? initial.volumes.some((v) => v.ml === 30) : true,
+    50: initial ? initial.volumes.some((v) => v.ml === 50) : true,
+  }));
+  const [aliasText, setAliasText] = useState((initial?.aliases ?? []).join('\n'));
+  const [pending, setPending] = useState(false);
+  const [banner, setBanner] = useState<{ kind: 'error' | 'ok'; text: string } | null>(null);
+  const [code, setCode] = useState(initial?.code ?? null);
+  const [photos, setPhotos] = useState<Record<number, string | null>>(() =>
+    Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.photo])),
+  );
+  const volumeIds = useMemo(
+    () => Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.id])),
+    [initial],
+  );
+
+  // Disabled volume slots are validated as blanks, so they never block a save.
+  const resolver: Resolver<FragranceInput> = (values, ctx, opts) =>
+    zodResolver(fragranceInputSchema)(
+      {
+        ...values,
+        volumes: values.volumes.map((v) => (enabled[v.ml] ? v : emptyVolume(v.ml))),
+      } as FragranceInput,
+      ctx,
+      opts,
+    ) as ReturnType<Resolver<FragranceInput>>;
+
+  const form = useForm<FragranceInput>({
+    defaultValues: toForm(initial),
+    resolver,
+    mode: 'onTouched',
+  });
+  const { register, watch, setValue, handleSubmit, formState, setError } = form;
+  const errors = formState.errors;
+  const v = watch();
+  const err = (e?: FieldError) => message(t, e);
+  const reg = (name: Parameters<typeof register>[0], opts?: Parameters<typeof register>[1]) =>
+    register(name, opts) as UseFormRegisterReturn;
+
+  const noteName = (n: DictionaryItem) => (language === 'uz' ? n.nameUz : n.nameRu);
+  const noteById = new Map(notes.map((n) => [n.id, n]));
+  const chosenNotes = new Set([...v.notes.top, ...v.notes.heart, ...v.notes.base]);
+  const setLevel = (level: Level, ids: number[]) =>
+    setValue(`notes.${level}`, ids, { shouldDirty: true, shouldValidate: true });
+  const setSimilar = (ids: number[]) =>
+    setValue('similarIds', ids, { shouldDirty: true, shouldValidate: true });
+  const move = (ids: number[], i: number, d: -1 | 1) => {
+    const out = [...ids];
+    const j = i + d;
+    if (j < 0 || j >= out.length) return out;
+    [out[i], out[j]] = [out[j]!, out[i]!];
+    return out;
+  };
+
+  const submit = handleSubmit(
+    async (values) => {
+      setBanner(null);
+      setPending(true);
+      const body: FragranceInput = {
+        ...values,
+        volumes: values.volumes.filter((x) => enabled[x.ml]),
+      };
+      const res = await (
+        initial
+          ? browserApi.catalog.fragrances.update({ params: { id: initial.id }, body })
+          : browserApi.catalog.fragrances.create({ body })
+      ).catch(() => null);
+      setPending(false);
+      if (res && (res.status === 200 || res.status === 201)) {
+        const saved = res.body as FragranceAdmin;
+        if (!initial) {
+          router.push(`/catalog/${saved.id}`);
+          return;
+        }
+        form.reset(toForm(saved));
+        setCode(saved.code);
+        setBanner({ kind: 'ok', text: c.saved });
+        router.refresh();
+        return;
+      }
+      if (res?.status === 409) {
+        setError('name', { type: 'server', message: 'server' });
+        setBanner({ kind: 'error', text: c.nameTaken });
+      } else if (res?.status === 422) {
+        for (const f of (res.body as { fields?: string[] }).fields ?? [])
+          setError(f as never, { type: 'server', message: 'server' });
+        setBanner({ kind: 'error', text: c.badReference });
+      } else setBanner({ kind: 'error', text: t.errors.generic });
+    },
+    () => setBanner({ kind: 'error', text: c.fixErrors }),
+  );
+
+  const volumeErr = (i: number, key: 'price' | 'salePrice' | 'saleEndsOn' | 'onHand') =>
+    err(
+      (errors.volumes as FieldErrors<FragranceInput['volumes']> | undefined)?.[i]?.[
+        key
+      ] as FieldError,
+    );
+
+  const pair = (
+    base: 'longevity' | 'descriptionField' | 'whenToWear',
+    label: string,
+    kind: 'input' | 'text',
+  ) => {
+    const names =
+      base === 'longevity'
+        ? (['longevityRu', 'longevityUz'] as const)
+        : base === 'whenToWear'
+          ? (['whenToWearRu', 'whenToWearUz'] as const)
+          : (['descriptionRu', 'descriptionUz'] as const);
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        {names.map((n, i) => (
+          <Field
+            key={n}
+            id={`f-${n}`}
+            label={`${label} · ${i === 0 ? c.ru : c.uz}`}
+            error={err(errors[n])}
+            hint={base === 'longevity' && i === 0 ? c.longevityHint : undefined}
+          >
+            {kind === 'input' ? (
+              <Input {...reg(n)} />
+            ) : (
+              <Textarea rows={base === 'whenToWear' ? 3 : 6} {...reg(n)} />
+            )}
+          </Field>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <form onSubmit={submit} noValidate>
+      <Link
+        href="/catalog"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="size-4" strokeWidth={1.5} aria-hidden />
+        {c.back}
+      </Link>
+      <PageHeader
+        title={initial ? initial.name : c.newTitle}
+        description={code ? `${c.productCode}: ${code}. ${c.productCodeHint}` : undefined}
+      />
+
+      <div className="grid gap-4">
+        <Section title={c.sectionMain}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field id="f-name" label={c.name} hint={c.nameHint} error={err(errors.name)}>
+              <Input {...reg('name')} />
+            </Field>
+            <Field
+              id="f-brand"
+              label={c.originalBrand}
+              hint={c.originalBrandHint}
+              error={err(errors.originalBrand)}
+            >
+              <Input {...reg('originalBrand')} />
+            </Field>
+            <Field id="f-type" label={c.type} error={err(errors.type)}>
+              <Select {...reg('type')}>
+                {FRAGRANCE_TYPES.map((x) => (
+                  <option key={x} value={x}>
+                    {c.options.type[x]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-family" label={c.family} error={err(errors.familyId)}>
+              <Select {...reg('familyId', { setValueAs: (x: string) => (x ? Number(x) : null) })}>
+                <option value="">{c.noFamily}</option>
+                {families.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {noteName(f)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-season" label={c.season} error={err(errors.season)}>
+              <Select {...reg('season')}>
+                {SEASONS.map((x) => (
+                  <option key={x} value={x}>
+                    {c.options.season[x]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-time" label={c.timeOfDay} error={err(errors.timeOfDay)}>
+              <Select {...reg('timeOfDay')}>
+                {TIMES_OF_DAY.map((x) => (
+                  <option key={x} value={x}>
+                    {c.options.time[x]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-sillage" label={c.sillage} error={err(errors.sillage)}>
+              <Select {...reg('sillage')}>
+                {SILLAGES.map((x) => (
+                  <option key={x} value={x}>
+                    {c.options.sillage[x]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-uzum" label={c.uzumUrl} error={err(errors.uzumUrl)}>
+              <Input type="url" inputMode="url" placeholder="https://" {...reg('uzumUrl')} />
+            </Field>
+          </div>
+        </Section>
+
+        <Section title={c.sectionTexts}>
+          {pair('longevity', c.longevity, 'input')}
+          {pair('descriptionField', c.descriptionField, 'text')}
+          {pair('whenToWear', c.whenToWear, 'text')}
+          <div>
+            <p className="text-[12.5px] font-medium text-muted-foreground">{c.keyNotes}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{c.keyNotesHint}</p>
+            <div className="mt-2 grid gap-4 md:grid-cols-2">
+              {(['Ru', 'Uz'] as const).map((lang) => (
+                <div key={lang} className="grid gap-3">
+                  {[0, 1, 2].map((i) => {
+                    const key = `keyNotes${lang}` as 'keyNotesRu' | 'keyNotesUz';
+                    return (
+                      <Field
+                        key={i}
+                        id={`f-${key}-${i}`}
+                        label={`${fill(c.keyNote, { n: String(i + 1) })} · ${lang === 'Ru' ? c.ru : c.uz}`}
+                        error={err((errors[key] as FieldError[] | undefined)?.[i])}
+                      >
+                        <Input {...reg(`${key}.${i}`)} />
+                      </Field>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <Field
+            id="f-aliases"
+            label={c.aliases}
+            hint={c.aliasesHint}
+            error={err(errors.aliases as FieldError | undefined)}
+          >
+            <Textarea
+              rows={3}
+              value={aliasText}
+              onChange={(e) => {
+                setAliasText(e.target.value);
+                setValue(
+                  'aliases',
+                  e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                  { shouldDirty: true, shouldValidate: true },
+                );
+              }}
+            />
+          </Field>
+          <Field id="f-remark" label={c.internalRemark} hint={c.internalRemarkHint}>
+            <Textarea rows={3} {...reg('internalRemark')} />
+          </Field>
+        </Section>
+
+        <Section title={c.sectionNotes}>
+          {errors.notes && <Notice title={err(errors.notes as FieldError) ?? c.errors.invalid} />}
+          {LEVELS.map((level) => {
+            const label = { top: c.noteTop, heart: c.noteHeart, base: c.noteBase }[level];
+            const ids = v.notes[level];
+            return (
+              <div key={level}>
+                <p className="text-[12.5px] font-medium text-muted-foreground">{label}</p>
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {ids.length === 0 && (
+                    <li className="text-sm text-muted-foreground">{c.noNotes}</li>
+                  )}
+                  {ids.map((id) => (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLevel(
+                            level,
+                            ids.filter((x) => x !== id),
+                          )
+                        }
+                        className="inline-flex h-9 items-center gap-1.5 rounded-full bg-field pr-2.5 pl-3.5 text-sm transition-colors hover:bg-stone/60"
+                        aria-label={`${c.remove}: ${noteById.get(id) ? noteName(noteById.get(id)!) : id}`}
+                      >
+                        {noteById.get(id) ? noteName(noteById.get(id)!) : id}
+                        <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-2 max-w-sm">
+                  <Select
+                    aria-label={`${label}: ${c.addNote}`}
+                    value=""
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      if (id) setLevel(level, [...ids, id]);
+                    }}
+                  >
+                    <option value="">{c.addNote}</option>
+                    {notes
+                      .filter((n) => !chosenNotes.has(n.id))
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {noteName(n)}
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+              </div>
+            );
+          })}
+        </Section>
+
+        <Section title={c.sectionSimilar}>
+          <p className="text-sm text-muted-foreground">{c.similarHint}</p>
+          {errors.similarIds && (
+            <Notice title={err(errors.similarIds as FieldError) ?? c.errors.invalid} />
+          )}
+          {v.similarIds.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{c.noSimilar}</p>
+          ) : (
+            <ol className="grid gap-1.5">
+              {v.similarIds.map((id, i) => (
+                <li
+                  key={id}
+                  className="flex items-center gap-2 rounded-button bg-field py-1 pr-1 pl-3.5 text-sm"
+                >
+                  <span className="w-5 tabular-nums text-muted-foreground">{i + 1}</span>
+                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                    {others.find((o) => o.id === id)?.name ?? id}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={c.moveUp}
+                    disabled={i === 0}
+                    onClick={() => setSimilar(move(v.similarIds, i, -1))}
+                  >
+                    <ArrowUp strokeWidth={1.5} />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={c.moveDown}
+                    disabled={i === v.similarIds.length - 1}
+                    onClick={() => setSimilar(move(v.similarIds, i, 1))}
+                  >
+                    <ArrowDown strokeWidth={1.5} />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={c.remove}
+                    onClick={() => setSimilar(v.similarIds.filter((x) => x !== id))}
+                  >
+                    <X strokeWidth={1.5} />
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          )}
+          {v.similarIds.length < MAX_SIMILAR && (
+            <div className="max-w-sm">
+              <Select
+                aria-label={c.addSimilar}
+                value=""
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  if (id) setSimilar([...v.similarIds, id]);
+                }}
+              >
+                <option value="">{c.addSimilar}</option>
+                {others
+                  .filter((o) => !v.similarIds.includes(o.id))
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          )}
+        </Section>
+
+        <Section title={c.sectionVolumes}>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {VOLUME_MLS.map((ml, i) => {
+              const on = enabled[ml];
+              const locked = !!initial?.volumes.some((x) => x.ml === ml);
+              return (
+                <div
+                  key={ml}
+                  className="grid content-start gap-3 rounded-button p-4 shadow-[inset_0_0_0_1px_var(--hairline-strong)]"
+                  data-volume={ml}
+                >
+                  <label className="flex items-center gap-2.5 font-semibold">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-graphite"
+                      checked={on}
+                      disabled={locked}
+                      onChange={(e) => setEnabled((s) => ({ ...s, [ml]: e.target.checked }))}
+                    />
+                    {ml} {c.ml}
+                    <span className="sr-only"> · {c.volumeEnabled}</span>
+                  </label>
+                  {on && (
+                    <>
+                      <Field id={`f-price-${ml}`} label={c.price} error={volumeErr(i, 'price')}>
+                        <Input
+                          inputMode="numeric"
+                          {...reg(`volumes.${i}.price`, { setValueAs: num })}
+                        />
+                      </Field>
+                      <Field
+                        id={`f-sale-${ml}`}
+                        label={c.salePrice}
+                        hint={c.salePriceHint}
+                        error={volumeErr(i, 'salePrice')}
+                      >
+                        <Input
+                          inputMode="numeric"
+                          {...reg(`volumes.${i}.salePrice`, { setValueAs: numOrNull })}
+                        />
+                      </Field>
+                      <Field
+                        id={`f-end-${ml}`}
+                        label={c.saleEndsOn}
+                        hint={c.saleEndsOnHint}
+                        error={volumeErr(i, 'saleEndsOn')}
+                      >
+                        <Input
+                          type="date"
+                          {...reg(`volumes.${i}.saleEndsOn`, { setValueAs: textOrNull })}
+                        />
+                      </Field>
+                      <Field
+                        id={`f-hand-${ml}`}
+                        label={c.onHand}
+                        hint={c.onHandHint}
+                        error={volumeErr(i, 'onHand')}
+                      >
+                        <Input
+                          inputMode="numeric"
+                          {...reg(`volumes.${i}.onHand`, { setValueAs: num })}
+                        />
+                      </Field>
+                      <PhotoUpload
+                        ml={ml}
+                        volumeId={volumeIds[ml] ?? null}
+                        hash={photos[ml] ?? null}
+                        onUploaded={(h) => setPhotos((s) => ({ ...s, [ml]: h }))}
+                        t={t}
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Section>
+
+        <Section title={c.sectionFlags}>
+          <Toggle label={c.isHit} hint={c.isHitHint} {...reg('isHit')} />
+          <Toggle label={c.isNew} hint={c.isNewHint} {...reg('isNew')} />
+          <Toggle label={c.hiddenLabel} hint={c.hiddenHint} {...reg('hidden')} />
+        </Section>
+      </div>
+
+      <div className="sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center gap-3 bg-background/95 px-4 py-3 backdrop-blur sm:-mx-0 sm:px-0">
+        <Button type="submit" loading={pending} className="max-sm:w-full">
+          {c.save}
+        </Button>
+        {banner && (
+          <p
+            role={banner.kind === 'error' ? 'alert' : 'status'}
+            className="flex items-center gap-1.5 text-sm font-medium"
+          >
+            {banner.kind === 'ok' && <Check className="size-4" strokeWidth={1.5} aria-hidden />}
+            {banner.text}
+          </p>
+        )}
+        {initial && initial.hidden && <Badge>{c.hidden}</Badge>}
+      </div>
+    </form>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card className="grid gap-5 p-4 sm:p-6">
+      <h2 className="text-[15px] font-semibold">{title}</h2>
+      {children}
+    </Card>
+  );
+}
+
+function Toggle({
+  label,
+  hint,
+  ...props
+}: { label: string; hint: string } & UseFormRegisterReturn) {
+  return (
+    <label className="flex items-start gap-3">
+      <input type="checkbox" className="mt-1 size-4 accent-graphite" {...props} />
+      <span>
+        <span className="block font-medium">{label}</span>
+        <span className="block text-[13px] text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  );
+}

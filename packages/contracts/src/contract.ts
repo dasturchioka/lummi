@@ -2,6 +2,18 @@ import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { catalogErrorSchema, fragranceCardSchema } from './catalog';
 import {
+  catalogAdminErrorSchema,
+  dictionaryInputSchema,
+  dictionaryItemSchema,
+  fragranceAdminSchema,
+  fragranceInputSchema,
+  fragranceListItemSchema,
+  fragranceListQuerySchema,
+  hiddenBodySchema,
+  stockBodySchema,
+  stockItemSchema,
+} from './admin-catalog';
+import {
   adminErrorSchema,
   createManagerBodySchema,
   devLoginBodySchema,
@@ -144,6 +156,176 @@ export const adminContract = c.router({
         409: adminErrorSchema,
       },
       summary: 'Owner only: remove a manager',
+    },
+  },
+  catalog: {
+    fragrances: {
+      list: {
+        method: 'GET',
+        path: '/admin/catalog/fragrances',
+        query: fragranceListQuerySchema,
+        responses: {
+          200: z.array(fragranceListItemSchema),
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: fragrances with search and filters, hidden ones included',
+      },
+      get: {
+        method: 'GET',
+        path: '/admin/catalog/fragrances/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        responses: {
+          200: fragranceAdminSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: every field of one fragrance',
+      },
+      create: {
+        method: 'POST',
+        path: '/admin/catalog/fragrances',
+        body: fragranceInputSchema,
+        responses: {
+          201: fragranceAdminSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+          422: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: create a fragrance with its notes, similar fragrances and volumes',
+      },
+      update: {
+        method: 'PUT',
+        path: '/admin/catalog/fragrances/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: fragranceInputSchema,
+        responses: {
+          200: fragranceAdminSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+          422: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: replace every editable field of a fragrance (volumes are upserted)',
+      },
+      setHidden: {
+        method: 'PATCH',
+        path: '/admin/catalog/fragrances/:id/hidden',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: hiddenBodySchema,
+        responses: {
+          200: fragranceAdminSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: hide or unhide a fragrance in the Mini App',
+      },
+    },
+    families: {
+      list: {
+        method: 'GET',
+        path: '/admin/catalog/families',
+        responses: {
+          200: z.array(dictionaryItemSchema),
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: the families dictionary with usage counts',
+      },
+      create: {
+        method: 'POST',
+        path: '/admin/catalog/families',
+        body: dictionaryInputSchema,
+        responses: {
+          201: dictionaryItemSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: add a dictionary entry',
+      },
+      update: {
+        method: 'PUT',
+        path: '/admin/catalog/families/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: dictionaryInputSchema,
+        responses: {
+          200: dictionaryItemSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: edit a dictionary entry',
+      },
+    },
+    notes: {
+      list: {
+        method: 'GET',
+        path: '/admin/catalog/notes',
+        responses: {
+          200: z.array(dictionaryItemSchema),
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: the notes dictionary with usage counts',
+      },
+      create: {
+        method: 'POST',
+        path: '/admin/catalog/notes',
+        body: dictionaryInputSchema,
+        responses: {
+          201: dictionaryItemSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: add a dictionary entry',
+      },
+      update: {
+        method: 'PUT',
+        path: '/admin/catalog/notes/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: dictionaryInputSchema,
+        responses: {
+          200: dictionaryItemSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+          409: catalogAdminErrorSchema,
+        },
+        summary: 'Owner only: edit a dictionary entry',
+      },
+    },
+  },
+  stock: {
+    list: {
+      method: 'GET',
+      path: '/admin/stock',
+      query: z.object({ q: z.string().trim().max(100).optional() }),
+      responses: {
+        200: z.array(stockItemSchema),
+        401: catalogAdminErrorSchema,
+        403: catalogAdminErrorSchema,
+      },
+      summary: 'Owner and manager: on hand, reserve and available per volume',
+    },
+    set: {
+      method: 'PATCH',
+      path: '/admin/volumes/:id/stock',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: stockBodySchema,
+      responses: {
+        200: stockItemSchema,
+        401: catalogAdminErrorSchema,
+        403: catalogAdminErrorSchema,
+        404: catalogAdminErrorSchema,
+      },
+      summary: 'Owner and manager: set on hand for one volume (audited)',
     },
   },
 });

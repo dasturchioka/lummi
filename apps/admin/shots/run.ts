@@ -214,6 +214,8 @@ async function signIn(context: BrowserContext, telegramId: number) {
 async function main() {
   await ensureServices();
   await seedStaff();
+  // the catalog screens need the 67 seeded fragrances (idempotent)
+  run('npm', ['run', 'seed:catalog', '-w', '@lummi/api'], { DATABASE_URL: databaseUrl });
   mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch();
   let count = 0;
