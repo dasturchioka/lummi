@@ -545,6 +545,110 @@ describe('quote(): free-delivery threshold base per discount source', () => {
   ]);
 });
 
+describe('quote(): the free-delivery nudge is the smallest addition that reaches the threshold', () => {
+  // Worst case for the customer: whatever is added is discountable, so a growing discount is counted.
+  runTable([
+    {
+      name: '"after" base, % uncapped: the code grows with what is added, so the nudge exceeds threshold − base',
+      given: {
+        lines: [
+          volume('g10', GUIDANCE, 10, 69_000, { markdown: { price: 60_000, endsAt: null } }),
+          volume('t30', TYGAR, 30, 149_000),
+        ],
+        promoCode: percentPromo('BLOGGER10', 10),
+      },
+      expected: {
+        itemsSubtotal: 209_000,
+        discount: { amount: 14_900 },
+        thresholdBaseAmount: 194_100,
+        // +62 111: items 271 111, of which 211 111 eligible → 21 111 off → base 250 000.
+        // +62 110 gives 249 999.
+        amountToFreeDelivery: 62_111,
+        deliveryFee: 25_000,
+        total: 219_100,
+      },
+    },
+    {
+      name: '"after" base, % reaching its cap on the way: the nudge stops growing at the cap',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 100_000, { qty: 2 })],
+        entitlements: [birthday(5, 20, 45_000)],
+      },
+      expected: {
+        discount: { amount: 40_000 },
+        thresholdBaseAmount: 160_000,
+        // +95 000: items 295 000, 20% = 59 000 capped at 45 000 → base 250 000.
+        amountToFreeDelivery: 95_000,
+        deliveryFee: 25_000,
+        total: 185_000,
+      },
+    },
+    {
+      name: '"after" base, % already at its cap: the discount stays put',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 100_000, { qty: 2 })],
+        entitlements: [birthday(5, 20, 30_000)],
+      },
+      expected: {
+        discount: { amount: 30_000 },
+        thresholdBaseAmount: 170_000,
+        amountToFreeDelivery: 80_000,
+        total: 195_000,
+      },
+    },
+    {
+      name: '"after" base, fixed code within the items: the discount stays put',
+      given: {
+        lines: [volume('t10', TYGAR, 10, 69_000, { qty: 2 })],
+        promoCode: fixedPromo('MINUS50', 50_000),
+      },
+      expected: {
+        discount: { amount: 50_000 },
+        thresholdBaseAmount: 88_000,
+        amountToFreeDelivery: 162_000,
+      },
+    },
+    {
+      name: '"after" base, upgrade right: one unit\u2019s discount does not grow',
+      given: {
+        lines: [volume('t50', TYGAR, 50, 219_000)],
+        entitlements: [setRight(1, [TYGAR])],
+        settings: {
+          ...DEFAULTS,
+          thresholdBase: {
+            ...DEFAULTS.thresholdBase,
+            upgradeRight: { ...DEFAULTS.thresholdBase.upgradeRight, set: 'after' },
+          },
+        },
+      },
+      expected: {
+        discount: { amount: 43_800 },
+        thresholdBaseAmount: 175_200,
+        amountToFreeDelivery: 74_800,
+        total: 200_200,
+      },
+    },
+    {
+      name: '"before" base: the nudge ignores the discount',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 100_000, { qty: 2 })],
+        entitlements: [birthday(5, 20, 100_000)],
+        settings: {
+          ...DEFAULTS,
+          thresholdBase: { ...DEFAULTS.thresholdBase, birthdayCoupon: 'before' },
+        },
+      },
+      expected: {
+        discount: { amount: 40_000 },
+        thresholdBase: 'before',
+        thresholdBaseAmount: 200_000,
+        amountToFreeDelivery: 50_000,
+        total: 185_000,
+      },
+    },
+  ]);
+});
+
 describe('quote(): birthday coupon (ADR 0007, 0008, 0009)', () => {
   runTable([
     {
@@ -630,7 +734,8 @@ describe('quote(): birthday coupon (ADR 0007, 0008, 0009)', () => {
         discount: { type: 'birthday_coupon', amount: 26_000 },
         thresholdBase: 'after',
         thresholdBaseAmount: 234_000,
-        amountToFreeDelivery: 16_000,
+        // Not 16 000: the coupon grows with what is added. 277 777 − 27 777 = 250 000.
+        amountToFreeDelivery: 17_777,
         deliveryFee: 25_000,
         total: 259_000,
       },
@@ -711,7 +816,8 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       expected: {
         discount: { amount: 69_000 },
         thresholdBaseAmount: 0,
-        amountToFreeDelivery: 250_000,
+        // The code grows up to its 100 000 as items are added: 350 000 − 100 000 = 250 000.
+        amountToFreeDelivery: 281_000,
         deliveryFee: 25_000,
         total: 25_000,
       },

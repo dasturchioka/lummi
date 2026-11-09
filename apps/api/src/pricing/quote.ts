@@ -79,6 +79,11 @@ interface DiscountOption {
   discount: Discount;
   base: ThresholdBase;
   expiresAt: Date | null;
+  /**
+   * How the amount grows as discountable items are added: `min(⌊(eligible + N) × percent / 100⌋, cap)`.
+   * Null when it stays put (an upgrade right discounts one unit). Only the nudge uses it.
+   */
+  growth: { eligibleSubtotal: number; percent: number; cap: number | null } | null;
 }
 
 interface Delivery {
@@ -144,7 +149,7 @@ export function quote(input: QuoteInput): Quote {
     thresholdBase: applied?.base ?? 'before',
     thresholdBaseAmount: totals.thresholdBaseAmount,
     freeDeliveryThreshold: delivery.threshold,
-    amountToFreeDelivery: Math.max(0, delivery.threshold - totals.thresholdBaseAmount),
+    amountToFreeDelivery: amountToFreeDelivery(itemsSubtotal, applied, delivery.threshold),
     deliveryFee: totals.deliveryFee,
     total: totals.total,
     alternatives,
@@ -230,6 +235,7 @@ function upgradeRightOption(
     discount: { type: 'upgrade_right', id: e.id, source: e.source, amount, lineKey: target.key },
     base: settings.thresholdBase.upgradeRight[e.source],
     expiresAt: e.expiresAt,
+    growth: null,
   };
 }
 
@@ -246,6 +252,7 @@ function birthdayOption(
     discount: { type: 'birthday_coupon', id: e.id, amount },
     base: settings.thresholdBase.birthdayCoupon,
     expiresAt: e.expiresAt,
+    growth: { eligibleSubtotal: eligible, percent: e.percent, cap: e.maxAmount },
   };
 }
 
@@ -274,6 +281,11 @@ function promoOutcome(
       discount: { type: 'promo_code', code: p.code, amount },
       base: settings.thresholdBase.promoCode,
       expiresAt: null,
+      // A fixed code is 100% of the eligible items, capped at its amount.
+      growth:
+        p.kind === 'percent'
+          ? { eligibleSubtotal: eligible, percent: p.percent, cap: p.maxDiscount }
+          : { eligibleSubtotal: eligible, percent: 100, cap: p.amount },
     },
     invalid: null,
   };
@@ -321,12 +333,48 @@ function totalsWith(
 }
 
 /**
+ * The «add N so'm for free delivery» nudge (spec Changes 2026-11-06, 2026-11-07): the smallest
+ * whole N for which items + N bring the applied discount's base to the threshold. Under an
+ * "after" base a growing discount is counted, as if everything added were discountable, so
+ * adding N of anything reaches the threshold.
+ */
+function amountToFreeDelivery(
+  itemsSubtotal: number,
+  applied: DiscountOption | null,
+  threshold: number,
+): number {
+  if (!applied || applied.base === 'before') return Math.max(0, threshold - itemsSubtotal);
+  const baseNow = itemsSubtotal - applied.discount.amount;
+  const g = applied.growth;
+  if (!g) return Math.max(0, threshold - baseNow);
+  // The base never shrinks as N grows, so the answer is the earlier of two moments:
+  // once the cap binds the discount is fixed (items + N − cap ≥ threshold) ...
+  const atCap = g.cap === null ? Infinity : Math.max(0, threshold - itemsSubtotal + g.cap);
+  // ... and before that, with x = eligible + N: items − eligible + ⌈x(100 − p)/100⌉ ≥ threshold,
+  // i.e. x(100 − p) > 100(r − 1) where r = threshold − items + eligible.
+  const r = threshold - itemsSubtotal + g.eligibleSubtotal;
+  let belowCap = Infinity;
+  if (r <= 0) belowCap = 0;
+  else if (g.percent < 100) {
+    const x = floorDiv(100 * (r - 1), 100 - g.percent) + 1;
+    belowCap = Math.max(0, x - g.eligibleSubtotal);
+  }
+  const n = Math.min(atCap, belowCap);
+  // An uncapped 100% code never lets discountable items lift the base; only other items would.
+  return Number.isFinite(n) ? n : Math.max(0, threshold - baseNow);
+}
+
+/**
  * `amount × percent / 100`, rounded down to a whole so'm. The one rounding point for every
- * discount (ADR 0007), in exact integer arithmetic.
+ * discount (ADR 0007).
  */
 function percentOf(amount: number, percent: number): number {
-  const scaled = amount * percent;
-  return (scaled - (scaled % 100)) / 100;
+  return floorDiv(amount * percent, 100);
+}
+
+/** Exact integer division rounding down, for non-negative safe integers. */
+function floorDiv(a: number, b: number): number {
+  return (a - (a % b)) / b;
 }
 
 /** Integer so'm only (ADR 0016): a float or negative amount never enters the money path. */
