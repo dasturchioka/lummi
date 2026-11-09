@@ -152,7 +152,9 @@ function Ask({
   return (
     <div>
       {/* The purpose sits in the sheet's description slot and leaves with the ask. */}
-      <SheetDescription className="type-small pb-3 text-muted">{r.text}</SheetDescription>
+      <SheetDescription className="type-small pb-3 text-pretty text-muted">
+        {r.text}
+      </SheetDescription>
       <ol className="flex flex-col gap-4 pt-1 pb-6">
         <Step n={1} title={r.contactTitle} text={r.contactText} />
         <Step n={2} title={r.writeTitle} text={r.writeText} />
@@ -161,14 +163,16 @@ function Ask({
         <p
           key={status}
           className={`type-small mb-3 flex animate-[fade-in_0.2s_ease-out] gap-2.5 ${
-            // A fault that a retry can fix sits on a Milk Field plate with the alert icon.
+            // A fault sits on a Milk Field plate with the alert icon.
             quiet
               ? 'justify-center text-center text-muted'
               : 'rounded-btn bg-field px-3 py-2.5 text-ink'
           }`}
         >
           {fault ? <AlertIcon size={18} className="shrink-0" /> : null}
-          <span className="min-w-0 self-center text-pretty">{notice}</span>
+          <span className={`min-w-0 self-center ${quiet ? 'text-balance' : 'text-pretty'}`}>
+            {notice}
+          </span>
         </p>
       ) : null}
       <div className="flex flex-col gap-2">
