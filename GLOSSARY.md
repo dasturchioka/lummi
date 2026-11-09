@@ -124,6 +124,10 @@ _Avoid_: Oblast, area, zone
 A customer's purchase from creation to its end state. It has exactly one status at a time, from «Ожидает оплаты» to «Доставлен», «Отменён» or «Возвращён».
 _Avoid_: Purchase, transaction, checkout
 
+**Snapshot**:
+What an order froze at creation: its lines with names, volumes, prices and quantities, the discount, the delivery region, BTS point (or typed address) and fee, the threshold base, the total and the amount due. Later price, catalog or point edits never change it; reports read only it.
+_Avoid_: Copy, order history, archived order
+
 **Gift order**:
 An order the customer marked «Это подарок» at checkout: gift-packed, with an optional greeting card text and no receipt in the parcel. Not a gift certificate (that is a deferred means of payment).
 _Avoid_: Present, gift certificate, gift card

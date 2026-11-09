@@ -38,9 +38,12 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - A review shows on every fragrance and set of its order.
   - Card block: average rating, count, latest published reviews.
 - **«Это подарок».**
-  - Is gift packaging free?
-  - Is the greeting card text typed by the customer, and is there a length limit?
+  - Is gift packaging free? (Built free, spec Changes 2026-11-10 checkout.)
+  - Is the greeting card text typed by the customer, and is there a length limit? (Built: typed, optional, at most 250 characters, an admin setting.)
   - "без чека" = no price slip or receipt in the parcel: does this interact with the fiscal receipt procedure (accountant)?
+- **Checkout (ticket #23, 2026-11-10).**
+  - Consent wording: built as the mockup's «Согласен(на) на обработку персональных данных, включая дату рождения.» (TZ §9 asks consent incl. birthday on the first order); the lawyer should approve it with the public offer, and say whether it needs a link to a privacy page.
+  - The Recipient phone is accepted only as an Uzbek number (+998). Should a foreign number be allowed for a recipient collecting at a BTS point?
 - **Favourites.** Not in the TZ; it comes from the approved design (heart on cards). The list lives in Profile → «Избранное».
 - **Delivery city on Home.**
   - Region + city from the BTS list, saved per customer.
