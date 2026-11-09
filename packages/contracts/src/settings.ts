@@ -69,6 +69,31 @@ export const settingDefinitions = {
       uz: 'Ilovadagi «Menejerga yozish» tugmasi shu akkauntga olib boradi. @ bilan, masalan @lummi_manager.',
     },
   },
+  // Catalog lists (spec Changes 2026-11-10, #15)
+  /** «Популярное» ranks by paid orders over this many days (owner-pinned hits stay first). */
+  'catalog.topSalesWindowDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 30,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Окно «Популярного», дней', uz: '«Mashhur» oynasi, kunlar' },
+    hint: {
+      ru: 'Сколько последних дней считаются оплаченные заказы для топа продаж.',
+      uz: 'Sotuvlar reytingi uchun soʻnggi necha kunlik toʻlangan buyurtmalar hisoblanadi.',
+    },
+  },
+  /** The most fragrances «Похожие ароматы» shows on a card. */
+  'catalog.similarCount': {
+    schema: z.number().int().min(1).max(12),
+    default: 6,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Похожих ароматов на карточке', uz: 'Kartadagi oʻxshash iforlar soni' },
+    hint: {
+      ru: 'Сначала подобранные вручную, затем из того же семейства и типа, только в наличии.',
+      uz: 'Avval qoʻlda tanlanganlar, keyin xuddi shu oila va turdagilar, faqat mavjudlari.',
+    },
+  },
   // ---- Pricing
   /** Delivery is free once the threshold base reaches this many so'm (TZ §8). */
   'pricing.freeDeliveryThreshold': {

@@ -22,6 +22,23 @@ export class CatalogController {
     });
   }
 
+  @TsRestHandler(contract.catalog.list)
+  list() {
+    return tsRestHandler(contract.catalog.list, async ({ query }) => ({
+      status: 200 as const,
+      body: await this.catalog.list(query),
+    }));
+  }
+
+  @TsRestHandler(contract.catalog.similar)
+  similar() {
+    return tsRestHandler(contract.catalog.similar, async ({ params }) => {
+      const items = await this.catalog.similarTo(params.slug);
+      if (!items) return { status: 404 as const, body: { code: 'not_found' as const } };
+      return { status: 200 as const, body: { items } };
+    });
+  }
+
   @TsRestHandler(contract.catalog.suggest)
   suggest() {
     return tsRestHandler(contract.catalog.suggest, async ({ query }) => ({

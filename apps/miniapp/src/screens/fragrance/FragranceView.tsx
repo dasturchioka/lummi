@@ -531,6 +531,7 @@ export function FragranceView({
   note,
   onAddToCart,
   onBuyNow,
+  footer,
 }: {
   card: FragranceCard;
   onBack: () => void;
@@ -539,6 +540,8 @@ export function FragranceView({
   note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
+  /** After the Uzum button: «Похожие ароматы», which loads on its own. */
+  footer?: ReactNode;
 }) {
   const { t, language } = usePrefs();
   // Start on the smallest volume that can be bought; all sold out -> the smallest one.
@@ -600,6 +603,7 @@ export function FragranceView({
             <ExternalIcon size={16} />
           </Button>
         ) : null}
+        {footer}
       </article>
     </Screen>
   );
