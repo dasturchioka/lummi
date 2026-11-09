@@ -131,6 +131,10 @@ const routeTree = rootRoute.addChildren([
     ...at('/profile'),
     component: lazyRouteComponent(() => import('../screens/Profile'), 'Profile'),
   }),
+  createRoute({
+    ...at('/info/$slug'),
+    component: lazyRouteComponent(() => import('../screens/InfoPage'), 'InfoPage'),
+  }),
   ...devRoutes,
   // Anything unknown lands on Home.
   createRoute({

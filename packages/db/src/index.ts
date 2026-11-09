@@ -17,6 +17,7 @@ export {
   gt,
   gte,
   notInArray,
+  ne,
   DrizzleQueryError,
 } from 'drizzle-orm';
 export { alias } from 'drizzle-orm/pg-core';

@@ -250,6 +250,36 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
+  { id: 'content', path: '/content', as: 'owner' },
+  {
+    id: 'content-banner-editor',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.locator('[data-banner-preview]').waitFor();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'content-banner-uz',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.getByRole('tab', { name: t.content.langUz }).click();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  { id: 'content-page-editor', path: '/content/pages/faq', as: 'owner' },
+  { id: 'content-page-offer', path: '/content/pages/offer', as: 'owner' },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },
   {

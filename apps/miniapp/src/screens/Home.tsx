@@ -9,7 +9,9 @@ import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
 import { GridSkeleton } from '../ui/GridSkeleton';
 import { Skeleton } from '../ui/Skeleton';
+import { useBanner, useSlogan } from '../content/queries';
 import { DiscoveryBanner } from './home/DiscoveryBanner';
+import { PromoBanner } from './home/PromoBanner';
 
 /** Below the fold: its own chunk, so the first screen carries less code. */
 const Popular = lazy(() => import('./home/Popular'));
@@ -43,7 +45,8 @@ function CoverArcs() {
 }
 
 function TopBlock() {
-  const { t, theme } = usePrefs();
+  const { t, theme, language } = usePrefs();
+  const slogan = useSlogan().data?.slogan;
   const photo = FABRIC[theme];
   return (
     <section
@@ -65,7 +68,7 @@ function TopBlock() {
       {/* The slot's own proportion, so a photo never shifts the layout when it arrives. */}
       <div className="flex aspect-[3/2] flex-col items-center px-5 pt-8 text-center">
         <Logo height={24} />
-        <p className="type-slogan mt-3 text-balance">{t.home.slogan}</p>
+        <p className="type-slogan mt-3 text-balance">{slogan?.[language] ?? t.home.slogan}</p>
       </div>
     </section>
   );
@@ -92,6 +95,17 @@ function PopularSkeleton() {
       </div>
     </div>
   );
+}
+
+/**
+ * The banner slot: the active promo banner, else the Discovery set banner. While the answer is on
+ * its way the slot keeps its height, so nothing below it jumps; a failed request shows Discovery.
+ */
+function BannerSlot() {
+  const banner = useBanner();
+  if (banner.isPending) return <Skeleton className="min-h-[140px] w-full" rounded="card" />;
+  const active = banner.data?.banner;
+  return active ? <PromoBanner banner={active} /> : <DiscoveryBanner />;
 }
 
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
@@ -126,7 +140,7 @@ export function Home() {
         </div>
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
-          <DiscoveryBanner />
+          <BannerSlot />
           <Suspense fallback={<PopularSkeleton />}>
             <Popular />
           </Suspense>

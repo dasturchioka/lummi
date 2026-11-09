@@ -184,6 +184,25 @@ const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
   },
 };
 
+interface ShotBanner {
+  titleRu: string;
+  titleUz: string;
+  subtitleRu: string;
+  subtitleUz: string;
+  priceLineRu: string;
+  priceLineUz: string;
+}
+/** An active promo banner whose photo is a seeded bottle photo (the photo set already exists). */
+async function promoBanner(db: ShotDb, b: ShotBanner) {
+  await clearBanners(db);
+  await db.query(
+    `insert into home_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
+     values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
+    [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
+  );
+}
+const clearBanners = async (db: ShotDb) => void (await db.query(`delete from home_banners`));
+
 export const screens: ScreenDef[] = [
   {
     id: 'home',
@@ -448,6 +467,55 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Content (#21): the owner's promo banner on Home (the plain `home` shot is the Discovery fallback).
+  {
+    id: 'home-promo',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Осенняя подборка',
+        titleUz: 'Kuzgi tanlov',
+        subtitleRu: 'Тёплые, древесные ароматы на вечер',
+        subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
+        priceLineRu: 'от 69 000 сум',
+        priceLineUz: '69 000 soʻmdan',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  {
+    // Worst case: long unbroken words, a long price line.
+    id: 'home-promo-worst',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
+        titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
+        subtitleRu:
+          'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
+        subtitleUz:
+          'Bir necha qatorga cho‘ziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
+        priceLineRu: 'от 1 234 567 сум за набор',
+        priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  // Info pages (#21): the long RU/UZ texts, a short one, and an unknown slug.
+  { id: 'info-faq', path: '/info/faq', fullPage: true },
+  { id: 'info-about', path: '/info/about' },
+  { id: 'info-contacts', path: '/info/contacts' },
+  { id: 'info-not-found', path: '/info/nope' },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {
     id: 'cart-lines',

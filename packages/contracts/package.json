@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./sign-contact": "./src/sign-contact.ts",
-    "./constants": "./src/constants.ts"
+    "./constants": "./src/constants.ts",
+    "./markdown": "./src/markdown.ts"
   },
   "scripts": {
     "lint": "eslint .",

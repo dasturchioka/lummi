@@ -46,6 +46,12 @@ export const clientRoutes = {
     setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
   },
+  content: {
+    banner: route('GET', '/content/banner', [200, 401]),
+    slogan: route('GET', '/content/slogan', [200, 401]),
+    pages: route('GET', '/content/pages', [200, 401]),
+    page: route('GET', '/content/pages/:slug', [200, 401, 404]),
+  },
   catalog: {
     list: route('GET', '/catalog/fragrances', [200, 401]),
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),

@@ -29,3 +29,45 @@ export type CatalogSort = (typeof CATALOG_SORTS)[number];
 /** How many cards the catalog list loads at a time, and the most one request may ask for. */
 export const CATALOG_PAGE_SIZE = 24;
 export const CATALOG_PAGE_MAX = 100;
+
+/**
+ * `startapp` parameter -> Mini App route: the one list of targets. The Mini App routes with it,
+ * the admin banner editor validates against it, and later tickets (broadcasts, set links) add
+ * their targets here. An unknown or missing value lands on Home; an unknown fragrance slug lands
+ * on the card's own not-found state, which leads on to the catalog.
+ */
+export const STATIC_START_TARGETS = {
+  home: '/',
+  catalog: '/catalog',
+  cart: '/cart',
+  orders: '/orders',
+  profile: '/profile',
+} as const;
+
+/** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
+export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
+/** True for a value `routeForStartParam` maps to a real target (not the Home fallback). */
+export function isStartParam(param: string): boolean {
+  return Object.hasOwn(STATIC_START_TARGETS, param) || FRAGRANCE_START_PARAM.test(param);
+}
+
+export function routeForStartParam(param: string | null | undefined): string {
+  if (!param) return '/';
+  const fragrance = FRAGRANCE_START_PARAM.exec(param);
+  if (fragrance) return `/p/${fragrance[1]}`;
+  return Object.hasOwn(STATIC_START_TARGETS, param)
+    ? STATIC_START_TARGETS[param as keyof typeof STATIC_START_TARGETS]
+    : '/';
+}
+
+/** The info pages (ticket #21): fixed slugs in display order. The owner edits them; nobody adds one. */
+export const INFO_PAGE_SLUGS = [
+  'about',
+  'delivery-payment',
+  'returns',
+  'faq',
+  'contacts',
+  'offer',
+] as const;
+export type InfoPageSlug = (typeof INFO_PAGE_SLUGS)[number];
