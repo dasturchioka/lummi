@@ -327,11 +327,16 @@ export const screens: Screen[] = [
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
-      const rows = page.getByRole('button', { name: `${t.catalog.edit}: ` });
-      const taken = (await rows.nth(1).textContent()) ?? '';
-      await rows.first().click();
+      // the RU name is the unique key: give the first note the second one's, in either language
+      const notes = (await (
+        await page.request.get(new URL('/api/admin/catalog/notes', page.url()).href)
+      ).json()) as { nameRu: string }[];
+      await page
+        .getByRole('button', { name: `${t.catalog.edit}: ` })
+        .first()
+        .click();
       const dialog = page.getByRole('dialog');
-      await dialog.locator('#dict-ru').fill(taken.trim());
+      await dialog.locator('#dict-ru').fill(notes[1]!.nameRu);
       await dialog.getByRole('button', { name: t.catalog.save, exact: true }).click();
       await dialog.getByText(t.catalog.dict.taken).waitFor();
     },
