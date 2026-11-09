@@ -10,11 +10,26 @@ const valid = {
 describe('parseEnv', () => {
   it('refuses the .env.example placeholder secret in production only', () => {
     const placeholder = { ...valid, SESSION_SECRET: PLACEHOLDER_SESSION_SECRET };
-    expect(() => parseEnv({ ...placeholder, NODE_ENV: 'production' })).toThrow(/SESSION_SECRET/);
+    expect(() =>
+      parseEnv({
+        ...placeholder,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(/SESSION_SECRET/);
     expect(parseEnv({ ...placeholder, NODE_ENV: 'development' }).SESSION_SECRET).toBe(
       PLACEHOLDER_SESSION_SECRET,
     );
-    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+    const keys = { TYPESAFE_API_KEY: 'k' };
+    expect(parseEnv({ ...valid, ...keys, NODE_ENV: 'production' }).NODE_ENV).toBe('production');
+  });
+
+  it('requires the TypeSafe key in production and never the OpenAI one', () => {
+    expect(() => parseEnv({ ...valid, NODE_ENV: 'production' })).toThrow(/TYPESAFE_API_KEY/);
+    expect(
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).OPENAI_API_KEY,
+    ).toBeUndefined();
   });
 
   it('applies defaults and coerces the port', () => {
@@ -69,12 +84,26 @@ describe('parseEnv', () => {
   });
 
   it('refuses the dev-only admin sign-in in production, allows it elsewhere', () => {
-    expect(() => parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'true' })).toThrow(
-      /ADMIN_DEV_LOGIN/,
-    );
-    expect(parseEnv({ ...valid, NODE_ENV: 'production' }).ADMIN_DEV_LOGIN).toBe(false);
+    expect(() =>
+      parseEnv({
+        ...valid,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+        ADMIN_DEV_LOGIN: 'true',
+      }),
+    ).toThrow(/ADMIN_DEV_LOGIN/);
     expect(
-      parseEnv({ ...valid, NODE_ENV: 'production', ADMIN_DEV_LOGIN: 'false' }).ADMIN_DEV_LOGIN,
+      parseEnv({ ...valid, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' }).ADMIN_DEV_LOGIN,
+    ).toBe(false);
+    expect(
+      parseEnv({
+        ...valid,
+        TYPESAFE_API_KEY: 'k',
+        OPENAI_API_KEY: 'k',
+        NODE_ENV: 'production',
+        ADMIN_DEV_LOGIN: 'false',
+      }).ADMIN_DEV_LOGIN,
     ).toBe(false);
     expect(
       parseEnv({ ...valid, NODE_ENV: 'development', ADMIN_DEV_LOGIN: 'true' }).ADMIN_DEV_LOGIN,

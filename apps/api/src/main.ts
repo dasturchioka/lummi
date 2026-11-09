@@ -1,6 +1,6 @@
 import { createDb } from '@lummi/db';
 import { createApp } from './app';
-import { LocalFileStore, SystemClock, UnconfiguredReceiptJudge, GrammySender } from './edges';
+import { LocalFileStore, SystemClock, GrammySender, createReceiptJudge } from './edges';
 import { BotService } from './bot/bot.service';
 import { parseEnv } from './env';
 
@@ -13,7 +13,7 @@ const app = await createApp({
   edges: {
     clock: new SystemClock(),
     telegram: new GrammySender(env.BOT_TOKEN),
-    receiptJudge: new UnconfiguredReceiptJudge(),
+    receiptJudge: createReceiptJudge(env, db),
     files: new LocalFileStore(env.FILES_DIR),
   },
 });

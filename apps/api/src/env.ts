@@ -59,6 +59,13 @@ export const envSchema = z
     OUTBOX_QUEUE: z.string().min(1).default('outbox'),
     /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
     EVENTS_QUEUE: z.string().min(1).default('events'),
+
+    /** Receipt AI keys (ADR 0013). TypeSafe is required in production; OpenAI (the fallback) is optional everywhere and fails as not-configured. */
+    TYPESAFE_API_KEY: z.string().min(1).optional(),
+    OPENAI_API_KEY: z.string().min(1).optional(),
+    /** Overrides for tests and proxies only. */
+    TYPESAFE_BASE_URL: z.string().url().default('https://api.typesafe.ai'),
+    OPENAI_BASE_URL: z.string().url().default('https://api.openai.com'),
     REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
     /** Shared secret of the internal endpoints the userbot calls (ADR 0031); unset = they answer 404. */
     INTERNAL_API_SECRET: z
@@ -72,6 +79,13 @@ export const envSchema = z
     INTERNAL_ALLOWED_CIDRS: cidrList.default('127.0.0.0/8,::1/128'),
   })
   .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production' && !env.TYPESAFE_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TYPESAFE_API_KEY'],
+        message: 'TYPESAFE_API_KEY is required in production',
+      });
+    }
     if (env.BOT_MODE === 'webhook') {
       for (const key of ['WEBHOOK_URL', 'WEBHOOK_SECRET'] as const) {
         if (!env[key]) {

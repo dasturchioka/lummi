@@ -2,7 +2,7 @@ import { createDb } from '@lummi/db';
 import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
 import { AppModule } from './app.module';
-import { GrammySender, LocalFileStore, SystemClock, UnconfiguredReceiptJudge } from './edges';
+import { GrammySender, LocalFileStore, SystemClock, createReceiptJudge } from './edges';
 import { parseEnv } from './env';
 import { WorkerRuntime } from './worker/runtime';
 import { describeError } from './logging/describe-error';
@@ -18,7 +18,7 @@ const app = await NestFactory.createApplicationContext(
     edges: {
       clock: new SystemClock(),
       telegram: new GrammySender(env.BOT_TOKEN),
-      receiptJudge: new UnconfiguredReceiptJudge(),
+      receiptJudge: createReceiptJudge(env, db),
       files: new LocalFileStore(env.FILES_DIR),
     },
   }),
