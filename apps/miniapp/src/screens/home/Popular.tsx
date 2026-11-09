@@ -28,7 +28,11 @@ export default function Popular() {
   // Nothing in the whole catalog: one calm state, not a row of empty sections.
   if (page && page.total === 0 && chip === 'all')
     return (
-      <EmptyState icon={<BottleIcon size={28} />} title={t.home.emptyTitle} text={t.home.emptyText} />
+      <EmptyState
+        icon={<BottleIcon size={28} />}
+        title={t.home.emptyTitle}
+        text={t.home.emptyText}
+      />
     );
 
   const options = typeChipOptions(TYPE_FILTERS, t.catalog.types, page?.facets.typePhotos);

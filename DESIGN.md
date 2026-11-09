@@ -289,7 +289,7 @@ The customer chose **Nurmuhammad's variant 2 with elements of variant 1** (`desi
 
 | Screen | Follow | Notes |
 |---|---|---|
-| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan sits on one line under the logo in the Slogan role (Cormorant Italic, as the comp); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». The row under it has a search disc (left) and the avatar (right) on Card White discs; until the city selector exists its centre stays empty. Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner (the customer's box photo on the left third, the set on Graphite beside it; until the sets ticket adds the price, arrow and link, a «Скоро» pill holds their place), «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
+| Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan sits on one line under the logo in the Slogan role (Cormorant Italic, as the comp); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». The row under it has a search disc (left) and the avatar (right) on Card White discs; until the city selector exists its centre stays empty. Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner (the customer's box photo on the left third, the set on Graphite beside it, named as the comp does: «НАБОР» / «TOʻPLAM» in label caps over «Discovery set» in the Name role at 24 px; until the sets ticket adds the price, arrow and link, a «Скоро» pill holds their place), «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No banner slider, no RU/UZ switch, no welcome screen. |
 | Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «от … сум», «+». |
 | Fragrance card | `design/approved` (variant 2 + icon row from variant 1) | Large photo with back, heart and share. Name lockup, description, the characteristics icon row, volume tiles with price under each, notes pyramid, then the reviews block, then «Купить на Uzum». Dock: «В корзину · <цена>» and «Купить сейчас». |
 | Cart | `design/approved` (variant 2 + bin from variant 1) and the free-delivery block from `design/mockups` 04-cart | Lines with stepper and bin. Promo field with «Применить». Dark totals block (items, promo, delivery «Доставка BTS, <город>», «Итого») with «Оформить заказ» inside. The free-delivery Sage thread with «Подойдёт любой аромат 10 мл» suggestions sits above the lines, exactly as in our mockup (the customer asked for it). |
@@ -332,7 +332,7 @@ Dark is the optional theme, switched in Profile. The Home top block uses the dar
 
 **Display Font:** Tenor Sans (with Manrope, sans-serif), always uppercase and tracked
 **Body Font:** Manrope 400 / 500 / 600 (with system-ui)
-**Name Font:** Cormorant Garamond Italic 500 (with Georgia), fragrance names, plus the slogan in the Home top block (customer-approved comp)
+**Name Font:** Cormorant Garamond Italic 500 (with Georgia), fragrance and set names, plus the slogan in the Home top block (customer-approved comp)
 
 All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subsets. The subsets cover Uzbek Latin `oʻ` / `gʻ` (U+02BB) and keep the first screen within budget.
 
@@ -341,9 +341,9 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 ### Hierarchy
 - **Title** (Tenor 400, 22px, 1.25, +0.2em, caps): screen titles such as КАТАЛОГ, КОРЗИНА, НАБОРЫ.
 - **Section** (Tenor 400, 13px, 1.35, +0.2em, caps): section heads such as "Топ продаж" and "Выберите 5 разных ароматов".
-- **Label caps** (Tenor 400, 10.5px, 1.45, +0.2em, caps, Muted Ink): the attribution line "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" and the box-lid label.
-- **Name** (Cormorant Italic 500, 20px; 24px on the product page; 17–19px in compact rows; 12.5px under set slots): fragrance names.
-- **Slogan** (Cormorant Italic 500, 21px, 1.2, sentence case, no trailing period): «Ароматы, которые освещают» / «Lahzalaringizni yorituvchi iforlar», one line under the logo in the Home top block. The one use of the italic beyond names (customer-approved comp).
+- **Label caps** (Tenor 400, 10.5px, 1.45, +0.2em, caps, Muted Ink): the attribution line "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida", the set label «НАБОР» / «TOʻPLAM» over a set's name, and the box-lid label.
+- **Name** (Cormorant Italic 500, 20px; 24px on the product page and the Home Discovery banner; 17–19px in compact rows; 12.5px under set slots): fragrance names, and a set's name («Discovery set») under its «НАБОР» label (approved comp).
+- **Slogan** (Cormorant Italic 500, 21px, 1.2, sentence case, no trailing period): «Ароматы, которые освещают» / «Lahzalaringizni yorituvchi iforlar», one line under the logo in the Home top block. The one use of the italic beyond fragrance and set names (customer-approved comp).
 - **Heading** (Manrope 600, 17px, 1.35, sentence case): the title of an empty, error or sign-in state, and the profile name. Never tracked caps, so long UZ titles stay readable.
 - **Body** (Manrope 400, 14px, 1.5): running text. Notes, meta and hints use 12.5px / 1.45 in Muted Ink.
 - **Row** (Manrope 400, 15px, 1.4, `type-row`): the label of a tappable list row (Profile rows, the region, city and point pickers). At 600 it is a BTS point's name and the Home delivery city.
@@ -356,7 +356,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 ### Named Rules
 **The Label Lockup Rule.** A fragrance is always named as: label caps attribution, then the italic name, then (in full cards) the rule (the 72 px label divider on the product page, a 28 px Sage rule on full cards, 18 px on list cards), then one muted meta line in Body small: the ХИТ / НОВИНКА badge inline at its start, then the type in caps (Manrope, +0.04em) and the family («UNISEX · Цитрусово-амбровый»), then the notes joined by " · ". Nothing sits above the attribution: no type, no badge, no family. The attribution line is mandatory legal wording, not a kicker. Never drop it, reword it or move it below the name.
 
-**The Italic Is Sacred Rule.** Cormorant Italic is for fragrance names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
+**The Italic Is Sacred Rule.** Cormorant Italic is for fragrance and set names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
 
 **The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals.
 
@@ -469,9 +469,9 @@ The amount card shows the 28px amount, the card number with copy buttons, and th
 
 ### Don't:
 - **Don't** use shadows, glows or gradients for depth. Tone and hairlines only.
-- **Don't** use Cormorant Italic for anything but fragrance names and the Home slogan.
+- **Don't** use Cormorant Italic for anything but fragrance and set names and the Home slogan.
 - **Don't** colour sale prices red or use burgundy, rose gold or gold. Savings are Sage Ink.
 - **Don't** put Sage text on Milk or white. Use Sage Ink.
 - **Don't** stack a badge on a card inside a row whose title already names it.
 - **Don't** draw the top header. Telegram owns it.
-- **Don't** add tracked-caps lines above headings. Label caps exist only for the brand attribution and the box-lid label.
+- **Don't** add tracked-caps lines above headings. Label caps exist only for the brand attribution, the set label over a set's name, and the box-lid label.
