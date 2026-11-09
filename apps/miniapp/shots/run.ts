@@ -223,11 +223,12 @@ async function main() {
             { timeout: 20_000 },
           );
           await screen.act?.({ page });
-          await page.waitForFunction(
-            () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
-            undefined,
-            { timeout: 20_000 },
-          );
+          if (!screen.loading)
+            await page.waitForFunction(
+              () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),
+              undefined,
+              { timeout: 20_000 },
+            );
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(screen.act ? 450 : 150); // sheets finish rising
           if (screen.fullPage) {
