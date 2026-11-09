@@ -96,6 +96,9 @@ describe('cart read and add', () => {
       available: 20,
       soldOut: false,
     });
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug!));
+    expect(f!.originalBrand).not.toBe('');
+    expect(res.body.lines[0]?.brand).toBe(f!.originalBrand);
     expect(res.body.count).toBe(1);
     expect(res.body.quote).toMatchObject({
       itemsSubtotal: 69_000,
@@ -301,6 +304,7 @@ describe('suggestions', () => {
     const { all, cart } = await cartWithGap(32_000);
     expect(cart.quote.amountToFreeDelivery).toBe(32_000);
     expect(cart.suggestions).toHaveLength(3);
+    expect(cart.suggestions.every((s) => s.brand !== '')).toBe(true);
     expect(cart.suggestions.every((s) => s.ml === 10 && s.price === 69_000)).toBe(true);
     expect(cart.suggestions.map((s) => s.slug)).not.toContain(all[0]);
     const ids = await t.db.select({ slug: fragrances.slug, id: fragrances.id }).from(fragrances);
@@ -406,6 +410,19 @@ describe('capped lines', () => {
     expect((await get()).lines[0]).toMatchObject({ qty: 2, limited: true });
     await setStock(slug!, 10, 9);
     expect((await get()).lines[0]?.limited).toBe(false);
+  });
+});
+
+describe('the 99 cap', () => {
+  it('stops a line at 99 even with more in stock, on add and on set', async () => {
+    const [slug] = await slugs();
+    await setStock(slug!, 10, 150);
+    const { add } = await me();
+    const res = await add(slug!, 10, 99);
+    expect(res.status === 200 && res.body.lines[0]?.qty).toBe(99);
+    const more = await add(slug!, 10, 1);
+    expect(more.status === 200 && more.body.lines[0]?.qty).toBe(99);
+    expect(more.status === 200 && more.body.lines[0]?.available).toBe(150);
   });
 });
 

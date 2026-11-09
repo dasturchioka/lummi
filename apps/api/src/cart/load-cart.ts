@@ -21,6 +21,7 @@ export interface CartLineView {
   fragranceId: number;
   slug: string;
   name: string;
+  brand: string;
   ml: number;
   photo: string | null;
   /** What the quote counts: never above `available` (a sold-out line keeps its own). */
@@ -57,6 +58,7 @@ export async function loadCartQuote(
       fragranceId: fragrances.id,
       slug: fragrances.slug,
       name: fragrances.name,
+      brand: fragrances.originalBrand,
       hidden: fragrances.hidden,
       ml: volumes.ml,
       photo: volumes.photoHash,
@@ -88,6 +90,7 @@ export async function loadCartQuote(
       fragranceId: r.fragranceId,
       slug: r.slug,
       name: r.name,
+      brand: r.brand,
       ml: r.ml,
       photo: r.photo,
       wanted: r.qty,

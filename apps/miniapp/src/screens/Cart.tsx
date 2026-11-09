@@ -5,6 +5,7 @@ import type {
   Discount,
   QuoteLine,
 } from '@lummi/contracts';
+import { CART_MAX_QTY } from '@lummi/contracts/client';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
@@ -18,6 +19,7 @@ import { BagIcon, CheckIcon, MinusIcon, PlusIcon, Spinner, TrashIcon } from '../
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
+import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 
@@ -179,7 +181,10 @@ function Nudge({
                   >
                     <Thumb photo={s.photo} className="w-10" />
                     <div className="min-w-0 flex-1">
-                      <p className="type-name text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
+                      <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
+                        {attribution(t.card.basedOn, s.brand)}
+                      </p>
+                      <p className="type-name mt-px text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
                         {s.name}
                       </p>
                       <p className="type-small mt-0.5 text-muted">
@@ -296,7 +301,7 @@ function Stepper({
       </span>
       <StepButton
         label={t.cart.increase}
-        limit={line.qty >= line.available}
+        limit={line.qty >= Math.min(line.available, CART_MAX_QTY)}
         busy={busy}
         onPress={() => onQty(line.qty + 1)}
       >
@@ -340,8 +345,11 @@ function Line({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
+            <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
+              {attribution(t.card.basedOn, line.brand)}
+            </p>
             <p
-              className={`type-name text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
+              className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
             >
               {line.name}
             </p>

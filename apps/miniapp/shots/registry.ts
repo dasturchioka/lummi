@@ -277,7 +277,11 @@ export const screens: ScreenDef[] = [
     fullPage: true,
     setup: async ({ api }) => {
       await forgetCity(api);
-      await fillCart(api, [['symphony', 10]]);
+      // 218 000: a gap of 32 000, so 10 ml bottles can close it and the suggestions show.
+      await fillCart(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
     },
     teardown: emptyCart,
   },

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { deliveryCitySchema } from './delivery';
+import { CART_MAX_QTY } from './limits';
 import { quoteSchema } from './quote';
 
 /**
@@ -11,6 +12,8 @@ export const cartLineSchema = z.object({
   id: z.number().int(),
   slug: z.string(),
   name: z.string(),
+  /** The original the fragrance is inspired by: every row names it («по мотивам …»). */
+  brand: z.string(),
   ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
   photo: z.string().nullable(),
   /** What the quote counts: the stored quantity, never above `available` (a sold-out line keeps its own). */
@@ -27,6 +30,7 @@ export type CartLineDto = z.infer<typeof cartLineSchema>;
 export const cartSuggestionSchema = z.object({
   slug: z.string(),
   name: z.string(),
+  brand: z.string(),
   ml: z.literal(10),
   photo: z.string().nullable(),
   /** The price to pay now (the markdown while it is active). */
@@ -54,9 +58,9 @@ export const addCartLineBodySchema = z.object({
   slug: z.string().min(1).max(100),
   ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
   /** How many to add; the total is capped at available. */
-  qty: z.number().int().min(1).max(99).default(1),
+  qty: z.number().int().min(1).max(CART_MAX_QTY).default(1),
 });
-export const setCartLineBodySchema = z.object({ qty: z.number().int().min(1).max(99) });
+export const setCartLineBodySchema = z.object({ qty: z.number().int().min(1).max(CART_MAX_QTY) });
 
 export const cartErrorSchema = z.object({
   code: z.enum(['unauthorized', 'not_found', 'sold_out']),

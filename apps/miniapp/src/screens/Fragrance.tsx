@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import type { CartDto } from '@lummi/contracts';
+import { CART_MAX_QTY } from '@lummi/contracts/client';
 import { fill } from '@lummi/i18n';
 import { useEffect, useState } from 'react';
 import { CART_KEY, useAddToCart } from '../cart/queries';
@@ -120,10 +121,16 @@ export function Fragrance() {
             onSuccess: (next) => {
               const after = next.lines.find((l) => l.slug === card.slug && l.ml === ml);
               if (after && after.qty <= before) {
-                // The server capped it: say how many there are, briefly.
-                setNote(fill(t.cart.onlyLeft, { n: String(after.available) }));
+                // The server capped it: the 99 limit while stock is above it, else what is left.
+                setNote(
+                  after.qty >= CART_MAX_QTY && after.available > CART_MAX_QTY
+                    ? fill(t.cart.maxQty, { n: String(CART_MAX_QTY) })
+                    : fill(t.cart.onlyLeft, { n: String(after.available) }),
+                );
               } else {
+                // Telegram Desktop has no haptics and this screen no tab bar: say it in words too.
                 hapticSuccess();
+                setNote(t.cart.added);
               }
             },
             // Stock moved under the customer (409/404): re-read the card so the dock tells the truth.

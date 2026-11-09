@@ -1,4 +1,4 @@
-import type { CartDto, CartSuggestionDto } from '@lummi/contracts';
+import { CART_MAX_QTY, type CartDto, type CartSuggestionDto } from '@lummi/contracts';
 import {
   and,
   cartLines,
@@ -40,6 +40,7 @@ export class CartService {
         id: l.lineId,
         slug: l.slug,
         name: l.name,
+        brand: l.brand,
         ml: l.ml as 10 | 30 | 50,
         photo: l.photo,
         qty: l.qty,
@@ -82,6 +83,7 @@ export class CartService {
         volumeId: volumes.id,
         slug: fragrances.slug,
         name: fragrances.name,
+        brand: fragrances.originalBrand,
         photo: volumes.photoHash,
         price: volumes.price,
         salePrice: volumes.salePrice,
@@ -115,7 +117,7 @@ export class CartService {
           now,
         ) ?? r.price;
       if (price < gap) continue;
-      out.push({ slug: r.slug, name: r.name, ml: 10, photo: r.photo, price });
+      out.push({ slug: r.slug, name: r.name, brand: r.brand, ml: 10, photo: r.photo, price });
       if (out.length === limit) break;
     }
     return out;
@@ -136,10 +138,10 @@ export class CartService {
       await this.touch(tx, customerId);
       await tx
         .insert(cartLines)
-        .values({ customerId, volumeId: v.id, qty: Math.min(qty, left) })
+        .values({ customerId, volumeId: v.id, qty: Math.min(qty, left, CART_MAX_QTY) })
         .onConflictDoUpdate({
           target: [cartLines.customerId, cartLines.volumeId],
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left})` },
+          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
         });
       return 'ok' as const;
     });
@@ -161,7 +163,7 @@ export class CartService {
       if (left > 0) {
         await tx
           .update(cartLines)
-          .set({ qty: Math.min(qty, left) })
+          .set({ qty: Math.min(qty, left, CART_MAX_QTY) })
           .where(eq(cartLines.id, lineId));
       }
       await this.touch(tx, customerId);
