@@ -35,6 +35,9 @@ export const botMessages = defineMessages(
       orderCancelled: 'Заказ № {number} отменён.\n{reason}.',
       /** Added to «Отменён» when the order had been paid: the money goes back as a Refund (ADR 0006). */
       refundNote: 'Менеджер свяжется с вами, чтобы вернуть деньги.',
+      /** The birthday coupon, 10:00 Tashkent a few days before (TZ §3.8, #30): `{max}` is money, `{until}` the last day. */
+      birthdayCoupon:
+        'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
     },
   },
   {
@@ -65,6 +68,8 @@ export const botMessages = defineMessages(
       delivered: '№ {number} buyurtma yetkazildi ✨\nLUMMIni tanlaganingiz uchun rahmat.',
       orderCancelled: '№ {number} buyurtma bekor qilindi.\n{reason}.',
       refundNote: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
+      birthdayCoupon:
+        'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
     },
   },
 );

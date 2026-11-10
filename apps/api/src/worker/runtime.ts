@@ -1,6 +1,6 @@
 import { lt, processedUpdates, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
-import { Worker, type Job } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
@@ -37,11 +37,24 @@ export interface Sweep {
 }
 
 /**
+ * A repeatable job (ADR 0021: daily jobs are BullMQ repeatable jobs with `tz: 'Asia/Tashkent'`),
+ * upserted by id when the worker starts, so a restart or a second worker never adds a second one.
+ */
+export interface JobSchedule {
+  id: string;
+  /** Cron, read on the `tz` wall clock: `0 10 * * *` is 10:00 every day. */
+  pattern: string;
+  tz: string;
+}
+
+/**
  * A BullMQ queue whose jobs the worker executes (ADR 0021: BullMQ only executes). A job that throws
  * is retried by its own attempts and backoff; the producer's sweep is the safety net beyond that.
  */
 export interface QueueProcessor {
   queue: string;
+  /** Repeatable jobs on this queue, scheduled when the worker starts. */
+  schedules?: JobSchedule[];
   concurrency?: number;
   /** Jobs per second for this queue, read once when the worker starts (a setting, so it can change). Unlimited when absent. */
   ratePerSecond?: () => Promise<number>;
@@ -169,6 +182,22 @@ export class WorkerRuntime implements OnApplicationShutdown {
     });
     worker.on('error', (e) => this.log.error(`queue ${p.queue} error: ${describeError(e)}`));
     this.extraWorkers.push({ worker, connection });
+    if (p.schedules?.length) {
+      // its own connection: the worker's carries its blocking reads
+      const queueConnection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
+      const queue = new Queue(p.queue, { connection: queueConnection });
+      try {
+        for (const s of p.schedules)
+          await queue.upsertJobScheduler(
+            s.id,
+            { pattern: s.pattern, tz: s.tz },
+            { name: s.id, opts: { removeOnComplete: true, removeOnFail: 100 } },
+          );
+      } finally {
+        await queue.close();
+        queueConnection.disconnect();
+      }
+    }
   }
 
   private async process(job: Job<{ id: number }>): Promise<void> {

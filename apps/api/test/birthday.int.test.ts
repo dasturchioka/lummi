@@ -4,10 +4,12 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
-import { auditLog, customers, eq } from '@lummi/db';
+import { auditLog, birthdayCoupons, customers, eq, outbox } from '@lummi/db';
+import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
+import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
@@ -165,5 +167,173 @@ describe('the date of birth: entered once', () => {
         needsConsent: true,
       },
     });
+  });
+});
+
+/** Enters the date of birth through the API at `enteredAt` (so the abuse guard counts from then). */
+async function bornOn(
+  birthDate: string,
+  user: TestUser = ali,
+  phone = '998901234567',
+  enteredAt = new Date('2026-01-10T06:00:00Z'),
+) {
+  const was = t.edges.clock.now();
+  t.edges.clock.set(enteredAt);
+  const s = await shopper(user, phone);
+  const res = await s.me.setBirthDate({ body: { birthDate, consent: true } });
+  if (res.status !== 200) throw new Error(`birth date: ${res.status}`);
+  t.edges.clock.set(was);
+  return s;
+}
+const runJobAt = async (iso: string) => {
+  t.edges.clock.set(new Date(iso));
+  return t.app.get(BirthdayCouponJob).run();
+};
+const coupons = () => t.db.select().from(birthdayCoupons).orderBy(birthdayCoupons.id);
+const messages = () => t.db.select().from(outbox).orderBy(outbox.id);
+
+describe('the daily job at 10:00 Asia/Tashkent issues the coupon', () => {
+  it('three days before the birthday at 10:00 Tashkent, not a second earlier, with the settings’ percent and cap and a message through the outbox', async () => {
+    await bornOn('1996-03-14');
+    // 09:59:59 in Tashkent on 11 March
+    await runJobAt('2027-03-11T04:59:59Z');
+    expect(await coupons()).toHaveLength(0);
+
+    await runJobAt('2027-03-11T05:00:00Z');
+    const [coupon, ...more] = await coupons();
+    expect(more).toHaveLength(0);
+    expect(coupon).toMatchObject({
+      birthdayYear: 2027,
+      birthday: '2027-03-14',
+      percent: 20,
+      maxAmount: 100_000,
+      usedByOrderId: null,
+    });
+    expect(coupon!.issuedAt.toISOString()).toBe('2027-03-11T05:00:00.000Z');
+    // works through 23:59:59 on 21 March in Tashkent
+    expect(coupon!.expiresAt.toISOString()).toBe('2027-03-21T19:00:00.000Z');
+
+    const [message] = await messages();
+    expect(coupon!.outboxId).toBe(message!.id);
+    expect(message).toMatchObject({ chatId: ali.id });
+    expect(message!.text).toContain('−20%');
+    expect(message!.text).toContain('100\u202f000\u202fсум'); // narrow no-break spaces
+    expect(message!.text).toContain('21 марта');
+    expect(message!.options).toMatchObject({
+      reply_markup: { inline_keyboard: [[{ web_app: { url: expect.stringMatching(/^https:/) } }]] },
+    });
+  });
+
+  it('writes the message in the customer’s language', async () => {
+    await bornOn('1996-03-14', vali, '998901112233');
+    await runJobAt('2027-03-11T05:00:00Z');
+    const [message] = await messages();
+    expect(message!.text).toContain('21-mart');
+    expect(message!.text).toContain('100\u202f000\u202fsoʻmgacha');
+  });
+
+  it('follows the settings for percent, cap and the days before and after', async () => {
+    const owner = await t.ownerSession();
+    for (const [key, value] of [
+      ['birthday.percent', 15],
+      ['birthday.maxAmount', 50_000],
+      ['birthday.daysBefore', 5],
+      ['birthday.daysAfter', 2],
+    ] as const) {
+      const res = await owner.client.admin.settings.update({ params: { key }, body: { value } });
+      expect(res.status).toBe(200);
+    }
+    await bornOn('1996-03-14');
+    await runJobAt('2027-03-09T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ percent: 15, maxAmount: 50_000 }]);
+    // through 16 March, two days after the birthday
+    expect((await coupons())[0]!.expiresAt.toISOString()).toBe('2027-03-16T19:00:00.000Z');
+  });
+
+  it('run twice, or twice at once, issues one coupon and one message', async () => {
+    await bornOn('1996-03-14');
+    await runJobAt('2027-03-11T05:00:00Z');
+    await runJobAt('2027-03-11T05:00:30Z');
+    expect(await coupons()).toHaveLength(1);
+    expect(await messages()).toHaveLength(1);
+
+    // Vali's window opens a day later; three runs at once still issue his coupon once
+    await bornOn('1996-03-15', vali, '998901112233');
+    t.edges.clock.set(new Date('2027-03-12T05:00:00Z'));
+    const job = t.app.get(BirthdayCouponJob);
+    await Promise.all([job.run(), job.run(), job.run()]);
+    expect((await coupons()).map((c) => c.birthday)).toEqual(['2027-03-14', '2027-03-15']);
+    expect(await messages()).toHaveLength(2);
+  });
+
+  it('29 February: on 25 February in a common year, on 26 February in a leap year, once a year', async () => {
+    await bornOn('2000-02-29');
+    await runJobAt('2027-02-25T04:59:00Z');
+    expect(await coupons()).toHaveLength(0);
+    await runJobAt('2027-02-25T05:00:00Z');
+    await runJobAt('2027-02-28T05:00:00Z');
+    await runJobAt('2027-03-07T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ birthdayYear: 2027, birthday: '2027-02-28' }]);
+    expect((await coupons())[0]!.expiresAt.toISOString()).toBe('2027-03-07T19:00:00.000Z');
+
+    await runJobAt('2028-02-25T05:00:00Z');
+    expect(await coupons()).toHaveLength(1);
+    await runJobAt('2028-02-26T05:00:00Z');
+    expect((await coupons()).map((c) => c.birthday)).toEqual(['2027-02-28', '2028-02-29']);
+  });
+
+  it('a 2 January birthday gets next year’s coupon on 30 December', async () => {
+    await bornOn('1990-01-02');
+    await runJobAt('2026-12-30T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ birthdayYear: 2027, birthday: '2027-01-02' }]);
+  });
+
+  it('a customer who blocked the bot or refused write access gets the coupon stored, with no message', async () => {
+    await bornOn('1996-03-14');
+    await bornOn('1996-03-14', vali, '998901112233');
+    await t.db.update(customers).set({ botBlocked: true }).where(eq(customers.telegramId, ali.id));
+    await t.db
+      .update(customers)
+      .set({ writeAccess: 'refused' })
+      .where(eq(customers.telegramId, vali.id));
+    await runJobAt('2027-03-11T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ outboxId: null }, { outboxId: null }]);
+    expect(await messages()).toHaveLength(0);
+  });
+
+  it('the first coupon opens no sooner than 14 days after the date was entered (a setting)', async () => {
+    // entered on 1 March: 11 March is only ten days on, so this year passes without a coupon
+    await bornOn('1996-03-14', ali, '998901234567', new Date('2027-03-01T05:00:00Z'));
+    await runJobAt('2027-03-11T05:00:00Z');
+    await runJobAt('2027-03-15T05:00:00Z');
+    expect(await coupons()).toHaveLength(0);
+    await runJobAt('2028-03-11T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ birthdayYear: 2028 }]);
+  });
+
+  it('a day the job missed is caught up while the window is open, with the same validity, never after it', async () => {
+    await bornOn('1996-03-14');
+    await bornOn('1990-03-01', vali, '998901112233');
+    // first job run since 2 March: Ali's window (11..21 March) is open, Vali's (26 Feb..8 Mar) is over
+    await runJobAt('2027-03-12T05:00:00Z');
+    expect(await coupons()).toMatchObject([{ birthday: '2027-03-14' }]);
+    expect((await coupons())[0]!.expiresAt.toISOString()).toBe('2027-03-21T19:00:00.000Z');
+  });
+});
+
+describe('the worker schedules the job', () => {
+  it('as a BullMQ repeatable job at 10:00 every day, Asia/Tashkent', async () => {
+    t.startWorker();
+    const queue = new Queue(t.env.BIRTHDAY_QUEUE, { connection: { url: t.env.REDIS_URL } });
+    try {
+      let schedulers: Awaited<ReturnType<typeof queue.getJobSchedulers>> = [];
+      for (const end = Date.now() + 10_000; schedulers.length === 0 && Date.now() < end;) {
+        schedulers = await queue.getJobSchedulers();
+        if (schedulers.length === 0) await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(schedulers).toMatchObject([{ pattern: '0 10 * * *', tz: 'Asia/Tashkent' }]);
+    } finally {
+      await queue.close();
+    }
   });
 });

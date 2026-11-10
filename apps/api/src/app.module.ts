@@ -32,6 +32,7 @@ import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
 import { BirthdayService } from './birthday/birthday.service';
+import { BirthdayCouponJob } from './birthday/birthday-job';
 import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
@@ -164,6 +165,7 @@ export class AppModule {
         BroadcastService,
         PromoAdminService,
         BirthdayService,
+        BirthdayCouponJob,
       ],
       exports: [
         CreditEvents,
