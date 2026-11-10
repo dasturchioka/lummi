@@ -1,4 +1,4 @@
-import type { AdminCampaignLink } from '@lummi/contracts';
+import { FRAGRANCE_START_PARAM, type AdminCampaignLink } from '@lummi/contracts';
 import type { AdminMessages } from '@/lib/i18n';
 
 /** «Блогер · Малика»: the source and its label, as the list and the editor read it. */
@@ -16,7 +16,7 @@ export function targetLine(
   t: AdminMessages,
   fragranceName: (slug: string) => string,
 ): string {
-  const slug = /^p_(.+)$/.exec(target)?.[1];
+  const slug = FRAGRANCE_START_PARAM.exec(target)?.[1];
   if (slug) return `${t.campaigns.fragrance}: ${fragranceName(slug)}`;
   return (t.broadcasts.targets as Record<string, string>)[target] ?? target;
 }

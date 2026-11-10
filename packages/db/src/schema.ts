@@ -1095,6 +1095,8 @@ export const promoCodes = pgTable(
     /** TZ «применять к уценённым»; off: marked-down items are not discounted (ADR 0008). */
     appliesToMarkedDown: boolean('applies_to_marked_down').notNull().default(false),
     active: boolean('active').notNull().default(true),
+    /** Its automatic campaign link was made (#35); a link the owner deleted is never made again. */
+    campaignLinkMade: boolean('campaign_link_made').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

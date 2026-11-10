@@ -36,7 +36,13 @@ export class CampaignsController {
   open(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.campaigns.open, async ({ body }) => {
       const res = await this.campaigns.open(customerId, body.code);
-      return res ? { status: 200 as const, body: res } : notFound;
+      if (res.kind === 'ok') return { status: 200 as const, body: res.result };
+      if (res.kind === 'too_many_attempts')
+        return {
+          status: 429 as const,
+          body: { code: 'too_many_attempts' as const, retryAfterSeconds: res.retryAfterSeconds },
+        };
+      return notFound;
     });
   }
 }

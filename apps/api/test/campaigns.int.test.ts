@@ -12,6 +12,7 @@ import {
   eq,
   fragrances,
   orders,
+  promoCodes,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -142,6 +143,15 @@ async function placeOrder(s: Shopper) {
   if (res.status !== 201) throw new Error(`order ${res.status} ${JSON.stringify(res.body)}`);
   const [row] = await t.db.select().from(orders).where(eq(orders.number, res.body.number));
   return row!;
+}
+/** The code of the link a promo code was given automatically: random, never derived from the promo code. */
+async function autoCode(promo: string) {
+  const [row] = await t.db
+    .select({ code: campaignLinks.code })
+    .from(campaignLinks)
+    .innerJoin(promoCodes, eq(promoCodes.id, campaignLinks.promoCodeId))
+    .where(eq(promoCodes.code, promo));
+  return row!.code;
 }
 const customerRow = async (telegramId: number) =>
   (await t.db.select().from(customers).where(eq(customers.telegramId, telegramId)))[0]!;
@@ -276,7 +286,7 @@ describe('every promo code has a link', () => {
     const created = await createPromo();
     const list = await owner.client.admin.campaignLinks.list();
     expect(list.status === 200 && list.body).toMatchObject([
-      { code: 'bloger10', promoCode: 'BLOGER10', target: 'catalog', source: 'other' },
+      { promoCode: 'BLOGER10', target: 'catalog', source: 'other' },
     ]);
     // deleting an unused promo code takes its unopened link along
     await owner.client.admin.promoCodes.remove({ params: { id: created.id } });
@@ -290,23 +300,51 @@ describe('every promo code has a link', () => {
     expect(list.status === 200 && list.body).toHaveLength(1);
   });
 
+  it('gives the link a random code, never one derived from the promo code', async () => {
+    await createPromo();
+    const code = await autoCode('BLOGER10');
+    expect(code).toMatch(/^[a-z0-9]{8}$/);
+    expect(code).not.toContain('bloger');
+  });
+
   it('backfills codes that predate links, and running it again adds nothing', async () => {
     await createPromo({ code: 'OLD1' });
     await createPromo({ code: 'OLD2' });
-    await t.db.delete(campaignLinks); // as if both predate the feature
+    // as if both predate the feature: no link, not yet marked
+    await t.db.delete(campaignLinks);
+    await t.db.update(promoCodes).set({ campaignLinkMade: false });
     const svc = t.app.get(CampaignsService);
     expect(await svc.backfillPromoLinks()).toBe(2);
     expect(await svc.backfillPromoLinks()).toBe(0);
-    const rows = await t.db.select().from(campaignLinks);
-    expect(rows.map((r) => r.code).sort()).toEqual(['old1', 'old2']);
+    expect(await t.db.select().from(campaignLinks)).toHaveLength(2);
   });
 
-  it('takes a suffixed code when the natural one is already a link', async () => {
-    await createLink({ code: 'taken1' });
-    await createPromo({ code: 'TAKEN1' });
-    const rows = await t.db.select().from(campaignLinks);
-    expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.promoCodeId !== null)!.code).toMatch(/^taken1-[a-z0-9]{4}$/);
+  it('never recreates an automatic link the owner deleted', async () => {
+    await createPromo();
+    const [link] = await t.db.select().from(campaignLinks);
+    expect(
+      (await owner.client.admin.campaignLinks.remove({ params: { id: link!.id } })).status,
+    ).toBe(200);
+    expect(await t.app.get(CampaignsService).backfillPromoLinks()).toBe(0);
+    expect(await t.db.select().from(campaignLinks)).toHaveLength(0);
+  });
+
+  it('two overlapping backfills make one link per code', async () => {
+    for (const code of ['AAA1', 'BBB2', 'CCC3']) await createPromo({ code });
+    await t.db.delete(campaignLinks);
+    await t.db.update(promoCodes).set({ campaignLinkMade: false });
+    const svc = t.app.get(CampaignsService);
+    const made = await Promise.all([svc.backfillPromoLinks(), svc.backfillPromoLinks()]);
+    expect(made.reduce((a, b) => a + b, 0)).toBe(3);
+    expect(await t.db.select().from(campaignLinks)).toHaveLength(3);
+  });
+
+  it('re-keys an old automatic link whose code was the promo code’s own', async () => {
+    await createPromo({ code: 'LEGACY1' });
+    await t.db.update(campaignLinks).set({ code: 'legacy1' });
+    expect(await t.app.get(CampaignsService).backfillPromoLinks()).toBe(0);
+    expect(await autoCode('LEGACY1')).toMatch(/^[a-z0-9]{8}$/);
+    expect(await autoCode('LEGACY1')).not.toBe('legacy1');
   });
 });
 
@@ -319,6 +357,9 @@ describe('opening l_<code>', () => {
       status: 200,
       body: { target: `p_${await slug()}`, promoCodePrefilled: false },
     });
+    await s.open('insta-nov'); // a repeat within a minute is not logged again
+    expect(await t.db.select().from(campaignOpens)).toHaveLength(1);
+    t.edges.clock.advance(61_000);
     await s.open('insta-nov');
     await (await shopper(vali, '998901234568')).open('insta-nov');
     expect(await t.db.select().from(campaignOpens)).toHaveLength(3);
@@ -342,7 +383,7 @@ describe('opening l_<code>', () => {
     await createPromo();
     const s = await shopper();
     await s.client.cart.addLine({ body: { slug: await slug(), ml: 30, qty: 1 } });
-    const res = await s.open('bloger10');
+    const res = await s.open(await autoCode('BLOGER10'));
     expect(res).toMatchObject({ status: 200, body: { promoCodePrefilled: true } });
     const cart = await s.client.cart.get();
     expect(cart.status === 200 && cart.body.promoCode).toBe('BLOGER10');
@@ -362,10 +403,41 @@ describe('opening l_<code>', () => {
     expect(cart.status === 200 && cart.body.promoCode).toBe('BLOGER10');
   });
 
+  it('a typed code in the cart is replaced by the link’s: the latest tap is the intent', async () => {
+    await createPromo();
+    await createPromo({ code: 'TYPED5', percent: 5 });
+    const s = await shopper();
+    await s.client.cart.applyPromoCode({ body: { code: 'typed5' } });
+    await s.open(await autoCode('BLOGER10'));
+    const cart = await s.client.cart.get();
+    expect(cart.status === 200 && cart.body.promoCode).toBe('BLOGER10');
+  });
+
+  it('guessing codes through the open spends the same attempts as typing, then 429s', async () => {
+    await createPromo();
+    const found = await autoCode('BLOGER10');
+    const set = await owner.client.admin.settings.update({
+      params: { key: 'promo.attemptLimit' },
+      body: { value: 2 },
+    });
+    expect(set.status).toBe(200);
+    const s = await shopper();
+    expect((await s.open('guess-one')).status).toBe(404);
+    expect((await s.open('guess-two')).status).toBe(404);
+    // past the budget even a real code is refused, so the answer is no oracle
+    expect(await s.open('guess-three')).toMatchObject({
+      status: 429,
+      body: { code: 'too_many_attempts' },
+    });
+    expect((await s.open(found)).status).toBe(429);
+    // typing shares the same window
+    expect((await s.client.cart.applyPromoCode({ body: { code: 'ONE' } })).status).toBe(429);
+  });
+
   it('a prefill is not a typed attempt: the customer still has every attempt', async () => {
     await createPromo();
     const s = await shopper();
-    await s.open('bloger10');
+    await s.open(await autoCode('BLOGER10'));
     for (let i = 0; i < 10; i++) {
       const r = await s.client.cart.applyPromoCode({ body: { code: `GUESS${i}` } });
       expect(r.status).toBe(200);
@@ -442,7 +514,7 @@ describe('attribution', () => {
     const link = (await t.db.select().from(campaignLinks))[0]!;
     const s = await shopper();
     await s.client.cart.addLine({ body: { slug: await slug(), ml: 30, qty: 1 } });
-    expect(await s.open('bloger10')).toMatchObject({
+    expect(await s.open(await autoCode('BLOGER10'))).toMatchObject({
       status: 200,
       body: { promoCodePrefilled: true },
     });

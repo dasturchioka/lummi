@@ -261,7 +261,7 @@ export const adminMessages = defineMessages(
         units: {
           none: '',
           seconds: 'сек.',
-          days: 'дн.',
+          days: 'сут.',
           ms: 'мс',
           sum: 'сум',
           ml: 'мл',

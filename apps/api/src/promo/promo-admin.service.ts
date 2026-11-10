@@ -17,6 +17,7 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { isUniqueViolation } from '../admin/catalog-admin.service';
 import { AuditService } from '../audit/audit.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import type { Edges } from '../edges';
@@ -38,7 +39,7 @@ function toColumns({ expiresOn, ...rest }: PromoCodeInput) {
 
 /** The editable fields as the form shows them: what the audit diffs and the list returns. */
 function fieldsOf(r: PromoCodeRow): PromoCodeInput {
-  const { id: _id, createdAt: _c, updatedAt: _u, expiresAt, ...rest } = r;
+  const { id: _id, createdAt: _c, updatedAt: _u, campaignLinkMade: _l, expiresAt, ...rest } = r;
   return { ...rest, expiresOn: tashkentDateOf(expiresAt) };
 }
 
@@ -61,12 +62,6 @@ function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
   const out: Record<string, [unknown, unknown]> = {};
   for (const k of Object.keys(after)) if (before[k] !== after[k]) out[k] = [before[k], after[k]];
   return out;
-}
-
-/** 23505, whether Drizzle wrapped the driver error or not. */
-function isUniqueViolation(e: unknown): boolean {
-  const err = (e as { code?: string; cause?: { code?: string } }) ?? {};
-  return err.code === '23505' || err.cause?.code === '23505';
 }
 
 /** Owner-only promo code admin (ADR 0017): every change is audited with the actor. */

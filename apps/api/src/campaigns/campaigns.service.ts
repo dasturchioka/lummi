@@ -13,10 +13,10 @@ import {
   campaignOpens,
   customers,
   desc,
+  gte,
   eq,
   inArray,
   isNull,
-  notInArray,
   orders,
   promoCodes,
   sql,
@@ -27,6 +27,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import QRCode from 'qrcode';
+import { isUniqueViolation } from '../admin/catalog-admin.service';
 import { AuditService, type Actor } from '../audit/audit.service';
 import { CartService } from '../cart/cart.service';
 import type { Edges } from '../edges';
@@ -38,6 +39,10 @@ export type CampaignFailure = {
   reason: 'not_found' | 'code_taken' | 'unknown_promo_code' | 'code_locked' | 'in_use';
 };
 export type CampaignOutcome<T> = { ok: true; value: T } | CampaignFailure;
+export type OpenOutcome =
+  | { kind: 'ok'; result: OpenCampaignResult }
+  | { kind: 'not_found' }
+  | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 const fail = (reason: CampaignFailure['reason']): CampaignFailure => ({ ok: false, reason });
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -47,11 +52,14 @@ function randomCode(length: number): string {
   return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('');
 }
 
-/** 23505, whether Drizzle wrapped the driver error or not. */
-function isUniqueViolation(e: unknown): boolean {
-  const err = (e as { code?: string; cause?: { code?: string } }) ?? {};
-  return err.code === '23505' || err.cause?.code === '23505';
-}
+/** Serialises `backfillPromoLinks` across boots (API and worker) and instances. */
+const BACKFILL_LOCK = 7_350_035;
+
+/**
+ * A repeat open by the same customer within this window is not logged again (a double tap, a
+ * reopened Mini App). A technical guard against inflating the log, not a business rule.
+ */
+const REPEAT_OPEN_MS = 60_000;
 
 /**
  * Campaign links (ticket #35, ADR 0022): the owner's CRUD and QR, the Mini App's open (log, route,
@@ -224,27 +232,28 @@ export class CampaignsService {
 
   /**
    * Gives a promo code its link (ticket #35: every code has one): target the catalog, source
-   * `other` labelled with the code, the code's own text as the link code (a suffix when taken).
-   * The owner edits it like any other link.
+   * `other` labelled with the code. The link code is random and never derived from the promo code:
+   * a code shared in a post must not be guessable from, or lead to, the link, and the open endpoint
+   * must not be an oracle for promo codes. The code is marked as having had its link, so a link the
+   * owner deletes is not made again. The owner edits it like any other link.
    */
   async ensurePromoLink(
     tx: DbOrTx,
     promo: { id: number; code: string },
     actor: Actor,
   ): Promise<boolean> {
+    await tx.update(promoCodes).set({ campaignLinkMade: true }).where(eq(promoCodes.id, promo.id));
     const [has] = await tx
       .select({ id: campaignLinks.id })
       .from(campaignLinks)
       .where(eq(campaignLinks.promoCodeId, promo.id))
       .limit(1);
     if (has) return false;
-    const natural = promo.code.toLowerCase();
     for (let attempt = 0; attempt < 5; attempt++) {
-      const code = attempt === 0 ? natural : `${natural.slice(0, 35)}-${randomCode(4)}`;
       const [row] = await tx
         .insert(campaignLinks)
         .values({
-          code,
+          code: randomCode(8),
           target: 'catalog',
           promoCodeId: promo.id,
           source: 'other',
@@ -265,17 +274,29 @@ export class CampaignsService {
     throw new Error(`no free link code for promo code ${promo.code}`);
   }
 
-  /** Codes that predate links (or lost theirs) get one; running it again changes nothing. Returns how many. */
+  /**
+   * Run at boot. Codes that never had a link get one (and are marked, so a link the owner deletes
+   * stays deleted); an old automatic link keyed by its promo code's own text gets a random code.
+   * Under an advisory lock, so overlapping boots make one link per code. Returns how many were made.
+   */
   async backfillPromoLinks(): Promise<number> {
     return this.db.transaction(async (tx) => {
-      const linked = tx
-        .select({ id: campaignLinks.promoCodeId })
+      await tx.execute(sql`select pg_advisory_xact_lock(${BACKFILL_LOCK})`);
+      const old = await tx
+        .select({ id: campaignLinks.id })
         .from(campaignLinks)
-        .where(sql`${campaignLinks.promoCodeId} is not null`);
+        .innerJoin(promoCodes, eq(promoCodes.id, campaignLinks.promoCodeId))
+        .where(sql`lower(${campaignLinks.code}) = lower(${promoCodes.code})`);
+      for (const l of old) {
+        await tx
+          .update(campaignLinks)
+          .set({ code: await this.freeCode(tx, randomCode(8)) })
+          .where(eq(campaignLinks.id, l.id));
+      }
       const missing = await tx
         .select({ id: promoCodes.id, code: promoCodes.code })
         .from(promoCodes)
-        .where(notInArray(promoCodes.id, linked))
+        .where(eq(promoCodes.campaignLinkMade, false))
         .orderBy(promoCodes.id);
       let made = 0;
       for (const p of missing) if (await this.ensurePromoLink(tx, p, { type: 'system' })) made++;
@@ -304,19 +325,37 @@ export class CampaignsService {
    * The customer opened `l_<code>`: log it, keep the first link ever opened as their acquisition
    * source, put the link's promo code in the cart and say where to go. The prefill goes through
    * the cart's own apply path, so the quote judges it like a typed code (its refusal reason shows
-   * in the cart); it is not a typed attempt, because the shop supplied it and nobody is guessing.
+   * in the cart); it is not a typed attempt, because the shop supplied it.
+   *
+   * An unknown code is a guess, and automatic links lead to promo codes, so a miss spends one of
+   * the customer's typed-code attempts. Past the budget every open is refused, a real code
+   * included, so the answer is no oracle.
    */
-  async open(customerId: number, code: string): Promise<OpenCampaignResult | null> {
+  async open(customerId: number, code: string): Promise<OpenOutcome> {
+    const wait = await this.cart.guessWait(customerId);
+    if (wait !== null) return { kind: 'too_many_attempts', retryAfterSeconds: wait };
     const now = this.edges.clock.now();
     const found = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .select({ link: campaignLinks, promo: promoCodes.code })
         .from(campaignLinks)
         .leftJoin(promoCodes, eq(promoCodes.id, campaignLinks.promoCodeId))
-        // exact case: Telegram keeps it, and lookups are not a way to probe for codes
+        // exact case: Telegram keeps it
         .where(eq(campaignLinks.code, code));
       if (!row) return null;
-      await tx.insert(campaignOpens).values({ linkId: row.link.id, customerId, openedAt: now });
+      const [recent] = await tx
+        .select({ id: campaignOpens.id })
+        .from(campaignOpens)
+        .where(
+          and(
+            eq(campaignOpens.customerId, customerId),
+            eq(campaignOpens.linkId, row.link.id),
+            gte(campaignOpens.openedAt, new Date(now.getTime() - REPEAT_OPEN_MS)),
+          ),
+        )
+        .limit(1);
+      if (!recent)
+        await tx.insert(campaignOpens).values({ linkId: row.link.id, customerId, openedAt: now });
       // first link wins: only a customer with no acquisition source takes this one
       await tx
         .update(customers)
@@ -324,10 +363,16 @@ export class CampaignsService {
         .where(and(eq(customers.id, customerId), isNull(customers.acquisitionLinkId)));
       return row;
     });
-    if (!found) return null;
+    if (!found) {
+      await this.cart.spendGuess(customerId);
+      return { kind: 'not_found' };
+    }
     if (found.promo)
       await this.cart.applyPromoCode(customerId, found.promo, { countAttempt: false });
-    return { target: found.link.target, promoCodePrefilled: found.promo !== null };
+    return {
+      kind: 'ok',
+      result: { target: found.link.target, promoCodePrefilled: found.promo !== null },
+    };
   }
 
   // ---- internals ----

@@ -436,9 +436,10 @@ export const contract = c.router({
         200: openCampaignResultSchema,
         401: campaignOpenErrorSchema,
         404: campaignOpenErrorSchema,
+        429: promoAttemptsErrorSchema,
       },
       summary:
-        'Log that the signed-in customer opened `l_<code>`, prefill its promo code in the cart, and return the target to route to; 404 for an unknown code (the app lands on Home)',
+        'Log that the signed-in customer opened `l_<code>`, prefill its promo code in the cart, and return the target to route to; 404 for an unknown code (the app lands on Home); a 404 spends one `promo.attemptLimit` attempt of the customer, and past them every open is 429',
     },
   },
   checkout: {

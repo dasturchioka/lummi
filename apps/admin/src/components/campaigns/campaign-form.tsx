@@ -2,6 +2,7 @@
 
 import {
   CAMPAIGN_SOURCES,
+  FRAGRANCE_START_PARAM,
   START_TARGETS,
   campaignLinkInputSchema,
   type AdminCampaignLink,
@@ -43,7 +44,7 @@ interface Draft {
 }
 
 function toDraft(l: AdminCampaignLink | null): Draft {
-  const slug = l ? /^p_(.+)$/.exec(l.target)?.[1] : undefined;
+  const slug = l ? FRAGRANCE_START_PARAM.exec(l.target)?.[1] : undefined;
   return {
     code: l?.code ?? '',
     kind: slug ? FRAGRANCE : (l?.target ?? 'catalog'),

@@ -1,5 +1,5 @@
 {
-  "id": "0c83afb0-ca13-40d9-8243-b66653eed7fc",
+  "id": "e6b6674c-a815-45f1-a497-02792a76bb01",
   "prevId": "1a71c023-2068-47e4-a625-00153b559f5a",
   "version": "7",
   "dialect": "postgresql",
@@ -3426,6 +3426,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "campaign_link_made": {
+          "name": "campaign_link_made",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

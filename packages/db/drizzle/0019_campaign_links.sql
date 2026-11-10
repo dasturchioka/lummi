@@ -20,6 +20,7 @@ CREATE TABLE "campaign_opens" (
 --> statement-breakpoint
 ALTER TABLE "customers" ADD COLUMN "acquisition_link_id" bigint;--> statement-breakpoint
 ALTER TABLE "orders" ADD COLUMN "campaign_link_id" bigint;--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD COLUMN "campaign_link_made" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "campaign_links" ADD CONSTRAINT "campaign_links_promo_code_id_promo_codes_id_fk" FOREIGN KEY ("promo_code_id") REFERENCES "public"."promo_codes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "campaign_opens" ADD CONSTRAINT "campaign_opens_link_id_campaign_links_id_fk" FOREIGN KEY ("link_id") REFERENCES "public"."campaign_links"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "campaign_opens" ADD CONSTRAINT "campaign_opens_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

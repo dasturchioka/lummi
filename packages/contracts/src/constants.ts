@@ -84,8 +84,9 @@ export type CampaignSource = (typeof CAMPAIGN_SOURCES)[number];
  * an unknown code lands on Home. A code is `A-Z a-z 0-9 _ -` (what `startapp` allows), at most 40
  * characters, so `l_<code>` stays far inside Telegram's 64.
  */
-export const CAMPAIGN_CODE_PATTERN = /^[A-Za-z0-9_-]{3,40}$/;
-export const CAMPAIGN_START_PARAM = /^l_([A-Za-z0-9_-]{3,40})$/;
+const CAMPAIGN_CODE_CHARS = '[A-Za-z0-9_-]{3,40}';
+export const CAMPAIGN_CODE_PATTERN = new RegExp(`^${CAMPAIGN_CODE_CHARS}$`);
+export const CAMPAIGN_START_PARAM = new RegExp(`^l_(${CAMPAIGN_CODE_CHARS})$`);
 
 /** The `startapp` value of a campaign link. */
 export const campaignStartParam = (code: string): string => `l_${code}`;
