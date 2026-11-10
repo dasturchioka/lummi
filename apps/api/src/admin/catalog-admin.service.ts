@@ -61,7 +61,7 @@ async function transient<T>(run: () => Promise<Outcome<T>>): Promise<Outcome<T>>
 }
 
 /** 23505, whether Drizzle wrapped the driver error or not. */
-function isUniqueViolation(e: unknown): boolean {
+export function isUniqueViolation(e: unknown): boolean {
   const code = (e as { code?: string; cause?: { code?: string } }) ?? {};
   return code.code === '23505' || code.cause?.code === '23505';
 }
@@ -73,7 +73,7 @@ const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null 
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Uzbek texts and aliases are normalised on every save (ADR 0018). Names and brands are left alone. */
-function normalise(input: FragranceInput): FragranceInput {
+export function normalise(input: FragranceInput): FragranceInput {
   return {
     ...input,
     longevityUz: normalizeUzbek(input.longevityUz),
@@ -85,11 +85,11 @@ function normalise(input: FragranceInput): FragranceInput {
 }
 
 /** The end of a markdown's last day: 23:59:59 Asia/Tashkent (spec Changes 2026-11-09). */
-function saleEndInstant(day: string): Date | null {
+export function saleEndInstant(day: string): Date | null {
   const [y, m, d] = day.split('-').map(Number);
   return tashkentToUtc({ year: y!, month: m!, day: d!, hour: 23, minute: 59, second: 59 });
 }
-function saleEndDay(at: Date | null): string | null {
+export function saleEndDay(at: Date | null): string | null {
   if (!at) return null;
   const t = utcToTashkent(at);
   return `${t.year}-${pad(t.month)}-${pad(t.day)}`;
@@ -240,120 +240,157 @@ export class CatalogAdminService {
 
   async create(actor: StaffRow, raw: FragranceInput): Promise<Outcome<FragranceAdmin>> {
     const input = normalise(raw);
-    const slug = slugify(input.name);
-    if (!slug) return fail('invalid', ['name']);
     try {
-      return await this.db.transaction(async (tx) => {
-        const bad = await this.checkReferences(tx, input, null);
-        if (bad.length) return fail('invalid', bad);
-        // Codes are handed out one after another; the lock keeps two creates from taking the same.
-        await tx.execute(sql`select pg_advisory_xact_lock(${PRODUCT_CODE_LOCK})`);
-        const [{ next }] = (
-          await tx.execute<{ next: number }>(
-            sql`select coalesce(max(code::int), 0) + 1 as next from fragrances where code ~ '^[0-9]+$'`,
-          )
-        ).rows as [{ next: number }];
-        const code = String(next).padStart(3, '0');
-        const [row] = await tx
-          .insert(fragrances)
-          .values({ ...this.columns(input), slug, code })
-          .returning({ id: fragrances.id });
-        const id = row!.id;
-        await this.writeLinks(tx, id, input);
-        for (const v of input.volumes) await this.insertVolume(tx, id, v);
-        await reindexFragrances(tx, [id]);
-        await this.audit.record(tx, {
-          actor: { type: 'staff', id: actor.id },
-          action: 'catalog.fragrance_created',
-          targetType: 'fragrance',
-          targetId: id,
-          payload: { name: input.name, slug, code, hidden: input.hidden },
-        });
-        return { ok: true, value: (await this.get(id, tx))! } as const;
-      });
+      return await this.db.transaction((tx) => this.createWithin(tx, actor, input));
     } catch (e) {
       if (isUniqueViolation(e)) return fail('conflict', ['name']);
       throw e;
     }
   }
 
+  /**
+   * The create, inside the caller's transaction (the Excel import runs many in one). `input` is
+   * already normalised. Without `opts.code` the next free code is handed out under the code lock;
+   * the import passes the code from the file. A null actor (the seed) writes no audit entry.
+   */
+  async createWithin(
+    tx: DbOrTx,
+    actor: StaffRow | null,
+    input: FragranceInput,
+    opts: { code?: string; source?: 'import'; placeholder?: boolean } = {},
+  ): Promise<Outcome<FragranceAdmin>> {
+    const slug = slugify(input.name);
+    if (!slug) return fail('invalid', ['name']);
+    const bad = await this.checkReferences(tx, input, null);
+    if (bad.length) return fail('invalid', bad);
+    // Codes are handed out one after another; the lock keeps two creates from taking the same.
+    await tx.execute(sql`select pg_advisory_xact_lock(${PRODUCT_CODE_LOCK})`);
+    let code = opts.code;
+    if (!code) {
+      const [{ next }] = (
+        await tx.execute<{ next: number }>(
+          sql`select coalesce(max(code::int), 0) + 1 as next from fragrances where code ~ '^[0-9]+$'`,
+        )
+      ).rows as [{ next: number }];
+      code = String(next).padStart(3, '0');
+    }
+    const [row] = await tx
+      .insert(fragrances)
+      .values({ ...this.columns(input), slug, code })
+      .returning({ id: fragrances.id });
+    const id = row!.id;
+    await this.writeLinks(tx, id, input);
+    for (const v of input.volumes) await this.insertVolume(tx, id, v, opts.placeholder);
+    await reindexFragrances(tx, [id]);
+    if (actor) {
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'catalog.fragrance_created',
+        targetType: 'fragrance',
+        targetId: id,
+        payload: {
+          name: input.name,
+          slug,
+          code,
+          hidden: input.hidden,
+          ...(opts.source ? { source: opts.source } : {}),
+        },
+      });
+    }
+    return { ok: true, value: (await this.get(id, tx))! } as const;
+  }
+
   async update(actor: StaffRow, id: number, raw: FragranceInput): Promise<Outcome<FragranceAdmin>> {
     const input = normalise(raw);
-    return transient(() =>
-      this.db.transaction(async (tx) => {
-        const [locked] = await tx
-          .select({ id: fragrances.id })
-          .from(fragrances)
-          .where(eq(fragrances.id, id))
-          .for('update');
-        if (!locked) return fail('not_found');
-        const bad = await this.checkReferences(tx, input, id);
-        if (bad.length) return fail('invalid', bad);
-        // The volume rows are locked before they are read: a count made meanwhile (a manager's, or
-        // the BTS handover's) is either seen here or waits for this save (ADR 0010).
-        await tx
-          .select({ id: volumes.id })
-          .from(volumes)
-          .where(eq(volumes.fragranceId, id))
-          .orderBy(asc(volumes.id)) // ascending id, like checkout: no lock-order deadlock
-          .for('update');
-        const before = (await this.get(id, tx))!;
-        // On hand is compare-and-set: the owner's form carries the count it loaded; a changed
-        // count is written only if the stored one still equals it. Nothing is written otherwise.
-        for (const v of input.volumes) {
-          const old = before.volumes.find((x) => x.ml === v.ml);
-          if (old && this.onHandEdited(v) && old.onHand !== v.loadedOnHand) {
-            return fail('on_hand_changed', [`volumes.${input.volumes.indexOf(v)}.onHand`]);
-          }
-        }
+    return transient(() => this.db.transaction((tx) => this.updateWithin(tx, actor, id, input)));
+  }
 
-        await tx
-          .update(fragrances)
-          .set({ ...this.columns(input), updatedAt: this.edges.clock.now() })
-          .where(eq(fragrances.id, id));
-        await tx.delete(fragranceNotes).where(eq(fragranceNotes.fragranceId, id));
-        await tx.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, id));
-        await this.writeLinks(tx, id, input);
-        const volumeChanges: Record<string, unknown>[] = [];
-        for (const v of input.volumes) {
-          const old = before.volumes.find((x) => x.ml === v.ml);
-          if (!old) {
-            await this.insertVolume(tx, id, v);
-            volumeChanges.push({ ml: v.ml, added: true, price: v.price, onHand: v.onHand });
-            continue;
-          }
-          const end = v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null;
-          const writeOnHand = this.onHandEdited(v);
-          const touched = old.price !== v.price || writeOnHand;
-          await tx
-            .update(volumes)
-            .set({
-              price: v.price,
-              salePrice: v.salePrice,
-              saleEndsAt: end,
-              ...(writeOnHand ? { onHand: v.onHand } : {}),
-              ...(touched ? { isPlaceholder: false } : {}),
-            })
-            .where(eq(volumes.id, old.id));
-          const diff = this.volumeDiff(old, v, writeOnHand);
-          if (diff) volumeChanges.push({ ml: v.ml, ...diff });
-        }
+  /** The update, inside the caller's transaction; `input` is already normalised. Null actor: no audit. */
+  async updateWithin(
+    tx: DbOrTx,
+    actor: StaffRow | null,
+    id: number,
+    input: FragranceInput,
+    opts: { source?: 'import' } = {},
+  ): Promise<Outcome<FragranceAdmin>> {
+    const [locked] = await tx
+      .select({ id: fragrances.id })
+      .from(fragrances)
+      .where(eq(fragrances.id, id))
+      .for('update');
+    if (!locked) return fail('not_found');
+    const bad = await this.checkReferences(tx, input, id);
+    if (bad.length) return fail('invalid', bad);
+    // The volume rows are locked before they are read: a count made meanwhile (a manager's, or
+    // the BTS handover's) is either seen here or waits for this save (ADR 0010).
+    await tx
+      .select({ id: volumes.id })
+      .from(volumes)
+      .where(eq(volumes.fragranceId, id))
+      .orderBy(asc(volumes.id)) // ascending id, like checkout: no lock-order deadlock
+      .for('update');
+    const before = (await this.get(id, tx))!;
+    // On hand is compare-and-set: the owner's form carries the count it loaded; a changed
+    // count is written only if the stored one still equals it. Nothing is written otherwise.
+    for (const v of input.volumes) {
+      const old = before.volumes.find((x) => x.ml === v.ml);
+      if (old && this.onHandEdited(v) && old.onHand !== v.loadedOnHand) {
+        return fail('on_hand_changed', [`volumes.${input.volumes.indexOf(v)}.onHand`]);
+      }
+    }
 
-        await reindexFragrances(tx, [id]);
-        const after = (await this.get(id, tx))!;
-        const changed = (Object.keys(after) as (keyof FragranceAdmin)[]).filter(
-          (k) => k !== 'volumes' && JSON.stringify(before[k]) !== JSON.stringify(after[k]),
-        );
-        await this.audit.record(tx, {
-          actor: { type: 'staff', id: actor.id },
-          action: 'catalog.fragrance_updated',
-          targetType: 'fragrance',
-          targetId: id,
-          payload: { name: after.name, changed, volumes: volumeChanges },
-        });
-        return { ok: true, value: after } as const;
-      }),
+    await tx
+      .update(fragrances)
+      .set({ ...this.columns(input), updatedAt: this.edges.clock.now() })
+      .where(eq(fragrances.id, id));
+    await tx.delete(fragranceNotes).where(eq(fragranceNotes.fragranceId, id));
+    await tx.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, id));
+    await this.writeLinks(tx, id, input);
+    const volumeChanges: Record<string, unknown>[] = [];
+    for (const v of input.volumes) {
+      const old = before.volumes.find((x) => x.ml === v.ml);
+      if (!old) {
+        await this.insertVolume(tx, id, v);
+        volumeChanges.push({ ml: v.ml, added: true, price: v.price, onHand: v.onHand });
+        continue;
+      }
+      const end = v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null;
+      const writeOnHand = this.onHandEdited(v);
+      const touched = old.price !== v.price || writeOnHand;
+      await tx
+        .update(volumes)
+        .set({
+          price: v.price,
+          salePrice: v.salePrice,
+          saleEndsAt: end,
+          ...(writeOnHand ? { onHand: v.onHand } : {}),
+          ...(touched ? { isPlaceholder: false } : {}),
+        })
+        .where(eq(volumes.id, old.id));
+      const diff = this.volumeDiff(old, v, writeOnHand);
+      if (diff) volumeChanges.push({ ml: v.ml, ...diff });
+    }
+
+    await reindexFragrances(tx, [id]);
+    const after = (await this.get(id, tx))!;
+    const changed = (Object.keys(after) as (keyof FragranceAdmin)[]).filter(
+      (k) => k !== 'volumes' && JSON.stringify(before[k]) !== JSON.stringify(after[k]),
     );
+    if (actor) {
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'catalog.fragrance_updated',
+        targetType: 'fragrance',
+        targetId: id,
+        payload: {
+          name: after.name,
+          changed,
+          volumes: volumeChanges,
+          ...(opts.source ? { source: opts.source } : {}),
+        },
+      });
+    }
+    return { ok: true, value: after } as const;
   }
 
   async setHidden(actor: StaffRow, id: number, hidden: boolean): Promise<Outcome<FragranceAdmin>> {
@@ -407,17 +444,42 @@ export class CatalogAdminService {
       i.notes[level].map((noteId, position) => ({ fragranceId: id, noteId, level, position })),
     );
     if (links.length) await tx.insert(fragranceNotes).values(links);
-    if (i.similarIds.length) {
-      await tx
-        .insert(fragranceSimilar)
-        .values(
-          i.similarIds.map((similarId, position) => ({ fragranceId: id, similarId, position })),
-        );
-    }
+    await this.writeSimilar(tx, id, i.similarIds);
   }
 
-  private async insertVolume(tx: DbOrTx, fragranceId: number, v: VolumeInput) {
+  private async writeSimilar(tx: DbOrTx, id: number, similarIds: number[]) {
+    if (!similarIds.length) return;
+    await tx
+      .insert(fragranceSimilar)
+      .values(similarIds.map((similarId, position) => ({ fragranceId: id, similarId, position })));
+  }
+
+  /** True when a similar id is the fragrance itself or does not exist. */
+  private async similarBad(tx: DbOrTx, ids: number[], selfId: number | null): Promise<boolean> {
+    if (!ids.length) return false;
+    if (selfId !== null && ids.includes(selfId)) return true;
+    const found = await tx.select({ id: fragrances.id }).from(fragrances).where(inArray(fragrances.id, ids));
+    return found.length !== ids.length;
+  }
+
+  /**
+   * Links a new fragrance to the similar ones the import names (they may be created in the same
+   * file, so they are known only after the first pass), with the form's own checks. False: refused.
+   */
+  async linkSimilarWithin(tx: DbOrTx, id: number, similarIds: number[]): Promise<boolean> {
+    if (await this.similarBad(tx, similarIds, id)) return false;
+    await this.writeSimilar(tx, id, similarIds);
+    return true;
+  }
+
+  private async insertVolume(
+    tx: DbOrTx,
+    fragranceId: number,
+    v: VolumeInput,
+    placeholder = false,
+  ) {
     await tx.insert(volumes).values({
+      isPlaceholder: placeholder,
       fragranceId,
       ml: v.ml,
       price: v.price,
@@ -459,16 +521,7 @@ export class CatalogAdminService {
         if (i.notes[level].some((n) => !have.has(n))) bad.push(`notes.${level}`);
       }
     }
-    if (i.similarIds.length) {
-      if (selfId !== null && i.similarIds.includes(selfId)) bad.push('similarIds');
-      else {
-        const found = await tx
-          .select({ id: fragrances.id })
-          .from(fragrances)
-          .where(inArray(fragrances.id, i.similarIds));
-        if (found.length !== i.similarIds.length) bad.push('similarIds');
-      }
-    }
+    if (await this.similarBad(tx, i.similarIds, selfId)) bad.push('similarIds');
     i.volumes.forEach((v, n) => {
       if (v.saleEndsOn && !saleEndInstant(v.saleEndsOn)) bad.push(`volumes.${n}.saleEndsOn`);
     });
@@ -515,6 +568,22 @@ export class CatalogAdminService {
     id: number | null,
     raw: DictionaryInput,
   ): Promise<Outcome<DictionaryItem>> {
+    try {
+      return await this.db.transaction((tx) => this.saveDictionaryWithin(tx, actor, kind, id, raw));
+    } catch (e) {
+      if (isUniqueViolation(e)) return fail('conflict', ['nameRu']);
+      throw e;
+    }
+  }
+
+  /** The dictionary save inside the caller's transaction (the Excel import uses it); null actor: no audit. */
+  async saveDictionaryWithin(
+    tx: DbOrTx,
+    actor: StaffRow | null,
+    kind: 'families' | 'notes',
+    id: number | null,
+    raw: DictionaryInput,
+  ): Promise<Outcome<DictionaryItem>> {
     const table = kind === 'families' ? families : notes;
     const values = {
       nameRu: raw.nameRu,
@@ -522,51 +591,44 @@ export class CatalogAdminService {
       aliases: [...new Set(raw.aliases.map(normalizeUzbek))],
     };
     const target = kind === 'families' ? 'family' : 'note';
-    try {
-      return await this.db.transaction(async (tx) => {
-        let rowId = id;
-        if (id === null) {
-          const [row] = await tx.insert(table).values(values).returning({ id: table.id });
-          rowId = row!.id;
-        } else {
-          const [row] = await tx
-            .update(table)
-            .set(values)
-            .where(eq(table.id, id))
-            .returning({ id: table.id });
-          if (!row) return fail('not_found');
-        }
-        if (id !== null) {
-          // every fragrance that shows this note or family is searchable by its new name
-          const used =
-            kind === 'families'
-              ? await tx
-                  .select({ id: fragrances.id })
-                  .from(fragrances)
-                  .where(eq(fragrances.familyId, id))
-              : await tx
-                  .selectDistinct({ id: fragranceNotes.fragranceId })
-                  .from(fragranceNotes)
-                  .where(eq(fragranceNotes.noteId, id));
-          await reindexFragrances(
-            tx,
-            used.map((u) => u.id),
-          );
-        }
-        await this.audit.record(tx, {
-          actor: { type: 'staff', id: actor.id },
-          action: `catalog.${target}_${id === null ? 'created' : 'updated'}`,
-          targetType: target,
-          targetId: rowId,
-          payload: values,
-        });
-        const item = (await this.listDictionary(kind, tx)).find((d) => d.id === rowId)!;
-        return { ok: true, value: item } as const;
-      });
-    } catch (e) {
-      if (isUniqueViolation(e)) return fail('conflict', ['nameRu']);
-      throw e;
+    let rowId = id;
+    if (id === null) {
+      const [row] = await tx.insert(table).values(values).returning({ id: table.id });
+      rowId = row!.id;
+    } else {
+      const [row] = await tx
+        .update(table)
+        .set(values)
+        .where(eq(table.id, id))
+        .returning({ id: table.id });
+      if (!row) return fail('not_found');
     }
+    if (id !== null) {
+      // every fragrance that shows this note or family is searchable by its new name
+      const used =
+        kind === 'families'
+          ? await tx.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.familyId, id))
+          : await tx
+              .select({ id: fragranceNotes.fragranceId })
+              .from(fragranceNotes)
+              .where(eq(fragranceNotes.noteId, id))
+              .groupBy(fragranceNotes.fragranceId);
+      await reindexFragrances(
+        tx,
+        used.map((u) => u.id),
+      );
+    }
+    if (actor) {
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: `catalog.${target}_${id === null ? 'created' : 'updated'}`,
+        targetType: target,
+        targetId: rowId,
+        payload: values,
+      });
+    }
+    const item = (await this.listDictionary(kind, tx)).find((d) => d.id === rowId)!;
+    return { ok: true, value: item } as const;
   }
 
   // ---- on hand and photos ----
