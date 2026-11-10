@@ -19,6 +19,8 @@ function failure(f: Failure) {
       return { status: 409 as const, body: { code: 'on_hand_changed' as const, fields } };
     case 'invalid':
       return { status: 422 as const, body: { code: 'invalid' as const, fields } };
+    case 'try_again':
+      return { status: 409 as const, body: { code: 'try_again' as const } };
   }
 }
 
@@ -149,8 +151,9 @@ export class OnHandController {
   set(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.onHand.set, async ({ params, body }) => {
       const res = await this.catalog.setOnHand(actor, params.id, body.onHand);
-      return res.ok
-        ? { status: 200 as const, body: res.value }
+      if (res.ok) return { status: 200 as const, body: res.value };
+      return res.reason === 'try_again'
+        ? { status: 409 as const, body: { code: 'try_again' as const } }
         : { status: 404 as const, body: { code: 'not_found' as const } };
     });
   }

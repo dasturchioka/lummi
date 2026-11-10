@@ -57,3 +57,11 @@ export type Picked =
 
 export const regionName = (r: RegionDto, language: 'ru' | 'uz') =>
   language === 'uz' ? r.nameUz : r.nameRu;
+
+/**
+ * Where a parcel goes, named in the shopper's language: BTS publishes city names in Russian only
+ * (spec Changes 2026-11-09), so RU shows the city and UZ the region's own UZ name rather than a
+ * Cyrillic word inside a Latin line («BTS yetkazish, Samarqand viloyati»).
+ */
+export const deliveryPlace = (region: RegionDto, city: string, language: 'ru' | 'uz') =>
+  language === 'uz' ? region.nameUz : city;

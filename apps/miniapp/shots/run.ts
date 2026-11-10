@@ -223,7 +223,7 @@ async function main() {
             undefined,
             { timeout: 20_000 },
           );
-          await screen.act?.({ page });
+          await screen.act?.({ page, db: shotDb });
           if (!screen.loading)
             await page.waitForFunction(
               () => !document.querySelector('[data-skeleton]:not([data-gallery] [data-skeleton])'),

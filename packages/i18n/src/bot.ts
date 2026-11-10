@@ -8,6 +8,10 @@ export const botMessages = defineMessages(
         'Добро пожаловать в LUMMI.\nExtrait de Parfum по мотивам известных ароматов. Откройте магазин и выберите свой.',
       openShop: 'Открыть магазин',
       alertPrefix: 'Системное сообщение',
+      /** The "order created" message (spec Changes 2026-11-07, customer messages): 1-2 emoji. */
+      orderCreated:
+        'Заказ № {number} оформлен ✨\nСумма к оплате: {amount}\nАроматы забронированы до {until}. Статус заказа всегда виден в разделе «Заказы».',
+      openOrder: 'Открыть заказ',
     },
   },
   {
@@ -16,6 +20,9 @@ export const botMessages = defineMessages(
         'LUMMI ga xush kelibsiz.\nMashhur atirlar asosidagi Extrait de Parfum. Doʻkonni oching va oʻzingizni tanlang.',
       openShop: 'Doʻkonni ochish',
       alertPrefix: 'Tizim xabari',
+      orderCreated:
+        '№ {number} buyurtma rasmiylashtirildi ✨\nToʻlov summasi: {amount}\nAtirlar {until} gacha band qilindi. Buyurtma holati doim «Buyurtmalar» boʻlimida koʻrinadi.',
+      openOrder: 'Buyurtmani ochish',
     },
   },
 );

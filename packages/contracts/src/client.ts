@@ -51,6 +51,14 @@ export const clientRoutes = {
     pages: route('GET', '/content/pages', [200, 401]),
     page: route('GET', '/content/pages/:slug', [200, 401, 404]),
   },
+  checkout: {
+    get: route('GET', '/checkout', [200, 401]),
+  },
+  orders: {
+    create: route('POST', '/orders', [201, 401, 403, 409, 422]),
+    list: route('GET', '/orders', [200, 401]),
+    get: route('GET', '/orders/:number', [200, 401, 404]),
+  },
   catalog: {
     list: route('GET', '/catalog/fragrances', [200, 401]),
     fragrance: route('GET', '/catalog/fragrances/:slug', [200, 401, 404]),
