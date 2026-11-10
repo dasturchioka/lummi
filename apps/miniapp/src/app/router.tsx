@@ -97,6 +97,9 @@ const devRoutes = import.meta.env.DEV
     ]
   : [];
 
+/** Both set screens live in one chunk: one loader, so the entry carries its preload list once. */
+const setsScreens = () => import('../screens/Sets');
+
 const routeTree = rootRoute.addChildren([
   createRoute({ ...at('/'), component: Home }),
   createRoute({
@@ -118,11 +121,11 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/sets/discovery'),
-    component: lazyRouteComponent(() => import('../screens/Sets'), 'DiscoverySetScreen'),
+    component: lazyRouteComponent(setsScreens, 'DiscoverySetScreen'),
   }),
   createRoute({
     ...at('/sets/builder'),
-    component: lazyRouteComponent(() => import('../screens/Sets'), 'BuilderScreen'),
+    component: lazyRouteComponent(setsScreens, 'BuilderScreen'),
   }),
   createRoute({
     ...at('/cart'),

@@ -1,6 +1,6 @@
 'use client';
 
-import { STARTAPP_ROUTES, type BroadcastDto, type StartappTarget } from '@lummi/contracts';
+import { STARTAPP_LABELS, type BroadcastDto, type StartappTarget } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { ArrowLeft, ImageIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -24,8 +24,8 @@ function targetLabel(b: BroadcastDto, m: AdminMessages['broadcasts'], language: 
   const target = b.buttonTarget ?? '';
   if (target.startsWith('p_'))
     return fill(m.targetFragrance, { name: b.buttonFragrance ?? target.slice(2) });
-  return Object.hasOwn(STARTAPP_ROUTES, target)
-    ? STARTAPP_ROUTES[target as StartappTarget].label[language]
+  return Object.hasOwn(STARTAPP_LABELS, target)
+    ? STARTAPP_LABELS[target as StartappTarget][language]
     : target;
 }
 

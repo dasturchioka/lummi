@@ -48,19 +48,34 @@ export type SetLineKind = Exclude<LineKind, 'volume'>;
 export const SET_SIZE = 5;
 
 /**
- * The one list of plain `startapp` targets (ADR 0022): the Mini App maps each to its route, the bot
- * and the admin's broadcast button picker offer exactly these, with the picker's RU/UZ label.
- * `p_<slug>` (a fragrance card) and `o_<number>` (an order) are matched by pattern in the Mini App.
- * An unknown value lands on Home. Zod-free, so every package may import it.
+ * The one list of plain `startapp` targets (ADR 0022) and the route each opens in the Mini App; the
+ * bot and the admin's broadcast button picker offer exactly these. `p_<slug>` (a fragrance card) and
+ * `o_<number>` (an order) are matched by pattern in the Mini App. An unknown value lands on Home.
+ * Zod-free, so every package may import it.
  */
 export const STARTAPP_ROUTES = {
-  home: { route: '/', label: { ru: 'Главная', uz: 'Bosh sahifa' } },
-  catalog: { route: '/catalog', label: { ru: 'Каталог', uz: 'Katalog' } },
-  cart: { route: '/cart', label: { ru: 'Корзина', uz: 'Savat' } },
-  orders: { route: '/orders', label: { ru: 'Заказы', uz: 'Buyurtmalar' } },
-  profile: { route: '/profile', label: { ru: 'Профиль', uz: 'Profil' } },
-  set_discovery: { route: '/sets/discovery', label: { ru: 'Discovery set', uz: 'Discovery set' } },
-  builder: { route: '/sets/builder', label: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' } },
-} as const satisfies Record<string, { route: string; label: { ru: string; uz: string } }>;
+  home: '/',
+  catalog: '/catalog',
+  cart: '/cart',
+  orders: '/orders',
+  profile: '/profile',
+  set_discovery: '/sets/discovery',
+  builder: '/sets/builder',
+} as const satisfies Record<string, string>;
 export type StartappTarget = keyof typeof STARTAPP_ROUTES;
 export const STARTAPP_TARGETS = Object.keys(STARTAPP_ROUTES) as StartappTarget[];
+
+/**
+ * The picker's RU/UZ name of each target, keyed by the list above: a target added there without a
+ * name here fails typecheck. Apart from the routes, so the Mini App's first screen does not carry
+ * the admin's labels (ADR 0030 budget).
+ */
+export const STARTAPP_LABELS = {
+  home: { ru: 'Главная', uz: 'Bosh sahifa' },
+  catalog: { ru: 'Каталог', uz: 'Katalog' },
+  cart: { ru: 'Корзина', uz: 'Savat' },
+  orders: { ru: 'Заказы', uz: 'Buyurtmalar' },
+  profile: { ru: 'Профиль', uz: 'Profil' },
+  set_discovery: { ru: 'Discovery set', uz: 'Discovery set' },
+  builder: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' },
+} as const satisfies Record<StartappTarget, { ru: string; uz: string }>;

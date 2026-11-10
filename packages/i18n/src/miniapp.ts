@@ -24,7 +24,6 @@ export const miniappMessages = defineMessages(
       discoveryLabel: 'Набор',
       discoveryTitle: 'Discovery set',
       discoveryText: 'Пять ароматов по 10 мл',
-      discoveryOpen: 'Открыть набор',
       filterLabel: 'Тип аромата',
     },
     /** The catalog screen: type chips, the four filters, the sort and the counter. */
@@ -58,7 +57,6 @@ export const miniappMessages = defineMessages(
       emptyText: 'Мы собираем коллекцию. Загляните чуть позже.',
       nothingTitle: 'Ничего не нашлось',
       nothingText: 'Попробуйте убрать часть фильтров или изменить цену.',
-      setsLabel: 'Наборы',
     },
     /** The search screen and the list card (search results now, the catalog next). */
     search: {
@@ -272,7 +270,6 @@ export const miniappMessages = defineMessages(
       discoveryLabel: 'Toʻplam',
       discoveryTitle: 'Discovery set',
       discoveryText: '10 ml li beshta ifor',
-      discoveryOpen: 'Toʻplamni ochish',
       filterLabel: 'Ifor turi',
     },
     catalog: {
@@ -311,7 +308,6 @@ export const miniappMessages = defineMessages(
       emptyText: 'Kolleksiyani tayyorlayapmiz. Birozdan keyin kiring.',
       nothingTitle: 'Hech narsa topilmadi',
       nothingText: 'Ba’zi filtrlarni olib tashlang yoki narxni oʻzgartiring.',
-      setsLabel: 'Toʻplamlar',
     },
     search: {
       label: 'Nomi yoki nota',

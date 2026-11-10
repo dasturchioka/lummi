@@ -5,7 +5,7 @@ import {
   BROADCAST_AUDIENCES,
   CAPTION_MAX,
   MAX_PHOTO_BYTES,
-  STARTAPP_ROUTES,
+  STARTAPP_LABELS,
   STARTAPP_TARGETS,
   type StartappTarget,
   TEXT_MAX,
@@ -353,7 +353,7 @@ export function BroadcastComposer({
         ? slug
           ? fill(b.targetFragrance, { name: fragranceName ?? slug })
           : b.targets.fragrance
-        : STARTAPP_ROUTES[kind as StartappTarget].label[language];
+        : STARTAPP_LABELS[kind as StartappTarget][language];
 
   return (
     <>
@@ -500,7 +500,7 @@ export function BroadcastComposer({
                   <option value="">{b.buttonNone}</option>
                   {STARTAPP_TARGETS.map((target) => (
                     <option key={target} value={target}>
-                      {STARTAPP_ROUTES[target].label[language]}
+                      {STARTAPP_LABELS[target][language]}
                     </option>
                   ))}
                   <option value="fragrance">{b.targets.fragrance}</option>
