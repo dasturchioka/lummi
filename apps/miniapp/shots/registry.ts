@@ -951,6 +951,46 @@ export const screens: ScreenDef[] = [
     },
   },
   {
+    // #29: the code stopped working while the shopper was on the screen, and free delivery offsets
+    // it (260 000 − 25 000 + 25 000 = 260 000 shipped free): the same total, a different order, so
+    // the sheet says the discount changed and names the code and why
+    id: 'checkout-promo-lost',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await db.query(
+        `update volumes set price = price + 41000 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await db.query(
+        `insert into promo_codes (code, kind, amount) values ('MINUS25', 'fixed', 25000)
+         on conflict (code) do update set kind = 'fixed', amount = 25000, percent = null,
+           max_discount = null, expires_at = null, min_order_total = null, total_limit = null,
+           per_customer_limit = null, new_customers_only = false, applies_to_marked_down = false,
+           active = true`,
+      );
+      await forgetPromo({ api, db });
+      await fillCart(api, [['symphony', 50]]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'MINUS25' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(`update promo_codes set active = false where code = 'MINUS25'`);
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.query(
+        `update volumes set price = price - 41000 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await ctx.db.query(`update promo_codes set active = true where code = 'MINUS25'`);
+      await forgetPromo(ctx);
+      await checkoutDone(ctx);
+    },
+  },
+  {
     // no account phone yet: checkout opens the registration step on arrival
     id: 'checkout-no-phone',
     path: '/checkout',
