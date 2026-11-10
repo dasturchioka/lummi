@@ -25,6 +25,8 @@ export interface SendResult {
 
 export interface TelegramSender {
   send(message: OutboundMessage): Promise<SendResult>;
+  /** Stop the spinner on a tapped inline button (answerCallbackQuery); best effort, never throws. */
+  answerCallback(callbackQueryId: string): Promise<void>;
 }
 
 /** Telegram answered 403: the user blocked the bot, or the bot was removed from the chat. Never retried. */
@@ -62,6 +64,9 @@ export class UnconfiguredTelegramSender implements TelegramSender {
   send(): Promise<SendResult> {
     return Promise.reject(new Error('TelegramSender is not configured yet'));
   }
+  answerCallback(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /** The real sender: grammY Api with auto-retry (429 retry_after, 5xx) and a throttler (ADR 0021). */
@@ -71,6 +76,10 @@ export class GrammySender implements TelegramSender {
     this.api = new Api(token);
     this.api.config.use(apiThrottler());
     this.api.config.use(autoRetry({ maxRetryAttempts: 3, maxDelaySeconds: 60 }));
+  }
+
+  async answerCallback(callbackQueryId: string): Promise<void> {
+    await this.api.answerCallbackQuery(callbackQueryId).catch(() => undefined);
   }
 
   async send(m: OutboundMessage): Promise<SendResult> {

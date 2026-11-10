@@ -8,8 +8,10 @@ import { CustomersService } from '../auth/customers.service';
 import type { Env } from '../env';
 import { OutboxService } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
-import { ENV } from '../tokens';
+import type { Edges } from '../edges';
+import { EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
+import { BotReceipts, type IncomingReceipt } from './bot-receipts.service';
 
 export const BOT_INFO = Symbol('BOT_INFO');
 
@@ -17,7 +19,7 @@ export const BOT_INFO = Symbol('BOT_INFO');
 type BotContext = Context & { tx: DbOrTx; afterCommit: (() => Promise<void>)[] };
 
 /** Update types we handle; getUpdates and setWebhook both need them named (the default omits some). */
-export const ALLOWED_UPDATES = ['message', 'my_chat_member'] as const;
+export const ALLOWED_UPDATES = ['message', 'callback_query', 'my_chat_member'] as const;
 
 /**
  * The grammY bot as a module of the API (ADR 0015). Handlers do their DB work and queue replies
@@ -35,12 +37,16 @@ export class BotService implements OnApplicationShutdown {
     @Inject(CustomersService) private readonly customers: CustomersService,
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(BotReceipts) private readonly botReceipts: BotReceipts,
+    @Inject(EDGES) private readonly edges: Edges,
     @Inject(BOT_INFO) botInfo: UserFromGetMe | undefined,
   ) {
     this.bot = new Bot<BotContext>(env.BOT_TOKEN, botInfo ? { botInfo } : {});
     this.initialized = botInfo !== undefined;
     this.bot.use((ctx, next) => this.dedupe(ctx, next));
     this.bot.command('start', (ctx) => this.onStart(ctx));
+    this.bot.on(['message:photo', 'message:document'], (ctx) => this.onReceiptFile(ctx));
+    this.bot.on('callback_query:data', (ctx) => this.onCallback(ctx));
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
     this.bot.catch((err) =>
@@ -142,6 +148,42 @@ export class BotService implements OnApplicationShutdown {
         ? { reply_markup: { inline_keyboard: [[{ text: t.openShop, web_app: { url } }]] } }
         : {},
     });
+  }
+
+  /** A photo or document in a private chat is a receipt (#31). */
+  private async onReceiptFile(ctx: BotContext): Promise<void> {
+    const m = ctx.message;
+    if (!m || ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return;
+    const file: IncomingReceipt | null = m.photo
+      ? {
+          kind: 'photo',
+          sizes: m.photo.map((p) => ({
+            fileId: p.file_id,
+            ...(p.file_size === undefined ? {} : { size: p.file_size }),
+          })),
+        }
+      : m.document
+        ? {
+            kind: 'document',
+            fileId: m.document.file_id,
+            ...(m.document.file_name ? { name: m.document.file_name } : {}),
+            ...(m.document.mime_type ? { mime: m.document.mime_type } : {}),
+            ...(m.document.file_size === undefined ? {} : { size: m.document.file_size }),
+          }
+        : null;
+    if (!file) return;
+    const job = await this.botReceipts.onFile(ctx.tx, ctx.from.id, ctx.from.language_code, file);
+    if (job) ctx.afterCommit.push(job);
+  }
+
+  /** A tapped inline button: today only the "which order is this receipt for?" choice. */
+  private async onCallback(ctx: BotContext): Promise<void> {
+    const query = ctx.callbackQuery;
+    if (!query?.data || query.from.is_bot) return;
+    const id = query.id;
+    ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id));
+    const job = await this.botReceipts.onChoice(ctx.tx, query.from.id, query.data);
+    if (job) ctx.afterCommit.push(job);
   }
 
   /** The group became a supergroup: its chat id changed. Follow it if it is our orders group. */

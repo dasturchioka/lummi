@@ -134,6 +134,13 @@
       "when": 1794348386654,
       "tag": "0018_saved_points",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794350578283,
+      "tag": "0019_bot_pending_receipts",
+      "breakpoints": true
     }
   ]
 }

@@ -1001,6 +1001,28 @@ export const savedPoints = pgTable(
 export type SavedPointRow = typeof savedPoints.$inferSelect;
 
 /**
+ * A file the shopper sent to the bot while several orders waited for payment (#31): the bot asks
+ * which order it is for and keeps the Telegram `file_id` (never the bytes) until they choose.
+ * Short-lived: a choice later than the setting `receipts.botChoiceSeconds` after `created_at`
+ * is refused, and the worker sweep deletes old rows.
+ */
+export const botPendingReceipts = pgTable(
+  'bot_pending_receipts',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    fileId: text('file_id').notNull(),
+    /** The document's own name; null for a photo. */
+    fileName: text('file_name'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bot_pending_receipts_created_idx').on(t.createdAt)],
+);
+export type BotPendingReceiptRow = typeof botPendingReceipts.$inferSelect;
+
+/**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
  * partial unique index is what enforces it. It sits in its own slot under the Discovery set
  * banner, which it never replaces; with none active Home shows only the Discovery banner.

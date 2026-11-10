@@ -601,6 +601,12 @@ function pointOf(o: OrderRow): OrderDto['delivery']['point'] {
   };
 }
 
+/** The Mini App's orders list, under its own URL (its path kept). */
+export function ordersUrl(miniAppUrl: string): string {
+  const base = miniAppUrl.endsWith('/') ? miniAppUrl : `${miniAppUrl}/`;
+  return new URL('orders', base).toString();
+}
+
 /** The Mini App route of an order, under the Mini App's own URL (its path kept). */
 export function orderUrl(miniAppUrl: string, number: number): string {
   const base = miniAppUrl.endsWith('/') ? miniAppUrl : `${miniAppUrl}/`;

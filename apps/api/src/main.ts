@@ -1,6 +1,12 @@
 import { createDb } from '@lummi/db';
 import { createApp } from './app';
-import { LocalFileStore, SystemClock, GrammySender, createReceiptJudge } from './edges';
+import {
+  LocalFileStore,
+  SystemClock,
+  GrammySender,
+  GrammyFiles,
+  createReceiptJudge,
+} from './edges';
 import { BotService } from './bot/bot.service';
 import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
@@ -17,6 +23,7 @@ const app = await createApp({
   edges: {
     clock: new SystemClock(),
     telegram: new GrammySender(env.BOT_TOKEN),
+    telegramFiles: new GrammyFiles(env.BOT_TOKEN),
     receiptJudge: createReceiptJudge(env, db),
     files: new LocalFileStore(env.FILES_DIR),
   },
