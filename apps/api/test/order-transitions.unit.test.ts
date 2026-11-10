@@ -44,6 +44,8 @@ function validPayload(action: OrderAction, actor: OrderActorType, from: OrderSta
       if (actor === 'customer') return { reason: 'customer_cancelled' };
       if (actor === 'system') return { reason: 'reserve_expired' };
       return { reason: from === 'handed_to_bts' ? 'not_collected_at_bts' : 'out_of_stock' };
+    case 'submit_receipt':
+      return { receiptId: 7 };
     case 'reject_receipt':
       return { reason: 'Сумма на чеке не совпадает с заказом' };
     case 'hand_to_bts':
@@ -98,6 +100,18 @@ describe('the transition table (ADR 0011, 0006)', () => {
 
 describe('required payloads', () => {
   const invalid = { ok: false, code: 'invalid_payload' };
+
+  it('a receipt submission names its Receipt (#28)', () => {
+    expect(planTransition('awaiting_payment', 'submit_receipt', 'customer', undefined)).toEqual(
+      invalid,
+    );
+    expect(
+      planTransition('awaiting_payment', 'submit_receipt', 'customer', { receiptId: 0 }),
+    ).toEqual(invalid);
+    expect(
+      planTransition('awaiting_payment', 'submit_receipt', 'customer', { receiptId: 12 }),
+    ).toMatchObject({ ok: true, to: 'receipt_review', payload: { receiptId: 12 } });
+  });
 
   it('a cancel always has a reason, and only one its actor may give', () => {
     expect(planTransition('awaiting_payment', 'cancel', 'staff', {})).toEqual(invalid);
@@ -183,8 +197,8 @@ describe('required payloads', () => {
       ok: true,
     });
     expect(planTransition('payment_confirmed', 'accept', 'staff', {})).toMatchObject({ ok: true });
-    expect(
-      planTransition('payment_confirmed', 'accept', 'staff', { trackingNumber: 'x' }),
-    ).toEqual(invalid);
+    expect(planTransition('payment_confirmed', 'accept', 'staff', { trackingNumber: 'x' })).toEqual(
+      invalid,
+    );
   });
 });

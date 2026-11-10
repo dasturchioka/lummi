@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -27,6 +28,25 @@ async function openFragrance(page: Page, which: number | string = 0) {
 /** Brings the volume editor to the top of the viewport (below the phone's top bar). */
 async function scrollToVolumes(page: Page) {
   await page.locator('[data-volume="10"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+}
+
+/**
+ * Puts the shot card back (a save that changes nothing writes nothing) or takes it off, through
+ * the owner's same-origin API, then reloads: the page reads the card on the server.
+ */
+async function shopCard(page: Page, card: { number: string; holder: string } | null) {
+  const url = `${new URL(page.url()).origin}/api/admin/shop-card`;
+  const res = card ? await page.request.put(url, { data: card }) : await page.request.delete(url);
+  if (res.status() !== 200) throw new Error(`shop card ${card ? 'set' : 'clear'}: ${res.status()}`);
+  await page.reload({ waitUntil: 'networkidle' });
+}
+
+/** Opens «Изменить» on the shot card and types another number (the holder stays). */
+async function editCard(page: Page, t: AdminMessages, number?: string) {
+  await shopCard(page, SHOT_CARD);
+  await page.getByRole('button', { name: t.shopCard.edit, exact: true }).click();
+  await page.getByRole('dialog').waitFor();
+  if (number !== undefined) await page.getByLabel(t.shopCard.number).fill(number);
 }
 
 /** A photo upload the browser or the API refuses, captured with its message under the slot. */
@@ -444,6 +464,103 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // «Карта для оплаты» (ticket #28): owner only. No card first, so the card is back for the rest.
+  {
+    id: 'shop-card-none',
+    path: '/shop-card',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await shopCard(page, null);
+      await page.getByText(t.shopCard.noneTitle, { exact: true }).waitFor();
+    },
+  },
+  {
+    id: 'shop-card',
+    path: '/shop-card',
+    as: 'owner',
+    act: async ({ page }) => {
+      await shopCard(page, SHOT_CARD);
+      await page.getByTestId('shop-card').waitFor();
+    },
+  },
+  {
+    id: 'shop-card-edit',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => editCard(page, t),
+  },
+  {
+    id: 'shop-card-invalid',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      // fifteen digits and no holder
+      await editCard(page, t, '8600 3104 7725 905');
+      await page.getByLabel(t.shopCard.holder).fill('');
+      await page.getByRole('button', { name: t.shopCard.next }).click();
+      await page.locator('[aria-invalid="true"]').nth(1).waitFor();
+    },
+  },
+  {
+    id: 'shop-card-confirm',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await editCard(page, t, '8600310477259055');
+      await page.getByRole('button', { name: t.shopCard.next }).click();
+      await page.getByTestId('confirm-number').waitFor();
+    },
+  },
+  {
+    id: 'shop-card-typo',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      // one digit off: the check digit says so, the save stays possible
+      await editCard(page, t, '8600 3104 7725 9065');
+      await page.getByRole('button', { name: t.shopCard.next }).click();
+      await page.getByText(t.shopCard.checksum).waitFor();
+    },
+  },
+  {
+    // break-ui (#28): a 30-character holder on the confirm step, with the check-digit warning
+    id: 'shop-card-worst',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await editCard(page, t, '8600 3104 7725 9065');
+      await page.getByLabel(t.shopCard.holder).fill('MUHAMMADSODIQXON ABDURAHMONOVA');
+      await page.getByRole('button', { name: t.shopCard.next }).click();
+      await page.getByText(t.shopCard.checksum).waitFor();
+    },
+  },
+  {
+    id: 'shop-card-remove',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await shopCard(page, SHOT_CARD);
+      await page.getByRole('button', { name: t.shopCard.remove, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    // the audit keeps the card masked and reads it «было → стало»: one card replaced by another
+    // just before, whatever earlier runs left in the shared shot database
+    id: 'audit-shop-card',
+    path: '/audit?action=shop_card.changed',
+    as: 'owner',
+    act: async ({ page }) => {
+      await shopCard(page, EARLIER_CARD);
+      await shopCard(page, SHOT_CARD);
+    },
+  },
   // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
   { id: 'content', path: '/content', as: 'owner' },
   {

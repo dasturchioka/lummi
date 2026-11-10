@@ -16,3 +16,10 @@ export function saleEndDate(iso: string, language: Language): string {
  */
 export const keepNumberWithWord = (text: string): string =>
   text.replace(/(\d) +(?=\p{L})/gu, '$1 ');
+
+/** A file's size as the shopper reads it: `350 КБ`, `1,2 МБ` / `350 KB`, `1,2 MB`. */
+export function formatFileSize(bytes: number, language: Language): string {
+  const [kb, mb] = language === 'uz' ? ['KB', 'MB'] : ['КБ', 'МБ'];
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} ${kb}`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} ${mb}`;
+}

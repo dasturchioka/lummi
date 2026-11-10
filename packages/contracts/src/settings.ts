@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Bilingual } from './catalog';
 import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
+import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
@@ -23,6 +24,7 @@ export const SETTING_UNITS = [
   'ms',
   'sum',
   'ml',
+  'mb',
   'count',
   'ratio',
   'perSecond',
@@ -214,6 +216,21 @@ export const settingDefinitions = {
     hint: {
       ru: 'Коды стран без «+», например 998 (Узбекистан). Номер получателя из другой страны не примем.',
       uz: 'Mamlakat kodlari «+»siz, masalan 998 (Oʻzbekiston). Boshqa mamlakat raqami qabul qilinmaydi.',
+    },
+  },
+  /**
+   * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020), up to
+   * the technical bound `RECEIPT_UPLOAD_MAX_MB`.
+   */
+  'receipts.maxUploadMb': {
+    schema: z.number().int().min(1).max(RECEIPT_UPLOAD_MAX_MB),
+    default: 10,
+    area: 'shop',
+    unit: 'mb',
+    label: { ru: 'Размер файла чека', uz: 'Chek faylining hajmi' },
+    hint: {
+      ru: 'Самый большой скриншот или PDF чека, который примет приложение.',
+      uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
     },
   },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
