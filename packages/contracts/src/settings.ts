@@ -6,6 +6,9 @@ import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
 
+/** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
+export const BOT_CHOICE_MAX_SECONDS = 86_400;
+
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
   'shop',
@@ -23,6 +26,7 @@ export type SettingArea = (typeof SETTING_AREAS)[number];
 export const SETTING_UNITS = [
   'none',
   'seconds',
+  'days',
   'ms',
   'sum',
   'ml',
@@ -272,6 +276,24 @@ export const settingDefinitions = {
     },
   },
   /**
+   * How long the bot keeps a receipt the shopper sent while several orders waited for payment,
+   * until they choose the order with a button (#31). Later, the bot asks them to send it again.
+   */
+  'receipts.botChoiceSeconds': {
+    schema: z.number().int().min(60).max(BOT_CHOICE_MAX_SECONDS),
+    default: 3600,
+    area: 'shop',
+    unit: 'seconds',
+    label: {
+      ru: 'Сколько ждём выбор заказа для чека в боте',
+      uz: 'Botda chek uchun buyurtma tanlovini kutish vaqti',
+    },
+    hint: {
+      ru: 'Если у покупателя несколько заказов, бот спрашивает, к какому относится чек. Выбор после этого срока бот не примет и попросит отправить чек заново. 3 600 секунд = 1 час.',
+      uz: 'Xaridorning bir nechta buyurtmasi boʻlsa, bot chek qaysi buyurtmaga tegishli ekanini soʻraydi. Bu muddatdan keyingi tanlovni bot qabul qilmaydi va chekni qayta yuborishni soʻraydi. 3 600 soniya = 1 soat.',
+    },
+  },
+  /**
    * The longest reason staff may type when they link a credit that does not match its order
    * exactly: another amount (tiyin included) or another card (#32, #33), up to the technical
    * bound `PAYMENT_LINK_REASON_MAX`.
@@ -368,6 +390,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Объёмы, на которые действует право на апгрейд. Только больше 10 мл, через запятую.',
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
+    },
+  },
+  /** Orders take the last campaign link opened within this many days before ordering (#35, ADR 0022). */
+  'campaigns.attributionWindowDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 7,
+    area: 'shop',
+    unit: 'days',
+    label: { ru: 'Окно атрибуции ссылок', uz: 'Havolalarni hisobga olish oynasi' },
+    hint: {
+      ru: 'Заказ получает источник из последней рекламной ссылки, открытой за столько суток до заказа (сутки = ровно 24 часа).',
+      uz: 'Buyurtma manbasi — buyurtmadan shuncha sutka oldin ochilgan oxirgi reklama havolasi (sutka = roppa-rosa 24 soat).',
     },
   },
   /** Promo codes are guessable: a customer may type this many per window (ticket #29). */

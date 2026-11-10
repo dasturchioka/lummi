@@ -39,6 +39,7 @@ import { fill, formatDateTime, formatMoney } from '@lummi/i18n';
 import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { attributedLinkId } from '../campaigns/attribution';
 import {
   loadQuote,
   readCartLines,
@@ -332,6 +333,7 @@ export class OrdersService {
         .values({
           customerId: c.id,
           status: 'awaiting_payment',
+          campaignLinkId: await attributedLinkId(tx, c.id, now),
           reserveUntil,
           recipientName: input.recipientName,
           recipientPhone,
@@ -601,10 +603,15 @@ function pointOf(o: OrderRow): OrderDto['delivery']['point'] {
   };
 }
 
+/** The Mini App's orders list, under its own URL (its path kept). */
+export function ordersUrl(miniAppUrl: string): string {
+  const base = miniAppUrl.endsWith('/') ? miniAppUrl : `${miniAppUrl}/`;
+  return new URL('orders', base).toString();
+}
+
 /** The Mini App route of an order, under the Mini App's own URL (its path kept). */
 export function orderUrl(miniAppUrl: string, number: number): string {
-  const base = miniAppUrl.endsWith('/') ? miniAppUrl : `${miniAppUrl}/`;
-  return new URL(`orders/${number}`, base).toString();
+  return `${ordersUrl(miniAppUrl)}/${number}`;
 }
 
 /** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */

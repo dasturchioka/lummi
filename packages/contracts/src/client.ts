@@ -61,6 +61,9 @@ export const clientRoutes = {
     pages: route('GET', '/content/pages', [200, 401]),
     page: route('GET', '/content/pages/:slug', [200, 401, 404]),
   },
+  campaigns: {
+    open: route('POST', '/campaigns/open', [200, 401, 404, 429]),
+  },
   checkout: {
     get: route('GET', '/checkout', [200, 401, 404]),
   },

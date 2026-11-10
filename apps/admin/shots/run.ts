@@ -21,6 +21,7 @@ import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
 import { seedShotOrders } from './orders-data';
+import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';
 import { seedShotShopCard } from './shop-card-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
@@ -231,6 +232,8 @@ async function main() {
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
   await seedShotPromo(ownerCall);
+  await seedShotCampaigns(ownerCall);
+  await seedShotOpens(databaseUrl);
   await seedShotShopCard(ownerCall);
   await seedShotBroadcasts(databaseUrl);
   await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);

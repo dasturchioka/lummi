@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { SHOT_QR_CODE, WORST_LINK_CODE } from './campaign-data';
 import { customerScreens, stockScreens } from './stock-data';
 import {
   forgetPromoList,
@@ -550,6 +551,43 @@ export const screens: Screen[] = [
       await page.getByText(t.promo.inUse, { exact: true }).waitFor();
     },
     teardown: ({ db }) => forgetUses(db),
+  },
+  // Campaign links (ticket #35): the list, the editor of a hand-made link, a new link, and the QR.
+  { id: 'campaign-list', path: '/campaign-links', as: 'owner' },
+  {
+    id: 'campaign-editor',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: SHOT_QR_CODE, exact: true }).first().click();
+      await page.locator('#c-code').waitFor();
+    },
+  },
+  { id: 'campaign-new', path: '/campaign-links/new', as: 'owner' },
+  {
+    id: 'campaign-qr',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: SHOT_QR_CODE, exact: true }).first().click();
+      const qr = page.locator('img[src*="/qr"]');
+      await qr.waitFor();
+      await page.waitForFunction(() => {
+        const img = document.querySelector<HTMLImageElement>('img[src*="/qr"]');
+        return !!img && img.complete && img.naturalWidth > 0;
+      });
+      await qr.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  {
+    // the 40-character code and the longest label, on the list's row
+    id: 'campaign-editor-worst',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_LINK_CODE, exact: true }).first().click();
+      await page.locator('#c-code').waitFor();
+    },
   },
   { id: 'promo-audit', path: '/audit?action=promo.created', as: 'owner' },
   // break-ui (#29), captured into shots/29/worst-case/: sixty codes in every state, and the editor

@@ -59,6 +59,7 @@ import type { Env } from './env';
 import { AlertService } from './outbox/alert.service';
 import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
+import { BotReceipts } from './bot/bot-receipts.service';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
 import { CreditEvents } from './humo/credit-events';
@@ -68,6 +69,8 @@ import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { ContentAdminController, ContentController } from './content/content.controller';
 import { ContentService } from './content/content.service';
+import { CampaignsAdminController, CampaignsController } from './campaigns/campaigns.controller';
+import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
 import { SettingsService } from './settings/settings.service';
@@ -118,6 +121,8 @@ export class AppModule {
         BroadcastController,
         PromoAdminController,
         AdminOrdersController,
+        CampaignsController,
+        CampaignsAdminController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -129,6 +134,7 @@ export class AppModule {
         OutboxService,
         AlertService,
         BotService,
+        BotReceipts,
         WorkerRuntime,
         SettingsService,
         CatalogService,
@@ -166,6 +172,7 @@ export class AppModule {
         PromoAdminService,
         ReceiptRejection,
         AdminOrdersService,
+        CampaignsService,
       ],
       exports: [
         CreditEvents,

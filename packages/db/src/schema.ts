@@ -1,5 +1,6 @@
 import type { Discount } from '@lummi/contracts';
 import {
+  CAMPAIGN_SOURCES,
   LINE_KINDS,
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
@@ -70,6 +71,10 @@ export const customers = pgTable('customers', {
   deliveryCity: text('delivery_city'),
   /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
   dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
+  /** The first campaign link they ever opened: the acquisition source, never overwritten (ADR 0022). */
+  acquisitionLinkId: bigint('acquisition_link_id', { mode: 'number' }).references(
+    () => campaignLinks.id,
+  ),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -701,6 +706,10 @@ export const orders = pgTable(
     creditId: bigint('credit_id', { mode: 'number' }).references(() => credits.id),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
+    /** The last campaign link the customer opened within `campaigns.attributionWindowDays` before ordering (ADR 0022). */
+    campaignLinkId: bigint('campaign_link_id', { mode: 'number' }).references(
+      () => campaignLinks.id,
+    ),
     /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
     trackingNumber: text('tracking_number'),
     /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
@@ -989,6 +998,33 @@ export const savedPoints = pgTable(
 export type SavedPointRow = typeof savedPoints.$inferSelect;
 
 /**
+ * A receipt the shopper sent to the bot (#31), kept until it is dealt with: the Telegram `file_id`
+ * (never the bytes), written in the update's own transaction so a restart cannot lose it (ADR 0021).
+ * With `order_number` null it waits for the shopper's choice among several orders (valid for the
+ * setting `receipts.botChoiceSeconds` after `created_at`; the worker sweep deletes older ones).
+ * With an order it is in flight: a BullMQ job (`bot-receipt-<id>`, re-queued by a sweep if the
+ * queue entry was lost) downloads the file and calls the receipt intake, and the row is deleted
+ * only when the outcome is final (attached, or refused and answered).
+ */
+export const botPendingReceipts = pgTable(
+  'bot_pending_receipts',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    fileId: text('file_id').notNull(),
+    /** The document's own name; null for a photo. */
+    fileName: text('file_name'),
+    /** The order it goes to; null until the shopper chooses. */
+    orderNumber: bigint('order_number', { mode: 'number' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bot_pending_receipts_created_idx').on(t.createdAt)],
+);
+export type BotPendingReceiptRow = typeof botPendingReceipts.$inferSelect;
+
+/**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
  * partial unique index is what enforces it. It sits in its own slot under the Discovery set
  * banner, which it never replaces; with none active Home shows only the Discovery banner.
@@ -1074,6 +1110,8 @@ export const promoCodes = pgTable(
     /** TZ «применять к уценённым»; off: marked-down items are not discounted (ADR 0008). */
     appliesToMarkedDown: boolean('applies_to_marked_down').notNull().default(false),
     active: boolean('active').notNull().default(true),
+    /** Its automatic campaign link was made (#35); a link the owner deleted is never made again. */
+    campaignLinkMade: boolean('campaign_link_made').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1121,3 +1159,51 @@ export const promoCodeUses = pgTable(
 
 export type PromoCodeRow = typeof promoCodes.$inferSelect;
 export type PromoCodeUseRow = typeof promoCodeUses.$inferSelect;
+
+export const campaignSourceEnum = pgEnum('campaign_source', CAMPAIGN_SOURCES);
+
+/**
+ * A Campaign link (ticket #35, ADR 0022): `startapp=l_<code>` opens `target` (a start target from
+ * `@lummi/contracts/constants`) and prefills `promo_code_id`'s code in the cart. The code's case is
+ * kept (Telegram keeps it) but two links never differ only by case. Every promo code gets one.
+ */
+export const campaignLinks = pgTable(
+  'campaign_links',
+  {
+    id: id(),
+    code: text('code').notNull(),
+    target: text('target').notNull(),
+    promoCodeId: bigint('promo_code_id', { mode: 'number' }).references(() => promoCodes.id),
+    source: campaignSourceEnum('source').notNull(),
+    sourceLabel: text('source_label'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('campaign_links_code_idx').on(sql`lower(${t.code})`),
+    index('campaign_links_promo_idx').on(t.promoCodeId),
+    check('campaign_links_code_check', sql`${t.code} ~ '^[A-Za-z0-9_-]{3,40}$'`),
+  ],
+);
+
+/** One row per open: customer, link, time. "Opens" in reports count distinct customers (ADR 0022). */
+export const campaignOpens = pgTable(
+  'campaign_opens',
+  {
+    id: id(),
+    linkId: bigint('link_id', { mode: 'number' })
+      .notNull()
+      .references(() => campaignLinks.id),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('campaign_opens_customer_idx').on(t.customerId, t.openedAt),
+    index('campaign_opens_link_idx').on(t.linkId, t.customerId),
+  ],
+);
+
+export type CampaignLinkRow = typeof campaignLinks.$inferSelect;
+export type CampaignOpenRow = typeof campaignOpens.$inferSelect;
