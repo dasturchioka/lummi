@@ -53,6 +53,7 @@ import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
+import { readShopCard } from '../payment/shop-card.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
@@ -62,7 +63,8 @@ export type CreateOutcome =
   | { kind: 'phone_required' }
   | { kind: 'conflict'; code: CheckoutConflictCode; checkout: CheckoutDto }
   | { kind: 'try_again' }
-  | { kind: 'invalid'; code: OrderInputError };
+  | { kind: 'invalid'; code: OrderInputError }
+  | { kind: 'payment_unavailable' };
 
 /** Where the parcel goes: a point from our list (its region), or a typed address in a region. */
 type Destination =
@@ -144,6 +146,7 @@ export class OrdersService {
       item: item ? toCheckoutLineDto(item) : null,
       savedPoints: saved,
       defaultSavedPointId: defaultSavedPoint(saved)?.id ?? null,
+      paymentAvailable: (await readShopCard(tx)) !== null,
     };
   }
 
@@ -200,6 +203,8 @@ export class OrdersService {
           order: toOrderDto(made, await linesOf(tx, made.id), await cancellationOf(tx, made.id)),
         };
 
+      // no shop card, nowhere to transfer: checkout is closed (#28)
+      if (!(await readShopCard(tx))) return { kind: 'payment_unavailable' } as const;
       if (!c.phone) return { kind: 'phone_required' } as const;
       if (c.dataConsentAt === null && !input.consent)
         return { kind: 'invalid', code: 'consent_required' } as const;

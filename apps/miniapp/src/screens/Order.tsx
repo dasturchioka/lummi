@@ -1,30 +1,22 @@
-import { customerMayCancel } from '@lummi/contracts/constants';
-import type { OrderDto, OrderLineDto, RepeatResultDto } from '@lummi/contracts';
-import { fill, formatDateTime, formatPhone, plural } from '@lummi/i18n';
+import type { OrderDto, OrderLineDto } from '@lummi/contracts';
+import { fill, formatDateTime, formatPhone } from '@lummi/i18n';
 import { useParams, useRouter } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { PointMeta } from '../delivery/Hours';
+import { CancelOrder } from '../orders/CancelOrder';
+import { RepeatOrder } from '../orders/repeat';
 import { MoneySummary, SectionTitle, StatusPill, Timeline } from '../orders/parts';
-import { useCancelOrder, useOrder, useOrdersText, useRepeatOrder } from '../orders/queries';
+import { useOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
-import { hapticSuccess, openManagerChat } from '../lib/telegram';
+import { openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { attribution } from '../ui/FragranceListCard';
-import {
-  AlertIcon,
-  BoxIcon,
-  ClockIcon,
-  CloseIcon,
-  GiftIcon,
-  PinIcon,
-  RefreshIcon,
-} from '../ui/icons';
+import { BoxIcon, ClockIcon, CloseIcon, GiftIcon, PinIcon } from '../ui/icons';
 import { MetaLine } from '../ui/MetaLine';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
-import { Sheet, SheetDescription } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { SetFragranceList } from '../ui/SetFragranceList';
@@ -135,12 +127,13 @@ function DeliveryCard({ order }: { order: OrderDto }) {
 
 /**
  * What to transfer while the order waits for payment (mockup 07, «Сумма к переводу»): the
- * server's Amount due at 28 px, then how long the fragrances stay reserved. The card number,
- * copy buttons and receipt upload join it with the payment screen (#28).
+ * server's Amount due at 28 px, how long the fragrances stay reserved, and «Перейти к оплате» to
+ * the payment screen with the card, the copy buttons and the receipt upload (#28).
  */
 function AmountDue({ order }: { order: OrderDto }) {
   const { language } = usePrefs();
   const o = useOrdersText();
+  const router = useRouter();
   const [before = '', after = ''] = o.orders.reservedUntil.split('{until}');
   // the time keeps the word after it (UZ «15:03 gacha») on its line: the Unbroken Date Rule
   const [, glue = '', rest = ''] = /^(\s?\S*)(.*)$/s.exec(after) ?? [];
@@ -164,6 +157,19 @@ function AmountDue({ order }: { order: OrderDto }) {
           {rest}
         </span>
       </p>
+      <Button
+        block
+        className="mt-4"
+        data-testid="go-to-pay"
+        onClick={() =>
+          void router.navigate({
+            to: '/orders/$number/pay',
+            params: { number: String(order.number) },
+          })
+        }
+      >
+        {o.payment.goToPay}
+      </Button>
     </Card>
   );
 }
@@ -209,239 +215,6 @@ function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cance
         ) : null}
       </div>
     </Card>
-  );
-}
-
-/**
- * A sentence with a `{manager}` slot that opens the shop's manager account (`openManagerChat`);
- * the words stay plain text until the customer's config has the username.
- */
-function WithManagerLink({ text, link }: { text: string; link: string }) {
-  const { customer } = usePrefs();
-  const username = customer?.config.managerUsername;
-  const [before = '', after = ''] = text.split('{manager}');
-  return (
-    <>
-      {before}
-      {username ? (
-        <button
-          type="button"
-          onClick={() => openManagerChat(username)}
-          data-testid="sheet-manager"
-          className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
-        >
-          {link}
-        </button>
-      ) : (
-        link
-      )}
-      {after}
-    </>
-  );
-}
-
-/**
- * «Отменить заказ» (ADR 0011: only while «Ожидает оплаты»), a quiet link under the manager line as
- * in the payment mockup, behind a confirmation sheet that sends a shopper who already paid to the
- * manager instead. The status the screen showed goes along. If the order moved on meanwhile (a
- * receipt went in, the reserve expired), the screen already shows it as it is now and the sheet
- * says so, rather than closing on a press that seemed to do nothing. Mounted whatever the status,
- * so the sheet can finish after the link has gone.
- */
-function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolean }) {
-  const { t } = usePrefs();
-  const o = useOrdersText();
-  const [open, setOpen] = useState(false);
-  const [changed, setChanged] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const cancel = useCancelOrder(order.number);
-  const show = () => {
-    setFailed(false);
-    setChanged(false);
-    setOpen(true);
-  };
-  const confirm = () => {
-    setFailed(false);
-    cancel.mutate(order.status, {
-      onSuccess: (result) => {
-        if (result.kind === 'try_again') setFailed(true);
-        else if (result.kind === 'changed') setChanged(true);
-        else setOpen(false);
-      },
-      onError: () => setFailed(true),
-    });
-  };
-  const gone = order.status === 'cancelled';
-  return (
-    <>
-      {customerMayCancel(order.status) ? (
-        // under «Написать менеджеру», or on its own when that line is not there
-        <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
-          <button
-            type="button"
-            onClick={show}
-            data-testid="cancel-order"
-            className="-my-3 rounded-btn px-1 py-3 font-medium text-muted underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
-          >
-            {o.orders.cancel}
-          </button>
-        </p>
-      ) : null}
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-        title={
-          changed
-            ? gone
-              ? o.orders.changedCancelledTitle
-              : o.orders.changedTitle
-            : fill(o.orders.cancelTitle, { number: String(order.number) })
-        }
-        ownDescription
-        closeLabel={t.common.close}
-      >
-        <SheetDescription className="type-small pb-3 text-pretty text-muted">
-          {changed ? (
-            gone && order.cancellation ? (
-              `${o.orders.cancelReason[order.cancellation.reason]}.`
-            ) : (
-              <WithManagerLink text={o.orders.changedText} link={o.orders.cancelManager} />
-            )
-          ) : (
-            <WithManagerLink text={o.orders.cancelText} link={o.orders.cancelManager} />
-          )}
-        </SheetDescription>
-        {changed ? (
-          <div className="flex flex-col gap-4 pb-1" data-testid="cancel-changed">
-            <div className="flex items-center gap-3">
-              <StatusPill status={order.status} />
-            </div>
-            <Button block onClick={() => setOpen(false)}>
-              {o.orders.gotIt}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
-            {failed ? (
-              <p className="type-small mb-2 text-ink" role="alert">
-                {o.orders.cancelFailed}
-              </p>
-            ) : null}
-            <Button block loading={cancel.isPending} onClick={confirm}>
-              {o.orders.cancelConfirm}
-            </Button>
-            <Button block variant="secondary" onClick={() => setOpen(false)}>
-              {o.orders.cancelKeep}
-            </Button>
-          </div>
-        )}
-      </Sheet>
-    </>
-  );
-}
-
-/**
- * «Повторить заказ» (spec Changes 2026-11-07 cart, 2026-11-11): the order's lines go into the cart
- * at today's prices. The sheet then says how many went in («Добавили 2 из 3 товаров»), names the
- * lines that are not available and the ones that went in with fewer units, exactly as the server
- * reported them, and leads on to the cart. Offered on every order, cancelled ones too.
- */
-function RepeatOrder({ order }: { order: OrderDto }) {
-  const { t, language } = usePrefs();
-  const o = useOrdersText();
-  const router = useRouter();
-  const repeat = useRepeatOrder(order.number);
-  const [result, setResult] = useState<RepeatResultDto | null>(null);
-  const [open, setOpen] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const run = () => {
-    setFailed(false);
-    repeat.mutate(undefined, {
-      onSuccess: (r) => {
-        if (r.added > 0) hapticSuccess();
-        setResult(r);
-        setOpen(true);
-      },
-      onError: () => setFailed(true),
-    });
-  };
-  const r = result;
-  const title = !r
-    ? ''
-    : r.added === 0
-      ? o.orders.repeatNoneTitle
-      : r.added === r.of
-        ? o.orders.repeatAllTitle
-        : fill(plural(language, r.of, o.orders.repeatSomeTitle), { added: String(r.added) });
-  const skipped = r?.lines.filter((l) => l.added === 0) ?? [];
-  const capped = r?.lines.filter((l) => l.added > 0 && l.added < l.ordered) ?? [];
-  const lineName = (l: RepeatResultDto['lines'][number]) =>
-    l.kind === 'volume' ? `${l.name[language]}, ${l.ml} ${t.card.ml}` : l.name[language];
-  return (
-    <>
-      <div className="mt-6">
-        <Button
-          block
-          variant="secondary"
-          loading={repeat.isPending}
-          onClick={run}
-          data-testid="repeat-order"
-        >
-          <RefreshIcon size={18} />
-          {o.orders.repeat}
-        </Button>
-        {failed ? (
-          <p role="alert" className="type-small mt-2 flex items-start gap-2 text-ink">
-            <span className="mt-px shrink-0">
-              <AlertIcon size={16} />
-            </span>
-            {o.orders.repeatFailed}
-          </p>
-        ) : null}
-      </div>
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-        title={title}
-        description={r && r.added > 0 ? o.orders.repeatPrices : o.orders.repeatNoneText}
-        closeLabel={t.common.close}
-      >
-        <div className="flex flex-col gap-4 pb-1" data-testid="repeat-result">
-          {skipped.length > 0 || capped.length > 0 ? (
-            <Card as="ul" className="divide-y divide-line overflow-hidden">
-              {skipped.map((l, i) => (
-                <li key={`s${i}`} className="flex items-baseline justify-between gap-3 px-4 py-3">
-                  <span className="type-body min-w-0 [overflow-wrap:anywhere] text-muted">
-                    {lineName(l)}
-                  </span>
-                  <span className="type-small shrink-0 text-muted">{o.orders.repeatSkipped}</span>
-                </li>
-              ))}
-              {capped.map((l, i) => (
-                <li key={`c${i}`} className="flex items-baseline justify-between gap-3 px-4 py-3">
-                  <span className="type-body min-w-0 [overflow-wrap:anywhere]">{lineName(l)}</span>
-                  <span className="type-small shrink-0 text-right text-muted">
-                    {fill(o.orders.repeatCapped, {
-                      added: String(l.added),
-                      ordered: String(l.ordered),
-                    })}
-                  </span>
-                </li>
-              ))}
-            </Card>
-          ) : null}
-          {r && r.added > 0 ? (
-            <Button block onClick={() => void router.navigate({ to: '/cart' })}>
-              {o.orders.toCart}
-            </Button>
-          ) : (
-            <Button block onClick={() => void router.navigate({ to: '/catalog' })}>
-              {o.orders.toCatalog}
-            </Button>
-          )}
-        </div>
-      </Sheet>
-    </>
   );
 }
 

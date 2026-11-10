@@ -99,6 +99,8 @@ export const checkoutSchema = z.object({
   savedPoints: z.array(savedPointSchema),
   /** The pair checkout starts on: the last used whose point BTS still offers; null when none. */
   defaultSavedPointId: z.number().int().nullable(),
+  /** A shop card is set; without one checkout is closed: «Оплата временно недоступна» (#28). */
+  paymentAvailable: z.boolean(),
 });
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 

@@ -110,8 +110,15 @@
     {
       "idx": 15,
       "version": "7",
-      "when": 1794340450928,
-      "tag": "0015_saved_points",
+      "when": 1794338875017,
+      "tag": "0015_payment_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794342657093,
+      "tag": "0016_saved_points",
       "breakpoints": true
     }
   ]

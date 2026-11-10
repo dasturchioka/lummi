@@ -7,6 +7,7 @@ import {
   lazyRouteComponent,
   redirect,
   useRouter,
+  useRouterState,
 } from '@tanstack/react-router';
 import { parseBuyNowParam } from '@lummi/contracts/buy-now';
 import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
@@ -21,17 +22,28 @@ import { TabBar, TABS } from '../ui/TabBar';
 
 const TAB_ROOTS: string[] = TABS.map((t) => t.to);
 
+/** An order number as a path takes it; any other `/orders/<x>` goes back to «Заказы». */
+const ORDER_NUMBER = '[1-9]\\d{0,9}';
+const isOrderNumber = (s: string) => new RegExp(`^${ORDER_NUMBER}$`).test(s);
+/** The payment screen of an order (#28): a task screen, with no tab bar. */
+const PAY_PATH = new RegExp(`^/orders/${ORDER_NUMBER}/pay$`);
+
 function Shell() {
   const router = useRouter();
-  const pathname = router.state.location.pathname;
+  // Subscribed: `router.state` read directly does not re-render the shell on navigation, so a task
+  // screen opened from another screen (an order → its payment) kept the tab bar over its dock. The
+  // resolved location is the screen on show: a lazy route keeps the previous screen until its
+  // chunk arrives, and the tab bar changes with the screen, not a beat before it.
+  const pathname = useRouterState({ select: (s) => (s.resolvedLocation ?? s.location).pathname });
   const isRoot = TAB_ROOTS.includes(pathname);
-  // The fragrance card (it carries its own dock, also on its fixtures), the search and the checkout are task screens: no tab bar.
+  // The fragrance card (it carries its own dock, also on its fixtures), the search, the checkout and the payment screen are task screens: no tab bar.
   const showTabBar =
     !pathname.startsWith('/p/') &&
     !pathname.startsWith('/sets/') &&
     pathname !== '/search' &&
     pathname !== '/dev/fragrance' &&
-    pathname !== '/checkout';
+    pathname !== '/checkout' &&
+    !PAY_PATH.test(pathname);
   const cartCount = useCartCount();
 
   // Telegram's native back button: visible on screens deeper than a tab root.
@@ -152,9 +164,16 @@ const routeTree = rootRoute.addChildren([
     ...at('/orders/$number'),
     // an order number only; anything else lands on the list
     beforeLoad: ({ params }) => {
-      if (!/^[1-9]\d{0,9}$/.test(params.number)) throw redirect({ to: '/orders', replace: true });
+      if (!isOrderNumber(params.number)) throw redirect({ to: '/orders', replace: true });
     },
     component: lazyRouteComponent(() => import('../screens/Order'), 'Order'),
+  }),
+  createRoute({
+    ...at('/orders/$number/pay'),
+    beforeLoad: ({ params }) => {
+      if (!isOrderNumber(params.number)) throw redirect({ to: '/orders', replace: true });
+    },
+    component: lazyRouteComponent(() => import('../screens/Payment'), 'Payment'),
   }),
   createRoute({
     ...at('/profile'),

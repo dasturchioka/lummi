@@ -181,11 +181,11 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* No negative tracking: it closed the digit groups up (`Money` widens their gaps). */
 @utility type-amount {
   font-family: var(--font-ui);
   font-size: 28px;
   line-height: 1.15;
-  letter-spacing: -0.01em;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

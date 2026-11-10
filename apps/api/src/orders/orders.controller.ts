@@ -44,6 +44,8 @@ export class OrdersController {
           return { status: 409 as const, body: { code: 'try_again' as const } };
         case 'invalid':
           return { status: 422 as const, body: { code: out.code } };
+        case 'payment_unavailable':
+          return { status: 503 as const, body: { code: 'payment_unavailable' as const } };
       }
     });
   }

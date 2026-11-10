@@ -63,6 +63,14 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
   );
 }
 
+/** A shop card as its audit entry keeps it: the masked number and the holder. */
+function cardText(t: AdminMessages, v: unknown): string {
+  if (v && typeof v === 'object' && 'number' in v && 'holder' in v)
+    // the number stays on one line; the line may break before the holder
+    return `${String(v.number).replace(/ /g, '\u00a0')} · ${String(v.holder)}`;
+  return t.shopCard.noneTitle;
+}
+
 /**
  * A setting change reads "old → new" in the setting's own units (so'm through `formatMoney`), the
  * old value in Muted Ink; the words «было» / «стало» stay for screen readers. The raw payload
@@ -70,26 +78,36 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
  */
 function Details({ t, language, e }: { t: AdminMessages; language: Language; e: AuditEntryDto }) {
   const { payload } = e;
-  const change =
-    e.action === 'setting.changed' && knownKey(e.targetId) && 'old' in payload && 'new' in payload
-      ? (() => {
-          const spec = describeInput(settingMeta(e.targetId).schema);
-          const show = (v: unknown) => displayValue(e.targetId as SettingKey, spec, v, language, t);
-          return (
-            <p className="break-words">
-              <span className="sr-only">{t.audit.was} </span>
-              <span className="text-muted-foreground">{show(payload.old)}</span>
-              <ArrowRight
-                className="mx-1.5 inline size-3.5 -translate-y-px text-muted-foreground"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-              <span className="sr-only">{t.audit.became} </span>
-              <span className="font-medium">{show(payload.new)}</span>
-            </p>
-          );
-        })()
-      : null;
+  const pair = ((): [string, string] | null => {
+    if (
+      e.action === 'setting.changed' &&
+      knownKey(e.targetId) &&
+      'old' in payload &&
+      'new' in payload
+    ) {
+      const spec = describeInput(settingMeta(e.targetId).schema);
+      const show = (v: unknown) => displayValue(e.targetId as SettingKey, spec, v, language, t);
+      return [show(payload.old), show(payload.new)];
+    }
+    if (e.action === 'shop_card.changed' || e.action === 'shop_card.cleared') {
+      // the API keeps the number masked (`9860 •••• •••• 1234`); no card reads «Карта не указана»
+      return [cardText(t, payload.old), cardText(t, payload.new)];
+    }
+    return null;
+  })();
+  const change = pair ? (
+    <p className="break-words">
+      <span className="sr-only">{t.audit.was} </span>
+      <span className="text-muted-foreground">{pair[0]}</span>
+      <ArrowRight
+        className="mx-1.5 inline size-3.5 -translate-y-px text-muted-foreground"
+        strokeWidth={1.5}
+        aria-hidden
+      />
+      <span className="sr-only">{t.audit.became} </span>
+      <span className="font-medium">{pair[1]}</span>
+    </p>
+  ) : null;
   const raw = Object.keys(payload).length === 0 ? null : JSON.stringify(payload, null, 2);
   return (
     <div className="grid min-w-0 gap-1">
