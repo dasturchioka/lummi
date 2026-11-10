@@ -390,7 +390,7 @@ Quiet, solid and decisive.
 - **Tonal:** Stone fill with Graphite text (Dark Block with Milk text in dark), the second action beside a primary in a dock («Купить сейчас», approved comp). Never alone, never the main action.
 - **Pair size:** 48 px with 14 px sides, for two actions sharing one dock row; the primary grows, the tonal one keeps its label width.
 - **Disabled / pending:** Milk Field fill with Muted Ink text, carrying the reason as its label ("Выберите ещё 2").
-- **Add "+":** a 32px Graphite square with a 10px radius (Milk in dark, as every primary action). This is the list-card add-to-cart control per TZ §3.2. A 158 px card cannot hold "В корзину", which is a recorded deviation from bb-08. On a list card it sits on the photo's bottom-right corner, 6 px in, never on the price line (#25): one volume available adds it, several open «Выберите объём», a sheet with the product page's volume tiles.
+- **Add "+":** a 32px Graphite square with a 10px radius (Milk in dark, as every primary action). This is the list-card add-to-cart control per TZ §3.2. A 158 px card cannot hold "В корзину", which is a recorded deviation from bb-08. On a list card it sits on the photo's bottom-right corner, 6 px in, never on the price line (#25): one volume available adds it, several open «Выберите объём», a sheet with the product page's volume tiles. In that sheet a sold-out tile cannot be chosen (there is no photo to see), a markdown keeps its row under the tiles, and an add that fails says so above the button, not in the note under the dim. Its glyph (+, spinner, check) grows in from a 2 px blur when it changes.
 - **Focus:** a 2px Sage outline at a 2px offset on every focusable element.
 
 ### Chips
