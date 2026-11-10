@@ -12,6 +12,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
 import { deliveryPlace } from '../delivery/queries';
+import { useSetsText } from '../sets/actions';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -22,6 +23,7 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
+import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
 
@@ -280,6 +282,7 @@ function Line({
   onRemove: () => void;
 }) {
   const { t } = usePrefs();
+  const s = useSetsText();
   const out = line.soldOut;
   return (
     <div
@@ -318,19 +321,9 @@ function Line({
                   className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
                   data-testid="set-name"
                 >
-                  {line.kind === 'discovery' ? t.sets.lineDiscovery : t.sets.lineBuilder}
+                  {line.kind === 'discovery_set' ? s.lineDiscovery : s.lineBuilder}
                 </p>
-                <ul
-                  className="type-small mt-1 flex flex-col gap-0.5 text-muted"
-                  data-testid="set-fragrances"
-                >
-                  {line.fragrances.map((f) => (
-                    <li key={f.slug} className="text-pretty [overflow-wrap:anywhere]">
-                      <span className="text-ink">{f.name}</span>{' '}
-                      {attribution(t.card.basedOn, f.brand)}
-                    </li>
-                  ))}
-                </ul>
+                <SetFragranceList items={line.fragrances} />
               </>
             )}
           </div>

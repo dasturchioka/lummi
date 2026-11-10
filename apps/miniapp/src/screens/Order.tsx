@@ -17,6 +17,7 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
+import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 
 /**
@@ -32,13 +33,7 @@ function Line({ line }: { line: OrderLineDto }) {
       <Thumb
         photo={line.photo}
         className="w-12"
-        set={
-          line.kind === 'discovery_set'
-            ? 'discovery'
-            : line.kind === 'builder_set'
-              ? 'builder'
-              : undefined
-        }
+        set={line.kind === 'volume' ? undefined : line.kind}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         {line.brand ? (
@@ -49,18 +44,7 @@ function Line({ line }: { line: OrderLineDto }) {
         <p className="type-name mt-px text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
           {line.name[language]}
         </p>
-        {line.setComposition ? (
-          <ul
-            className="type-small mt-1 flex flex-col gap-0.5 text-muted"
-            data-testid="set-fragrances"
-          >
-            {line.setComposition.map((f, i) => (
-              <li key={i} className="text-pretty [overflow-wrap:anywhere]">
-                <span className="text-ink">{f.name}</span> {attribution(t.card.basedOn, f.brand)}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {line.setComposition ? <SetFragranceList items={line.setComposition} /> : null}
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
           <p className="type-small min-w-0 text-muted">
             {line.kind !== 'volume'

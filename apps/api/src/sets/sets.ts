@@ -122,7 +122,6 @@ export interface TenMl {
 export async function tenMlOf(
   db: DbOrTx,
   by: { ids: readonly number[] } | { slugs: readonly string[] } | { all: true },
-  lock = false,
 ): Promise<TenMl[]> {
   if (!('all' in by) && ('ids' in by ? by.ids : by.slugs).length === 0) return [];
   const q = db
@@ -148,7 +147,7 @@ export async function tenMlOf(
       ),
     )
     .orderBy(asc(volumes.id));
-  const rows = await (lock ? q.for('update', { of: volumes }) : q);
+  const rows = await q;
   const reserved = await reservedByVolume(
     db,
     rows.map((r) => r.volumeId),

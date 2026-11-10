@@ -34,12 +34,12 @@ export const volumeLineSchema = z.object({
 const setFragrances = z.array(z.object({ slug: z.string(), name: z.string(), brand: z.string() }));
 export const discoveryLineSchema = z.object({
   ...lineBase,
-  kind: z.literal('discovery'),
+  kind: z.literal('discovery_set'),
   fragrances: setFragrances,
 });
 export const builderLineSchema = z.object({
   ...lineBase,
-  kind: z.literal('builder'),
+  kind: z.literal('builder_set'),
   fragrances: setFragrances,
 });
 

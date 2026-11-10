@@ -1,5 +1,5 @@
 import type { DeliveryCityDto, Quote } from '@lummi/contracts';
-import { CART_MAX_QTY } from '@lummi/contracts/constants';
+import { CART_MAX_QTY, SET_SIZE } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -16,11 +16,7 @@ import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import {
-  builderAvailable,
-  loadDiscovery,
-  tenMlOf,
-} from '../sets/sets';
+import { loadDiscovery, tenMlOf, type DiscoveryState, type TenMl } from '../sets/sets';
 
 /** What every cart line carries: the quantity capped at available, the wish kept apart. */
 interface LineBase {
@@ -45,14 +41,27 @@ export interface VolumeLineView extends LineBase {
   ml: number;
 }
 
-/** The Discovery set or a builder set: five fragrances, 10 ml each. */
-export interface SetLineView extends LineBase {
-  kind: 'discovery' | 'builder';
-  fragrances: { slug: string; name: string; brand: string }[];
-  /** The five fragrances' ids and their 10 ml volumes, in the order shown (the order snapshot keeps them). */
-  fragranceIds: number[];
-  volumeIds: number[];
+/** One of a set's five fragrances, as the cart shows it and the order snapshot keeps it. */
+export interface SetItem {
+  fragranceId: number;
+  slug: string;
+  name: string;
+  brand: string;
 }
+
+/** The Discovery set: five fragrances from its own stock, never touching 10 ml. */
+export interface DiscoveryLineView extends LineBase {
+  kind: 'discovery_set';
+  items: SetItem[];
+}
+
+/** A builder set: five fragrances, one 10 ml of each (`volumeId`) per set unit. */
+export interface BuilderLineView extends LineBase {
+  kind: 'builder_set';
+  items: (SetItem & { volumeId: number })[];
+}
+
+export type SetLineView = DiscoveryLineView | BuilderLineView;
 
 export type CartLineView = VolumeLineView | SetLineView;
 
@@ -115,25 +124,6 @@ export async function loadCartQuote(
     rows.map((r) => r.volumeId!),
   );
   type Priced = { price: number; salePrice: number | null; saleEndsAt: Date | null };
-  const volumeLines: (VolumeLineView & Priced)[] = rows.map((r) => {
-    // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-    const left = r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId!) ?? 0);
-    return {
-      kind: 'volume',
-      lineId: r.lineId,
-      volumeId: r.volumeId!,
-      fragranceId: r.fragranceId,
-      slug: r.slug,
-      name: r.name,
-      brand: r.brand,
-      ml: r.ml,
-      photo: r.photo,
-      ...capped(r.qty, left),
-      price: r.price,
-      salePrice: r.salePrice,
-      saleEndsAt: r.saleEndsAt,
-    };
-  });
 
   // Set lines (ADR 0009): the Discovery set from its own stock, a builder set from each chosen 10 ml.
   const setRows = await tx
@@ -146,50 +136,100 @@ export async function loadCartQuote(
     .from(cartLines)
     .where(and(eq(cartLines.customerId, customerId), ne(cartLines.kind, 'volume')))
     .orderBy(asc(cartLines.id));
-  const setLines: SetLineView[] = [];
   let setPrice = 0;
+  let discovery: DiscoveryState | null = null;
+  let tenMlOfFragrance = new Map<number, TenMl>();
   if (setRows.length > 0) {
-    const discovery = await loadDiscovery(tx);
+    discovery = await loadDiscovery(tx);
     setPrice = discovery.row.price;
+    const composed = setRows.some((r) => r.kind === 'discovery_set') ? discovery.composition : [];
     const wantedIds = [
-      ...new Set([
-        ...setRows.flatMap((r) => r.fragranceIds ?? []),
-        ...(setRows.some((r) => r.kind === 'discovery')
-          ? discovery.composition.map((f) => f.id)
-          : []),
-      ]),
+      ...new Set([...setRows.flatMap((r) => r.fragranceIds ?? []), ...composed.map((f) => f.id)]),
     ];
-    const tenMl = await tenMlOf(tx, { ids: wantedIds });
-    const tenMlOfFragrance = new Map(tenMl.map((t) => [t.fragranceId, t]));
-    for (const r of setRows) {
-      if (r.kind === 'discovery') {
-        setLines.push({
-          kind: 'discovery',
-          lineId: r.lineId,
-          photo: discovery.row.photoHash,
-          fragrances: discovery.composition.map((f) => ({
-            slug: f.slug,
-            name: f.name,
-            brand: f.brand,
-          })),
-          fragranceIds: discovery.composition.map((f) => f.id),
-          volumeIds: discovery.composition.flatMap(
-            (f) => tenMlOfFragrance.get(f.id)?.volumeId ?? [],
-          ),
-          ...capped(r.qty, discovery.available),
-        });
-      } else {
-        const five = (r.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
-        setLines.push({
-          kind: 'builder',
-          lineId: r.lineId,
-          photo: null,
-          fragrances: five.map((t) => ({ slug: t.slug, name: t.name, brand: t.brand })),
-          fragranceIds: five.map((t) => t.fragranceId),
-          volumeIds: five.map((t) => t.volumeId),
-          ...capped(r.qty, builderAvailable(five)),
-        });
-      }
+    tenMlOfFragrance = new Map(
+      (await tenMlOf(tx, { ids: wantedIds })).map((t) => [t.fragranceId, t]),
+    );
+  }
+
+  // What each volume still has for the lines after the ones already placed, in line order: one 10 ml
+  // may sit in a volume line and in builder sets of the same cart, and the last unit is sold once
+  // (ADR 0010). A line that no longer fits is flagged like a sold-out one and takes nothing.
+  const free = new Map<number, number>();
+  for (const r of rows)
+    free.set(r.volumeId!, r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId!) ?? 0));
+  for (const t of tenMlOfFragrance.values()) free.set(t.volumeId, t.available);
+  const take = (volumeIds: number[], qty: number) => {
+    for (const id of volumeIds) free.set(id, (free.get(id) ?? 0) - qty);
+  };
+
+  const volumeById = new Map(rows.map((r) => [r.lineId, r]));
+  const setById = new Map(setRows.map((r) => [r.lineId, r]));
+  const volumeLines: (VolumeLineView & Priced)[] = [];
+  const setLines: SetLineView[] = [];
+  const ordered = [...rows.map((r) => r.lineId), ...setRows.map((r) => r.lineId)].sort(
+    (a, b) => a - b,
+  );
+  for (const lineId of ordered) {
+    const r = volumeById.get(lineId);
+    if (r) {
+      // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
+      const view = capped(r.qty, free.get(r.volumeId!) ?? 0);
+      if (!view.soldOut) take([r.volumeId!], view.qty);
+      volumeLines.push({
+        kind: 'volume',
+        lineId: r.lineId,
+        volumeId: r.volumeId!,
+        fragranceId: r.fragranceId,
+        slug: r.slug,
+        name: r.name,
+        brand: r.brand,
+        ml: r.ml,
+        photo: r.photo,
+        ...view,
+        price: r.price,
+        salePrice: r.salePrice,
+        saleEndsAt: r.saleEndsAt,
+      });
+      continue;
+    }
+    const sr = setById.get(lineId)!;
+    if (sr.kind === 'discovery_set' && discovery) {
+      setLines.push({
+        kind: 'discovery_set',
+        lineId: sr.lineId,
+        photo: discovery.row.photoHash,
+        items: discovery.composition.map((f) => ({
+          fragranceId: f.id,
+          slug: f.slug,
+          name: f.name,
+          brand: f.brand,
+        })),
+        ...capped(sr.qty, discovery.available),
+      });
+    } else {
+      const five = (sr.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
+      const view = capped(
+        sr.qty,
+        five.length === SET_SIZE ? Math.min(...five.map((t) => free.get(t.volumeId) ?? 0)) : 0,
+      );
+      if (!view.soldOut)
+        take(
+          five.map((t) => t.volumeId),
+          view.qty,
+        );
+      setLines.push({
+        kind: 'builder_set',
+        lineId: sr.lineId,
+        photo: null,
+        items: five.map((t) => ({
+          fragranceId: t.fragranceId,
+          volumeId: t.volumeId,
+          slug: t.slug,
+          name: t.name,
+          brand: t.brand,
+        })),
+        ...view,
+      });
     }
   }
   const lines: CartLineView[] = [...volumeLines, ...setLines].sort((a, b) => a.lineId - b.lineId);

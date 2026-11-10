@@ -23,12 +23,7 @@ import type { Edges } from '../edges';
 import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
-import {
-  builderAvailable,
-  judgeBuilderPick,
-  loadDiscovery,
-  tenMlOf,
-} from '../sets/sets';
+import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
 import { loadCartQuote } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
@@ -70,7 +65,11 @@ export class CartService {
               brand: l.brand,
               ml: l.ml as 10 | 30 | 50,
             }
-          : { ...base, kind: l.kind, fragrances: l.fragrances };
+          : {
+              ...base,
+              kind: l.kind,
+              fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
+            };
       }),
       quote: q,
       count: lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
@@ -185,10 +184,10 @@ export class CartService {
       await this.touch(tx, customerId);
       await tx
         .insert(cartLines)
-        .values({ customerId, kind: 'discovery', qty: Math.min(qty, left, CART_MAX_QTY) })
+        .values({ customerId, kind: 'discovery_set', qty: Math.min(qty, left, CART_MAX_QTY) })
         .onConflictDoUpdate({
           target: [cartLines.customerId],
-          targetWhere: sql`kind = 'discovery'`,
+          targetWhere: sql`kind = 'discovery_set'`,
           set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
         });
       return { result: 'ok' } as const;
@@ -215,13 +214,13 @@ export class CartService {
         .insert(cartLines)
         .values({
           customerId,
-          kind: 'builder',
+          kind: 'builder_set',
           fragranceIds,
           qty: Math.min(qty, left, CART_MAX_QTY),
         })
         .onConflictDoUpdate({
           target: [cartLines.customerId, cartLines.fragranceIds],
-          targetWhere: sql`kind = 'builder'`,
+          targetWhere: sql`kind = 'builder_set'`,
           set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
         });
       return { result: 'ok' } as const;

@@ -98,7 +98,7 @@ describe('the Discovery set', () => {
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
     expect(res.body.lines).toHaveLength(1);
-    expect(res.body.lines[0]).toMatchObject({ kind: 'discovery', qty: 2, available: 10 });
+    expect(res.body.lines[0]).toMatchObject({ kind: 'discovery_set', qty: 2, available: 10 });
     expect(res.body.quote).toMatchObject({ itemsSubtotal: 598_000 });
     expect(res.body.quote.lines[0]).toMatchObject({ unitPrice: 299_000, lineTotal: 598_000 });
     expect(await slugs(8).then((s) => Promise.all(s.map(tenMlOnHand)))).toEqual(before);
@@ -110,7 +110,7 @@ describe('the Discovery set', () => {
     await client.cart.addDiscovery({ body: { qty: 2 } });
     const res = await client.cart.addDiscovery({ body: { qty: 2 } });
     expect(res.status === 200 && res.body.lines.map((l) => [l.kind, l.qty, l.limited])).toEqual([
-      ['discovery', 3, false],
+      ['discovery_set', 3, false],
     ]);
   });
 
@@ -122,7 +122,7 @@ describe('the Discovery set', () => {
     expect(gone.status).toBe(409);
     const cart = await client.cart.get();
     expect(cart.status === 200 && cart.body.lines[0]).toMatchObject({
-      kind: 'discovery',
+      kind: 'discovery_set',
       soldOut: true,
       available: 0,
     });
@@ -160,9 +160,11 @@ describe('the builder', () => {
     if (res.status !== 200) return;
     expect(res.body.lines).toHaveLength(1);
     const line = res.body.lines[0]!;
-    expect(line).toMatchObject({ kind: 'builder', qty: 2 });
-    expect(line.kind === 'builder' && line.fragrances.every((f) => f.brand.length > 0)).toBe(true);
-    expect(line.kind === 'builder' && line.fragrances.map((f) => f.slug).sort()).toEqual(
+    expect(line).toMatchObject({ kind: 'builder_set', qty: 2 });
+    expect(line.kind === 'builder_set' && line.fragrances.every((f) => f.brand.length > 0)).toBe(
+      true,
+    );
+    expect(line.kind === 'builder_set' && line.fragrances.map((f) => f.slug).sort()).toEqual(
       [...five].sort(),
     );
     expect(res.body.quote.itemsSubtotal).toBe(598_000);
@@ -359,8 +361,8 @@ describe('relink', () => {
     await t.db.transaction((tx) => moveCartData(tx, idOf(52), idOf(51), new Date()));
     const cart = await a.client.cart.get();
     expect(cart.status === 200 && cart.body.lines.map((l) => [l.kind, l.qty])).toEqual([
-      ['discovery', 3],
-      ['builder', 3],
+      ['discovery_set', 3],
+      ['builder_set', 3],
     ]);
     expect(
       await t.db

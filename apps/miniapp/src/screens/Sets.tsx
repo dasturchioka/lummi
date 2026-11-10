@@ -3,7 +3,8 @@ import { SET_SIZE } from '@lummi/contracts/constants';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { useAddBuilder, useAddDiscovery, useBuilder, useDiscoverySet } from '../sets/queries';
+import { useAddBuilder, useAddDiscovery, useBuilder, useSetsText } from '../sets/actions';
+import { useDiscoverySet } from '../sets/queries';
 import { goBackOrCatalog, useOpenFragrance } from '../lib/navigation';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
@@ -61,6 +62,7 @@ export function DiscoverySetView({
   onOpen?: (slug: string) => void;
 }) {
   const { t, language } = usePrefs();
+  const s = useSetsText();
   const ready = set.fragrances.length === SET_SIZE;
   return (
     <Screen
@@ -70,16 +72,16 @@ export function DiscoverySetView({
           <DockNote text={note} />
           {!ready ? (
             <Button block disabled>
-              {t.sets.notReady}
+              {s.notReady}
             </Button>
           ) : set.soldOut ? (
             <Button block disabled data-availability="sold-out">
-              {t.sets.soldOut}
+              {s.soldOut}
             </Button>
           ) : (
             <Button block loading={adding} onClick={onAdd}>
               <span className="flex items-center gap-1.5">
-                {t.sets.toCart}
+                {s.toCart}
                 <span aria-hidden="true" className="opacity-60">
                   ·
                 </span>
@@ -103,9 +105,9 @@ export function DiscoverySetView({
         <header className="mt-5 flex flex-col">
           <p className="type-label text-muted">{t.home.discoveryLabel}</p>
           <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
-            {t.sets.discoveryTitle}
+            {s.discoveryTitle}
           </h1>
-          <p className="type-body mt-2 text-muted">{t.sets.discoveryLead}</p>
+          <p className="type-body mt-2 text-muted">{s.discoveryLead}</p>
           <p className="mt-3">
             <Money amount={set.price} size="amount" />
           </p>
@@ -114,7 +116,7 @@ export function DiscoverySetView({
         {ready ? (
           <section className="mt-7" aria-labelledby="inside">
             <h2 id="inside" className="type-label text-muted">
-              {t.sets.inside}
+              {s.inside}
             </h2>
             <ul className="mt-2 divide-y divide-line overflow-hidden rounded-card bg-card">
               {set.fragrances.map((f, i) => (
@@ -135,7 +137,7 @@ export function DiscoverySetView({
                       <span className="min-w-0 flex-1">
                         <NameLockup brand={f.brand} name={f.name} />
                         <span className="type-small mt-0.5 block text-muted">
-                          {t.sets.from} · {f.keyNotes[language].slice(0, 3).join(' · ')}
+                          {s.from} · {f.keyNotes[language].slice(0, 3).join(' · ')}
                         </span>
                       </span>
                       <span className="shrink-0 text-muted" aria-hidden="true">
@@ -158,7 +160,7 @@ export function DiscoverySetView({
 export function DiscoverySetScreen() {
   const router = useRouter();
   const open = useOpenFragrance();
-  const { t } = usePrefs();
+  const s = useSetsText();
   const query = useDiscoverySet();
   const add = useAddDiscovery();
   const [note, setNote] = useNote();
@@ -180,9 +182,9 @@ export function DiscoverySetScreen() {
         add.mutate(undefined, {
           onSuccess: () => {
             hapticSuccess();
-            setNote(t.sets.added);
+            setNote(s.added);
           },
-          onError: () => setNote(t.sets.failed),
+          onError: () => setNote(s.failed),
         })
       }
     />
@@ -202,14 +204,15 @@ function PickRow({
   full: boolean;
   onToggle: (slug: string) => void;
 }) {
-  const { t, language } = usePrefs();
+  const { language } = usePrefs();
+  const s = useSetsText();
   const locked = full && !chosen;
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={chosen}
-      aria-label={fill(chosen ? t.sets.unpick : t.sets.pick, { name: item.name })}
+      aria-label={fill(chosen ? s.unpick : s.pick, { name: item.name })}
       aria-disabled={locked || undefined}
       data-testid="pick"
       data-chosen={chosen}
@@ -274,6 +277,7 @@ export function BuilderView({
   onAdd?: () => void;
 }) {
   const { t, language } = usePrefs();
+  const s = useSetsText();
   const left = SET_SIZE - picked.length;
   const full = left === 0;
   return (
@@ -288,7 +292,7 @@ export function BuilderView({
               className="mb-2 flex items-center justify-between gap-3"
               data-testid="add-failed"
             >
-              <p className="type-small text-pretty text-ink">{t.sets.failed}</p>
+              <p className="type-small text-pretty text-ink">{s.failed}</p>
               <Button variant="secondary" size="sm" className="shrink-0" onClick={onAdd}>
                 {t.common.retry}
               </Button>
@@ -296,7 +300,7 @@ export function BuilderView({
           ) : null}
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="type-small text-ink" data-testid="chosen">
-              {fill(t.sets.chosen, { n: String(picked.length), size: String(SET_SIZE) })}
+              {fill(s.chosen, { n: String(picked.length), size: String(SET_SIZE) })}
             </p>
             <div
               role="progressbar"
@@ -316,14 +320,14 @@ export function BuilderView({
           <Button block disabled={!full} loading={adding} onClick={onAdd}>
             {full ? (
               <span className="flex items-center gap-1.5">
-                {t.sets.toCart}
+                {s.toCart}
                 <span aria-hidden="true" className="opacity-60">
                   ·
                 </span>
                 <Money amount={builder.price} />
               </span>
             ) : (
-              plural(language, left, t.sets.pickMore)
+              plural(language, left, s.pickMore)
             )}
           </Button>
         </div>
@@ -339,18 +343,18 @@ export function BuilderView({
           <ArrowLeftIcon size={20} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="type-title text-ink [overflow-wrap:anywhere]">{t.sets.builderTitle}</h1>
-          <p className="type-body mt-2 text-muted">{t.sets.builderLead}</p>
+          <h1 className="type-title text-ink [overflow-wrap:anywhere]">{s.builderTitle}</h1>
+          <p className="type-body mt-2 text-muted">{s.builderLead}</p>
           <p className="mt-2">
             <Money amount={builder.price} />
           </p>
         </div>
       </header>
       {builder.options.length === 0 ? (
-        <EmptyState icon={<BoxIcon size={28} />} title={t.sets.empty} text={t.sets.emptyText} />
+        <EmptyState icon={<BoxIcon size={28} />} title={s.empty} text={s.emptyText} />
       ) : (
         <ul
-          aria-label={t.sets.builderTitle}
+          aria-label={s.builderTitle}
           className="divide-y divide-line overflow-hidden rounded-card bg-card"
         >
           {builder.options.map((o) => (
@@ -368,7 +372,7 @@ export function BuilderView({
 /** `/sets/builder`, also the target of the `builder` deep link. */
 export function BuilderScreen() {
   const router = useRouter();
-  const { t } = usePrefs();
+  const s = useSetsText();
   const query = useBuilder();
   const add = useAddBuilder();
   const [picked, setPicked] = useState<string[]>([]);
@@ -407,12 +411,12 @@ export function BuilderScreen() {
           onSuccess: () => {
             hapticSuccess();
             setPicked([]);
-            setNote(t.sets.added);
+            setNote(s.added);
           },
           // 409: a chosen 10 ml ran out (the list re-reads itself); anything else is retryable
           onError: (e) =>
             e instanceof Error && e.message === 'HTTP 409'
-              ? setNote(t.sets.unavailable)
+              ? setNote(s.unavailable)
               : setFailed(true),
         });
       }}

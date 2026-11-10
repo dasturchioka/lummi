@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { FRAGRANCE_TYPES, MAX_PRICE, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './constants';
+import {
+  FRAGRANCE_TYPES,
+  MAX_PRICE,
+  NOTE_LEVELS,
+  SEASONS,
+  SILLAGES,
+  TIMES_OF_DAY,
+} from './constants';
 
 /**
  * Admin catalog editing (ticket #17). Text is trimmed; the API normalises Uzbek apostrophes on

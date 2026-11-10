@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { usePrefs } from '../../lib/prefs';
+import { useSetsText } from '../../sets/actions';
 import { useDiscoverySet } from '../../sets/queries';
 import { ChevronIcon } from '../../ui/icons';
 import { Money } from '../../ui/Money';
@@ -11,6 +12,7 @@ import { SetPhoto } from '../../ui/SetPhoto';
  */
 export function SetCards() {
   const { t } = usePrefs();
+  const s = useSetsText();
   const navigate = useNavigate();
   const set = useDiscoverySet().data;
   const card =
@@ -33,16 +35,12 @@ export function SetCards() {
           <span className="min-w-0 flex-1">
             <span className="type-label block text-muted">{t.home.discoveryLabel}</span>
             <span className="type-name-lg mt-0.5 block text-ink [overflow-wrap:anywhere]">
-              {t.sets.discoveryTitle}
+              {s.discoveryTitle}
             </span>
-            <span className="type-small mt-1 block text-pretty text-muted">
-              {t.sets.discoveryLead}
-            </span>
+            <span className="type-small mt-1 block text-pretty text-muted">{s.discoveryLead}</span>
             <span className="mt-2 flex items-center gap-2">
               {set ? <Money amount={set.price} /> : null}
-              {set?.soldOut ? (
-                <span className="type-caption text-muted">{t.sets.soldOut}</span>
-              ) : null}
+              {set?.soldOut ? <span className="type-caption text-muted">{s.soldOut}</span> : null}
             </span>
           </span>
           <span aria-hidden="true" className="shrink-0 text-muted">
@@ -59,10 +57,10 @@ export function SetCards() {
         >
           <span className="min-w-0 flex-1 py-1 pl-1">
             <span className="type-heading block text-ink [overflow-wrap:anywhere]">
-              {t.sets.builderCardTitle}
+              {s.builderCardTitle}
             </span>
             <span className="type-small mt-1 block text-pretty text-muted">
-              {t.sets.builderCardText}
+              {s.builderCardText}
             </span>
             {set ? (
               <span className="mt-2 block">

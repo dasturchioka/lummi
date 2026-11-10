@@ -1,5 +1,5 @@
 {
-  "id": "52e01385-9d9a-4344-92a9-1e72b86b00a1",
+  "id": "b7404e58-ef74-4f69-9b18-46c7d0d2a97f",
   "prevId": "67b99aaa-52fd-4bd6-8c3d-0493077ee697",
   "version": "7",
   "dialect": "postgresql",
@@ -353,7 +353,7 @@
             }
           ],
           "isUnique": true,
-          "where": "kind = 'discovery'",
+          "where": "kind = 'discovery_set'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -375,7 +375,7 @@
             }
           ],
           "isUnique": true,
-          "where": "kind = 'builder'",
+          "where": "kind = 'builder_set'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -438,7 +438,7 @@
         },
         "cart_lines_kind_check": {
           "name": "cart_lines_kind_check",
-          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null)\n        or (kind = 'discovery' and volume_id is null and fragrance_ids is null)\n        or (kind = 'builder' and volume_id is null and cardinality(fragrance_ids) = 5)"
+          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null)\n        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)\n        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)"
         }
       },
       "isRLSEnabled": false
@@ -1756,7 +1756,7 @@
         },
         "order_lines_kind_check": {
           "name": "order_lines_kind_check",
-          "value": "(\"order_lines\".\"kind\" = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\" <> 'volume' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5 and \"order_lines\".\"set_composition\" is not null)"
+          "value": "(\"order_lines\".\"kind\"::text = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\"::text = 'builder_set' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5 and jsonb_array_length(\"order_lines\".\"set_composition\") = 5) or (\"order_lines\".\"kind\"::text = 'discovery_set' and \"order_lines\".\"volume_id\" is null and \"order_lines\".\"set_volume_ids\" is null and jsonb_array_length(\"order_lines\".\"set_composition\") = 5)"
         },
         "order_lines_money_check": {
           "name": "order_lines_money_check",
@@ -2733,8 +2733,8 @@
       "schema": "public",
       "values": [
         "volume",
-        "discovery",
-        "builder"
+        "builder_set",
+        "discovery_set"
       ]
     },
     "public.fragrance_type": {

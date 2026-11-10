@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { deliveryCitySchema, regionSchema } from './delivery';
+import { LINE_KINDS } from './constants';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
 import {
   CHECKOUT_CONFLICTS,
@@ -91,7 +92,7 @@ export type CreateOrderInput = z.output<typeof createOrderBodySchema>;
 
 /** One line of the order as it was bought: names RU/UZ, volume, price and quantity, frozen. */
 export const orderLineSchema = z.object({
-  kind: z.enum(['volume', 'builder_set', 'discovery_set']),
+  kind: z.enum(LINE_KINDS),
   /** The fragrance's slug for a link back to its card; null for a set. */
   slug: z.string().nullable(),
   name: bilingual,

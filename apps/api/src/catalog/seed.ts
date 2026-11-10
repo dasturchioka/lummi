@@ -104,7 +104,9 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
   if (has || fragranceIds.length < SET_SIZE) return;
   await tx
     .insert(discoverySetItems)
-    .values(fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })));
+    .values(
+      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })),
+    );
   await tx
     .update(discoverySet)
     .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })

@@ -1,3 +1,4 @@
+import type { SetLineKind } from '@lummi/contracts/constants';
 import { useState } from 'react';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { SetPhoto, SetPhotoEmpty } from './SetPhoto';
@@ -13,7 +14,7 @@ export function Thumb({
 }: {
   photo: string | null;
   className: string;
-  set?: 'discovery' | 'builder';
+  set?: SetLineKind;
 }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -21,8 +22,8 @@ export function Thumb({
       aria-hidden="true"
       className={`${className} relative aspect-[3/4] shrink-0 overflow-hidden rounded-thumb bg-photo`}
     >
-      {set === 'discovery' ? <SetPhoto hash={photo} sizes="64px" /> : null}
-      {set === 'builder' ? <SetPhotoEmpty /> : null}
+      {set === 'discovery_set' ? <SetPhoto hash={photo} sizes="64px" /> : null}
+      {set === 'builder_set' ? <SetPhotoEmpty /> : null}
       {!set && photo && !failed ? (
         <img
           src={photoUrl(photo, 400)}

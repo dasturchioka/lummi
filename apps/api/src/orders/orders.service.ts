@@ -38,7 +38,7 @@ import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { loadCartQuote } from '../cart/load-cart';
-import { loadDiscovery } from '../sets/sets';
+import { readDiscoverySet } from '../sets/sets';
 import { toRegionDto } from '../delivery/dto';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
@@ -123,8 +123,10 @@ export class OrdersService {
    * failure, then answered with `try_again`):
    * 0. the customer row is locked, so a repeat of the same request (same idempotency key) waits
    *    for the first and then returns the order it made, never a second one;
-   * 1. the cart row and the stock rows of its lines are locked (`FOR UPDATE`, ascending id), so a
-   *    concurrent checkout for the same last unit waits here and then sees this order's reserve;
+   * 1. the cart row, then the Discovery set row (when the cart holds it), then the stock rows of
+   *    its lines (a volume line's volume, the five 10 ml of a builder line) are locked
+   *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
+   *    waits here and then sees this order's reserve; every checkout takes them in this order;
    * 2. the quote is recomputed under that lock with the destination region's tariff, its lines
    *    capped at available; a total other than the one the shopper confirmed is refused (409)
    *    with the new checkout, since they will transfer exactly that amount;
@@ -200,11 +202,11 @@ export class OrdersService {
         })
         .from(cartLines)
         .where(eq(cartLines.customerId, c.id));
-      if (wanted.some((w) => w.kind === 'discovery')) await loadDiscovery(tx, { lock: true });
+      if (wanted.some((w) => w.kind === 'discovery_set')) await readDiscoverySet(tx, true);
       // a volume line locks its volume; a builder line the 10 ml of each of its five
       const lockVolumes = wanted.flatMap((w) => w.volumeId ?? []);
       const lockFragrances = [
-        ...new Set(wanted.flatMap((w) => (w.kind === 'builder' ? (w.fragranceIds ?? []) : []))),
+        ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
       ];
       if (lockVolumes.length > 0 || lockFragrances.length > 0) {
         await tx
@@ -315,22 +317,23 @@ export class OrdersService {
                 ml: l.ml,
                 photo: l.photo,
               };
-            // A set line (ADR 0009): its five fragrances as bought, and their 10 ml volumes (a
-            // builder set's reserve takes one of each; the Discovery set's own stock is its reserve).
-            const set = dictionaries.ru.sets;
-            const setUz = dictionaries.uz.sets;
+            // A set line (ADR 0009): its five fragrances as bought. A builder set also records the
+            // five 10 ml volumes its reserve takes one of each from; the Discovery set holds none
+            // (its own stock is its reserve) and its snapshot is the composition alone.
+            const name = (t: typeof dictionaries.ru.sets) =>
+              l.kind === 'discovery_set' ? t.lineDiscovery : t.lineBuilder;
             return {
               ...base,
-              kind: l.kind === 'discovery' ? ('discovery_set' as const) : ('builder_set' as const),
-              nameRu: l.kind === 'discovery' ? set.lineDiscovery : set.lineBuilder,
-              nameUz: l.kind === 'discovery' ? setUz.lineDiscovery : setUz.lineBuilder,
+              kind: l.kind,
+              nameRu: name(dictionaries.ru.sets),
+              nameUz: name(dictionaries.uz.sets),
               ml: 10,
               photo: l.photo,
-              setVolumeIds: l.volumeIds,
-              setComposition: l.fragrances.map((f, i) => ({
-                fragranceId: l.fragranceIds[i] as number,
-                name: f.name,
-                brand: f.brand,
+              setVolumeIds: l.kind === 'builder_set' ? l.items.map((i) => i.volumeId) : null,
+              setComposition: l.items.map((i) => ({
+                fragranceId: i.fragranceId,
+                name: i.name,
+                brand: i.brand,
               })),
             };
           }),

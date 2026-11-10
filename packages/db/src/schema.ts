@@ -1,5 +1,5 @@
 import type { Discount } from '@lummi/contracts';
-import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
+import { LINE_KINDS, ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -500,7 +500,7 @@ export const discoverySetItems = pgTable(
   (t) => [check('discovery_set_items_position', sql`${t.position} between 1 and 5`)],
 );
 
-export const cartLineKindEnum = pgEnum('cart_line_kind', ['volume', 'discovery', 'builder']);
+export const cartLineKindEnum = pgEnum('cart_line_kind', LINE_KINDS);
 
 /**
  * One cart line: a volume x quantity, the Discovery set x quantity, or a builder set x quantity.
@@ -527,10 +527,10 @@ export const cartLines = pgTable(
     uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
     uniqueIndex('cart_lines_customer_discovery_idx')
       .on(t.customerId)
-      .where(sql`kind = 'discovery'`),
+      .where(sql`kind = 'discovery_set'`),
     uniqueIndex('cart_lines_customer_builder_idx')
       .on(t.customerId, t.fragranceIds)
-      .where(sql`kind = 'builder'`),
+      .where(sql`kind = 'builder_set'`),
     index('cart_lines_volume_idx').on(t.volumeId),
     check('cart_lines_qty_check', sql`${t.qty} > 0`),
     // exactly five fragrance ids and none NULL (distinctness is judged by the builder's rules)
@@ -541,8 +541,8 @@ export const cartLines = pgTable(
     check(
       'cart_lines_kind_check',
       sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null)
-        or (kind = 'discovery' and volume_id is null and fragrance_ids is null)
-        or (kind = 'builder' and volume_id is null and cardinality(fragrance_ids) = 5)`,
+        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)
+        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)`,
     ),
   ],
 );
@@ -571,11 +571,7 @@ export const RESERVING_STATUSES = [
 ] as const satisfies readonly OrderStatus[];
 export const thresholdBaseEnum = pgEnum('threshold_base', ['before', 'after']);
 /** A single volume, a builder set (five 10 ml volumes) or the Discovery set (its own stock), ADR 0009. */
-export const orderLineKindEnum = pgEnum('order_line_kind', [
-  'volume',
-  'builder_set',
-  'discovery_set',
-]);
+export const orderLineKindEnum = pgEnum('order_line_kind', LINE_KINDS);
 
 export const orders = pgTable(
   'orders',
@@ -684,7 +680,7 @@ export const orderLines = pgTable(
     check('order_lines_qty_check', sql`${t.qty} > 0`),
     check(
       'order_lines_kind_check',
-      sql`(${t.kind} = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind} <> 'volume' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5 and ${t.setComposition} is not null)`,
+      sql`(${t.kind}::text = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind}::text = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5 and jsonb_array_length(${t.setComposition}) = 5) or (${t.kind}::text = 'discovery_set' and ${t.volumeId} is null and ${t.setVolumeIds} is null and jsonb_array_length(${t.setComposition}) = 5)`,
     ),
     check(
       'order_lines_money_check',
