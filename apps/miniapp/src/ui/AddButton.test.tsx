@@ -111,7 +111,8 @@ describe('the list card «+» (#25)', () => {
     addLine.mockResolvedValue({ status: 200, body: cart(1) });
     renderAdd(item([volume(10, 69_000, 5), volume(30, 149_000, 5), volume(50, 219_000, 0)]));
     fireEvent.click(screen.getByTestId('list-add'));
-    const dialog = await screen.findByRole('dialog', { name: 'Выберите объём' });
+    // The sheet is a lazy chunk: on a busy machine its import can take longer than findBy's 1 s.
+    const dialog = await screen.findByRole('dialog', { name: 'Выберите объём' }, { timeout: 5000 });
     expect(dialog.textContent).toContain('В корзину');
     expect(screen.getByRole('radio', { name: /10 мл/ }).getAttribute('aria-checked')).toBe('true');
     fireEvent.click(screen.getByRole('radio', { name: /30 мл/ }));
@@ -126,7 +127,7 @@ describe('the list card «+» (#25)', () => {
     addLine.mockResolvedValue({ status: 409, body: { code: 'sold_out' } });
     renderAdd(item([volume(10, 69_000, 5), volume(30, 149_000, 5), volume(50, 219_000, 0)]));
     fireEvent.click(screen.getByTestId('list-add'));
-    await screen.findByRole('dialog', { name: 'Выберите объём' });
+    await screen.findByRole('dialog', { name: 'Выберите объём' }, { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
     expect((await screen.findByRole('alert')).textContent).toBe(
       '10 мл закончился — выберите другой объём',
@@ -143,7 +144,7 @@ describe('the list card «+» (#25)', () => {
     addLine.mockResolvedValue({ status: 409, body: { code: 'sold_out' } });
     renderAdd(item([volume(10, 69_000, 5), volume(30, 149_000, 1), volume(50, 219_000, 0)]));
     fireEvent.click(screen.getByTestId('list-add'));
-    await screen.findByRole('dialog', { name: 'Выберите объём' });
+    await screen.findByRole('dialog', { name: 'Выберите объём' }, { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
     await screen.findByRole('alert');
     fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
