@@ -1,4 +1,6 @@
-import type { Language } from '@lummi/i18n';
+import { plural, type Language, type PluralForms } from '@lummi/i18n';
+import { num } from '@/lib/setting-copy';
+import { fill } from '@/lib/utils';
 
 const parts = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -18,3 +20,9 @@ export function formatWhen(iso: string, _language: Language): string {
   const p = Object.fromEntries(parts.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
   return `${p.day}.${p.month}.${p.year}, ${p.hour}:${p.minute}`;
 }
+
+/** «50 000 адресатов»: the plural form for `n`, with the thousands grouped as the audit log does. */
+export const countOf = (language: Language, n: number, forms: PluralForms) =>
+  fill(plural(language, n, forms), { total: num(n) });
+
+export { num };

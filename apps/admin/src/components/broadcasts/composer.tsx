@@ -9,17 +9,26 @@ import {
   TEXT_MAX,
   broadcastBodySchema,
   copyWarnings,
+  type BroadcastAudience,
   type BroadcastBody,
 } from '@lummi/contracts';
-import { plural, type Language } from '@lummi/i18n';
-import { Check, CircleAlert, ImageOff, ImagePlus, Send, Trash2 } from 'lucide-react';
+import type { Language } from '@lummi/i18n';
+import {
+  ArrowLeft,
+  Check,
+  CircleAlert,
+  ImageOff,
+  ImagePlus,
+  RotateCw,
+  Send,
+  Trash2,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm, type FieldError, type Resolver } from 'react-hook-form';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -31,22 +40,32 @@ import {
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { Section } from '@/components/ui/section';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { TEXT_LINK } from '@/lib/ui-classes';
-import { fill } from '@/lib/utils';
+import { cn, fill } from '@/lib/utils';
+import { countOf, num } from './format';
+import { PreviewLanguageSwitch, TelegramPreview } from './telegram-preview';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 type Count = { total: number; reachable: number };
-type Status = { kind: 'ok' | 'error'; text: string } | null;
+/** The recipient count of the chosen audience: what the confirmation states, so it is never stale. */
+type Reach =
+  | { state: 'ok'; audience: BroadcastAudience; count: Count }
+  | { state: 'loading' | 'error'; audience: BroadcastAudience; previous?: Count };
+type Banner = { kind: 'ok' | 'error'; text: string } | null;
 
 /**
  * The owner's composer: RU and UZ text, an optional image and link button, the audience with a
- * live recipient count, «Отправить себе» and «Отправить» (behind a confirmation that names the
- * audience). The server checks everything again; here the checks only save a round trip.
+ * live recipient count, a preview of the message as Telegram shows it, «Отправить себе» and
+ * «Отправить клиентам» (behind a confirmation that names the audience, its language and its
+ * size). The server checks everything again; here the checks only save a round trip.
+ *
+ * Wide screens put the preview in a sticky column beside the form; phones show it after the
+ * audience, right before the two send buttons.
  */
 export function BroadcastComposer({
   initialCount,
@@ -90,34 +109,65 @@ export function BroadcastComposer({
     return (e.message && map[e.message]) || e.message || b.errors.required;
   };
 
-  // live recipient count for the chosen audience
-  const [count, setCount] = useState<Count | null>(initialCount);
+  // live recipient count for the chosen audience (the page renders with «all» already counted)
+  const [reach, setReach] = useState<Reach>({
+    state: 'ok',
+    audience: 'all',
+    count: initialCount,
+  });
+  const loadCount = useCallback((audience: BroadcastAudience) => {
+    let live = true;
+    setReach((r) => ({
+      state: 'loading',
+      audience,
+      previous: r.state === 'ok' ? r.count : r.previous,
+    }));
+    browserApi.broadcasts
+      .audience({ query: { audience } })
+      .then((res) => {
+        if (!live) return;
+        setReach(
+          res.status === 200
+            ? { state: 'ok', audience, count: res.body }
+            : { state: 'error', audience },
+        );
+      })
+      .catch(() => live && setReach({ state: 'error', audience }));
+    return () => {
+      live = false;
+    };
+  }, []);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
-    let live = true;
-    setCount(null);
-    void browserApi.broadcasts.audience({ query: { audience: v.audience } }).then((res) => {
-      if (live && res.status === 200) setCount(res.body);
-    });
-    return () => {
-      live = false;
-    };
-  }, [v.audience]);
+    return loadCount(v.audience);
+  }, [v.audience, loadCount]);
+  const count = reach.state === 'ok' && reach.audience === v.audience ? reach.count : null;
+  // while the next audience is counted, the last count stays, dimmed, instead of a skeleton flash
+  const shownCount = count ?? (reach.state === 'loading' ? (reach.previous ?? null) : null);
 
-  // image: uploaded when picked; the key is what the form sends
+  // image: uploaded when picked; the key is what the form sends. The picked file shows at once,
+  // dimmed until the server has it; a failed upload brings the previous image back.
   const input = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [imageState, setImageState] = useState<Status | { kind: 'busy'; text: string }>(null);
-  useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
+  const committed = useRef<string | null>(null);
+  const [image, setImage] = useState<{ url: string; pending: boolean } | null>(null);
+  const [imageState, setImageState] = useState<Banner | { kind: 'busy'; text: string }>(null);
+  useEffect(
+    () => () => {
+      if (committed.current) URL.revokeObjectURL(committed.current);
+    },
+    [],
+  );
   const pickImage = async (file: File | undefined) => {
     if (!file) return;
     if (!IMAGE_TYPES.includes(file.type))
       return setImageState({ kind: 'error', text: b.imageBadType });
     if (file.size > MAX_PHOTO_BYTES) return setImageState({ kind: 'error', text: b.imageTooBig });
+    const url = URL.createObjectURL(file);
+    setImage({ url, pending: true });
     setImageState({ kind: 'busy', text: b.imageUploading });
     const res = await fetch('/api/admin/broadcasts/image', {
       method: 'PUT',
@@ -126,11 +176,15 @@ export function BroadcastComposer({
     }).catch(() => null);
     if (res?.ok) {
       const { key } = (await res.json()) as { key: string };
-      setPreview(URL.createObjectURL(file));
+      if (committed.current) URL.revokeObjectURL(committed.current);
+      committed.current = url;
+      setImage({ url, pending: false });
       setValue('imageKey', key, { shouldDirty: true });
       setImageState(null);
       void trigger(['textRu', 'textUz']);
     } else {
+      URL.revokeObjectURL(url);
+      setImage(committed.current ? { url: committed.current, pending: false } : null);
       setImageState({
         kind: 'error',
         text:
@@ -143,64 +197,105 @@ export function BroadcastComposer({
     }
   };
   const removeImage = () => {
-    setPreview(null);
+    if (committed.current) URL.revokeObjectURL(committed.current);
+    committed.current = null;
+    setImage(null);
     setImageState(null);
     setValue('imageKey', null, { shouldDirty: true });
     void trigger(['textRu', 'textUz']);
   };
-
-  // soft copy rules: a hint under the text, never a block
-  const warnings = [...new Set([...copyWarnings(v.textRu), ...copyWarnings(v.textUz)])];
+  const uploading = imageState?.kind === 'busy';
 
   const limit = v.imageKey ? CAPTION_MAX : TEXT_MAX;
-  const counter = (text: string) => fill(b.counter, { n: String(text.length), max: String(limit) });
+
+  // the preview follows the text being written; the switch picks it by hand
+  const [previewLang, setPreviewLang] = useState<Language>(language);
+
+  // one line beside the buttons: «Отправить себе» went out, or why a send did not
+  const [banner, setBanner] = useState<Banner>(null);
 
   // «Отправить себе»
   const [testing, setTesting] = useState(false);
-  const [testStatus, setTestStatus] = useState<Status>(null);
   const sendTest = async () => {
-    setTestStatus(null);
-    if (!(await trigger()) || slugBad) return;
+    setBanner(null);
+    if (!(await trigger(undefined, { shouldFocus: true })) || slugBad) {
+      return setBanner({ kind: 'error', text: b.fixErrors });
+    }
     setTesting(true);
     const res = await browserApi.broadcasts.test({ body: getValues() }).catch(() => null);
     setTesting(false);
-    if (res?.status === 200) setTestStatus({ kind: 'ok', text: b.testSent });
+    if (res?.status === 200) setBanner({ kind: 'ok', text: b.testSent });
     else if (res?.status === 502 && res.body.code === 'test_blocked')
-      setTestStatus({ kind: 'error', text: b.testBlocked });
-    else setTestStatus({ kind: 'error', text: b.testFailed });
+      setBanner({ kind: 'error', text: b.testBlocked });
+    else setBanner({ kind: 'error', text: b.testFailed });
   };
 
-  // «Отправить»: validate, confirm with the audience size, send
+  // «Отправить клиентам»: validate, confirm with the audience size, send
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
   const review = handleSubmit(
     () => {
-      if (slugBad) return;
-      setSendError(null);
+      if (slugBad) return setBanner({ kind: 'error', text: b.fixErrors });
+      setBanner(null);
       setConfirming(true);
     },
-    () => setSendError(b.fixErrors),
+    () => setBanner({ kind: 'error', text: b.fixErrors }),
   );
   const send = async () => {
     setSending(true);
-    setSendError(null);
+    setBanner(null);
     const res = await browserApi.broadcasts.create({ body: getValues() }).catch(() => null);
-    setSending(false);
     if (res?.status === 201) return router.push(`/broadcasts/${res.body.id}`);
+    setSending(false);
     setConfirming(false);
     if (res?.status === 422) {
       for (const f of res.body.fields ?? []) {
         if (f === 'imageKey') setError('imageKey', { message: b.errors.imageMissing });
         if (f === 'buttonTarget') setError('buttonTarget', { message: b.errors.slugUnknown });
       }
-      setSendError(b.fixErrors);
-    } else setSendError(b.sendFailed);
+      setBanner({ kind: 'error', text: b.fixErrors });
+    } else setBanner({ kind: 'error', text: b.sendFailed });
   };
 
-  const addressees = count ? plural(language, count.reachable, b.addressees) : null;
+  const addressees = count ? countOf(language, count.reachable, b.addressees) : null;
   const blockedCount = count ? count.total - count.reachable : 0;
-  const shownImage = preview;
+  const shownBlocked = shownCount ? shownCount.total - shownCount.reachable : 0;
+
+  const counter = (n: number) => {
+    const over = n > limit;
+    return (
+      <span
+        className={cn(
+          'text-xs whitespace-nowrap tabular-nums',
+          over
+            ? 'font-semibold text-foreground'
+            : n >= limit * 0.9
+              ? 'text-foreground'
+              : 'text-muted-foreground',
+        )}
+      >
+        {fill(b.counter, { n: num(n), max: num(limit) })}
+      </span>
+    );
+  };
+  const warningsFor = (text: string) => {
+    const list = copyWarnings(text);
+    return list.length === 0 ? null : (
+      <Notice title={b.warnings.title} className="py-3">
+        {list.map((w) => b.warnings[w]).join(' ')}
+      </Notice>
+    );
+  };
+
+  const shownText = previewLang === 'uz' ? v.textUz : v.textRu;
+  const targetLabel =
+    kind === ''
+      ? null
+      : kind === 'fragrance'
+        ? slug
+          ? fill(b.targetFragrance, { name: slug })
+          : b.targets.fragrance
+        : b.targets[kind as (typeof STARTAPP_TARGETS)[number]];
 
   return (
     <>
@@ -208,211 +303,364 @@ export function BroadcastComposer({
         title={b.newTitle}
         description={b.newDescription}
         actions={
-          <Link href="/broadcasts" className={TEXT_LINK}>
-            {b.back}
-          </Link>
+          <Button variant="outline" asChild>
+            <Link href="/broadcasts">
+              <ArrowLeft strokeWidth={1.5} aria-hidden />
+              {b.back}
+            </Link>
+          </Button>
         }
       />
-      <form onSubmit={review} noValidate className="grid max-w-[46rem] gap-4">
-        <Card className="grid gap-5 px-4 py-5 @container sm:px-6">
-          <Field id="bc-ru" label={b.textRu} hint={b.textHint} error={message(errors.textRu)}>
-            <Textarea lang="ru" rows={5} {...register('textRu')} />
-          </Field>
-          <p className="-mt-3 text-right text-xs text-muted-foreground tabular-nums">
-            {counter(v.textRu)}
-          </p>
-          <Field id="bc-uz" label={b.textUz} error={message(errors.textUz)}>
-            <Textarea lang="uz" rows={5} {...register('textUz')} />
-          </Field>
-          <p className="-mt-3 text-right text-xs text-muted-foreground tabular-nums">
-            {counter(v.textUz)}
-          </p>
-          {warnings.length > 0 && (
-            <Notice title={b.warnings.title}>{warnings.map((w) => b.warnings[w]).join(' ')}</Notice>
-          )}
-        </Card>
-
-        <Card className="grid gap-5 px-4 py-5 sm:px-6">
-          <div className="grid gap-1.5" data-image>
-            <p className="text-[12.5px] font-medium text-muted-foreground">{b.image}</p>
-            <div className="flex flex-col gap-3 @xs:flex-row sm:flex-row sm:items-start sm:gap-4">
-              <div className="grid aspect-[3/4] w-24 shrink-0 place-items-center overflow-hidden rounded-[8px] bg-field">
-                {shownImage ? (
-                  <img src={shownImage} alt="" className="size-full object-cover" />
-                ) : (
-                  <ImageOff
-                    className="size-5 text-muted-foreground"
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                )}
-              </div>
-              <div className="grid min-w-0 content-start justify-items-start gap-2">
-                <input
-                  ref={input}
-                  type="file"
-                  accept={IMAGE_TYPES.join(',')}
-                  className="sr-only"
-                  tabIndex={-1}
-                  aria-label={b.image}
-                  onChange={(e) => {
-                    void pickImage(e.target.files?.[0]);
-                    e.target.value = '';
-                  }}
+      <form
+        onSubmit={review}
+        noValidate
+        autoComplete="off"
+        className="grid max-w-[46rem] gap-4 xl:max-w-none xl:grid-cols-[minmax(0,1fr)_21rem] xl:gap-x-6 [&_:is(input,select,textarea)]:scroll-mt-24"
+      >
+        <div className="grid min-w-0 gap-4 xl:col-start-1 xl:row-start-1">
+          <Section title={b.sectionText}>
+            <div className="grid gap-2.5">
+              <Field
+                id="bc-ru"
+                label={b.textRu}
+                hint={b.textHint}
+                error={message(errors.textRu)}
+                aside={counter(v.textRu.length)}
+              >
+                <Textarea
+                  lang="ru"
+                  rows={5}
+                  {...register('textRu')}
+                  onFocus={() => setPreviewLang('ru')}
                 />
-                <div className="flex flex-wrap gap-2">
+              </Field>
+              {warningsFor(v.textRu)}
+            </div>
+            <div className="grid gap-2.5">
+              <Field
+                id="bc-uz"
+                label={b.textUz}
+                error={message(errors.textUz)}
+                aside={counter(v.textUz.length)}
+              >
+                <Textarea
+                  lang="uz"
+                  rows={5}
+                  {...register('textUz')}
+                  onFocus={() => setPreviewLang('uz')}
+                />
+              </Field>
+              {warningsFor(v.textUz)}
+            </div>
+          </Section>
+
+          <Section title={b.sectionMedia}>
+            <div className="grid gap-1.5" data-image>
+              <p className="text-[12.5px] font-medium text-muted-foreground">{b.image}</p>
+              <div className="flex flex-col gap-3 min-[400px]:flex-row min-[400px]:items-start min-[400px]:gap-4">
+                {/* the whole picture (contain): Telegram shows it uncropped, whatever its shape */}
+                <div
+                  className={cn(
+                    'grid aspect-[3/4] w-24 shrink-0 place-items-center overflow-hidden rounded-[8px] bg-field transition-opacity duration-200',
+                    image?.pending && 'opacity-60',
+                  )}
+                >
+                  {image ? (
+                    <img
+                      src={image.url}
+                      alt=""
+                      className="size-full object-contain"
+                      decoding="async"
+                    />
+                  ) : (
+                    <span className="grid justify-items-center gap-1.5 px-2 text-center text-xs text-muted-foreground">
+                      <ImageOff className="size-5" strokeWidth={1.5} aria-hidden />
+                      {b.imageNone}
+                    </span>
+                  )}
+                </div>
+                <div className="grid min-w-0 content-start justify-items-start gap-2">
+                  <input
+                    ref={input}
+                    type="file"
+                    accept={IMAGE_TYPES.join(',')}
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-label={b.image}
+                    onChange={(e) => {
+                      void pickImage(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      loading={uploading}
+                      onClick={() => input.current?.click()}
+                    >
+                      <ImagePlus strokeWidth={1.5} aria-hidden />
+                      {v.imageKey ? b.imageReplace : b.imageChoose}
+                    </Button>
+                    {v.imageKey && !uploading && (
+                      <Button type="button" variant="ghost" size="sm" onClick={removeImage}>
+                        <Trash2 strokeWidth={1.5} aria-hidden />
+                        {b.imageRemove}
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs leading-snug text-pretty text-muted-foreground">
+                    {b.imageHint}
+                  </p>
+                  {(imageState?.kind === 'error' || errors.imageKey) && (
+                    <p
+                      key={imageState?.text ?? errors.imageKey?.message}
+                      role="alert"
+                      className="flex animate-[overlay-in_200ms_var(--ease-out)] items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
+                    >
+                      <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+                      {imageState?.kind === 'error' ? imageState.text : errors.imageKey?.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                id="bc-target"
+                label={b.button}
+                hint={b.buttonHint}
+                error={
+                  errors.buttonTarget && kind !== 'fragrance'
+                    ? message(errors.buttonTarget)
+                    : undefined
+                }
+              >
+                <Select value={kind} onChange={(e) => pickTarget(e.target.value, slug)}>
+                  <option value="">{b.buttonNone}</option>
+                  {STARTAPP_TARGETS.map((target) => (
+                    <option key={target} value={target}>
+                      {b.targets[target]}
+                    </option>
+                  ))}
+                  <option value="fragrance">{b.targets.fragrance}</option>
+                </Select>
+              </Field>
+              {kind === 'fragrance' && (
+                <Field
+                  id="bc-slug"
+                  label={b.fragranceSlug}
+                  hint={b.fragranceSlugHint}
+                  error={
+                    errors.buttonTarget?.message === b.errors.slugUnknown
+                      ? b.errors.slugUnknown
+                      : formState.isSubmitted && slugBad
+                        ? b.errors.slug
+                        : undefined
+                  }
+                >
+                  <Input
+                    value={slug}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="done"
+                    onChange={(e) => pickTarget('fragrance', e.target.value.trim().toLowerCase())}
+                  />
+                </Field>
+              )}
+            </div>
+          </Section>
+
+          <Section title={b.audience}>
+            {/* each option is one tap target the width of the card, washed while pressed */}
+            <fieldset className="-mx-2.5 -my-2 grid gap-0.5">
+              <legend className="sr-only">{b.audience}</legend>
+              {BROADCAST_AUDIENCES.map((a) => (
+                <label
+                  key={a}
+                  className="flex cursor-pointer touch-manipulation items-start gap-3 rounded-button px-2.5 py-2 transition-colors duration-150 select-none hover:bg-milk active:bg-field"
+                >
+                  <input
+                    type="radio"
+                    value={a}
+                    className="mt-0.5 size-[18px] shrink-0 accent-graphite"
+                    {...register('audience')}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{b.audiences[a]}</span>
+                    <span className="block text-[13px] text-pretty text-muted-foreground">
+                      {b.audienceHints[a]}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <div
+              role="status"
+              aria-live="polite"
+              className="border-t border-border pt-4"
+              data-audience-size
+            >
+              {shownCount ? (
+                <div
+                  aria-busy={!count || undefined}
+                  className={cn('transition-opacity duration-200 ease-out', !count && 'opacity-50')}
+                >
+                  {!count && <span className="sr-only">{b.countLoading}</span>}
+                  <p className="text-[17px] leading-snug font-semibold tabular-nums">
+                    {b.reach}:{' '}
+                    <span className="whitespace-nowrap">
+                      {countOf(language, shownCount.reachable, b.addressees)}
+                    </span>
+                  </p>
+                  {shownBlocked > 0 && (
+                    <p className="mt-1 text-[13px] text-pretty text-muted-foreground">
+                      {fill(b.addresseesBlocked, { n: num(shownBlocked) })}
+                    </p>
+                  )}
+                </div>
+              ) : reach.state === 'error' ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="flex items-start gap-2 text-sm font-medium">
+                    <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+                    {b.countFailed}
+                  </p>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    loading={imageState?.kind === 'busy'}
-                    onClick={() => input.current?.click()}
+                    onClick={() => loadCount(v.audience)}
                   >
-                    <ImagePlus strokeWidth={1.5} aria-hidden />
-                    {v.imageKey ? b.imageReplace : b.imageChoose}
+                    <RotateCw strokeWidth={1.5} aria-hidden />
+                    {t.actions.retry}
                   </Button>
-                  {v.imageKey && (
-                    <Button type="button" variant="ghost" size="sm" onClick={removeImage}>
-                      <Trash2 strokeWidth={1.5} aria-hidden />
-                      {b.imageRemove}
-                    </Button>
-                  )}
                 </div>
-                <p className="text-xs leading-snug text-pretty text-muted-foreground">
-                  {b.imageHint}
-                </p>
-                {imageState && imageState.kind === 'error' && (
-                  <p
-                    role="alert"
-                    className="flex items-start gap-1.5 text-xs leading-snug font-medium"
-                  >
-                    <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-                    {imageState.text}
-                  </p>
-                )}
-                {errors.imageKey && (
-                  <p role="alert" className="text-xs leading-snug font-medium">
-                    {errors.imageKey.message}
-                  </p>
-                )}
-              </div>
+              ) : null}
             </div>
-          </div>
+          </Section>
+        </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              id="bc-target"
-              label={b.button}
-              hint={b.buttonHint}
-              error={
-                errors.buttonTarget && kind !== 'fragrance'
-                  ? message(errors.buttonTarget)
-                  : undefined
-              }
+        <Section
+          title={b.sectionPreview}
+          className="min-w-0 xl:sticky xl:top-10 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-start"
+          action={
+            <PreviewLanguageSwitch
+              value={previewLang}
+              onChange={setPreviewLang}
+              label={b.previewLanguage}
+            />
+          }
+        >
+          <div className="grid gap-2">
+            <TelegramPreview
+              text={shownText}
+              image={image?.url ?? null}
+              button={v.buttonTarget !== null}
+              language={previewLang}
+              t={t}
+              className="xl:max-h-[min(34rem,calc(100dvh-14rem))]"
+            />
+            {targetLabel && (
+              <p className="text-xs leading-snug text-pretty text-muted-foreground [overflow-wrap:anywhere]">
+                {fill(b.buttonTo, { target: targetLabel })}
+              </p>
+            )}
+          </div>
+        </Section>
+
+        <div className="flex flex-col gap-3 pt-2 xl:col-start-1 xl:row-start-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {/* a disabled button says why (DESIGN.md): nobody in this audience can get it */}
+            <Button type="submit" disabled={count?.reachable === 0}>
+              {count?.reachable === 0 ? (
+                b.sendNobody
+              ) : (
+                <>
+                  <Send strokeWidth={1.5} aria-hidden />
+                  {b.send}
+                </>
+              )}
+            </Button>
+            <Button type="button" variant="outline" loading={testing} onClick={sendTest}>
+              {b.sendTest}
+            </Button>
+          </div>
+          {banner && (
+            <p
+              key={banner.text}
+              role={banner.kind === 'error' ? 'alert' : 'status'}
+              className="flex min-w-0 flex-1 animate-[overlay-in_200ms_var(--ease-out)] items-start gap-2 text-sm leading-snug font-medium text-pretty sm:basis-64"
+              data-test-status={banner.text === b.testSent ? '' : undefined}
             >
-              <Select value={kind} onChange={(e) => pickTarget(e.target.value, slug)}>
-                <option value="">{b.buttonNone}</option>
-                {STARTAPP_TARGETS.map((target) => (
-                  <option key={target} value={target}>
-                    {b.targets[target]}
-                  </option>
-                ))}
-                <option value="fragrance">{b.targets.fragrance}</option>
-              </Select>
-            </Field>
-            {kind === 'fragrance' && (
-              <Field
-                id="bc-slug"
-                label={b.fragranceSlug}
-                hint={b.fragranceSlugHint}
-                error={
-                  errors.buttonTarget?.message === b.errors.slugUnknown
-                    ? b.errors.slugUnknown
-                    : formState.isSubmitted && slugBad
-                      ? b.errors.slug
-                      : undefined
-                }
-              >
-                <Input
-                  value={slug}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  onChange={(e) => pickTarget('fragrance', e.target.value.trim().toLowerCase())}
+              {banner.kind === 'error' ? (
+                <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+              ) : (
+                <Check
+                  className="mt-px size-4 shrink-0 text-sage-ink"
+                  strokeWidth={1.5}
+                  aria-hidden
                 />
-              </Field>
-            )}
-          </div>
-        </Card>
-
-        <Card className="grid gap-4 px-4 py-5 sm:px-6">
-          <Field id="bc-audience" label={b.audience}>
-            <Select {...register('audience')}>
-              {BROADCAST_AUDIENCES.map((a) => (
-                <option key={a} value={a}>
-                  {b.audiences[a]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div role="status" aria-live="polite" className="text-sm" data-audience-size>
-            {count === null ? (
-              <span className="text-muted-foreground">{b.countLoading}</span>
-            ) : (
-              <>
-                <p className="font-semibold">{addressees}</p>
-                {blockedCount > 0 && (
-                  <p className="mt-0.5 text-[13px] text-muted-foreground">
-                    {fill(b.addresseesBlocked, { n: String(blockedCount) })}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        </Card>
-
-        {sendError && <Notice title={sendError} />}
-        {testStatus && (
-          <p
-            role={testStatus.kind === 'error' ? 'alert' : 'status'}
-            className="flex items-start gap-2 rounded-button bg-field px-4 py-3 text-sm font-medium"
-            data-test-status
-          >
-            {testStatus.kind === 'error' ? (
-              <CircleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden />
-            ) : (
-              <Check
-                className="mt-0.5 size-4 shrink-0 text-sage-ink"
-                strokeWidth={1.5}
-                aria-hidden
-              />
-            )}
-            {testStatus.text}
-          </p>
-        )}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" loading={testing} onClick={sendTest}>
-            {b.sendTest}
-          </Button>
-          <Button type="submit" disabled={count?.reachable === 0}>
-            <Send strokeWidth={1.5} aria-hidden />
-            {b.send}
-          </Button>
+              )}
+              {banner.text}
+            </p>
+          )}
         </div>
       </form>
 
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+      <AlertDialog open={confirming} onOpenChange={(open) => !sending && setConfirming(open)}>
         <AlertDialogContent>
-          <AlertDialogTitle>{b.sendTitle}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {fill(b.sendText, { addressees: addressees ?? '' })}
-          </AlertDialogDescription>
+          <AlertDialogTitle>{b.sendTitle[v.audience]}</AlertDialogTitle>
+          <AlertDialogDescription>{b.sendText}</AlertDialogDescription>
+          <dl className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 rounded-button bg-field px-4 py-3.5 text-sm leading-snug">
+            <dt className="self-center text-muted-foreground">{b.reach}</dt>
+            <dd className="text-[17px] font-semibold tabular-nums">
+              {count ? (
+                addressees
+              ) : reach.state === 'error' ? (
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-medium">
+                  {b.countFailed}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadCount(v.audience)}
+                  >
+                    <RotateCw strokeWidth={1.5} aria-hidden />
+                    {t.actions.retry}
+                  </Button>
+                </span>
+              ) : (
+                <span className="skeleton inline-block h-5 w-28 align-middle" />
+              )}
+            </dd>
+            {blockedCount > 0 && (
+              <>
+                <dt className="text-muted-foreground">{b.unreachable}</dt>
+                <dd className="text-pretty">
+                  <span className="font-medium tabular-nums">{num(blockedCount)}</span>
+                  <span className="text-muted-foreground">: {b.unreachableHint}</span>
+                </dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">{b.language}</dt>
+            <dd className="text-pretty">{b.audienceHints[v.audience]}</dd>
+          </dl>
           <DialogFooter>
             <AlertDialogCancel asChild>
-              <Button variant="outline">{t.actions.cancel}</Button>
+              <Button variant="outline" disabled={sending}>
+                {t.actions.cancel}
+              </Button>
             </AlertDialogCancel>
-            <Button loading={sending} onClick={send}>
-              {b.sendConfirm}
+            <Button
+              loading={sending || reach.state === 'loading'}
+              disabled={!count || count.reachable === 0}
+              onClick={send}
+            >
+              <Send strokeWidth={1.5} aria-hidden />
+              {count ? countOf(language, count.reachable, b.sendConfirm) : b.send}
             </Button>
           </DialogFooter>
         </AlertDialogContent>

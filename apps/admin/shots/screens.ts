@@ -584,6 +584,8 @@ export const screens: Screen[] = [
       await fillComposer(page, t);
       await page.getByRole('button', { name: t.broadcasts.sendTest }).click();
       await page.getByText(t.broadcasts.testSent).waitFor();
+      // back to the top, so the phone's sticky header is not caught mid-page in the full-page shot
+      await page.evaluate(() => window.scrollTo(0, 0));
     },
   },
   {

@@ -29,10 +29,10 @@ import {
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { Section } from '@/components/ui/section';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
@@ -713,18 +713,6 @@ export function FragranceForm({
         )}
       </div>
     </form>
-  );
-}
-
-/** A card per part of the form, headed in the DESIGN.md Section role (Tenor caps, 13 px). */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <Card className="grid scroll-mt-24 gap-5 p-4 sm:p-6">
-      <h2 className="font-display text-[13px] leading-[1.35] tracking-[0.2em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </Card>
   );
 }
 

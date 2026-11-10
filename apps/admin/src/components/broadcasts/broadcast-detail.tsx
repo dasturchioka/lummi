@@ -1,32 +1,36 @@
 'use client';
 
 import type { BroadcastDto } from '@lummi/contracts';
-import { plural, type Language } from '@lummi/i18n';
+import type { Language } from '@lummi/i18n';
 import { ArrowLeft, ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { MetaLine } from '@/components/ui/meta-line';
+import { Section } from '@/components/ui/section';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { fill } from '@/lib/utils';
-import { TEXT_LINK } from '@/lib/ui-classes';
+import { cn, fill } from '@/lib/utils';
 import { CountTiles } from './counts';
-import { formatWhen } from './format';
+import { countOf, formatWhen } from './format';
+import { TelegramPreview } from './telegram-preview';
 
 const POLL_MS = 2000;
 
-/** «Каталог», or «Карточка аромата: Tygar» for a `p_<slug>` target. */
+/** «Каталог», or «Аромат Tygar» for a `p_<slug>` target (the slug when the fragrance is gone). */
 function targetLabel(b: BroadcastDto, m: AdminMessages['broadcasts']): string {
   const target = b.buttonTarget ?? '';
   if (target.startsWith('p_'))
-    return `${m.targets.fragrance}: ${b.buttonFragrance ?? target.slice(2)}`;
+    return fill(m.targetFragrance, { name: b.buttonFragrance ?? target.slice(2) });
   return (m.targets as Record<string, string>)[target] ?? target;
 }
 
-/** One broadcast: its counts (refreshed every two seconds while it sends) and the two texts as sent. */
+/**
+ * One broadcast: who sent it and when, its counts (refreshed every two seconds while it sends),
+ * and the two language versions as the customers got them.
+ */
 export function BroadcastDetail({
   initial,
   language,
@@ -51,23 +55,25 @@ export function BroadcastDetail({
   return (
     <>
       <PageHeader
-        title={m.title}
-        description={m.sentBy.replace('{name}', b.createdByName)}
+        title={m.detailTitle}
+        description={`${formatWhen(b.createdAt, language)} · ${fill(m.sentBy, { name: b.createdByName })}`}
         actions={
-          <Link href="/broadcasts" className={TEXT_LINK}>
-            <ArrowLeft className="mr-1.5 inline size-4" strokeWidth={1.5} aria-hidden />
-            {m.back}
-          </Link>
+          <Button variant="outline" asChild>
+            <Link href="/broadcasts">
+              <ArrowLeft strokeWidth={1.5} aria-hidden />
+              {m.back}
+            </Link>
+          </Button>
         }
       />
-      <div className="grid gap-4 @container">
+      <div className="grid gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground">
-          <Badge tone={sending ? 'neutral' : 'sage'}>{m.status[b.status]}</Badge>
+          <Badge tone={sending ? 'live' : 'sage'}>{m.status[b.status]}</Badge>
           <MetaLine
+            className="min-w-0 flex-1 basis-56"
             parts={[
-              formatWhen(b.createdAt, language),
               m.audiences[b.audience],
-              plural(language, b.counts.total, m.addressees),
+              countOf(language, b.counts.total, m.addressees),
               b.buttonTarget && fill(m.buttonTo, { target: targetLabel(b, m) }),
               b.hasImage && (
                 <span className="inline-flex items-center gap-1">
@@ -78,21 +84,30 @@ export function BroadcastDetail({
             ]}
           />
         </div>
-        <CountTiles counts={b.counts} t={t} />
-        <p role="status" className="text-[13px] text-muted-foreground">
-          {sending ? m.runningNote : m.doneNote}
-        </p>
-        <div className="grid gap-3 @3xl:grid-cols-2">
-          {(['Ru', 'Uz'] as const).map((l) => (
-            <Card key={l} className="px-4 py-4">
-              <h2 className="text-[12.5px] font-medium text-muted-foreground">
-                {m[`version${l}`]}
-              </h2>
-              <p className="mt-2 text-[15px] leading-snug whitespace-pre-wrap [overflow-wrap:anywhere]">
-                {b[`text${l}`]}
-              </p>
-            </Card>
-          ))}
+        <CountTiles counts={b.counts} sending={sending} t={t} />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* the version the customers got comes first */}
+          {(b.audience === 'uz' ? (['uz', 'ru'] as const) : (['ru', 'uz'] as const)).map((l) => {
+            // a one-language audience never got the other version
+            const unsent = b.audience !== 'all' && b.audience !== l;
+            return (
+              <Section key={l} title={l === 'ru' ? m.versionRu : m.versionUz}>
+                {unsent && b.audience !== 'all' && (
+                  <p className="-mt-2 text-[13px] text-pretty text-muted-foreground">
+                    {m.versionUnsent[b.audience]}
+                  </p>
+                )}
+                <TelegramPreview
+                  text={l === 'ru' ? b.textRu : b.textUz}
+                  image={b.hasImage ? 'placeholder' : null}
+                  button={b.buttonTarget !== null}
+                  language={l}
+                  t={t}
+                  className={cn(unsent && 'opacity-60')}
+                />
+              </Section>
+            );
+          })}
         </div>
       </div>
     </>
