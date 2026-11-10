@@ -915,7 +915,8 @@ export interface StoredJudgement {
   choiceConfidence: number;
   /** The judge's own verdict; only this ever confirmed anything. */
   confirmed: boolean;
-  provider: string;
+  /** The provider that answered; 'none' when none could (no answer, only a failure). */
+  provider: 'typesafe' | 'openai' | 'none';
   reason?: string;
 }
 

@@ -1,7 +1,9 @@
 import {
   and,
+  asc,
   credits,
   eq,
+  isNull,
   orders,
   receiptChecks,
   receipts,
@@ -18,7 +20,7 @@ import {
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Queue, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
-import type { Edges, ReceiptJudgement } from '../edges';
+import { answered, type Edges, type ReceiptJudgement } from '../edges';
 import type { Env } from '../env';
 import { CreditEvents, type CreditRecorded } from '../humo/credit-events';
 import { describeError } from '../logging/describe-error';
@@ -46,7 +48,8 @@ interface Candidate {
 
 type CheckOutcome = ReceiptCheckRow['outcome'];
 
-const NOT_CONFIRMED: Omit<ReceiptJudgement, 'reason'> = {
+/** What is kept when no provider answered. */
+const NOT_ANSWERED: Omit<ReceiptJudgement, 'reason'> = {
   isReceipt: 0,
   amountMatches: 0,
   recipientMatches: 0,
@@ -55,6 +58,13 @@ const NOT_CONFIRMED: Omit<ReceiptJudgement, 'reason'> = {
   confirmed: false,
   provider: 'none',
 };
+
+/** The judge gave no answer to act on (both providers failed, it threw, no image): try again. */
+class JudgeUnavailable extends Error {
+  constructor(readonly judgement: ReceiptJudgement) {
+    super(`the receipt AI could not answer: ${judgement.reason ?? 'no reason given'}`);
+  }
+}
 
 /**
  * Automatic payment matching (ADR 0012, 0013): a receipt under check is confirmed by the AI once
@@ -103,7 +113,10 @@ export class PaymentMatching implements OnApplicationShutdown {
     runtime.registerQueue({
       queue: env.RECEIPT_CHECKS_QUEUE,
       concurrency: CONCURRENCY,
-      process: (job: Job<{ receiptId: number }>) => this.check(job.data.receiptId),
+      process: (job: Job<{ receiptId: number }>) =>
+        this.check(job.data.receiptId, {
+          lastAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1),
+        }),
     });
   }
 
@@ -159,7 +172,7 @@ export class PaymentMatching implements OnApplicationShutdown {
         opts: {
           jobId: `receipt-${receiptId}`, // one live check per receipt
           attempts: ATTEMPTS,
-          backoff: { type: 'exponential', delay: 2000 },
+          backoff: { type: 'exponential', delay: this.env.RECEIPT_CHECK_BACKOFF_MS },
           removeOnComplete: true,
           removeOnFail: true,
         },
@@ -171,16 +184,18 @@ export class PaymentMatching implements OnApplicationShutdown {
   /**
    * The job. Asks the judge while the receipt is waiting and has a candidate it was never shown,
    * again if credits arrived while it was asking (their own queue entry found this job running).
+   * A judge that could not answer throws, so BullMQ tries again; on the `lastAttempt` the receipt
+   * goes to manual review instead (`judge_failed`). An answer is final.
    */
-  async check(receiptId: number): Promise<void> {
+  async check(receiptId: number, opts: { lastAttempt: boolean } = { lastAttempt: true }) {
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const outcome = await this.checkOnce(receiptId);
+      const outcome = await this.checkOnce(receiptId, opts.lastAttempt);
       if (outcome === null || outcome === 'confirmed' || outcome === 'stale') return;
     }
   }
 
-  /** One look at the receipt; null when there was nothing new to ask. */
-  private async checkOnce(receiptId: number): Promise<CheckOutcome | null> {
+  /** One look at the receipt; null when there was nothing to ask or act on. */
+  private async checkOnce(receiptId: number, lastAttempt: boolean): Promise<CheckOutcome | null> {
     const [row] = await this.db
       .select({ receipt: receipts, order: orders })
       .from(receipts)
@@ -188,6 +203,14 @@ export class PaymentMatching implements OnApplicationShutdown {
       .where(eq(receipts.id, receiptId));
     if (!row || row.order.status !== 'receipt_review') return null;
     if (!WAITING_VERDICTS.includes(row.receipt.verdict)) return null;
+    // an answer stored before a crash is acted on, never asked again
+    const [unsettled] = await this.db
+      .select()
+      .from(receiptChecks)
+      .where(and(eq(receiptChecks.receiptId, receiptId), isNull(receiptChecks.outcome)))
+      .orderBy(asc(receiptChecks.id))
+      .limit(1);
+    if (unsettled) return this.settleInTx(row.receipt, unsettled);
     if (await isDuplicateReceipt(this.db, receiptId)) {
       await this.holdDuplicates({ receiptId });
       return null;
@@ -198,17 +221,30 @@ export class PaymentMatching implements OnApplicationShutdown {
     const shown = await this.shownCredits(receiptId);
     if (candidates.every((c) => shown.has(c.id))) return null;
 
-    const judgement = await this.ask(row.receipt, row.order, card, candidates);
-    return retryTransientOnce(() =>
-      this.outbox.withTx((tx) =>
-        this.settle(
-          tx,
-          row.receipt,
-          candidates.map((c) => c.id),
-          judgement,
-        ),
-      ),
-    );
+    let judgement: ReceiptJudgement;
+    try {
+      judgement = await this.ask(row.receipt, row.order, card, candidates);
+    } catch (e) {
+      if (!(e instanceof JudgeUnavailable) || !lastAttempt) throw e;
+      this.log.error(`receipt ${receiptId}: the judge failed on the last attempt; manual review`);
+      judgement = e.judgement;
+    }
+    // stored in its own transaction before anything is acted on: a crash after this point
+    // settles the stored answer on the retry instead of asking again
+    const [check] = await this.db
+      .insert(receiptChecks)
+      .values({
+        receiptId,
+        candidateCreditIds: candidates.map((c) => c.id),
+        judgement: stored(judgement),
+        createdAt: this.edges.clock.now(),
+      })
+      .returning();
+    return this.settleInTx(row.receipt, check!);
+  }
+
+  private settleInTx(receipt: ReceiptRow, check: ReceiptCheckRow): Promise<CheckOutcome> {
+    return retryTransientOnce(() => this.outbox.withTx((tx) => this.settle(tx, receipt, check)));
   }
 
   /** Candidate credits of an order, oldest first. */
@@ -231,29 +267,42 @@ export class PaymentMatching implements OnApplicationShutdown {
   }
 
   /**
-   * The waiting receipts (order «Чек на проверке», verdict pending or manual review) that have a
-   * candidate they were never shown, in one query.
+   * The waiting receipts (order «Чек на проверке», verdict pending or manual review) to check: one
+   * with an answer stored but not acted on, or one that is no duplicate and has a candidate it was
+   * never shown (only `receiptId`, or only those `creditId` is such a candidate for).
    */
   private async receiptsToCheck(only: { receiptId?: number; creditId?: number }) {
     const { rows } = await this.db.execute<{ id: string }>(sql`
-      select distinct r.id
+      select r.id
       from ${receipts} r
       join ${orders} o on o.id = r.order_id
-      join ${shopCard} sc on true
-      join ${credits} c on ${CANDIDATE}
       where o.status = 'receipt_review'
         and r.verdict in (${sqlList(WAITING_VERDICTS)})
-        and not ${IS_DUPLICATE}
-        and not exists (
-          select 1 from ${receiptChecks} k where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
-        )
         ${only.receiptId !== undefined ? sql`and r.id = ${only.receiptId}` : sql``}
-        ${only.creditId !== undefined ? sql`and c.id = ${only.creditId}` : sql``}
+        and (
+          exists (
+            select 1 from ${receiptChecks} k where k.receipt_id = r.id and k.outcome is null
+          )
+          or (
+            not ${IS_DUPLICATE}
+            and exists (
+              select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE}
+              where not exists (
+                select 1 from ${receiptChecks} k
+                where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
+              )
+              ${only.creditId !== undefined ? sql`and c.id = ${only.creditId}` : sql``}
+            )
+          )
+        )
       order by r.id`);
     return rows.map((r) => Number(r.id));
   }
 
-  /** The judge's answer; a judge that throws or an image gone missing is "not confirmed". */
+  /**
+   * The judge's answer, confirmed or not. Throws `JudgeUnavailable` when there is none to act on:
+   * the judge threw, no provider answered (`answered()`), or the image for it is gone.
+   */
   private async ask(
     receipt: ReceiptRow,
     order: OrderRow,
@@ -261,9 +310,11 @@ export class PaymentMatching implements OnApplicationShutdown {
     candidates: Candidate[],
   ): Promise<ReceiptJudgement> {
     const image = await this.edges.files.get(receipt.normalizedKey);
-    if (!image) return { ...NOT_CONFIRMED, reason: 'the image for the AI is missing' };
+    if (!image)
+      throw new JudgeUnavailable({ ...NOT_ANSWERED, reason: 'the image for the AI is missing' });
+    let judgement: ReceiptJudgement;
     try {
-      return await this.edges.receiptJudge.judge({
+      judgement = await this.edges.receiptJudge.judge({
         image,
         mimeType: receipt.normalizedMime === 'image/jpeg' ? 'image/jpeg' : 'image/png',
         amountDue: order.amountDue,
@@ -276,29 +327,24 @@ export class PaymentMatching implements OnApplicationShutdown {
         })),
       });
     } catch (e) {
-      this.log.error(`receipt ${receipt.id}: the judge failed: ${describeError(e)}`);
-      return { ...NOT_CONFIRMED, reason: `judge failed: ${describeError(e)}` };
+      throw new JudgeUnavailable({ ...NOT_ANSWERED, reason: `judge failed: ${describeError(e)}` });
     }
+    if (!answered(judgement)) throw new JudgeUnavailable(judgement);
+    return judgement;
   }
 
   /**
-   * Act on the answer under the order's lock: only a `confirmed` answer with a candidate the judge
-   * was shown pays the order (through the door, as the AI); anything else is manual review.
+   * Act on a stored answer under the order's lock: only a `confirmed` answer naming a candidate the
+   * judge was shown pays the order (through the door, as the AI); anything else is manual review.
+   * The answer's row gets its outcome in the same transaction.
    */
   private async settle(
     tx: DbOrTx,
     receipt: ReceiptRow,
-    candidateIds: number[],
-    judgement: ReceiptJudgement,
+    check: ReceiptCheckRow,
   ): Promise<CheckOutcome> {
     const record = async (outcome: CheckOutcome) => {
-      await tx.insert(receiptChecks).values({
-        receiptId: receipt.id,
-        candidateCreditIds: candidateIds,
-        judgement: stored(judgement),
-        outcome,
-        createdAt: this.edges.clock.now(),
-      });
+      await tx.update(receiptChecks).set({ outcome }).where(eq(receiptChecks.id, check.id));
       return outcome;
     };
     const [order] = await tx
@@ -318,8 +364,10 @@ export class PaymentMatching implements OnApplicationShutdown {
     )
       return record('stale');
 
+    const { judgement } = check;
     const chosen = judgement.chosenCreditId;
-    if (judgement.confirmed && chosen !== null && candidateIds.includes(chosen)) {
+    let why: ReceiptRow['reviewReason'] = answered(judgement) ? 'not_confirmed' : 'judge_failed';
+    if (judgement.confirmed && chosen !== null && check.candidateCreditIds.includes(chosen)) {
       const out = await this.payments.confirmPaymentWithCredit(tx, {
         orderId: order.id,
         creditId: chosen,
@@ -329,13 +377,12 @@ export class PaymentMatching implements OnApplicationShutdown {
       if (out.kind === 'confirmed') return record('confirmed');
       // another receipt's check took this credit first: wait for this shopper's own money
       if (out.kind === 'credit_taken') return record('credit_taken');
-      this.log.warn(
-        `receipt ${receipt.id}: the AI's credit was refused (${out.kind}); manual review`,
-      );
+      if (out.kind === 'duplicate_receipt') why = 'duplicate';
+      else this.log.warn(`receipt ${receipt.id}: the AI's credit was refused (${out.kind})`);
     }
     await tx
       .update(receipts)
-      .set({ verdict: 'manual_review', reviewReason: 'not_confirmed' })
+      .set({ verdict: 'manual_review', reviewReason: why })
       .where(and(eq(receipts.id, receipt.id), eq(receipts.verdict, 'pending')));
     return record('manual_review');
   }

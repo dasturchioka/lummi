@@ -72,6 +72,8 @@ export const envSchema = z
     EVENTS_QUEUE: z.string().min(1).default('events'),
     /** BullMQ queue of receipt checks (the receipt AI, ADR 0013); API and worker must agree. */
     RECEIPT_CHECKS_QUEUE: z.string().min(1).default('receipt-checks'),
+    /** First retry delay of a receipt check whose judge could not answer (doubles each time); tests shorten it. */
+    RECEIPT_CHECK_BACKOFF_MS: z.coerce.number().int().min(1).default(5000),
 
     /** Receipt AI keys (ADR 0013). TypeSafe is required in production; OpenAI (the fallback) is optional everywhere and fails as not-configured. */
     TYPESAFE_API_KEY: z.string().min(1).optional(),

@@ -117,6 +117,7 @@ export async function createTestApp(
     OUTBOX_QUEUE: `q_${dbName}`,
     EVENTS_QUEUE: `e_${dbName}`,
     RECEIPT_CHECKS_QUEUE: `r_${dbName}`,
+    RECEIPT_CHECK_BACKOFF_MS: '200',
     BROADCAST_QUEUE: `b_${dbName}`,
     ADMIN_DEV_LOGIN: 'true',
     INTERNAL_API_SECRET: TEST_INTERNAL_SECRET,

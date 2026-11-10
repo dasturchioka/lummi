@@ -145,6 +145,18 @@ const noneOfThese: ReceiptJudgement = {
   reason: 'typesafe: below threshold',
 };
 
+/** What the judge says when neither provider answered (both errored or timed out, ADR 0013). */
+const bothProvidersFailed: ReceiptJudgement = {
+  isReceipt: 0,
+  amountMatches: 0,
+  recipientMatches: 0,
+  chosenCreditId: null,
+  choiceConfidence: 0,
+  confirmed: false,
+  provider: 'none',
+  reason: 'typesafe: timeout: 20000 ms; openai: timeout: 30000 ms',
+};
+
 /** A promise and its resolver: holds the judge mid-answer until the test lets it go. */
 function hold() {
   let release!: () => void;
@@ -345,10 +357,49 @@ describe('when the AI cannot confirm', () => {
     expect(await statusOf(placed)).toBe('receipt_review');
   });
 
-  it('a judge that fails is manual review, asked once', async () => {
+  it('judge errors are retried: two failed attempts, then the third confirms', async () => {
     const placed = await placeOrder();
     const receiptId = await upload(placed);
-    t.edges.receiptJudge.respond = () => Promise.reject(new Error('provider down'));
+    let asked = 0;
+    t.edges.receiptJudge.respond = async (input) => {
+      asked += 1;
+      if (asked === 1) throw new Error('provider down');
+      if (asked === 2) return bothProvidersFailed;
+      return pickLatest(input);
+    };
+
+    await recordCredit(t, { som: placed.order.amountDue });
+
+    await vi.waitFor(async () => expect(await statusOf(placed)).toBe('payment_confirmed'), {
+      timeout: 20_000,
+    });
+    expect(t.edges.receiptJudge.calls).toHaveLength(3);
+    expect((await receiptNow(receiptId)).verdict).toBe('ai_confirmed');
+    // a failed attempt is not an answer: only the third is kept
+    expect((await t.db.select().from(receiptChecks)).map((c) => c.outcome)).toEqual(['confirmed']);
+  });
+
+  it('a judge that fails on every attempt: manual review after the last one', async () => {
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    t.edges.receiptJudge.respond = () => Promise.resolve(bothProvidersFailed);
+
+    await recordCredit(t, { som: placed.order.amountDue });
+
+    await vi.waitFor(
+      async () => expect((await receiptNow(receiptId)).verdict).toBe('manual_review'),
+      { timeout: 20_000 },
+    );
+    await settled();
+    expect(t.edges.receiptJudge.calls).toHaveLength(3);
+    expect(await receiptNow(receiptId)).toMatchObject({ reviewReason: 'judge_failed' });
+    expect(await statusOf(placed)).toBe('receipt_review');
+  });
+
+  it('an answer that does not confirm is final: manual review at once, asked once', async () => {
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    t.edges.receiptJudge.respond = () => noneOfThese;
 
     await recordCredit(t, { som: placed.order.amountDue });
 
@@ -358,7 +409,29 @@ describe('when the AI cannot confirm', () => {
     );
     await settled();
     expect(t.edges.receiptJudge.calls).toHaveLength(1);
-    expect(await statusOf(placed)).toBe('receipt_review');
+    expect(await receiptNow(receiptId)).toMatchObject({ reviewReason: 'not_confirmed' });
+  });
+});
+
+describe('a crash between the answer and acting on it', () => {
+  it('the retry acts on the stored answer: the AI is asked once', async () => {
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    t.edges.receiptJudge.respond = pickLatest;
+    const door = vi
+      .spyOn(t.app.get(PaymentConfirmation), 'confirmPaymentWithCredit')
+      .mockRejectedValueOnce(new Error('the worker died while settling'));
+
+    await recordCredit(t, { som: placed.order.amountDue });
+
+    await vi.waitFor(async () => expect(await statusOf(placed)).toBe('payment_confirmed'), {
+      timeout: 20_000,
+    });
+    expect(t.edges.receiptJudge.calls).toHaveLength(1);
+    expect(door).toHaveBeenCalledTimes(2);
+    expect((await receiptNow(receiptId)).verdict).toBe('ai_confirmed');
+    expect((await t.db.select().from(receiptChecks)).map((c) => c.outcome)).toEqual(['confirmed']);
+    door.mockRestore();
   });
 });
 

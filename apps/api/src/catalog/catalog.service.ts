@@ -17,6 +17,9 @@ import {
   fragrances,
   inArray,
   notes,
+  orderEvents,
+  orderLines,
+  orders,
   volumes,
   type Db,
   type DbOrTx,
@@ -93,17 +96,17 @@ export async function paidOrderCounts(db: DbOrTx, since: Date): Promise<Map<numb
     select f.fragrance_id, count(distinct f.order_id) as n
     from (
       select l.order_id, l.fragrance_id
-      from order_lines l
+      from ${orderLines} l
       where l.kind = 'volume' and l.fragrance_id is not null
       union all
       select l.order_id, (pick->>'fragranceId')::bigint
-      from order_lines l cross join lateral jsonb_array_elements(l.set_composition) pick
+      from ${orderLines} l cross join lateral jsonb_array_elements(l.set_composition) pick
       where l.kind = 'builder_set'
     ) f
-    join orders o on o.id = f.order_id
+    join ${orders} o on o.id = f.order_id
     where o.status in (${sold})
       and exists (
-        select 1 from order_events ev
+        select 1 from ${orderEvents} ev
         where ev.order_id = o.id and ev.action = 'confirm_payment'
           and ev.created_at >= ${since.toISOString()}::timestamptz
       )
