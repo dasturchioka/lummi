@@ -15,6 +15,7 @@ import { FragranceGrid } from '../ui/FragranceGrid';
 import { GridSkeleton } from '../ui/GridSkeleton';
 import { BoxIcon, ChevronIcon, GridIcon, SearchIcon } from '../ui/icons';
 import { Screen } from '../ui/Screen';
+import { SetCards } from './sets/SetCards';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { SearchField } from '../ui/SearchField';
 import { EmptyState, ErrorState } from '../ui/States';
@@ -46,8 +47,8 @@ export function Catalog() {
 
   const sets = filters.type === 'sets';
   const list = useCatalogList(filters, !sets);
-  // «Наборы» lists nothing yet, but its chip row still shows the other types' bottles: one row of
-  // the whole catalog brings the facets (the Discovery banner links straight here).
+  // «Наборы» lists no fragrances, but its chip row still shows the other types' bottles: one row of
+  // the whole catalog brings the facets.
   const facetsOnly = useCatalogPage({}, 1, sets);
   const first = list.data?.pages[0];
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
@@ -90,7 +91,7 @@ export function Catalog() {
   // keep the last ones while «Наборы» (which loads no list) or a failed request has none.
   const [typePhotos, setTypePhotos] = useState(facets?.typePhotos);
   if (facets?.typePhotos && facets.typePhotos !== typePhotos) setTypePhotos(facets.typePhotos);
-  // «Наборы» has no bottle of its own: the box icon holds its circle until the sets ticket.
+  // «Наборы» has no bottle of its own: the box icon holds its circle.
   const typeOptions = typeChipOptions(TYPES, t.catalog.types, typePhotos).map((o) =>
     o.value === 'sets' ? { ...o, icon: <BoxIcon size={16} /> } : o,
   );
@@ -124,13 +125,7 @@ export function Catalog() {
 
   let body;
   if (sets) {
-    body = (
-      <EmptyState
-        icon={<BoxIcon size={28} />}
-        title={t.catalog.setsTitle}
-        text={t.catalog.setsText}
-      />
-    );
+    body = <SetCards />;
   } else if (!first) {
     body = list.isError ? (
       <ErrorState retrying={list.isFetching} onRetry={() => void list.refetch()} />

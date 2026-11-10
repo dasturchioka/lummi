@@ -128,6 +128,37 @@ describe('order detail', () => {
   });
 });
 
+describe('set lines', () => {
+  it('names the five fragrances of a set with their attribution', () => {
+    const five = ['A', 'B', 'C', 'D', 'E'].map((name) => ({ name, brand: 'Louis Vuitton' }));
+    renderView(
+      <OrderView
+        order={order({
+          lines: [
+            {
+              kind: 'discovery_set',
+              slug: null,
+              name: { ru: 'Discovery set', uz: 'Discovery set' },
+              brand: null,
+              ml: 10,
+              photo: null,
+              unitPrice: 299_000,
+              regularUnitPrice: 299_000,
+              markedDown: false,
+              qty: 1,
+              lineTotal: 299_000,
+              setComposition: five,
+            },
+          ],
+        })}
+      />,
+    );
+    const list = screen.getByTestId('set-fragrances');
+    expect(list.querySelectorAll('li')).toHaveLength(5);
+    expect(list.textContent).toContain('Louis Vuitton');
+  });
+});
+
 describe('cancelling an order', () => {
   it('offers «Отменить заказ» only while it waits for payment', () => {
     renderView(<OrderView order={order({ status: 'receipt_review' })} />);
