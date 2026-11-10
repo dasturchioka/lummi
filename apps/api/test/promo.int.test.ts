@@ -40,7 +40,6 @@ afterEach(() => vi.restoreAllMocks());
 
 const ali: TestUser = { id: 41, first_name: 'Ali', language_code: 'ru' };
 const vali: TestUser = { id: 42, first_name: 'Vali', language_code: 'uz' };
-const HOUR = 3600_000;
 
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
