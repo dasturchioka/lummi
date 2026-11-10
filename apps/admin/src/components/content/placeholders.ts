@@ -1,5 +1,5 @@
 import { CONTENT_PLACEHOLDERS } from '@lummi/contracts';
-import { formatMoney, type Language } from '@lummi/i18n';
+import { formatDuration, formatMoney, type Language } from '@lummi/i18n';
 
 export type Placeholder = (typeof CONTENT_PLACEHOLDERS)[number];
 
@@ -8,6 +8,7 @@ export interface PlaceholderSettings {
   threshold?: number;
   tariff?: number;
   manager?: string;
+  reserveSeconds?: number;
 }
 
 /**
@@ -24,22 +25,27 @@ export function placeholderValues(
     defaultTariff: s.tariff === undefined ? undefined : formatMoney(s.tariff, language),
     managerUsername: s.manager,
     managerLink: s.manager && `https://t.me/${s.manager.replace(/^@/, '')}`,
+    reserveTime:
+      s.reserveSeconds === undefined ? undefined : formatDuration(s.reserveSeconds, language),
   };
 }
 
-/** Wraps a filled value in the preview, so it can be drawn as «came from the settings». */
-export const FILLED = /\uE000([^\uE001]*)\uE001/;
-
 /**
- * Fills the body the way the API does before it is parsed, so the preview's links and wrapping are
- * the customer's. Text values are wrapped in `FILLED` markers; `{managerLink}` is a link target
- * and goes in plain. A value the route could not read leaves its `{name}`, still marked.
+ * Fills the body the way the API does before it is parsed, so the preview reads exactly as the
+ * customer's page: values plain, links working. A value the route could not read keeps its
+ * `{name}`, as an unknown placeholder does in the app.
  */
 export function fillForPreview(source: string, values: Partial<Record<Placeholder, string>>) {
-  return source.replace(/\{(\w+)\}/g, (m, key: string) => {
-    if (!(CONTENT_PLACEHOLDERS as readonly string[]).includes(key)) return m;
-    const value = values[key as Placeholder];
-    if (key === 'managerLink') return value ?? m;
-    return `\uE000${value ?? m}\uE001`;
-  });
+  return source.replace(/\{(\w+)\}/g, (m, key: string) =>
+    (CONTENT_PLACEHOLDERS as readonly string[]).includes(key)
+      ? (values[key as Placeholder] ?? m)
+      : m,
+  );
+}
+
+/** The placeholders a body uses, for the list under the editor. */
+export function usedPlaceholders(source: string): Set<Placeholder> {
+  return new Set(
+    CONTENT_PLACEHOLDERS.filter((name) => source.includes(`{${name}}`)) as Placeholder[],
+  );
 }

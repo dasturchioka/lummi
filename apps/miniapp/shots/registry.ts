@@ -1098,7 +1098,7 @@ export const screens: ScreenDef[] = [
     },
     teardown: ({ db }) => clearBanners(db),
   },
-  // the narrowest phone, with the banner at its limits and the slogan at its 80 characters
+  // the narrowest phone, with the banner and the slogan at their limits (one slogan line)
   {
     id: 'home-content-limit-360',
     path: '/',

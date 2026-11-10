@@ -22,6 +22,7 @@ export default async function EditInfoPage({ params }: { params: Promise<{ slug:
     threshold: num(value('pricing.freeDeliveryThreshold')),
     tariff: num(value('delivery.defaultTariff')),
     manager: typeof manager === 'string' ? manager : undefined,
+    reserveSeconds: num(value('orders.reserveTtlSeconds')),
   };
   const { t, language } = await getAdminMessages();
   return <PageEditor key={page.slug} page={page} fills={fills} t={t} language={language} />;

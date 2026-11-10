@@ -6,33 +6,18 @@ import {
   type RichInline,
 } from '@lummi/rich-text';
 import { Fragment } from 'react';
-import { FILLED } from './placeholders';
 
 /**
  * The info page as the Mini App renders it, for the page editor's preview. Same parser and the same heading table (`HEADING_TAG`) as the Mini App's `RichText`, so what
  * the owner sees is what the customer reads; React escapes every string, nothing is HTML.
  */
-/** A text run; a value the settings fill in (see `fillForPreview`) sits on a Sage Wash ground. */
-function Text({ v }: { v: string }) {
-  const parts = keepNumbersTogether(v).split(FILLED);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <span key={i} className="rounded-[3px] bg-sage-wash px-0.5 [box-decoration-break:clone]">
-        {part}
-      </span>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
-  );
-}
-
 function Inline({ nodes }: { nodes: RichInline[] }) {
   return (
     <>
       {nodes.map((n, i) => {
         switch (n.t) {
           case 'text':
-            return <Text key={i} v={n.v} />;
+            return <Fragment key={i}>{keepNumbersTogether(n.v)}</Fragment>;
           case 'br':
             return <br key={i} />;
           case 'strong':

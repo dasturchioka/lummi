@@ -1,6 +1,7 @@
 'use client';
 
 import { SLOGAN_MAX, sloganInputSchema, type Slogan } from '@lummi/contracts';
+import { fill } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -44,11 +45,13 @@ export function SloganEditor({ slogan, t }: { slogan: Slogan; t: AdminMessages }
         <Field
           id="slogan-ru"
           label={c.slogan.ru}
+          // what fits one line on a 360 px phone, counted as the owner types
+          hint={fill(c.slogan.count, { n: String(ru.length), max: String(SLOGAN_MAX.ru) })}
           error={state === 'invalid' && !ru.trim() ? c.required : undefined}
         >
           <Input
             value={ru}
-            maxLength={SLOGAN_MAX}
+            maxLength={SLOGAN_MAX.ru}
             lang="ru"
             onChange={(e) => setRu(e.target.value)}
           />
@@ -56,11 +59,13 @@ export function SloganEditor({ slogan, t }: { slogan: Slogan; t: AdminMessages }
         <Field
           id="slogan-uz"
           label={c.slogan.uz}
+          // what fits one line on a 360 px phone, counted as the owner types
+          hint={fill(c.slogan.count, { n: String(uz.length), max: String(SLOGAN_MAX.uz) })}
           error={state === 'invalid' && !uz.trim() ? c.required : undefined}
         >
           <Input
             value={uz}
-            maxLength={SLOGAN_MAX}
+            maxLength={SLOGAN_MAX.uz}
             lang="uz"
             onChange={(e) => setUz(e.target.value)}
           />

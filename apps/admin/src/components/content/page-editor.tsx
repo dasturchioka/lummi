@@ -15,7 +15,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
-import { fillForPreview, placeholderValues, type PlaceholderSettings } from './placeholders';
+import {
+  fillForPreview,
+  placeholderValues,
+  usedPlaceholders,
+  type PlaceholderSettings,
+} from './placeholders';
 import { RichTextView } from './rich-text-view';
 
 export function PageEditor({
@@ -46,6 +51,7 @@ export function PageEditor({
   const titleKey = `title${S}` as 'titleRu' | 'titleUz';
   const bodyKey = `body${S}` as 'bodyRu' | 'bodyUz';
   const values = placeholderValues(fills, lang);
+  const used = usedPlaceholders(v[bodyKey]);
 
   const save = async () => {
     const parsed = infoPageInputSchema.safeParse(v);
@@ -114,14 +120,23 @@ export function PageEditor({
                   onChange={(e) => setV({ ...v, [bodyKey]: e.target.value })}
                 />
               </Field>
-              {/* What `{name}` turns into for the customer: the name to type, what it is, its value now. */}
+              {/*
+                What `{name}` turns into for the customer: the name to type, what it is, its value
+                now, and whether this text uses it (the preview shows values plain, as the app does).
+              */}
               <div className="grid gap-2">
                 <p className="text-[12.5px] font-medium text-muted-foreground">{p.placeholders}</p>
                 <dl className="grid gap-x-3 gap-y-1.5 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
                   {CONTENT_PLACEHOLDERS.map((name) => (
                     <div key={name} className="contents">
-                      <dt>
-                        <code className="rounded-[4px] bg-field px-1.5 py-0.5 font-mono text-[12.5px] select-all">
+                      <dt className="flex items-center gap-1.5">
+                        <code
+                          className={`rounded-[4px] px-1.5 py-0.5 font-mono text-[12.5px] select-all ${
+                            used.has(name)
+                              ? 'bg-sage-wash text-foreground'
+                              : 'bg-field text-muted-foreground'
+                          }`}
+                        >
                           {`{${name}}`}
                         </code>
                       </dt>
@@ -133,6 +148,12 @@ export function PageEditor({
                             {values[name]}
                           </span>
                         ) : null}
+                        {used.has(name) ? (
+                          <span className="ml-1.5 inline-flex items-center gap-1 align-middle text-xs font-medium whitespace-nowrap text-sage-ink">
+                            <Check className="size-3.5" strokeWidth={1.5} aria-hidden />
+                            {p.tokenUsed}
+                          </span>
+                        ) : null}
                       </dd>
                     </div>
                   ))}
@@ -141,8 +162,11 @@ export function PageEditor({
             </div>
             <div className="grid gap-1.5" data-page-preview>
               <p className="text-[12.5px] font-medium text-muted-foreground">{p.preview}</p>
-              {/* The Mini App's page on its Milk ground: the Tenor caps title, then the text. */}
-              <div className="rounded-card bg-background px-4 pt-5 pb-5 shadow-[inset_0_0_0_1px_var(--hairline)] sm:px-5">
+              {/*
+                The Mini App's page on its Milk ground at a 390 px phone's width: 16 px gutters
+                around the app's 358 px column, the Tenor caps title, then the text.
+              */}
+              <div className="w-full max-w-[390px] rounded-card bg-background px-4 pt-5 pb-5 shadow-[inset_0_0_0_1px_var(--hairline)]">
                 <p className="title mb-4 [overflow-wrap:anywhere]">{v[titleKey]}</p>
                 {v[bodyKey].trim() ? (
                   <RichTextView source={fillForPreview(v[bodyKey], values)} />

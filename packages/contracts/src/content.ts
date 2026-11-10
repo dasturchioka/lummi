@@ -9,7 +9,13 @@ import { INFO_PAGE_SLUGS, isStartTarget } from './constants';
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 
-export const SLOGAN_MAX = 80;
+/**
+ * The Home slogan sits on one line under the logo (DESIGN.md «Slogan»: Cormorant Italic 21 px).
+ * Measured in that face on the narrowest phone we build for (360 px, a 320 px line): realistic
+ * Russian fits up to 32 characters (Cyrillic is wider), Uzbek Latin up to about 40; the UZ cap
+ * keeps two characters of margin. A constant, like the banner and page limits, not a setting.
+ */
+export const SLOGAN_MAX = { ru: 32, uz: 38 } as const;
 export const PAGE_BODY_MAX = 20_000;
 
 export const contentErrorSchema = z.object({
@@ -106,7 +112,10 @@ export const adminBannerSchema = promoBannerSchema.extend({
 export type AdminBanner = z.infer<typeof adminBannerSchema>;
 export const bannerActiveBodySchema = z.object({ active: z.boolean() });
 
-export const sloganInputSchema = z.object({ ru: text(SLOGAN_MAX), uz: text(SLOGAN_MAX) });
+export const sloganInputSchema = z.object({
+  ru: text(SLOGAN_MAX.ru),
+  uz: text(SLOGAN_MAX.uz),
+});
 
 export const adminInfoPageSchema = infoPageSchema.extend({ updatedAt: z.string() });
 export type AdminInfoPage = z.infer<typeof adminInfoPageSchema>;

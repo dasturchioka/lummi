@@ -369,6 +369,17 @@ describe('slogan and pages', () => {
     expect(await audits('content.slogan_changed')).toHaveLength(1);
   });
 
+  it('refuses a slogan longer than one line on a 360 px phone (32 RU, 38 UZ characters)', async () => {
+    const ru32 = 'Ароматы для важных моментов дня';
+    const uz38 = 'Lahzalaringizni yorituvchi iforlar uz';
+    expect([ru32.length, uz38.length]).toEqual([31, 37]);
+    const set = (ru: string, uz: string) =>
+      owner.client.admin.content.slogan.set({ body: { ru, uz } });
+    expect((await set(`${ru32}!`, `${uz38}!`)).status).toBe(200);
+    expect((await set(`${ru32}!!`, uz38)).status).toBe(422);
+    expect((await set(ru32, `${uz38}!!`)).status).toBe(422);
+  });
+
   it('edits a page, flips its draft flag, normalises the UZ body and audits the flag', async () => {
     const res = await owner.client.admin.content.pages.update({
       params: { slug: 'returns' },
