@@ -1,7 +1,7 @@
 import type { ReceiptFileKind } from '@lummi/contracts';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { pdfFirstPage, UnreadablePdfError } from './pdf-first-page';
+import { PdfBusyError, pdfFirstPage, UnreadablePdfError } from './pdf-first-page';
 
 /**
  * The receipt AI's image size (ticket #7, `ReceiptJudge`): TypeSafe takes each side within
@@ -9,14 +9,23 @@ import { pdfFirstPage, UnreadablePdfError } from './pdf-first-page';
  */
 export const JUDGE_MIN_SIDE = 280;
 export const JUDGE_MAX_SIDE = 1568;
-/** A decoded image larger than this is refused before it is decoded (a decompression bomb). */
+/**
+ * A decoded image larger than this is refused before it is decoded (a decompression bomb). A
+ * technical guard, not a shop rule, so not a setting.
+ */
 const MAX_INPUT_PIXELS = 100_000_000;
-/** A PDF whose first page takes longer than this to render counts as unreadable. */
+/**
+ * A PDF whose first page takes longer than this to render counts as unreadable. A technical
+ * guard, not a shop rule, so not a setting.
+ */
 const PDF_TIMEOUT_MS = 15_000;
 const WHITE = { r: 255, g: 255, b: 255 };
 
 /** The file is the kind it claims by its first bytes, but it does not open. */
 export class UnreadableReceiptError extends Error {}
+
+/** No PDF render slot is free (ADR 0033): the same file may be sent again in a moment. */
+export class ReceiptBusyError extends Error {}
 
 /**
  * JPG, PNG, WebP or PDF by the file's first bytes, never its name or content type (ADR 0020); null
@@ -113,6 +122,7 @@ export async function normalizeReceipt(
       height: info.height,
     };
   } catch (e) {
+    if (e instanceof PdfBusyError) throw new ReceiptBusyError(e.message, { cause: e });
     if (e instanceof UnreadablePdfError || e instanceof UnreadableReceiptError)
       throw new UnreadableReceiptError(e.message, { cause: e });
     // sharp refuses a broken or truncated image, or one past the pixel limit

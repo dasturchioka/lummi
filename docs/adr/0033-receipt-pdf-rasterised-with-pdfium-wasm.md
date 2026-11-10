@@ -9,7 +9,11 @@ Rejected options:
 - **MuPDF** is AGPL.
 - **libvips' own PDF loader** (through sharp) is not in sharp's prebuilt binaries.
 
-**Isolation.** Each PDF renders in a `worker_threads` worker (`pdf-first-page.ts`) with a 128 MB JavaScript heap limit. The API's event loop never waits on PDFium. A page that takes longer than 15 s is stopped (`worker.terminate()`) and counts as `unreadable`, and so does a PDF with a password, a broken one, or one with no pages. The page is rendered so that its longer side is 1568 px, the AI's largest side.
+**Isolation and the memory bound.** Each PDF renders in a `worker_threads` worker (`pdf-first-page.ts`), so the API's event loop never waits on PDFium. The worker's JavaScript heap limit (128 MB) does not cover PDFium, whose memory is a WebAssembly buffer that could grow towards 2 GB. So PDFium's WebAssembly memory is capped at 256 MB: the worker instantiates the module itself and refuses any growth past the cap through `emscripten_resize_heap`, the one import PDFium grows its heap through. The allocation then fails and the render ends as an error. The glue may over-grow a granted request by up to 20 %, so one render holds at most about 310 MB of WebAssembly memory plus the 128 MB heap. PDFium starts at about 18 MB, and a receipt page at 1568 px needs under 30 MB.
+
+At most two renders run at once in one API process (`pdfRenderSlots`), so PDFs can take at most about 0.9 GB of the 4 GB VPS. A third upload is refused at once, not queued, with 503 `try_again`. Nothing is stored, the order still waits, and the Mini App says to try again in a minute with the same file still chosen.
+
+A page that takes longer than 15 s is stopped (`worker.terminate()`) and counts as `unreadable`. So does a page past the memory cap, a PDF with a password, a broken one, or one with no pages. The page is rendered so that its longer side is 1568 px, the AI's largest side. The limits are technical guards, not shop rules, so they are constants rather than settings.
 
 **The AI's image (`receipt-file.ts`, sharp).** Every receipt, whether image or rendered page, is normalised the same way:
 

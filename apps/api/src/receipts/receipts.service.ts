@@ -1,5 +1,6 @@
 import {
   RECEIPT_FILE_NAME_MAX,
+  RECEIPT_FILE_TYPES,
   type OrderDto,
   type PaymentDto,
   type ReceiptFileKind,
@@ -31,6 +32,7 @@ import { retryTransientOnce, TryAgainError } from '../util/transient';
 import {
   differenceHash,
   normalizeReceipt,
+  ReceiptBusyError,
   receiptKind,
   sha256Hex,
   UnreadableReceiptError,
@@ -39,18 +41,10 @@ import {
 
 /** Where the files live in the FileStore: `/media/private` on the VPS, never served as static (ADR 0020). */
 const PRIVATE_PREFIX = 'private/receipts/';
-const EXTENSION: Record<ReceiptFileKind, string> = {
-  jpeg: 'jpg',
-  png: 'png',
-  webp: 'webp',
-  pdf: 'pdf',
-};
-export const RECEIPT_MIME: Record<ReceiptFileKind, string> = {
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  pdf: 'application/pdf',
-};
+/** The extension an original is stored under: its kind's first (`jpeg` → `.jpg`). */
+const extensionOf = (kind: ReceiptFileKind) => RECEIPT_FILE_TYPES[kind].extensions[0]!;
+/** The extension of the image the AI is shown, by its type (JPEG or PNG, ADR 0033). */
+const judgeExtension = (mime: string) => (mime === 'image/jpeg' ? 'jpg' : 'png');
 
 export type SubmitOutcome =
   | { kind: 'submitted'; receipt: ReceiptSummaryDto; order: OrderDto }
@@ -117,21 +111,27 @@ export class ReceiptsService {
   async payment(customerId: number, number: number): Promise<PaymentDto | null> {
     const order = await this.ownOrder(this.db, customerId, number);
     if (!order) return null;
-    const [card, sent, limits] = await Promise.all([
+    const [card, sent, maxUploadBytes] = await Promise.all([
       readShopCard(this.db),
       this.db
         .select()
         .from(receipts)
         .where(eq(receipts.orderId, order.id))
         .orderBy(desc(receipts.id)),
-      readSettings(this.db, ['receipts.maxUploadMb']),
+      this.maxUploadBytes(),
     ]);
     return {
       order: await this.dto(this.db, order),
       card: card ? { number: card.number, holder: card.holder } : null,
       receipts: sent.map(toReceiptSummary),
-      maxUploadBytes: limits['receipts.maxUploadMb'] * 1024 * 1024,
+      maxUploadBytes,
     };
+  }
+
+  /** The largest upload in bytes: the setting `receipts.maxUploadMb`. */
+  async maxUploadBytes(): Promise<number> {
+    const settings = await readSettings(this.db, ['receipts.maxUploadMb']);
+    return settings['receipts.maxUploadMb'] * 1024 * 1024;
   }
 
   async submit(
@@ -145,8 +145,7 @@ export class ReceiptsService {
     if (!order) return { kind: 'not_found' };
     if (order.status !== 'awaiting_payment')
       return { kind: 'status_changed', order: await this.dto(this.db, order) };
-    const settings = await readSettings(this.db, ['receipts.maxUploadMb']);
-    const maxBytes = settings['receipts.maxUploadMb'] * 1024 * 1024;
+    const maxBytes = await this.maxUploadBytes();
     if (bytes.length > maxBytes) return { kind: 'refused', code: 'too_large', maxBytes };
     const kind = receiptKind(bytes);
     if (!kind) return { kind: 'refused', code: 'unsupported_type' };
@@ -156,15 +155,17 @@ export class ReceiptsService {
       normalized = await normalizeReceipt(bytes, kind);
     } catch (e) {
       if (e instanceof UnreadableReceiptError) return { kind: 'refused', code: 'unreadable' };
+      // every PDF render slot is taken: nothing is stored, the same file may go again
+      if (e instanceof ReceiptBusyError) return { kind: 'try_again' };
       throw e;
     }
     const name = randomUUID();
-    const originalKey = `${PRIVATE_PREFIX}${name}.${EXTENSION[kind]}`;
-    const normalizedKey = `${PRIVATE_PREFIX}${name}.judge.${normalized.mime === 'image/jpeg' ? 'jpg' : 'png'}`;
+    const originalKey = `${PRIVATE_PREFIX}${name}.${extensionOf(kind)}`;
+    const normalizedKey = `${PRIVATE_PREFIX}${name}.judge.${judgeExtension(normalized.mime)}`;
     const [sha256, phash] = [sha256Hex(bytes), await differenceHash(normalized.data)];
     await this.edges.files.put(originalKey, bytes);
     await this.edges.files.put(normalizedKey, normalized.data);
-    const forget = async () => {
+    const deleteStoredFiles = async () => {
       await this.edges.files.delete(originalKey);
       await this.edges.files.delete(normalizedKey);
     };
@@ -216,10 +217,10 @@ export class ReceiptsService {
           };
         }),
       );
-      if (out.kind !== 'submitted') await forget();
+      if (out.kind !== 'submitted') await deleteStoredFiles();
       return out;
     } catch (e) {
-      await forget();
+      await deleteStoredFiles();
       if (e instanceof TryAgainError) return { kind: 'try_again' };
       throw e;
     }
@@ -256,12 +257,8 @@ export class ReceiptsService {
     const original = variant === 'original';
     const data = await this.edges.files.get(original ? row.originalKey : row.normalizedKey);
     if (!data) return null;
-    const contentType = original ? RECEIPT_MIME[row.kind] : row.normalizedMime;
-    const ext = original
-      ? EXTENSION[row.kind]
-      : row.normalizedMime === 'image/jpeg'
-        ? 'jpg'
-        : 'png';
+    const contentType = original ? RECEIPT_FILE_TYPES[row.kind].mime : row.normalizedMime;
+    const ext = original ? extensionOf(row.kind) : judgeExtension(row.normalizedMime);
     return {
       data,
       contentType,

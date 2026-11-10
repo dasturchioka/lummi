@@ -21,6 +21,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
+import { pdfRenderSlots } from '../src/receipts/pdf-first-page';
 import { receiptPdf } from './harness/pdf';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, TEST_SHOP_CARD, type TestApp } from './harness/test-app';
@@ -249,6 +250,26 @@ describe('receipt upload', () => {
     expect([judged.format, judged.width, judged.height]).toEqual([format, width, height]);
   });
 
+  it('renders the first page of a PDF, not a later one', async () => {
+    const s = await shopper();
+    const number = await placeOrder(s);
+
+    // its later pages are landscape and dark: the wrong page shows in the size and the colour
+    await upload(s.token, number, receiptPdf({ pages: 3 }));
+
+    const [row] = await receiptRows(number);
+    const judged = sharp(t.edges.files.files.get(row!.normalizedKey)!);
+    const { width, height } = await judged.metadata();
+    expect([width, height]).toEqual([1112, 1568]);
+    // its top-left corner is page 1's white (a later page is dark from edge to edge)
+    const corner = await judged
+      .clone()
+      .extract({ left: 0, top: 0, width: 8, height: 8 })
+      .raw()
+      .toBuffer();
+    expect(new Set(corner)).toEqual(new Set([255]));
+  });
+
   it('gives the same receipt, re-compressed, nearly the same perceptual hash', async () => {
     const a = await shopper(ali);
     const b = await shopper(vali, '998901112233');
@@ -342,9 +363,33 @@ describe('a refused upload', () => {
 
     const res = await upload(s.token, number, Buffer.alloc(22 * 1024 * 1024, 0xff));
 
-    expect(res.status).toBe(413);
-    expect(res.body).toMatchObject({ code: 'too_large' });
+    expect(res).toEqual({ status: 413, body: { code: 'too_large', maxBytes: 10 * 1024 * 1024 } });
+    expect(storedKeys()).toEqual([]);
     expect(await statusOf(s, number)).toBe('awaiting_payment');
+  });
+
+  it('a PDF while every render slot is taken: 503 try_again, nothing stored; the same file goes in once one is free', async () => {
+    const s = await shopper();
+    const number = await placeOrder(s);
+    const pdf = receiptPdf();
+    // the other renders, still running
+    const release: (() => void)[] = [];
+    const running = Array.from({ length: pdfRenderSlots.limit }, () =>
+      pdfRenderSlots.run(() => new Promise<void>((done) => release.push(done))),
+    );
+
+    try {
+      expect(await upload(s.token, number, pdf)).toEqual({
+        status: 503,
+        body: { code: 'try_again' },
+      });
+      expect(storedKeys()).toEqual([]);
+      expect(await statusOf(s, number)).toBe('awaiting_payment');
+    } finally {
+      release.forEach((done) => done());
+      await Promise.all(running);
+    }
+    expect((await upload(s.token, number, pdf)).status).toBe(201);
   });
 });
 
@@ -525,6 +570,20 @@ describe('the shop card', () => {
     expect(
       await t.db.select().from(auditLog).where(eq(auditLog.action, 'shop_card.changed')),
     ).toHaveLength(1);
+  });
+
+  it('removed while an order waits: a shopper who already paid still sends the receipt', async () => {
+    const s = await shopper();
+    const number = await placeOrder(s);
+    const owner = await t.ownerSession();
+    expect((await owner.client.admin.shopCard.clear()).status).toBe(200);
+
+    const res = await upload(s.token, number, await png(), 'chek.png');
+
+    expect(res.status).toBe(201);
+    expect(await statusOf(s, number)).toBe('receipt_review');
+    const payment = await s.client.orders.payment({ params: { number } });
+    expect(payment.status === 200 && payment.body.card).toBeNull();
   });
 
   it('refuses a number that is not 16 digits', async () => {

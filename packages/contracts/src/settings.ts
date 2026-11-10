@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Bilingual } from './catalog';
 import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
+import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
@@ -193,11 +194,11 @@ export const settingDefinitions = {
     },
   },
   /**
-   * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020). The
-   * bound stays under the body parser's ceiling (`RECEIPT_UPLOAD_CEILING_BYTES`).
+   * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020), up to
+   * the technical bound `RECEIPT_UPLOAD_MAX_MB`.
    */
   'receipts.maxUploadMb': {
-    schema: z.number().int().min(1).max(20),
+    schema: z.number().int().min(1).max(RECEIPT_UPLOAD_MAX_MB),
     default: 10,
     area: 'shop',
     unit: 'mb',

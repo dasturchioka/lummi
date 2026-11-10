@@ -1,8 +1,12 @@
 /**
- * A one-page PDF built by hand (no PDF library in the tests): a white A6-ish page with dark bars,
- * like a bank's transfer receipt. `pages` adds blank pages after it; the first page is what the
- * pipeline rasterises.
+ * A PDF built by hand (no PDF library in the tests): a white A6-ish portrait page with dark bars,
+ * like a bank's transfer receipt. `pages` adds pages after it that differ from it on purpose:
+ * landscape (420 x 298) and filled dark, so rendering any page but the first shows in the size and
+ * the colour of the result.
  */
+/** A later page's content: dark from edge to edge. */
+const LATER = '0.13 0.13 0.13 rg 0 0 420 420 re f';
+
 export function receiptPdf({ pages = 1 }: { pages?: number } = {}): Buffer {
   const width = 298;
   const height = 420;
@@ -20,9 +24,10 @@ export function receiptPdf({ pages = 1 }: { pages?: number } = {}): Buffer {
   objects[3] = `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
   pageIds.forEach((id, i) => {
     const stream = i === 0 ? 3 : id + 1;
-    objects[id] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Contents ${stream} 0 R >>`;
-    if (i > 0) objects[id + 1] = '<< /Length 0 >>\nstream\n\nendstream';
+    const box = i === 0 ? `0 0 ${width} ${height}` : `0 0 ${height} ${width}`;
+    objects[id] = `<< /Type /Page /Parent 2 0 R /MediaBox [${box}] /Contents ${stream} 0 R >>`;
+    if (i > 0)
+      objects[id + 1] = `<< /Length ${Buffer.byteLength(LATER)} >>\nstream\n${LATER}\nendstream`;
   });
 
   let out = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';

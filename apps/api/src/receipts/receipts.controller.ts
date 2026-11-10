@@ -1,4 +1,9 @@
-import { contract, RECEIPT_FILE_NAME_HEADER } from '@lummi/contracts';
+import {
+  contract,
+  RECEIPT_FILE_NAME_HEADER,
+  RECEIPT_UPLOAD_STATUS,
+  type ReceiptUploadCode,
+} from '@lummi/contracts';
 import {
   Controller,
   Get,
@@ -18,6 +23,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request, Response } from 'express';
 import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
 import { StaffGuard } from '../staff/staff.guard';
+import { readBody } from './read-body';
 import { cleanFileName, ReceiptsService, type ReceiptFile } from './receipts.service';
 
 /**
@@ -66,8 +72,19 @@ export class ReceiptsController {
     @SessionCustomerId() customerId: number,
     @Req() req: Request,
   ) {
-    const body: unknown = req.body;
-    const bytes = Buffer.isBuffer(body) ? body : Buffer.alloc(0);
+    const refuse = (code: ReceiptUploadCode, extra: Record<string, unknown> = {}) =>
+      new HttpException({ code, ...extra }, RECEIPT_UPLOAD_STATUS[code]);
+    // no body parser buffers this route: its bytes are read here, after the session guard, and
+    // only up to the setting
+    const maxBytes = await this.receipts.maxUploadBytes();
+    // an image sent as `image/*` was already read by the photo parser (within its own bound)
+    const parsed: unknown = req.body;
+    const bytes = Buffer.isBuffer(parsed)
+      ? parsed.length > maxBytes
+        ? null
+        : parsed
+      : await readBody(req, maxBytes);
+    if (!bytes) throw refuse('too_large', { maxBytes });
     const header = req.headers[RECEIPT_FILE_NAME_HEADER];
     const out = await this.receipts.submit(customerId, number, bytes, {
       fileName: cleanFileName(Array.isArray(header) ? header[0] : header),
@@ -77,18 +94,13 @@ export class ReceiptsController {
       case 'submitted':
         return { receipt: out.receipt, order: out.order };
       case 'not_found':
-        throw new NotFoundException({ code: 'not_found' });
+        throw refuse('not_found');
       case 'status_changed':
-        throw new HttpException({ code: 'status_changed', order: out.order }, 409);
+        throw refuse('status_changed', { order: out.order });
       case 'try_again':
-        throw new HttpException({ code: 'try_again' }, 409);
-      case 'refused': {
-        const status = { too_large: 413, unsupported_type: 415, unreadable: 422 }[out.code];
-        throw new HttpException(
-          { code: out.code, ...(out.maxBytes ? { maxBytes: out.maxBytes } : {}) },
-          status,
-        );
-      }
+        throw refuse('try_again');
+      case 'refused':
+        throw refuse(out.code, out.maxBytes ? { maxBytes: out.maxBytes } : {});
     }
   }
 

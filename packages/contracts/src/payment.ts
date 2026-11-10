@@ -72,9 +72,12 @@ export const receiptUploadedSchema = z.object({
 });
 export type ReceiptUploadedDto = z.infer<typeof receiptUploadedSchema>;
 
-/** A refused upload (413, 415, 422); `maxBytes` comes with `too_large`. */
+/**
+ * A refused upload (413, 415, 422) or a busy server (503 `try_again`), statuses per
+ * `RECEIPT_UPLOAD_STATUS`; `maxBytes` comes with `too_large`.
+ */
 export const receiptUploadErrorSchema = z.object({
-  code: z.enum(RECEIPT_UPLOAD_ERRORS),
+  code: z.enum([...RECEIPT_UPLOAD_ERRORS, 'try_again']),
   maxBytes: z.number().int().positive().optional(),
 });
 export type ReceiptUploadErrorDto = z.infer<typeof receiptUploadErrorSchema>;
