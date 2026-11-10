@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { customerScreens, stockScreens } from './stock-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -959,6 +960,8 @@ export const screens: Screen[] = [
       });
     },
   },
+  ...stockScreens,
+  ...customerScreens,
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];
