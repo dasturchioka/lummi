@@ -16,16 +16,25 @@ const CONFIRMED: ReadonlySet<OrderStatus> = new Set([
   'delivered',
 ]);
 
-/** DESIGN.md Payment: the status pill is Milk Field (pending) or Sage Wash with Sage Ink (confirmed). */
+/** Over: no longer pending and not on its way. */
+const ENDED: ReadonlySet<OrderStatus> = new Set(['cancelled', 'returned']);
+
+/**
+ * DESIGN.md Payment: the status pill is Milk Field (pending) or Sage Wash with Sage Ink
+ * (confirmed); an order that is over (cancelled, returned) steps back to a hairline outline with
+ * Muted Ink, so it never reads as waiting for the shopper.
+ */
 export function StatusPill({ status }: { status: OrderStatus }) {
   const o = useOrdersText();
-  const ok = CONFIRMED.has(status);
+  const tone = CONFIRMED.has(status)
+    ? 'bg-sage-wash text-sage-ink'
+    : ENDED.has(status)
+      ? 'inset-line text-muted'
+      : 'bg-field text-ink';
   return (
     <span
       data-testid="status"
-      className={`type-small inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill px-2.5 font-medium whitespace-nowrap ${
-        ok ? 'bg-sage-wash text-sage-ink' : 'bg-field text-ink'
-      }`}
+      className={`type-small inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill px-2.5 font-medium whitespace-nowrap ${tone}`}
     >
       <span aria-hidden="true" className="size-1.5 rounded-pill bg-current" />
       {o.orders.status[status]}

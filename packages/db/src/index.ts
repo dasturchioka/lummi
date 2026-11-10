@@ -16,6 +16,7 @@ export {
   inArray,
   gt,
   gte,
+  lte,
   notInArray,
   ne,
   DrizzleQueryError,

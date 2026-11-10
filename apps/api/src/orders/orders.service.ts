@@ -40,6 +40,7 @@ import { loadCartQuote } from '../cart/load-cart';
 import { toRegionDto } from '../delivery/dto';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
+import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
@@ -159,7 +160,11 @@ export class OrdersService {
         .select()
         .from(orders)
         .where(and(eq(orders.customerId, c.id), eq(orders.idempotencyKey, input.idempotencyKey)));
-      if (made) return { kind: 'created', order: toOrderDto(made, await linesOf(tx, made.id)) };
+      if (made)
+        return {
+          kind: 'created',
+          order: toOrderDto(made, await linesOf(tx, made.id), await cancellationOf(tx, made.id)),
+        };
 
       if (!c.phone) return { kind: 'phone_required' } as const;
       if (c.dataConsentAt === null && !input.consent)
@@ -331,7 +336,7 @@ export class OrdersService {
         payload: { number: order.number, total: order.total, status: order.status },
       });
       await this.outbox.enqueue(tx, this.createdMessage(c, order));
-      return { kind: 'created', order: toOrderDto(order, lines) } as const;
+      return { kind: 'created', order: toOrderDto(order, lines, null) } as const;
     }
   }
 
@@ -389,7 +394,11 @@ export class OrdersService {
       .from(orders)
       .where(and(eq(orders.customerId, customerId), eq(orders.number, number)));
     if (!order) return null;
-    return toOrderDto(order, await linesOf(this.db, order.id));
+    return toOrderDto(
+      order,
+      await linesOf(this.db, order.id),
+      await cancellationOf(this.db, order.id),
+    );
   }
 
   private async destination(
@@ -426,7 +435,7 @@ export class OrdersService {
   }
 }
 
-async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
+export async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
   return db
     .select()
     .from(orderLines)
@@ -462,7 +471,12 @@ export function orderUrl(miniAppUrl: string, number: number): string {
   return new URL(`orders/${number}`, base).toString();
 }
 
-function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
+/** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */
+export function toOrderDto(
+  o: OrderRow,
+  lines: OrderLineRow[],
+  cancellation: OrderDto['cancellation'],
+): OrderDto {
   return {
     number: o.number,
     status: o.status,
@@ -484,6 +498,7 @@ function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
     thresholdBaseAmount: o.thresholdBaseAmount,
     total: o.total,
     amountDue: o.amountDue,
+    cancellation,
   };
 }
 

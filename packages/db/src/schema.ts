@@ -1,5 +1,10 @@
 import type { Discount } from '@lummi/contracts';
-import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
+import {
+  ORDER_ACTIONS,
+  ORDER_ACTOR_TYPES,
+  ORDER_STATUSES,
+  type OrderStatus,
+} from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -27,7 +32,8 @@ export const languageEnum = pgEnum('language', LANGUAGES);
 export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
 export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const writeAccessEnum = pgEnum('write_access', ['granted', 'refused']);
-export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
+/** Who acted: the same list as an order move's actor (`ORDER_ACTOR_TYPES`). */
+export const actorTypeEnum = pgEnum('actor_type', ORDER_ACTOR_TYPES);
 
 export const broadcastAudienceEnum = pgEnum('broadcast_audience', ['all', 'ru', 'uz']);
 export const broadcastDeliveryStatusEnum = pgEnum('broadcast_delivery_status', [
@@ -615,6 +621,10 @@ export const orders = pgTable(
     amountDue: integer('amount_due').notNull(),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
+    /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
+    trackingNumber: text('tracking_number'),
+    /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
+    reserveReminderSentAt: timestamp('reserve_reminder_sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -622,6 +632,10 @@ export const orders = pgTable(
     index('orders_customer_idx').on(t.customerId, t.createdAt),
     uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
     index('orders_status_idx').on(t.status),
+    // the reserve sweeps read unpaid orders by when their reserve ends
+    index('orders_awaiting_reserve_idx')
+      .on(t.reserveUntil)
+      .where(sql`${t.status} = 'awaiting_payment'`),
     // A chosen point is all there (code, name, city, address), or the address was typed instead.
     check(
       'orders_point_or_typed',
@@ -684,7 +698,37 @@ export const orderLines = pgTable(
   ],
 );
 
+/** Every way an order changes status (the transition table lives in the contracts). */
+export const orderActionEnum = pgEnum('order_action', ORDER_ACTIONS);
+
+/**
+ * The order's history (ADR 0011): one row per status change, written by `transition()` in the
+ * same transaction as the change, its audit entry and its customer message. `reason` is the
+ * cancel reason code, or the text staff typed for a rejected receipt or a return; `payload` keeps
+ * the rest (a tracking number, per-line back-to-stock flags, the on-hand changes).
+ */
+export const orderEvents = pgTable(
+  'order_events',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    fromStatus: orderStatusEnum('from_status').notNull(),
+    toStatus: orderStatusEnum('to_status').notNull(),
+    action: orderActionEnum('action').notNull(),
+    actorType: actorTypeEnum('actor_type').notNull(),
+    /** Customer or staff id; null for ai/system. */
+    actorId: bigint('actor_id', { mode: 'number' }),
+    reason: text('reason'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
+);
+
 export type OrderRow = typeof orders.$inferSelect;
+export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
 
