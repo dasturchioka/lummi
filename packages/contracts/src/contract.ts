@@ -109,7 +109,8 @@ import {
   adminShopCardSchema,
   paymentSchema,
   paymentUnavailableSchema,
-  shopCardInputSchema,
+  shopCardBodySchema,
+  shopCardErrorSchema,
 } from './payment';
 import {
   humoLastMessageIdSchema,
@@ -491,8 +492,13 @@ const adminCore = c.router({
     set: {
       method: 'PUT',
       path: '/admin/shop-card',
-      body: shopCardInputSchema,
-      responses: { 200: adminShopCardSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+      body: shopCardBodySchema,
+      responses: {
+        200: adminShopCardSchema,
+        400: shopCardErrorSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+      },
       summary: 'Owner only: set the card number and holder; audited with the number masked',
     },
     clear: {
@@ -500,7 +506,8 @@ const adminCore = c.router({
       path: '/admin/shop-card',
       body: c.noBody(),
       responses: { 200: adminShopCardSchema, 401: adminErrorSchema, 403: adminErrorSchema },
-      summary: 'Owner only: remove the card, which closes checkout («Оплата временно недоступна»); audited',
+      summary:
+        'Owner only: remove the card, which closes checkout («Оплата временно недоступна»); audited',
     },
   },
   audit: {

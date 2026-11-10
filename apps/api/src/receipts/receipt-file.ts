@@ -30,12 +30,7 @@ export function receiptKind(b: Uint8Array): ReceiptFileKind | null {
     [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((byte, i) => b[i] === byte)
   )
     return 'png';
-  if (
-    b.length >= 12 &&
-    ascii(b, 0, 4) === 'RIFF' &&
-    ascii(b, 8, 12) === 'WEBP'
-  )
-    return 'webp';
+  if (b.length >= 12 && ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 12) === 'WEBP') return 'webp';
   if (Buffer.from(b.subarray(0, 1024)).includes('%PDF-', 0, 'latin1')) return 'pdf';
   return null;
 }
@@ -111,7 +106,12 @@ export async function normalizeReceipt(
     const { data, info } = await (jpeg ? pipeline.jpeg({ quality: 90 }) : pipeline.png()).toBuffer({
       resolveWithObject: true,
     });
-    return { data, mime: jpeg ? 'image/jpeg' : 'image/png', width: info.width, height: info.height };
+    return {
+      data,
+      mime: jpeg ? 'image/jpeg' : 'image/png',
+      width: info.width,
+      height: info.height,
+    };
   } catch (e) {
     if (e instanceof UnreadablePdfError || e instanceof UnreadableReceiptError)
       throw new UnreadableReceiptError(e.message, { cause: e });

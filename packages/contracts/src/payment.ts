@@ -19,6 +19,17 @@ export const shopCardInputSchema = z.object({
 });
 export type ShopCardInput = z.input<typeof shopCardInputSchema>;
 
+/** `PUT /admin/shop-card` as sent; the handler reads it with `shopCardInputSchema`. */
+export const shopCardBodySchema = z.object({
+  number: z.string().max(40),
+  holder: z.string().max(200),
+});
+/** 400: the fields that did not pass (`number`: not 16 digits; `holder`: under 2 or over 100 letters). */
+export const shopCardErrorSchema = z.object({
+  code: z.literal('invalid'),
+  fields: z.array(z.enum(['number', 'holder'])),
+});
+
 /** The card a shopper transfers to: 16 digits and the holder. */
 export const shopCardSchema = z.object({ number: z.string(), holder: z.string() });
 export type ShopCardDto = z.infer<typeof shopCardSchema>;

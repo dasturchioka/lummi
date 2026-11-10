@@ -1,4 +1,4 @@
-import { adminContract } from '@lummi/contracts';
+import { adminContract, shopCardInputSchema } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
@@ -21,10 +21,16 @@ export class ShopCardController {
 
   @TsRestHandler(adminContract.shopCard.set)
   set(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.shopCard.set, async ({ body }) => ({
-      status: 200 as const,
-      body: await this.cards.set(actor, body),
-    }));
+    return tsRestHandler(adminContract.shopCard.set, async ({ body }) => {
+      const parsed = shopCardInputSchema.safeParse(body);
+      if (!parsed.success) {
+        const fields = [...new Set(parsed.error.issues.map((i) => i.path[0]))].filter(
+          (f): f is 'number' | 'holder' => f === 'number' || f === 'holder',
+        );
+        return { status: 400 as const, body: { code: 'invalid' as const, fields } };
+      }
+      return { status: 200 as const, body: await this.cards.set(actor, parsed.data) };
+    });
   }
 
   @TsRestHandler(adminContract.shopCard.clear)

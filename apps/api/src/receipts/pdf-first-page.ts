@@ -42,7 +42,11 @@ export function pdfFirstPage(
     );
     worker.once(
       'message',
-      (m: { ok: true; width: number; height: number; data: Uint8Array } | { ok: false; error: string }) =>
+      (
+        m:
+          | { ok: true; width: number; height: number; data: Uint8Array }
+          | { ok: false; error: string },
+      ) =>
         finish(() =>
           m.ok
             ? resolve({ width: m.width, height: m.height, data: m.data })

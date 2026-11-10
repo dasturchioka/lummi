@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NextFunction, Request, Response } from 'express';
 import { MAX_PHOTO_BYTES, RECEIPT_UPLOAD_CEILING_BYTES } from '@lummi/contracts';
 import { AppModule, type AppDeps } from './app.module';
 import { SafeExceptionFilter } from './logging/safe-exception.filter';
@@ -22,6 +23,15 @@ export async function createApp(deps: AppDeps): Promise<INestApplication> {
   app.useBodyParser('raw', {
     type: 'application/octet-stream',
     limit: RECEIPT_UPLOAD_CEILING_BYTES,
+  });
+  // ... and one above even that is still the upload's own «too large», not an unexpected error
+  app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+    const tooLarge = (err as { type?: unknown } | null)?.type === 'entity.too.large';
+    if (tooLarge && req.is('application/octet-stream')) {
+      res.status(413).json({ code: 'too_large' });
+      return;
+    }
+    next(err);
   });
   // Query parameters (personal data) never reach the log, whatever the endpoint.
   app.useGlobalFilters(new SafeExceptionFilter(app.getHttpAdapter()));
