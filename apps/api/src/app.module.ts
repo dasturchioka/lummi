@@ -18,6 +18,8 @@ import { DeliveryController } from './delivery/delivery.controller';
 import { DeliveryService } from './delivery/delivery.service';
 import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
+import { OrdersController } from './orders/orders.controller';
+import { OrdersService } from './orders/orders.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
@@ -66,6 +68,7 @@ export class AppModule {
         CatalogController,
         CartController,
         SetsController,
+        OrdersController,
         MediaController,
         WebhookController,
         AdminAuthController,
@@ -94,6 +97,7 @@ export class AppModule {
         CatalogService,
         CartService,
         SetsService,
+        OrdersService,
         CatalogAdminService,
         SetsAdminService,
         SearchService,

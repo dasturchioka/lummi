@@ -20,6 +20,8 @@ import {
   type Db,
   type DbOrTx,
   type VolumeRow,
+  RESERVING_STATUSES,
+  sql,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
@@ -28,15 +30,41 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 
 /**
- * What is held back for orders not yet handed to BTS (ADR 0010). Order lines arrive with the
- * checkout ticket; until then nothing is reserved. Keep this the one place that knows, so
- * "available" is on hand minus reserve everywhere.
+ * The Reserve per volume (ADR 0010): units held by order lines whose order is neither handed to
+ * BTS nor cancelled (`RESERVING_STATUSES`). A volume line holds its quantity; a builder set line
+ * holds one 10 ml of each of its five fragrances per set unit (ADR 0009). The Discovery set has
+ * its own stock and never touches 10 ml (#22 adds its reserve beside this). This is the one place
+ * that knows, so "available" is on hand minus reserve everywhere: card, list, cart, order creation.
  */
 export async function reservedByVolume(
-  _db: DbOrTx,
+  db: DbOrTx,
   volumeIds: number[],
 ): Promise<Map<number, number>> {
-  return new Map(volumeIds.map((id) => [id, 0]));
+  const out = new Map(volumeIds.map((id) => [id, 0]));
+  if (volumeIds.length === 0) return out;
+  const ids = sql.join(
+    volumeIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const statuses = sql.join(
+    RESERVING_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  const { rows } = await db.execute<{ volume_id: string; reserved: string }>(sql`
+    select held.volume_id, sum(held.qty) as reserved
+    from (
+      select ol.volume_id, ol.qty
+      from order_lines ol join orders o on o.id = ol.order_id
+      where o.status in (${statuses}) and ol.volume_id in (${ids})
+      union all
+      select v.id, ol.qty
+      from order_lines ol join orders o on o.id = ol.order_id
+      cross join lateral unnest(ol.set_volume_ids) as v(id)
+      where o.status in (${statuses}) and ol.kind = 'builder_set' and v.id in (${ids})
+    ) held
+    group by held.volume_id`);
+  for (const r of rows) out.set(Number(r.volume_id), Number(r.reserved));
+  return out;
 }
 
 /**

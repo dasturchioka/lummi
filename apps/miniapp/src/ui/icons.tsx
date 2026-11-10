@@ -164,3 +164,17 @@ export const MinusIcon = (p: P) => <Icon d="M5.5 12h13" {...p} />;
 export const TrashIcon = (p: P) => (
   <Icon d="M4.5 7h15M9.5 7V5h5v2M6.5 7l.8 12h9.4l.8-12M10 10.5v5.5M14 10.5v5.5" {...p} />
 );
+/** A wrapped box with a bow: «Это подарок». */
+export const GiftIcon = (p: P) => (
+  <Icon
+    d="M4.5 9h15v3h-15zM5.5 12h13v7.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1zM12 9v11.5M12 9c-1-2.8-4.5-4-5.3-2.2C5.9 8.6 9.5 9 12 9zM12 9c1-2.8 4.5-4 5.3-2.2C18.1 8.6 14.5 9 12 9z"
+    {...p}
+  />
+);
+/** A delivery van: BTS delivery to the point. */
+export const TruckIcon = (p: P) => (
+  <Icon
+    d="M3.5 6.5h10v10h-10zM13.5 9.5h3.6l3.4 3.5v3.5h-7zM7.5 18.8a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6zM17 18.8a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6z"
+    {...p}
+  />
+);

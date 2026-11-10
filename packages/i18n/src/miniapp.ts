@@ -409,10 +409,10 @@ export const miniappMessages = defineMessages(
       saveFailed: 'Shaharni saqlab boʻlmadi. Qaytadan urinib koʻring.',
       change: 'Oʻzgartirish',
       moreInCity: {
-        one: '{city}: yana {n} ta punkt',
-        few: '{city}: yana {n} ta punkt',
-        many: '{city}: yana {n} ta punkt',
-        other: '{city}: yana {n} ta punkt',
+        one: 'Shu shahar yoki tumanda yana {n} ta punkt',
+        few: 'Shu shahar yoki tumanda yana {n} ta punkt',
+        many: 'Shu shahar yoki tumanda yana {n} ta punkt',
+        other: 'Shu shahar yoki tumanda yana {n} ta punkt',
       },
     },
     card: {

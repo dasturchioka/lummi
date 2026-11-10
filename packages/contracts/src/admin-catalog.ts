@@ -216,6 +216,8 @@ export const catalogAdminErrorSchema = z.object({
     'conflict',
     'invalid',
     'on_hand_changed',
+    /** A deadlock or serialization failure survived one retry: send the same request again. */
+    'try_again',
   ]),
   /** Dotted field paths that failed a rule the schema cannot see (unknown ids, taken names). */
   fields: z.array(z.string()).optional(),

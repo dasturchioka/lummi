@@ -7,6 +7,8 @@ import {
   eq,
   fragrances,
   inArray,
+  RESERVING_STATUSES,
+  sql,
   volumes,
   type DbOrTx,
   type DiscoverySetRow,
@@ -14,12 +16,20 @@ import {
 import { available, reservedByVolume } from '../catalog/catalog.service';
 
 /**
- * What is held back of the Discovery set's own stock for orders not yet handed to BTS (ADR 0010).
- * Order lines arrive with the checkout ticket; until then nothing is reserved. Like
+ * What is held back of the Discovery set's own stock: the units on Discovery lines of orders that
+ * are neither handed to BTS nor cancelled (`RESERVING_STATUSES`, ADR 0010). Like
  * `reservedByVolume`, the one place that knows, so "available" is on hand minus reserve.
  */
-export async function reservedDiscovery(_db: DbOrTx): Promise<number> {
-  return 0;
+export async function reservedDiscovery(db: DbOrTx): Promise<number> {
+  const statuses = sql.join(
+    RESERVING_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  const { rows } = await db.execute<{ reserved: string | null }>(sql`
+    select sum(ol.qty) as reserved
+    from order_lines ol join orders o on o.id = ol.order_id
+    where o.status in (${statuses}) and ol.kind = 'discovery_set'`);
+  return Number(rows[0]?.reserved ?? 0);
 }
 
 /** The Discovery set row. The migration inserts it, so it always exists. */

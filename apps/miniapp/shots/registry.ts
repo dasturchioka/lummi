@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
 import type { ShotDb } from './db';
@@ -19,7 +20,7 @@ export interface ScreenDef {
   /** Undo what `setup` changed in the database, so the next run starts from the seed. */
   teardown?: (ctx: { api: ApiClient; db: ShotDb }) => Promise<void>;
   /** Interact with the loaded page (open a sheet, type in a search) before the capture. */
-  act?: (ctx: { page: Page }) => Promise<void>;
+  act?: (ctx: { page: Page; db: ShotDb }) => Promise<void>;
   /** Capture the loading state `act` left on screen: skeletons are expected, not waited out. */
   loading?: boolean;
   /** Sign in with initData this many seconds old (shows the "reopen the app" state). */
@@ -102,6 +103,14 @@ const NO_PHONE_USER: ShotUser = {
   language_code: 'uz',
 };
 
+/** A customer whose Telegram phone is Russian: not an allowed Recipient country by default. */
+const FOREIGN_PHONE_USER: ShotUser = {
+  id: 700_000_003,
+  first_name: 'Anna',
+  last_name: 'Sokolova',
+  language_code: 'ru',
+};
+
 /** Every state of the registration sheet, on its dev route (no Telegram call). */
 const registrationStates: ScreenDef[] = (
   [
@@ -118,6 +127,263 @@ const registrationStates: ScreenDef[] = (
     ['browser', 'browser'],
   ] as const
 ).map(([id, state]) => ({ id: `registration-${id}`, path: `/dev/registration?state=${state}` }));
+
+/** The screenshot customer's account phone from a signed contact, as the registration step saves it. */
+async function sharePhone(api: ApiClient, userId = SHOT_USER.id, phone = '+998901234567') {
+  const res = await api.me.shareContact({
+    body: {
+      proof: signContact({
+        botToken: process.env.BOT_TOKEN ?? '',
+        userId,
+        phone,
+        authDate: Math.floor(Date.now() / 1000),
+      }),
+    },
+  });
+  if (res.status !== 200) throw new Error(`share contact failed ${res.status}`);
+}
+
+/** Removes the shot customers' orders (their lines are the reserve) and, optionally, their consent. */
+async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none' } = {}) {
+  const ids = [SHOT_USER.id, NO_PHONE_USER.id, FOREIGN_PHONE_USER.id];
+  await db.query(
+    `delete from orders where customer_id in (select id from customers where telegram_id = any($1))`,
+    [ids],
+  );
+  if (consent)
+    await db.query(`update customers set data_consent_at = $2 where telegram_id = any($1)`, [
+      ids,
+      consent === 'given' ? new Date() : null,
+    ]);
+}
+
+/** The first offered point of the saved city (Samarkand). */
+async function firstPoint(api: ApiClient) {
+  const regions = await api.delivery.regions();
+  if (regions.status !== 200) throw new Error(`regions: HTTP ${regions.status}`);
+  const region = regions.body.find((r) => r.nameRu.startsWith('Самаркандская'))!;
+  const points = await api.delivery.points({ query: { regionId: region.id, city: 'Самарканд' } });
+  if (points.status !== 200 || !points.body[0]) throw new Error('no point (run bts:import)');
+  return { region, point: points.body[0] };
+}
+
+/** Places an order through the real API, at the total checkout quotes. */
+async function placeOrder(
+  api: ApiClient,
+  items: [slug: string, ml: 10 | 30 | 50, qty?: number][],
+  extra: {
+    gift?: boolean;
+    giftMessage?: string;
+    comment?: string;
+    recipientName?: string;
+    /** A typed address in the point's region instead of the point. */
+    typed?: string;
+    /** Fills the cart itself (set lines), instead of the volumes in `items`. */
+    fill?: (api: ApiClient) => Promise<void>;
+  } = {},
+) {
+  if (extra.fill) await extra.fill(api);
+  else await fillCart(api, items);
+  const { region, point } = await firstPoint(api);
+  const checkout = await api.checkout.get({ query: { regionId: region.id } });
+  if (checkout.status !== 200) throw new Error(`checkout: HTTP ${checkout.status}`);
+  const res = await api.orders.create({
+    body: {
+      recipientName: 'Dilnoza Karimova',
+      recipientPhone: '+998901234567',
+      delivery: extra.typed
+        ? { kind: 'typed', regionId: region.id, text: extra.typed }
+        : { kind: 'point', pointId: point.id },
+      consent: true,
+      confirmedTotal: checkout.body.quote.total,
+      idempotencyKey: randomUUID(),
+      gift: extra.gift,
+      giftMessage: extra.giftMessage,
+      comment: extra.comment,
+      ...(extra.recipientName ? { recipientName: extra.recipientName } : {}),
+    },
+  });
+  if (res.status !== 201) throw new Error(`order: HTTP ${res.status}`);
+}
+
+/** A cart of one volume, the Discovery set twice and a builder set of the five best sellers. */
+async function fillSetsCart(api: ApiClient) {
+  await fillCart(api, [['symphony', 30]]);
+  await api.cart.addDiscovery({ body: { qty: 2 } });
+  const options = await api.sets.builder();
+  if (options.status !== 200) throw new Error(`builder: HTTP ${options.status}`);
+  const slugs = options.body.options.slice(0, 5).map((o) => o.slug);
+  const res = await api.cart.addBuilder({ body: { slugs, qty: 1 } });
+  if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+}
+
+/** Checkout's state for a shot: phone shared, Samarkand saved, the mockup's 243 000 cart. */
+async function checkoutReady(api: ApiClient, db: ShotDb, consent: 'given' | 'none') {
+  await sharePhone(api);
+  await chooseCity(api);
+  await clearOrders(db, { consent });
+  await fillCart(api, [
+    ['symphony', 10],
+    ['tygar', 30],
+  ]);
+}
+const checkoutDone = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+  await clearOrders(db);
+  await emptyCart({ api, db });
+};
+
+/** Opens the point picker (on the saved city's points) and takes the first point. */
+async function pickFirstPoint(page: Page) {
+  await page.getByTestId('choose-point').click();
+  await sheet(page).getByTestId('point-row').first().click();
+  await sheet(page).waitFor({ state: 'detached' });
+  await page.getByTestId('chosen-point').waitFor();
+}
+
+/** Opens the newest order from the «Заказы» list. */
+async function openFirstOrder(page: Page) {
+  await page.getByTestId('order-row').first().click();
+  await page.getByTestId('timeline').waitFor();
+}
+
+/*
+ * The realistic worst case for checkout and orders (break-ui): a 60-character name (a full UZ
+ * name with patronymic), a greeting at the 250-character limit (setting
+ * `orders.giftMessageMaxLength`), an address typed by hand, twelve lines, a seven-digit total
+ * and order numbers in the 10 000s.
+ */
+const LONG_NAME = 'Muhammadsodiqxon Abdurahmonov-Nematullayev Shavkatjon oʻgʻli';
+const LONG_GREETING =
+  'Madinaxon! Tugʻilgan kuningiz muborak boʻlsin. Bu ifor sizga Samarqanddagi iliq kuzgi oqshomlarini, choyxonadagi uzoq suhbatlarimizni va Registon ustidagi quyosh botishini eslatib tursin. Doim shunday nurli va baxtli boʻling. Sevuvchi opangiz Dilnoza';
+const TYPED_ADDRESS =
+  'Urgut tumani, Kattaqoʻrgʻon koʻchasi 14-uy, eski bozor roʻparasidagi «Nur» dorixonasi yonida';
+const LONG_COMMENT =
+  'Iltimos, yetkazishdan bir soat oldin qabul qiluvchiga qoʻngʻiroq qiling. Javob bermasa, menga yozing: +998 93 555 12 34. Sovgʻa ekanini aytmang, bu syurpriz!';
+const TWELVE_LINES: [string, 10 | 30 | 50, number?][] = [
+  ['elysium-pour-homme-parfum', 50],
+  ['baccarat-rouge-540', 50],
+  ['blue-sapphire', 30],
+  ['le-male-le-parfum', 10],
+  ['montabaco-intensivo', 10],
+  ['pink-molecule-090-09', 30],
+  ['stronger-with-you', 10],
+  ['hibiscus-mahajad', 10],
+  ['molecule-02', 50],
+  ['miss-dior-blooming-bouquet', 30],
+  ['very-sexy-sea', 10],
+  ['symphony', 10, 3],
+];
+/** Roja Elysium at a seven-digit price (and back to the seed's placeholder prices). */
+const ELYSIUM = `fragrance_id = (select id from fragrances where slug = 'elysium-pour-homme-parfum')`;
+async function priceyElysium(db: ShotDb) {
+  await db.query(
+    `update volumes set price = case ml when 10 then 1250000 when 30 then 2450000 else 3490000 end where ${ELYSIUM}`,
+  );
+}
+async function seedElysium(db: ShotDb) {
+  await db.query(
+    `update volumes set price = case ml when 10 then 69000 when 30 then 149000 else 219000 end where ${ELYSIUM}`,
+  );
+}
+/** The next order number; `numberFromSeed` puts it back after the shot customers' orders are gone. */
+async function numberFrom(db: ShotDb, next: number) {
+  await db.query(`select setval('orders_number_seq', $1, false)`, [next]);
+}
+async function numberFromSeed(db: ShotDb) {
+  await db.query(
+    `select setval('orders_number_seq', greatest(1001, coalesce((select max(number) from orders), 0) + 1), false)`,
+  );
+}
+const worstDone = async (ctx: { api: ApiClient; db: ShotDb }) => {
+  await checkoutDone(ctx);
+  await seedElysium(ctx.db);
+  await numberFromSeed(ctx.db);
+};
+
+/** Answers (or, with no answer, holds) the order creation; every other request goes through. */
+const onCreateOrder = (page: Page, answer: (route: Route) => Promise<void> | void) =>
+  page.route(
+    (url) => url.pathname.endsWith('/orders'),
+    (route) => (route.request().method() === 'POST' ? answer(route) : route.continue()),
+  );
+/** Fails one API read (not the page of the same path), as a dropped connection does, and reloads into its error state. */
+async function failRead(page: Page, path: RegExp) {
+  await page.route(
+    (url) => path.test(url.pathname),
+    (route) => (route.request().resourceType() === 'fetch' ? route.abort() : route.continue()),
+  );
+  await page.reload();
+  await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+}
+/** Holds one API read unanswered and reloads, so the screen stays on its loading shape. */
+async function holdRead(page: Page, path: RegExp) {
+  await page.route(
+    (url) => path.test(url.pathname),
+    (route) => (route.request().resourceType() === 'fetch' ? undefined : route.continue()),
+  );
+  await page.reload();
+  await page.locator('[data-skeleton]').first().waitFor();
+}
+
+/** A 60-character name, a greeting at the 250 limit, and a seven-digit total. */
+const checkoutWorst: Omit<ScreenDef, 'id'> = {
+  path: '/checkout',
+  fullPage: true,
+  setup: async ({ api, db }) => {
+    await sharePhone(api);
+    await chooseCity(api);
+    await clearOrders(db, { consent: 'given' });
+    await priceyElysium(db);
+    await fillCart(api, [
+      ['elysium-pour-homme-parfum', 50, 2],
+      ['baccarat-rouge-540', 50],
+    ]);
+  },
+  act: async ({ page }) => {
+    await pickFirstPoint(page);
+    await page.getByRole('textbox', { name: /^(Имя|Ism)$/ }).fill(LONG_NAME);
+    await page.getByTestId('gift-toggle').click();
+    await page.getByTestId('gift').getByRole('textbox').fill(LONG_GREETING);
+  },
+  teardown: worstDone,
+};
+/**
+ * «Заказы» at its worst: numbers in the 10 000s, the longest status, twelve lines, a seven-digit
+ * total, and «Показать ещё» (three a page here).
+ */
+const ordersWorst: Omit<ScreenDef, 'id'> = {
+  path: '/orders',
+  fullPage: true,
+  setup: async ({ api, db }) => {
+    await sharePhone(api);
+    await clearOrders(db, { consent: 'given' });
+    await priceyElysium(db);
+    await numberFrom(db, 10479);
+    await placeOrder(api, [['symphony', 10]]);
+    await placeOrder(api, [
+      ['tygar', 30],
+      ['ink-mark', 10],
+    ]);
+    await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+    await placeOrder(api, TWELVE_LINES);
+    // the longest status there is («Chek tekshirilmoqda»), next to a five-digit number
+    await db.query(`update orders set status = 'receipt_review' where number = 10481`);
+  },
+  act: async ({ page }) => {
+    await page.route(
+      (url) => url.pathname.endsWith('/orders'),
+      (route) => {
+        if (route.request().resourceType() !== 'fetch') return route.continue();
+        const url = new URL(route.request().url());
+        url.searchParams.set('limit', '3');
+        return route.continue({ url: url.toString() });
+      },
+    );
+    await page.reload();
+    await page.getByTestId('orders-more').waitFor();
+  },
+  teardown: worstDone,
+};
 
 /** The seed has no hits and no new flags: pin three hits and flag six novelties for Home and the catalog. */
 const HITS = ['symphony', 'aventus', 'tygar'];
@@ -398,8 +664,8 @@ export const screens: ScreenDef[] = [
     // The longest family name of the guide, chosen: the chip shows it.
     id: 'catalog-family-chosen',
     path: '/catalog',
-    act: async ({ page }) => {
-      await catalogSheet(/Семейство|Oila/)({ page });
+    act: async ({ page, db }) => {
+      await catalogSheet(/Семейство|Oila/)({ page, db });
       await sheet(page)
         .getByTestId('option-row')
         .filter({ hasText: /Древесно-цветочный мускусный|Yogʻochli gulli mushkli/ })
@@ -436,7 +702,331 @@ export const screens: ScreenDef[] = [
   { id: 'catalog-loading', path: '/catalog', loading: true, act: holdCatalog },
   { id: 'catalog-error', path: '/catalog?type=homme', act: failCatalog },
   { id: 'cart', path: '/cart' },
-  { id: 'orders', path: '/orders' },
+  // Checkout (#23): the mockup's cart (243 000 with delivery to Samarkand), a point chosen.
+  {
+    id: 'checkout',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    // the Telegram phone is not from an allowed country: the Recipient phone starts empty, with the hint
+    id: 'checkout-foreign-phone',
+    path: '/checkout',
+    user: FOREIGN_PHONE_USER,
+    setup: async ({ api, db }) => {
+      await sharePhone(api, FOREIGN_PHONE_USER.id, '+79161234567');
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await fillCart(api, [['symphony', 10]]);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: async ({ api, db }) => {
+      await clearOrders(db);
+      await fillCart(api, []);
+    },
+  },
+  {
+    // «Перейти к оплате» on a first order with the name cleared, half a phone and no point:
+    // every field says what it needs
+    id: 'checkout-errors',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'none'),
+    act: async ({ page }) => {
+      await page.getByRole('textbox', { name: /^(Имя|Ism)$/ }).fill('');
+      await page.getByRole('textbox', { name: /Телефон получателя|telefoni/ }).fill('+998 90 12');
+      await page.getByTestId('submit').click();
+      await page.getByTestId('consent').getByRole('alert').waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // the first order: the consent check
+    id: 'checkout-consent',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'none'),
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    // «Это подарок» on, with a greeting for the card (free of charge: the total does not move)
+    id: 'checkout-gift',
+    path: '/checkout',
+    fullPage: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => {
+      await pickFirstPoint(page);
+      await page.getByTestId('gift-toggle').click();
+      await page
+        .getByTestId('gift')
+        .getByRole('textbox')
+        .fill('С днём рождения, Мадина! Пусть этот аромат напоминает о нашем лете в Самарканде.');
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // the owner raised a price while the shopper was on the screen: the 409 sheet with the new total
+    id: 'checkout-total-changed',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(
+        `update volumes set price = price + 10000 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.query(
+        `update volumes set price = price - 10000 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    // no account phone yet: checkout opens the registration step on arrival
+    id: 'checkout-no-phone',
+    path: '/checkout',
+    user: NO_PHONE_USER,
+    setup: ({ api }) => fillCart(api, [['symphony', 10]]),
+    act: async ({ page }) => void (await sheet(page).waitFor()),
+    teardown: async ({ api }) => fillCart(api, []),
+  },
+  // The «Заказы» tab: empty, then two orders (a gift among them), and an order's detail.
+  { id: 'orders-empty', path: '/orders', setup: ({ db }) => clearOrders(db) },
+  {
+    id: 'orders-list',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail-gift',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]], {
+        gift: true,
+        giftMessage: 'С днём рождения, Мадина! Пусть этот аромат напоминает о нашем лете.',
+        comment: 'Позвоните получателю за час до доставки',
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
+  // Sets (#22) through checkout: the cart with set lines, then the order as bought.
+  {
+    id: 'checkout-sets',
+    path: '/checkout',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await fillSetsCart(api);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail-sets',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [], { fill: fillSetsCart });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: async (ctx) => {
+      await ctx.db.query('update discovery_set set on_hand = 10');
+      await checkoutDone(ctx);
+    },
+  },
+  // break-ui (#23): the worst case enters through the API, as real data does.
+  { id: 'checkout-worst', ...checkoutWorst },
+  // the narrowest phone: the seven-digit total still shares the confirm button with its label
+  { id: 'checkout-worst-360', ...checkoutWorst, width: 360 },
+  {
+    // no point fits: the address typed by hand, flagged for the manager
+    id: 'checkout-typed',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => {
+      await page.getByTestId('choose-point').click();
+      await sheet(page)
+        .getByRole('button', { name: /Укажите адрес вручную|Manzilni qoʻlda yozing/ })
+        .click();
+      await sheet(page).locator('#typed-address').fill(TYPED_ADDRESS);
+      await sheet(page)
+        .getByRole('button', { name: /^(Готово|Tayyor)$/ })
+        .click();
+      await sheet(page).waitFor({ state: 'detached' });
+      await page.getByTestId('typed-point').scrollIntoViewIfNeeded();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // «Перейти к оплате» pressed: the button keeps its width and spins while the order is made
+    id: 'checkout-submitting',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => {
+      await pickFirstPoint(page);
+      await onCreateOrder(page, () => undefined);
+      await page.getByTestId('submit').click();
+      await page.locator('[data-testid="submit"][aria-busy="true"]').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // the transaction lost a race twice: 409 try_again asks for one more press
+    id: 'checkout-try-again',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page }) => {
+      await pickFirstPoint(page);
+      await onCreateOrder(page, (route) =>
+        route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'try_again' }),
+        }),
+      );
+      await page.getByTestId('submit').click();
+      await page.getByRole('alert').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // everything sold out meanwhile: 409 nothing_to_order, the state says so and leads to the cart
+    id: 'checkout-gone',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.setOnHand('symphony', 0);
+      await db.setOnHand('tygar', 0);
+      await page.getByTestId('submit').click();
+      await page.getByRole('heading', { name: /Товаров больше нет|qolmadi/ }).waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.restore('symphony');
+      await ctx.db.restore('tygar');
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    id: 'checkout-loading',
+    path: '/checkout',
+    loading: true,
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: ({ page }) => holdRead(page, /\/checkout$/),
+    teardown: checkoutDone,
+  },
+  {
+    // the registration step put off: checkout says why it needs the phone
+    id: 'checkout-no-phone-later',
+    path: '/checkout',
+    user: NO_PHONE_USER,
+    setup: ({ api }) => fillCart(api, [['symphony', 10]]),
+    act: async ({ page }) => {
+      await sheet(page)
+        .getByRole('button', { name: /Не сейчас|Hozir emas/ })
+        .click();
+      await sheet(page).waitFor({ state: 'detached' });
+    },
+    teardown: async ({ api }) => fillCart(api, []),
+  },
+  {
+    id: 'checkout-empty',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await emptyCart({ api, db });
+    },
+  },
+  {
+    id: 'checkout-error',
+    path: '/checkout',
+    setup: ({ api, db }) => checkoutReady(api, db, 'given'),
+    act: ({ page }) => failRead(page, /\/checkout$/),
+    teardown: checkoutDone,
+  },
+  { id: 'orders-more', ...ordersWorst },
+  { id: 'orders-more-360', ...ordersWorst, width: 360 },
+  {
+    id: 'orders-error',
+    path: '/orders',
+    act: ({ page }) => failRead(page, /\/orders$/),
+  },
+  {
+    id: 'orders-loading',
+    path: '/orders',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/orders$/),
+  },
+  {
+    // the title stands from the first frame: the number comes from the link
+    id: 'order-loading',
+    path: '/orders/1001',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/orders\/\d+$/),
+  },
+  // an old or someone else's link
+  { id: 'order-not-found', path: '/orders/999999' },
+  {
+    // twelve lines, a seven-digit total, a typed address, the longest name and greeting, number 10 482
+    id: 'order-detail-worst',
+    path: '/orders/10482',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await priceyElysium(db);
+      await numberFrom(db, 10482);
+      await placeOrder(api, TWELVE_LINES, {
+        recipientName: LONG_NAME,
+        typed: TYPED_ADDRESS,
+        gift: true,
+        giftMessage: LONG_GREETING,
+        comment: LONG_COMMENT,
+      });
+    },
+    teardown: worstDone,
+  },
   {
     id: 'profile',
     path: '/profile',

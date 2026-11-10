@@ -11,17 +11,18 @@ import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
-import { photoSrcSet, photoUrl } from '../lib/media';
+import { deliveryPlace } from '../delivery/queries';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Figure } from '../ui/Figure';
 import { BagIcon, CheckIcon, MinusIcon, PlusIcon, Spinner, TrashIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
-import { SetPhoto, SetPhotoEmpty } from '../ui/SetPhoto';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
+import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
 
 type T = ReturnType<typeof usePrefs>['t'];
@@ -36,71 +37,6 @@ export interface CartPending {
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
-
-/** A 3:4 bottle thumbnail on its Photo Blush slot, which stays when the photo is missing or fails. */
-function Thumb({
-  photo,
-  className,
-  set,
-}: {
-  photo: string | null;
-  className: string;
-  /** A set line: the Discovery box photo (or the owner's), or the box icon for a builder set. */
-  set?: 'discovery' | 'builder';
-}) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div
-      aria-hidden="true"
-      className={`${className} relative aspect-[3/4] shrink-0 overflow-hidden rounded-thumb bg-photo`}
-    >
-      {set === 'discovery' ? <SetPhoto hash={photo} sizes="64px" /> : null}
-      {set === 'builder' ? <SetPhotoEmpty /> : null}
-      {!set && photo && !failed ? (
-        <img
-          src={photoUrl(photo, 400)}
-          srcSet={photoSrcSet(photo)}
-          sizes="64px"
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-          className="absolute inset-0 size-full object-cover"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-/** How many times a value has changed since mount (0 = never), to replay a small settle on change. */
-function useChanges<V>(value: V): number {
-  const [seen, setSeen] = useState({ value, n: 0 });
-  if (!Object.is(seen.value, value)) setSeen({ value, n: seen.n + 1 });
-  return seen.n;
-}
-
-/** A server amount that settles in place when it changes, so the totals never jump or flicker. */
-function Figure({
-  amount,
-  minus = false,
-  className = '',
-}: {
-  amount: number;
-  minus?: boolean;
-  className?: string;
-}) {
-  const { language } = usePrefs();
-  const n = useChanges(amount);
-  return (
-    <span
-      key={n}
-      className={`whitespace-nowrap tabular-nums ${n ? 'animate-[tick_0.22s_ease-out]' : ''} ${className}`}
-    >
-      {minus ? '−' : null}
-      {formatMoney(amount, language)}
-    </span>
-  );
-}
 
 /** A message whose one value is set apart, from the i18n template («Добавьте ещё {amount} — …»). */
 function withValue(template: string, key: string, value: ReactNode): ReactNode {
@@ -497,7 +433,7 @@ function discountLabel(d: Discount, t: T): string {
  * free delivery are Dark Sage Ink. When nothing in the cart can be bought, the button says why.
  */
 function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void }) {
-  const { t } = usePrefs();
+  const { t, language } = usePrefs();
   const { quote } = cart;
   const row = 'flex items-baseline justify-between gap-4';
   const canBuy = quote.itemsSubtotal > 0;
@@ -530,7 +466,9 @@ function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void })
         <div className={row}>
           <dt className="min-w-0 text-pretty text-totals-ink/75">
             {cart.deliveryCity
-              ? fill(t.cart.delivery, { city: cart.deliveryCity.city })
+              ? fill(t.cart.delivery, {
+                  city: deliveryPlace(cart.deliveryCity.region, cart.deliveryCity.city, language),
+                })
               : t.cart.deliveryNoCity}
           </dt>
           <dd className="type-price">

@@ -1,4 +1,5 @@
 CREATE TYPE "public"."cart_line_kind" AS ENUM('volume', 'discovery', 'builder');--> statement-breakpoint
+ALTER TYPE "public"."order_line_kind" ADD VALUE 'discovery_set';--> statement-breakpoint
 CREATE TABLE "discovery_set" (
 	"id" boolean PRIMARY KEY DEFAULT true NOT NULL,
 	"price" integer NOT NULL,
@@ -17,6 +18,7 @@ CREATE TABLE "discovery_set_items" (
 	CONSTRAINT "discovery_set_items_position" CHECK ("discovery_set_items"."position" between 1 and 5)
 );
 --> statement-breakpoint
+ALTER TABLE "order_lines" DROP CONSTRAINT "order_lines_kind_check";--> statement-breakpoint
 ALTER TABLE "cart_lines" ALTER COLUMN "volume_id" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "cart_lines" ADD COLUMN "kind" "cart_line_kind" DEFAULT 'volume' NOT NULL;--> statement-breakpoint
 ALTER TABLE "cart_lines" ADD COLUMN "fragrance_ids" bigint[];--> statement-breakpoint
@@ -26,7 +28,8 @@ CREATE UNIQUE INDEX "cart_lines_customer_builder_idx" ON "cart_lines" USING btre
 ALTER TABLE "cart_lines" ADD CONSTRAINT "cart_lines_fragrance_ids_check" CHECK ("cart_lines"."fragrance_ids" is null or (cardinality("cart_lines"."fragrance_ids") = 5 and array_position("cart_lines"."fragrance_ids", null) is null));--> statement-breakpoint
 ALTER TABLE "cart_lines" ADD CONSTRAINT "cart_lines_kind_check" CHECK ((kind = 'volume' and volume_id is not null and fragrance_ids is null)
         or (kind = 'discovery' and volume_id is null and fragrance_ids is null)
-        or (kind = 'builder' and volume_id is null and cardinality(fragrance_ids) = 5));
+        or (kind = 'builder' and volume_id is null and cardinality(fragrance_ids) = 5));--> statement-breakpoint
+ALTER TABLE "order_lines" ADD CONSTRAINT "order_lines_kind_check" CHECK (("order_lines"."kind" = 'volume' and "order_lines"."volume_id" is not null and "order_lines"."set_volume_ids" is null) or ("order_lines"."kind" <> 'volume' and "order_lines"."volume_id" is null and cardinality("order_lines"."set_volume_ids") = 5 and "order_lines"."set_composition" is not null));
 --> statement-breakpoint
 -- the one Discovery set row, with the placeholder price from docs/catalog-sample.md (ours, not the customer's)
 INSERT INTO "discovery_set" ("id", "price", "on_hand", "is_placeholder") VALUES (true, 299000, 0, true);

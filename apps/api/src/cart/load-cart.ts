@@ -49,6 +49,9 @@ export interface VolumeLineView extends LineBase {
 export interface SetLineView extends LineBase {
   kind: 'discovery' | 'builder';
   fragrances: { slug: string; name: string; brand: string }[];
+  /** The five fragrances' ids and their 10 ml volumes, in the order shown (the order snapshot keeps them). */
+  fragranceIds: number[];
+  volumeIds: number[];
 }
 
 export type CartLineView = VolumeLineView | SetLineView;
@@ -74,14 +77,16 @@ export interface LoadedCart {
 
 /**
  * The cart's lines capped at available, priced through `quote()` (ADR 0001). The one place that
- * turns stored lines into a Quote: the cart screen and checkout (#23, inside its transaction)
- * both come through here. `entitlements` is for the discount tickets; none are held yet.
+ * turns stored lines into a Quote: the cart screen and checkout (inside its transaction, after
+ * the stock rows are locked) both come through here. `entitlements` is for the discount tickets;
+ * none are held yet. `deliveryTariff` is checkout's: the chosen BTS point's region tariff, which
+ * wins over the saved delivery city's.
  */
 export async function loadCartQuote(
   tx: DbOrTx,
   now: Date,
   customerId: number,
-  opts: { entitlements?: Entitlement[] } = {},
+  opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
 ): Promise<LoadedCart> {
   const rows = await tx
     .select({
@@ -146,8 +151,15 @@ export async function loadCartQuote(
   if (setRows.length > 0) {
     const discovery = await loadDiscovery(tx);
     setPrice = discovery.row.price;
-    const builderIds = [...new Set(setRows.flatMap((r) => r.fragranceIds ?? []))];
-    const tenMl = await tenMlOf(tx, { ids: builderIds });
+    const wantedIds = [
+      ...new Set([
+        ...setRows.flatMap((r) => r.fragranceIds ?? []),
+        ...(setRows.some((r) => r.kind === 'discovery')
+          ? discovery.composition.map((f) => f.id)
+          : []),
+      ]),
+    ];
+    const tenMl = await tenMlOf(tx, { ids: wantedIds });
     const tenMlOfFragrance = new Map(tenMl.map((t) => [t.fragranceId, t]));
     for (const r of setRows) {
       if (r.kind === 'discovery') {
@@ -160,6 +172,10 @@ export async function loadCartQuote(
             name: f.name,
             brand: f.brand,
           })),
+          fragranceIds: discovery.composition.map((f) => f.id),
+          volumeIds: discovery.composition.flatMap(
+            (f) => tenMlOfFragrance.get(f.id)?.volumeId ?? [],
+          ),
           ...capped(r.qty, discovery.available),
         });
       } else {
@@ -169,6 +185,8 @@ export async function loadCartQuote(
           lineId: r.lineId,
           photo: null,
           fragrances: five.map((t) => ({ slug: t.slug, name: t.name, brand: t.brand })),
+          fragranceIds: five.map((t) => t.fragranceId),
+          volumeIds: five.map((t) => t.volumeId),
           ...capped(r.qty, builderAvailable(five)),
         });
       }
@@ -211,7 +229,8 @@ export async function loadCartQuote(
     entitlements: opts.entitlements ?? [],
     promoCode: null,
     choice: state?.discountChoice ?? null,
-    deliveryTariff: city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
+    deliveryTariff:
+      opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
     settings: {
       freeDeliveryThreshold: settings['pricing.freeDeliveryThreshold'],
       thresholdBase: settings['pricing.thresholdBase'],
