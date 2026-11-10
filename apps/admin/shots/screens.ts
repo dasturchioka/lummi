@@ -4,7 +4,14 @@ import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
-import { WORST_PROMO } from './promo-data';
+import {
+  forgetPromoList,
+  forgetUses,
+  holdUses,
+  seedPromoList,
+  WORST_PROMO,
+  WORST_FIXED_PROMO,
+} from './promo-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -177,6 +184,8 @@ export type ScreenContext = {
   language: 'ru' | 'uz';
   outsiderId: number;
   width: number;
+  /** The shot database, for a change that has to land while the page is open (a race). */
+  db: ShotSql;
 };
 
 /** The run's own shot database, for a state no admin form reaches without changing what later screens see. */
@@ -445,7 +454,56 @@ export const screens: Screen[] = [
       await page.getByRole('alertdialog').waitFor();
     },
   },
+  {
+    // a code orders have used: the count, and the note in place of «Удалить»
+    id: 'promo-used',
+    path: '/promo-codes',
+    as: 'owner',
+    setup: ({ db }) => holdUses(db, 'MINUS50', 12),
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: 'MINUS50', exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+    teardown: ({ db }) => forgetUses(db),
+  },
+  {
+    // an order takes the code while its editor is open: the delete is refused, «only switch it off»
+    id: 'promo-remove-refused',
+    path: '/promo-codes',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, db }) => {
+      await page.getByRole('link', { name: 'LUMMI10', exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+      await holdUses(db, 'LUMMI10', 1);
+      await page.getByRole('button', { name: t.promo.remove, exact: true }).click();
+      await page
+        .getByRole('alertdialog')
+        .getByRole('button', { name: t.promo.remove, exact: true })
+        .click();
+      await page.getByText(t.promo.inUse, { exact: true }).waitFor();
+    },
+    teardown: ({ db }) => forgetUses(db),
+  },
   { id: 'promo-audit', path: '/audit?action=promo.created', as: 'owner' },
+  // break-ui (#29), captured into shots/29/worst-case/: sixty codes in every state, and the editor
+  // of a seven-digit fixed code with every condition (the 32-character percent code is promo-editor).
+  {
+    id: 'promo-list-worst',
+    path: '/promo-codes',
+    as: 'owner',
+    setup: ({ db }) => seedPromoList(db),
+    teardown: ({ db }) => forgetPromoList(db),
+  },
+  {
+    id: 'promo-editor-fixed-worst',
+    path: '/promo-codes',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_FIXED_PROMO, exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+  },
   // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
   { id: 'content', path: '/content', as: 'owner' },
   {

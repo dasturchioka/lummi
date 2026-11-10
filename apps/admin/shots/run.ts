@@ -278,7 +278,7 @@ async function main() {
             waitUntil: 'networkidle',
             timeout: 120_000,
           });
-          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width });
+          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width, db });
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);
