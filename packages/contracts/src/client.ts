@@ -34,6 +34,8 @@ export const clientRoutes = {
     getDeliveryCity: route('GET', '/me/delivery-city', [200, 401]),
     setDeliveryCity: route('PUT', '/me/delivery-city', [200, 401, 404, 422]),
     clearDeliveryCity: route('DELETE', '/me/delivery-city', [200, 401]),
+    savedPoints: route('GET', '/me/points', [200, 401]),
+    removeSavedPoint: route('DELETE', '/me/points/:id', [200, 401, 404]),
   },
   delivery: {
     regions: route('GET', '/delivery/regions', [200, 401]),
@@ -58,13 +60,14 @@ export const clientRoutes = {
     page: route('GET', '/content/pages/:slug', [200, 401, 404]),
   },
   checkout: {
-    get: route('GET', '/checkout', [200, 401]),
+    get: route('GET', '/checkout', [200, 401, 404]),
   },
   orders: {
     create: route('POST', '/orders', [201, 401, 403, 409, 422]),
     list: route('GET', '/orders', [200, 401]),
     get: route('GET', '/orders/:number', [200, 401, 404]),
     cancel: route('POST', '/orders/:number/cancel', [200, 401, 403, 404, 409]),
+    repeat: route('POST', '/orders/:number/repeat', [200, 401, 404]),
   },
   catalog: {
     list: route('GET', '/catalog/fragrances', [200, 401]),

@@ -119,6 +119,18 @@ export const settingDefinitions = {
       uz: 'Mijoz shaharni tanlamaguncha. Viloyatning oʻz tarifi boʻlsa, oʻsha amal qiladi.',
     },
   },
+  /** How many recipient + point pairs «Мои пункты BTS» keeps per customer; the least recently used goes first (spec Changes 2026-11-11). */
+  'delivery.savedPointsMax': {
+    schema: z.number().int().min(1).max(50),
+    default: 5,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Сколько пунктов BTS запоминать', uz: 'Nechta BTS punkti eslab qolinadi' },
+    hint: {
+      ru: 'Пары «получатель + пункт» из заказов покупателя, в «Моих пунктах BTS». Сверх лимита забываем давно не использованные.',
+      uz: 'Xaridor buyurtmalaridagi «qabul qiluvchi + punkt» juftliklari, «Mening BTS punktlarim»da. Limitdan oshganda eng uzoq ishlatilmagani unutiladi.',
+    },
+  },
   /**
    * How long a new order's reserve lives without a receipt (TZ §4: 12 h, ADR 0012); the order
    * stores the instant as `reserve_until`. The metadata (area, label, unit, hint) is in the shape

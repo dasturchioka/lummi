@@ -1,13 +1,12 @@
-import type { DeliveryCityDto, Quote } from '@lummi/contracts';
-import { CART_MAX_QTY, SET_SIZE } from '@lummi/contracts/constants';
+import type { CartLineDto, DeliveryCityDto, Quote } from '@lummi/contracts';
+import { CART_MAX_QTY, SET_SIZE, type LineKind } from '@lummi/contracts/constants';
 import {
-  and,
   asc,
   cartLines,
   carts,
   eq,
   fragrances,
-  ne,
+  inArray,
   volumes,
   type CartRow,
   type DbOrTx,
@@ -82,62 +81,108 @@ function capped(wanted: number, left: number) {
 export interface LoadedCart {
   lines: CartLineView[];
   quote: Quote;
+  /** The cart row (discount choice, promo code); undefined for lines quoted on their own. */
   state: CartRow | undefined;
   city: DeliveryCityDto | null;
 }
 
+/** A line as stored: what was asked for. Volume, price and stock are resolved when it is read. */
+export interface StoredLine {
+  lineId: number;
+  kind: LineKind;
+  volumeId: number | null;
+  fragranceIds: number[] | null;
+  qty: number;
+}
+
 /**
- * The cart's lines capped at available, priced through `quote()` (ADR 0001). The one place that
- * turns stored lines into a Quote: the cart screen and checkout (inside its transaction, after
- * the stock rows are locked) both come through here. `entitlements` is for the discount tickets;
- * none are held yet. `deliveryTariff` is checkout's: the chosen BTS point's region tariff, which
- * wins over the saved delivery city's.
+ * Where a quote's lines come from: the customer's cart (with its stored discount choice), or lines
+ * given here and quoted on their own, with no stored choice and no promo code. «Купить сейчас»
+ * gives its one line; «Повторить заказ» gives the cart's lines followed by the old order's, to see
+ * what each old line can still take (spec Changes 2026-11-11).
  */
-export async function loadCartQuote(
+export type LineSource = { kind: 'cart' } | { kind: 'lines'; lines: readonly StoredLine[] };
+
+/** The customer's cart lines as stored, in line order. */
+export async function readCartLines(tx: DbOrTx, customerId: number): Promise<StoredLine[]> {
+  return tx
+    .select({
+      lineId: cartLines.id,
+      kind: cartLines.kind,
+      volumeId: cartLines.volumeId,
+      fragranceIds: cartLines.fragranceIds,
+      qty: cartLines.qty,
+    })
+    .from(cartLines)
+    .where(eq(cartLines.customerId, customerId))
+    .orderBy(asc(cartLines.id));
+}
+
+/** The cart's quote: `loadQuote` with the cart as the line source. */
+export function loadCartQuote(
   tx: DbOrTx,
   now: Date,
   customerId: number,
   opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
 ): Promise<LoadedCart> {
-  const rows = await tx
-    .select({
-      lineId: cartLines.id,
-      volumeId: cartLines.volumeId,
-      fragranceId: fragrances.id,
-      slug: fragrances.slug,
-      name: fragrances.name,
-      brand: fragrances.originalBrand,
-      hidden: fragrances.hidden,
-      ml: volumes.ml,
-      photo: volumes.photoHash,
-      qty: cartLines.qty,
-      price: volumes.price,
-      salePrice: volumes.salePrice,
-      saleEndsAt: volumes.saleEndsAt,
-      onHand: volumes.onHand,
-    })
-    .from(cartLines)
-    .innerJoin(volumes, eq(volumes.id, cartLines.volumeId))
-    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-    .where(and(eq(cartLines.customerId, customerId), eq(cartLines.kind, 'volume')))
-    .orderBy(asc(cartLines.id));
+  return loadQuote(tx, now, customerId, { kind: 'cart' }, opts);
+}
+
+/**
+ * Lines capped at available, priced through `quote()` (ADR 0001). The one place that turns stored
+ * lines into a Quote: the cart screen, checkout (inside its transaction, after the stock rows are
+ * locked) and «Купить сейчас» all come through here, so a line is judged and priced one way.
+ * `entitlements` is for the discount tickets; none are held yet. `deliveryTariff` is checkout's:
+ * the chosen BTS point's region tariff, which wins over the saved delivery city's.
+ */
+export async function loadQuote(
+  tx: DbOrTx,
+  now: Date,
+  customerId: number,
+  source: LineSource,
+  opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
+): Promise<LoadedCart> {
+  const stored =
+    source.kind === 'cart'
+      ? await readCartLines(tx, customerId)
+      : [...source.lines].sort((a, b) => a.lineId - b.lineId);
+  const askedVolumes = stored.flatMap((l) =>
+    l.kind === 'volume' && l.volumeId !== null ? [l.volumeId] : [],
+  );
+  const volumeInfo =
+    askedVolumes.length === 0
+      ? []
+      : await tx
+          .select({
+            volumeId: volumes.id,
+            fragranceId: fragrances.id,
+            slug: fragrances.slug,
+            name: fragrances.name,
+            brand: fragrances.originalBrand,
+            hidden: fragrances.hidden,
+            ml: volumes.ml,
+            photo: volumes.photoHash,
+            price: volumes.price,
+            salePrice: volumes.salePrice,
+            saleEndsAt: volumes.saleEndsAt,
+            onHand: volumes.onHand,
+          })
+          .from(volumes)
+          .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+          .where(inArray(volumes.id, askedVolumes));
+  const infoOf = new Map(volumeInfo.map((v) => [v.volumeId, v]));
+  const rows = stored.flatMap((l) => {
+    const v = l.kind === 'volume' && l.volumeId !== null ? infoOf.get(l.volumeId) : undefined;
+    return v ? [{ ...v, lineId: l.lineId, qty: l.qty }] : [];
+  });
   const reserved = await reservedByVolume(
     tx,
-    rows.map((r) => r.volumeId!),
+    rows.map((r) => r.volumeId),
   );
   type Priced = { price: number; salePrice: number | null; saleEndsAt: Date | null };
 
   // Set lines (ADR 0009): the Discovery set from its own stock, a builder set from each chosen 10 ml.
-  const setRows = await tx
-    .select({
-      lineId: cartLines.id,
-      kind: cartLines.kind,
-      fragranceIds: cartLines.fragranceIds,
-      qty: cartLines.qty,
-    })
-    .from(cartLines)
-    .where(and(eq(cartLines.customerId, customerId), ne(cartLines.kind, 'volume')))
-    .orderBy(asc(cartLines.id));
+  const setRows = stored.filter((l) => l.kind !== 'volume');
   let setPrice = 0;
   let discovery: DiscoveryState | null = null;
   let tenMlOfFragrance = new Map<number, TenMl>();
@@ -158,11 +203,14 @@ export async function loadCartQuote(
   // (ADR 0010). A line that no longer fits is flagged like a sold-out one and takes nothing.
   const free = new Map<number, number>();
   for (const r of rows)
-    free.set(r.volumeId!, r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId!) ?? 0));
+    free.set(r.volumeId, r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0));
   for (const t of tenMlOfFragrance.values()) free.set(t.volumeId, t.available);
   const take = (volumeIds: number[], qty: number) => {
     for (const id of volumeIds) free.set(id, (free.get(id) ?? 0) - qty);
   };
+  // the Discovery set's own stock, shared the same way (a cart holds one Discovery line, but
+  // «Повторить заказ» weighs the old order's after it)
+  let discoveryFree = discovery?.available ?? 0;
 
   const volumeById = new Map(rows.map((r) => [r.lineId, r]));
   const setById = new Map(setRows.map((r) => [r.lineId, r]));
@@ -175,12 +223,12 @@ export async function loadCartQuote(
     const r = volumeById.get(lineId);
     if (r) {
       // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-      const view = capped(r.qty, free.get(r.volumeId!) ?? 0);
-      if (!view.soldOut) take([r.volumeId!], view.qty);
+      const view = capped(r.qty, free.get(r.volumeId) ?? 0);
+      if (!view.soldOut) take([r.volumeId], view.qty);
       volumeLines.push({
         kind: 'volume',
         lineId: r.lineId,
-        volumeId: r.volumeId!,
+        volumeId: r.volumeId,
         fragranceId: r.fragranceId,
         slug: r.slug,
         name: r.name,
@@ -196,6 +244,8 @@ export async function loadCartQuote(
     }
     const sr = setById.get(lineId)!;
     if (sr.kind === 'discovery_set' && discovery) {
+      const view = capped(sr.qty, discoveryFree);
+      if (!view.soldOut) discoveryFree -= view.qty;
       setLines.push({
         kind: 'discovery_set',
         lineId: sr.lineId,
@@ -206,7 +256,7 @@ export async function loadCartQuote(
           name: f.name,
           brand: f.brand,
         })),
-        ...capped(sr.qty, discovery.available),
+        ...view,
       });
     } else {
       const five = (sr.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
@@ -242,7 +292,10 @@ export async function loadCartQuote(
   }
   const lines: CartLineView[] = [...volumeLines, ...setLines].sort((a, b) => a.lineId - b.lineId);
 
-  const [state] = await tx.select().from(carts).where(eq(carts.customerId, customerId));
+  const [state] =
+    source.kind === 'cart'
+      ? await tx.select().from(carts).where(eq(carts.customerId, customerId))
+      : [];
   const city = await readDeliveryCity(tx, customerId);
   const settings = await readSettings(tx, [
     'pricing.freeDeliveryThreshold',
@@ -294,3 +347,33 @@ export async function loadCartQuote(
     city,
   };
 }
+
+/** A line as the Mini App shows it, without its cart line id (a «Купить сейчас» line has none). */
+export function toLineDto(l: CartLineView): DistributiveOmit<CartLineDto, 'id'> {
+  const base = {
+    photo: l.photo,
+    qty: l.qty,
+    available: l.available,
+    soldOut: l.soldOut,
+    limited: l.limited,
+  };
+  const fragrancesOf = (items: SetItem[]) =>
+    items.map(({ slug, name, brand }) => ({ slug, name, brand }));
+  switch (l.kind) {
+    case 'volume':
+      return {
+        ...base,
+        kind: 'volume',
+        slug: l.slug,
+        name: l.name,
+        brand: l.brand,
+        ml: l.ml as 10 | 30 | 50,
+      };
+    case 'builder_set':
+      return { ...base, kind: l.kind, fragrances: fragrancesOf(l.items), short: l.short };
+    case 'discovery_set':
+      return { ...base, kind: l.kind, fragrances: fragrancesOf(l.items) };
+  }
+}
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

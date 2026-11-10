@@ -24,6 +24,8 @@ export const ORDER_INPUT_ERRORS = [
   'unknown_region',
   'gift_message_too_long',
   'invalid_recipient_phone',
+  /** «Купить сейчас» named a fragrance or set that is unknown or no longer sold (hidden). */
+  'unknown_item',
 ] as const;
 export type OrderInputError = (typeof ORDER_INPUT_ERRORS)[number];
 

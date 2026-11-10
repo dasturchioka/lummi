@@ -2,6 +2,7 @@ import { contract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
+import { CartService } from '../cart/cart.service';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { OrdersService } from './orders.service';
 
@@ -14,12 +15,15 @@ export class OrdersController {
   constructor(
     @Inject(OrdersService) private readonly orders: OrdersService,
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
+    @Inject(CartService) private readonly cart: CartService,
   ) {}
 
   @TsRestHandler(contract.checkout.get)
   checkout(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.checkout.get, async ({ query }) => {
-      const dto = await this.orders.checkout(customerId, query.regionId);
+      const dto = await this.orders.checkout(customerId, query.regionId, query.item);
+      if (dto === 'unknown_item')
+        return { status: 404 as const, body: { code: 'not_found' as const } };
       return dto ? { status: 200 as const, body: dto } : unauthorized;
     });
   }
@@ -91,6 +95,15 @@ export class OrdersController {
             },
           };
       }
+    });
+  }
+
+  @TsRestHandler(contract.orders.repeat)
+  repeat(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.orders.repeat, async ({ params }) => {
+      const result = await this.cart.repeat(customerId, params.number);
+      if (!result) return { status: 404 as const, body: { code: 'not_found' as const } };
+      return { status: 200 as const, body: { result, cart: await this.cart.get(customerId) } };
     });
   }
 }
