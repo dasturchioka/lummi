@@ -177,10 +177,19 @@ export type ScreenContext = {
   width: number;
 };
 
+/** The run's own shot database, for a state no admin form reaches without changing what later screens see. */
+export type ShotSql = {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+};
+
 export type Screen = {
   /** File name prefix: `<id>-<width>-<lang>.png`. */
   id: string;
   path: string;
+  /** Put the database in this screen's state before each capture… */
+  setup?: (ctx: { db: ShotSql }) => Promise<void>;
+  /** …and back again after it, so the next screen (and the next run) starts from the seed. */
+  teardown?: (ctx: { db: ShotSql }) => Promise<void>;
   /** Who is signed in; omitted = nobody. */
   as?: 'owner' | 'manager';
   /** Defaults to 390 and 1280. */
@@ -189,6 +198,53 @@ export type Screen = {
   act?: (ctx: ScreenContext) => Promise<void>;
   /** Full-page capture (default); overlays use the viewport. */
   fullPage?: boolean;
+};
+
+/*
+ * The «Наборы» page at its worst (break-ui, #22): a fragrance hidden from the catalog (the shot
+ * catalog's longest name) and the four longest names of the guide in the composition, a
+ * seven-digit price still marked as a placeholder, and four-digit stock.
+ */
+let savedSet: { price: unknown; onHand: unknown; ids: unknown[] } | undefined;
+const setsWorst: Pick<Screen, 'setup' | 'teardown'> = {
+  setup: async ({ db }) => {
+    const [set] = (await db.query('select price, on_hand from discovery_set')).rows;
+    const items = await db.query('select fragrance_id from discovery_set_items order by position');
+    savedSet ??= {
+      price: set?.price,
+      onHand: set?.on_hand,
+      ids: items.rows.map((r) => r.fragrance_id),
+    };
+    await db.query(
+      'update discovery_set set price = 1250000, on_hand = 1250, is_placeholder = true',
+    );
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select 1, id from fragrances where name = $1
+       union all
+       select 1 + i, (select id from fragrances where slug = ($2::text[])[i])
+       from generate_subscripts($2::text[], 1) as i`,
+      [
+        WORST_NAME,
+        ['baccarat-rouge-540', 'blue-sapphire', 'le-male-le-parfum', 'pink-molecule-090-09'],
+      ],
+    );
+  },
+  teardown: async ({ db }) => {
+    if (!savedSet) return;
+    await db.query('update discovery_set set price = $1, on_hand = $2', [
+      savedSet.price,
+      savedSet.onHand,
+    ]);
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
+      [savedSet.ids],
+    );
+    savedSet = undefined;
+  },
 };
 
 export const screens: Screen[] = [
@@ -521,6 +577,8 @@ export const screens: Screen[] = [
       await page.getByText(t.sets.duplicate).waitFor();
     },
   },
+  { id: 'sets-worst', path: '/sets', as: 'owner', ...setsWorst },
+  { id: 'sets-manager-worst', path: '/sets', as: 'manager', ...setsWorst },
   { id: 'catalog-dictionaries', path: '/catalog/dictionaries', as: 'owner' },
   {
     id: 'catalog-dictionaries-search',

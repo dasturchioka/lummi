@@ -217,6 +217,88 @@ async function fillSetsCart(api: ApiClient) {
   if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
 }
 
+/*
+ * Sets at their worst (break-ui, #22): the five longest names and brands of the guide in the
+ * Discovery set, a seven-digit set price (the builder costs the same), 99 of each set in the cart,
+ * and a builder set whose five 10 ml bottles all ran out after it was added. `bestSets` puts back
+ * whatever the set was before, so a rerun starts from the seed.
+ */
+const LONG_FIVE = [
+  'baccarat-rouge-540',
+  'blue-sapphire',
+  'le-male-le-parfum',
+  'pink-molecule-090-09',
+  'montabaco-intensivo',
+];
+const LONG_FIVE_NAMES = [
+  'Baccarat Rouge 540',
+  'Blue Sapphire',
+  'Le Male Le Parfum',
+  'Pink Molécule 090.09',
+  'Montabaco Intensivo',
+];
+const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
+const tenMlOf = `ml = 10 and fragrance_id in (select id from fragrances where slug = any($1))`;
+let savedSet: { price: number; onHand: number; ids: number[] } | undefined;
+async function worstSets(db: ShotDb) {
+  const [set] = (await db.query('select price, on_hand from discovery_set')).rows;
+  const items = await db.query('select fragrance_id from discovery_set_items order by position');
+  savedSet ??= {
+    price: Number(set?.price),
+    onHand: Number(set?.on_hand),
+    ids: items.rows.map((r) => Number(r.fragrance_id)),
+  };
+  await db.query('update discovery_set set price = 1250000, on_hand = 120');
+  await db.query('delete from discovery_set_items');
+  await db.query(
+    `insert into discovery_set_items (position, fragrance_id)
+     select i, (select id from fragrances where slug = ($1::text[])[i])
+     from generate_subscripts($1::text[], 1) as i`,
+    [LONG_FIVE],
+  );
+  await db.query(`update volumes set on_hand = 120 where ${tenMlOf}`, [LONG_FIVE]);
+}
+async function bestSets(db: ShotDb) {
+  if (savedSet) {
+    const { price, onHand, ids } = savedSet;
+    await db.query('update discovery_set set price = $1, on_hand = $2', [price, onHand]);
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
+      [ids],
+    );
+    savedSet = undefined;
+  }
+  for (const slug of [...LONG_FIVE, ...SOLD_FIVE]) await db.restore(slug);
+}
+/** Taps the builder rows of these fragrances, then brings the set box back into view. */
+async function pickByName(page: Page, names: string[]) {
+  const picks = page.getByTestId('pick');
+  await picks.first().waitFor();
+  for (const name of names) await picks.filter({ hasText: name }).first().click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+/** A cart of the worst sets: 99 Discovery sets, 99 builder sets of the longest five, and a builder set gone. */
+async function fillWorstSetsCart(api: ApiClient, db: ShotDb) {
+  await fillCart(api, []);
+  const discovery = await api.cart.addDiscovery({ body: { qty: 99 } });
+  if (discovery.status !== 200) throw new Error(`discovery add: HTTP ${discovery.status}`);
+  const long = await api.cart.addBuilder({ body: { slugs: LONG_FIVE, qty: 99 } });
+  if (long.status !== 200) throw new Error(`builder add: HTTP ${long.status}`);
+  const gone = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
+  if (gone.status !== 200) throw new Error(`builder add: HTTP ${gone.status}`);
+  await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [SOLD_FIVE]);
+}
+/** The name of the n-th builder row, and its slug, so a shot can take its 10 ml away. */
+let builderVictim: string | undefined;
+async function sellOutPicked(page: Page, db: ShotDb) {
+  const name = await page.getByTestId('pick').first().locator('.type-name').innerText();
+  const { rows } = await db.query('select slug from fragrances where name = $1', [name]);
+  builderVictim = String(rows[0]?.slug);
+  await db.setOnHand(builderVictim, 0);
+}
+
 /** Checkout's state for a shot: phone shared, Samarkand saved, the mockup's 243 000 cart. */
 async function checkoutReady(api: ApiClient, db: ShotDb, consent: 'given' | 'none') {
   await sharePhone(api);
@@ -1295,23 +1377,61 @@ export const screens: ScreenDef[] = [
   },
   { id: 'builder-empty', path: '/sets/builder' },
   { id: 'builder-3', path: '/sets/builder', act: pickForBuilder(3) },
+  { id: 'builder-3-360', path: '/sets/builder', width: 360, act: pickForBuilder(3) },
   { id: 'builder-5', path: '/sets/builder', act: pickForBuilder(5) },
   {
-    // A chosen fragrance's 10 ml ran out before the tap: the server answers 409 and the page says so.
+    // A chosen fragrance's 10 ml ran out before the tap: the server answers 409 naming it, the page
+    // names it over the button, and the box drops it (four left to fill one).
     id: 'builder-unavailable',
+    path: '/sets/builder',
+    act: async ({ page, db }) => {
+      await pickForBuilder(5)({ page });
+      await sellOutPicked(page, db);
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.getByTestId('dock-alert').waitFor();
+      await page.waitForFunction(
+        () => document.querySelectorAll('[data-testid="pick"][data-chosen="true"]').length === 4,
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: async ({ db }) => {
+      if (builderVictim) await db.restore(builderVictim);
+      builderVictim = undefined;
+    },
+  },
+  {
+    // The add failed on the way (no connection): «Повторить» over the button, the five kept.
+    id: 'builder-failed',
     path: '/sets/builder',
     act: async ({ page }) => {
       await pickForBuilder(5)({ page });
-      await page.route('**/cart/sets/builder', (route) =>
-        route.fulfill({
-          status: 409,
-          contentType: 'application/json',
-          body: JSON.stringify({ code: 'unavailable', slugs: ['tygar'] }),
-        }),
-      );
+      await page.route('**/cart/sets/builder', (route) => route.abort());
       await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
-      await page.locator('[data-open]').waitFor();
+      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
     },
+  },
+  {
+    id: 'builder-loading',
+    path: '/sets/builder',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/sets\/builder$/),
+  },
+  {
+    id: 'builder-error',
+    path: '/sets/builder',
+    act: ({ page }) => failRead(page, /\/sets\/builder$/),
+  },
+  {
+    id: 'set-discovery-loading',
+    path: '/sets/discovery',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/sets\/discovery$/),
+  },
+  {
+    id: 'set-discovery-error',
+    path: '/sets/discovery',
+    act: ({ page }) => failRead(page, /\/sets\/discovery$/),
   },
   {
     id: 'cart-sets',
@@ -1327,6 +1447,133 @@ export const screens: ScreenDef[] = [
     },
     teardown: emptyCart,
     fullPage: true,
+  },
+  {
+    // One 10 ml left, shared: the volume line takes it, so the builder set after it cannot be
+    // bought (the server shares each 10 ml across the lines in order).
+    id: 'cart-sets-shared',
+    path: '/cart',
+    setup: async ({ api, db }) => {
+      await fillCart(api, [['symphony', 10]]);
+      const res = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
+      if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+      await db.query(`update volumes set on_hand = 1 where ml = 10 and fragrance_id =
+        (select id from fragrances where slug = 'symphony')`);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      for (const slug of SOLD_FIVE) await ctx.db.restore(slug);
+    },
+    fullPage: true,
+  },
+  // break-ui (#22): the longest five in the Discovery set, a seven-digit set price, 99 of each set.
+  {
+    id: 'set-discovery-worst',
+    path: '/sets/discovery',
+    fullPage: true,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'set-discovery-worst-360',
+    path: '/sets/discovery',
+    width: 360,
+    fullPage: true,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    // the Discovery card sold out beside its seven-digit price, on the narrowest phone
+    id: 'sets-catalog-worst-360',
+    path: '/catalog?type=sets',
+    width: 360,
+    setup: async ({ db }) => {
+      await worstSets(db);
+      await db.query('update discovery_set set on_hand = 0');
+    },
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'home-sets-worst-360',
+    path: '/',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'builder-worst-360',
+    path: '/sets/builder',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    act: ({ page }) => pickByName(page, LONG_FIVE_NAMES),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    // all five chosen ran out at once: the 409 names every one of them over the button
+    id: 'builder-gone-worst-360',
+    path: '/sets/builder',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    act: async ({ page, db }) => {
+      await pickByName(page, LONG_FIVE_NAMES);
+      await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [LONG_FIVE]);
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.getByTestId('dock-alert').waitFor();
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="pick"][data-chosen="true"]'),
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'cart-sets-worst',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await fillWorstSetsCart(api, db);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      await bestSets(ctx.db);
+    },
+  },
+  {
+    id: 'cart-sets-worst-360',
+    path: '/cart',
+    width: 360,
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await fillWorstSetsCart(api, db);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      await bestSets(ctx.db);
+    },
+  },
+  {
+    id: 'order-detail-sets-worst',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [], {
+        fill: async (a) => {
+          await fillCart(a, []);
+          await a.cart.addDiscovery({ body: { qty: 99 } });
+          await a.cart.addBuilder({ body: { slugs: LONG_FIVE, qty: 99 } });
+        },
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: async (ctx) => {
+      await checkoutDone(ctx);
+      await bestSets(ctx.db);
+    },
   },
   // FragranceListCard on dev fixtures: grid (the catalog's), row and compact, worst cases included.
   { id: 'list-cards', path: '/dev/list', fullPage: true },
