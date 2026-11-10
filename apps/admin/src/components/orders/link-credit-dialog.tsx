@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  charCount,
   ORDER_NUMBER_MAX,
   WAITING_RECEIPT_VERDICTS,
   type AdminCreditDto,
@@ -15,7 +16,8 @@ import { Notice } from '@/components/ui/notice';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
-import { Frame, LinkReasonField, reasonFits } from './order-dialogs';
+import { formatTashkent } from '@/lib/setting-copy';
+import { Frame, LinkReasonField, Mark, ReferenceLine, reasonFits } from './order-dialogs';
 
 /**
  * «Привязать к заказу» from the credits list: find the order by its number, then confirm its
@@ -57,8 +59,22 @@ export function LinkCreditDialog({
     page?.order.status === 'receipt_review'
       ? (page.receipts.find((r) => WAITING_RECEIPT_VERDICTS.includes(r.verdict)) ?? null)
       : null;
-  const differs =
-    page !== null && (credit.amountSom !== page.order.amountDue || !credit.onShopCard || mismatch);
+  const otherAmount = page !== null && credit.amountSom !== page.order.amountDue;
+  const differs = page !== null && (otherAmount || !credit.onShopCard || mismatch);
+  // what a press will link, said above the buttons when the credit does not fit the order
+  const summary =
+    page && waiting && differs
+      ? [
+          otherAmount &&
+            fill(o.sumAmount, {
+              credit: formatTiyin(credit.amountTiyin, language),
+              due: formatMoney(page.order.amountDue, language),
+            }),
+          !credit.onShopCard && fill(o.sumCard, { last4: credit.cardLast4 }),
+        ]
+          .filter(Boolean)
+          .join('. ')
+      : null;
 
   const find = async () => {
     const number = Number(typed.replace(/\D/g, ''));
@@ -107,6 +123,14 @@ export function LinkCreditDialog({
     } else if (res?.status === 422 && res.body.code === 'reason_required') {
       setMismatch(true);
       setTried(false);
+    } else if (res?.status === 422 && res.body.code === 'reason_invalid') {
+      setError(
+        charCount(reason.trim()) < (res.body.min ?? 0)
+          ? fill(o.linkReasonShort, { min: String(res.body.min ?? '') })
+          : fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
+      );
+    } else if (res?.status === 422 && res.body.code === 'credit_mismatch') {
+      setError(res.body.what === 'before_order' ? o.beforeOrder : o.notAllowed);
     } else if (res?.status === 422) setError(o.notAllowed);
     else setError(res?.status === 409 ? o.tryAgain : t.errors.generic);
   };
@@ -122,10 +146,16 @@ export function LinkCreditDialog({
       busy={busy || finding}
       submit={page ? o.detail.confirm : c.find}
       cancel={t.actions.cancel}
+      summary={summary ? <Mark>{summary}</Mark> : undefined}
     >
-      <p className="-mt-1 font-semibold tabular-nums">
-        {fill(c.thisCredit, { amount: formatTiyin(credit.amountTiyin, language) })}
-      </p>
+      <div className="-mt-1 grid gap-1">
+        <p className="font-semibold tabular-nums">
+          {fill(c.thisCredit, { amount: formatTiyin(credit.amountTiyin, language) })}
+        </p>
+        <p className="text-small text-muted-foreground tabular-nums">
+          {formatTashkent(credit.occurredAt)} · {fill(o.cardShort, { last4: credit.cardLast4 })}
+        </p>
+      </div>
       {/* the dialog's own button reads «Найти» until the order is found */}
       <Field id="link-order" label={c.orderNumber} error={missing ? c.notFound : undefined}>
         <Input
@@ -142,16 +172,16 @@ export function LinkCreditDialog({
         />
       </Field>
       {page && (
-        <div className="grid gap-1 rounded-button bg-field px-3.5 py-3 text-sm" data-link-order>
+        <div className="grid gap-2" data-link-order>
           <p className="font-semibold [overflow-wrap:anywhere]">
             {fill(c.orderFound, {
               number: String(page.order.number),
               customer: page.customer.name,
             })}
           </p>
-          <p className="tabular-nums">
-            {fill(c.amountDue, { amount: formatMoney(page.order.amountDue, language) })}
-          </p>
+          <ReferenceLine page={page} t={t} language={language} />
+          {otherAmount && <Mark>{o.amountDiffers}</Mark>}
+          {!credit.onShopCard && <Mark>{fill(o.markCard, { last4: credit.cardLast4 })}</Mark>}
           <p className="text-small text-muted-foreground">
             {receipt ? c.withReceipt : c.withoutReceipt}
           </p>

@@ -10,10 +10,18 @@ export function StatusBadge({ status, language }: { status: OrderStatus; languag
   return <Badge tone={tone}>{ordersMessages[language].orders.status[status]}</Badge>;
 }
 
-/** Where the money stands; a receipt waiting for a person breathes, a confirmed payment is sage. */
+/**
+ * The payment state says something the status does not only when a receipt waits for a person,
+ * or an order ended unpaid or paid (a cancel then owes a Refund). Otherwise its chip would repeat
+ * the status («Чек на проверке» and «на проверке»), so it is left out: one chip per meaning.
+ */
+export const paymentWorthShowing = (status: OrderStatus, payment: PaymentState) =>
+  payment === 'manual_review' || (status === 'cancelled' && payment === 'paid');
+
+/** Where the money stands, in its own words; a receipt waiting for a person breathes. */
 export function PaymentBadge({ payment, t }: { payment: PaymentState; t: AdminMessages }) {
   const tone = payment === 'paid' ? 'sage' : payment === 'manual_review' ? 'live' : 'neutral';
-  return <Badge tone={tone}>{t.orders.payment[payment]}</Badge>;
+  return <Badge tone={tone}>{t.orders.paymentChip[payment]}</Badge>;
 }
 
 /** A receipt's verdict: confirmed is sage, one waiting for a person breathes. */

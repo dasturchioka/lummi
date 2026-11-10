@@ -452,6 +452,7 @@ describe('the order page', () => {
       ['order.created', 'Ali'],
     ]);
     expect(page.limits).toEqual({ rejectNoteMax: 300, linkReasonMin: 3, linkReasonMax: 500 });
+    expect(page.shopCardLast4).toBe('1234');
   });
 
   it('an unknown number is 404, however long', async () => {
@@ -1038,11 +1039,11 @@ describe('the credits list', () => {
     if (res.status !== 200) return;
     expect(res.body.total).toBe(3);
     expect(
-      res.body.items.map((c) => [c.amountTiyin, c.amountSom, c.cardMask, c.onShopCard, c.order]),
+      res.body.items.map((c) => [c.amountTiyin, c.amountSom, c.cardLast4, c.onShopCard, c.order]),
     ).toEqual([
-      [125_000_000, 1_250_000, 'HUMOCARD *9876', false, null],
-      [7_575_050, null, 'HUMOCARD *1234', true, null],
-      [14_900_000, 149_000, 'HUMOCARD *1234', true, null],
+      [125_000_000, 1_250_000, '9876', false, null],
+      [7_575_050, null, '1234', true, null],
+      [14_900_000, 149_000, '1234', true, null],
     ]);
     // 10:40 Tashkent is 05:40 UTC
     expect(res.body.items[0]).toMatchObject({

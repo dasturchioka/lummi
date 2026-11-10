@@ -2,6 +2,7 @@
 
 import {
   CANCEL_NOTE_MAX,
+  charCount,
   CANCEL_REASON_ONLY_FROM,
   CANCEL_REASONS_BY_ACTOR,
   RECEIPT_REJECT_REASONS,
@@ -13,8 +14,9 @@ import {
   type CreditOptionsDto,
   type ReceiptRejectReason,
 } from '@lummi/contracts';
-import { formatTiyin, type Language } from '@lummi/i18n';
-import { receiptRejectedText } from '@lummi/i18n/bot';
+import { formatMoney, formatTiyin, type Language } from '@lummi/i18n';
+import { orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
+import { CircleAlert } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,8 +53,24 @@ type Common = {
   t: AdminMessages;
 };
 
-/** Characters as a person counts them (an emoji is one), as the server counts the note. */
-const length = (s: string) => [...s].length;
+/** Characters as a person counts them (an emoji is one): the server's own count (`charCount`). */
+const length = charCount;
+
+/** «Покупатель получит»: the message exactly as the bot will send it, in the shopper's language. */
+function Preview({ label, language, text }: { label: string; language: Language; text: string }) {
+  return (
+    <div className="grid gap-1.5">
+      <p className="text-[12.5px] font-medium text-muted-foreground">{label}</p>
+      <p
+        lang={language}
+        className="rounded-button bg-field px-3.5 py-3 text-[13.5px] leading-snug whitespace-pre-line [overflow-wrap:anywhere]"
+        data-preview
+      >
+        {text}
+      </p>
+    </div>
+  );
+}
 
 /** One tap target per reason, the width of the dialog, washed while pressed (the composer's list). */
 function ReasonList<R extends string>({
@@ -114,6 +132,7 @@ export function Frame({
   submit,
   cancel,
   wide,
+  summary,
   children,
 }: {
   open: boolean;
@@ -127,6 +146,8 @@ export function Frame({
   cancel: string;
   /** 520 px from 640 px up, for two columns of reasons. */
   wide?: boolean;
+  /** A line above the buttons that stays in view with them (what the press will do). */
+  summary?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -139,16 +160,19 @@ export function Frame({
           {children}
           {error && <Notice title={error} />}
           {/* the actions stay in reach while a long form scrolls under them */}
-          <DialogFooter className="sticky bottom-0 z-10 -mx-5 mt-1 border-t border-border bg-card px-5 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6 sm:pb-6">
-            <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={busy}>
-                {cancel}
+          <div className="sticky bottom-0 z-10 -mx-5 mt-1 border-t border-border bg-card px-5 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6 sm:pb-6">
+            {summary && <div className="mb-3">{summary}</div>}
+            <DialogFooter className="mt-0">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={busy}>
+                  {cancel}
+                </Button>
+              </DialogClose>
+              <Button type="submit" loading={busy}>
+                {submit}
               </Button>
-            </DialogClose>
-            <Button type="submit" loading={busy}>
-              {submit}
-            </Button>
-          </DialogFooter>
+            </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
@@ -245,16 +269,11 @@ export function RejectDialog({
         />
       </Field>
       {reason && (
-        <div className="grid gap-1.5">
-          <p className="text-[12.5px] font-medium text-muted-foreground">{o.preview}</p>
-          <p
-            lang={reader}
-            className="rounded-button bg-field px-3.5 py-3 text-[13.5px] leading-snug whitespace-pre-line [overflow-wrap:anywhere]"
-            data-preview
-          >
-            {receiptRejectedText(reader, page.order.number, reason, trimmed || null)}
-          </p>
-        </div>
+        <Preview
+          label={o.preview}
+          language={reader}
+          text={receiptRejectedText(reader, page.order.number, reason, trimmed || null)}
+        />
       )}
     </Frame>
   );
@@ -272,6 +291,7 @@ export function CancelDialog({
   t,
   onSubmit,
 }: Common & { onSubmit: Submit<{ reason: CancelReason; note?: string }> }) {
+  const reader: Language = page.customer.language;
   const o = t.orders;
   const status = page.order.status;
   const reasons = CANCEL_REASONS_BY_ACTOR.staff.filter((r) => {
@@ -327,6 +347,13 @@ export function CancelDialog({
           className="min-h-16"
         />
       </Field>
+      {reason && (
+        <Preview
+          label={o.preview}
+          language={reader}
+          text={orderCancelledText(reader, page.order.number, reason, page.payment === 'paid')}
+        />
+      )}
     </Frame>
   );
 }
@@ -449,19 +476,71 @@ export const reasonFits = (reason: string, limits: AdminOrderDto['limits']) => {
   return n >= limits.linkReasonMin && n <= limits.linkReasonMax;
 };
 
-/** How a credit differs from the order, in words: more or less than the amount due, another card. */
-export function creditFlags(
-  c: { differenceTiyin: number; onShopCard: boolean },
+/**
+ * How a credit differs from the order: «На 40 000 сум меньше», «Другая карта *9055». Each is a
+ * marked line (an icon, semibold Graphite), never red, so a manager cannot miss it (#33).
+ */
+export function mismatchMarks(
+  c: { differenceTiyin: number; onShopCard: boolean; cardLast4: string },
   t: AdminMessages,
   language: Language,
 ): string[] {
-  const d = t.orders.detail;
+  const o = t.orders;
   const amount = formatTiyin(Math.abs(c.differenceTiyin), language);
   return [
-    c.differenceTiyin > 0 && fill(d.more, { amount }),
-    c.differenceTiyin < 0 && fill(d.less, { amount }),
-    !c.onShopCard && d.offShopCard,
+    c.differenceTiyin < 0 && fill(o.markLess, { amount }),
+    c.differenceTiyin > 0 && fill(o.markMore, { amount }),
+    !c.onShopCard && fill(o.markCard, { last4: c.cardLast4 }),
   ].filter((x): x is string => Boolean(x));
+}
+
+/** What linking a credit that differs will do, in one line above the buttons. */
+export function mismatchSummary(
+  c: { differenceTiyin: number; onShopCard: boolean; cardLast4: string },
+  t: AdminMessages,
+  language: Language,
+): string | null {
+  const o = t.orders;
+  const amount = formatTiyin(Math.abs(c.differenceTiyin), language);
+  const parts = [
+    c.differenceTiyin < 0 && fill(o.sumLess, { amount }),
+    c.differenceTiyin > 0 && fill(o.sumMore, { amount }),
+    !c.onShopCard && fill(o.sumCard, { last4: c.cardLast4 }),
+  ].filter((x): x is string => Boolean(x));
+  return parts.length > 0 ? parts.join('. ') : null;
+}
+
+/** A marked line: the eye stops on it without an alarm colour (DESIGN.md No Alarm Rule). */
+export function Mark({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex items-start gap-1.5 text-[13px] leading-snug font-semibold text-foreground">
+      <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.75} aria-hidden />
+      <span className="min-w-0">{children}</span>
+    </span>
+  );
+}
+
+/** «К переводу 259 200 сум · карта магазина *7364»: what every credit is measured against. */
+export function ReferenceLine({
+  page,
+  t,
+  language,
+}: {
+  page: AdminOrderDto;
+  t: AdminMessages;
+  language: Language;
+}) {
+  const amount = formatMoney(page.order.amountDue, language);
+  return (
+    <p
+      className="-mt-1 rounded-button bg-field px-3.5 py-2.5 text-[14px] font-semibold tabular-nums [overflow-wrap:anywhere]"
+      data-reference
+    >
+      {page.shopCardLast4
+        ? fill(t.orders.refLine, { amount, last4: page.shopCardLast4 })
+        : fill(t.orders.refNoCard, { amount })}
+    </p>
+  );
 }
 
 /**
@@ -529,7 +608,7 @@ export function ConfirmPaymentDialog({
   };
 
   const row = (c: CreditOptionDto) => {
-    const flags = creditFlags(c, t, language);
+    const marks = mismatchMarks(c, t, language);
     return (
       <label
         key={c.id}
@@ -556,7 +635,7 @@ export function ConfirmPaymentDialog({
             parts={[
               formatTashkent(c.occurredAt),
               <span key="card" className="whitespace-nowrap">
-                {c.cardMask}
+                {fill(o.cardShort, { last4: c.cardLast4 })}
               </span>,
               c.counterparty && (
                 <span key="from" className="[overflow-wrap:anywhere]">
@@ -565,10 +644,8 @@ export function ConfirmPaymentDialog({
               ),
             ]}
           />
-          {flags.map((f) => (
-            <span key={f} className="text-small font-medium">
-              {f}
-            </span>
+          {marks.map((m) => (
+            <Mark key={m}>{m}</Mark>
           ))}
         </span>
       </label>
@@ -587,7 +664,13 @@ export function ConfirmPaymentDialog({
       submit={o.detail.confirm}
       cancel={t.actions.cancel}
       wide
+      summary={
+        selected && mismatchSummary(selected, t, language) ? (
+          <Mark>{mismatchSummary(selected, t, language)}</Mark>
+        ) : undefined
+      }
     >
+      <ReferenceLine page={page} t={t} language={language} />
       {options === 'loading' ? (
         <p role="status" className="text-sm text-muted-foreground">
           {o.loadingCredits}

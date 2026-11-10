@@ -1,8 +1,7 @@
 import { PAID_STATUSES, type OrderAction, type TransitionPayload } from '@lummi/contracts';
 import type { OrderLineRow, OrderRow, orders } from '@lummi/db';
 import { fill, formatMoney, type Language } from '@lummi/i18n';
-import { botMessages, receiptRejectedText } from '@lummi/i18n/bot';
-import { ordersMessages } from '@lummi/i18n/orders';
+import { botMessages, orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
 import type { OnHandMove } from './on-hand';
 
 /** One move as `transition()` is about to make it. */
@@ -137,12 +136,8 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
     discountSource: 'release',
     // a paid order's money goes back as a Refund (ADR 0006): the manager will be in touch
     message: (m, lang) => {
-      const t = bot(lang);
-      const text = fill(t.orderCancelled, {
-        number: number(m),
-        reason: ordersMessages[lang].orders.cancelReason[m.payload.reason],
-      });
-      return paid(m) ? { text: `${text}\n${t.refundNote}`, manager: true } : { text };
+      const text = orderCancelledText(lang, m.order.number, m.payload.reason, paid(m));
+      return paid(m) ? { text, manager: true } : { text };
     },
   },
 };

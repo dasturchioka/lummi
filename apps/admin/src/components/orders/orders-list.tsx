@@ -14,7 +14,7 @@ import { formatTashkent, num } from '@/lib/setting-copy';
 import { TEXT_LINK } from '@/lib/ui-classes';
 import { listHref } from '@/lib/list-page';
 import { fill } from '@/lib/utils';
-import { PaymentBadge, StatusBadge } from './badges';
+import { PaymentBadge, paymentWorthShowing, StatusBadge } from './badges';
 import { OrdersFiltersForm, type OrderFilters } from './orders-filters';
 
 export type { OrderFilters };
@@ -28,13 +28,6 @@ type Props = {
   pageSize: number;
   filters: OrderFilters;
 };
-
-/**
- * The payment state says something the status does not: a receipt waiting for a person, or a
- * cancelled order that had been paid (a Refund is owed). Otherwise the status says it all.
- */
-const paymentWorthShowing = (o: AdminOrderListItemDto) =>
-  o.payment === 'manual_review' || (o.payment === 'paid' && o.status === 'cancelled');
 
 /**
  * The orders list (#33): the filters (a GET form), the count, then the orders newest first, as
@@ -151,7 +144,9 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
                 <div className="text-small text-muted-foreground">{lines(it)}</div>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   <StatusBadge status={it.status} language={language} />
-                  {paymentWorthShowing(it) && <PaymentBadge payment={it.payment} t={t} />}
+                  {paymentWorthShowing(it.status, it.payment) && (
+                    <PaymentBadge payment={it.payment} t={t} />
+                  )}
                 </div>
               </li>
             ))}
@@ -185,7 +180,9 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
                     <TD>
                       <div className="flex flex-col items-start gap-1.5">
                         <StatusBadge status={it.status} language={language} />
-                        {paymentWorthShowing(it) && <PaymentBadge payment={it.payment} t={t} />}
+                        {paymentWorthShowing(it.status, it.payment) && (
+                          <PaymentBadge payment={it.payment} t={t} />
+                        )}
                       </div>
                     </TD>
                   </TR>

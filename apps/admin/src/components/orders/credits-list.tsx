@@ -20,7 +20,7 @@ import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent, num } from '@/lib/setting-copy';
-import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
+import { TEXT_LINK } from '@/lib/ui-classes';
 import { listHref } from '@/lib/list-page';
 import { cn, fill } from '@/lib/utils';
 import { LinkCreditDialog } from './link-credit-dialog';
@@ -65,28 +65,42 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
     [!it.onShopCard && c.otherCard, it.amountSom === null && c.withTiyin].filter((x): x is string =>
       Boolean(x),
     );
-  const link = (it: AdminCreditDto) =>
+  /** The order it paid, or «Не привязано». */
+  const status = (it: AdminCreditDto) =>
     it.order ? (
       <Link href={`/orders/${it.order.number}`} className={cn(TEXT_LINK, 'whitespace-nowrap')}>
         {fill(c.order, { number: String(it.order.number) })}
       </Link>
     ) : (
-      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Badge>{c.unlinked}</Badge>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn('-mx-1 px-2', QUIET_ACTION)}
-          onClick={() => {
-            setLinked(null);
-            setLinking(it);
-          }}
-          data-link-credit={it.id}
-        >
-          {c.linkAction}
-        </Button>
-      </span>
+      <Badge>{c.unlinked}</Badge>
     );
+  /** «Привязать к заказу», left-aligned with the row's content. */
+  const linkAction = (it: AdminCreditDto) =>
+    it.order ? null : (
+      <Button
+        variant="outline"
+        size="sm"
+        className="justify-self-start"
+        onClick={() => {
+          setLinked(null);
+          setLinking(it);
+        }}
+        data-link-credit={it.id}
+      >
+        {c.linkAction}
+      </Button>
+    );
+  /** Why it cannot pay an order by itself, as chips: another card, tiyin in the amount. */
+  const chips = (it: AdminCreditDto) => {
+    const why = caveat(it);
+    return why.length === 0 ? null : (
+      <div className="flex flex-wrap gap-1.5">
+        {why.map((x) => (
+          <Badge key={x}>{x}</Badge>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -191,10 +205,10 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
           </p>
           <ul className="divide-y divide-border @3xl:hidden">
             {items.map((it) => (
-              <li key={it.id} className="grid gap-1 px-4 py-4 @xl:px-5" data-credit={it.id}>
+              <li key={it.id} className="grid gap-1.5 px-4 py-4 @xl:px-5" data-credit={it.id}>
                 <div className="flex items-baseline justify-between gap-3">
                   {amount(it)}
-                  {link(it)}
+                  {status(it)}
                 </div>
                 <MetaLine
                   className="text-small text-muted-foreground tabular-nums"
@@ -212,11 +226,8 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
                     ),
                   ]}
                 />
-                {caveat(it).map((x) => (
-                  <p key={x} className="text-small font-medium">
-                    {x}
-                  </p>
-                ))}
+                {chips(it)}
+                {linkAction(it)}
               </li>
             ))}
           </ul>
@@ -240,23 +251,28 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
                     <TD className="text-right">
                       {amount(it)}
                       {it.amountSom === null && (
-                        <span className="block text-small whitespace-nowrap text-muted-foreground">
-                          {c.withTiyin}
+                        <span className="mt-1 flex justify-end">
+                          <Badge>{c.withTiyin}</Badge>
                         </span>
                       )}
                     </TD>
                     <TD className="whitespace-nowrap">
                       {it.cardMask}
                       {!it.onShopCard && (
-                        <span className="block text-small text-muted-foreground">
-                          {c.otherCard}
+                        <span className="mt-1 flex">
+                          <Badge>{c.otherCard}</Badge>
                         </span>
                       )}
                     </TD>
                     <TD className="min-w-[10rem] text-muted-foreground [overflow-wrap:anywhere]">
                       {it.counterparty}
                     </TD>
-                    <TD>{link(it)}</TD>
+                    <TD>
+                      <div className="grid justify-items-start gap-1.5">
+                        {status(it)}
+                        {linkAction(it)}
+                      </div>
+                    </TD>
                   </TR>
                 ))}
               </TBody>

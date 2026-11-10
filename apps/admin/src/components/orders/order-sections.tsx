@@ -8,7 +8,7 @@ import {
   type CancelReason,
   type ReceiptRejectReason,
 } from '@lummi/contracts';
-import { formatMoney, formatPhone, formatTiyin, type Language } from '@lummi/i18n';
+import { formatDecimal, formatMoney, formatPhone, formatTiyin, type Language } from '@lummi/i18n';
 import { ChevronRight, ExternalLink, FileText, Gift } from 'lucide-react';
 import Link from 'next/link';
 import { actionLabel, Details, who } from '@/components/audit-view';
@@ -20,7 +20,7 @@ import { formatTashkent } from '@/lib/setting-copy';
 import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
 import { cn, fill } from '@/lib/utils';
 import { VerdictBadge } from './badges';
-import { creditFlags } from './order-dialogs';
+import { Mark, mismatchMarks } from './order-dialogs';
 
 type Props = { page: AdminOrderDto; t: AdminMessages; language: Language };
 
@@ -30,12 +30,14 @@ const receiptFile = (id: number, variant: 'original' | 'normalized') =>
 
 const minus = (amount: number, language: Language) => `−${formatMoney(amount, language)}`;
 
-/** A size in KB or MB with one decimal, in the panel's words («74 КБ», «1,2 МБ»). */
-function fileSize(bytes: number, t: AdminMessages) {
+/** A size in KB or MB in the panel's words and the language's notation («74 КБ», «1,2 МБ»). */
+function fileSize(bytes: number, t: AdminMessages, language: Language) {
   const d = t.orders.detail;
-  return bytes >= 1_000_000
-    ? fill(d.sizeMb, { n: (bytes / 1_000_000).toFixed(1).replace('.', ',') }).replace(' ', '\u00a0')
-    : fill(d.sizeKb, { n: String(Math.max(1, Math.round(bytes / 1000))) }).replace(' ', '\u00a0');
+  const text =
+    bytes >= 1_000_000
+      ? fill(d.sizeMb, { n: formatDecimal(bytes / 1_000_000, 1, language) })
+      : fill(d.sizeKb, { n: formatDecimal(Math.max(1, Math.round(bytes / 1000)), 0, language) });
+  return text.replace(' ', '\u00a0');
 }
 
 /** A label: value row of a side card (Muted Ink label above, the value under it). */
@@ -56,35 +58,39 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 export function ReceiptsSection({
   page,
   t,
+  language,
   onReject,
   onConfirm,
-}: Omit<Props, 'language'> & {
+}: Props & {
   onReject: (r: AdminReceiptDto) => void;
   onConfirm: (r: AdminReceiptDto) => void;
 }) {
   const d = t.orders.detail;
   const open = page.order.status === 'receipt_review';
+  const due = formatMoney(page.order.amountDue, language);
   return (
     <Section title={d.receipts}>
       {page.receipts.length === 0 ? (
         <p className="-mt-2 text-sm text-muted-foreground">{d.noReceipts}</p>
       ) : (
-        <ul className="-mt-1 grid gap-5" data-receipts>
+        <ul className="-mt-1 grid gap-6" data-receipts>
           {page.receipts.map((r) => {
             const waiting = open && WAITING_RECEIPT_VERDICTS.includes(r.verdict);
             const at = formatTashkent(r.createdAt);
+            // a tap opens the whole image: the original for a screenshot, the rendered page for a PDF
+            const full = receiptFile(r.id, r.kind === 'pdf' ? 'normalized' : 'original');
             return (
               <li
                 key={r.id}
-                className="grid grid-cols-[96px_minmax(0,1fr)] gap-4 sm:grid-cols-[132px_minmax(0,1fr)]"
+                className="grid grid-cols-[136px_minmax(0,1fr)] gap-4 sm:grid-cols-[200px_minmax(0,1fr)]"
                 data-receipt={r.id}
               >
                 <a
-                  href={receiptFile(r.id, 'original')}
+                  href={full}
                   target="_blank"
                   rel="noreferrer"
                   className="group relative block self-start overflow-hidden rounded-[8px] bg-field"
-                  aria-label={r.kind === 'pdf' ? d.downloadOriginal : d.openOriginal}
+                  aria-label={d.openOriginal}
                 >
                   <img
                     src={receiptFile(r.id, 'normalized')}
@@ -92,7 +98,7 @@ export function ReceiptsSection({
                     width={r.width}
                     height={r.height}
                     decoding="async"
-                    className="block h-auto max-h-64 w-full object-contain object-top transition-opacity duration-150 group-hover:opacity-90"
+                    className="block h-auto max-h-[26rem] w-full object-contain object-top transition-opacity duration-150 group-hover:opacity-90"
                   />
                   {r.kind === 'pdf' && (
                     <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-card/92 px-2 py-0.5 text-[11px] font-semibold">
@@ -105,6 +111,11 @@ export function ReceiptsSection({
                   <div>
                     <VerdictBadge verdict={r.verdict} t={t} />
                   </div>
+                  {/* what the receipt must show, right beside it */}
+                  <p className="text-[15px] leading-snug tabular-nums" data-due>
+                    <span className="text-muted-foreground">{d.amountDue}: </span>
+                    <span className="font-semibold whitespace-nowrap">{due}</span>
+                  </p>
                   <MetaLine
                     className="text-small text-muted-foreground"
                     parts={[
@@ -122,14 +133,12 @@ export function ReceiptsSection({
                         </span>
                       ),
                       <span key="size" className="whitespace-nowrap">
-                        {fileSize(r.size, t)}
+                        {fileSize(r.size, t, language)}
                       </span>,
                     ]}
                   />
                   {r.reviewReason && WAITING_RECEIPT_VERDICTS.includes(r.verdict) && (
-                    <p className="text-[13.5px] leading-snug font-medium text-pretty">
-                      {d.reviewReason[r.reviewReason]}
-                    </p>
+                    <Mark>{d.reviewReason[r.reviewReason]}</Mark>
                   )}
                   {r.confirmation && (
                     <p className="text-small text-muted-foreground">
@@ -155,27 +164,31 @@ export function ReceiptsSection({
                       </p>
                     </div>
                   )}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5">
-                    {waiting && (
-                      <>
-                        <Button size="sm" onClick={() => onConfirm(r)} data-confirm-receipt={r.id}>
-                          {d.confirm}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => onReject(r)}>
-                          {d.reject}
-                        </Button>
-                      </>
-                    )}
-                    <a
-                      href={receiptFile(r.id, 'original')}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={cn(TEXT_LINK, 'inline-flex items-center gap-1 text-[13px]')}
-                    >
-                      {r.kind === 'pdf' ? d.downloadOriginal : d.openOriginal}
-                      <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden />
-                    </a>
-                  </div>
+                  {waiting && (
+                    // the routine press first; turning the receipt down sits on its own row below
+                    <div className="grid justify-items-start gap-2 pt-0.5">
+                      <Button size="sm" onClick={() => onConfirm(r)} data-confirm-receipt={r.id}>
+                        {d.confirm}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={cn('-ml-3', QUIET_ACTION)}
+                        onClick={() => onReject(r)}
+                      >
+                        {d.reject}
+                      </Button>
+                    </div>
+                  )}
+                  <a
+                    href={receiptFile(r.id, 'original')}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(TEXT_LINK, 'inline-flex w-fit items-center gap-1 text-[13px]')}
+                  >
+                    {r.kind === 'pdf' ? d.downloadOriginal : d.openOriginal}
+                    <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden />
+                  </a>
                   {r.checks.length > 0 && <Checks checks={r.checks} t={t} />}
                 </div>
               </li>
@@ -187,17 +200,30 @@ export function ReceiptsSection({
   );
 }
 
-/** A probability in 0..1 as the panel shows it: «0,92». */
-const score = (n: number) => n.toFixed(2).replace('.', ',');
+/**
+ * The receipt AI answers yes/no questions as probabilities (ADR 0013); it never reads an amount
+ * off the image. Shown in words: the answer, and how firmly («да, уверенно»). Display only: the
+ * judge's own `confirmed`, not these words, is what ever paid anything.
+ */
+function answerWords(p: number, ai: AdminMessages['orders']['ai']) {
+  const firm = Math.abs(p - 0.5) * 2;
+  return `${p >= 0.5 ? ai.yes : ai.no}, ${firm >= 0.8 ? ai.sure : firm >= 0.4 ? ai.likely : ai.unsure}`;
+}
+/** The choice among the candidate credits' times: found one or none, and how concentrated. */
+function choiceWords(c: AdminReceiptDto['checks'][number], ai: AdminMessages['orders']['ai']) {
+  const firm = c.choiceConfidence;
+  const how = firm >= 0.8 ? ai.sure : firm >= 0.5 ? ai.likely : ai.unsure;
+  return `${c.chosenCreditId !== null ? ai.yes : ai.no}, ${how}`;
+}
 
 /**
- * The receipt AI's answers about one receipt (#32), newest first: when, which provider, how many
- * credits it was shown, its four numbers and what came of it. Read-only: only `confirmed` ever
- * paid anything (ADR 0013); the numbers are for staff and for tuning the thresholds.
+ * The receipt AI's answers about one receipt (#32), newest first, in plain words: when it looked,
+ * how many credits it compared with, its four answers and what came of it. No provider names,
+ * no raw strings: those stay in the database for tuning.
  */
 function Checks({ checks, t }: { checks: AdminReceiptDto['checks']; t: AdminMessages }) {
   const d = t.orders.detail;
-  const keys = ['isReceipt', 'amountMatches', 'recipientMatches', 'choiceConfidence'] as const;
+  const ai = t.orders.ai;
   return (
     <details className="group mt-1 text-[13px]" open={checks.length === 1} data-checks>
       <summary
@@ -219,25 +245,30 @@ function Checks({ checks, t }: { checks: AdminReceiptDto['checks']; t: AdminMess
             <MetaLine
               className="text-small text-muted-foreground tabular-nums"
               parts={[
-                formatTashkent(c.at),
-                d.provider[c.provider],
-                fill(d.checkMeta, { n: String(c.candidates) }),
+                fill(ai.title, { at: formatTashkent(c.at) }),
+                fill(ai.compared, { n: String(c.candidates) }),
               ]}
             />
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums sm:grid-cols-4">
-              {keys.map((k) => (
-                <div key={k} className="flex items-baseline justify-between gap-2 sm:block">
-                  <dt className="text-small text-muted-foreground">{d.scores[k]}</dt>
-                  <dd className="font-medium">{score(c[k])}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="font-medium">{d.checkOutcome[c.outcome ?? 'waiting']}</p>
-            {c.reason && (
-              <p className="text-small text-pretty text-muted-foreground [overflow-wrap:anywhere]">
-                {c.reason}
-              </p>
+            {c.provider === 'none' ? (
+              <p>{ai.noAnswer}</p>
+            ) : (
+              <dl className="grid gap-0.5">
+                {(
+                  [
+                    [ai.isReceipt, answerWords(c.isReceipt, ai)],
+                    [ai.amountMatches, answerWords(c.amountMatches, ai)],
+                    [ai.recipientMatches, answerWords(c.recipientMatches, ai)],
+                    [ai.choice, choiceWords(c, ai)],
+                  ] as const
+                ).map(([q, a]) => (
+                  <div key={q} className="flex flex-wrap gap-x-1.5">
+                    <dt className="text-muted-foreground">{q}:</dt>
+                    <dd className="font-medium">{a}</dd>
+                  </div>
+                ))}
+              </dl>
             )}
+            <p className="font-medium">{d.checkOutcome[c.outcome ?? 'waiting']}</p>
           </li>
         ))}
       </ul>
@@ -456,8 +487,12 @@ function MatchedCredit({
   language: Language;
 }) {
   const d = t.orders.detail;
-  const flags = creditFlags(
-    { differenceTiyin: credit.link.differenceTiyin, onShopCard: !credit.link.offShopCard },
+  const marks = mismatchMarks(
+    {
+      differenceTiyin: credit.link.differenceTiyin,
+      onShopCard: !credit.link.offShopCard,
+      cardLast4: credit.cardLast4,
+    },
     t,
     language,
   );
@@ -481,10 +516,8 @@ function MatchedCredit({
           ),
         ]}
       />
-      {flags.map((f) => (
-        <span key={f} className="text-small font-medium">
-          {f}
-        </span>
+      {marks.map((m) => (
+        <Mark key={m}>{m}</Mark>
       ))}
       {credit.link.reason && (
         <span className="text-small text-pretty [overflow-wrap:anywhere]">

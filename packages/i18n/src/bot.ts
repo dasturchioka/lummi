@@ -101,3 +101,25 @@ export function receiptRejectedText(
         ].join('\n');
   return fill(t.receiptRejected, { number: String(number), reason: why });
 }
+
+/** Why an order was cancelled (contracts `CANCEL_REASONS`). */
+export type CancelReasonKey = keyof (typeof ordersMessages)['ru']['orders']['cancelReason'];
+
+/**
+ * The shopper's «Отменён» message: the reason as a sentence in their language, and for a paid
+ * order the line that the manager will be in touch to return the money (ADR 0006). The bot sends
+ * it and the admin's cancel dialog previews it.
+ */
+export function orderCancelledText(
+  language: Language,
+  number: number,
+  reason: CancelReasonKey,
+  paid: boolean,
+): string {
+  const t = botMessages[language].bot;
+  const text = fill(t.orderCancelled, {
+    number: String(number),
+    reason: ordersMessages[language].orders.cancelReason[reason],
+  });
+  return paid ? `${text}\n${t.refundNote}` : text;
+}

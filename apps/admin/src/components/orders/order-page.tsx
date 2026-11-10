@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  charCount,
   FULFIL_ACTIONS,
   findTransition,
   type AdminOrderDto,
@@ -20,8 +21,9 @@ import { Notice } from '@/components/ui/notice';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent } from '@/lib/setting-copy';
-import { fill } from '@/lib/utils';
-import { PaymentBadge, StatusBadge } from './badges';
+import { QUIET_ACTION } from '@/lib/ui-classes';
+import { cn, fill } from '@/lib/utils';
+import { PaymentBadge, paymentWorthShowing, StatusBadge } from './badges';
 import {
   CancelDialog,
   ConfirmPaymentDialog,
@@ -80,7 +82,7 @@ export function OrderPage({
   const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
   /** Applies a move's answer; returns what failed for the dialog, or null when it is done. */
-  const apply = (res: MoveResponse | null): Failure | null => {
+  const apply = (res: MoveResponse | null, reason?: string): Failure | null => {
     if (!res) return { text: t.errors.generic };
     switch (res.status) {
       case 200:
@@ -107,10 +109,16 @@ export function OrderPage({
           case 'reason_required':
             return { text: o.linkReasonRequired, mismatch: res.body.mismatch ?? [] };
           case 'reason_invalid':
+            // the server gives the bounds; the reason the manager typed says which was crossed
             return {
-              text: fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
+              text:
+                charCount(reason?.trim() ?? '') < (res.body.min ?? 0)
+                  ? fill(o.linkReasonShort, { min: String(res.body.min ?? '') })
+                  : fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
               mismatch: [],
             };
+          case 'credit_mismatch':
+            return { text: res.body.what === 'before_order' ? o.beforeOrder : o.notAllowed };
           default:
             return { text: o.notAllowed };
         }
@@ -169,7 +177,9 @@ export function OrderPage({
           <Card className="grid gap-4 p-4 sm:p-6" data-status>
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={status} language={language} />
-              <PaymentBadge payment={page.payment} t={t} />
+              {paymentWorthShowing(status, page.payment) && (
+                <PaymentBadge payment={page.payment} t={t} />
+              )}
             </div>
             {cancellation ? (
               <div className="grid gap-1 text-sm">
@@ -183,7 +193,7 @@ export function OrderPage({
               hint && <p className="text-sm text-pretty text-muted-foreground">{hint}</p>
             )}
             {notice && <Notice title={notice} />}
-            {(next || canCancel || status === 'awaiting_payment') && (
+            {(next || status === 'awaiting_payment') && (
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {next && (
                   <Button onClick={() => void step(next)} loading={busy === next} data-next={next}>
@@ -199,21 +209,28 @@ export function OrderPage({
                     {d.confirm}
                   </Button>
                 )}
-                {canCancel && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setDialog({ kind: 'cancel', key: Date.now() })}
-                    disabled={busy !== null}
-                  >
-                    {o.step.cancel}
-                  </Button>
-                )}
+              </div>
+            )}
+            {/* cancelling is never beside the routine step: a quiet action under a hairline */}
+            {canCancel && (
+              <div className="-mx-4 -mb-1 border-t border-border px-4 pt-2 sm:-mx-6 sm:px-6">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn('-ml-3', QUIET_ACTION)}
+                  onClick={() => setDialog({ kind: 'cancel', key: Date.now() })}
+                  disabled={busy !== null}
+                  data-cancel
+                >
+                  {o.step.cancel}
+                </Button>
               </div>
             )}
           </Card>
           <ReceiptsSection
             page={page}
             t={t}
+            language={language}
             onReject={(receipt) => setDialog({ kind: 'reject', receipt, key: Date.now() })}
             onConfirm={(receipt) =>
               setDialog({ kind: 'confirm', receiptId: receipt.id, key: Date.now() })
@@ -257,7 +274,10 @@ export function OrderPage({
           t={t}
           language={language}
           onSubmit={async (body) =>
-            apply(await browserApi.orders.confirmPayment({ params, body }).catch(() => null))
+            apply(
+              await browserApi.orders.confirmPayment({ params, body }).catch(() => null),
+              body.reason,
+            )
           }
         />
       )}

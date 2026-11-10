@@ -97,6 +97,7 @@ export const adminCreditSchema = z.object({
   amountTiyin: z.number().int().positive(),
   amountSom: som.nullable(),
   cardMask: z.string(),
+  cardLast4: z.string(),
   /** The current shop card's last four digits are the same: the account may hold other cards. */
   onShopCard: z.boolean(),
   counterparty: z.string().nullable(),
@@ -234,6 +235,8 @@ export type AdminOrderEventDto = z.infer<typeof adminOrderEventSchema>;
  */
 export const adminOrderSchema = z.object({
   order: orderSchema,
+  /** The shop card's last four digits now, for «К переводу … · карта магазина *7364»; null without one. */
+  shopCardLast4: z.string().nullable(),
   trackingNumber: z.string().nullable(),
   payment: paymentStateSchema,
   customer: z.object({

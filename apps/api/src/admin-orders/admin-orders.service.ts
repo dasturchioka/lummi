@@ -254,8 +254,10 @@ export class AdminOrdersService {
             )
             .orderBy(desc(receiptChecks.id));
     const confirmations = events.filter((e) => e.action === PAID_BY);
+    const card = await readShopCard(this.db);
     return {
       order: toOrderDto(o, await linesOf(this.db, o.id), await cancellationOf(this.db, o.id)),
+      shopCardLast4: card?.number.slice(-4) ?? null,
       trackingNumber: o.trackingNumber,
       payment,
       customer: {
@@ -618,6 +620,7 @@ export function toCreditDto(
     amountTiyin: c.amountTiyin,
     amountSom: c.amountSom ?? null,
     cardMask: c.cardMask,
+    cardLast4: c.cardLast4,
     onShopCard: shopCardLast4 !== null && c.cardLast4 === shopCardLast4,
     counterparty: c.counterparty,
     order,
