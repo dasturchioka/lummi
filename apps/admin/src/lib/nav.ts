@@ -1,5 +1,6 @@
 import type { StaffDto } from '@lummi/contracts';
 import {
+  BanknoteArrowDown,
   ChartColumn,
   CreditCard,
   Droplet,
@@ -49,7 +50,8 @@ export const NAV: NavGroup[] = [
   {
     key: 'sales',
     items: [
-      { key: 'orders', icon: ShoppingBag, href: null, roles: ALL },
+      { key: 'orders', icon: ShoppingBag, href: '/orders', roles: ALL },
+      { key: 'credits', icon: BanknoteArrowDown, href: '/credits', roles: ALL },
       { key: 'btsPoints', icon: MapPin, href: '/bts-points', roles: ALL },
       { key: 'customers', icon: Users, href: '/customers', roles: ALL },
       { key: 'reviews', icon: MessageSquareText, href: null, roles: OWNER },

@@ -4,6 +4,7 @@ import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
+import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
 
 /** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
 export const BOT_CHOICE_MAX_SECONDS = 86_400;
@@ -260,6 +261,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Самый большой скриншот или PDF чека, который примет приложение.',
       uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
+    },
+  },
+  /** The longest note a manager may add when rejecting a receipt (#33, spec Changes 2026-11-11). */
+  'receipts.rejectNoteMaxLength': {
+    schema: z.number().int().min(20).max(RECEIPT_REJECT_NOTE_HARD_MAX),
+    default: 300,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Длина комментария к отклонённому чеку', uz: 'Rad etilgan chekka izoh uzunligi' },
+    hint: {
+      ru: 'Сколько символов менеджер может написать покупателю, когда не принимает чек.',
+      uz: 'Chek qabul qilinmaganda menejer xaridorga nechta belgi yozishi mumkin.',
     },
   },
   /**

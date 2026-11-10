@@ -1,0 +1,661 @@
+import {
+  CREDIT_OPTIONS_LIMIT,
+  ORDER_NUMBER_MAX,
+  PAYMENT_LINK_REASON_MIN,
+  tashkentDayStart as dayStart,
+  RECEIPT_REJECT_REASONS,
+  type AdminCreditDto,
+  type AdminCreditsPageDto,
+  type AdminCreditsQuery,
+  type AdminOrderDto,
+  type AdminOrderEventDto,
+  type AdminOrderListItemDto,
+  type AdminOrdersPageDto,
+  type AdminOrdersQuery,
+  type AdminReceiptDto,
+  type CreditOptionsDto,
+  type ReceiptCheckDto,
+  type StaffConfirmBody,
+  type FulfilBody,
+  type OrderAction,
+  type OrderStatus,
+  type PaymentState,
+  type ReceiptVerdict,
+  type ReceiptRejectReason,
+  type RejectReceiptBody,
+  type StaffCancelBody,
+  type TransitionRefusal,
+} from '@lummi/contracts';
+import {
+  and,
+  asc,
+  credits,
+  isNull,
+  customers,
+  desc,
+  eq,
+  inArray,
+  orderEvents,
+  orderLines,
+  orders,
+  receiptChecks,
+  receipts,
+  sql,
+  staff,
+  type Db,
+  type OrderRow,
+} from '@lummi/db';
+import { Inject, Injectable } from '@nestjs/common';
+import { AuditQueryService } from '../audit/audit-query.service';
+import { cancellationOf } from '../order-status/history';
+import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
+import { linesOf, toOrderDto } from '../orders/orders.service';
+import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
+import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
+import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
+import { readShopCard } from '../payment/shop-card.service';
+import { readSettings } from '../settings/settings.service';
+import { DB } from '../tokens';
+
+type ListQuery = { page: number; pageSize: number } & Omit<AdminOrdersQuery, 'page' | 'pageSize'>;
+type CreditsQuery = {
+  page: number;
+  pageSize: number;
+  linked: 'all' | 'unlinked' | 'linked';
+} & Omit<AdminCreditsQuery, 'page' | 'pageSize' | 'linked'>;
+
+/** What a staff move on an order answers (#33): the order page now, or why not. */
+export type MoveOutcome =
+  | { kind: 'done'; order: AdminOrderDto }
+  | { kind: 'not_found' }
+  /**
+   * The order, the receipt or the credit moved on meanwhile (another manager, the AI, the
+   * shopper, a sweep): nothing changed; the page as it is now.
+   */
+  | {
+      kind: 'conflict';
+      code: 'status_changed' | 'receipt_changed' | 'credit_taken';
+      order: AdminOrderDto;
+    }
+  | {
+      kind: 'refused';
+      code:
+        | TransitionRefusal
+        | 'note_too_long'
+        | 'reason_required'
+        | 'reason_invalid'
+        | 'credit_mismatch';
+      min?: number;
+      max?: number;
+      mismatch?: ('amount' | 'card')[];
+      what?: 'before_order' | 'amount' | 'card';
+    }
+  | { kind: 'try_again' };
+
+/** The words of the one payment-state rule, typed against their enums. */
+const PAID_BY: OrderAction = 'confirm_payment';
+const UNDER_CHECK: OrderStatus = 'receipt_review';
+const HELD: ReceiptVerdict = 'manual_review';
+const STATE = {
+  paid: 'paid',
+  manual_review: 'manual_review',
+  checking: 'checking',
+  unpaid: 'unpaid',
+} as const satisfies Record<PaymentState, PaymentState>;
+
+/**
+ * Where an order's money stands (contracts `PAYMENT_STATES`, the one definition): paid once a
+ * payment was confirmed, whatever came after; otherwise what its receipt under check waits for.
+ * The columns are named with their table: in a one-table select Drizzle leaves the table out, and
+ * a bare `id` inside the subqueries would be theirs.
+ */
+const paymentState = sql<PaymentState>`case
+  when exists (select 1 from order_events pe where pe.order_id = "orders"."id" and pe.action = ${PAID_BY}) then ${STATE.paid}
+  when "orders"."status" = ${UNDER_CHECK} and exists (select 1 from receipts pr where pr.order_id = "orders"."id" and pr.verdict = ${HELD}) then ${STATE.manual_review}
+  when "orders"."status" = ${UNDER_CHECK} then ${STATE.checking}
+  else ${STATE.unpaid}
+end`;
+
+/** The digits of a phone as stored (E.164 with `+`), for a search by part of the number. */
+const digitsOf = (column: unknown) =>
+  sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g')`;
+
+/** A number the column can hold: anything longer is no order, so 404 rather than a DB error. */
+const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
+
+const customerName = (c: { firstName: string; lastName: string | null }) =>
+  c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName;
+
+/**
+ * The admin orders panel (#33): the list and the order page staff resolve any question from, the
+ * credits list, and the staff moves. Every move goes through `transition()` (ADR 0011) with the
+ * staff member as the actor; a rejection goes through `ReceiptRejection`, which also gives the
+ * receipt its verdict.
+ */
+@Injectable()
+export class AdminOrdersService {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(OrderStatusService) private readonly status: OrderStatusService,
+    @Inject(ReceiptRejection) private readonly rejection: ReceiptRejection,
+    @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
+    @Inject(AuditQueryService) private readonly auditQuery: AuditQueryService,
+  ) {}
+
+  /** Newest first. A search puts the order with that number first, then phone matches. */
+  async list(q: ListQuery): Promise<AdminOrdersPageDto> {
+    const conditions = [];
+    if (q.status) conditions.push(eq(orders.status, q.status));
+    if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
+    if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
+    if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
+    const digits = q.q?.replace(/\D/g, '') ?? null;
+    // an order number fits in nine digits; a phone is searched by four digits or more
+    const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;
+    if (digits !== null) {
+      const matches = [];
+      if (byNumber !== null) matches.push(eq(orders.number, byNumber));
+      if (digits.length >= 4)
+        matches.push(
+          sql`${digitsOf(orders.recipientPhone)} like ${`%${digits}%`}`,
+          sql`${digitsOf(customers.phone)} like ${`%${digits}%`}`,
+        );
+      conditions.push(matches.length > 0 ? sql`(${sql.join(matches, sql` or `)})` : sql`false`);
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [{ total } = { total: 0 }] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(orders)
+      .innerJoin(customers, eq(customers.id, orders.customerId))
+      .where(where);
+    const rows = await this.db
+      .select({ order: orders, customer: customers, payment: paymentState })
+      .from(orders)
+      .innerJoin(customers, eq(customers.id, orders.customerId))
+      .where(where)
+      .orderBy(
+        ...(byNumber !== null ? [sql`${orders.number} = ${byNumber} desc`] : []),
+        desc(orders.number),
+      )
+      .limit(q.pageSize)
+      .offset((q.page - 1) * q.pageSize);
+
+    const lines =
+      rows.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(orderLines)
+            .where(
+              inArray(
+                orderLines.orderId,
+                rows.map((r) => r.order.id),
+              ),
+            )
+            .orderBy(asc(orderLines.orderId), asc(orderLines.position));
+    const items = rows.map(({ order: o, customer: c, payment }): AdminOrderListItemDto => {
+      const own = lines.filter((l) => l.orderId === o.id);
+      const first = own[0];
+      if (!first) throw new Error(`order ${o.number} has no lines`);
+      return {
+        number: o.number,
+        status: o.status,
+        payment,
+        createdAt: o.createdAt.toISOString(),
+        total: o.total,
+        itemCount: own.reduce((n, l) => n + l.qty, 0),
+        firstLine: { name: { ru: first.nameRu, uz: first.nameUz }, ml: first.ml, qty: first.qty },
+        lineCount: own.length,
+        customer: { id: c.id, name: customerName(c), phone: c.phone },
+        recipient: { name: o.recipientName, phone: o.recipientPhone },
+        region: { ru: o.regionNameRu, uz: o.regionNameUz },
+        isGift: o.isGift,
+      };
+    });
+    return { items, total, page: q.page, pageSize: q.pageSize };
+  }
+
+  /** The order page by its number; null when there is no such order. */
+  async page(number: number): Promise<AdminOrderDto | null> {
+    if (!knownNumber(number)) return null;
+    const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
+    return o ? this.pageOf(o) : null;
+  }
+
+  private async pageOf(o: OrderRow): Promise<AdminOrderDto> {
+    const [[customer], [{ payment } = { payment: 'unpaid' as PaymentState }], events, rows] =
+      await Promise.all([
+        this.db.select().from(customers).where(eq(customers.id, o.customerId)),
+        this.db.select({ payment: paymentState }).from(orders).where(eq(orders.id, o.id)),
+        this.events(o.id),
+        this.db
+          .select()
+          .from(receipts)
+          .where(eq(receipts.orderId, o.id))
+          .orderBy(desc(receipts.createdAt), desc(receipts.id)),
+      ]);
+    if (!customer) throw new Error(`order ${o.number} has no customer`);
+    const limits = await readSettings(this.db, [
+      'receipts.rejectNoteMaxLength',
+      'payments.linkReasonMaxLength',
+    ]);
+    const checks =
+      rows.length === 0
+        ? []
+        : await this.db
+            .select()
+            .from(receiptChecks)
+            .where(
+              inArray(
+                receiptChecks.receiptId,
+                rows.map((r) => r.id),
+              ),
+            )
+            .orderBy(desc(receiptChecks.id));
+    const confirmations = events.filter((e) => e.action === PAID_BY);
+    const card = await readShopCard(this.db);
+    return {
+      order: toOrderDto(o, await linesOf(this.db, o.id), await cancellationOf(this.db, o.id)),
+      shopCardLast4: card?.number.slice(-4) ?? null,
+      trackingNumber: o.trackingNumber,
+      payment,
+      customer: {
+        id: customer.id,
+        telegramId: customer.telegramId,
+        name: customerName(customer),
+        username: customer.username,
+        phone: customer.phone,
+        language: customer.language,
+      },
+      receipts: rows.map((r): AdminReceiptDto => {
+        const rejected = events.findLast(
+          (e) => e.action === 'reject_receipt' && e.receiptId === r.id,
+        );
+        if (rejected && rejected.actor.id === null)
+          throw new Error(`order ${o.number}: a rejection without its manager`);
+        const confirmed = confirmations.findLast((e) => e.receiptId === r.id);
+        return {
+          id: r.id,
+          createdAt: r.createdAt.toISOString(),
+          source: r.source,
+          verdict: r.verdict,
+          fileName: r.fileName,
+          kind: r.kind,
+          size: r.size,
+          width: r.width,
+          height: r.height,
+          reviewReason: r.reviewReason,
+          checks: checks.filter((c) => c.receiptId === r.id).map(toCheckDto),
+          confirmation:
+            ACCEPTED_VERDICTS.includes(r.verdict) && confirmed
+              ? { by: confirmerOf(confirmed), at: confirmed.at }
+              : null,
+          rejection:
+            r.verdict === 'rejected' && rejected
+              ? {
+                  reason: rejectReason(rejected.reason),
+                  note: rejected.note,
+                  by: { id: rejected.actor.id!, name: rejected.actor.name },
+                  at: rejected.at,
+                }
+              : null,
+        };
+      }),
+      credit: await this.matchedCredit(o, confirmations.at(-1)),
+      // the page's history as the contract has it: the link details stay with the credit
+      events: events.map(({ creditId: _credit, link: _link, ...e }) => e),
+      audit: await this.auditQuery.forTarget('order', o.id),
+      limits: {
+        rejectNoteMax: limits['receipts.rejectNoteMaxLength'],
+        linkReasonMin: PAYMENT_LINK_REASON_MIN,
+        linkReasonMax: limits['payments.linkReasonMaxLength'],
+      },
+    };
+  }
+
+  /** The Credit that paid the order (#32 links it), with how its confirmation recorded the link. */
+  private async matchedCredit(
+    o: OrderRow,
+    confirmed: EventRow | undefined,
+  ): Promise<AdminOrderDto['credit']> {
+    if (o.creditId === null) return null;
+    const [c] = await this.db.select().from(credits).where(eq(credits.id, o.creditId));
+    if (!c || !confirmed)
+      throw new Error(`order ${o.number}: a credit link without its confirmation`);
+    const card = await readShopCard(this.db);
+    return {
+      ...toCreditDto(c, card?.number.slice(-4) ?? null, { number: o.number }),
+      link: {
+        differenceTiyin: confirmed.link?.differenceTiyin ?? c.amountTiyin - o.amountDue * 100,
+        offShopCard: confirmed.link?.offShopCard ?? false,
+        reason: confirmed.reason,
+        by: confirmerOf(confirmed),
+        at: confirmed.at,
+      },
+    };
+  }
+
+  /** The order's history, oldest first, with the actor's name. */
+  private async events(orderId: number): Promise<EventRow[]> {
+    const rows = await this.db
+      .select({
+        e: orderEvents,
+        staffName: staff.name,
+        customerFirst: customers.firstName,
+        customerLast: customers.lastName,
+      })
+      .from(orderEvents)
+      .leftJoin(
+        staff,
+        sql`${orderEvents.actorType} = 'staff' and ${orderEvents.actorId} = ${staff.id}`,
+      )
+      .leftJoin(
+        customers,
+        sql`${orderEvents.actorType} = 'customer' and ${orderEvents.actorId} = ${customers.id}`,
+      )
+      .where(eq(orderEvents.orderId, orderId))
+      .orderBy(asc(orderEvents.id));
+    return rows.map(({ e, staffName, customerFirst, customerLast }) => {
+      const p = e.payload;
+      const text = (v: unknown) => (typeof v === 'string' ? v : null);
+      return {
+        id: e.id,
+        at: e.createdAt.toISOString(),
+        from: e.fromStatus,
+        to: e.toStatus,
+        action: e.action,
+        actor: {
+          type: e.actorType,
+          id: e.actorId,
+          name:
+            staffName ??
+            (customerFirst === null
+              ? null
+              : customerName({ firstName: customerFirst, lastName: customerLast })),
+        },
+        reason: e.reason,
+        note: text(p.note),
+        trackingNumber: text(p.trackingNumber),
+        receiptId: typeof p.receiptId === 'number' ? p.receiptId : null,
+        creditId: typeof p.creditId === 'number' ? p.creditId : null,
+        ...(e.action === PAID_BY
+          ? {
+              link: {
+                differenceTiyin: typeof p.differenceTiyin === 'number' ? p.differenceTiyin : 0,
+                offShopCard: p.offShopCard === true,
+              },
+            }
+          : {}),
+      };
+    });
+  }
+
+  /** Credits newest first; «Не привязано» are those no order holds. */
+  async credits(q: CreditsQuery): Promise<AdminCreditsPageDto> {
+    const conditions = [];
+    if (q.linked === 'linked') conditions.push(sql`${orders.id} is not null`);
+    if (q.linked === 'unlinked') conditions.push(isNull(orders.id));
+    if (q.amount !== undefined) conditions.push(eq(credits.amountSom, q.amount));
+    if (q.from) conditions.push(sql`${credits.occurredAt} >= ${dayStart(q.from).toISOString()}`);
+    if (q.to) conditions.push(sql`${credits.occurredAt} < ${dayStart(q.to, 1).toISOString()}`);
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const [{ total } = { total: 0 }] = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(credits)
+      .leftJoin(orders, eq(orders.creditId, credits.id))
+      .where(where);
+    const rows = await this.db
+      .select({ credit: credits, number: orders.number })
+      .from(credits)
+      .leftJoin(orders, eq(orders.creditId, credits.id))
+      .where(where)
+      .orderBy(desc(credits.occurredAt), desc(credits.id))
+      .limit(q.pageSize)
+      .offset((q.page - 1) * q.pageSize);
+    const card = await readShopCard(this.db);
+    const last4 = card?.number.slice(-4) ?? null;
+    return {
+      items: rows.map((r) =>
+        toCreditDto(r.credit, last4, r.number === null ? null : { number: r.number }),
+      ),
+      total,
+      page: q.page,
+      pageSize: q.pageSize,
+    };
+  }
+
+  /**
+   * The credits a manager may link to the order: its Candidate credits (#32's rule, `rules.ts`),
+   * oldest first, then the other unlinked credits from the order's minute on, newest first. One
+   * from before the order never pays it, so it is not offered.
+   */
+  async creditOptions(number: number): Promise<CreditOptionsDto | null> {
+    if (!knownNumber(number)) return null;
+    const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
+    if (!o) return null;
+    const over = (cond: ReturnType<typeof sql>) =>
+      sql`${credits.id} in (select c.id from ${credits} c join ${orders} o on o.id = ${o.id} left join shop_card sc on true where ${cond})`;
+    const other = sql`(${UNLINKED}) and (${IN_ORDER_TIME}) and not coalesce((${CANDIDATE}), false)`;
+    const [candidates, others, [{ total } = { total: 0 }], card] = await Promise.all([
+      this.db
+        .select()
+        .from(credits)
+        .where(over(CANDIDATE))
+        .orderBy(asc(credits.occurredAt), asc(credits.id))
+        .limit(CREDIT_OPTIONS_LIMIT),
+      this.db
+        .select()
+        .from(credits)
+        .where(over(other))
+        .orderBy(desc(credits.occurredAt), desc(credits.id))
+        .limit(CREDIT_OPTIONS_LIMIT),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(credits)
+        .where(over(other)),
+      readShopCard(this.db),
+    ]);
+    const last4 = card?.number.slice(-4) ?? null;
+    const option = (c: typeof credits.$inferSelect) => ({
+      ...toCreditDto(c, last4, null),
+      differenceTiyin: c.amountTiyin - o.amountDue * 100,
+    });
+    return {
+      amountDue: o.amountDue,
+      candidates: candidates.map(option),
+      others: others.map(option),
+      othersTotal: total,
+    };
+  }
+
+  /**
+   * Links the credit the manager picked and confirms the payment through #32's one door,
+   * `PaymentConfirmation` (actor: that staff member): with the order's waiting receipt, or none
+   * while the order is «Ожидает оплаты». A credit of another amount or card needs a reason.
+   */
+  async confirmPayment(
+    staffId: number,
+    number: number,
+    body: StaffConfirmBody,
+  ): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const out: ConfirmPaymentOutcome = await this.payments.confirmPayment({
+      orderId: id,
+      creditId: body.creditId,
+      receiptId: body.receiptId,
+      actor: { type: 'staff', id: staffId },
+      ...(body.reason === undefined ? {} : { reason: body.reason }),
+    });
+    const now = async () => {
+      const [o] = await this.db.select().from(orders).where(eq(orders.id, id));
+      return this.pageOf(o!);
+    };
+    switch (out.kind) {
+      case 'confirmed':
+        return { kind: 'done', order: await this.pageOf(out.order) };
+      case 'conflict':
+        return { kind: 'conflict', code: 'status_changed', order: await this.pageOf(out.order) };
+      case 'credit_taken':
+        return { kind: 'conflict', code: 'credit_taken', order: await now() };
+      case 'receipt_not_waiting':
+      case 'duplicate_receipt':
+        return { kind: 'conflict', code: 'receipt_changed', order: await now() };
+      case 'reason_required':
+        return { kind: 'refused', code: 'reason_required', mismatch: out.mismatch };
+      case 'reason_invalid':
+        return { kind: 'refused', code: 'reason_invalid', min: out.min, max: out.max };
+      case 'credit_mismatch':
+        return { kind: 'refused', code: 'credit_mismatch', what: out.what };
+      case 'refused':
+        return { kind: 'refused', code: out.code };
+      case 'not_found':
+        return { kind: 'not_found' };
+      case 'try_again':
+        return { kind: 'try_again' };
+    }
+  }
+
+  /** One fulfilment step, by a staff member, from the status they saw. */
+  async fulfil(staffId: number, number: number, body: FulfilBody): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const actor = { type: 'staff' as const, id: staffId };
+    const out =
+      body.action === 'hand_to_bts'
+        ? await this.status.transition(id, 'hand_to_bts', actor, body.expectedStatus, {
+            trackingNumber: body.trackingNumber,
+          })
+        : await this.status.transition(id, body.action, actor, body.expectedStatus, undefined);
+    return this.answer(out);
+  }
+
+  /** A staff cancel with a TZ §6 reason (and a note kept in the history). */
+  async cancel(staffId: number, number: number, body: StaffCancelBody): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const out = await this.status.transition(
+      id,
+      'cancel',
+      { type: 'staff', id: staffId },
+      body.expectedStatus,
+      { reason: body.reason, ...(body.note ? { note: body.note } : {}) },
+    );
+    return this.answer(out);
+  }
+
+  /** The receipt the manager looked at, turned down with a reason the shopper reads. */
+  async rejectReceipt(
+    staffId: number,
+    number: number,
+    body: RejectReceiptBody,
+  ): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const out: RejectReceiptOutcome = await this.rejection.reject({
+      orderId: id,
+      receiptId: body.receiptId,
+      reason: body.reason,
+      note: body.note,
+      staffId,
+    });
+    switch (out.kind) {
+      case 'rejected':
+        return { kind: 'done', order: await this.pageOf(out.order) };
+      case 'conflict':
+        return { kind: 'conflict', code: 'status_changed', order: await this.pageOf(out.order) };
+      case 'receipt_changed':
+        return { kind: 'conflict', code: 'receipt_changed', order: await this.pageOf(out.order) };
+      case 'note_too_long':
+        return { kind: 'refused', code: 'note_too_long', max: out.max };
+      case 'refused':
+        return { kind: 'refused', code: out.code };
+      case 'not_found':
+        return { kind: 'not_found' };
+      case 'try_again':
+        return { kind: 'try_again' };
+    }
+  }
+
+  private async idOf(number: number): Promise<number | null> {
+    if (!knownNumber(number)) return null;
+    const [row] = await this.db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.number, number));
+    return row?.id ?? null;
+  }
+
+  private async answer(out: TransitionOutcome): Promise<MoveOutcome> {
+    switch (out.kind) {
+      case 'done':
+        return { kind: 'done', order: await this.pageOf(out.order) };
+      case 'conflict':
+        return { kind: 'conflict', code: 'status_changed', order: await this.pageOf(out.order) };
+      case 'refused':
+        return { kind: 'refused', code: out.code };
+      case 'not_found':
+      case 'try_again':
+        return { kind: out.kind };
+    }
+  }
+}
+
+/** A rejection event's reason as a preset; an unknown one (never written) is `other`. */
+function rejectReason(reason: string | null): ReceiptRejectReason {
+  return RECEIPT_REJECT_REASONS.includes(reason as ReceiptRejectReason)
+    ? (reason as ReceiptRejectReason)
+    : 'other';
+}
+
+export function toCreditDto(
+  c: typeof credits.$inferSelect,
+  shopCardLast4: string | null,
+  order: { number: number } | null,
+): AdminCreditDto {
+  return {
+    id: c.id,
+    occurredAt: c.occurredAt.toISOString(),
+    amountTiyin: c.amountTiyin,
+    amountSom: c.amountSom ?? null,
+    cardMask: c.cardMask,
+    cardLast4: c.cardLast4,
+    onShopCard: shopCardLast4 !== null && c.cardLast4 === shopCardLast4,
+    counterparty: c.counterparty,
+    order,
+  };
+}
+
+/** A history row as the page reads it, with a confirmation's link details kept for the credit. */
+type EventRow = AdminOrderEventDto & {
+  creditId: number | null;
+  link?: { differenceTiyin: number; offShopCard: boolean };
+};
+
+/** Who confirmed a payment, from its history row: the receipt AI or a staff member. */
+function confirmerOf(e: AdminOrderEventDto): NonNullable<AdminReceiptDto['confirmation']>['by'] {
+  if (e.actor.type === 'ai') return { type: 'ai' };
+  if (e.actor.type === 'staff' && e.actor.id !== null)
+    return { type: 'staff', id: e.actor.id, name: e.actor.name };
+  throw new Error(`event ${e.id}: a payment confirmed by ${e.actor.type}`);
+}
+
+/** One stored answer of the receipt AI, as the page shows it (read-only). */
+function toCheckDto(c: typeof receiptChecks.$inferSelect): ReceiptCheckDto {
+  const j = c.judgement;
+  return {
+    id: c.id,
+    at: c.createdAt.toISOString(),
+    candidates: c.candidateCreditIds.length,
+    provider: j.provider,
+    isReceipt: j.isReceipt,
+    amountMatches: j.amountMatches,
+    recipientMatches: j.recipientMatches,
+    choiceConfidence: j.choiceConfidence,
+    chosenCreditId: j.chosenCreditId,
+    confirmed: j.confirmed,
+    reason: j.reason ?? null,
+    outcome: c.outcome,
+  };
+}
