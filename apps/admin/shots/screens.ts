@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
-import { SHOT_CARD } from './shop-card-data';
+import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -33,7 +33,7 @@ async function scrollToVolumes(page: Page) {
  * Puts the shot card back (a save that changes nothing writes nothing) or takes it off, through
  * the owner's same-origin API, then reloads: the page reads the card on the server.
  */
-async function shopCard(page: Page, card: typeof SHOT_CARD | null) {
+async function shopCard(page: Page, card: { number: string; holder: string } | null) {
   const url = `${new URL(page.url()).origin}/api/admin/shop-card`;
   const res = card ? await page.request.put(url, { data: card }) : await page.request.delete(url);
   if (res.status() !== 200) throw new Error(`shop card ${card ? 'set' : 'clear'}: ${res.status()}`);
@@ -491,6 +491,19 @@ export const screens: Screen[] = [
     },
   },
   {
+    // break-ui (#28): a 30-character holder on the confirm step, with the check-digit warning
+    id: 'shop-card-worst',
+    path: '/shop-card',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await editCard(page, t, '8600 3104 7725 9065');
+      await page.getByLabel(t.shopCard.holder).fill('MUHAMMADSODIQXON ABDURAHMONOVA');
+      await page.getByRole('button', { name: t.shopCard.next }).click();
+      await page.getByText(t.shopCard.checksum).waitFor();
+    },
+  },
+  {
     id: 'shop-card-remove',
     path: '/shop-card',
     as: 'owner',
@@ -501,8 +514,17 @@ export const screens: Screen[] = [
       await page.getByRole('alertdialog').waitFor();
     },
   },
-  // the audit keeps the card masked and reads it «было → стало»
-  { id: 'audit-shop-card', path: '/audit?action=shop_card.changed', as: 'owner' },
+  {
+    // the audit keeps the card masked and reads it «было → стало»: one card replaced by another
+    // just before, whatever earlier runs left in the shared shot database
+    id: 'audit-shop-card',
+    path: '/audit?action=shop_card.changed',
+    as: 'owner',
+    act: async ({ page }) => {
+      await shopCard(page, EARLIER_CARD);
+      await shopCard(page, SHOT_CARD);
+    },
+  },
   // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
   { id: 'content', path: '/content', as: 'owner' },
   {
