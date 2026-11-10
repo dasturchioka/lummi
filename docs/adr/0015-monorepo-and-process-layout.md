@@ -20,3 +20,5 @@ The grammY bot is a module of `apps/api` (its webhook is an API route), not its 
 Amended in part by ADR 0031: the internal endpoint is not loopback only. It accepts an allowlisted source network without proxy headers, plus the shared secret, because the userbot runs in its own Compose container (ADR 0024).
 
 Amended by ticket #9: `packages/contracts` also holds the settings registry (schemas, defaults, RU/UZ labels) and the Asia/Tashkent date helper that the audit query schema needs. Mini App code imports only the zod-free `@lummi/contracts/constants` and `@lummi/contracts/client` at runtime (ADR 0030).
+
+Amended by ticket #24: `packages/contracts` also holds the order transition table (`ORDER_TRANSITIONS`, the cancel reasons per actor, `findTransition`, `customerMayCancel`) and the payload schemas of each move. It is policy data shared by the API, the admin and the Mini App, not pricing (ADR 0001); the table's module stays zod-free, so the Mini App's lazy order screen can import it.
