@@ -112,7 +112,7 @@ export const ordersMessages = defineMessages(
       /** Why the order was cancelled, as the shopper reads it (here and in the bot's message). */
       cancelReason: {
         customer_cancelled: 'Вы отменили заказ',
-        reserve_expired: 'Время брони истекло, а чек не поступил',
+        reserve_expired: 'Время брони истекло, оплата не подтверждена',
         out_of_stock: 'Товара не оказалось в наличии',
         customer_refused: 'Вы отказались от заказа',
         unreachable: 'Мы не смогли с вами связаться',
@@ -122,11 +122,21 @@ export const ordersMessages = defineMessages(
       cancelledAt: 'Отменён {at}',
       cancel: 'Отменить заказ',
       cancelTitle: 'Отменить заказ № {number}?',
+      /** `{manager}` is the «напишите менеджеру» link (`cancelManager`). */
       cancelText:
-        'Бронь снимется, и ароматы вернутся в продажу. Если вы уже перевели деньги, не отменяйте заказ: напишите менеджеру.',
+        'Бронь снимется, и ароматы вернутся в продажу. Если вы уже перевели деньги, не отменяйте заказ, а {manager}.',
+      cancelManager: 'напишите менеджеру',
       cancelConfirm: 'Отменить заказ',
       cancelKeep: 'Не отменять',
       cancelFailed: 'Не удалось отменить заказ. Проверьте соединение и попробуйте ещё раз.',
+      /** The order moved on while the sheet was open (409): it says so, as the order is now. */
+      changedTitle: 'Заказ уже изменился',
+      changedText:
+        'Пока вы решали, статус заказа сменился, и отменить его здесь уже нельзя. Если нужно, {manager}.',
+      changedCancelledTitle: 'Заказ уже отменён',
+      gotIt: 'Понятно',
+      /** Under the reason of a cancelled order that had been paid (ADR 0006). */
+      cancelledRefund: 'Менеджер свяжется с вами, чтобы вернуть деньги.',
     },
   },
   {
@@ -241,7 +251,7 @@ export const ordersMessages = defineMessages(
       more: 'Yana koʻrsatish',
       cancelReason: {
         customer_cancelled: 'Buyurtmani siz bekor qildingiz',
-        reserve_expired: 'Band qilish muddati tugadi, chek kelmadi',
+        reserve_expired: 'Band qilish muddati tugadi, toʻlov tasdiqlanmadi',
         out_of_stock: 'Mahsulot mavjud boʻlmay qoldi',
         customer_refused: 'Siz buyurtmadan voz kechdingiz',
         unreachable: 'Siz bilan bogʻlana olmadik',
@@ -252,10 +262,17 @@ export const ordersMessages = defineMessages(
       cancel: 'Buyurtmani bekor qilish',
       cancelTitle: '№ {number} buyurtma bekor qilinsinmi?',
       cancelText:
-        'Bandlik olib tashlanadi va atirlar yana sotuvga qaytadi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang: menejerga yozing.',
+        'Bandlik olib tashlanadi va atirlar yana sotuvga qaytadi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang, {manager}.',
+      cancelManager: 'menejerga yozing',
       cancelConfirm: 'Ha, bekor qilish',
       cancelKeep: 'Buyurtmani qoldirish',
       cancelFailed: 'Buyurtmani bekor qilib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
+      changedTitle: 'Buyurtma allaqachon oʻzgardi',
+      changedText:
+        'Siz qaror qilayotganingizda buyurtma holati oʻzgardi va uni bu yerda bekor qilib boʻlmaydi. Kerak boʻlsa, {manager}.',
+      changedCancelledTitle: 'Buyurtma allaqachon bekor qilingan',
+      gotIt: 'Tushunarli',
+      cancelledRefund: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
     },
   },
 );

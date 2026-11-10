@@ -26,9 +26,7 @@ export const transitionPayloadSchemas = {
       reason: typedReason,
       lines: z
         .array(
-          z
-            .object({ position: z.number().int().nonnegative(), backToStock: z.boolean() })
-            .strict(),
+          z.object({ position: z.number().int().nonnegative(), backToStock: z.boolean() }).strict(),
         )
         .min(1),
     })

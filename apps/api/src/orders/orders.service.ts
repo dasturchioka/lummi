@@ -160,7 +160,11 @@ export class OrdersService {
         .select()
         .from(orders)
         .where(and(eq(orders.customerId, c.id), eq(orders.idempotencyKey, input.idempotencyKey)));
-      if (made) return { kind: 'created', order: toOrderDto(made, await linesOf(tx, made.id)) };
+      if (made)
+        return {
+          kind: 'created',
+          order: toOrderDto(made, await linesOf(tx, made.id), await cancellationOf(tx, made.id)),
+        };
 
       if (!c.phone) return { kind: 'phone_required' } as const;
       if (c.dataConsentAt === null && !input.consent)
@@ -332,7 +336,7 @@ export class OrdersService {
         payload: { number: order.number, total: order.total, status: order.status },
       });
       await this.outbox.enqueue(tx, this.createdMessage(c, order));
-      return { kind: 'created', order: toOrderDto(order, lines) } as const;
+      return { kind: 'created', order: toOrderDto(order, lines, null) } as const;
     }
   }
 
@@ -471,7 +475,7 @@ export function orderUrl(miniAppUrl: string, number: number): string {
 export function toOrderDto(
   o: OrderRow,
   lines: OrderLineRow[],
-  cancellation: OrderDto['cancellation'] = null,
+  cancellation: OrderDto['cancellation'],
 ): OrderDto {
   return {
     number: o.number,

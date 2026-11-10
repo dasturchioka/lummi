@@ -148,7 +148,12 @@ export const orderSchema = z.object({
   amountDue: som,
   /** Why and when the order was cancelled; null unless it is «Отменён». */
   cancellation: z
-    .object({ reason: z.enum(CANCEL_REASONS), at: z.string().datetime() })
+    .object({
+      reason: z.enum(CANCEL_REASONS),
+      at: z.string().datetime(),
+      /** It had been paid: the money goes back as a Refund, the manager gets in touch (ADR 0006). */
+      afterPayment: z.boolean(),
+    })
     .nullable(),
 });
 export type OrderDto = z.infer<typeof orderSchema>;

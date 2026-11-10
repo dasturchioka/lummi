@@ -1,5 +1,10 @@
 import type { Discount } from '@lummi/contracts';
-import { ORDER_ACTIONS, ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
+import {
+  ORDER_ACTIONS,
+  ORDER_ACTOR_TYPES,
+  ORDER_STATUSES,
+  type OrderStatus,
+} from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -26,7 +31,8 @@ export const languageEnum = pgEnum('language', LANGUAGES);
 export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
 export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const writeAccessEnum = pgEnum('write_access', ['granted', 'refused']);
-export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
+/** Who acted: the same list as an order move's actor (`ORDER_ACTOR_TYPES`). */
+export const actorTypeEnum = pgEnum('actor_type', ORDER_ACTOR_TYPES);
 
 /** A Customer is a Telegram account (ADR 0004). */
 export const customers = pgTable('customers', {

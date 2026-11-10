@@ -2,7 +2,6 @@ import type {
   OrderAction,
   OrderDto,
   OrderStatus,
-  TransitionPayload,
   TransitionPayloadInput,
   TransitionRefusal,
 } from '@lummi/contracts';
@@ -15,7 +14,6 @@ import {
   type Db,
   type DbOrTx,
   type OrderEventRow,
-  type OrderLineRow,
   type OrderRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
@@ -27,11 +25,12 @@ import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
-import { closeRightsOpenedBy, releaseDiscountSource } from './discount-source';
+import { DiscountSourceHooks } from './discount-sources';
+import { EFFECTS, type Effects, type Move } from './effects';
 import { cancellationOf } from './history';
 import { planTransition } from './machine';
-import { statusMessage, type MessageLinks } from './messages';
-import { lockVolumes, moveOnHand, stockUnits, type OnHandChange } from './stock';
+import { orderMessage } from './messages';
+import { changeOnHand, type OnHandChange } from './on-hand';
 
 /** Who makes the move: the shopper or a staff member by id, the receipt AI, or a sweep. */
 export type TransitionActor =
@@ -50,27 +49,13 @@ export type TransitionOutcome =
   /** The database gave up twice on a deadlock or serialization failure. */
   | { kind: 'try_again' };
 
-/** The audit entry of each move, labelled RU/UZ in the admin's audit log. */
-const AUDIT_ACTION: Record<OrderAction, string> = {
-  submit_receipt: 'order.receipt_submitted',
-  confirm_payment: 'order.payment_confirmed',
-  reject_receipt: 'order.receipt_rejected',
-  payment_not_found: 'order.payment_not_found',
-  accept: 'order.accepted',
-  start_assembly: 'order.assembling',
-  hand_to_bts: 'order.handed_to_bts',
-  deliver: 'order.delivered',
-  return: 'order.returned',
-  cancel: 'order.cancelled',
-};
-
 /**
  * The one door every order status change goes through (ADR 0011): the Mini App, the bot, the
  * admin panel, the receipt AI and the sweeps all call `transition()`. It checks the move against
  * the table, the actor's permission and the payload, locks the order, refuses a stale
- * `expectedStatus` as a conflict, and then, in one transaction, writes the status, its stock
- * effects (ADR 0010), the discount-source hook (ADR 0005), the `order_events` row, the audit entry
- * and the shopper's message (outbox, ADR 0021).
+ * `expectedStatus` as a conflict, and then, in one transaction, makes the move's effects
+ * (`EFFECTS`: on hand, ADR 0010; the discount source, ADR 0005; its columns) and writes the
+ * status, the `order_events` row, the audit entry and the shopper's message (outbox, ADR 0021).
  */
 @Injectable()
 export class OrderStatusService {
@@ -80,6 +65,7 @@ export class OrderStatusService {
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(DiscountSourceHooks) private readonly discountSources: DiscountSourceHooks,
   ) {}
 
   /**
@@ -125,24 +111,21 @@ export class OrderStatusService {
       return { kind: 'not_found' };
     if (order.status !== expectedStatus) return { kind: 'conflict', order };
 
-    const lines = await linesOf(tx, order.id);
-    const back = action === 'return' ? backToStock(lines, plan.payload) : null;
-    if (back === undefined) return { kind: 'refused', code: 'invalid_payload' };
+    const fx = EFFECTS[action] as Effects<A>;
+    const move: Move<A> = { order, lines: await linesOf(tx, order.id), payload: plan.payload };
+    if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 
     const now = this.edges.clock.now();
-    const stock = await this.stockEffects(tx, order, lines, action, back);
-    if (action === 'cancel' || action === 'return') await releaseDiscountSource(tx, order);
-    if (action === 'return') await closeRightsOpenedBy(tx, order);
+    const onHand: OnHandChange[] = fx.onHand
+      ? await changeOnHand(tx, order.id, move.lines, fx.onHand(move))
+      : [];
+    if (fx.discountSource) await this.discountSources.release(tx, order);
+    if (fx.discountSource === 'release_and_close_rights')
+      await this.discountSources.closeRightsOpenedBy(tx, order);
 
     const [updated] = await tx
       .update(orders)
-      .set({
-        status: plan.to,
-        updatedAt: now,
-        ...(action === 'hand_to_bts'
-          ? { trackingNumber: (plan.payload as TransitionPayload<'hand_to_bts'>).trackingNumber }
-          : {}),
-      })
+      .set({ ...fx.columns?.(move), status: plan.to, updatedAt: now })
       .where(and(eq(orders.id, order.id), eq(orders.status, expectedStatus)))
       .returning();
     if (!updated) throw new Error(`order ${order.number}: the locked status moved`);
@@ -151,6 +134,7 @@ export class OrderStatusService {
       string,
       unknown
     >;
+    const recorded = { ...details, ...(onHand.length > 0 ? { onHand } : {}) };
     const actorId = 'id' in actor ? actor.id : null;
     const [event] = await tx
       .insert(orderEvents)
@@ -162,13 +146,13 @@ export class OrderStatusService {
         actorType: actor.type,
         actorId,
         reason: reason ?? null,
-        payload: { ...details, ...(stock.length > 0 ? { stock } : {}) },
+        payload: recorded,
         createdAt: now,
       })
       .returning();
     await this.audit.record(tx, {
       actor: { type: actor.type, id: actorId },
-      action: AUDIT_ACTION[action],
+      action: fx.audit,
       targetType: 'order',
       targetId: order.id,
       payload: {
@@ -176,8 +160,7 @@ export class OrderStatusService {
         from: expectedStatus,
         to: plan.to,
         ...(reason ? { reason } : {}),
-        ...details,
-        ...(stock.length > 0 ? { stock } : {}),
+        ...recorded,
       },
     });
 
@@ -186,14 +169,19 @@ export class OrderStatusService {
       .from(customers)
       .where(eq(customers.id, order.customerId));
     if (!customer) throw new Error(`order ${order.number} has no customer`);
-    const message = statusMessage(
-      customer,
-      updated,
-      action,
-      plan.payload,
-      await this.links(tx, action),
-    );
-    if (message) await this.outbox.enqueue(tx, message);
+    const said = fx.message(move, customer.language);
+    if (said) {
+      const managerUsername = said.manager
+        ? (await readSettings(tx, ['shop.managerUsername']))['shop.managerUsername']
+        : undefined;
+      await this.outbox.enqueue(
+        tx,
+        orderMessage(customer, updated, said.text, {
+          miniAppUrl: this.env.MINIAPP_URL,
+          managerUsername,
+        }),
+      );
+    }
     return { kind: 'done', order: updated, event: event! };
   }
 
@@ -240,53 +228,4 @@ export class OrderStatusService {
       await cancellationOf(this.db, order.id),
     );
   }
-
-  /**
-   * On hand moves only when bottles leave or come back (ADR 0010): down at BTS handover, up when
-   * a handed-over parcel is cancelled («Не забрал в BTS») or when returned lines go back to stock.
-   * Any move that ends the reserve or touches on hand locks the order's volume rows first, in
-   * ascending id like checkout, so a cancel frees its reserve in step with a concurrent checkout.
-   */
-  private async stockEffects(
-    tx: DbOrTx,
-    order: OrderRow,
-    lines: OrderLineRow[],
-    action: OrderAction,
-    back: OrderLineRow[] | null,
-  ): Promise<OnHandChange[]> {
-    if (action !== 'cancel' && action !== 'hand_to_bts' && action !== 'return') return [];
-    const all = stockUnits(lines);
-    const locked = await lockVolumes(tx, all.keys());
-    if (action === 'hand_to_bts') return moveOnHand(tx, locked, all, -1);
-    if (action === 'cancel' && order.status === 'handed_to_bts')
-      return moveOnHand(tx, locked, all, 1);
-    if (action === 'return' && back) return moveOnHand(tx, locked, stockUnits(back), 1);
-    return [];
-  }
-
-  /** The links a message may carry; the manager's username only where the message asks to act. */
-  private async links(tx: DbOrTx, action: OrderAction): Promise<MessageLinks> {
-    const links: MessageLinks = { miniAppUrl: this.env.MINIAPP_URL };
-    if (action === 'reject_receipt' || action === 'payment_not_found') {
-      const s = await readSettings(tx, ['shop.managerUsername']);
-      links.managerUsername = s['shop.managerUsername'];
-    }
-    return links;
-  }
-}
-
-/**
- * The lines a return puts back on the shelf. Its flags must name every line of the order exactly
- * once (ADR 0006: a leaking bottle is flagged off); anything else is `undefined`, refused.
- */
-function backToStock(lines: OrderLineRow[], payload: unknown): OrderLineRow[] | undefined {
-  const flags = (payload as TransitionPayload<'return'>).lines;
-  const positions = flags.map((f) => f.position);
-  if (
-    new Set(positions).size !== positions.length ||
-    positions.length !== lines.length ||
-    !lines.every((l) => positions.includes(l.position))
-  )
-    return undefined;
-  return lines.filter((l) => flags.find((f) => f.position === l.position)?.backToStock);
 }

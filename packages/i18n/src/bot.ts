@@ -15,7 +15,7 @@ export const botMessages = defineMessages(
       writeManager: 'Написать менеджеру',
       /** Before the reserve ends while the order still waits for a receipt (setting `orders.reserveReminderSeconds`). */
       reserveReminder:
-        'Заказ № {number} забронирован до {until} ⏳\nПереведите {amount} и загрузите чек: тогда бронь сохранится до проверки оплаты.',
+        'Бронь заказа № {number} действует до {until} ⏳\nЗагрузите чек об оплате {amount}, и бронь сохранится до проверки.',
       /** One message per status change (spec Changes 2026-11-07, customer messages); none for «Принят» or a return. */
       receiptReceived:
         'Чек к заказу № {number} получен 🧾\nПроверяем оплату и напишем, как только она подтвердится.',
@@ -31,6 +31,8 @@ export const botMessages = defineMessages(
       delivered: 'Заказ № {number} доставлен ✨\nСпасибо, что выбрали LUMMI.',
       /** The reason is the shopper-facing sentence of `orders.cancelReason`. */
       orderCancelled: 'Заказ № {number} отменён.\n{reason}.',
+      /** Added to «Отменён» when the order had been paid: the money goes back as a Refund (ADR 0006). */
+      refundNote: 'Менеджер свяжется с вами, чтобы вернуть деньги.',
     },
   },
   {
@@ -44,7 +46,7 @@ export const botMessages = defineMessages(
       openOrder: 'Buyurtmani ochish',
       writeManager: 'Menejerga yozish',
       reserveReminder:
-        '№ {number} buyurtma {until} gacha band qilingan ⏳\n{amount} oʻtkazing va chekni yuklang: shunda toʻlov tekshirilguncha bandlik saqlanadi.',
+        '№ {number} buyurtma bandligi {until} gacha amal qiladi ⏳\n{amount} toʻlov chekini yuklang, shunda bandlik tekshiruvgacha saqlanadi.',
       receiptReceived:
         '№ {number} buyurtma cheki qabul qilindi 🧾\nToʻlovni tekshiryapmiz, tasdiqlanishi bilan xabar beramiz.',
       paymentConfirmed:
@@ -57,8 +59,9 @@ export const botMessages = defineMessages(
         '№ {number} buyurtmani yigʻyapmiz 📦\nAtirlarni ehtiyotkorlik bilan qadoqlab, BTSga topshiramiz.',
       handedToBts:
         '№ {number} buyurtma BTSga topshirildi 🚚\nTrek-raqam: {tracking}\nBTS punktigacha yetkazish 48 soatgacha.',
-      delivered: '№ {number} buyurtma yetkazildi ✨\nLUMMI ni tanlaganingiz uchun rahmat.',
+      delivered: '№ {number} buyurtma yetkazildi ✨\nLUMMIni tanlaganingiz uchun rahmat.',
       orderCancelled: '№ {number} buyurtma bekor qilindi.\n{reason}.',
+      refundNote: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
     },
   },
 );
