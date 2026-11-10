@@ -16,7 +16,7 @@ import { MetaLine } from '../ui/MetaLine';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
-import { Sheet } from '../ui/Sheet';
+import { Sheet, SheetDescription } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { Thumb } from '../ui/Thumb';
@@ -157,7 +157,8 @@ function AmountDue({ order }: { order: OrderDto }) {
 
 /**
  * A cancelled order in place of the timeline: why, in the shopper's words (their own cancel, the
- * expired reserve, a manager's reason), and when. The status pill above already says «Отменён».
+ * expired reserve, a manager's reason), and when; for a paid order, that the manager will be in
+ * touch about the money (ADR 0006). The status pill above already says «Отменён».
  */
 function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cancellation']> }) {
   const { language } = usePrefs();
@@ -174,69 +175,139 @@ function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cance
         <p className="type-small mt-0.5 text-muted">
           {fill(o.orders.cancelledAt, { at: formatDateTime(cancellation.at, language) })}
         </p>
+        {cancellation.afterPayment ? (
+          <p className="type-small mt-2.5 border-t border-line pt-2.5 text-pretty text-ink">
+            {o.orders.cancelledRefund}
+          </p>
+        ) : null}
       </div>
     </Card>
   );
 }
 
 /**
+ * A sentence with a `{manager}` slot that opens the shop's manager account (`openManagerChat`);
+ * the words stay plain text until the customer's config has the username.
+ */
+function WithManagerLink({ text, link }: { text: string; link: string }) {
+  const { customer } = usePrefs();
+  const username = customer?.config.managerUsername;
+  const [before = '', after = ''] = text.split('{manager}');
+  return (
+    <>
+      {before}
+      {username ? (
+        <button
+          type="button"
+          onClick={() => openManagerChat(username)}
+          data-testid="sheet-manager"
+          className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+        >
+          {link}
+        </button>
+      ) : (
+        link
+      )}
+      {after}
+    </>
+  );
+}
+
+/**
  * «Отменить заказ» (ADR 0011: only while «Ожидает оплаты»), a quiet link under the manager line as
- * in the payment mockup, behind a confirmation sheet that warns a shopper who already paid. The
- * status the screen showed goes along; if it moved on meanwhile, the screen shows the order as it
- * is now and the sheet closes.
+ * in the payment mockup, behind a confirmation sheet that sends a shopper who already paid to the
+ * manager instead. The status the screen showed goes along. If the order moved on meanwhile (a
+ * receipt went in, the reserve expired), the screen already shows it as it is now and the sheet
+ * says so, rather than closing on a press that seemed to do nothing. Mounted whatever the status,
+ * so the sheet can finish after the link has gone.
  */
 function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolean }) {
   const { t } = usePrefs();
   const o = useOrdersText();
   const [open, setOpen] = useState(false);
+  const [changed, setChanged] = useState(false);
   const [failed, setFailed] = useState(false);
   const cancel = useCancelOrder(order.number);
+  const show = () => {
+    setFailed(false);
+    setChanged(false);
+    setOpen(true);
+  };
   const confirm = () => {
     setFailed(false);
     cancel.mutate(order.status, {
       onSuccess: (result) => {
         if (result.kind === 'try_again') setFailed(true);
+        else if (result.kind === 'changed') setChanged(true);
         else setOpen(false);
       },
       onError: () => setFailed(true),
     });
   };
+  const gone = order.status === 'cancelled';
   return (
     <>
-      {/* under «Написать менеджеру», or on its own when that line is not there */}
-      <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
-        <button
-          type="button"
-          onClick={() => {
-            setFailed(false);
-            setOpen(true);
-          }}
-          data-testid="cancel-order"
-          className="-my-3 rounded-btn px-1 py-3 font-medium text-muted underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
-        >
-          {o.orders.cancel}
-        </button>
-      </p>
+      {customerMayCancel(order.status) ? (
+        // under «Написать менеджеру», or on its own when that line is not there
+        <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
+          <button
+            type="button"
+            onClick={show}
+            data-testid="cancel-order"
+            className="-my-3 rounded-btn px-1 py-3 font-medium text-muted underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+          >
+            {o.orders.cancel}
+          </button>
+        </p>
+      ) : null}
       <Sheet
         open={open}
         onOpenChange={setOpen}
-        title={fill(o.orders.cancelTitle, { number: String(order.number) })}
-        description={o.orders.cancelText}
+        title={
+          changed
+            ? gone
+              ? o.orders.changedCancelledTitle
+              : o.orders.changedTitle
+            : fill(o.orders.cancelTitle, { number: String(order.number) })
+        }
+        ownDescription
         closeLabel={t.common.close}
       >
-        <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
-          {failed ? (
-            <p className="type-small mb-2 text-ink" role="alert">
-              {o.orders.cancelFailed}
-            </p>
-          ) : null}
-          <Button block loading={cancel.isPending} onClick={confirm}>
-            {o.orders.cancelConfirm}
-          </Button>
-          <Button block variant="secondary" onClick={() => setOpen(false)}>
-            {o.orders.cancelKeep}
-          </Button>
-        </div>
+        <SheetDescription className="type-small pb-3 text-pretty text-muted">
+          {changed ? (
+            gone && order.cancellation ? (
+              `${o.orders.cancelReason[order.cancellation.reason]}.`
+            ) : (
+              <WithManagerLink text={o.orders.changedText} link={o.orders.cancelManager} />
+            )
+          ) : (
+            <WithManagerLink text={o.orders.cancelText} link={o.orders.cancelManager} />
+          )}
+        </SheetDescription>
+        {changed ? (
+          <div className="flex flex-col gap-4 pb-1" data-testid="cancel-changed">
+            <div className="flex items-center gap-3">
+              <StatusPill status={order.status} />
+            </div>
+            <Button block onClick={() => setOpen(false)}>
+              {o.orders.gotIt}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
+            {failed ? (
+              <p className="type-small mb-2 text-ink" role="alert">
+                {o.orders.cancelFailed}
+              </p>
+            ) : null}
+            <Button block loading={cancel.isPending} onClick={confirm}>
+              {o.orders.cancelConfirm}
+            </Button>
+            <Button block variant="secondary" onClick={() => setOpen(false)}>
+              {o.orders.cancelKeep}
+            </Button>
+          </div>
+        )}
       </Sheet>
     </>
   );
@@ -391,9 +462,7 @@ export function OrderView({ order }: { order: OrderDto }) {
         </p>
       ) : null}
 
-      {customerMayCancel(order.status) ? (
-        <CancelOrder order={order} spaced={!managerUsername} />
-      ) : null}
+      <CancelOrder order={order} spaced={!managerUsername} />
     </Screen>
   );
 }

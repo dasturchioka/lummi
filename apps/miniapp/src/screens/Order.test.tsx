@@ -18,13 +18,23 @@ vi.mock('../lib/prefs', () => ({
 }));
 vi.mock('../lib/telegram', () => ({ openManagerChat: (u: string) => openManagerChat(u) }));
 const cancelOrder = vi.fn();
+const getOrder = vi.fn();
 vi.mock('../lib/api', () => ({
-  api: { orders: { cancel: (req: unknown) => cancelOrder(req), get: vi.fn() } },
-  unwrap: vi.fn(),
+  api: {
+    orders: { cancel: (req: unknown) => cancelOrder(req), get: (req: unknown) => getOrder(req) },
+  },
+  unwrap: (res: { status: number; body: unknown }, status: number) => {
+    if (res.status !== status) throw new Error(`HTTP ${res.status}`);
+    return res.body;
+  },
   session: {},
 }));
+vi.mock('@tanstack/react-router', () => ({
+  useParams: () => ({ number: '1001' }),
+  useRouter: () => ({ navigate: vi.fn() }),
+}));
 
-import { OrderView } from './Order';
+import { Order, OrderView } from './Order';
 
 function renderView(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -82,6 +92,7 @@ afterEach(() => {
   cleanup();
   openManagerChat.mockReset();
   cancelOrder.mockReset();
+  getOrder.mockReset();
   managerUsername = '@lummi_shop';
 });
 
@@ -131,7 +142,11 @@ describe('cancelling an order', () => {
       status: 200,
       body: order({
         status: 'cancelled',
-        cancellation: { reason: 'customer_cancelled', at: '2026-11-09T11:00:00.000Z' },
+        cancellation: {
+          reason: 'customer_cancelled',
+          at: '2026-11-09T11:00:00.000Z',
+          afterPayment: false,
+        },
       }),
     });
     renderView(<OrderView order={order()} />);
@@ -161,15 +176,69 @@ describe('cancelling an order', () => {
       <OrderView
         order={order({
           status: 'cancelled',
-          cancellation: { reason: 'reserve_expired', at: '2026-11-09T22:00:00.000Z' },
+          cancellation: {
+            reason: 'reserve_expired',
+            at: '2026-11-09T22:00:00.000Z',
+            afterPayment: false,
+          },
         })}
       />,
     );
     expect(screen.getByTestId('cancelled').textContent).toBe(
-      'Время брони истекло, а чек не поступилОтменён 10 ноября, 03:00',
+      'Время брони истекло, оплата не подтвержденаОтменён 10 ноября, 03:00',
     );
     expect(screen.queryByTestId('timeline')).toBeNull();
     expect(screen.queryByTestId('amount-due')).toBeNull();
     expect(screen.queryByTestId('cancel-order')).toBeNull();
+  });
+
+  it('a paid order cancelled by the shop says the manager will be in touch about the money', () => {
+    renderView(
+      <OrderView
+        order={order({
+          status: 'cancelled',
+          cancellation: {
+            reason: 'out_of_stock',
+            at: '2026-11-09T12:00:00.000Z',
+            afterPayment: true,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId('cancelled').textContent).toContain(
+      'Менеджер свяжется с вами, чтобы вернуть деньги.',
+    );
+  });
+
+  it('a shopper who already paid is sent to the manager from the confirmation', () => {
+    renderView(<OrderView order={order()} />);
+    fireEvent.click(screen.getByTestId('cancel-order'));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('не отменяйте заказ, а напишите менеджеру.');
+    fireEvent.click(screen.getByTestId('sheet-manager'));
+    expect(openManagerChat).toHaveBeenCalledWith('@lummi_shop');
+    expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('the order moved on before the press (409): the screen and the sheet show it as it is now', async () => {
+    getOrder.mockResolvedValue({ status: 200, body: order() });
+    cancelOrder.mockResolvedValue({
+      status: 409,
+      body: { code: 'status_changed', order: order({ status: 'receipt_review' }) },
+    });
+    renderView(<Order />);
+    fireEvent.click(await screen.findByTestId('cancel-order'));
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить заказ' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Заказ уже изменился' });
+    expect(dialog.textContent).toContain('Чек на проверке');
+    // behind it the page already reads the new status, with nothing left to cancel
+    expect(screen.queryByTestId('cancel-order')).toBeNull();
+    expect(screen.getAllByTestId('status').map((s) => s.textContent)).toEqual([
+      'Чек на проверке',
+      'Чек на проверке',
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: 'Понятно' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
