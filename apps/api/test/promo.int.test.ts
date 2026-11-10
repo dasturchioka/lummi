@@ -4,12 +4,13 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody, PromoCodeInput } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
-import { and, auditLog, btsPoints, eq, fragrances, regions, volumes } from '@lummi/db';
+import { and, auditLog, btsPoints, eq, fragrances, orders, regions, volumes } from '@lummi/db';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
+import { OrderStatusService } from '../src/order-status/order-status.service';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
@@ -703,6 +704,47 @@ describe('the order holds a use; the limits count uses that were not voided', ()
       },
     });
     expect(again).toMatchObject({ status: 201, body: { discount: null, total: 174_000 } });
+  });
+
+  it('a returned order voids its use too, through the same release (ADR 0005)', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ totalLimit: 1, perCustomerLimit: 1 });
+    const s = await shopper();
+    await s.add(a!, 30);
+    await s.apply('BLOGER10');
+    const placed = await placeOrder(s);
+    expect(await usesOf()).toMatchObject({ uses: 1, state: 'exhausted' });
+
+    // paid, through the door, delivered, then returned whole by a manager
+    const [row] = await t.db.select().from(orders).where(eq(orders.number, placed.number));
+    const machine = t.app.get(OrderStatusService);
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const path = [
+      ['awaiting_payment', 'submit_receipt', { type: 'customer', id: row!.customerId }, undefined],
+      ['receipt_review', 'confirm_payment', { type: 'ai' }, undefined],
+      ['payment_confirmed', 'accept', manager, undefined],
+      ['accepted', 'start_assembly', manager, undefined],
+      ['assembling', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
+      ['handed_to_bts', 'deliver', manager, undefined],
+    ] as const;
+    for (const [from, action, actor, payload] of path) {
+      const out = await machine.transition(row!.id, action, actor, from, payload as never);
+      expect(out.kind, action).toBe('done');
+    }
+    const release = vi.spyOn(t.app.get(DiscountSourceHooks), 'release');
+    const returned = await machine.transition(row!.id, 'return', manager, 'delivered', {
+      reason: 'Не подошёл аромат',
+      lines: [{ position: 0, backToStock: true }],
+    });
+    expect(returned.kind).toBe('done');
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(await usesOf()).toMatchObject({ uses: 0, everUsed: true, state: 'active' });
+    // the shopper's own limit is free again as well
+    await s.add(b!, 30);
+    expect((await s.apply('BLOGER10')).quote).toMatchObject({
+      discount: { type: 'promo_code', amount: 14_900 },
+      promoCode: { invalid: null },
+    });
   });
 
   it('a used code can be switched off but not deleted', async () => {
