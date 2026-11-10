@@ -1,4 +1,5 @@
 import { formatMoney } from '@lummi/i18n';
+import { Fragment } from 'react';
 import { usePrefs } from '../lib/prefs';
 
 const SIZES = {
@@ -21,5 +22,22 @@ export function Money({
   className?: string;
 }) {
   const { language } = usePrefs();
-  return <span className={`${SIZES[size]} ${className}`}>{formatMoney(amount, language)}</span>;
+  const text = formatMoney(amount, language);
+  if (size !== 'amount') return <span className={`${SIZES[size]} ${className}`}>{text}</span>;
+  // At 28 px the narrow no-break spaces close up into one block of digits: each gap is widened
+  // (the currency's a little more), and stays a narrow no-break space when copied.
+  const parts = text.split(NNBSP);
+  return (
+    <span className={`${SIZES[size]} ${className}`}>
+      {parts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 ? (
+            <span className={i === parts.length - 1 ? 'pl-[0.2em]' : 'pl-[0.14em]'}>{NNBSP}</span>
+          ) : null}
+          {part}
+        </Fragment>
+      ))}
+    </span>
+  );
 }
+const NNBSP = '\u202f';

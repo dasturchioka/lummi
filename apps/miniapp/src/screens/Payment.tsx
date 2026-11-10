@@ -227,14 +227,29 @@ function Holder({ holder }: { holder: string }) {
   );
 }
 
-/** «Оплатите до …» with a clock, the time kept on one line with the word after it (UZ «gacha»). */
-function PayUntil({ until }: { until: string }) {
+/**
+ * A deadline sentence with a clock: «Оплатите до …» on the payment screen, «Ароматы
+ * забронированы до …» without a card. The time stays on one line with the word after it (UZ
+ * «gacha»); `then` follows as the next sentence.
+ */
+function Deadline({
+  template,
+  until,
+  then,
+  testId,
+  className = '',
+}: {
+  template: string;
+  until: string;
+  then?: string;
+  testId: string;
+  className?: string;
+}) {
   const { language } = usePrefs();
-  const o = useOrdersText();
-  const [before = '', after = ''] = o.payment.payUntil.split('{until}');
+  const [before = '', after = ''] = template.split('{until}');
   const [, glue = '', rest = ''] = /^(\s?\S*)(.*)$/s.exec(after) ?? [];
   return (
-    <p className="type-body mb-4 flex items-start gap-2.5 text-ink" data-testid="pay-until">
+    <p className={`type-body flex items-start gap-2.5 text-ink ${className}`} data-testid={testId}>
       <span className="mt-0.5 shrink-0 text-muted">
         <ClockIcon size={20} />
       </span>
@@ -245,6 +260,7 @@ function PayUntil({ until }: { until: string }) {
           {glue}
         </span>
         {rest}
+        {then ? ` ${then}` : null}
       </span>
     </p>
   );
@@ -263,7 +279,8 @@ function NoCard() {
         <CardIcon size={22} />
       </span>
       <span className="min-w-0">
-        <span className="type-row block font-semibold text-pretty text-ink">
+        {/* a state title (DESIGN.md Heading): the note leads, ahead of the status pill */}
+        <span className="type-heading block text-pretty text-ink">
           {o.payment.unavailableTitle}
         </span>
         <span className="type-small mt-1 block text-pretty text-muted">
@@ -585,7 +602,12 @@ function PayStep({ payment }: { payment: PaymentDto }) {
       <Head order={order} />
       {card ? (
         <>
-          <PayUntil until={order.reserveUntil} />
+          <Deadline
+            template={o.payment.payUntil}
+            until={order.reserveUntil}
+            testId="pay-until"
+            className="mb-4"
+          />
           <TransferCard
             order={order}
             card={card}
@@ -599,9 +621,14 @@ function PayStep({ payment }: { payment: PaymentDto }) {
       ) : (
         <>
           <NoCard />
-          <p className="type-body mt-6 text-pretty text-ink" data-testid="already-paid">
-            {o.payment.alreadyPaid}
-          </p>
+          {/* the reserve keeps running without a card: until when, and the upload for who paid */}
+          <Deadline
+            template={o.orders.reservedUntil}
+            until={order.reserveUntil}
+            then={o.payment.alreadyPaid}
+            testId="already-paid"
+            className="mt-6"
+          />
         </>
       )}
       <input
