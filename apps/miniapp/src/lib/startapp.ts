@@ -2,7 +2,7 @@ import { STARTAPP_ROUTES } from '@lummi/contracts/constants';
 
 /**
  * `startapp` parameter -> route. The plain targets live in `@lummi/contracts/constants`
- * (`STARTAPP_ROUTES`: the one list the bot and the admin's link builder share, ADR 0022).
+ * (`STARTAPP_ROUTES`: the one list the bot and the admin's broadcast button picker share, ADR 0022).
  * An unknown or missing value lands on Home; an unknown fragrance slug lands on the card's own
  * not-found state, which leads on to the catalog.
  */
@@ -19,6 +19,6 @@ export function routeForStartParam(param: string | null | undefined): string {
   const order = ORDER_PARAM.exec(param);
   if (order) return `/orders/${order[1]}`;
   return Object.hasOwn(STARTAPP_ROUTES, param)
-    ? STARTAPP_ROUTES[param as keyof typeof STARTAPP_ROUTES]
+    ? STARTAPP_ROUTES[param as keyof typeof STARTAPP_ROUTES].route
     : '/';
 }

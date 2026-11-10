@@ -48,15 +48,19 @@ export type SetLineKind = Exclude<LineKind, 'volume'>;
 export const SET_SIZE = 5;
 
 /**
- * `startapp` parameter -> Mini App route, for the plain navigation links (ADR 0022). `p_<slug>`
- * (a fragrance card) is matched by pattern in the Mini App. An unknown value lands on Home.
+ * The one list of plain `startapp` targets (ADR 0022): the Mini App maps each to its route, the bot
+ * and the admin's broadcast button picker offer exactly these, with the picker's RU/UZ label.
+ * `p_<slug>` (a fragrance card) and `o_<number>` (an order) are matched by pattern in the Mini App.
+ * An unknown value lands on Home. Zod-free, so every package may import it.
  */
 export const STARTAPP_ROUTES = {
-  home: '/',
-  catalog: '/catalog',
-  cart: '/cart',
-  orders: '/orders',
-  profile: '/profile',
-  set_discovery: '/sets/discovery',
-  builder: '/sets/builder',
-} as const satisfies Record<string, string>;
+  home: { route: '/', label: { ru: 'Главная', uz: 'Bosh sahifa' } },
+  catalog: { route: '/catalog', label: { ru: 'Каталог', uz: 'Katalog' } },
+  cart: { route: '/cart', label: { ru: 'Корзина', uz: 'Savat' } },
+  orders: { route: '/orders', label: { ru: 'Заказы', uz: 'Buyurtmalar' } },
+  profile: { route: '/profile', label: { ru: 'Профиль', uz: 'Profil' } },
+  set_discovery: { route: '/sets/discovery', label: { ru: 'Discovery set', uz: 'Discovery set' } },
+  builder: { route: '/sets/builder', label: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' } },
+} as const satisfies Record<string, { route: string; label: { ru: string; uz: string } }>;
+export type StartappTarget = keyof typeof STARTAPP_ROUTES;
+export const STARTAPP_TARGETS = Object.keys(STARTAPP_ROUTES) as StartappTarget[];

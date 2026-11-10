@@ -23,6 +23,16 @@ import {
   onHandItemSchema,
 } from './admin-catalog';
 import {
+  audienceCountSchema,
+  audienceQuerySchema,
+  broadcastBodySchema,
+  broadcastErrorSchema,
+  broadcastSchema,
+  fragranceTargetQuerySchema,
+  fragranceTargetSchema,
+  testSendResultSchema,
+} from './broadcast';
+import {
   adminErrorSchema,
   auditFiltersSchema,
   auditPageSchema,
@@ -726,7 +736,88 @@ const adminDelivery = c.router({
 });
 
 /** Staff-facing routes (admin panel). Not part of the Mini App's client table (`./client`). */
-export const adminContract = c.router({ ...adminCore, ...adminDelivery, ...adminSets });
+const adminBroadcasts = c.router({
+  broadcasts: {
+    list: {
+      method: 'GET',
+      path: '/admin/broadcasts',
+      responses: {
+        200: z.array(broadcastSchema),
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+      },
+      summary: 'Past broadcasts, newest first, with live counts (owner only)',
+    },
+    audience: {
+      method: 'GET',
+      path: '/admin/broadcasts/audience',
+      query: audienceQuerySchema,
+      responses: {
+        200: audienceCountSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+      },
+      summary: 'Live recipient count for an audience, split by language (owner only)',
+    },
+    fragrance: {
+      method: 'GET',
+      path: '/admin/broadcasts/fragrance',
+      query: fragranceTargetQuerySchema,
+      responses: {
+        200: fragranceTargetSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+        404: broadcastErrorSchema,
+      },
+      summary:
+        "A `p_<slug>` button target's fragrance name as the owner types the slug (owner only)",
+    },
+    get: {
+      method: 'GET',
+      path: '/admin/broadcasts/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      responses: {
+        200: broadcastSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+        404: broadcastErrorSchema,
+      },
+      summary: 'One broadcast with its counts; the page polls it while it sends (owner only)',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/broadcasts',
+      body: broadcastBodySchema,
+      responses: {
+        201: broadcastSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+        422: broadcastErrorSchema,
+      },
+      summary: 'Send a broadcast: one durable row, one queued job per customer (owner only)',
+    },
+    test: {
+      method: 'POST',
+      path: '/admin/broadcasts/test',
+      body: broadcastBodySchema,
+      responses: {
+        200: testSendResultSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+        422: broadcastErrorSchema,
+        502: broadcastErrorSchema,
+      },
+      summary: "«Отправить себе»: both language versions to the owner's own Telegram id",
+    },
+  },
+});
+
+export const adminContract = c.router({
+  ...adminCore,
+  ...adminDelivery,
+  ...adminSets,
+  ...adminBroadcasts,
+});
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
 export const internalContract = c.router({
