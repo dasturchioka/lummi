@@ -116,6 +116,7 @@ async function orderBody(client: Client): Promise<CreateOrderBody> {
     delivery: { kind: 'point', pointId: point!.id },
     consent: true,
     confirmedTotal: checkout.body.quote.total,
+    confirmedDiscount: checkout.body.quote.discount,
     idempotencyKey: randomUUID(),
   };
 }

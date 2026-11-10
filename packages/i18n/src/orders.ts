@@ -55,6 +55,9 @@ export const ordersMessages = defineMessages(
       changedWas: 'Было',
       changedNow: 'Сейчас',
       changedConfirm: 'Подтвердить',
+      discountChangedTitle: 'Скидка изменилась',
+      discountChangedText:
+        'Пока вы оформляли заказ, изменилась скидка. Сумма к переводу осталась прежней.',
       goneTitle: 'Товаров больше нет в наличии',
       goneText: 'Пока вы оформляли заказ, их успели купить. В корзине видно, что осталось.',
       failed: 'Не удалось оформить заказ. Проверьте соединение и попробуйте ещё раз.',
@@ -188,6 +191,9 @@ export const ordersMessages = defineMessages(
       changedWas: 'Avval',
       changedNow: 'Hozir',
       changedConfirm: 'Tasdiqlash',
+      discountChangedTitle: 'Chegirma oʻzgardi',
+      discountChangedText:
+        'Buyurtmani rasmiylashtirayotganingizda chegirma oʻzgardi. Oʻtkaziladigan summa oʻzgarmadi.',
       goneTitle: 'Mahsulotlar qolmadi',
       goneText: 'Rasmiylashtirayotganingizda ularni sotib olishdi. Savatda nima qolganini koʻring.',
       failed: 'Buyurtmani rasmiylashtirib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',

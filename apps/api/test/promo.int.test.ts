@@ -215,6 +215,15 @@ async function slugs(n: number) {
     .slice(0, n);
 }
 
+async function setPrice(slug: string, ml: number, price: number) {
+  const [v] = await t.db
+    .select({ id: volumes.id })
+    .from(volumes)
+    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+    .where(and(eq(fragrances.slug, slug), eq(volumes.ml, ml)));
+  await t.db.update(volumes).set({ price }).where(eq(volumes.id, v!.id));
+}
+
 async function markDown(slug: string, ml: number, salePrice: number) {
   const [v] = await t.db
     .select({ id: volumes.id })
@@ -240,6 +249,7 @@ async function orderBody(s: Shopper): Promise<CreateOrderBody> {
     delivery: { kind: 'point', pointId: point!.id },
     consent: true,
     confirmedTotal: checkout.body.quote.total,
+    confirmedDiscount: checkout.body.quote.discount,
     idempotencyKey: randomUUID(),
   };
 }
@@ -584,6 +594,55 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     expect(await usesOf()).toMatchObject({ uses: 1, state: 'expired' });
   });
 
+  it('a code lost between the quote and the order is 409 even when the total comes out the same', async () => {
+    const [a, b] = await slugs(2);
+    await setPrice(a!, 50, 260_000);
+    await createPromo({
+      code: 'MINUS25',
+      kind: 'fixed',
+      percent: null,
+      amount: 25_000,
+      totalLimit: 1,
+    });
+    const late = await shopper(vali, '998901112233');
+    await late.add(a!, 50);
+    await late.apply('MINUS25');
+    // with the code: 260 000 − 25 000 = 235 000 is below the threshold (base «after»), + 25 000
+    const stale = await orderBody(late);
+    expect(stale).toMatchObject({
+      confirmedTotal: 260_000,
+      confirmedDiscount: { type: 'promo_code', code: 'MINUS25', amount: 25_000 },
+    });
+
+    const first = await shopper(ali);
+    await first.add(b!, 30);
+    await first.apply('MINUS25');
+    await placeOrder(first);
+
+    // without it: 260 000 ships free, the same 260 000, but not the order the shopper confirmed
+    const res = await late.client.orders.create({ body: stale });
+    expect(res).toMatchObject({
+      status: 409,
+      body: {
+        code: 'total_changed',
+        checkout: {
+          quote: {
+            discount: null,
+            deliveryFee: 0,
+            total: 260_000,
+            promoCode: { code: 'MINUS25', invalid: { reason: 'exhausted' } },
+          },
+        },
+      },
+    });
+    expect(await usesOf('MINUS25')).toMatchObject({ uses: 1 });
+    // confirming the new terms orders without the code
+    const again = await late.client.orders.create({
+      body: { ...stale, confirmedDiscount: null, idempotencyKey: randomUUID() },
+    });
+    expect(again).toMatchObject({ status: 201, body: { discount: null, total: 260_000 } });
+  });
+
   it('a code exhausted between the quote and the order: 409 with the new quote, which says why', async () => {
     const [a, b] = await slugs(2);
     await createPromo({ totalLimit: 1 });
@@ -615,7 +674,12 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     expect(await usesOf()).toMatchObject({ uses: 1 });
     // never blocked: confirming the new total orders without the code
     const again = await late.client.orders.create({
-      body: { ...stale, confirmedTotal: 174_000, idempotencyKey: randomUUID() },
+      body: {
+        ...stale,
+        confirmedTotal: 174_000,
+        confirmedDiscount: null,
+        idempotencyKey: randomUUID(),
+      },
     });
     expect(again).toMatchObject({ status: 201, body: { discount: null, total: 174_000 } });
   });

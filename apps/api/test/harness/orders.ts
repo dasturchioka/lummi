@@ -58,6 +58,7 @@ export const orderBody = (pointId: number, confirmedTotal: number) =>
     consent: true,
     idempotencyKey: randomUUID(),
     confirmedTotal,
+    confirmedDiscount: null,
   }) satisfies CreateOrderBody;
 
 /**

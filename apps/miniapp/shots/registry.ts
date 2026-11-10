@@ -218,6 +218,7 @@ async function placeOrder(
         : { kind: 'point', pointId: point.id },
       consent: true,
       confirmedTotal: checkout.body.quote.total,
+      confirmedDiscount: checkout.body.quote.discount,
       idempotencyKey: randomUUID(),
       gift: extra.gift,
       giftMessage: extra.giftMessage,

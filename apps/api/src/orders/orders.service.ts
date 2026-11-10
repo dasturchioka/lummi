@@ -57,6 +57,14 @@ export type CreateOutcome =
   | { kind: 'try_again' }
   | { kind: 'invalid'; code: OrderInputError };
 
+/** The same discount source and amount; an upgrade right's line key may differ (it names a cart line). */
+export function sameDiscount(a: Discount | null, b: Discount | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.type !== b.type || a.amount !== b.amount) return false;
+  if (a.type === 'promo_code') return b.type === 'promo_code' && a.code === b.code;
+  return 'id' in b && a.id === b.id;
+}
+
 /** Where the parcel goes: a point from our list (its region), or a typed address in a region. */
 type Destination =
   | { kind: 'point'; region: RegionRow; point: BtsPointRow }
@@ -244,8 +252,14 @@ export class OrdersService {
         ({ kind: 'conflict', code, checkout: await this.checkoutOf(tx, c, region) }) as const;
       if (quote.itemsSubtotal === 0 || bought.length === 0) return conflict('nothing_to_order');
       // The quote capped every line at what is available under the lock, so the total is the
-      // check: a line that no longer fits changed it.
-      if (quote.total !== input.confirmedTotal) return conflict('total_changed');
+      // check: a line that no longer fits changed it. The discount is checked too: a code lost
+      // meanwhile can leave the total as it was (free delivery offsets it), and the order the
+      // shopper confirmed had that discount.
+      if (
+        quote.total !== input.confirmedTotal ||
+        !sameDiscount(quote.discount, input.confirmedDiscount)
+      )
+        return conflict('total_changed');
 
       // ADR 0005 seam: the discount source the quote applied is held here, in this transaction,
       // before the snapshot (a conditional UPDATE on the upgrade right #38 or the birthday coupon
@@ -363,7 +377,7 @@ export class OrdersService {
         .returning();
 
       // 4. The cart, consent, audit and the message. The order takes the entered code with it,
-      // held or refused, so the next cart starts without one (spec Changes 2026-11-10, #29).
+      // held or refused, so the next cart starts without one (spec Changes 2026-11-11 (4), #29).
       await tx
         .update(carts)
         .set({
