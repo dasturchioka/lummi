@@ -4,7 +4,7 @@ import type { StockLevel, StockRow } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -60,7 +60,7 @@ function ShortTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
  * the editor was shown.
  */
 export function StockTable({
-  rows,
+  rows: served,
   lowThreshold,
   total,
   language,
@@ -73,6 +73,10 @@ export function StockTable({
   t: AdminMessages;
 }) {
   const router = useRouter();
+  /** Rows re-read from the server after a 409, until the page's own refresh brings the same numbers. */
+  const [fresh, setFresh] = useState<Record<string, StockRow>>({});
+  useEffect(() => setFresh({}), [served]);
+  const rows = served.map((r) => fresh[r.key] ?? r);
   const [editing, setEditing] = useState<{ key: string; edit: Edit } | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -86,6 +90,15 @@ export function StockTable({
     setEditing({ key: r.key, edit: { step: 'typing', value: String(r.onHand) } });
   };
   const close = () => setEditing(null);
+
+  /** The row as the server has it now (its on hand, reserve, available and level), found by its name. */
+  async function reread(r: StockRow) {
+    const res = await browserApi.stock
+      .list({ query: { q: r.kind === 'discovery' ? 'Discovery' : r.name!, page: 1, pageSize: 50 } })
+      .catch(() => null);
+    const row = res?.status === 200 ? res.body.rows.find((x) => x.key === r.key) : undefined;
+    if (row) setFresh((f) => ({ ...f, [r.key]: row }));
+  }
 
   /** One save, always compare-and-set against the count the row showed (or the one the 409 returned). */
   async function save(r: StockRow, onHand: number, expected: number) {
@@ -101,6 +114,8 @@ export function StockTable({
         setSavedKey(r.key);
         router.refresh();
       } else if (res.status === 409 && 'current' in res.body && res.body.current !== undefined) {
+        // the row shows the server's numbers before the banner does, so the page never holds two counts
+        await reread(r);
         setEditing({
           key: r.key,
           edit: { step: 'conflict', value: onHand, current: res.body.current },
@@ -174,6 +189,23 @@ export function StockTable({
       : [fill(s.ml, { ml: String(r.ml) }), r.hidden ? s.hiddenTag : null]
           .filter(Boolean)
           .join(' · ');
+  /** The Discovery set is its own card; a fragrance's volumes (the rows arrive together) share one. */
+  const groups = rows.reduce<{ key: string; title: string; hidden: boolean; rows: StockRow[] }[]>(
+    (out, r) => {
+      const key = r.kind === 'discovery' ? 'discovery' : `f${r.fragranceId}`;
+      const last = out[out.length - 1];
+      if (last && last.key === key) last.rows.push(r);
+      else
+        out.push({
+          key,
+          title: r.kind === 'discovery' ? s.discovery : r.name!,
+          hidden: r.hidden,
+          rows: [r],
+        });
+      return out;
+    },
+    [],
+  );
   const tone = (level: StockLevel) =>
     level === 'zero' ? 'bg-stone/30' : level === 'low' ? 'bg-sage-wash' : '';
 
@@ -182,54 +214,74 @@ export function StockTable({
       <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
         {plural(language, total, s.total)} · {fill(s.lowHint, { n: num(lowThreshold) })}
       </p>
-      {/* phones and narrow cards: one block per row, so reserve and available need no side scroll */}
+      {/* phones and narrow cards: a card per fragrance with a short line per volume, so reserve and
+          available need no side scroll and 60 volumes are not 60 cards */}
       <ul className="divide-y divide-border @3xl:hidden">
-        {rows.map((r) => {
-          const active = editing?.key === r.key ? editing.edit : null;
-          return (
-            <li
-              key={r.key}
-              data-testid={`stock-block-${r.key}`}
-              data-level={r.level}
-              className={cn('grid gap-2 px-4 py-3.5', tone(r.level))}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
-                    {r.kind === 'discovery' ? s.discovery : r.name}
-                  </span>
-                  <span className="block text-small text-muted-foreground">{sub(r)}</span>
-                </div>
-                <ShortTag level={r.level} t={t} />
-              </div>
-              <dl className="grid grid-cols-3 gap-2 text-center">
-                {(
-                  [
-                    [s.onHand, r.onHand, 'on-hand'],
-                    [s.reserved, r.reserved, 'reserved'],
-                    [s.available, r.available, 'available'],
-                  ] as const
-                ).map(([name, value, id]) => (
-                  <div key={id} className="min-w-0">
-                    <dt className="text-small text-muted-foreground">{name}</dt>
-                    <dd className="font-semibold tabular-nums" data-testid={id}>
-                      {num(value)}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {r.belowReserve && <p className="text-small text-muted-foreground">{s.belowNow}</p>}
-              {active ? (
-                editor(r, active, 'block')
-              ) : (
-                <div className="flex items-center justify-between gap-3">
-                  {savedMark(r) || <span />}
-                  {changeButton(r)}
-                </div>
+        {groups.map((g) => (
+          <li key={g.key} data-testid={`stock-card-${g.key}`} className="grid gap-1 px-4 py-3.5">
+            <div className="min-w-0">
+              <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
+                {g.title}
+              </span>
+              {g.hidden && (
+                <span className="block text-small text-muted-foreground">{s.hiddenTag}</span>
               )}
-            </li>
-          );
-        })}
+            </div>
+            <ul className="grid gap-1.5">
+              {g.rows.map((r) => {
+                const active = editing?.key === r.key ? editing.edit : null;
+                return (
+                  <li
+                    key={r.key}
+                    data-testid={`stock-block-${r.key}`}
+                    data-level={r.level}
+                    className={cn(
+                      'grid gap-1.5 rounded-button px-3 py-2.5',
+                      tone(r.level) || 'bg-milk/50',
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2">
+                        <span className="font-semibold">
+                          {r.kind === 'discovery'
+                            ? s.discoverySub
+                            : fill(s.ml, { ml: String(r.ml) })}
+                        </span>
+                        <ShortTag level={r.level} t={t} />
+                      </span>
+                      {active ? null : (
+                        <span className="flex items-center gap-3">
+                          {savedMark(r)}
+                          {changeButton(r)}
+                        </span>
+                      )}
+                    </div>
+                    <dl className="grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          [s.onHand, r.onHand, 'on-hand'],
+                          [s.reserved, r.reserved, 'reserved'],
+                          [s.available, r.available, 'available'],
+                        ] as const
+                      ).map(([name, value, id]) => (
+                        <div key={id} className="min-w-0">
+                          <dt className="text-small text-muted-foreground">{name}</dt>
+                          <dd className="font-semibold tabular-nums" data-testid={id}>
+                            {num(value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {r.belowReserve && (
+                      <p className="text-small text-muted-foreground">{s.belowNow}</p>
+                    )}
+                    {active && editor(r, active, 'block')}
+                  </li>
+                );
+              })}
+            </ul>
+          </li>
+        ))}
       </ul>
       <div className="hidden @3xl:block">
         <Table>

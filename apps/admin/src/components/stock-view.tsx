@@ -1,5 +1,6 @@
 import type { StockList, StockQuery } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -10,6 +11,8 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
+import { num } from '@/lib/setting-copy';
+import { fill } from '@/lib/utils';
 
 /**
  * The stock page: a GET form (the URL is the state, so a filtered view can be linked, as on the
@@ -28,6 +31,16 @@ export function StockView({
 }) {
   const s = t.stock;
   const filtered = Boolean(query.q || query.filter || query.visibility);
+  const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+  const href = (p: number) => {
+    const q = new URLSearchParams();
+    for (const key of ['q', 'filter', 'visibility'] as const)
+      if (query[key]) q.set(key, query[key]);
+    if (p > 1) q.set('page', String(p));
+    const text = q.toString();
+    return text ? `/stock?${text}` : '/stock';
+  };
+  const pageText = fill(s.page, { page: num(data.page), pages: num(pages) });
   return (
     <>
       <PageHeader title={s.title} description={s.description} />
@@ -90,11 +103,39 @@ export function StockView({
         <StockTable
           rows={data.rows}
           lowThreshold={data.lowThreshold}
-          total={data.rows.length}
+          total={data.total}
           language={language}
           t={t}
         />
       )}
+      {pages > 1 && (
+        <nav
+          aria-label={pageText}
+          className="mt-4 flex items-center justify-between gap-3 text-small text-muted-foreground"
+        >
+          <PageLink href={data.page > 1 ? href(data.page - 1) : null}>
+            <ChevronLeft strokeWidth={1.5} aria-hidden />
+            {s.prev}
+          </PageLink>
+          <span className="text-center tabular-nums">{pageText}</span>
+          <PageLink href={data.page < pages ? href(data.page + 1) : null}>
+            {s.next}
+            <ChevronRight strokeWidth={1.5} aria-hidden />
+          </PageLink>
+        </nav>
+      )}
     </>
+  );
+}
+
+function PageLink({ href, children }: { href: string | null; children: React.ReactNode }) {
+  return href ? (
+    <Button asChild variant="outline" size="sm">
+      <Link href={href}>{children}</Link>
+    </Button>
+  ) : (
+    <Button variant="outline" size="sm" disabled>
+      {children}
+    </Button>
   );
 }

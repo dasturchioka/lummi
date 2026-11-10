@@ -226,20 +226,22 @@ export const stockScreens: Screen[] = [
   {
     id: 'stock-conflict',
     fullPage: false,
+    teardown: async ({ db }) => {
+      await db.query('update volumes set on_hand = 20 where on_hand = 19');
+    },
     path: '/stock',
     as: 'manager',
     act: async ({ page }) => {
       await editFirst(page);
       const input = page.locator('input[id^="on-hand-"]:visible');
       await input.fill('15');
-      // somebody else saves meanwhile: the row's own request, with the count the editor does not know
-      await page.route('**/api/admin/volumes/*/on-hand', async (route) => {
-        const body = route.request().postDataJSON() as { onHand: number };
-        await route.fulfill({
-          status: 409,
-          json: { code: 'on_hand_changed', current: body.onHand + 4 },
-        });
+      // somebody else saves 19 meanwhile (a real write), so the editor's save gets a real 409
+      const volumeId = (await input.getAttribute('id'))!.split('-v').pop()!;
+      const origin = new URL(page.url()).origin;
+      const other = await page.request.patch(`${origin}/api/admin/volumes/${volumeId}/on-hand`, {
+        data: { onHand: 19 },
       });
+      if (!other.ok()) throw new Error(`the other editor's save failed: ${other.status()}`);
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]:visible').first().waitFor();
       await showEditor(page);

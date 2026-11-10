@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditLog, discoverySet, eq, fragrances, settings, volumes } from '@lummi/db';
+import { auditLog, discoverySet, eq, fragrances, settings, sql, volumes } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { reservedByVolume } from '../src/catalog/catalog.service';
@@ -35,10 +35,20 @@ beforeEach(async () => {
 const ali: TestUser = { id: 71, first_name: 'Ali', language_code: 'ru' };
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
-async function list(as: StaffSession = manager, query: Record<string, string> = {}) {
+/** One page of the stock list, as the panel asks for it. */
+async function page(as: StaffSession = manager, query: Record<string, string> = {}) {
   const res = await as.client.admin.stock.list({ query });
   if (res.status !== 200) throw new Error(`stock ${res.status}`);
   return res.body;
+}
+/** Every page of it, merged: most tests care about the rows, not the paging. */
+async function list(as: StaffSession = manager, query: Record<string, string> = {}) {
+  const first = await page(as, { ...query, pageSize: '50', page: '1' });
+  const rows = [...first.rows];
+  for (let p = 2; (p - 1) * 50 < first.total; p++) {
+    rows.push(...(await page(as, { ...query, pageSize: '50', page: String(p) })).rows);
+  }
+  return { ...first, rows };
 }
 async function volumeRow(slug: string, ml: number, as: StaffSession = manager) {
   const { id } = await tenMl(t, slug);
@@ -229,6 +239,62 @@ describe('the Discovery set follows the same rules', () => {
     expect(await discoveryRow()).toMatchObject({ onHand: 1, reserved: 2, belowReserve: true });
     const rows = await audits('sets.discovery_on_hand_changed');
     expect(rows.map((r) => r.actorId)).toEqual([manager.staff.id, owner.staff.id]);
+  });
+});
+
+describe('paging (by fragrance)', () => {
+  const fragranceCount = async () => (await t.db.select().from(fragrances)).length;
+  const ids = (rows: { fragranceId: number | null }[]) => [
+    ...new Set(rows.map((r) => r.fragranceId).filter((id) => id !== null)),
+  ];
+
+  it('holds whole fragrances, the Discovery set first on page 1 only, and nothing twice', async () => {
+    const total = await fragranceCount();
+    const one = await page(manager, { pageSize: '5' });
+    expect(one).toMatchObject({ total, page: 1, pageSize: 5 });
+    expect(one.rows[0]?.kind).toBe('discovery');
+    const volumesOnPage = one.rows.filter((r) => r.kind === 'volume');
+    expect(ids(volumesOnPage)).toHaveLength(5);
+    expect(volumesOnPage).toHaveLength(15); // every volume of those five, none split off
+    const two = await page(manager, { pageSize: '5', page: '2' });
+    expect(two.rows.some((r) => r.kind === 'discovery')).toBe(false);
+    expect(ids(two.rows).filter((id) => ids(volumesOnPage).includes(id))).toEqual([]);
+    // the last page holds the remainder; past the end is empty but still says how many there are
+    const lastPage = Math.ceil(total / 5);
+    expect(ids((await page(manager, { pageSize: '5', page: String(lastPage) })).rows)).toHaveLength(
+      total - (lastPage - 1) * 5,
+    );
+    const past = await page(manager, { pageSize: '5', page: String(lastPage + 1) });
+    expect(past).toMatchObject({ rows: [], total });
+  });
+
+  it('filters and searches cover every page: only matching fragrances count, wherever they sort', async () => {
+    const all = await t.db
+      .select({ id: fragrances.id })
+      .from(fragrances)
+      .orderBy(sql`lower(${fragrances.name})`);
+    const spread = [all[0]!.id, all[30]!.id, all[60]!.id];
+    for (const id of spread) {
+      await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.fragranceId, id));
+    }
+    const one = await page(manager, { filter: 'low', pageSize: '2' });
+    expect(one.total).toBe(3);
+    expect(ids(one.rows)).toEqual([spread[0], spread[1]]);
+    expect(one.rows.every((r) => r.level !== 'ok')).toBe(true);
+    const two = await page(manager, { filter: 'low', pageSize: '2', page: '2' });
+    expect(ids(two.rows)).toEqual([spread[2]]);
+    // a hidden fragrance deep in the list is on page 1 of the hidden filter
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, all[60]!.id));
+    const hidden = await page(manager, { visibility: 'hidden', pageSize: '2' });
+    expect(hidden.total).toBe(1);
+    expect(ids(hidden.rows)).toEqual([all[60]!.id]);
+  });
+
+  it('refuses a page size above the maximum', async () => {
+    const res = await fetch(`${t.baseUrl}/admin/stock?pageSize=500`, {
+      headers: { cookie: manager.cookie },
+    });
+    expect(res.status).toBe(400);
   });
 });
 

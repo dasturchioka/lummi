@@ -42,6 +42,7 @@ export class StockAdminService {
     const volumeRows = await this.db
       .select({
         volumeId: volumes.id,
+        fragranceId: fragrances.id,
         name: fragrances.name,
         hidden: fragrances.hidden,
         ml: volumes.ml,
@@ -50,7 +51,7 @@ export class StockAdminService {
       .from(volumes)
       .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
       .where(q ? containsIgnoringApostrophes(fragrances.name, q) : undefined)
-      .orderBy(asc(sql`lower(${fragrances.name})`), asc(volumes.ml));
+      .orderBy(asc(sql`lower(${fragrances.name})`), asc(fragrances.id), asc(volumes.ml));
     const reserved = await reservedByVolume(
       this.db,
       volumeRows.map((r) => r.volumeId),
@@ -61,6 +62,7 @@ export class StockAdminService {
         kind: 'volume',
         key: `v${r.volumeId}`,
         volumeId: r.volumeId,
+        fragranceId: r.fragranceId,
         name: r.name,
         hidden: r.hidden,
         ml: r.ml,
@@ -72,13 +74,29 @@ export class StockAdminService {
       };
     });
 
-    // the Discovery set sorts first: it is the one row that is not a fragrance
+    const matching = (r: StockRow) => {
+      if (query.filter === 'zero' && r.level !== 'zero') return false;
+      if (query.filter === 'low' && r.level === 'ok') return false;
+      if (query.visibility === 'hidden' && !r.hidden) return false;
+      if (query.visibility === 'visible' && r.hidden) return false;
+      return true;
+    };
+    const shown = rows.filter(matching);
+
+    // pages hold whole fragrances (the rows are in name order, a fragrance's volumes together)
+    const fragranceIds = [...new Set(shown.map((r) => r.fragranceId))];
+    const first = (query.page - 1) * query.pageSize;
+    const onPage = new Set(fragranceIds.slice(first, first + query.pageSize));
+    const pageRows = shown.filter((r) => onPage.has(r.fragranceId));
+
+    // the Discovery set is the one row that is not a fragrance: first on page 1, when it matches
     const discovery = await loadDiscovery(this.db);
-    if (!q || matchesDiscoveryLabel(q)) {
-      rows.unshift({
+    if (query.page === 1 && (!q || matchesDiscoveryLabel(q))) {
+      const row: StockRow = {
         kind: 'discovery',
         key: 'discovery',
         volumeId: null,
+        fragranceId: null,
         name: null,
         hidden: false,
         ml: null,
@@ -87,18 +105,16 @@ export class StockAdminService {
         available: discovery.available,
         belowReserve: belowReserve(discovery.row.onHand, discovery.reserved),
         level: stockLevel(discovery.available, lowThreshold),
-      });
+      };
+      if (matching(row)) pageRows.unshift(row);
     }
 
     return {
       lowThreshold,
-      rows: rows.filter((r) => {
-        if (query.filter === 'zero' && r.level !== 'zero') return false;
-        if (query.filter === 'low' && r.level === 'ok') return false;
-        if (query.visibility === 'hidden' && !r.hidden) return false;
-        if (query.visibility === 'visible' && r.hidden) return false;
-        return true;
-      }),
+      rows: pageRows,
+      total: fragranceIds.length,
+      page: query.page,
+      pageSize: query.pageSize,
     };
   }
 }

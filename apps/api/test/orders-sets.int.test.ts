@@ -46,7 +46,12 @@ const whileTableLocked = <T>(table: string, run: () => Promise<T>) => lockedWhil
 async function reservedOf(slug: string) {
   const manager = await t.managerSession();
   const { id } = await tenMl(slug);
-  const res = await manager.client.admin.stock.list({ query: {} });
+  // the list pages by fragrance: find the fragrance's own page by its name
+  const [f] = await t.db
+    .select({ name: fragrances.name })
+    .from(fragrances)
+    .where(eq(fragrances.id, (await tenMl(slug)).fragranceId));
+  const res = await manager.client.admin.stock.list({ query: { q: f!.name } });
   if (res.status !== 200) throw new Error(`stock list: ${res.status}`);
   return res.body.rows.find((r) => r.volumeId === id)?.reserved;
 }

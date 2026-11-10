@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
@@ -26,10 +27,14 @@ export function TelegramLink({ c, t }: { c: AdminCustomer; t: AdminMessages }) {
       href={telegramLink(c)}
       target="_blank"
       rel="noreferrer"
-      className={cn(TEXT_LINK, 'inline-flex items-center gap-1.5 [overflow-wrap:anywhere]')}
+      className={cn(TEXT_LINK, 'inline-flex items-center gap-1.5 break-all')}
     >
       <Send className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-      {c.username ? `@${c.username}` : t.customers.openTelegram}
+      {c.username ? (
+        `@${c.username}`
+      ) : (
+        <span className="whitespace-nowrap">{t.customers.openTelegram}</span>
+      )}
     </a>
   );
 }
@@ -123,53 +128,90 @@ export function CustomersView({
           <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
             {plural(language, data.total, c.total)}
           </p>
-          <Table>
-            <THead>
-              <TR>
-                <TH>{c.name}</TH>
-                <TH>{c.telegram}</TH>
-                <TH>{c.phone}</TH>
-                <TH>{c.language}</TH>
-                <TH className="text-right" title={c.ordersHint}>
-                  {c.orders}
-                </TH>
-                <TH className="text-right" title={c.spentHint}>
-                  {c.spent}
-                </TH>
-                <TH>{c.blocked}</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {data.items.map((row) => (
-                <TR key={row.id} data-testid={`customer-row-${row.id}`}>
-                  <TD className="min-w-[10rem] max-w-[18rem]">
-                    <Link
-                      href={`/customers/${row.id}`}
-                      className="font-semibold [overflow-wrap:anywhere] hover:underline underline-offset-[3px]"
-                    >
-                      {row.name}
-                    </Link>
-                  </TD>
-                  <TD className="min-w-[9rem] max-w-[14rem]">
-                    <TelegramLink c={row} t={t} />
-                  </TD>
-                  <TD className="whitespace-nowrap">
-                    {row.phone ? (
-                      formatPhone(row.phone)
-                    ) : (
-                      <span className="text-muted-foreground">{c.noPhone}</span>
-                    )}
-                  </TD>
-                  <TD className="uppercase">{row.language}</TD>
-                  <TD className="text-right">{num(row.ordersCount)}</TD>
-                  <TD className="text-right font-semibold whitespace-nowrap">
-                    {formatMoney(row.totalSpent, language)}
-                  </TD>
-                  <TD>{row.botBlocked ? <BlockedBadge t={t} /> : null}</TD>
+          {/* phones: one block per customer, orders and total spent in view without side scroll */}
+          <ul className="divide-y divide-border sm:hidden">
+            {data.items.map((row) => (
+              <li
+                key={row.id}
+                data-testid={`customer-block-${row.id}`}
+                className="grid gap-1 px-4 py-3.5"
+              >
+                <Link
+                  href={`/customers/${row.id}`}
+                  className="font-semibold leading-snug [overflow-wrap:anywhere] underline-offset-[3px] hover:underline"
+                >
+                  {row.name}
+                </Link>
+                <p className="text-small tabular-nums">
+                  {c.orders}: <span className="font-semibold">{num(row.ordersCount)}</span> ·{' '}
+                  {c.spent}{' '}
+                  <span className="font-semibold">{formatMoney(row.totalSpent, language)}</span>
+                </p>
+                {row.botBlocked && (
+                  <span>
+                    <BlockedBadge t={t} />
+                  </span>
+                )}
+                <MetaLine
+                  className="text-small text-muted-foreground [overflow-wrap:anywhere]"
+                  parts={[
+                    <TelegramLink key="tg" c={row} t={t} />,
+                    row.phone ? formatPhone(row.phone) : c.noPhone,
+                    row.language.toUpperCase(),
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+          <div className="hidden sm:block">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>{c.name}</TH>
+                  <TH>{c.telegram}</TH>
+                  <TH>{c.phone}</TH>
+                  <TH>{c.language}</TH>
+                  <TH className="text-right" title={c.ordersHint}>
+                    {c.orders}
+                  </TH>
+                  <TH className="text-right" title={c.spentHint}>
+                    {c.spent}
+                  </TH>
+                  <TH>{c.blocked}</TH>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
+              </THead>
+              <TBody>
+                {data.items.map((row) => (
+                  <TR key={row.id} data-testid={`customer-row-${row.id}`}>
+                    <TD className="min-w-[13rem] max-w-[20rem]">
+                      <Link
+                        href={`/customers/${row.id}`}
+                        className="font-semibold break-words hover:underline underline-offset-[3px]"
+                      >
+                        {row.name}
+                      </Link>
+                    </TD>
+                    <TD className="min-w-[11rem] max-w-[16rem]">
+                      <TelegramLink c={row} t={t} />
+                    </TD>
+                    <TD className="whitespace-nowrap">
+                      {row.phone ? (
+                        formatPhone(row.phone)
+                      ) : (
+                        <span className="text-muted-foreground">{c.noPhone}</span>
+                      )}
+                    </TD>
+                    <TD className="uppercase">{row.language}</TD>
+                    <TD className="text-right">{num(row.ordersCount)}</TD>
+                    <TD className="text-right font-semibold whitespace-nowrap">
+                      {formatMoney(row.totalSpent, language)}
+                    </TD>
+                    <TD>{row.botBlocked ? <BlockedBadge t={t} /> : null}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </div>
         </Card>
       )}
 

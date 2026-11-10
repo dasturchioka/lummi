@@ -3,6 +3,8 @@ import { ORDER_STATUSES } from './order-status';
 
 /* ---- stock (#27) ---- */
 
+export const STOCK_PAGE_DEFAULT = 20;
+export const STOCK_PAGE_MAX = 50;
 export const STOCK_LEVELS = ['zero', 'low', 'ok'] as const;
 export type StockLevel = (typeof STOCK_LEVELS)[number];
 
@@ -13,6 +15,8 @@ export const stockRowSchema = z.object({
   key: z.string(),
   /** The volume to edit; null for the Discovery set. */
   volumeId: z.number().int().nullable(),
+  /** The fragrance the volume belongs to; null for the Discovery set. A page holds whole fragrances. */
+  fragranceId: z.number().int().nullable(),
   /** The fragrance's name; null for the Discovery set. */
   name: z.string().nullable(),
   hidden: z.boolean(),
@@ -33,13 +37,21 @@ export const stockQuerySchema = z.object({
   filter: z.enum(['low', 'zero']).optional(),
   /** Fragrances hidden from the catalog; the Discovery set counts as visible. */
   visibility: z.enum(['visible', 'hidden']).optional(),
+  /** Pages hold whole fragrances (all their matching volumes), so a card is never split. */
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(STOCK_PAGE_MAX).default(STOCK_PAGE_DEFAULT),
 });
 export type StockQuery = z.infer<typeof stockQuerySchema>;
 
 export const stockListSchema = z.object({
   /** The setting `stock.lowAvailableThreshold`. */
   lowThreshold: z.number().int(),
+  /** This page's rows: the Discovery set first (page 1 only, when it matches), then whole fragrances in name order. */
   rows: z.array(stockRowSchema),
+  /** Fragrances matching the search and filters, over all pages. */
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
 });
 export type StockList = z.infer<typeof stockListSchema>;
 
