@@ -35,6 +35,26 @@ export const botMessages = defineMessages(
       orderCancelled: 'Заказ № {number} отменён.\n{reason}.',
       /** Added to «Отменён» when the order had been paid: the money goes back as a Refund (ADR 0006). */
       refundNote: 'Менеджер свяжется с вами, чтобы вернуть деньги.',
+      /** A receipt sent to the bot (#31); the receipt-received message itself is `receiptReceived`. */
+      receiptNoOrders:
+        'Сейчас нет заказов, ожидающих оплаты. Оформите заказ в магазине, а затем отправьте чек сюда.',
+      openOrders: 'Открыть заказы',
+      receiptUnknownUser:
+        'Сначала откройте магазин: после первого входа сюда можно будет отправлять чеки.',
+      receiptWhichOrder: 'К какому заказу относится этот чек?',
+      /** The button per order: «№ 1012 · 243 000 сум». */
+      receiptOrderChoice: '№ {number} · {amount}',
+      receiptTooLarge:
+        'Файл слишком большой: можно до {max} МБ. Отправьте чек поменьше, например скриншот.',
+      receiptUnsupported:
+        'Не получилось принять этот файл. Отправьте чек как фото, скриншот (JPG, PNG, WebP) или PDF.',
+      receiptUnreadable: 'Файл не открывается. Отправьте чек ещё раз, лучше скриншотом.',
+      receiptTryAgain: 'Сейчас не получилось принять чек. Отправьте его ещё раз через минуту.',
+      /** The order already has a receipt under check (or is no longer waiting for payment). */
+      receiptUnderCheck:
+        'К заказу № {number} чек уже отправлен и проверяется. Мы напишем, как только оплата подтвердится.',
+      orderNotAwaiting: 'Заказ № {number} уже не ожидает оплаты, чек не нужен.',
+      receiptExpired: 'Этот выбор устарел. Отправьте чек ещё раз.',
       /** The birthday coupon, 10:00 Tashkent a few days before (TZ §3.8, #30): `{max}` is money, `{until}` the last day. */
       birthdayCoupon:
         'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
@@ -68,6 +88,23 @@ export const botMessages = defineMessages(
       delivered: '№ {number} buyurtma yetkazildi ✨\nLUMMIni tanlaganingiz uchun rahmat.',
       orderCancelled: '№ {number} buyurtma bekor qilindi.\n{reason}.',
       refundNote: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
+      receiptNoOrders:
+        'Hozir toʻlov kutayotgan buyurtma yoʻq. Doʻkonda buyurtma bering, keyin chekni shu yerga yuboring.',
+      openOrders: 'Buyurtmalarni ochish',
+      receiptUnknownUser:
+        'Avval doʻkonni oching: birinchi kirishdan keyin bu yerga chek yuborish mumkin boʻladi.',
+      receiptWhichOrder: 'Bu chek qaysi buyurtmaga tegishli?',
+      receiptOrderChoice: '№ {number} · {amount}',
+      receiptTooLarge:
+        'Fayl juda katta: {max} MB gacha boʻlishi mumkin. Kichikroq chek yuboring, masalan skrinshot.',
+      receiptUnsupported:
+        'Bu faylni qabul qilib boʻlmadi. Chekni rasm, skrinshot (JPG, PNG, WebP) yoki PDF koʻrinishida yuboring.',
+      receiptUnreadable: 'Fayl ochilmayapti. Chekni qayta yuboring, yaxshisi skrinshot qilib.',
+      receiptTryAgain: 'Hozir chekni qabul qilib boʻlmadi. Bir daqiqadan keyin qayta yuboring.',
+      receiptUnderCheck:
+        '№ {number} buyurtmaga chek allaqachon yuborilgan va tekshirilmoqda. Toʻlov tasdiqlanishi bilan xabar beramiz.',
+      orderNotAwaiting: '№ {number} buyurtma endi toʻlov kutmayapti, chek kerak emas.',
+      receiptExpired: 'Bu tanlov eskirgan. Chekni qayta yuboring.',
       birthdayCoupon:
         'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
     },

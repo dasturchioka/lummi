@@ -117,6 +117,7 @@ export async function createTestApp(
     OUTBOX_QUEUE: `q_${dbName}`,
     EVENTS_QUEUE: `e_${dbName}`,
     RECEIPT_CHECKS_QUEUE: `r_${dbName}`,
+    BOT_RECEIPTS_QUEUE: `bq_${dbName}`,
     RECEIPT_CHECK_BACKOFF_MS: '200',
     BROADCAST_QUEUE: `b_${dbName}`,
     BIRTHDAY_QUEUE: `d_${dbName}`,

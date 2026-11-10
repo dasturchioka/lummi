@@ -138,8 +138,15 @@
     {
       "idx": 19,
       "version": "7",
-      "when": 1794350611094,
-      "tag": "0019_birthday_coupons",
+      "when": 1794351440345,
+      "tag": "0019_bot_pending_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794352446759,
+      "tag": "0020_birthday_coupons",
       "breakpoints": true
     }
   ]

@@ -2,7 +2,13 @@ import { createDb } from '@lummi/db';
 import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
 import { AppModule } from './app.module';
-import { GrammySender, LocalFileStore, SystemClock, createReceiptJudge } from './edges';
+import {
+  GrammySender,
+  GrammyFiles,
+  LocalFileStore,
+  SystemClock,
+  createReceiptJudge,
+} from './edges';
 import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
 import { WorkerRuntime } from './worker/runtime';
@@ -20,6 +26,7 @@ const app = await NestFactory.createApplicationContext(
     edges: {
       clock: new SystemClock(),
       telegram: new GrammySender(env.BOT_TOKEN),
+      telegramFiles: new GrammyFiles(env.BOT_TOKEN),
       receiptJudge: createReceiptJudge(env, db),
       files: new LocalFileStore(env.FILES_DIR),
     },
