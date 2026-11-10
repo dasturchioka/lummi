@@ -271,6 +271,29 @@ export const settingDefinitions = {
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
     },
   },
+  /** Promo codes are guessable: a customer may type this many per window (ticket #29). */
+  'promo.attemptLimit': {
+    schema: z.number().int().min(1).max(1000),
+    default: 10,
+    area: 'pricing',
+    unit: 'count',
+    label: { ru: 'Попыток ввести промокод', uz: 'Promokod kiritish urinishlari' },
+    hint: {
+      ru: 'Сколько кодов клиент может ввести за окно ниже. Защищает от подбора кодов.',
+      uz: 'Mijoz quyidagi oyna ichida nechta kod kirita oladi. Kodlarni taxmin qilishdan himoya.',
+    },
+  },
+  'promo.attemptWindowSeconds': {
+    schema: z.number().int().min(60).max(7 * 86_400),
+    default: 3600,
+    area: 'pricing',
+    unit: 'seconds',
+    label: { ru: 'Окно попыток ввода промокода', uz: 'Promokod urinishlari oynasi' },
+    hint: {
+      ru: 'После стольких попыток новый код можно ввести, когда окно закончится.',
+      uz: 'Shuncha urinishdan keyin yangi kodni oyna tugagach kiritish mumkin.',
+    },
+  },
   // ---- Bot and orders group
   // Orders group (spec Changes 2026-11-07). Null until the group is set up; the bot follows migrate_to_chat_id.
   'bot.groupChatId': {

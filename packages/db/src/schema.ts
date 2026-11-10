@@ -474,6 +474,10 @@ export const carts = pgTable('carts', {
   discountChoice: jsonb('discount_choice').$type<StoredDiscountChoice>(),
   /** An entered or link-prefilled promo code, upper-case; judged by the quote, never blocks the order. */
   promoCode: text('promo_code'),
+  /** Codes typed in the current window (settings `promo.attemptLimit` per `promo.attemptWindowSeconds`): codes are guessable. */
+  promoAttempts: integer('promo_attempts').notNull().default(0),
+  /** When the current attempt window opened; null before the first typed code. */
+  promoAttemptsSince: timestamp('promo_attempts_since', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -786,3 +790,82 @@ export const infoPages = pgTable('info_pages', {
 
 export type PromoBannerRow = typeof promoBanners.$inferSelect;
 export type InfoPageRow = typeof infoPages.$inferSelect;
+
+export const promoKindEnum = pgEnum('promo_kind', ['percent', 'fixed']);
+
+/**
+ * A Promo code (ticket #29; ADR 0002, 0005, 0007, 0008; spec Changes 2026-11-07 promo counting):
+ * a percentage (optionally capped) or a fixed amount off the eligible items, never delivery.
+ * The code is stored trimmed and upper-case, so a lookup by the upper-cased entry is
+ * case-insensitive and the unique constraint is too. `expires_at` is the last valid instant,
+ * 23:59:59 Asia/Tashkent of the chosen day. Limits count non-voided uses (`promo_code_uses`).
+ */
+export const promoCodes = pgTable(
+  'promo_codes',
+  {
+    id: id(),
+    code: text('code').notNull().unique(),
+    kind: promoKindEnum('kind').notNull(),
+    /** Whole percent, 1-100 (a percent code). */
+    percent: smallint('percent'),
+    /** So'm off the eligible items (a fixed code). */
+    amount: integer('amount'),
+    /** A percent code's cap, so'm. */
+    maxDiscount: integer('max_discount'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /** Compared with items before discount, without delivery (ADR 0007). */
+    minOrderTotal: integer('min_order_total'),
+    totalLimit: integer('total_limit'),
+    perCustomerLimit: integer('per_customer_limit'),
+    /** Only for a customer with no other non-cancelled order. */
+    newCustomersOnly: boolean('new_customers_only').notNull().default(false),
+    /** TZ «применять к уценённым»; off: marked-down items are not discounted (ADR 0008). */
+    appliesToMarkedDown: boolean('applies_to_marked_down').notNull().default(false),
+    active: boolean('active').notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('promo_codes_code_check', sql`${t.code} = upper(btrim(${t.code})) and ${t.code} <> ''`),
+    check(
+      'promo_codes_terms_check',
+      sql`(${t.kind} = 'percent' and ${t.percent} between 1 and 100 and ${t.amount} is null) or (${t.kind} = 'fixed' and ${t.amount} > 0 and ${t.percent} is null and ${t.maxDiscount} is null)`,
+    ),
+    check(
+      'promo_codes_limits_check',
+      sql`coalesce(${t.maxDiscount}, 1) > 0 and coalesce(${t.minOrderTotal}, 0) >= 0 and coalesce(${t.totalLimit}, 1) > 0 and coalesce(${t.perCustomerLimit}, 1) > 0`,
+    ),
+  ],
+);
+
+/**
+ * A promo code held by an order (ADR 0005): written in the order's own transaction under a lock on
+ * the code's row, voided (`voided_at`) when the order is cancelled or returned, so it stops counting
+ * against the code's limits. One per order.
+ */
+export const promoCodeUses = pgTable(
+  'promo_code_uses',
+  {
+    id: id(),
+    promoCodeId: bigint('promo_code_id', { mode: 'number' })
+      .notNull()
+      .references(() => promoCodes.id),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    createdAt: createdAt(),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('promo_code_uses_counted_idx')
+      .on(t.promoCodeId, t.customerId)
+      .where(sql`${t.voidedAt} is null`),
+  ],
+);
+
+export type PromoCodeRow = typeof promoCodes.$inferSelect;
+export type PromoCodeUseRow = typeof promoCodeUses.$inferSelect;

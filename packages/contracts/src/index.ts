@@ -16,3 +16,4 @@ export * from './content';
 export * from './broadcast';
 export * from './orders';
 export * from './order-transition-payloads';
+export * from './promo';

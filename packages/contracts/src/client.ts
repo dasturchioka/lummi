@@ -45,6 +45,8 @@ export const clientRoutes = {
     addLine: route('POST', '/cart/lines', [200, 401, 404, 409]),
     setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
+    applyPromoCode: route('PUT', '/cart/promo-code', [200, 401, 429]),
+    removePromoCode: route('DELETE', '/cart/promo-code', [200, 401]),
   },
   content: {
     home: route('GET', '/content/home', [200, 401]),
