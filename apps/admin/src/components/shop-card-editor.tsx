@@ -162,7 +162,7 @@ function EditCard({
           <p className="text-[15px] [overflow-wrap:anywhere]">{parsed.data.holder}</p>
           {/*
            * A warning about the number, not a form error: it sits on the number's own plate, in
-           * regular weight, and «Сохранить карту» stays as it is.
+           * regular weight, and saving stays possible.
            */}
           {!valid && (
             <p
@@ -175,13 +175,30 @@ function EditCard({
           )}
         </div>
         {error && <Notice title={error} className="mt-4" />}
+        {/*
+         * A failed check digit makes fixing the default: «Исправить» is filled and saving drops
+         * to «Сохранить всё равно», since a typo sends customers' money to a stranger's card.
+         */}
         <DialogFooter>
-          <Button variant="outline" onClick={() => setStep('form')} disabled={pending}>
-            {s.back}
-          </Button>
-          <Button loading={pending} onClick={save}>
-            {s.save}
-          </Button>
+          {valid ? (
+            <>
+              <Button variant="outline" onClick={() => setStep('form')} disabled={pending}>
+                {s.back}
+              </Button>
+              <Button loading={pending} onClick={save}>
+                {s.save}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" loading={pending} onClick={save}>
+                {s.saveAnyway}
+              </Button>
+              <Button onClick={() => setStep('form')} disabled={pending}>
+                {s.back}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     );

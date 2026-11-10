@@ -780,6 +780,8 @@ export const adminMessages = defineMessages(
         checksum: 'Контрольная цифра не сходится: похоже, в номере опечатка.',
         back: 'Исправить',
         save: 'Сохранить карту',
+        /** With a failed check digit, fixing is the default and saving the secondary. */
+        saveAnyway: 'Сохранить всё равно',
         remove: 'Убрать карту',
         removeTitle: 'Убрать карту?',
         removeText:
@@ -1632,6 +1634,7 @@ export const adminMessages = defineMessages(
         checksum: 'Nazorat raqami mos kelmadi: raqamda xato boʻlishi mumkin.',
         back: 'Tuzatish',
         save: 'Kartani saqlash',
+        saveAnyway: 'Baribir saqlash',
         remove: 'Kartani olib tashlash',
         removeTitle: 'Karta olib tashlansinmi?',
         removeText:
