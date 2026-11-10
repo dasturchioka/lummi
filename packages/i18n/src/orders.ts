@@ -55,6 +55,8 @@ export const ordersMessages = defineMessages(
       changedWas: 'Было',
       changedNow: 'Сейчас',
       changedConfirm: 'Подтвердить',
+      promoLostText:
+        'Пока вы оформляли заказ, промокод перестал действовать. Переводить нужно новую сумму.',
       discountChangedTitle: 'Скидка изменилась',
       discountChangedText:
         'Пока вы оформляли заказ, изменилась скидка. Сумма к переводу осталась прежней.',
@@ -191,6 +193,8 @@ export const ordersMessages = defineMessages(
       changedWas: 'Avval',
       changedNow: 'Hozir',
       changedConfirm: 'Tasdiqlash',
+      promoLostText:
+        'Buyurtmani rasmiylashtirayotganingizda promokod amal qilmay qoldi. Yangi summani oʻtkazish kerak.',
       discountChangedTitle: 'Chegirma oʻzgardi',
       discountChangedText:
         'Buyurtmani rasmiylashtirayotganingizda chegirma oʻzgardi. Oʻtkaziladigan summa oʻzgarmadi.',

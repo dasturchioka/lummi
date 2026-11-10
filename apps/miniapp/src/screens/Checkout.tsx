@@ -20,6 +20,7 @@ import { useRegistration } from '../lib/registration';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { CodeText } from '../ui/DiscountRow';
 import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
 import { Figure } from '../ui/Figure';
 import {
@@ -656,6 +657,7 @@ function ConflictSheet({
   const c = conflict ?? shown;
   const gone = c?.code === 'nothing_to_order';
   const promo = c?.checkout.quote.promoCode;
+  const lost = promo?.invalid ? { code: promo.code, invalid: promo.invalid } : null;
   // a lost discount can leave the total as it was (free delivery offsets it): say what changed
   const sameTotal = !!c && !gone && c.checkout.quote.total === c.was;
   return (
@@ -676,12 +678,31 @@ function ConflictSheet({
           ? o.checkout.goneText
           : sameTotal
             ? o.checkout.discountChangedText
-            : o.checkout.changedText
+            : lost
+              ? o.checkout.promoLostText
+              : o.checkout.changedText
       }
       closeLabel={t.common.close}
     >
       {c && !gone ? (
         <div className="flex flex-col pb-1" data-testid="total-changed">
+          {lost ? (
+            // the code the shopper confirmed no longer applies: the cart's own field, read-only,
+            // with why, above the numbers it changed (#29)
+            <Card className="mb-3 flex items-start gap-2.5 px-3.5 py-3" data-testid="changed-promo">
+              <span aria-hidden="true" className="flex h-[22px] shrink-0 items-center text-muted">
+                <TagIcon size={18} />
+              </span>
+              <p className="min-w-0 text-pretty">
+                <span className="block text-base leading-[22px] font-semibold tracking-[0.04em] [overflow-wrap:anywhere]">
+                  <CodeText code={lost.code} />
+                </span>
+                <span className="type-small mt-0.5 block text-muted">
+                  {promoReasonText(lost.invalid, t, language)}
+                </span>
+              </p>
+            </Card>
+          ) : null}
           <MoneySummary
             itemCount={c.checkout.itemCount}
             itemsSubtotal={c.checkout.quote.itemsSubtotal}
@@ -691,23 +712,6 @@ function ConflictSheet({
             place={place}
             was={c.was}
           />
-          {promo?.invalid ? (
-            // the code the shopper confirmed with no longer applies: say which and why (#29)
-            <p
-              className="type-small mt-3 flex items-start gap-2 text-pretty text-ink"
-              data-testid="changed-promo"
-            >
-              <span aria-hidden="true" className="flex h-[18px] shrink-0 items-center text-muted">
-                <TagIcon size={16} />
-              </span>
-              <span className="min-w-0">
-                <span className="font-semibold tracking-[0.04em] [overflow-wrap:anywhere]">
-                  {promo.code}
-                </span>
-                <span className="block">{promoReasonText(promo.invalid, t, language)}</span>
-              </span>
-            </p>
-          ) : null}
           <div className="mt-4 flex flex-col gap-2">
             <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote)}>
               <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>
