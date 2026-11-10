@@ -9,7 +9,6 @@ import {
 import { formatMoney, formatTiyin, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { useState, type FormEvent } from 'react';
-import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
@@ -127,30 +126,20 @@ export function LinkCreditDialog({
       <p className="-mt-1 font-semibold tabular-nums">
         {fill(c.thisCredit, { amount: formatTiyin(credit.amountTiyin, language) })}
       </p>
+      {/* the dialog's own button reads «Найти» until the order is found */}
       <Field id="link-order" label={c.orderNumber} error={missing ? c.notFound : undefined}>
-        <div className="flex gap-2">
-          <Input
-            value={typed}
-            onChange={(e) => {
-              setTyped(e.target.value);
-              setPage(null);
-              setMissing(false);
-            }}
-            inputMode="numeric"
-            autoComplete="off"
-            enterKeyHint="search"
-            className="tabular-nums"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void find()}
-            loading={finding}
-            disabled={!typed.trim()}
-          >
-            {c.find}
-          </Button>
-        </div>
+        <Input
+          value={typed}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            setPage(null);
+            setMissing(false);
+          }}
+          inputMode="numeric"
+          autoComplete="off"
+          enterKeyHint="search"
+          className="tabular-nums"
+        />
       </Field>
       {page && (
         <div className="grid gap-1 rounded-button bg-field px-3.5 py-3 text-sm" data-link-order>

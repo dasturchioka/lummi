@@ -1395,6 +1395,60 @@ export const screens: Screen[] = [
       await dialog.getByLabel(t.orders.trackingLabel).fill('UZB 7704 1131 0058');
     },
   },
+  {
+    // the receipt in manual review: Candidate credits first
+    id: 'order-confirm',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      const first = dialog.locator('[data-credit-option] input').first();
+      await first.waitFor();
+      await first.check();
+    },
+  },
+  {
+    // «Показать другие», one of another amount picked: the reason it needs
+    id: 'order-confirm-other',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      await dialog.locator('[data-credit-option]').first().waitFor();
+      await dialog.getByRole('button', { name: /\(\d+\)$/ }).click();
+      // the transfer 40 000 short, the one the rejected receipt showed: the oldest of the others
+      const short = dialog.locator('[data-credit-option]').last();
+      await short.locator('input').check();
+      await short.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await dialog.locator('textarea').fill('Перевела двумя частями, вторая придёт вечером');
+    },
+  },
+  {
+    // money that came with no receipt, from «Ожидает оплаты»
+    id: 'order-confirm-no-receipt',
+    path: `/orders/${SHOT_ORDER.awaiting}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      await dialog.locator('[data-credit-option] input').first().check();
+    },
+  },
+  {
+    id: 'credits-link',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.locator('[data-link-credit]:visible').first().click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel(t.credits.orderNumber).fill(String(SHOT_ORDER.awaiting));
+      await dialog.getByRole('button', { name: t.credits.find, exact: true }).click();
+      await dialog.locator('[data-link-order]').waitFor();
+    },
+  },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

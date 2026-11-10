@@ -72,14 +72,43 @@ type Step = {
   reason?: string;
   payload?: Record<string, unknown>;
 };
+type Check = {
+  isReceipt: number;
+  amountMatches: number;
+  recipientMatches: number;
+  choiceConfidence: number;
+  confirmed: boolean;
+  outcome: 'confirmed' | 'manual_review' | 'credit_taken' | 'stale';
+  provider?: 'typesafe' | 'openai';
+  reason?: string;
+};
+/** The AI's answer when it confirmed a receipt (ADR 0013 thresholds 0.8 / 0.6). */
+const SURE: Check = {
+  isReceipt: 0.99,
+  amountMatches: 0.97,
+  recipientMatches: 0.98,
+  choiceConfidence: 0.74,
+  confirmed: true,
+  outcome: 'confirmed',
+};
 type ReceiptSpec = {
   at: string;
-  verdict: 'pending' | 'manual_review' | 'rejected' | 'ai_confirmed' | 'payment_not_found';
+  verdict:
+    | 'pending'
+    | 'manual_review'
+    | 'rejected'
+    | 'ai_confirmed'
+    | 'manager_confirmed'
+    | 'payment_not_found';
   file: string;
   source: 'miniapp' | 'bot';
   pdf?: boolean;
   amount: number;
+  reviewReason?: 'duplicate' | 'not_confirmed' | 'judge_failed';
+  check?: Check;
 };
+/** An unlinked credit some minutes after the order: its amount differs by `deltaTiyin`. */
+type Spare = { afterMin: number; deltaTiyin?: number; card?: string; from?: string };
 type Spec = {
   number: number;
   customer: number;
@@ -94,6 +123,9 @@ type Spec = {
   tracking?: string;
   receipts?: ReceiptSpec[];
   steps?: Step[];
+  /** How the confirming credit differs, and who linked it (default: exact, by the AI). */
+  link?: { deltaTiyin?: number; card?: string; reason?: string; staff?: number };
+  spare?: Spare[];
 };
 
 const AUDIT: Record<string, string> = {
@@ -240,6 +272,10 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
       status: 'awaiting_payment',
       at: at(11, 9, 12),
       lines: [{ pick: 3, ml: 30, qty: 1 }],
+      spare: [
+        { afterMin: 18, from: 'CLICK P2P HUMO2UZCAR' },
+        { afterMin: 26, deltaTiyin: -500_000, from: 'PAYNET P2P' },
+      ],
     },
     {
       number: 9002,
@@ -295,7 +331,23 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'Click_chek.png',
           source: 'bot',
           amount: 0,
+          reviewReason: 'not_confirmed',
+          check: {
+            isReceipt: 0.97,
+            amountMatches: 0.55,
+            recipientMatches: 0.91,
+            choiceConfidence: 0.42,
+            confirmed: false,
+            outcome: 'manual_review',
+            reason: 'below threshold',
+          },
         },
+      ],
+      spare: [
+        { afterMin: 50, from: 'CLICK P2P HUMO2UZCAR' },
+        { afterMin: 12, deltaTiyin: -4_000_000, from: 'CLICK P2P HUMO2UZCAR' },
+        { afterMin: 58, card: '9055', from: 'UZCARD2HUMO P2P' },
+        { afterMin: 61, deltaTiyin: 50, from: 'PAYNET P2P' },
       ],
       steps: [
         {
@@ -339,6 +391,7 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'chek.jpg',
           source: 'miniapp',
           amount: 0,
+          check: SURE,
         },
       ],
       steps: walk(at(10, 16, 5), 'payment_confirmed', dilnoza),
@@ -360,6 +413,7 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'IMG_7731.PNG',
           source: 'miniapp',
           amount: 0,
+          check: SURE,
         },
       ],
       steps: walk(at(9, 14, 20), 'handed_to_bts', muhammadjon, 'UZB 7704 1129 0042'),
@@ -374,13 +428,29 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
       receipts: [
         {
           at: at(6, 12, 9),
-          verdict: 'ai_confirmed',
+          verdict: 'manager_confirmed',
           file: 'IMG_6620.PNG',
           source: 'miniapp',
-          amount: 0,
+          amount: 5_000,
+          reviewReason: 'not_confirmed',
+          check: {
+            isReceipt: 0.98,
+            amountMatches: 0.12,
+            recipientMatches: 0.95,
+            choiceConfidence: 0.31,
+            confirmed: false,
+            outcome: 'manual_review',
+            provider: 'openai',
+            reason: 'below threshold',
+          },
         },
       ],
       steps: walk(at(6, 12, 0), 'delivered', dilnoza, 'UZB 7704 0981 0017'),
+      link: {
+        deltaTiyin: 500_000,
+        staff: dilnoza,
+        reason: 'Перевели на 5 000 сум больше: разницу вернём наличными с посылкой.',
+      },
     },
     {
       number: 9007,
@@ -395,6 +465,7 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'chek_8_noyabr.png',
           source: 'bot',
           amount: 0,
+          check: SURE,
         },
       ],
       steps: [
@@ -468,8 +539,10 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'IMG_9930.PNG',
           source: 'miniapp',
           amount: 0,
+          reviewReason: 'duplicate',
         },
       ],
+      spare: [{ afterMin: 395, from: 'UZCARD2HUMO P2P TRANSFER FROM APELSIN MOBILE BANKING' }],
       steps: [
         {
           action: 'submit_receipt',
@@ -575,11 +648,29 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           file: 'IMG_8812.PNG',
           source: 'miniapp',
           amount: 0,
+          check: SURE,
         },
       ],
       steps: walk(at(10, 9, 50), 'assembling', dilnoza),
     },
   ];
+
+  const SHOP_LAST4 = '7364';
+  let humo = HUMO_FIRST;
+  /** A credit as the Humo intake writes one; returns its id. */
+  const credit = async (occurred: string, tiyin: number, last4: string, from: string | null) => {
+    const id = humo++;
+    await db.query(
+      `insert into humo_messages (message_id, text, received_at) values ($1, 'shot', $2)`,
+      [id, occurred],
+    );
+    const { rows } = await db.query(
+      `insert into credits (humo_message_id, amount_tiyin, occurred_at, card_mask, card_last4, counterparty, event_handled_at)
+       values ($1, $2, date_trunc('minute', $3::timestamptz), $4, $5, $6, now()) returning id`,
+      [id, tiyin, occurred, `HUMOCARD *${last4}`, last4, from],
+    );
+    return Number(rows[0]!.id);
+  };
 
   const browser = await chromium.launch();
   const page = await browser.newPage({
@@ -683,6 +774,17 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
         },
       );
 
+      const spareIds: number[] = [];
+      for (const c of s.spare ?? [])
+        spareIds.push(
+          await credit(
+            plus(s.at, c.afterMin),
+            total * 100 + (c.deltaTiyin ?? 0),
+            c.card ?? SHOP_LAST4,
+            c.from ?? null,
+          ),
+        );
+
       const receiptIds: number[] = [];
       for (const r of s.receipts ?? []) {
         await page.setContent(
@@ -717,7 +819,13 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           ],
         );
         receiptIds.push(Number(made[0]!.id));
+        if (r.reviewReason)
+          await db.query(`update receipts set review_reason = $2 where id = $1`, [
+            made[0]!.id,
+            r.reviewReason,
+          ]);
       }
+      let linkedCredit: number | null = null;
 
       let submitted = -1;
       for (const step of s.steps ?? []) {
@@ -726,7 +834,35 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           step.action === 'submit_receipt' || step.action === 'reject_receipt'
             ? receiptIds[submitted]
             : undefined;
-        const payload = { ...(step.payload ?? {}), ...(receiptId ? { receiptId } : {}) };
+        let payload: Record<string, unknown> = {
+          ...(step.payload ?? {}),
+          ...(receiptId ? { receiptId } : {}),
+        };
+        if (step.action === 'confirm_payment') {
+          // the money came a couple of minutes before; #32's door links it (orders.credit_id)
+          const delta = s.link?.deltaTiyin ?? 0;
+          const last4 = s.link?.card ?? SHOP_LAST4;
+          linkedCredit = await credit(
+            plus(step.at, -2),
+            total * 100 + delta,
+            last4,
+            'CLICK P2P HUMO2UZCAR',
+          );
+          await db.query(`update orders set credit_id = $2 where id = $1`, [orderId, linkedCredit]);
+          payload = {
+            creditId: linkedCredit,
+            receiptId: receiptIds[submitted] ?? null,
+            amountDue: total,
+            creditAmountTiyin: total * 100 + delta,
+            differenceTiyin: delta,
+            cardLast4: last4,
+            offShopCard: last4 !== SHOP_LAST4,
+          };
+          if (s.link?.staff) {
+            step.by = { type: 'staff', staff: s.link.staff };
+            step.reason = s.link.reason;
+          }
+        }
         const actorId =
           step.by.type === 'customer'
             ? customer.get(s.customer)!
@@ -763,35 +899,48 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
           },
         );
       }
+
+      // the receipt AI's answers (#32): shown the credit that paid it, or the first one waiting
+      for (const [i, r] of (s.receipts ?? []).entries()) {
+        const shown = linkedCredit ?? spareIds[0];
+        if (!r.check || shown === undefined) continue;
+        const { provider = 'typesafe', outcome, reason, ...scores } = r.check;
+        await db.query(
+          `insert into receipt_checks (receipt_id, candidate_credit_ids, judgement, outcome, created_at)
+           values ($1, $2, $3, $4, $5::timestamptz + interval '1 minute')`,
+          [
+            receiptIds[i],
+            [shown, ...spareIds.slice(1, 2)],
+            JSON.stringify({
+              ...scores,
+              chosenCreditId: r.check.confirmed ? shown : null,
+              provider,
+              ...(reason ? { reason } : {}),
+            }),
+            outcome,
+            r.at,
+          ],
+        );
+      }
     }
   } finally {
     await browser.close();
   }
 
-  // credits as the Humo intake writes them; none is linked to an order before #32
-  const credits: [string, number, string, string | null][] = [
-    ['2026-11-11T04:02:00Z', 18_800_000, 'HUMOCARD *7364', 'CLICK P2P HUMO2UZCAR'],
-    ['2026-11-11T03:41:00Z', 7_575_050, 'HUMOCARD *7364', 'PAYNET P2P'],
+  // a few more credits nothing claims, as the Humo intake writes them
+  for (const [occurred, tiyin, last4, from] of [
+    ['2026-11-11T04:02:00Z', 18_800_000, SHOP_LAST4, 'CLICK P2P HUMO2UZCAR'],
+    ['2026-11-11T03:41:00Z', 7_575_050, SHOP_LAST4, 'PAYNET P2P'],
     [
       '2026-11-10T15:12:00Z',
       125_000_000,
-      'HUMOCARD *9055',
+      '9055',
       'UZCARD2HUMO P2P TRANSFER FROM APELSIN MOBILE BANKING',
     ],
-    ['2026-11-10T11:20:00Z', 14_900_000, 'HUMOCARD *7364', 'CLICK P2P HUMO2UZCAR'],
-    ['2026-11-09T09:00:00Z', 9_900_000, 'HUMOCARD *7364', null],
-  ];
-  for (const [i, [occurred, tiyin, mask, counterparty]] of credits.entries()) {
-    await db.query(
-      `insert into humo_messages (message_id, text, received_at) values ($1, 'shot', $2)`,
-      [HUMO_FIRST + i, occurred],
-    );
-    await db.query(
-      `insert into credits (humo_message_id, amount_tiyin, occurred_at, card_mask, card_last4, counterparty, event_handled_at)
-       values ($1, $2, $3, $4, $5, $6, now())`,
-      [HUMO_FIRST + i, tiyin, occurred, mask, mask.slice(-4), counterparty],
-    );
-  }
+    ['2026-11-10T11:20:00Z', 14_900_000, SHOP_LAST4, 'CLICK P2P HUMO2UZCAR'],
+    ['2026-11-09T09:00:00Z', 9_900_000, SHOP_LAST4, null],
+  ] as const)
+    await credit(occurred, tiyin, last4, from);
 }
 
 async function audit(
@@ -818,12 +967,17 @@ export async function forgetShotOrders(db: Sql) {
     `delete from audit_log where target_type = 'order' and target_id = any($1::text[])`,
     [ids],
   );
+  await db.query(
+    `delete from receipt_checks where receipt_id in (select id from receipts where order_id = any($1::bigint[]))`,
+    [ids],
+  );
   await db.query(`delete from receipts where order_id = any($1::bigint[])`, [ids]);
   await db.query(`delete from orders where number between $1 and $2`, [FIRST, LAST]);
-  await db.query(`delete from credits where humo_message_id >= $1 and humo_message_id < $1 + 100`, [
-    HUMO_FIRST,
-  ]);
-  await db.query(`delete from humo_messages where message_id >= $1 and message_id < $1 + 100`, [
+  await db.query(
+    `delete from credits where humo_message_id >= $1 and humo_message_id < $1 + 1000`,
+    [HUMO_FIRST],
+  );
+  await db.query(`delete from humo_messages where message_id >= $1 and message_id < $1 + 1000`, [
     HUMO_FIRST,
   ]);
 }
