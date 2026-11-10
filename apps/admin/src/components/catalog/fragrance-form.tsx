@@ -667,11 +667,14 @@ export function FragranceForm({
                         </Notice>
                       )}
                       <PhotoUpload
-                        ml={ml}
-                        volumeId={volumeIds[ml] ?? null}
+                        slot={ml}
+                        label={`${c.photo} ${ml} ${c.ml}`}
+                        url={volumeIds[ml] ? `/api/admin/volumes/${volumeIds[ml]}/photo` : null}
                         hash={photos[ml] ?? null}
-                        onUploaded={(h) => setPhotos((s) => ({ ...s, [ml]: h }))}
-                        t={t}
+                        onUploaded={(a) =>
+                          setPhotos((s) => ({ ...s, [ml]: (a as { photo: string }).photo }))
+                        }
+                        messages={c}
                       />
                     </>
                   )}

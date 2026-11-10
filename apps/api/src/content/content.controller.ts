@@ -1,19 +1,10 @@
-import { MAX_PHOTO_BYTES, adminContract, contract } from '@lummi/contracts';
+import { adminContract, contract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
-import {
-  Controller,
-  HttpException,
-  Inject,
-  Param,
-  ParseIntPipe,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Inject, Param, ParseIntPipe, Put, Req, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
 import { SessionGuard } from '../auth/session.guard';
-import { looksLikeImage } from '../catalog/photo-pipeline';
+import { photoFailure, readPhotoBody } from '../catalog/photo-upload';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { ContentService, type ContentFailure } from './content.service';
 
@@ -23,19 +14,11 @@ import { ContentService, type ContentFailure } from './content.service';
 export class ContentController {
   constructor(@Inject(ContentService) private readonly content: ContentService) {}
 
-  @TsRestHandler(contract.content.banner)
-  banner() {
-    return tsRestHandler(contract.content.banner, async () => ({
+  @TsRestHandler(contract.content.home)
+  home() {
+    return tsRestHandler(contract.content.home, async () => ({
       status: 200 as const,
-      body: { banner: await this.content.activeBanner() },
-    }));
-  }
-
-  @TsRestHandler(contract.content.slogan)
-  slogan() {
-    return tsRestHandler(contract.content.slogan, async () => ({
-      status: 200 as const,
-      body: { slogan: await this.content.slogan() },
+      body: await this.content.home(),
     }));
   }
 
@@ -119,18 +102,10 @@ export class ContentAdminController {
     @CurrentStaff() actor: StaffRow,
     @Req() req: Request,
   ) {
-    const body: unknown = req.body;
-    const bytes = Buffer.isBuffer(body) ? body : null;
-    if (!bytes || bytes.length === 0)
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 415);
-    if (bytes.length > MAX_PHOTO_BYTES)
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 413);
-    if (!looksLikeImage(bytes))
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 415);
+    const bytes = readPhotoBody(req.body);
     const res = await this.content.setBannerPhoto(actor, id, bytes);
     if (res.ok) return res.value;
-    if (res.reason === 'not_found') throw new HttpException({ code: 'not_found' }, 404);
-    throw new HttpException({ code: 'invalid', fields: ['photo'] }, 422);
+    throw photoFailure(res.reason);
   }
 
   @TsRestHandler(adminContract.content.slogan.get)

@@ -1,5 +1,5 @@
 import type { BannerInput } from '@lummi/contracts';
-import { auditLog, eq, homeBanners, infoPages } from '@lummi/db';
+import { auditLog, eq, promoBanners, infoPages, settings } from '@lummi/db';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PAGE_SEEDS, seedContent } from '../src/content/seed';
@@ -54,12 +54,11 @@ const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLo
 describe('customer content endpoints', () => {
   it('answers null banner and the seeded slogan before anything is set up', async () => {
     const { client } = await t.signIn();
-    const b = await client.content.banner();
-    expect(b).toMatchObject({ status: 200, body: { banner: null } });
-    const s = await client.content.slogan();
-    expect(s).toMatchObject({
+    const home = await client.content.home();
+    expect(home).toMatchObject({
       status: 200,
       body: {
+        banner: null,
         slogan: { ru: 'Ароматы, которые освещают', uz: 'Lahzalaringizni yorituvchi iforlar' },
       },
     });
@@ -72,7 +71,7 @@ describe('customer content endpoints', () => {
       body: { active: true },
     });
     const { client } = await t.signIn();
-    const res = await client.content.banner();
+    const res = await client.content.home();
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
     expect(res.body.banner).toMatchObject({
@@ -115,6 +114,32 @@ describe('customer content endpoints', () => {
     expect((await client.content.pages()).status).toBe(200);
   });
 
+  it('fills the delivery numbers and the manager from the settings when a page is read', async () => {
+    await t.db.insert(settings).values([
+      { key: 'pricing.freeDeliveryThreshold', value: 300_000 },
+      { key: 'delivery.defaultTariff', value: 30_000 },
+      { key: 'shop.managerUsername', value: '@other_manager' },
+    ]);
+    const { client } = await t.signIn();
+    const dp = await client.content.page({ params: { slug: 'delivery-payment' } });
+    const contacts = await client.content.page({ params: { slug: 'contacts' } });
+    if (dp.status !== 200 || contacts.status !== 200) throw new Error('read');
+    expect(dp.body.bodyRu).toContain('300\u202f000\u202fсум');
+    expect(dp.body.bodyRu).toContain('30\u202f000\u202fсум');
+    expect(dp.body.bodyUz).toContain('300\u202f000\u202fsoʻm');
+    expect(dp.body.bodyRu).toContain('до 48 часов');
+    expect(contacts.body.bodyRu).toContain('[@other_manager](https://t.me/other_manager)');
+    expect(`${dp.body.bodyRu}${dp.body.bodyUz}${contacts.body.bodyUz}`).not.toMatch(
+      /\{(freeDeliveryThreshold|defaultTariff|managerUsername|managerLink)\}/,
+    );
+    // the admin keeps the placeholders, so the owner edits the template
+    const admin = await owner.client.admin.content.pages.list();
+    if (admin.status !== 200) throw new Error('admin list');
+    expect(admin.body.find((p) => p.slug === 'delivery-payment')?.bodyRu).toContain(
+      '{freeDeliveryThreshold}',
+    );
+  });
+
   it('the seeded drafts follow the copy rules', () => {
     const all = PAGE_SEEDS.flatMap((p) => [p.bodyRu, p.bodyUz, p.titleRu, p.titleUz]).join('\n');
     expect(all).not.toMatch(/оригинал|копия|реплика|[Oo]riginal/);
@@ -140,7 +165,7 @@ describe('owner-only editing', () => {
     ];
     for (const res of await Promise.all(calls)) expect(res.status).toBe(403);
     expect((await photoFor(1, manager)).status).toBe(403);
-    expect(await t.db.select().from(homeBanners)).toHaveLength(0);
+    expect(await t.db.select().from(promoBanners)).toHaveLength(0);
   });
 
   it('answers an anonymous visitor 401', async () => {
@@ -167,12 +192,47 @@ describe('banners', () => {
     expect(row?.payload).toMatchObject({ switchedOff: [a.id] });
   });
 
+  it('audits and touches only the banner that was active, with three banners', async () => {
+    const a = await banner();
+    const b = await banner();
+    const c = await banner();
+    const act = (id: number) =>
+      owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
+    await act(a.id);
+    const [cBefore] = await t.db.select().from(promoBanners).where(eq(promoBanners.id, c.id));
+    await act(b.id);
+    const [row] = (await audits('content.banner_activated')).filter(
+      (x) => x.targetId === String(b.id),
+    );
+    expect(row?.payload).toMatchObject({ switchedOff: [a.id] });
+    const [cAfter] = await t.db.select().from(promoBanners).where(eq(promoBanners.id, c.id));
+    expect(cAfter?.updatedAt).toEqual(cBefore?.updatedAt);
+  });
+
+  it('two activations at once end with exactly one active banner and no error', async () => {
+    const a = await banner();
+    const b = await banner();
+    const c = await banner();
+    const act = (id: number) =>
+      owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
+    for (const first of [
+      [a.id, b.id],
+      [b.id, c.id],
+      [c.id, a.id],
+    ] as const) {
+      const results = await Promise.all(first.map(act));
+      expect(results.map((r) => r.status)).toEqual([200, 200]);
+      const active = await t.db.select().from(promoBanners).where(eq(promoBanners.active, true));
+      expect(active).toHaveLength(1);
+    }
+  });
+
   it('is enforced by the database, not only by the service', async () => {
     const a = await banner();
     const b = await banner();
-    await t.db.update(homeBanners).set({ active: true }).where(eq(homeBanners.id, a.id));
+    await t.db.update(promoBanners).set({ active: true }).where(eq(promoBanners.id, a.id));
     await expect(
-      t.db.update(homeBanners).set({ active: true }).where(eq(homeBanners.id, b.id)),
+      t.db.update(promoBanners).set({ active: true }).where(eq(promoBanners.id, b.id)),
     ).rejects.toThrow();
   });
 
@@ -269,7 +329,7 @@ describe('banners', () => {
     const del = await owner.client.admin.content.banners.remove({ params: { id: b.id } });
     expect(del.status).toBe(200);
     const { client } = await t.signIn();
-    expect(await client.content.banner()).toMatchObject({ body: { banner: null } });
+    expect(await client.content.home()).toMatchObject({ body: { banner: null } });
     expect(await audits('content.banner_deleted')).toHaveLength(1);
   });
 });
@@ -284,7 +344,7 @@ describe('slogan and pages', () => {
       body: { ru: 'Свет в каждом дне', uz: 'Har kuni nur, gʻoya' },
     });
     const { client } = await t.signIn();
-    expect(await client.content.slogan()).toMatchObject({
+    expect(await client.content.home()).toMatchObject({
       body: { slogan: { uz: 'Har kuni nur, gʻoya' } },
     });
     expect(await audits('content.slogan_changed')).toHaveLength(1);

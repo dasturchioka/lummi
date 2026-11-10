@@ -196,12 +196,12 @@ interface ShotBanner {
 async function promoBanner(db: ShotDb, b: ShotBanner) {
   await clearBanners(db);
   await db.query(
-    `insert into home_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
+    `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
      values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
     [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
   );
 }
-const clearBanners = async (db: ShotDb) => void (await db.query(`delete from home_banners`));
+const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
 
 export const screens: ScreenDef[] = [
   {

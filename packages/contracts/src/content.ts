@@ -1,11 +1,13 @@
 import { z } from 'zod';
-import { INFO_PAGE_SLUGS, isStartParam } from './constants';
+import { FRAGRANCE_START_PARAM, INFO_PAGE_SLUGS, STATIC_START_TARGETS } from './constants';
 
 /**
  * Content (ticket #21): the Home promo banner, the Home slogan and the info pages, RU/UZ.
  * Customer reads return RU/UZ pairs and the Mini App picks by language. The API normalises Uzbek
- * apostrophes on save. Page bodies are limited Markdown (`./markdown`), never HTML.
+ * apostrophes on save. Page bodies are rich text (`@lummi/rich-text`), never HTML.
  */
+const isStartParam = (v: string) =>
+  Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 
@@ -33,12 +35,33 @@ export const promoBannerSchema = z.object({
   target: z.string(),
 });
 export type PromoBanner = z.infer<typeof promoBannerSchema>;
-export const activeBannerResponseSchema = z.object({ banner: promoBannerSchema.nullable() });
-
 export const sloganSchema = z.object({ ru: z.string(), uz: z.string() });
 export type Slogan = z.infer<typeof sloganSchema>;
 /** `null`: nothing saved yet, the app uses its own built-in slogan. */
 export const sloganResponseSchema = z.object({ slogan: sloganSchema.nullable() });
+
+/**
+ * What Home needs from the owner, in one response so the slogan never swaps in after the first
+ * paint: the active banner (null: Home shows the Discovery set banner) and the saved slogan.
+ */
+export const homeContentSchema = z.object({
+  banner: promoBannerSchema.nullable(),
+  slogan: sloganSchema.nullable(),
+});
+export type HomeContent = z.infer<typeof homeContentSchema>;
+
+/**
+ * `{name}` placeholders the API fills in a page body when a customer reads it, from the settings
+ * (`pricing.freeDeliveryThreshold`, `delivery.defaultTariff`, `shop.managerUsername`), so the
+ * text can't drift from the admin. Money reads `100 000 сум` / `100 000 soʻm` per language;
+ * `managerLink` is the manager's t.me link. The admin editor lists them.
+ */
+export const CONTENT_PLACEHOLDERS = [
+  'freeDeliveryThreshold',
+  'defaultTariff',
+  'managerUsername',
+  'managerLink',
+] as const;
 
 const slugSchema = z.enum(INFO_PAGE_SLUGS);
 

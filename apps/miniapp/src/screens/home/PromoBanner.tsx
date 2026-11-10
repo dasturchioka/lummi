@@ -10,18 +10,22 @@ import { ArrowRightIcon } from '../../ui/icons';
  * the left third, the text on the dark block beside it. The whole banner is one button that opens
  * its `startapp` target through the same route table as a deep link.
  */
-export function PromoBanner({ banner }: { banner: Banner }) {
+export default function PromoBanner({ banner }: { banner: Banner }) {
   const { language } = usePrefs();
   const router = useRouter();
   const uz = language === 'uz';
+  const to = routeForStartParam(banner.target);
   const title = uz ? banner.titleUz : banner.titleRu;
   const subtitle = uz ? banner.subtitleUz : banner.subtitleRu;
   const priceLine = uz ? banner.priceLineUz : banner.priceLineRu;
   return (
-    <button
-      type="button"
+    <a
       data-slot="promo"
-      onClick={() => void router.navigate({ to: routeForStartParam(banner.target) })}
+      href={to}
+      onClick={(e) => {
+        e.preventDefault();
+        void router.navigate({ to });
+      }}
       className="flex min-h-[140px] w-full overflow-hidden rounded-card bg-totals text-left text-totals-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.99]"
     >
       <div aria-hidden="true" className="relative w-[34%] shrink-0 bg-photo">
@@ -57,6 +61,6 @@ export function PromoBanner({ banner }: { banner: Banner }) {
           </span>
         </div>
       </div>
-    </button>
+    </a>
   );
 }

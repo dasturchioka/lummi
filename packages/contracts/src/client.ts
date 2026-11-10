@@ -47,8 +47,7 @@ export const clientRoutes = {
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
   },
   content: {
-    banner: route('GET', '/content/banner', [200, 401]),
-    slogan: route('GET', '/content/slogan', [200, 401]),
+    home: route('GET', '/content/home', [200, 401]),
     pages: route('GET', '/content/pages', [200, 401]),
     page: route('GET', '/content/pages/:slug', [200, 401, 404]),
   },

@@ -9,7 +9,7 @@ export interface PreviewBanner {
 }
 
 /**
- * The Mini App's promo banner (Home, approved variant 2) at its phone width: the photo on the
+ * Mirrors the Mini App's `PromoBanner` (`apps/miniapp/src/screens/home/PromoBanner.tsx`; Home, approved variant 2) at its phone width: the photo on the
  * left third, the text on the Graphite block, price line and arrow at the bottom. A drawing of
  * the same layout with the panel's own tokens, so the owner sees what customers will see.
  */

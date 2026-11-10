@@ -9,13 +9,13 @@ import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
 import { GridSkeleton } from '../ui/GridSkeleton';
 import { Skeleton } from '../ui/Skeleton';
-import { useBanner, useSlogan } from '../content/queries';
+import { useHomeContent } from '../content/home';
 import { DiscoveryBanner } from './home/DiscoveryBanner';
-import { PromoBanner } from './home/PromoBanner';
 
 /** Below the fold: its own chunk, so the first screen carries less code. */
 const Popular = lazy(() => import('./home/Popular'));
 const Novelties = lazy(() => import('./home/Novelties'));
+const PromoBanner = lazy(() => import('./home/PromoBanner'));
 
 /**
  * The fabric photos of the top block (approved variant 2), one per theme. To ship them, put the
@@ -46,7 +46,7 @@ function CoverArcs() {
 
 function TopBlock() {
   const { t, theme, language } = usePrefs();
-  const slogan = useSlogan().data?.slogan;
+  const slogan = useHomeContent().data?.slogan;
   const photo = FABRIC[theme];
   return (
     <section
@@ -102,10 +102,17 @@ function PopularSkeleton() {
  * its way the slot keeps its height, so nothing below it jumps; a failed request shows Discovery.
  */
 function BannerSlot() {
-  const banner = useBanner();
-  if (banner.isPending) return <Skeleton className="min-h-[140px] w-full" rounded="card" />;
-  const active = banner.data?.banner;
-  return active ? <PromoBanner banner={active} /> : <DiscoveryBanner />;
+  const home = useHomeContent();
+  const slot = <Skeleton className="min-h-[140px] w-full" rounded="card" />;
+  if (home.isPending) return slot;
+  const active = home.data?.banner;
+  return active ? (
+    <Suspense fallback={slot}>
+      <PromoBanner banner={active} />
+    </Suspense>
+  ) : (
+    <DiscoveryBanner />
+  );
 }
 
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills

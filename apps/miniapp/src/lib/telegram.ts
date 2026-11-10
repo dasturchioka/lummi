@@ -24,6 +24,8 @@ import { languageFromTelegram, type Language } from '@lummi/i18n';
 const BROWSER_MODE = import.meta.env.DEV || import.meta.env.VITE_BROWSER_MODE === '1';
 /** The SDK's mock stands in for Telegram: client-only requests (contact) would never answer. */
 let mocked = false;
+/** True in browser mode, where Telegram is mocked and its openers do nothing. */
+export const isMocked = () => mocked;
 
 /**
  * Plain browsers (development, screenshots) have no Telegram. With launch params in the URL

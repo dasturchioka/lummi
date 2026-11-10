@@ -1,5 +1,5 @@
 import { useParams, useRouter } from '@tanstack/react-router';
-import { Markdown } from '../content/Markdown';
+import { RichText } from '../content/RichText';
 import { useInfoPage } from '../content/queries';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
@@ -21,7 +21,7 @@ function PageSkeleton() {
 
 /** One info page in the customer's language: a plain, readable column of long text. */
 export function InfoPage() {
-  const { slug } = useParams({ strict: false }) as { slug: string };
+  const { slug } = useParams({ from: '/info/$slug' });
   const { t, language } = usePrefs();
   const router = useRouter();
   const page = useInfoPage(slug);
@@ -56,7 +56,7 @@ export function InfoPage() {
       <ScreenHeader title={data ? (language === 'uz' ? data.titleUz : data.titleRu) : ''} />
       {data ? (
         <article lang={language}>
-          <Markdown source={language === 'uz' ? data.bodyUz : data.bodyRu} />
+          <RichText source={language === 'uz' ? data.bodyUz : data.bodyRu} />
         </article>
       ) : (
         <div role="status" aria-label={t.info.loadingLabel}>

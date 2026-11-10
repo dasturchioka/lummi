@@ -1,19 +1,26 @@
 import { contentTexts, infoPages, type Db } from '@lummi/db';
 import { normalizeUzbek } from '@lummi/i18n';
+import { miniappMessages } from '@lummi/i18n/miniapp';
 import type { InfoPageSlug } from '@lummi/contracts';
+import { SLOGAN_KEY } from './content.service';
 
 /**
  * Draft texts from the TZ appendix (v1.11), seeded as drafts pending the customer's approval
  * (ticket #21). Changes from the TZ draft, all for the brand's copy rules (CLAUDE.md): the FAQ's
  * first question no longer uses the banned word «оригинал» (it asks about the known brands'
  * fragrances instead), and longevity reads «до 24 часов» / «24 soatgacha» as the customer decided
- * on 2026-11-07, not the draft's «[8–12]». The returns window «[3] дней» keeps its number but is
- * still to be confirmed (open-questions). The public offer is a placeholder: it comes from the
- * customer's lawyer.
+ * on 2026-11-07, not the draft's «[8–12]». Delivery follows the 2026-11-06 decision (BTS to a
+ * pickup point, a tariff per region, free from a threshold, «до 48 часов после передачи в BTS»). Numbers and the manager's handle are
+ * `{placeholders}` the API fills from the settings when a customer reads the page
+ * (`CONTENT_PLACEHOLDERS`), so a text can't drift from the admin. The returns window «[3] дней»
+ * keeps its number but is still to be confirmed (open-questions). The public offer is a
+ * placeholder: it comes from the customer's lawyer.
+ *
+ * The slogan's default is the Mini App's own built-in string (`home.slogan`), one source.
  */
 export const SLOGAN_SEED = {
-  ru: 'Ароматы, которые освещают',
-  uz: 'Lahzalaringizni yorituvchi iforlar',
+  ru: miniappMessages.ru.home.slogan,
+  uz: miniappMessages.uz.home.slogan,
 };
 
 interface PageSeed {
@@ -32,9 +39,9 @@ export const PAGE_SEEDS: PageSeed[] = [
     bodyRu: `**LUMMI.** — парфюм по мотивам мировых ароматов. Мы делаем премиальные ароматы доступными: качественное сырьё, стойкость и аккуратная подача.
 
 Найдите «свой» аромат и носите каждый день.`,
-    bodyUz: `**LUMMI.** — dunyo mashhur hidlari asosidagi atirlar. Biz premium hidlarni hamma uchun qulay qilamiz: sifatli xomashyo, uzoq saqlanish va chiroyli qadoq.
+    bodyUz: `**LUMMI.** — dunyo mashhur iforlari asosidagi atirlar. Biz premium iforlarni hamma uchun qulay qilamiz: sifatli xomashyo, uzoq saqlanish va chiroyli qadoq.
 
-O‘z hidingizni toping va har kuni qo‘llang.`,
+O‘z iforingizni toping va har kuni qo‘llang.`,
   },
   {
     slug: 'delivery-payment',
@@ -42,18 +49,22 @@ O‘z hidingizni toping va har kuni qo‘llang.`,
     titleUz: 'Yetkazib berish va to‘lov',
     bodyRu: `### Доставка
 
-Доставляем по всему Узбекистану почтой BTS, до 48 часов с передачи в службу. Цена зависит от области, её видно при оформлении заказа.
+Отправляем почтой BTS в пункт BTS, который вы выбираете при оформлении заказа. Цена зависит от области и показана при оформлении, по умолчанию {defaultTariff}. При заказе от {freeDeliveryThreshold} доставка бесплатная.
+
+Срок: до 48 часов после передачи заказа в BTS. Если нужно уточнить, напишите менеджеру: {managerUsername}.
 
 ### Оплата
 
-Перевод на карту и загрузка чека. Заказ собираем после подтверждения оплаты. Оплатить нужно в течение 12 часов.`,
+Перевод на карту и загрузка чека. Заказ собираем после подтверждения оплаты. Время на оплату ограничено, оно показано в заказе.`,
     bodyUz: `### Yetkazib berish
 
-Butun O‘zbekiston bo‘ylab BTS pochtasi orqali, xizmatga topshirilgandan keyin 48 soatgacha yetkazamiz. Narx viloyatga bog‘liq, u buyurtma rasmiylashtirilganda ko‘rinadi.
+BTS pochtasi orqali buyurtma rasmiylashtirilganda tanlagan BTS punktingizga yuboramiz. Narx viloyatga bog‘liq va rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}. {freeDeliveryThreshold} dan boshlab buyurtmalar uchun yetkazib berish bepul.
+
+Muddat: buyurtma BTS ga topshirilgandan keyin 48 soatgacha. Aniqlashtirish kerak bo‘lsa, menejerga yozing: {managerUsername}.
 
 ### To‘lov
 
-Kartaga o‘tkazma va chekni yuklash. Buyurtma to‘lov tasdiqlangach yig‘iladi. 12 soat ichida to‘lash kerak.`,
+Kartaga o‘tkazma va chekni yuklash. Buyurtma to‘lov tasdiqlangach yig‘iladi. To‘lash uchun vaqt cheklangan, u buyurtmada ko‘rsatiladi.`,
   },
   {
     slug: 'returns',
@@ -92,22 +103,22 @@ Ochilgan sifatli atir-upa mahsulotlari almashtirilmaydi va qaytarilmaydi.`,
 
 ### Сколько стоит доставка?
 
-Зависит от области, цена показана при оформлении. Срок: до 48 часов.`,
-    bodyUz: `### Bu mashhur brendlarning atirlarimi?
+Зависит от области, цена показана при оформлении, по умолчанию {defaultTariff}. От {freeDeliveryThreshold} доставка бесплатная. Срок: до 48 часов после передачи в BTS.`,
+    bodyUz: `### Bu mashhur brendlarning iforlarimi?
 
-Yo‘q. Bu mashhur atirlar asosida yaratilgan LUMMI hidlari, sifatli atir xomashyosidan.
+Yo‘q. Bu mashhur atirlar asosida yaratilgan LUMMI iforlari, sifatli atir xomashyosidan.
 
-### Hid qancha saqlanadi?
+### Ifor qancha saqlanadi?
 
-24 soatgacha, teri, ob-havo va hidga bog‘liq.
+24 soatgacha, teri, ob-havo va iforga bog‘liq.
 
 ### Qanday surtiladi?
 
-Bilak, bo‘yin va quloq orqasiga. Ishqalamang: hid yaxshiroq ochiladi.
+Bilak, bo‘yin va quloq orqasiga. Ishqalamang: ifor yaxshiroq ochiladi.
 
-### Hidlab ko‘rmagan bo‘lsam, qanday tanlayman?
+### Hidlab ko‘rmagan bo‘lsam, iforni qanday tanlayman?
 
-Discovery set oling: bir nechta 10 ml hid. Yoki menejerga yozing.
+Discovery set oling: bir nechta 10 ml ifor. Yoki menejerga yozing.
 
 ### Qanday to‘layman?
 
@@ -115,7 +126,7 @@ Kartaga o‘tkazma orqali: rekvizit va summa buyurtmadan keyin chiqadi, so‘ng 
 
 ### Yetkazib berish qancha turadi?
 
-Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi. Muddat: 48 soatgacha.`,
+Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}. {freeDeliveryThreshold} dan boshlab bepul. Muddat: BTS ga topshirilgandan keyin 48 soatgacha.`,
   },
   {
     slug: 'contacts',
@@ -123,13 +134,13 @@ Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi. Muddat: 48 soatgacha.`
     titleUz: 'Aloqa',
     bodyRu: `Мы на связи, чтобы помочь с выбором аромата и заказом.
 
-- Менеджер: [@lummi_manager](https://t.me/lummi_manager)
+- Менеджер: [{managerUsername}]({managerLink})
 - Telegram-канал: [t.me/lummi_uz](https://t.me/lummi_uz)
 - Instagram: [instagram.com/lummi.uz](https://instagram.com/lummi.uz)
 - Магазин LUMMI на Uzum Market`,
-    bodyUz: `Hid tanlash va buyurtma bo‘yicha yordam berish uchun aloqadamiz.
+    bodyUz: `Ifor tanlash va buyurtma bo‘yicha yordam berish uchun aloqadamiz.
 
-- Menejer: [@lummi_manager](https://t.me/lummi_manager)
+- Menejer: [{managerUsername}]({managerLink})
 - Telegram kanal: [t.me/lummi_uz](https://t.me/lummi_uz)
 - Instagram: [instagram.com/lummi.uz](https://instagram.com/lummi.uz)
 - Uzum Market’dagi LUMMI do‘koni`,
@@ -138,12 +149,12 @@ Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi. Muddat: 48 soatgacha.`
     slug: 'offer',
     titleRu: 'Публичная оферта',
     titleUz: 'Ommaviy oferta',
-    bodyRu: `Текст публичной оферты готовится вместе с юристом и появится здесь. Порядок перевода и возврата денег будет указан в ней.
+    bodyRu: `Текст публичной оферты будет опубликован здесь.
 
-По любым вопросам напишите менеджеру: [@lummi_manager](https://t.me/lummi_manager).`,
-    bodyUz: `Ommaviy oferta matni yurist bilan birga tayyorlanmoqda va shu yerda paydo bo‘ladi. Pulni o‘tkazish va qaytarish tartibi unda ko‘rsatiladi.
+По любым вопросам напишите менеджеру: [{managerUsername}]({managerLink}).`,
+    bodyUz: `Ommaviy oferta matni shu yerda e’lon qilinadi.
 
-Savollar bo‘lsa, menejerga yozing: [@lummi_manager](https://t.me/lummi_manager).`,
+Savollar bo‘lsa, menejerga yozing: [{managerUsername}]({managerLink}).`,
   },
 ];
 
@@ -151,7 +162,7 @@ Savollar bo‘lsa, menejerga yozing: [@lummi_manager](https://t.me/lummi_manager
 export async function seedContent(db: Db): Promise<void> {
   await db
     .insert(contentTexts)
-    .values({ key: 'home.slogan', ru: SLOGAN_SEED.ru, uz: normalizeUzbek(SLOGAN_SEED.uz) })
+    .values({ key: SLOGAN_KEY, ru: SLOGAN_SEED.ru, uz: normalizeUzbek(SLOGAN_SEED.uz) })
     .onConflictDoNothing();
   await db
     .insert(infoPages)

@@ -1,15 +1,16 @@
 'use client';
 
 import {
-  MAX_PHOTO_BYTES,
+  FRAGRANCE_START_PARAM,
   STATIC_START_TARGETS,
   bannerInputSchema,
   type AdminBanner,
 } from '@lummi/contracts';
-import { Check, CircleAlert, ImageOff, ImagePlus } from 'lucide-react';
+import { Check, ImageOff } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { photoUrl } from '@/components/catalog/photo';
+import { PhotoUpload } from '@/components/catalog/photo-upload';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -30,9 +31,10 @@ import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
 import { BannerPreview } from './banner-preview';
 
-const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+/** The target list is `STATIC_START_TARGETS` plus the fragrance link; a new target there shows up here with no edit. */
 const STATIC_KINDS = Object.keys(STATIC_START_TARGETS) as (keyof typeof STATIC_START_TARGETS)[];
-type Kind = (typeof STATIC_KINDS)[number] | 'fragrance';
+type Kind = string;
+const FRAGRANCE = 'fragrance';
 
 interface Draft {
   titleRu: string;
@@ -58,7 +60,7 @@ const emptyDraft: Draft = {
 
 function toDraft(b: AdminBanner | null): Draft {
   if (!b) return emptyDraft;
-  const isFragrance = b.target.startsWith('p_');
+  const slug = FRAGRANCE_START_PARAM.exec(b.target)?.[1];
   return {
     titleRu: b.titleRu,
     titleUz: b.titleUz,
@@ -66,12 +68,12 @@ function toDraft(b: AdminBanner | null): Draft {
     subtitleUz: b.subtitleUz,
     priceLineRu: b.priceLineRu ?? '',
     priceLineUz: b.priceLineUz ?? '',
-    kind: isFragrance ? 'fragrance' : (b.target as Kind),
-    slug: isFragrance ? b.target.slice(2) : '',
+    kind: slug ? FRAGRANCE : b.target,
+    slug: slug ?? '',
   };
 }
 
-const targetOf = (d: Draft) => (d.kind === 'fragrance' ? `p_${d.slug.trim()}` : d.kind);
+const targetOf = (d: Draft) => (d.kind === FRAGRANCE ? `p_${d.slug.trim()}` : d.kind);
 
 function toInput(d: Draft) {
   return {
@@ -83,123 +85,6 @@ function toInput(d: Draft) {
     priceLineUz: d.priceLineUz.trim() === '' ? null : d.priceLineUz,
     target: targetOf(d),
   };
-}
-
-/** The photo slot of a saved banner: current rendition, a button, and the server's verdict. */
-function BannerPhoto({
-  id,
-  hash,
-  onUploaded,
-  t,
-}: {
-  id: number | null;
-  hash: string | null;
-  onUploaded: (b: AdminBanner) => void;
-  t: AdminMessages;
-}) {
-  const c = t.content.banner;
-  const input = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [state, setState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'error'; text?: string }>({
-    kind: 'idle',
-  });
-  useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
-
-  const pick = async (file: File | undefined) => {
-    if (!file || id === null) return;
-    if (!TYPES.includes(file.type)) return setState({ kind: 'error', text: c.photoBadType });
-    if (file.size > MAX_PHOTO_BYTES) return setState({ kind: 'error', text: c.photoTooBig });
-    setPreview(URL.createObjectURL(file));
-    setState({ kind: 'busy', text: c.photoUploading });
-    const res = await fetch(`/api/admin/content/banners/${id}/photo`, {
-      method: 'PUT',
-      headers: { 'content-type': file.type },
-      body: file,
-    }).catch(() => null);
-    if (res?.ok) {
-      onUploaded((await res.json()) as AdminBanner);
-      setState({ kind: 'ok', text: c.photoUploaded });
-    } else {
-      setPreview(null);
-      setState({
-        kind: 'error',
-        text:
-          res?.status === 413
-            ? c.photoTooBig
-            : res?.status === 415
-              ? c.photoBadType
-              : res?.status === 422
-                ? c.photoTooSmall
-                : c.photoFailed,
-      });
-    }
-  };
-
-  const shown = preview ?? (hash ? photoUrl(hash, 400) : null);
-  const busy = state.kind === 'busy';
-  return (
-    <div className="grid gap-1.5" data-banner-photo>
-      <p className="text-[12.5px] font-medium text-muted-foreground">{c.photo}</p>
-      {id === null ? (
-        <p className="text-xs text-pretty text-muted-foreground">{c.photoSaveFirst}</p>
-      ) : (
-        <div className="flex items-start gap-4">
-          <div
-            className={`grid aspect-[3/4] w-24 shrink-0 place-items-center overflow-hidden rounded-[8px] bg-field transition-opacity duration-200 ${busy ? 'opacity-60' : ''}`}
-          >
-            {shown ? (
-              <img src={shown} alt="" className="size-full object-cover" decoding="async" />
-            ) : (
-              <ImageOff className="size-5 text-muted-foreground" strokeWidth={1.5} aria-hidden />
-            )}
-          </div>
-          <div className="grid min-w-0 content-start justify-items-start gap-2">
-            <input
-              ref={input}
-              type="file"
-              accept={TYPES.join(',')}
-              className="sr-only"
-              tabIndex={-1}
-              aria-label={c.photo}
-              onChange={(e) => {
-                void pick(e.target.files?.[0]);
-                e.target.value = '';
-              }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              loading={busy}
-              onClick={() => input.current?.click()}
-            >
-              <ImagePlus strokeWidth={1.5} aria-hidden />
-              {shown ? c.photoReplace : c.photoChoose}
-            </Button>
-            <p className="text-xs text-pretty text-muted-foreground">{c.photoHint}</p>
-            {state.text && !busy && (
-              <p
-                key={state.text}
-                role={state.kind === 'error' ? 'alert' : 'status'}
-                className="flex items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
-              >
-                {state.kind === 'error' ? (
-                  <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-                ) : (
-                  <Check
-                    className="size-3.5 shrink-0 text-sage-ink"
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                )}
-                {state.text}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function Form({
@@ -230,7 +115,7 @@ function Form({
     const parsed = bannerInputSchema.safeParse(input);
     if (!parsed.success) {
       const bad = new Set(parsed.error.issues.map((i) => String(i.path[0])));
-      if (bad.delete('target')) bad.add(draft.kind === 'fragrance' ? 'slug' : 'kind');
+      if (bad.delete('target')) bad.add(draft.kind === FRAGRANCE ? 'slug' : 'kind');
       setErrors(bad);
       setState('invalid');
       return;
@@ -312,16 +197,16 @@ function Form({
         })}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="bn-target" label={b.target}>
-            <Select value={draft.kind} onChange={(e) => set('kind', e.target.value as Kind)}>
+            <Select value={draft.kind} onChange={(e) => set('kind', e.target.value)}>
               {STATIC_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {b.targets[k]}
                 </option>
               ))}
-              <option value="fragrance">{b.targets.fragrance}</option>
+              <option value={FRAGRANCE}>{b.targets.fragrance}</option>
             </Select>
           </Field>
-          {draft.kind === 'fragrance' && (
+          {draft.kind === FRAGRANCE && (
             <Field
               id="bn-slug"
               label={b.fragranceSlug}
@@ -338,15 +223,19 @@ function Form({
             </Field>
           )}
         </div>
-        <BannerPhoto
+        <PhotoUpload
           key={saved?.id ?? 'new'}
-          id={saved?.id ?? null}
+          slot="banner"
+          label={t.catalog.photo}
+          url={saved ? `/api/admin/content/banners/${saved.id}/photo` : null}
           hash={saved?.imageHash ?? null}
-          onUploaded={(nb) => {
+          hint={b.photoHint}
+          messages={{ ...t.catalog, photoSaveFirst: b.photoSaveFirst }}
+          onUploaded={(a) => {
+            const nb = a as AdminBanner;
             setSaved(nb);
             onSaved(nb);
           }}
-          t={t}
         />
         {(state === 'invalid' || state === 'failed') && (
           <Notice title={state === 'invalid' ? c.fixErrors : c.failed} />

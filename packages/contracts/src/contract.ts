@@ -65,12 +65,12 @@ import {
   telegramAuthBodySchema,
 } from './auth';
 import {
-  activeBannerResponseSchema,
   adminBannerSchema,
   adminInfoPageSchema,
   bannerActiveBodySchema,
   bannerInputSchema,
   contentErrorSchema,
+  homeContentSchema,
   infoPageErrorSchema,
   infoPageInputSchema,
   infoPageListItemSchema,
@@ -190,17 +190,12 @@ export const contract = c.router({
     },
   },
   content: {
-    banner: {
+    home: {
       method: 'GET',
-      path: '/content/banner',
-      responses: { 200: activeBannerResponseSchema, 401: authErrorSchema },
-      summary: 'The active Home promo banner, or null (Home then shows the Discovery set banner)',
-    },
-    slogan: {
-      method: 'GET',
-      path: '/content/slogan',
-      responses: { 200: sloganResponseSchema, 401: authErrorSchema },
-      summary: 'The Home slogan in RU and UZ, or null when the owner has not set one',
+      path: '/content/home',
+      responses: { 200: homeContentSchema, 401: authErrorSchema },
+      summary:
+        'Home content in one answer: the active promo banner (null: Home shows the Discovery set banner) and the saved slogan in RU and UZ (null: the built-in one)',
     },
     pages: {
       method: 'GET',

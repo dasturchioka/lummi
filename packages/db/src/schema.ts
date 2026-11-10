@@ -485,8 +485,8 @@ export type CartLineRow = typeof cartLines.$inferSelect;
  * partial unique index is what enforces it. With none active Home shows the Discovery set banner.
  * `image_hash` names a rendition set of the photo pipeline (`public/<hash>-<w>.webp`).
  */
-export const homeBanners = pgTable(
-  'home_banners',
+export const promoBanners = pgTable(
+  'promo_banners',
   {
     id: id(),
     imageHash: text('image_hash'),
@@ -503,7 +503,7 @@ export const homeBanners = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('home_banners_one_active_idx')
+    uniqueIndex('promo_banners_one_active_idx')
       .on(t.active)
       .where(sql`${t.active}`),
   ],
@@ -531,5 +531,5 @@ export const infoPages = pgTable('info_pages', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type HomeBannerRow = typeof homeBanners.$inferSelect;
+export type PromoBannerRow = typeof promoBanners.$inferSelect;
 export type InfoPageRow = typeof infoPages.$inferSelect;

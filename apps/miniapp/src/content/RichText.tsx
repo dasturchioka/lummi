@@ -1,12 +1,13 @@
-import { parseMarkdown, type MdBlock, type MdInline } from '@lummi/contracts/markdown';
+import { HEADING_TAG, parseRichText, type RichBlock, type RichInline } from '@lummi/rich-text';
 import { Fragment, useMemo, type ReactNode } from 'react';
+import { openContentLink } from '../lib/open-content-link';
 
 /**
- * Renders the limited Markdown of the info pages as React elements. It never sets inner HTML:
+ * Renders the rich text of the info pages as React elements. It never sets inner HTML:
  * every string goes through React's escaping, and the parser (shared with the admin preview)
  * keeps only safe link targets, so a `<script>` in a body is just visible text.
  */
-function Inline({ nodes }: { nodes: MdInline[] }): ReactNode {
+function Inline({ nodes }: { nodes: RichInline[] }): ReactNode {
   return nodes.map((n, i) => {
     switch (n.t) {
       case 'text':
@@ -26,12 +27,15 @@ function Inline({ nodes }: { nodes: MdInline[] }): ReactNode {
           </em>
         );
       case 'a':
+        // t.me links stay inside Telegram, https links open in its browser (lib/telegram.ts);
+        // mailto: and tel: are left to the system
         return (
           <a
             key={i}
             href={n.href}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => {
+              if (openContentLink(n.href)) e.preventDefault();
+            }}
             className="font-medium underline decoration-line-strong underline-offset-[3px]"
           >
             <Inline nodes={n.c} />
@@ -41,18 +45,16 @@ function Inline({ nodes }: { nodes: MdInline[] }): ReactNode {
   });
 }
 
-function Block({ block }: { block: MdBlock }) {
+function Block({ block }: { block: RichBlock }) {
   switch (block.t) {
-    case 'h':
-      return block.level === 2 ? (
-        <h2 className="type-heading mt-7 text-ink first:mt-0">
+    case 'h': {
+      const Tag = HEADING_TAG[block.level];
+      return (
+        <Tag className={`type-heading text-ink first:mt-0 ${block.level === 2 ? 'mt-7' : 'mt-6'}`}>
           <Inline nodes={block.c} />
-        </h2>
-      ) : (
-        <h3 className="type-heading mt-6 text-ink first:mt-0">
-          <Inline nodes={block.c} />
-        </h3>
+        </Tag>
       );
+    }
     case 'p':
       return (
         <p className="mt-3 first:mt-0">
@@ -79,8 +81,8 @@ function Block({ block }: { block: MdBlock }) {
   }
 }
 
-export function Markdown({ source }: { source: string }) {
-  const blocks = useMemo(() => parseMarkdown(source), [source]);
+export function RichText({ source }: { source: string }) {
+  const blocks = useMemo(() => parseRichText(source), [source]);
   return (
     <div className="text-[15px] leading-[1.6] break-words text-pretty text-ink [overflow-wrap:anywhere]">
       {blocks.map((b, i) => (

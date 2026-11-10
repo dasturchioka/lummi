@@ -1,11 +1,11 @@
-import { parseMarkdown, type MdBlock, type MdInline } from '@lummi/contracts/markdown';
+import { HEADING_TAG, parseRichText, type RichBlock, type RichInline } from '@lummi/rich-text';
 import { Fragment } from 'react';
 
 /**
- * The info page as the Mini App renders it, for the page editor's preview. Same parser, so what
+ * The info page as the Mini App renders it, for the page editor's preview. Same parser and the same heading table (`HEADING_TAG`) as the Mini App's `RichText`, so what
  * the owner sees is what the customer reads; React escapes every string, nothing is HTML.
  */
-function Inline({ nodes }: { nodes: MdInline[] }) {
+function Inline({ nodes }: { nodes: RichInline[] }) {
   return (
     <>
       {nodes.map((n, i) => {
@@ -44,14 +44,18 @@ function Inline({ nodes }: { nodes: MdInline[] }) {
   );
 }
 
-function Block({ block }: { block: MdBlock }) {
+function Block({ block }: { block: RichBlock }) {
   switch (block.t) {
-    case 'h':
+    case 'h': {
+      const Tag = HEADING_TAG[block.level];
       return (
-        <h3 className="mt-6 text-[17px] leading-snug font-semibold first:mt-0">
+        <Tag
+          className={`text-[17px] leading-snug font-semibold first:mt-0 ${block.level === 2 ? 'mt-7' : 'mt-6'}`}
+        >
           <Inline nodes={block.c} />
-        </h3>
+        </Tag>
       );
+    }
     case 'p':
       return (
         <p className="mt-3 first:mt-0">
@@ -76,10 +80,10 @@ function Block({ block }: { block: MdBlock }) {
   }
 }
 
-export function MarkdownView({ source }: { source: string }) {
+export function RichTextView({ source }: { source: string }) {
   return (
     <div className="text-[15px] leading-[1.6] [overflow-wrap:anywhere] text-pretty">
-      {parseMarkdown(source).map((b, i) => (
+      {parseRichText(source).map((b, i) => (
         <Block key={i} block={b} />
       ))}
     </div>

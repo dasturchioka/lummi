@@ -1,5 +1,5 @@
 {
-  "id": "ba3847d8-8dd8-45f2-bb9a-6360c8395eab",
+  "id": "940aade6-4112-4940-bc0f-3fc5215bd67e",
   "prevId": "e889758a-7a1c-43c2-8e02-dc357eda4d89",
   "version": "7",
   "dialect": "postgresql",
@@ -1298,123 +1298,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.home_banners": {
-      "name": "home_banners",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "home_banners_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "image_hash": {
-          "name": "image_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "title_ru": {
-          "name": "title_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title_uz": {
-          "name": "title_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subtitle_ru": {
-          "name": "subtitle_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subtitle_uz": {
-          "name": "subtitle_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price_line_ru": {
-          "name": "price_line_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "price_line_uz": {
-          "name": "price_line_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target": {
-          "name": "target",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'catalog'"
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "home_banners_one_active_idx": {
-          "name": "home_banners_one_active_idx",
-          "columns": [
-            {
-              "expression": "active",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"home_banners\".\"active\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.humo_messages": {
       "name": "humo_messages",
       "schema": "",
@@ -1731,6 +1614,123 @@
         }
       },
       "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.promo_banners": {
+      "name": "promo_banners",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "promo_banners_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "image_hash": {
+          "name": "image_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title_ru": {
+          "name": "title_ru",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title_uz": {
+          "name": "title_uz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subtitle_ru": {
+          "name": "subtitle_ru",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subtitle_uz": {
+          "name": "subtitle_uz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_line_ru": {
+          "name": "price_line_ru",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_line_uz": {
+          "name": "price_line_uz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'catalog'"
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "promo_banners_one_active_idx": {
+          "name": "promo_banners_one_active_idx",
+          "columns": [
+            {
+              "expression": "active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"promo_banners\".\"active\"",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

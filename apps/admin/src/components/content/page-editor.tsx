@@ -1,6 +1,7 @@
 'use client';
 
-import { infoPageInputSchema, type AdminInfoPage } from '@lummi/contracts';
+import { CONTENT_PLACEHOLDERS, infoPageInputSchema, type AdminInfoPage } from '@lummi/contracts';
+import { fill } from '@lummi/i18n';
 import { ArrowLeft, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
-import { MarkdownView } from './markdown-view';
+import { RichTextView } from './rich-text-view';
 
 export function PageEditor({
   page,
@@ -101,7 +102,11 @@ export function PageEditor({
                   onChange={(e) => setV({ ...v, [titleKey]: e.target.value })}
                 />
               </Field>
-              <Field id="page-body" label={p.bodyField} hint={p.bodyHint}>
+              <Field
+                id="page-body"
+                label={p.bodyField}
+                hint={`${p.bodyHint} ${fill(p.placeholders, { list: CONTENT_PLACEHOLDERS.map((n) => `{${n}}`).join(', ') })}`}
+              >
                 <Textarea
                   className="min-h-56 font-mono text-[14px]"
                   value={v[bodyKey]}
@@ -113,9 +118,9 @@ export function PageEditor({
             <div className="grid gap-1.5" data-page-preview>
               <p className="text-[12.5px] font-medium text-muted-foreground">{p.preview}</p>
               <div className="rounded-card bg-field p-4 sm:p-5">
-                <h3 className="mb-4 text-[17px] font-semibold">{v[titleKey]}</h3>
+                <p className="mb-4 text-[17px] font-semibold">{v[titleKey]}</p>
                 {v[bodyKey].trim() ? (
-                  <MarkdownView source={v[bodyKey]} />
+                  <RichTextView source={v[bodyKey]} />
                 ) : (
                   <p className="text-sm text-muted-foreground">{p.previewEmpty}</p>
                 )}

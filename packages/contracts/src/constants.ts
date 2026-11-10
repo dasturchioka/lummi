@@ -47,20 +47,6 @@ export const STATIC_START_TARGETS = {
 /** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
 export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
 
-/** True for a value `routeForStartParam` maps to a real target (not the Home fallback). */
-export function isStartParam(param: string): boolean {
-  return Object.hasOwn(STATIC_START_TARGETS, param) || FRAGRANCE_START_PARAM.test(param);
-}
-
-export function routeForStartParam(param: string | null | undefined): string {
-  if (!param) return '/';
-  const fragrance = FRAGRANCE_START_PARAM.exec(param);
-  if (fragrance) return `/p/${fragrance[1]}`;
-  return Object.hasOwn(STATIC_START_TARGETS, param)
-    ? STATIC_START_TARGETS[param as keyof typeof STATIC_START_TARGETS]
-    : '/';
-}
-
 /** The info pages (ticket #21): fixed slugs in display order. The owner edits them; nobody adds one. */
 export const INFO_PAGE_SLUGS = [
   'about',

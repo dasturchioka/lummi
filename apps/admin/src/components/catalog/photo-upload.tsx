@@ -10,26 +10,49 @@ import { photoUrl } from './photo';
 
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+/** The strings a photo slot needs; `t.catalog` has them all. */
+export type PhotoMessages = Pick<
+  AdminMessages['catalog'],
+  | 'photo'
+  | 'photoSaveFirst'
+  | 'photoUploading'
+  | 'photoUploaded'
+  | 'photoBadType'
+  | 'photoTooBig'
+  | 'photoTooSmall'
+  | 'photoFailed'
+  | 'photoReplace'
+  | 'photoChoose'
+  | 'noPhoto'
+>;
+
 /**
- * One volume's photo: the current 3:4 rendition (or the picked file) as a preview, and an upload
+ * One 3:4 photo slot (a volume's, a promo banner's): the current 3:4 rendition (or the picked file) as a preview, and an upload
  * button. The file goes up as raw bytes; the server rechecks type, size and dimensions, so the
  * browser's checks here only save a round trip. The preview sits beside the controls when the
  * column has room (a phone, a tablet) and above them in the three-column desktop editor.
  */
 export function PhotoUpload({
-  ml,
-  volumeId,
+  label,
+  url,
   hash,
   onUploaded,
-  t,
+  messages: c,
+  hint,
+  slot,
 }: {
-  ml: number;
-  volumeId: number | null;
+  /** Accessible name of the file input. */
+  label: string;
+  /** The raw-bytes PUT route; null until the owner of the photo is saved. */
+  url: string | null;
   hash: string | null;
-  onUploaded: (hash: string) => void;
-  t: AdminMessages;
+  /** Gets the route's JSON answer. */
+  onUploaded: (answer: unknown) => void;
+  messages: PhotoMessages;
+  hint?: string;
+  /** Test hook: `data-photo` value. */
+  slot: string | number;
 }) {
-  const c = t.catalog;
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [state, setState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'error'; text?: string }>({
@@ -38,19 +61,18 @@ export function PhotoUpload({
   useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
 
   const pick = async (file: File | undefined) => {
-    if (!file || volumeId === null) return;
+    if (!file || url === null) return;
     if (!TYPES.includes(file.type)) return setState({ kind: 'error', text: c.photoBadType });
     if (file.size > MAX_PHOTO_BYTES) return setState({ kind: 'error', text: c.photoTooBig });
     setPreview(URL.createObjectURL(file));
     setState({ kind: 'busy', text: c.photoUploading });
-    const res = await fetch(`/api/admin/volumes/${volumeId}/photo`, {
+    const res = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': file.type },
       body: file,
     }).catch(() => null);
     if (res?.ok) {
-      const body = (await res.json()) as { photo: string };
-      onUploaded(body.photo);
+      onUploaded(await res.json());
       setState({ kind: 'ok', text: c.photoUploaded });
     } else {
       setPreview(null);
@@ -71,9 +93,9 @@ export function PhotoUpload({
   const shown = preview ?? (hash ? photoUrl(hash, 400) : null);
   const busy = state.kind === 'busy';
   return (
-    <div className="grid gap-1.5" data-photo={ml}>
+    <div className="grid gap-1.5" data-photo={slot}>
       <p className="text-[12.5px] font-medium text-muted-foreground">{c.photo}</p>
-      {volumeId === null ? (
+      {url === null ? (
         <p className="text-xs text-pretty text-muted-foreground">{c.photoSaveFirst}</p>
       ) : (
         <div className="flex flex-col gap-3 @xs:flex-row @xs:items-start @xs:gap-4">
@@ -100,7 +122,7 @@ export function PhotoUpload({
               accept={TYPES.join(',')}
               className="sr-only"
               tabIndex={-1}
-              aria-label={`${c.photo} ${ml} ${c.ml}`}
+              aria-label={label}
               onChange={(e) => {
                 void pick(e.target.files?.[0]);
                 e.target.value = '';
@@ -116,6 +138,7 @@ export function PhotoUpload({
               <ImagePlus strokeWidth={1.5} aria-hidden />
               {shown ? c.photoReplace : c.photoChoose}
             </Button>
+            {hint && <p className="text-xs text-pretty text-muted-foreground">{hint}</p>}
             {state.text && !busy && (
               <p
                 key={state.text}
