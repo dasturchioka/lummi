@@ -28,7 +28,7 @@ import { retryTransientOnce } from '../util/transient';
 import { withTimeout } from '../util/with-timeout';
 import { WorkerRuntime } from '../worker/runtime';
 import { PaymentConfirmation } from './payment-confirmation';
-import { CANDIDATE, sqlList, WAITING_VERDICTS } from './rules';
+import { CANDIDATE, IS_DUPLICATE, isDuplicateReceipt, sqlList, WAITING_VERDICTS } from './rules';
 import { lastFour, readShopCard } from './shop-card.service';
 
 const JOB = 'receipt.check';
@@ -95,7 +95,10 @@ export class PaymentMatching implements OnApplicationShutdown {
     creditEvents.onCreditRecorded((event) => this.onCreditRecorded(event));
     runtime.register({
       name: 'receipt-matching',
-      run: async () => void (await this.queueChecks()),
+      run: async () => {
+        await this.holdDuplicates();
+        await this.queueChecks();
+      },
     });
     runtime.registerQueue({
       queue: env.RECEIPT_CHECKS_QUEUE,
@@ -107,7 +110,13 @@ export class PaymentMatching implements OnApplicationShutdown {
   /** Right after a receipt's upload commits. Never throws: if Redis is down, the sweep queues it. */
   async queueAfterCommit(receiptId: number): Promise<void> {
     try {
-      await withTimeout(this.queueChecks({ receiptId }), DISPATCH_TIMEOUT_MS);
+      await withTimeout(
+        (async () => {
+          await this.holdDuplicates({ receiptId });
+          await this.queueChecks({ receiptId });
+        })(),
+        DISPATCH_TIMEOUT_MS,
+      );
     } catch (e) {
       this.log.warn(`receipt ${receiptId}: check not queued, the sweep will: ${describeError(e)}`);
     }
@@ -117,6 +126,23 @@ export class PaymentMatching implements OnApplicationShutdown {
   async onCreditRecorded(event: CreditRecorded): Promise<void> {
     if (event.amountSom === null) return; // tiyin: never a candidate, a manager links it by hand
     await this.queueChecks({ creditId: event.creditId });
+  }
+
+  /**
+   * Duplicates never confirm themselves (spec 2026-11-07): every waiting receipt that is the same
+   * file as one accepted or sent for another order (only those sharing `receiptId`'s file, or all:
+   * the sweep) goes to manual review at once, reason `duplicate`, and the AI is never asked.
+   */
+  async holdDuplicates(only: { receiptId?: number } = {}): Promise<number[]> {
+    const { rows } = await this.db.execute<{ id: string }>(sql`
+      update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
+      where r.verdict in (${sqlList(WAITING_VERDICTS)})
+        and r.review_reason is distinct from 'duplicate'
+        and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
+        and ${IS_DUPLICATE}
+        ${only.receiptId !== undefined ? sql`and r.sha256 = (select sha256 from ${receipts} where id = ${only.receiptId})` : sql``}
+      returning r.id`);
+    return rows.map((r) => Number(r.id));
   }
 
   /**
@@ -162,6 +188,10 @@ export class PaymentMatching implements OnApplicationShutdown {
       .where(eq(receipts.id, receiptId));
     if (!row || row.order.status !== 'receipt_review') return null;
     if (!WAITING_VERDICTS.includes(row.receipt.verdict)) return null;
+    if (await isDuplicateReceipt(this.db, receiptId)) {
+      await this.holdDuplicates({ receiptId });
+      return null;
+    }
     const card = await readShopCard(this.db);
     if (!card) return null; // no card, no candidates: the receipt waits (#28 keeps uploads open)
     const candidates = await this.candidates(this.db, row.order);
@@ -213,6 +243,7 @@ export class PaymentMatching implements OnApplicationShutdown {
       join ${credits} c on ${CANDIDATE}
       where o.status = 'receipt_review'
         and r.verdict in (${sqlList(WAITING_VERDICTS)})
+        and not ${IS_DUPLICATE}
         and not exists (
           select 1 from ${receiptChecks} k where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
         )
@@ -304,7 +335,7 @@ export class PaymentMatching implements OnApplicationShutdown {
     }
     await tx
       .update(receipts)
-      .set({ verdict: 'manual_review' })
+      .set({ verdict: 'manual_review', reviewReason: 'not_confirmed' })
       .where(and(eq(receipts.id, receipt.id), eq(receipts.verdict, 'pending')));
     return record('manual_review');
   }

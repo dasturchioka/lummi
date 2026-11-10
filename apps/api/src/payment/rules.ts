@@ -1,4 +1,4 @@
-import { orders, receipts, sql, type ReceiptRow } from '@lummi/db';
+import { orders, receipts, sql, type DbOrTx, type ReceiptRow } from '@lummi/db';
 
 type ReceiptVerdict = ReceiptRow['verdict'];
 
@@ -43,3 +43,11 @@ export const IS_DUPLICATE = sql`exists (
   where twin.sha256 = r.sha256 and twin.id <> r.id
     and (twin.verdict in (${sqlList(ACCEPTED_VERDICTS)}) or twin.order_id <> r.order_id)
 )`;
+
+/** Whether the receipt is a duplicate (`IS_DUPLICATE`). */
+export async function isDuplicateReceipt(db: DbOrTx, receiptId: number): Promise<boolean> {
+  const { rows } = await db.execute<{ duplicate: boolean }>(
+    sql`select ${IS_DUPLICATE} as duplicate from ${receipts} r where r.id = ${receiptId}`,
+  );
+  return rows[0]?.duplicate === true;
+}

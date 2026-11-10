@@ -574,3 +574,54 @@ describe('re-matching and idempotency', () => {
     expect((await orderNow(placed.order.id)).creditId).toBe(creditId);
   });
 });
+
+describe('duplicate receipts never confirm themselves', () => {
+  it("a re-uploaded receipt never takes another shopper's same-amount credit, and the AI is not asked", async () => {
+    const first = await placeOrder();
+    const file = await uniqueReceiptImage();
+    t.edges.receiptJudge.respond = pickLatest;
+    await upload(first, file);
+    await recordCredit(t, { som: first.order.amountDue });
+    await vi.waitFor(async () => expect(await statusOf(first)).toBe('payment_confirmed'), {
+      timeout: 15_000,
+    });
+    await settled();
+    t.edges.receiptJudge.calls.length = 0;
+
+    const second = await placeOrder(vali, '998907654321');
+    const receiptId = await upload(second, file);
+    expect(await receiptNow(receiptId)).toMatchObject({
+      verdict: 'manual_review',
+      reviewReason: 'duplicate',
+    });
+    t.edges.clock.advance(60_000);
+    await recordCredit(t, { som: second.order.amountDue });
+    await settled();
+    await worker.tick();
+    await settled();
+
+    expect(t.edges.receiptJudge.calls).toHaveLength(0);
+    expect(await statusOf(second)).toBe('receipt_review');
+    expect((await orderNow(second.order.id)).creditId).toBeNull();
+  });
+
+  it('the same file on two waiting orders holds both for a person', async () => {
+    const first = await placeOrder();
+    const second = await placeOrder(vali, '998907654321');
+    const file = await uniqueReceiptImage();
+    const [r1, r2] = [await upload(first, file), await upload(second, file)];
+    t.edges.receiptJudge.respond = pickLatest;
+
+    await recordCredit(t, { som: first.order.amountDue });
+    await settled();
+    await worker.tick();
+    await settled();
+
+    expect(t.edges.receiptJudge.calls).toHaveLength(0);
+    for (const id of [r1, r2])
+      expect(await receiptNow(id)).toMatchObject({
+        verdict: 'manual_review',
+        reviewReason: 'duplicate',
+      });
+  });
+});

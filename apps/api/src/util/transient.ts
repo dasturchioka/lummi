@@ -36,3 +36,16 @@ export async function retryTransientOnce<T>(run: () => Promise<T>): Promise<T> {
     throw e;
   }
 }
+
+/**
+ * The unique index a write ran into (SQLSTATE 23505), or null for any other error, whether or not
+ * Drizzle wrapped the driver error.
+ */
+export function uniqueViolation(e: unknown): string | null {
+  for (let cur: unknown = e, depth = 0; cur && depth < 4; depth++) {
+    const { code, constraint } = cur as { code?: unknown; constraint?: unknown };
+    if (code === '23505') return typeof constraint === 'string' ? constraint : '';
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return null;
+}

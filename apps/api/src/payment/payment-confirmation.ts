@@ -13,6 +13,7 @@ import {
   receipts,
   shopCard,
   sql,
+  type Db,
   type DbOrTx,
   type OrderEventRow,
   type OrderRow,
@@ -22,8 +23,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
-import { retryTransientOnce, TryAgainError } from '../util/transient';
-import { AMOUNT_FITS, IN_ORDER_TIME, ON_SHOP_CARD, WAITING_VERDICTS } from './rules';
+import { DB } from '../tokens';
+import { retryTransientOnce, TryAgainError, uniqueViolation } from '../util/transient';
+import {
+  AMOUNT_FITS,
+  IN_ORDER_TIME,
+  isDuplicateReceipt,
+  ON_SHOP_CARD,
+  WAITING_VERDICTS,
+} from './rules';
 
 export { WAITING_VERDICTS } from './rules';
 
@@ -72,6 +80,8 @@ export type ConfirmPaymentOutcome =
   | { kind: 'credit_taken'; orderId: number | null }
   /** The receipt was decided meanwhile (confirmed, rejected, payment not found). */
   | { kind: 'receipt_not_waiting'; verdict: ReceiptVerdict }
+  /** AI: the receipt is the same file as one accepted or sent for another order; a person decides. */
+  | { kind: 'duplicate_receipt' }
   /**
    * The credit cannot pay this order: it arrived before the order was created (for anyone), or,
    * for the AI, it is another amount (a credit with tiyin always is) or on another card.
@@ -93,6 +103,7 @@ export const CONFIRM_PAYMENT_HTTP = {
   conflict: 409,
   credit_taken: 409,
   receipt_not_waiting: 409,
+  duplicate_receipt: 409,
   credit_mismatch: 422,
   reason_required: 422,
   reason_invalid: 422,
@@ -130,10 +141,16 @@ export function confirmPaymentHttpStatus(out: ConfirmPaymentOutcome): number {
  */
 @Injectable()
 export class PaymentConfirmation {
+  /** The capability for `confirm_payment`: this class is the only holder. */
+  private readonly door: symbol;
+
   constructor(
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-  ) {}
+    @Inject(DB) private readonly db: Db,
+  ) {
+    this.door = status.issuePaymentDoor();
+  }
 
   /** In its own transaction, retried once on a deadlock; the message is queued after the commit. */
   async confirmPayment(input: ConfirmPaymentInput): Promise<ConfirmPaymentOutcome> {
@@ -143,6 +160,15 @@ export class PaymentConfirmation {
       );
     } catch (e) {
       if (e instanceof TryAgainError) return { kind: 'try_again' };
+      // the DB's own guard against a second link, should a writer outside this door get there first
+      const index = uniqueViolation(e);
+      if (index === 'orders_credit_idx' || index === 'receipts_one_accepted_idx') {
+        const [payer] = await this.db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(eq(orders.creditId, input.creditId));
+        return { kind: 'credit_taken', orderId: payer?.id ?? null };
+      }
       throw e;
     }
   }
@@ -216,6 +242,10 @@ export class PaymentConfirmation {
       if (!receipt) return { kind: 'not_found', what: 'receipt' };
       if (!WAITING_VERDICTS.includes(receipt.verdict))
         return { kind: 'receipt_not_waiting', verdict: receipt.verdict };
+      if (input.actor.type === 'ai') {
+        // a duplicate never confirms itself (spec 2026-11-07); a manager may still decide
+        if (await isDuplicateReceipt(tx, receipt.id)) return { kind: 'duplicate_receipt' };
+      }
     }
 
     const differenceTiyin = credit.amountTiyin - order.amountDue * 100;
@@ -237,6 +267,7 @@ export class PaymentConfirmation {
       input.actor,
       expected,
       payload,
+      this.door,
     );
     // the order is locked in `expected` and the payload fits it: any refusal here is a bug, and rolls back
     if (moved.kind !== 'done')

@@ -841,6 +841,16 @@ export const receiptVerdictEnum = pgEnum('receipt_verdict', [
   'rejected',
   'payment_not_found',
 ]);
+/**
+ * Why a receipt went to manual review (#32): the same file as another receipt (`duplicate`, #36
+ * adds the perceptual hash), the AI's answer did not confirm it (`not_confirmed`), or the AI could
+ * not be asked, attempt after attempt (`judge_failed`).
+ */
+export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', [
+  'duplicate',
+  'not_confirmed',
+  'judge_failed',
+]);
 /** Where the shopper sent it from: the payment screen, or the chat with the bot (#31). */
 export const receiptSourceEnum = pgEnum('receipt_source', ['miniapp', 'bot']);
 /** The original's kind, by its first bytes (ADR 0020). */
@@ -862,6 +872,8 @@ export const receipts = pgTable(
       .references(() => orders.id),
     source: receiptSourceEnum('source').notNull(),
     verdict: receiptVerdictEnum('verdict').notNull().default('pending'),
+    /** Why it last went to manual review; null until it did. */
+    reviewReason: receiptReviewReasonEnum('review_reason'),
     /** The name the shopper's device gave the file, if any. */
     fileName: text('file_name'),
     kind: receiptFileKindEnum('kind').notNull(),
@@ -921,9 +933,10 @@ export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', [
 ]);
 
 /**
- * Every time the receipt AI was asked about a Receipt (ADR 0013, #32): the candidate credits it
- * was shown, its answer and what came of it. A receipt is asked again only when a candidate it
- * was never shown appears, so a repeated event or job asks nothing twice.
+ * Every answer the receipt AI gave about a Receipt (ADR 0013, #32): the candidate credits it was
+ * shown, its answer and what came of it. A receipt is asked again only when a candidate it was
+ * never shown appears, so a repeated event, job or retry asks nothing twice. A judge that could
+ * not answer leaves no row until its last attempt.
  */
 export const receiptChecks = pgTable(
   'receipt_checks',
@@ -935,7 +948,11 @@ export const receiptChecks = pgTable(
     /** The Candidate credits shown to the judge, oldest first. */
     candidateCreditIds: bigint('candidate_credit_ids', { mode: 'number' }).array().notNull(),
     judgement: jsonb('judgement').$type<StoredJudgement>().notNull(),
-    outcome: receiptCheckOutcomeEnum('outcome').notNull(),
+    /**
+     * Null from the moment the answer is stored (in its own transaction, right after the judge
+     * answered) until it is acted on, so a crash in between acts on it again without asking twice.
+     */
+    outcome: receiptCheckOutcomeEnum('outcome'),
     createdAt: createdAt(),
   },
   (t) => [

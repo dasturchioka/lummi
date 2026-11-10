@@ -1,5 +1,5 @@
 {
-  "id": "7e1efb92-fba1-42a2-97f9-3bc70f39b6bc",
+  "id": "8945a665-3994-47ac-935a-7f2890aa972a",
   "prevId": "2772f8b4-b200-4027-ae3f-641acf090b8c",
   "version": "7",
   "dialect": "postgresql",
@@ -3233,7 +3233,7 @@
           "type": "receipt_check_outcome",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -3333,6 +3333,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
+        },
+        "review_reason": {
+          "name": "review_reason",
+          "type": "receipt_review_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "file_name": {
           "name": "file_name",
@@ -4162,6 +4169,15 @@
         "png",
         "webp",
         "pdf"
+      ]
+    },
+    "public.receipt_review_reason": {
+      "name": "receipt_review_reason",
+      "schema": "public",
+      "values": [
+        "duplicate",
+        "not_confirmed",
+        "judge_failed"
       ]
     },
     "public.receipt_source": {

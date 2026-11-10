@@ -15,7 +15,7 @@ import {
   receipts,
 } from '@lummi/db';
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
@@ -71,10 +71,10 @@ const confirm = (input: Parameters<PaymentConfirmation['confirmPayment']>[0]) =>
   t.app.get(PaymentConfirmation).confirmPayment(input);
 
 /** The shopper sends a receipt for the order (#28): the order is then «Чек на проверке». */
-async function sendReceipt(order: { customerId: number; number: number }) {
+async function sendReceipt(order: { customerId: number; number: number }, file?: Buffer) {
   const sent = await t.app
     .get(ReceiptsService)
-    .submit(order.customerId, order.number, await uniqueReceiptImage(), {
+    .submit(order.customerId, order.number, file ?? (await uniqueReceiptImage()), {
       fileName: null,
       source: 'miniapp',
     });
@@ -476,6 +476,94 @@ describe('a receipt under check', () => {
       await confirm({ orderId: order.id, creditId, receiptId, actor: { type: 'ai' } }),
     ).toEqual({ kind: 'receipt_not_waiting', verdict: 'rejected' });
     expect((await orderNow(order.id)).status).toBe('receipt_review');
+  });
+});
+
+describe('the one door', () => {
+  it('no one else makes the confirm_payment move, not even with a full payload', async () => {
+    const { order } = await placeOrder();
+    const creditId = await recordCredit(t, { som: order.amountDue });
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const payload = {
+      creditId,
+      receiptId: null,
+      amountDue: order.amountDue,
+      creditAmountTiyin: order.amountDue * 100,
+      differenceTiyin: 0,
+      cardLast4: '1234',
+      offShopCard: false,
+    };
+    const machine = t.app.get(OrderStatusService);
+
+    expect(
+      await machine.transition(order.id, 'confirm_payment', manager, 'awaiting_payment', payload),
+    ).toEqual({ kind: 'refused', code: 'forbidden' });
+    expect(
+      await t.db.transaction((tx) =>
+        machine.transitionIn(tx, order.id, 'confirm_payment', manager, 'awaiting_payment', payload),
+      ),
+    ).toEqual({ kind: 'refused', code: 'forbidden' });
+
+    expect(await orderNow(order.id)).toMatchObject({ status: 'awaiting_payment', creditId: null });
+    // the capability went to PaymentConfirmation when the app started, and only to it
+    expect(() => machine.issuePaymentDoor()).toThrow();
+  });
+
+  it('a unique violation on the link answers credit_taken, never a 500', async () => {
+    const first = await placeOrder();
+    const second = await placeOrder(vali, '998907654321');
+    const creditId = await recordCredit(t, { som: first.order.amountDue });
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    // a writer outside the door links the credit between the door's check and its write; it
+    // skips the foreign-key check, which would otherwise wait on the door's lock on the credit
+    const machine = t.app.get(OrderStatusService);
+    const transitionIn = machine.transitionIn.bind(machine);
+    vi.spyOn(machine, 'transitionIn').mockImplementationOnce(async (...args) => {
+      const other = new pg.Client({ connectionString: t.env.DATABASE_URL });
+      await other.connect();
+      await other.query(`set session_replication_role = replica`);
+      await other.query(`update orders set credit_id = $1 where id = $2`, [
+        creditId,
+        first.order.id,
+      ]);
+      await other.end();
+      return transitionIn(...args);
+    });
+
+    const out = await confirm({
+      orderId: second.order.id,
+      creditId,
+      receiptId: null,
+      actor: manager,
+    });
+
+    expect(out).toEqual({ kind: 'credit_taken', orderId: first.order.id });
+    expect(await orderNow(second.order.id)).toMatchObject({
+      status: 'awaiting_payment',
+      creditId: null,
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('the AI never confirms a duplicate receipt (the same file on another order); a manager may', async () => {
+    const first = await placeOrder();
+    const second = await placeOrder(vali, '998907654321');
+    const file = await uniqueReceiptImage();
+    await sendReceipt(first.order, file);
+    const receiptId = await sendReceipt(second.order, file);
+    const creditId = await recordCredit(t, { som: second.order.amountDue });
+
+    expect(
+      await confirm({ orderId: second.order.id, creditId, receiptId, actor: { type: 'ai' } }),
+    ).toEqual({ kind: 'duplicate_receipt' });
+    expect(await orderNow(second.order.id)).toMatchObject({
+      status: 'receipt_review',
+      creditId: null,
+    });
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    expect(
+      (await confirm({ orderId: second.order.id, creditId, receiptId, actor: manager })).kind,
+    ).toBe('confirmed');
   });
 });
 
