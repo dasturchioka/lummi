@@ -3,7 +3,8 @@ import { SessionManager, type AuthResult } from './session';
 import { rawInitData } from './telegram';
 
 /** Same-origin `/api/*` (Vite proxy in dev, Caddy in production): no CORS, no absolute URLs. */
-const baseUrl = import.meta.env.VITE_API_URL ?? '/api';
+export const API_BASE: string = import.meta.env.VITE_API_URL ?? '/api';
+const baseUrl = API_BASE;
 
 const anonymous = createClient(baseUrl);
 

@@ -62,6 +62,65 @@ export const ordersMessages = defineMessages(
       fixErrors: 'Проверьте отмеченные поля.',
       unknownPoint: 'Этот пункт BTS больше недоступен. Выберите другой.',
       giftTooLong: 'Текст открытки длиннее {max} символов.',
+      /** No shop card is set (#28): checkout is closed. */
+      unavailableTitle: 'Оплата временно недоступна',
+      unavailableText:
+        'Оформить заказ пока нельзя: мы обновляем реквизиты для оплаты. Загляните чуть позже или напишите менеджеру.',
+      writeManager: 'Написать менеджеру',
+    },
+    /** The payment screen (#28; mockups 07, 12, 13). */
+    payment: {
+      title: 'Оплата',
+      payUntil:
+        'Оплатите до {until}. Загрузите чек до этого времени — тогда бронь сохранится до проверки.',
+      amount: 'Сумма к переводу',
+      amountHint: 'Переведите ровно эту сумму, без округления, — так оплата подтвердится быстрее.',
+      card: 'Карта получателя',
+      holder: 'Получатель: {holder}',
+      copyAmount: 'Скопировать сумму',
+      copyCard: 'Скопировать номер карты',
+      copied: 'Скопировано',
+      copyFailed: 'Не удалось скопировать. Выделите текст и скопируйте его вручную.',
+      steps: {
+        transfer: 'Переведите сумму на карту в приложении банка',
+        save: 'Сохраните скриншот или PDF чека',
+        upload: 'Загрузите чек сюда',
+      },
+      choose: 'Выберите скриншот или PDF чека',
+      formats: 'JPG, PNG, WebP или PDF, до {mb} МБ',
+      replace: 'Заменить',
+      ready: 'готов к отправке',
+      uploading: 'Отправляем… {percent} %',
+      processing: 'Проверяем файл…',
+      receipt: 'Чек',
+      pick: 'Выбрать чек',
+      send: 'Отправить чек',
+      pickAnother: 'Выбрать другой файл',
+      sendFailed: 'Не удалось отправить чек. Проверьте соединение и попробуйте ещё раз.',
+      tryAgain: 'Сейчас много запросов. Нажмите ещё раз через пару секунд.',
+      /** Why a file was refused, by the app or the server (`RECEIPT_UPLOAD_ERRORS`). */
+      refused: {
+        unsupported_type:
+          'Этот файл не подходит. Загрузите скриншот (JPG, PNG, WebP) или PDF чека.',
+        too_large: 'Файл больше {mb} МБ. Сделайте скриншот чека — он весит меньше.',
+        unreadable: 'Не удалось открыть файл. Загрузите скриншот чека или другой PDF.',
+      },
+      question: 'Вопрос по оплате?',
+      reviewTitle: 'Чек получен, проверяем оплату',
+      reviewText:
+        'Сверяем чек с поступлением на карту. Напишем в чат с ботом, как только оплата подтвердится.',
+      sentAt: 'отправлен {at}',
+      doneTitle: 'Спасибо! Оплата подтверждена',
+      doneText:
+        'Скоро начнём собирать заказ № {number}. Когда передадим его в BTS, пришлём трек-номер в чат с ботом.',
+      myOrders: 'Мои заказы',
+      toShop: 'В магазин',
+      unavailableTitle: 'Оплата временно недоступна',
+      unavailableText:
+        'Мы обновляем реквизиты для оплаты. Не переводите деньги, пока здесь нет карты. Если вопрос срочный, напишите менеджеру.',
+      toOrder: 'К заказу',
+      /** On the order page while it waits for payment. */
+      goToPay: 'Перейти к оплате',
     },
     orders: {
       title: 'Заказы',
@@ -196,6 +255,61 @@ export const ordersMessages = defineMessages(
       fixErrors: 'Belgilangan maydonlarni tekshiring.',
       unknownPoint: 'Bu BTS punkti endi mavjud emas. Boshqasini tanlang.',
       giftTooLong: 'Otkritka matni {max} belgidan uzun.',
+      unavailableTitle: 'Toʻlov vaqtincha mavjud emas',
+      unavailableText:
+        'Hozircha buyurtma berib boʻlmaydi: toʻlov rekvizitlarini yangilayapmiz. Birozdan keyin qayta kiring yoki menejerga yozing.',
+      writeManager: 'Menejerga yozish',
+    },
+    payment: {
+      title: 'Toʻlov',
+      payUntil:
+        '{until} gacha toʻlang. Chekni shu vaqtgacha yuklang — shunda bandlik tekshiruvgacha saqlanadi.',
+      amount: 'Oʻtkaziladigan summa',
+      amountHint: 'Aynan shu summani yaxlitlamasdan oʻtkazing — toʻlov tezroq tasdiqlanadi.',
+      card: 'Qabul qiluvchi karta',
+      holder: 'Qabul qiluvchi: {holder}',
+      copyAmount: 'Summani koʻchirib olish',
+      copyCard: 'Karta raqamini koʻchirib olish',
+      copied: 'Koʻchirib olindi',
+      copyFailed: 'Koʻchirib boʻlmadi. Matnni belgilab, qoʻlda koʻchiring.',
+      steps: {
+        transfer: 'Bank ilovasida summani kartaga oʻtkazing',
+        save: 'Chek skrinshoti yoki PDF faylini saqlang',
+        upload: 'Chekni shu yerga yuklang',
+      },
+      choose: 'Chek skrinshoti yoki PDF faylini tanlang',
+      formats: 'JPG, PNG, WebP yoki PDF, {mb} MB gacha',
+      replace: 'Almashtirish',
+      ready: 'yuborishga tayyor',
+      uploading: 'Yuborilmoqda… {percent} %',
+      processing: 'Fayl tekshirilmoqda…',
+      receipt: 'Chek',
+      pick: 'Chekni tanlash',
+      send: 'Chekni yuborish',
+      pickAnother: 'Boshqa fayl tanlash',
+      sendFailed: 'Chekni yuborib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
+      tryAgain: 'Hozir soʻrovlar koʻp. Bir necha soniyadan keyin yana bosing.',
+      refused: {
+        unsupported_type:
+          'Bu fayl mos emas. Chek skrinshotini (JPG, PNG, WebP) yoki PDF faylini yuklang.',
+        too_large: 'Fayl {mb} MB dan katta. Chek skrinshotini oling — u yengilroq.',
+        unreadable: 'Faylni ochib boʻlmadi. Chek skrinshotini yoki boshqa PDF faylni yuklang.',
+      },
+      question: 'Toʻlov boʻyicha savol bormi?',
+      reviewTitle: 'Chek qabul qilindi, toʻlovni tekshiryapmiz',
+      reviewText:
+        'Chekni kartaga tushgan pul bilan solishtiryapmiz. Toʻlov tasdiqlanishi bilan bot chatiga yozamiz.',
+      sentAt: 'yuborildi: {at}',
+      doneTitle: 'Rahmat! Toʻlov tasdiqlandi',
+      doneText:
+        'Tez orada № {number} buyurtmani yigʻishni boshlaymiz. BTSga topshirganimizda trek-raqamni bot chatiga yuboramiz.',
+      myOrders: 'Buyurtmalarim',
+      toShop: 'Doʻkonga',
+      unavailableTitle: 'Toʻlov vaqtincha mavjud emas',
+      unavailableText:
+        'Toʻlov rekvizitlarini yangilayapmiz. Bu yerda karta paydo boʻlmaguncha pul oʻtkazmang. Savol shoshilinch boʻlsa, menejerga yozing.',
+      toOrder: 'Buyurtmaga',
+      goToPay: 'Toʻlovga oʻtish',
     },
     orders: {
       title: 'Buyurtmalar',

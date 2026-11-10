@@ -46,7 +46,9 @@ export type CreateResult =
   | { kind: 'conflict'; code: CheckoutConflictCode; checkout: CheckoutDto }
   | { kind: 'try_again' }
   | { kind: 'phone_required' }
-  | { kind: 'invalid'; code: OrderInputError };
+  | { kind: 'invalid'; code: OrderInputError }
+  /** No shop card is set: checkout is closed («Оплата временно недоступна», #28). */
+  | { kind: 'payment_unavailable' };
 
 /** POST /orders. A created order empties the ordered cart lines, so the cart is re-read. */
 export function useCreateOrder() {
@@ -61,6 +63,7 @@ export function useCreateOrder() {
           : { kind: 'try_again' };
       if (res.status === 403) return { kind: 'phone_required' };
       if (res.status === 422) return { kind: 'invalid', code: res.body.code };
+      if (res.status === 503) return { kind: 'payment_unavailable' };
       throw new Error(`HTTP ${res.status}`);
     },
     onSuccess: (result) => {
@@ -101,6 +104,30 @@ export function useOrder(number: number) {
   });
 }
 
+export const paymentKey = (number: number) => ['orders', number, 'payment'] as const;
+
+/**
+ * The payment screen: the order, the shop card (null while none is set), the receipts sent and
+ * the upload limit; `null` when the order is not this customer's. Re-read on every open, so a
+ * card the owner changed meanwhile is the one shown.
+ */
+export function usePayment(number: number) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: paymentKey(number),
+    refetchOnMount: 'always',
+    staleTime: 0,
+    queryFn: async () => {
+      const res = await api.orders.payment({ params: { number } });
+      if (res.status === 404) return null;
+      const payment = unwrap(res, 200);
+      // the order screen reads the same order: keep it in step
+      qc.setQueryData(orderKey(number), payment.order);
+      return payment;
+    },
+  });
+}
+
 export type CancelResult =
   /** Cancelled now; the order as it reads after. */
   | { kind: 'cancelled'; order: OrderDto }
@@ -134,6 +161,7 @@ export function useCancelOrder(number: number) {
       if (result.kind === 'try_again') return;
       qc.setQueryData(orderKey(number), result.order);
       void qc.invalidateQueries({ queryKey: [...ORDERS_KEY, 'list'] });
+      void qc.invalidateQueries({ queryKey: paymentKey(number) });
     },
   });
 }
