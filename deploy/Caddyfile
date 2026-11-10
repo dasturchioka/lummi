@@ -17,6 +17,13 @@
 		Referrer-Policy strict-origin-when-cross-origin
 	}
 	encode zstd gzip
+
+	# Whatever a host serves, a path with a `..` segment is never meant: refuse it outright.
+	# (the raw URI: Caddy's path matchers see the cleaned path, where `..` is already gone)
+	@dotdot expression `{http.request.uri}.matches('(^|/)[.][.](/|$|[?])')`
+	handle @dotdot {
+		respond 404
+	}
 }
 
 # The Mini App: static build with an SPA fallback; /api/* is the API (prefix stripped), same origin.
