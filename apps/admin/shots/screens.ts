@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { WORST_PROMO } from './promo-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -352,6 +353,43 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // Promo codes (ticket #29): the list, the editor of the worst-case code, a new code with every
+  // error, the delete dialog, and the audit entries.
+  { id: 'promo-list', path: '/promo-codes', as: 'owner' },
+  {
+    id: 'promo-editor',
+    path: '/promo-codes',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_PROMO, exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+  },
+  { id: 'promo-new', path: '/promo-codes/new', as: 'owner' },
+  {
+    id: 'promo-new-errors',
+    path: '/promo-codes/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#p-code').fill('ЛУММИ');
+      await page.locator('#p-percent').fill('120');
+      await page.getByRole('button', { name: t.promo.save, exact: true }).click();
+      await page.getByText(t.promo.fixErrors, { exact: true }).waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
+  {
+    id: 'promo-remove',
+    path: '/promo-codes',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('link', { name: 'LUMMI10', exact: true }).first().click();
+      await page.getByRole('button', { name: t.promo.remove, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  { id: 'promo-audit', path: '/audit?action=promo.created', as: 'owner' },
   // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
   { id: 'content', path: '/content', as: 'owner' },
   {
