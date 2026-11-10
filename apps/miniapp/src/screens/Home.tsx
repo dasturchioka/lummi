@@ -3,7 +3,7 @@ import { lazy, Suspense } from 'react';
 import { Link } from '@tanstack/react-router';
 import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
-import { SearchIcon } from '../ui/icons';
+import { SearchIcon } from '../ui/icons-core';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';

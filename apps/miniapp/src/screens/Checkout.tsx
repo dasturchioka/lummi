@@ -5,6 +5,7 @@ import type {
   QuoteLine,
   SavedPointDto,
 } from '@lummi/contracts';
+import { parseBuyNowParam } from '@lummi/contracts/buy-now';
 import {
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
@@ -229,7 +230,9 @@ export function Checkout() {
   const router = useRouter();
   const qc = useQueryClient();
   const { ensurePhone } = useRegistration();
-  const { item } = useSearch({ from: '/checkout' });
+  // «Купить сейчас» names its item in the address; a malformed one checks out the cart instead.
+  const asked = useSearch({ from: '/checkout' }).item;
+  const item = asked && parseBuyNowParam(asked) ? asked : undefined;
 
   const [dest, setDest] = useState<Destination | null>(null);
   const regionId = dest?.region.id;

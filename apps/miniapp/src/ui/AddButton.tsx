@@ -2,11 +2,14 @@ import type { CartDto, FragranceListItem, VolumeCard } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { addNote, CART_KEY, lineQty, useAddToCart } from '../cart/queries';
+import { addNote, lineQty } from '../cart/add-note';
+import { CART_KEY, useAddToCart } from '../cart/queries';
 import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
 import { CheckIcon, PlusIcon, Spinner } from './icons';
-import { showShopNote } from './ShopNote';
+import { showShopNote } from './ShopNoteHost';
+
+export { ShopNote } from './ShopNote';
 
 // The volume choice is the only heavy part of «+»: it loads on the first press (ticket #25 budget).
 const loadSheet = () => import('./VolumeSheet');

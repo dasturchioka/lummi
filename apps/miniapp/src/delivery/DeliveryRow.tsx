@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { usePrefs } from '../lib/prefs';
-import { ChevronIcon } from '../ui/icons';
+import { ChevronIcon } from '../ui/icons-core';
 import { Skeleton } from '../ui/Skeleton';
 import { useDeliveryCity } from './queries';
 
