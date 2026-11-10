@@ -22,8 +22,7 @@ import { loadCartQuote } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
 export type ApplyCodeOutcome =
-  | { kind: 'ok' }
-  | { kind: 'too_many_attempts'; retryAfterSeconds: number };
+  { kind: 'ok' } | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 
 /** The customer's server-side cart (spec Changes 2026-11-10). Money comes only from `quote()`. */
 @Injectable()
@@ -231,7 +230,10 @@ export class CartService {
       const attempts = fresh ? 0 : (row?.attempts ?? 0);
       if (!fresh && attempts >= s['promo.attemptLimit']) {
         const left = since.getTime() + windowMs - now.getTime();
-        return { kind: 'too_many_attempts', retryAfterSeconds: Math.max(1, Math.ceil(left / 1000)) };
+        return {
+          kind: 'too_many_attempts',
+          retryAfterSeconds: Math.max(1, Math.ceil(left / 1000)),
+        };
       }
       await tx
         .update(carts)

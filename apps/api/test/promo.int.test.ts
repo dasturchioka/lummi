@@ -64,7 +64,8 @@ function promo(over: Partial<PromoCodeInput> = {}): PromoCodeInput {
 }
 async function createPromo(over: Partial<PromoCodeInput> = {}) {
   const res = await owner.client.admin.promoCodes.create({ body: promo(over) });
-  if (res.status !== 201) throw new Error(`create promo: ${res.status} ${JSON.stringify(res.body)}`);
+  if (res.status !== 201)
+    throw new Error(`create promo: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
 
@@ -128,7 +129,9 @@ describe('admin: promo codes are the owner’s', () => {
     expect((await post(fixedWithPercent)).status).toBe(400);
     expect((await post(promo({ code: 'ЛУММИ' }))).status).toBe(400);
     expect((await post(promo({ code: 'AB' }))).status).toBe(400);
-    expect((await post(promo({ code: 'MINUS20', kind: 'fixed', percent: null, amount: 20_000 }))).status).toBe(201);
+    expect(
+      (await post(promo({ code: 'MINUS20', kind: 'fixed', percent: null, amount: 20_000 }))).status,
+    ).toBe(201);
     expect(await owner.client.admin.promoCodes.list()).toMatchObject({
       body: [{ code: 'MINUS20', kind: 'fixed', amount: 20_000 }, { code: 'LUMMI10' }],
     });
@@ -147,7 +150,10 @@ describe('admin: promo codes are the owner’s', () => {
       params: { id: created.id },
       body: promo({ percent: 15, active: false }),
     });
-    expect(res).toMatchObject({ status: 200, body: { percent: 15, active: false, state: 'inactive' } });
+    expect(res).toMatchObject({
+      status: 200,
+      body: { percent: 15, active: false, state: 'inactive' },
+    });
     const [entry] = await audits('promo.updated');
     expect(entry?.payload).toEqual({
       code: 'BLOGER10',
@@ -321,7 +327,10 @@ describe('the cart: a typed code', () => {
 
     // 2026-11-15 23:59:59.999 in Tashkent (UTC+5)
     t.edges.clock.set(new Date('2026-11-15T18:59:59.999Z'));
-    expect(await quoteOf(s)).toMatchObject({ discount: { amount: 21_900 }, promoCode: { invalid: null } });
+    expect(await quoteOf(s)).toMatchObject({
+      discount: { amount: 21_900 },
+      promoCode: { invalid: null },
+    });
     t.edges.clock.set(new Date('2026-11-15T19:00:00Z'));
     expect(await quoteOf(s)).toMatchObject({
       discount: null,
@@ -349,7 +358,10 @@ describe('the cart: a typed code', () => {
       params: { id: created.id },
       body: promo({ appliesToMarkedDown: true }),
     });
-    expect(await quoteOf(s)).toMatchObject({ discount: { amount: 26_900 }, total: 242_100 + 25_000 });
+    expect(await quoteOf(s)).toMatchObject({
+      discount: { amount: 26_900 },
+      total: 242_100 + 25_000,
+    });
   });
 
   it('says so when every item is marked down and the code is not flagged for them', async () => {
