@@ -73,7 +73,7 @@ export function BroadcastDetail({
             className="min-w-0 flex-1 basis-56"
             parts={[
               m.audiences[b.audience],
-              countOf(language, b.counts.total, m.addressees),
+              countOf(language, b.counts.total, m.customers),
               b.buttonTarget && fill(m.buttonTo, { target: targetLabel(b, m) }),
               b.hasImage && (
                 <span className="inline-flex items-center gap-1">

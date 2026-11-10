@@ -88,7 +88,12 @@ const UZ_LONG =
   'Kuz — iliq, yogʻochli iforlar fasli 🍂 LUMMIʼda Maison Francis Kurkdjian Baccarat Rouge 540 va Tom Ford Tobacco Vanille asosidagi yangiliklar paydo boʻldi: kechgacha siz bilan qoladigan quyuq iz. Oʻzingizga yoqqanini tanlang va doʻstlaringizga ulashing ✨ Toʻplamni sinab koʻring, sovgʻa uchun ham mos 🎁 '.repeat(
     5,
   );
-const BIG_AUDIENCE = { total: 51_977, reachable: 50_420 };
+/** Per audience, as the API answers it: everyone, the reachable ones, and those by language. */
+const BIG_AUDIENCE = {
+  all: { total: 51_977, reachable: 50_420, reachableByLanguage: { ru: 31_012, uz: 19_408 } },
+  ru: { total: 32_101, reachable: 31_012, reachableByLanguage: { ru: 31_012, uz: 0 } },
+  uz: { total: 19_876, reachable: 19_408, reachableByLanguage: { ru: 0, uz: 19_408 } },
+};
 const BIG_COUNTS = { total: 50_420, sent: 31_207, blocked: 1_913, failed: 12, pending: 17_288 };
 const LONG_SLUG = 'velours-fume-extraordinaire-intense-rare';
 
@@ -100,11 +105,26 @@ async function pickAudience(page: Page, audience: 'all' | 'ru' | 'uz') {
   await page.locator('[data-audience-size] [aria-busy]').waitFor({ state: 'detached' });
 }
 
-/** Answers the composer's audience count with 50 420 reachable customers. */
-async function stubBigAudience(page: Page) {
-  await page.route('**/api/admin/broadcasts/audience?**', (route) =>
-    route.fulfill({ status: 200, json: BIG_AUDIENCE }),
-  );
+/** Answers the composer's audience counts with 50 420 reachable customers for «all». */
+async function showBigAudience(page: Page) {
+  await page.route('**/api/admin/broadcasts/audience?**', (route) => {
+    const audience = new URL(route.request().url()).searchParams.get('audience');
+    const json = BIG_AUDIENCE[audience as keyof typeof BIG_AUDIENCE] ?? BIG_AUDIENCE.all;
+    return route.fulfill({ status: 200, json });
+  });
+  // the page renders «all» counted by the server: count it again through the stub
+  await pickAudience(page, 'ru');
+  await pickAudience(page, 'all');
+}
+
+/** Types a fragrance slug as the button target and waits for its name to be looked up. */
+async function typeFragranceTarget(page: Page, slug: string) {
+  await page.locator('#bc-target').selectOption('fragrance');
+  const looked = page.waitForResponse((r) => r.url().includes('/api/admin/broadcasts/fragrance'));
+  await page.locator('#bc-slug').fill(slug);
+  await looked;
+  await page.locator('#bc-slug').blur();
+  await page.waitForTimeout(100);
 }
 
 /**
@@ -676,9 +696,42 @@ export const screens: Screen[] = [
       await page
         .locator('#bc-uz')
         .fill('Absolu Aventus yana sotuvda. Yangi, tutunli, ishonchli: muhim kun uchun ifor.');
-      await page.locator('#bc-target').selectOption('fragrance');
-      await page.locator('#bc-slug').fill('absolu-aventus');
-      await page.locator('#bc-slug').blur();
+      await typeFragranceTarget(page, 'absolu-aventus');
+    },
+  },
+  {
+    id: 'broadcast-new-target-missing',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await typeFragranceTarget(page, 'absolu-aventus-intense');
+    },
+  },
+  {
+    // a UZ-only audience locks the preview to UZ, even right after the RU text was edited
+    id: 'broadcast-new-locked',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await pickAudience(page, 'uz');
+      await page.locator('#bc-ru').focus();
+    },
+  },
+  {
+    // a warning still open at confirm time is repeated in the sheet (it warns, never blocks)
+    id: 'broadcast-send-confirm-warnings',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page
+        .locator('#bc-ru')
+        .fill('Не копия, а аромат по мотивам Creed Aventus 🎉🎉🎉 для вашего вечера.');
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
     },
   },
   ...(['ru', 'uz'] as const).map((audience): Screen => ({
@@ -719,8 +772,7 @@ export const screens: Screen[] = [
     path: '/broadcasts/new',
     as: 'owner',
     act: async ({ page }) => {
-      await stubBigAudience(page);
-      await pickAudience(page, 'ru');
+      await showBigAudience(page);
     },
   },
   {
@@ -729,9 +781,8 @@ export const screens: Screen[] = [
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
-      await stubBigAudience(page);
       await fillComposer(page, t);
-      await pickAudience(page, 'ru');
+      await showBigAudience(page);
       await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
       await page.getByRole('alertdialog').waitFor();
     },
@@ -759,9 +810,7 @@ export const screens: Screen[] = [
     as: 'owner',
     act: async ({ page, t }) => {
       await fillComposer(page, t);
-      await page.locator('#bc-target').selectOption('fragrance');
-      await page.locator('#bc-slug').fill(LONG_SLUG);
-      await page.locator('#bc-slug').blur();
+      await typeFragranceTarget(page, LONG_SLUG);
     },
   },
   {

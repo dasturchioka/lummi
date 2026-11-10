@@ -9,8 +9,10 @@ import {
   TEXT_MAX,
   broadcastBodySchema,
   copyWarnings,
+  type AudienceCount,
   type BroadcastAudience,
   type BroadcastBody,
+  type CopyWarning,
 } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import {
@@ -39,6 +41,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { Section } from '@/components/ui/section';
 import { Select } from '@/components/ui/select';
@@ -51,7 +54,10 @@ import { PreviewLanguageSwitch, TelegramPreview } from './telegram-preview';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-type Count = { total: number; reachable: number };
+type Count = AudienceCount;
+/** «Копия», «реплика»; emoji as they are, without quotes. */
+const named = (w: CopyWarning) =>
+  w.kind === 'emoji' ? w.matches.join(' ') : w.matches.map((m) => `«${m}»`).join(', ');
 /** The recipient count of the chosen audience: what the confirmation states, so it is never stale. */
 type Reach =
   | { state: 'ok'; audience: BroadcastAudience; count: Count }
@@ -97,6 +103,42 @@ export function BroadcastComposer({
     setValue('buttonTarget', target, { shouldDirty: true, shouldValidate: formState.isSubmitted });
   };
   const slugBad = kind === 'fragrance' && !SLUG.test(slug);
+
+  // the fragrance behind the typed slug, looked up once typing pauses (the send checks it again)
+  const [lookup, setLookup] = useState<{
+    slug: string;
+    name: string | null;
+    failed?: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (kind !== 'fragrance' || !SLUG.test(slug)) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      browserApi.broadcasts
+        .fragrance({ query: { slug } })
+        .then((res) => {
+          if (!live) return;
+          if (res.status === 200) setLookup({ slug, name: res.body.name });
+          else setLookup({ slug, name: null, failed: res.status !== 404 });
+        })
+        .catch(() => live && setLookup({ slug, name: null, failed: true }));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [kind, slug]);
+  const fragrance: 'none' | 'loading' | 'found' | 'missing' | 'error' =
+    kind !== 'fragrance' || slugBad
+      ? 'none'
+      : lookup?.slug !== slug
+        ? 'loading'
+        : lookup.failed
+          ? 'error'
+          : lookup.name
+            ? 'found'
+            : 'missing';
+  const fragranceName = fragrance === 'found' ? lookup?.name : null;
 
   const message = (e?: FieldError): string | undefined => {
     if (!e) return undefined;
@@ -208,8 +250,11 @@ export function BroadcastComposer({
 
   const limit = v.imageKey ? CAPTION_MAX : TEXT_MAX;
 
-  // the preview follows the text being written; the switch picks it by hand
+  // the preview follows the text being written; the switch picks it by hand. A one-language
+  // audience locks it: the other version goes to nobody, so it is never shown as what they get.
   const [previewLang, setPreviewLang] = useState<Language>(language);
+  const lockedLang = v.audience === 'all' ? null : v.audience;
+  const shownLang = lockedLang ?? previewLang;
 
   // one line beside the buttons: «Отправить себе» went out, or why a send did not
   const [banner, setBanner] = useState<Banner>(null);
@@ -236,6 +281,11 @@ export function BroadcastComposer({
   const review = handleSubmit(
     () => {
       if (slugBad) return setBanner({ kind: 'error', text: b.fixErrors });
+      if (fragrance === 'missing') {
+        // the server refuses it too; say so here instead of in a failed send
+        setError('buttonTarget', { message: b.errors.slugUnknown }, { shouldFocus: true });
+        return setBanner({ kind: 'error', text: b.fixErrors });
+      }
       setBanner(null);
       setConfirming(true);
     },
@@ -257,7 +307,7 @@ export function BroadcastComposer({
     } else setBanner({ kind: 'error', text: b.sendFailed });
   };
 
-  const addressees = count ? countOf(language, count.reachable, b.addressees) : null;
+  const reachableCustomers = count ? countOf(language, count.reachable, b.customers) : null;
   const blockedCount = count ? count.total - count.reachable : 0;
   const shownBlocked = shownCount ? shownCount.total - shownCount.reachable : 0;
 
@@ -282,18 +332,24 @@ export function BroadcastComposer({
     const list = copyWarnings(text);
     return list.length === 0 ? null : (
       <Notice title={b.warnings.title} className="py-3">
-        {list.map((w) => b.warnings[w]).join(' ')}
+        {list.map((w) => fill(b.warnings[w.kind], { words: named(w) })).join(' ')}
       </Notice>
     );
   };
+  // what the customers of this audience would read with a warning still on it, for the confirmation
+  const sentTexts =
+    v.audience === 'all' ? [v.textRu, v.textUz] : [v.audience === 'ru' ? v.textRu : v.textUz];
+  const openWarnings = [
+    ...new Set(sentTexts.flatMap((text) => copyWarnings(text).map(named))),
+  ].join(', ');
 
-  const shownText = previewLang === 'uz' ? v.textUz : v.textRu;
+  const shownText = shownLang === 'uz' ? v.textUz : v.textRu;
   const targetLabel =
     kind === ''
       ? null
       : kind === 'fragrance'
         ? slug
-          ? fill(b.targetFragrance, { name: slug })
+          ? fill(b.targetFragrance, { name: fragranceName ?? slug })
           : b.targets.fragrance
         : b.targets[kind as (typeof STARTAPP_TARGETS)[number]];
 
@@ -449,27 +505,64 @@ export function BroadcastComposer({
                 </Select>
               </Field>
               {kind === 'fragrance' && (
-                <Field
-                  id="bc-slug"
-                  label={b.fragranceSlug}
-                  hint={b.fragranceSlugHint}
-                  error={
-                    errors.buttonTarget?.message === b.errors.slugUnknown
-                      ? b.errors.slugUnknown
-                      : formState.isSubmitted && slugBad
-                        ? b.errors.slug
-                        : undefined
-                  }
-                >
-                  <Input
-                    value={slug}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    enterKeyHint="done"
-                    onChange={(e) => pickTarget('fragrance', e.target.value.trim().toLowerCase())}
-                  />
-                </Field>
+                <div className="grid content-start gap-1.5">
+                  <Field
+                    id="bc-slug"
+                    label={b.fragranceSlug}
+                    hint={fragrance === 'none' ? b.fragranceSlugHint : undefined}
+                    error={
+                      errors.buttonTarget?.message === b.errors.slugUnknown
+                        ? b.errors.slugUnknown
+                        : formState.isSubmitted && slugBad
+                          ? b.errors.slug
+                          : undefined
+                    }
+                  >
+                    <Input
+                      value={slug}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      enterKeyHint="done"
+                      onChange={(e) => pickTarget('fragrance', e.target.value.trim().toLowerCase())}
+                    />
+                  </Field>
+                  {/* which fragrance the slug opens, once typing pauses */}
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className={cn(
+                      'flex items-start gap-1.5 text-xs leading-snug text-pretty [overflow-wrap:anywhere]',
+                      (fragrance === 'loading' || fragrance === 'error') && 'text-muted-foreground',
+                      fragrance === 'found' && 'font-medium',
+                      // the field already says it in its error line after a refused send
+                      (fragrance === 'none' ||
+                        (fragrance === 'missing' &&
+                          errors.buttonTarget?.message === b.errors.slugUnknown)) &&
+                        'sr-only',
+                    )}
+                  >
+                    {fragrance === 'found' && (
+                      <Check
+                        className="size-3.5 shrink-0 text-sage-ink"
+                        strokeWidth={1.5}
+                        aria-hidden
+                      />
+                    )}
+                    {fragrance === 'missing' && (
+                      <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+                    )}
+                    {fragrance === 'loading'
+                      ? b.fragranceLooking
+                      : fragrance === 'found'
+                        ? fill(b.targetFragrance, { name: fragranceName ?? slug })
+                        : fragrance === 'missing'
+                          ? b.errors.slugUnknown
+                          : fragrance === 'error'
+                            ? b.fragranceLookupFailed
+                            : ''}
+                  </p>
+                </div>
               )}
             </div>
           </Section>
@@ -513,7 +606,7 @@ export function BroadcastComposer({
                   <p className="text-[17px] leading-snug font-semibold tabular-nums">
                     {b.reach}:{' '}
                     <span className="whitespace-nowrap">
-                      {countOf(language, shownCount.reachable, b.addressees)}
+                      {countOf(language, shownCount.reachable, b.customers)}
                     </span>
                   </p>
                   {shownBlocked > 0 && (
@@ -548,8 +641,9 @@ export function BroadcastComposer({
           className="min-w-0 xl:sticky xl:top-10 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-start"
           action={
             <PreviewLanguageSwitch
-              value={previewLang}
+              value={shownLang}
               onChange={setPreviewLang}
+              only={lockedLang}
               label={b.previewLanguage}
             />
           }
@@ -559,13 +653,18 @@ export function BroadcastComposer({
               text={shownText}
               image={image?.url ?? null}
               button={v.buttonTarget !== null}
-              language={previewLang}
+              language={shownLang}
               t={t}
               className="xl:max-h-[min(34rem,calc(100dvh-14rem))]"
             />
             {targetLabel && (
               <p className="text-xs leading-snug text-pretty text-muted-foreground [overflow-wrap:anywhere]">
                 {fill(b.buttonTo, { target: targetLabel })}
+              </p>
+            )}
+            {lockedLang && (
+              <p className="text-xs leading-snug text-pretty text-muted-foreground">
+                {b.previewLocked[lockedLang]}
               </p>
             )}
           </div>
@@ -618,7 +717,7 @@ export function BroadcastComposer({
             <dt className="self-center text-muted-foreground">{b.reach}</dt>
             <dd className="text-[17px] font-semibold tabular-nums">
               {count ? (
-                addressees
+                reachableCustomers
               ) : reach.state === 'error' ? (
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-medium">
                   {b.countFailed}
@@ -646,8 +745,34 @@ export function BroadcastComposer({
               </>
             )}
             <dt className="text-muted-foreground">{b.language}</dt>
-            <dd className="text-pretty">{b.audienceHints[v.audience]}</dd>
+            <dd className="text-pretty">
+              {v.audience === 'all' && count && (
+                <MetaLine
+                  className="font-medium tabular-nums"
+                  parts={(['ru', 'uz'] as const).map((l) => (
+                    <span key={l} className="whitespace-nowrap">
+                      {fill(b.languageSplit[l], { n: num(count.reachableByLanguage[l]) })}
+                    </span>
+                  ))}
+                />
+              )}
+              <span className={cn(v.audience === 'all' && count && 'text-muted-foreground')}>
+                {b.audienceHints[v.audience]}
+              </span>
+            </dd>
+            {targetLabel && (
+              <>
+                <dt className="text-muted-foreground">{b.buttonShort}</dt>
+                <dd className="text-pretty [overflow-wrap:anywhere]">{targetLabel}</dd>
+              </>
+            )}
           </dl>
+          {openWarnings && (
+            <p className="mt-3 flex items-start gap-2 text-[13px] leading-snug text-pretty [overflow-wrap:anywhere]">
+              <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+              {fill(b.warnings.confirm, { words: openWarnings })}
+            </p>
+          )}
           <DialogFooter>
             <AlertDialogCancel asChild>
               <Button variant="outline" disabled={sending}>

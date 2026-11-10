@@ -27,6 +27,6 @@ export function formatWhen(iso: string, _language: Language): string {
   return `${p.day}.${p.month}.${p.year}, ${p.hour}:${p.minute}`;
 }
 
-/** «50 000 адресатов»: the plural form for `n`, its thousands grouped by `num`. */
+/** «50 000 клиентов»: the plural form for `n`, its thousands grouped by `num`. */
 export const countOf = (language: Language, n: number, forms: PluralForms) =>
   fill(plural(language, n, forms), { total: num(n) });

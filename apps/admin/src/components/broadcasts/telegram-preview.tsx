@@ -85,10 +85,13 @@ export function TelegramPreview({
 export function PreviewLanguageSwitch({
   value,
   onChange,
+  only,
   label,
 }: {
   value: Language;
   onChange: (language: Language) => void;
+  /** A one-language audience: the other version is not offered. */
+  only?: Language | null;
   label: string;
 }) {
   return (
@@ -103,12 +106,13 @@ export function PreviewLanguageSwitch({
           type="button"
           lang={l}
           aria-pressed={value === l}
+          disabled={!!only && only !== l}
           onClick={() => onChange(l)}
           className={cn(
             'h-full min-w-10 rounded-full px-2.5 text-xs tracking-wide uppercase transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.96]',
             value === l
               ? 'bg-card font-semibold text-foreground'
-              : 'font-medium text-muted-foreground hover:text-foreground',
+              : 'font-medium text-muted-foreground hover:text-foreground disabled:opacity-50',
           )}
         >
           {l}
