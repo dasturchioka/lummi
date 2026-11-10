@@ -1,9 +1,10 @@
-import type {
-  CatalogParams,
-  CatalogResult,
-  FragranceCard,
-  FragranceListItem,
-  VolumeCard,
+import {
+  PAID_STATUSES,
+  type CatalogParams,
+  type CatalogResult,
+  type FragranceCard,
+  type FragranceListItem,
+  type VolumeCard,
 } from '@lummi/contracts';
 import {
   and,
@@ -73,13 +74,41 @@ export async function reservedByVolume(
   return out;
 }
 
+/** Orders that still count as sold: paid, and neither cancelled nor returned. */
+const SOLD_STATUSES = PAID_STATUSES.filter((s) => s !== 'returned');
+
 /**
- * Paid orders per fragrance since `since`, for the top-sales ranking: paid orders only (not
- * cancelled or refunded) over the window. Orders arrive with the checkout ticket; until then
- * nothing has been sold, so the ranking falls through to newest.
+ * Paid orders per fragrance for the top-sales ranking: orders whose payment was confirmed since
+ * `since` and that are still sold (not cancelled, not returned). A fragrance counts once per
+ * order, bought as a bottle or picked into a builder set; the Discovery set's five are the
+ * owner's choice, so its sales lift none of them. A Refund (#40) leaves an order's status alone
+ * and is not looked at.
  */
-export async function paidOrderCounts(_db: DbOrTx, _since: Date): Promise<Map<number, number>> {
-  return new Map();
+export async function paidOrderCounts(db: DbOrTx, since: Date): Promise<Map<number, number>> {
+  const sold = sql.join(
+    SOLD_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  const { rows } = await db.execute<{ fragrance_id: string; n: string }>(sql`
+    select f.fragrance_id, count(distinct f.order_id) as n
+    from (
+      select l.order_id, l.fragrance_id
+      from order_lines l
+      where l.kind = 'volume' and l.fragrance_id is not null
+      union all
+      select l.order_id, (pick->>'fragranceId')::bigint
+      from order_lines l cross join lateral jsonb_array_elements(l.set_composition) pick
+      where l.kind = 'builder_set'
+    ) f
+    join orders o on o.id = f.order_id
+    where o.status in (${sold})
+      and exists (
+        select 1 from order_events ev
+        where ev.order_id = o.id and ev.action = 'confirm_payment'
+          and ev.created_at >= ${since.toISOString()}::timestamptz
+      )
+    group by f.fragrance_id`);
+  return new Map(rows.map((r) => [Number(r.fragrance_id), Number(r.n)]));
 }
 
 /** A visible fragrance as the list queries see it: card fields, filter fields and its volumes. */
@@ -177,7 +206,7 @@ export class CatalogService {
 
   /**
    * Ids of every visible fragrance in «Популярное» order: owner-pinned (hit) first, then the paid
-   * order count over `catalog.topSalesWindowDays` (nothing until orders exist), then newest. One
+   * order count over `catalog.topSalesWindowDays` (`paidOrderCounts`), then newest. One
    * function, so Home, the catalog sort, the similar fallback and the cart suggestions agree.
    */
   async topSellersOrder(db: DbOrTx = this.db): Promise<number[]> {

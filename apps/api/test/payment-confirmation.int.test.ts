@@ -1,16 +1,29 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { asc, credits, eq, fragrances, orderEvents, orders, outbox, receipts } from '@lummi/db';
+import {
+  asc,
+  credits,
+  discoverySet,
+  discoverySetItems,
+  eq,
+  fragrances,
+  inArray,
+  orderEvents,
+  orders,
+  outbox,
+  receipts,
+} from '@lummi/db';
 import pg from 'pg';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
+import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { orderBody, samarkandPoint, shopper } from './harness/orders';
-import { recordCredit } from './harness/payments';
+import { payWithCredit, recordCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
 
@@ -407,5 +420,107 @@ describe('races', () => {
     // exactly one credit is linked; the other stays free for another order
     const linked = await t.db.select().from(orders).where(eq(orders.id, order.id));
     expect([c1, c2]).toContain(linked[0]!.creditId);
+  });
+});
+
+describe('«Популярное» ranks by paid orders (#15, now that orders get paid)', () => {
+  /** An order of whatever `fill` puts in Ali's cart, at the quoted total. */
+  async function orderOf(fill: (c: Awaited<ReturnType<typeof shopper>>) => Promise<unknown>) {
+    const client = await shopper(t, ali, '998901234567');
+    await fill(client);
+    const point = await samarkandPoint(t);
+    const checkout = await client.checkout.get({ query: { regionId: point.regionId } });
+    if (checkout.status !== 200) throw new Error(`checkout ${checkout.status}`);
+    const res = await client.orders.create({
+      body: orderBody(point.id, checkout.body.quote.total),
+    });
+    if (res.status !== 201) throw new Error(`order ${res.status}`);
+    return orderNow(
+      (await t.db.select().from(orders).where(eq(orders.number, res.body.number)))[0]!.id,
+    );
+  }
+  const bottle = (slug: string) => (c: Awaited<ReturnType<typeof shopper>>) =>
+    c.cart.addLine({ body: { slug, ml: 10, qty: 1 } });
+  /** Paid the way production pays: a receipt, then the credit the AI links to it. */
+  async function pay(order: Awaited<ReturnType<typeof orderOf>>) {
+    await payWithCredit(t, order, await sendReceipt(order));
+  }
+  async function topSlugs() {
+    const { client } = await t.signIn();
+    const res = await client.catalog.list({ query: { limit: 100 } });
+    if (res.status !== 200) throw new Error(`catalog ${res.status}`);
+    return res.body.items.map((i) => i.slug);
+  }
+
+  it('counts each paid order once per fragrance in a bottle or a builder set; never unpaid, cancelled, returned, old, or the Discovery set', async () => {
+    const discoveryIds = (await t.db.select().from(discoverySetItems)).map((i) => i.fragranceId);
+    const all = await t.db.select().from(fragrances).orderBy(asc(fragrances.slug));
+    const discoveryFive = all.filter((f) => discoveryIds.includes(f.id)).map((f) => f.slug);
+    const [a, b, unpaid, cancelled, returned, old, ...rest] = all
+      .filter((f) => !discoveryIds.includes(f.id))
+      .map((f) => f.slug);
+    const picks = rest.slice(0, 5);
+    // nobody pinned; the ones that must not count are the newest, so any count would lift them
+    await t.db
+      .update(fragrances)
+      .set({ isHit: false, createdAt: new Date('2026-01-01T00:00:00Z') });
+    await t.db
+      .update(fragrances)
+      .set({ createdAt: new Date('2026-11-01T00:00:00Z') })
+      .where(inArray(fragrances.slug, [unpaid!, cancelled!, returned!, old!, ...discoveryFive]));
+    await t.db
+      .update(fragrances)
+      .set({ createdAt: new Date('2026-02-01T00:00:00Z') })
+      .where(eq(fragrances.slug, b!));
+    await t.db.update(discoverySet).set({ onHand: 5 });
+
+    // paid 40 days ago: outside the 30-day window
+    t.edges.clock.set(new Date('2026-09-30T10:00:00Z'));
+    await pay(await orderOf(bottle(old!)));
+    t.edges.clock.set(new Date('2026-11-09T10:00:30Z'));
+
+    await pay(await orderOf(bottle(a!)));
+    await pay(await orderOf(bottle(a!)));
+    // two bottles of b in one order are still one order
+    await pay(
+      await orderOf(async (c) => {
+        await bottle(b!)(c);
+        await c.cart.addLine({ body: { slug: b!, ml: 30, qty: 1 } });
+      }),
+    );
+    await pay(await orderOf((c) => c.cart.addBuilder({ body: { slugs: picks, qty: 1 } })));
+    await pay(await orderOf((c) => c.cart.addDiscovery({ body: { qty: 1 } })));
+    await orderOf(bottle(unpaid!));
+    const machine = t.app.get(OrderStatusService);
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const toCancel = await orderOf(bottle(cancelled!));
+    await pay(toCancel);
+    const out = await machine.transition(toCancel.id, 'cancel', manager, 'payment_confirmed', {
+      reason: 'out_of_stock',
+    });
+    expect(out.kind).toBe('done');
+    const toReturn = await orderOf(bottle(returned!));
+    await pay(toReturn);
+    for (const [from, action, payload] of [
+      ['payment_confirmed', 'accept', undefined],
+      ['accepted', 'start_assembly', undefined],
+      ['assembling', 'hand_to_bts', { trackingNumber: 'BTS 1' }],
+      ['handed_to_bts', 'deliver', undefined],
+      [
+        'delivered',
+        'return',
+        { reason: 'Не подошёл', lines: [{ position: 0, backToStock: true }] },
+      ],
+    ] as const) {
+      const moved = await machine.transition(toReturn.id, action, manager, from, payload as never);
+      expect(moved.kind, action).toBe('done');
+    }
+
+    const order = await topSlugs();
+    expect(order.slice(0, 2)).toEqual([a, b]);
+    expect(new Set(order.slice(2, 7))).toEqual(new Set(picks));
+    expect(new Set(order.slice(7, 16))).toEqual(
+      new Set([unpaid, cancelled, returned, old, ...discoveryFive]),
+    );
   });
 });
