@@ -16,7 +16,10 @@ function failure(f: Failure) {
     case 'conflict':
       return { status: 409 as const, body: { code: 'conflict' as const, fields } };
     case 'on_hand_changed':
-      return { status: 409 as const, body: { code: 'on_hand_changed' as const, fields } };
+      return {
+        status: 409 as const,
+        body: { code: 'on_hand_changed' as const, fields, current: f.current },
+      };
     case 'invalid':
       return { status: 422 as const, body: { code: 'invalid' as const, fields } };
     case 'try_again':
@@ -139,19 +142,12 @@ export class CatalogAdminController {
 export class OnHandController {
   constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
 
-  @TsRestHandler(adminContract.onHand.list)
-  list() {
-    return tsRestHandler(adminContract.onHand.list, async ({ query }) => ({
-      status: 200 as const,
-      body: await this.catalog.onHandList(query.q),
-    }));
-  }
-
   @TsRestHandler(adminContract.onHand.set)
   set(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.onHand.set, async ({ params, body }) => {
-      const res = await this.catalog.setOnHand(actor, params.id, body.onHand);
+      const res = await this.catalog.setOnHand(actor, params.id, body.onHand, body.expected);
       if (res.ok) return { status: 200 as const, body: res.value };
+      if (res.reason === 'on_hand_changed') return failure(res);
       return res.reason === 'try_again'
         ? { status: 409 as const, body: { code: 'try_again' as const } }
         : { status: 404 as const, body: { code: 'not_found' as const } };

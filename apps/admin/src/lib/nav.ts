@@ -51,7 +51,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: 'orders', icon: ShoppingBag, href: null, roles: ALL },
       { key: 'btsPoints', icon: MapPin, href: '/bts-points', roles: ALL },
-      { key: 'customers', icon: Users, href: null, roles: OWNER },
+      { key: 'customers', icon: Users, href: '/customers', roles: ALL },
       { key: 'reviews', icon: MessageSquareText, href: null, roles: OWNER },
     ],
   },
@@ -59,7 +59,7 @@ export const NAV: NavGroup[] = [
     key: 'shop',
     items: [
       { key: 'catalog', icon: Droplet, href: '/catalog', roles: OWNER },
-      { key: 'stock', icon: Warehouse, href: null, roles: ALL },
+      { key: 'stock', icon: Warehouse, href: '/stock', roles: ALL },
       { key: 'sets', icon: Package, href: '/sets', roles: ALL },
       { key: 'content', icon: FileText, href: '/content', roles: OWNER },
     ],

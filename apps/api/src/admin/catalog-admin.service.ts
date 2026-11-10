@@ -24,21 +24,24 @@ import {
   type DbOrTx,
   type StaffRow,
 } from '@lummi/db';
-import { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from '@lummi/i18n';
+import { normalizeUzbek } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { reindexFragrances } from '../search/search-index';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
+import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
 
 export type Failure = {
   ok: false;
   reason: 'not_found' | 'conflict' | 'invalid' | 'on_hand_changed' | 'try_again';
   fields?: string[];
+  /** With `on_hand_changed` from a single-count edit: the count as it is now. */
+  current?: number;
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
 const fail = (reason: Failure['reason'], fields?: string[]): Failure => ({
@@ -68,7 +71,6 @@ export function isUniqueViolation(e: unknown): boolean {
 
 /** Advisory lock that serialises handing out internal product codes. */
 const PRODUCT_CODE_LOCK = 1701;
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null : s.trim());
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -115,12 +117,11 @@ export class CatalogAdminService {
     const where = [];
     if (query.q) {
       // apostrophes are ignored on both sides: «Devil's» finds «Devil’s Intrigue» and the reverse
-      const like = `%${escapeLike(stripApostrophes(normalizeUzbek(query.q)))}%`;
-      const plain = (col: unknown) => sql`regexp_replace(${col}, ${APOSTROPHE_CLASS}, '', 'g')`;
+      const like = apostropheLike(query.q);
       where.push(
-        sql`(${plain(fragrances.name)} ilike ${like} or ${plain(fragrances.originalBrand)} ilike ${like}
+        sql`(${withoutApostrophes(fragrances.name)} ilike ${like} or ${withoutApostrophes(fragrances.originalBrand)} ilike ${like}
           or ${fragrances.code} ilike ${like}
-          or exists (select 1 from unnest(${fragrances.aliases}) a where ${plain(sql`a`)} ilike ${like}))`,
+          or exists (select 1 from unnest(${fragrances.aliases}) a where ${withoutApostrophes(sql`a`)} ilike ${like}))`,
       );
     }
     if (query.type) where.push(eq(fragrances.type, query.type));
@@ -231,7 +232,7 @@ export class CatalogAdminService {
         saleEndsOn: saleEndDay(v.saleEndsAt),
         onHand: v.onHand,
         reserved: reserved.get(v.id) ?? 0,
-        belowReserve: v.onHand < (reserved.get(v.id) ?? 0),
+        belowReserve: belowReserve(v.onHand, reserved.get(v.id) ?? 0),
         photo: v.photoHash,
         isPlaceholder: v.isPlaceholder,
       })),
@@ -458,7 +459,10 @@ export class CatalogAdminService {
   private async similarBad(tx: DbOrTx, ids: number[], selfId: number | null): Promise<boolean> {
     if (!ids.length) return false;
     if (selfId !== null && ids.includes(selfId)) return true;
-    const found = await tx.select({ id: fragrances.id }).from(fragrances).where(inArray(fragrances.id, ids));
+    const found = await tx
+      .select({ id: fragrances.id })
+      .from(fragrances)
+      .where(inArray(fragrances.id, ids));
     return found.length !== ids.length;
   }
 
@@ -472,12 +476,7 @@ export class CatalogAdminService {
     return true;
   }
 
-  private async insertVolume(
-    tx: DbOrTx,
-    fragranceId: number,
-    v: VolumeInput,
-    placeholder = false,
-  ) {
+  private async insertVolume(tx: DbOrTx, fragranceId: number, v: VolumeInput, placeholder = false) {
     await tx.insert(volumes).values({
       isPlaceholder: placeholder,
       fragranceId,
@@ -607,7 +606,10 @@ export class CatalogAdminService {
       // every fragrance that shows this note or family is searchable by its new name
       const used =
         kind === 'families'
-          ? await tx.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.familyId, id))
+          ? await tx
+              .select({ id: fragrances.id })
+              .from(fragrances)
+              .where(eq(fragrances.familyId, id))
           : await tx
               .select({ id: fragranceNotes.fragranceId })
               .from(fragranceNotes)
@@ -633,38 +635,31 @@ export class CatalogAdminService {
 
   // ---- on hand and photos ----
 
-  async onHandList(q?: string): Promise<OnHandItem[]> {
-    const where = q ? sql`${fragrances.name} ilike ${'%' + escapeLike(q) + '%'}` : undefined;
-    const rows = await this.db
-      .select({
-        volumeId: volumes.id,
-        fragranceId: fragrances.id,
-        name: fragrances.name,
-        ml: volumes.ml,
-        onHand: volumes.onHand,
-      })
-      .from(volumes)
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(where)
-      .orderBy(asc(sql`lower(${fragrances.name})`), asc(volumes.ml));
-    const reserved = await reservedByVolume(
-      this.db,
-      rows.map((r) => r.volumeId),
-    );
-    return rows.map((r) => this.onHandItem(r, reserved.get(r.volumeId) ?? 0));
-  }
-
-  async setOnHand(actor: StaffRow, volumeId: number, onHand: number): Promise<Outcome<OnHandItem>> {
+  /**
+   * The one write of a volume's on hand from the panel (the fragrance form's compare-and-set aside,
+   * which it shares the rule with). `expected` is the count the editor was shown: when the row under
+   * the lock holds another, nothing is written and the current count comes back (409). Below the
+   * reserve is allowed (ADR 0010); the item says so.
+   */
+  async setOnHand(
+    actor: StaffRow,
+    volumeId: number,
+    onHand: number,
+    expected?: number,
+  ): Promise<Outcome<OnHandItem>> {
     return transient(() =>
       this.db.transaction(async (tx) => {
         const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');
         if (!old) return fail('not_found');
+        if (expected !== undefined && old.onHand !== expected) {
+          return { ...fail('on_hand_changed'), current: old.onHand };
+        }
         await tx
           .update(volumes)
           .set({ onHand, ...(old.onHand !== onHand ? { isPlaceholder: false } : {}) })
           .where(eq(volumes.id, volumeId));
         const [f] = await tx
-          .select({ id: fragrances.id, name: fragrances.name })
+          .select({ id: fragrances.id, name: fragrances.name, hidden: fragrances.hidden })
           .from(fragrances)
           .where(eq(fragrances.id, old.fragranceId));
         await this.audit.record(tx, {
@@ -678,7 +673,14 @@ export class CatalogAdminService {
         return {
           ok: true,
           value: this.onHandItem(
-            { volumeId, fragranceId: f!.id, name: f!.name, ml: old.ml, onHand },
+            {
+              volumeId,
+              fragranceId: f!.id,
+              name: f!.name,
+              hidden: f!.hidden,
+              ml: old.ml,
+              onHand,
+            },
             reserved,
           ),
         } as const;
@@ -687,14 +689,21 @@ export class CatalogAdminService {
   }
 
   private onHandItem(
-    r: { volumeId: number; fragranceId: number; name: string; ml: number; onHand: number },
+    r: {
+      volumeId: number;
+      fragranceId: number;
+      name: string;
+      hidden: boolean;
+      ml: number;
+      onHand: number;
+    },
     reserved: number,
   ): OnHandItem {
     return {
       ...r,
       reserved,
       available: available(r.onHand, reserved),
-      belowReserve: r.onHand < reserved,
+      belowReserve: belowReserve(r.onHand, reserved),
     };
   }
 

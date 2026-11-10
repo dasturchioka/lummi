@@ -231,6 +231,18 @@ export const settingDefinitions = {
       uz: 'Mamlakat kodlari «+»siz, masalan 998 (Oʻzbekiston). Boshqa mamlakat raqami qabul qilinmaydi.',
     },
   },
+  /** The stock page marks a row «заканчивается» when its available is at or under this (spec Changes 2026-11-11). */
+  'stock.lowAvailableThreshold': {
+    schema: z.number().int().min(0).max(1000),
+    default: 3,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Порог «заканчивается» на складе', uz: 'Omborda «tugayapti» chegarasi' },
+    hint: {
+      ru: 'Строка склада подсвечивается, когда доступно не больше этого числа штук. Нуль подсвечивается всегда.',
+      uz: 'Mavjud miqdor shu sondan oshmasa, ombor qatori ajratib koʻrsatiladi. Nol har doim ajratiladi.',
+    },
+  },
   /**
    * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020), up to
    * the technical bound `RECEIPT_UPLOAD_MAX_MB`.
