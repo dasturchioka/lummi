@@ -34,7 +34,8 @@ function Inline({ nodes }: { nodes: RichInline[] }): ReactNode {
         );
       case 'a':
         // t.me links stay inside Telegram, https links open in its browser (lib/telegram.ts);
-        // mailto: and tel: are left to the system
+        // mailto: and tel: are left to the system. A link here is part of the text, so it stays
+        // selectable with its sentence (the base CSS makes control links unselectable).
         return (
           <a
             key={i}
@@ -42,7 +43,7 @@ function Inline({ nodes }: { nodes: RichInline[] }): ReactNode {
             onClick={(e) => {
               if (openContentLink(n.href)) e.preventDefault();
             }}
-            className="rounded-[2px] font-medium underline decoration-line-strong decoration-1 underline-offset-[3px] transition-opacity duration-150 active:opacity-60"
+            className="rounded-[2px] font-medium underline select-text decoration-line-strong decoration-1 underline-offset-[3px] transition-opacity duration-150 active:opacity-60"
           >
             <Inline nodes={n.c} />
           </a>
