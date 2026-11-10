@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody, PromoCodeInput } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { and, auditLog, btsPoints, eq, fragrances, regions, volumes } from '@lummi/db';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import pg from 'pg';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
+import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
@@ -34,6 +36,7 @@ beforeEach(async () => {
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
 });
+afterEach(() => vi.restoreAllMocks());
 
 const ali: TestUser = { id: 41, first_name: 'Ali', language_code: 'ru' };
 const vali: TestUser = { id: 42, first_name: 'Vali', language_code: 'uz' };
@@ -303,6 +306,8 @@ describe('the cart: a typed code', () => {
       expect(order).toMatchObject({ discount: null, total: 298_000 });
       const [code] = (await owner.client.admin.promoCodes.list()).body as { uses: number }[];
       expect(code?.uses).toBe(0);
+      // the refused code went with the order too, so the next cart does not greet with a refusal
+      expect((await s.client.cart.get()).body).toMatchObject({ promoCode: null });
     },
   );
 
@@ -366,6 +371,35 @@ const usesOf = async (code = 'BLOGER10') => {
   return list.body.find((p) => p.code === code)!;
 };
 
+/**
+ * Runs `run` while another session holds an EXCLUSIVE lock on `table` (reads pass, writes wait),
+ * and releases it only once `waiters` sessions are blocked on a lock: the race is then real, not
+ * a hope that two requests overlapped within some fixed time.
+ */
+async function whileTableLocked<T>(table: string, waiters: number, run: () => Promise<T>) {
+  const locker = new pg.Client({ connectionString: t.env.DATABASE_URL });
+  await locker.connect();
+  try {
+    await locker.query('begin');
+    await locker.query(`lock table ${table} in exclusive mode`);
+    const pending = run();
+    for (const deadline = Date.now() + 10_000; ;) {
+      const { rows } = await locker.query<{ n: number }>(
+        `select count(*)::int as n from pg_stat_activity
+         where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()`,
+      );
+      if (rows[0]!.n >= waiters) break;
+      if (Date.now() > deadline)
+        throw new Error(`only ${rows[0]!.n} of ${waiters} sessions reached a lock`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    await locker.query('commit');
+    return await pending;
+  } finally {
+    await locker.end();
+  }
+}
+
 describe('the order holds a use; the limits count uses that were not voided', () => {
   it('the order keeps the code as its discount and holds one use', async () => {
     const [a, b] = await slugs(2);
@@ -380,8 +414,8 @@ describe('the order holds a use; the limits count uses that were not voided', ()
       total: 268_200,
     });
     expect(await usesOf()).toMatchObject({ uses: 1, everUsed: true, totalLimit: 5 });
-    // the code stays in the cart for the next order
-    expect((await s.client.cart.get()).body).toMatchObject({ promoCode: 'BLOGER10' });
+    // the order took the code with it: the next cart starts without one
+    expect((await s.client.cart.get()).body).toMatchObject({ promoCode: null });
   });
 
   it('total limit: the last use goes to one shopper, the next is told it is exhausted; a cancel gives it back', async () => {
@@ -400,7 +434,10 @@ describe('the order holds a use; the limits count uses that were not voided', ()
       promoCode: { code: 'BLOGER10', invalid: { reason: 'exhausted' } },
     });
 
+    // the cancel voids the use through the discount-source release (ADR 0005), in its transaction
+    const release = vi.spyOn(t.app.get(DiscountSourceHooks), 'release');
     await cancel(first, taken.number);
+    expect(release).toHaveBeenCalledTimes(1);
     expect(await usesOf()).toMatchObject({ uses: 0, everUsed: true, state: 'active' });
     expect(await quoteOf(second)).toMatchObject({
       discount: { type: 'promo_code', amount: 14_900 },
@@ -416,7 +453,7 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     await s.apply('BLOGER10');
     const order = await placeOrder(s);
     await s.add(b!, 30);
-    expect(await quoteOf(s)).toMatchObject({
+    expect((await s.apply('BLOGER10')).quote).toMatchObject({
       discount: null,
       promoCode: { invalid: { reason: 'already_used' } },
     });
@@ -443,6 +480,76 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     await cancel(s, first.number);
     const order = await placeOrder(s);
     expect(order.discount).toMatchObject({ type: 'promo_code', code: 'BLOGER10' });
+  });
+
+  it('two concurrent orders for the last use: exactly one holds it, the other gets 409 with the new quote', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ totalLimit: 1 });
+    const first = await shopper(ali);
+    const second = await shopper(vali, '998901112233');
+    // different bottles, so no stock row orders the two: only the code's own lock can
+    await first.add(a!, 30);
+    await second.add(b!, 30);
+    await first.apply('BLOGER10');
+    await second.apply('BLOGER10');
+    const bodies = [await orderBody(first), await orderBody(second)] as const;
+    expect(bodies.map((b) => b.confirmedTotal)).toEqual([159_100, 159_100]);
+
+    // Both requests run while no use can be written yet, so each would count the uses before the
+    // other held one: only the row lock on the code keeps the second from taking it too.
+    const results = await whileTableLocked('promo_code_uses', 2, () =>
+      Promise.all([
+        first.client.orders.create({ body: bodies[0] }),
+        second.client.orders.create({ body: bodies[1] }),
+      ]),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(results.find((r) => r.status === 409)).toMatchObject({
+      body: {
+        code: 'total_changed',
+        checkout: {
+          quote: {
+            discount: null,
+            total: 174_000,
+            promoCode: { code: 'BLOGER10', invalid: { reason: 'exhausted' } },
+          },
+        },
+      },
+    });
+    expect(results.find((r) => r.status === 201)).toMatchObject({
+      body: { discount: { type: 'promo_code', code: 'BLOGER10', amount: 14_900 } },
+    });
+    expect(await usesOf()).toMatchObject({ uses: 1, state: 'exhausted' });
+  });
+
+  it('expiry at the order: held at 23:59:59 Tashkent on the last day, 409 from 00:00 the next', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ expiresOn: '2026-11-15' });
+    t.edges.clock.set(new Date('2026-11-15T18:59:59Z')); // 23:59:59 in Tashkent (UTC+5)
+    const s = await shopper(ali);
+    await s.add(a!, 30);
+    await s.apply('BLOGER10');
+    expect(await placeOrder(s)).toMatchObject({
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 14_900 },
+      total: 159_100,
+    });
+
+    const late = await shopper(vali, '998901112233');
+    await late.add(b!, 30);
+    await late.apply('BLOGER10');
+    const body = await orderBody(late); // confirmed with the code, a second before midnight
+    expect(body.confirmedTotal).toBe(159_100);
+    t.edges.clock.set(new Date('2026-11-15T19:00:00Z'));
+    expect(await late.client.orders.create({ body })).toMatchObject({
+      status: 409,
+      body: {
+        code: 'total_changed',
+        checkout: {
+          quote: { discount: null, total: 174_000, promoCode: { invalid: { reason: 'expired' } } },
+        },
+      },
+    });
+    expect(await usesOf()).toMatchObject({ uses: 1, state: 'expired' });
   });
 
   it('a code exhausted between the quote and the order: 409 with the new quote, which says why', async () => {
@@ -491,5 +598,37 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     await cancel(s, order.number);
     const res = await owner.client.admin.promoCodes.remove({ params: { id: created.id } });
     expect(res).toMatchObject({ status: 409, body: { code: 'in_use' } });
+  });
+});
+
+describe('typing codes: guessable, so attempts are limited (settings)', () => {
+  it('past promo.attemptLimit codes in the window: 429, the stored code stays; the window ends, typing works again', async () => {
+    for (const [key, value] of [
+      ['promo.attemptLimit', 2],
+      ['promo.attemptWindowSeconds', 600],
+    ] as const) {
+      const res = await owner.client.admin.settings.update({ params: { key }, body: { value } });
+      expect(res.status).toBe(200);
+    }
+    await createPromo();
+    const s = await shopper();
+    expect((await s.apply('GUESS1')).promoCode).toBe('GUESS1');
+    t.edges.clock.advance(60_000);
+    expect((await s.apply('bloger10')).promoCode).toBe('BLOGER10');
+
+    // a third code within 600 s of the first is refused and the stored one stays
+    const refused = await s.client.cart.applyPromoCode({ body: { code: 'GUESS2' } });
+    expect(refused).toMatchObject({
+      status: 429,
+      body: { code: 'too_many_attempts', retryAfterSeconds: 540 },
+    });
+    expect((await s.client.cart.get()).body).toMatchObject({ promoCode: 'BLOGER10' });
+    // removing is not an attempt, and works while typing is refused
+    const removed = await s.client.cart.removePromoCode();
+    expect(removed.status === 200 && removed.body.promoCode).toBeNull();
+    t.edges.clock.advance(539_000);
+    expect((await s.client.cart.applyPromoCode({ body: { code: 'GUESS2' } })).status).toBe(429);
+    t.edges.clock.advance(1_000);
+    expect((await s.apply('GUESS2')).promoCode).toBe('GUESS2');
   });
 });
