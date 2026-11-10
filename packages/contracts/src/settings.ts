@@ -94,6 +94,31 @@ export const settingDefinitions = {
       uz: 'Avval qoʻlda tanlanganlar, keyin xuddi shu oila va turdagilar, faqat mavjudlari.',
     },
   },
+  // Excel catalog import (spec Changes 2026-11-07, #26)
+  /** The largest `LUMMI_Katalog.xlsx` the import accepts. */
+  'catalog.import.maxBytes': {
+    schema: z.number().int().min(100_000).max(20_000_000),
+    default: 5_000_000,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Импорт каталога: размер файла, байт', uz: 'Katalog importi: fayl hajmi, bayt' },
+    hint: {
+      ru: 'Файл Excel больше этого размера отклоняется до разбора.',
+      uz: 'Shundan katta Excel fayl oʻqilmasdan rad etiladi.',
+    },
+  },
+  /** The most data rows on each sheet of the import file. */
+  'catalog.import.maxRows': {
+    schema: z.number().int().min(10).max(20_000),
+    default: 2_000,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Импорт каталога: строк на листе', uz: 'Katalog importi: varaqdagi qatorlar' },
+    hint: {
+      ru: 'Лист с большим числом строк отклоняется целиком.',
+      uz: 'Qatorlari bundan koʻp varaq butunlay rad etiladi.',
+    },
+  },
   // ---- Pricing
   /** Delivery is free once the threshold base reaches this many so'm (TZ §8). */
   'pricing.freeDeliveryThreshold': {

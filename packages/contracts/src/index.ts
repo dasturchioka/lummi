@@ -14,3 +14,4 @@ export * from './constants';
 export * from './cart';
 export * from './broadcast';
 export * from './orders';
+export * from './catalog-import';

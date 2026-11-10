@@ -5,7 +5,9 @@ import { AdminAuthController } from './admin/admin-auth.controller';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
+import { CatalogImportController } from './admin/catalog-import.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
+import { CatalogImportService } from './catalog-import/catalog-import.service';
 import { BroadcastController } from './broadcast/broadcast.controller';
 import { BroadcastService } from './broadcast/broadcast.service';
 import { SettingsController } from './admin/settings.controller';
@@ -73,6 +75,7 @@ export class AppModule {
         SettingsController,
         AuditController,
         CatalogAdminController,
+        CatalogImportController,
         OnHandController,
         DeliveryController,
         BtsAdminController,
@@ -95,6 +98,7 @@ export class AppModule {
         CartService,
         OrdersService,
         CatalogAdminService,
+        CatalogImportService,
         SearchService,
         CustomersService,
         DeliveryService,

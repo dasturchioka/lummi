@@ -1,67 +1,36 @@
-import {
-  families,
-  fragranceNotes,
-  fragranceSimilar,
-  fragrances,
-  notes,
-  sql,
-  volumes,
-  type Db,
-} from '@lummi/db';
-import { normalizeUzbek } from '@lummi/i18n';
-import { slugify } from './slug';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { FileStore } from '../edges';
-import { reindexFragrances } from '../search/search-index';
+import { fileURLToPath } from 'node:url';
+import { and, eq, fragrances, volumes, type Db } from '@lummi/db';
+import { AuditService } from '../audit/audit.service';
+import { CatalogAdminService } from '../admin/catalog-admin.service';
+import { CatalogImportService } from '../catalog-import/catalog-import.service';
+import { normaliseCode } from '../catalog-import/plan';
+import { readWorkbook } from '../catalog-import/workbook';
+import { SystemClock, type Edges, type FileStore } from '../edges';
+import { slugify } from './slug';
 import { storePhoto } from './photo-pipeline';
 
 /**
- * Seed from the customer's guide (`materials/catalog/`, ADR 0018): 67 fragrances with RU/UZ text,
- * families, notes by level, curated similar fragrances, and their bottle photos through the photo
- * pipeline. Everything the guide does not give is OURS and flagged `is_placeholder`:
- * prices and stock (docs/catalog-sample.md -> Seed data). Idempotent: run it again and rows are
- * updated in place; an existing volume keeps its price and stock (only its photo is refreshed).
+ * Seed from the customer's guide, loaded through the Excel import (#26). The guide (`materials/catalog/`,
+ * ADR 0018) was converted once into the import template `apps/api/seed/LUMMI_Katalog.xlsx`
+ * (`npm run seed:workbook -w @lummi/api`): 67 fragrances with RU/UZ text, families, notes by level,
+ * curated similar fragrances. Everything the guide does not give is OURS and flagged `is_placeholder`:
+ * prices and stock (docs/catalog-sample.md -> Seed data). The bottle photos go through the photo
+ * pipeline afterwards. Idempotent: run it again and rows are updated in place; an existing fragrance
+ * keeps its aliases, flags, prices, markdowns and stock (the importer's `seed` mode).
  */
 export const PLACEHOLDER_PRICES = { 10: 69_000, 30: 149_000, 50: 219_000 } as const;
 export const PLACEHOLDER_ON_HAND = 20;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
-
-interface GuideRecord {
-  id: number;
-  brand: string;
-  name: string;
-  similar_ids: number[];
-  ru: Record<string, string>;
-  uz: Record<string, string>;
-}
-
-const TYPE = { Мужской: 'homme', Женский: 'femme', Унисекс: 'unisex' } as const;
-const SILLAGE = { Средний: 'medium', Заметный: 'noticeable', Сильный: 'strong' } as const;
-const SEASON = {
-  'Весна–лето': 'spring_summer',
-  'Осень–зима': 'autumn_winter',
-  'Круглый год': 'all_year',
-  'Весна–осень': 'spring_autumn',
-} as const;
-const TIME = {
-  Днём: 'day',
-  Вечер: 'evening',
-  'День и вечер': 'day_evening',
-  'На каждый день': 'everyday',
-} as const;
-
-function pick<T extends Record<string, string>>(map: T, key: string, what: string): T[keyof T] {
-  const v = map[key];
-  if (!v) throw new Error(`catalog guide: unknown ${what} "${key}"`);
-  return v as T[keyof T];
-}
+export const SEED_WORKBOOK = fileURLToPath(new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url));
 
 /**
  * Spelling variants (aliases) for names whose Cyrillic or phonetic reading does not follow from
  * the Latin spelling (French and English). Provisional: the customer's list and the admin panel
- * replace them. Written only while a fragrance has no aliases, so an admin's edits are kept.
+ * replace them. They live in the seed workbook's «Псевдонимы» column; this is how it was filled.
  */
 export const SEED_ALIASES: Record<string, string[]> = {
   'sauvage-edt': ['Соваж', 'Саваж', 'Sovaj'],
@@ -74,155 +43,70 @@ export const SEED_ALIASES: Record<string, string[]> = {
   'oud-wood': ['Уд Вуд', 'Oud Vud'],
 };
 
-const list = (s: string, sep: string | RegExp) =>
-  s
-    .split(sep)
-    .map((x) => x.trim())
-    .filter(Boolean);
-
 export interface SeedOptions {
-  /** `materials/` of the repo (read-only). */
+  /** `materials/` of the repo (read-only); the bottle photos are read from `flakons/`. */
   materialsDir: string;
   /** With a store, the bottle photos go through the pipeline; without, volumes get no photo. */
   photos?: FileStore;
-  /** Only the first N records (tests). */
+  /** Only the first N fragrances of the workbook (tests). */
   limit?: number;
+  /** Another workbook in the template (tests); default is the committed seed. */
+  workbook?: string;
 }
 
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
-  const guide = (
-    JSON.parse(
-      await readFile(join(opts.materialsDir, 'catalog/lummi_aromatlar.json'), 'utf8'),
-    ) as GuideRecord[]
-  ).slice(0, opts.limit);
-  const lexicon = new Map<string, string>();
-  const lexText = await readFile(join(opts.materialsDir, 'catalog/notalar_lugati.txt'), 'utf8');
-  for (const line of lexText.split('\n').slice(1)) {
-    const [ru, uz] = line.split(' — ');
-    if (ru && uz) lexicon.set(ru.trim(), normalizeUzbek(uz.trim()));
+  const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);
+  const raw = await readWorkbook(bytes, { maxRows: 100_000 });
+  if (opts.limit !== undefined) {
+    const keep = new Set(raw.fragrances.slice(0, opts.limit).map((r) => normaliseCode(r.cells.code)));
+    raw.fragrances = raw.fragrances.filter((r) => keep.has(normaliseCode(r.cells.code)));
+    raw.volumes = raw.volumes.filter((r) => keep.has(normaliseCode(r.cells.code)));
+    // curated similar fragrances inside the kept ones only
+    for (const r of raw.fragrances) {
+      r.cells.similar = r.cells.similar
+        .split(/[,;]/)
+        .filter((c) => keep.has(normaliseCode(c)))
+        .join(', ');
+    }
   }
 
-  // Photos first (slow, no DB): slug -> ml -> hash.
-  const photoHash = new Map<string, string>();
+  const clock = new SystemClock();
+  const audit = new AuditService();
+  const admin = new CatalogAdminService(db, { clock } as unknown as Edges, audit);
+  const importer = new CatalogImportService(db, { clock }, audit, admin);
+  const res = await importer.applyRaw(
+    null,
+    raw,
+    createHash('sha256').update(bytes).digest('hex'),
+    null,
+    { seed: true },
+  );
+  if (!res.ok) {
+    const issues = res.reason === 'invalid' ? res.report.errors : [];
+    throw new Error(
+      `seed workbook rejected: ${issues
+        .slice(0, 5)
+        .map((i) => `${i.sheet} row ${i.row} ${i.column ?? ''} ${i.code}`)
+        .join('; ')}`,
+    );
+  }
+
+  // Photos last (slow): slug -> ml -> hash, onto the volumes the import just wrote.
   if (opts.photos) {
-    for (const r of guide) {
+    for (const r of raw.fragrances) {
+      const slug = slugify(r.cells.name);
       for (const ml of [10, 30, 50]) {
-        const slug = slugify(r.name);
         const file = join(opts.materialsDir, `flakons/${slug}_${ml}ml.webp`);
         const { hash } = await storePhoto(opts.photos, await readFile(file));
-        photoHash.set(`${slug}:${ml}`, hash);
+        const [f] = await db.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.slug, slug));
+        if (f) {
+          await db
+            .update(volumes)
+            .set({ photoHash: hash })
+            .where(and(eq(volumes.fragranceId, f.id), eq(volumes.ml, ml)));
+        }
       }
     }
   }
-
-  await db.transaction(async (tx) => {
-    // Dictionaries.
-    const familyPairs = new Map<string, string>();
-    for (const r of guide) familyPairs.set(r.ru.semeystvo!, normalizeUzbek(r.uz.oila!));
-    const familyRows = await tx
-      .insert(families)
-      .values([...familyPairs].map(([nameRu, nameUz]) => ({ nameRu, nameUz })))
-      .onConflictDoUpdate({ target: families.nameRu, set: { nameUz: sql`excluded.name_uz` } })
-      .returning();
-    const familyId = new Map(familyRows.map((f) => [f.nameRu, f.id]));
-
-    const noteRows = await tx
-      .insert(notes)
-      .values([...lexicon].map(([nameRu, nameUz]) => ({ nameRu, nameUz })))
-      .onConflictDoUpdate({ target: notes.nameRu, set: { nameUz: sql`excluded.name_uz` } })
-      .returning();
-    const noteId = new Map(noteRows.map((n) => [n.nameRu, n.id]));
-
-    const idBySlug = new Map<string, number>();
-    const idByGuideId = new Map<number, number>();
-    for (const r of guide) {
-      const slug = slugify(r.name);
-      const values = {
-        slug,
-        code: String(r.id).padStart(3, '0'),
-        name: r.name,
-        originalBrand: r.brand,
-        type: pick(TYPE, r.ru.pol!, 'type'),
-        familyId: familyId.get(r.ru.semeystvo!) ?? null,
-        season: pick(SEASON, r.ru.sezon!, 'season'),
-        timeOfDay: pick(TIME, r.ru.vremya!, 'time of day'),
-        longevityRu: LONGEVITY.ru,
-        longevityUz: LONGEVITY.uz,
-        sillage: pick(SILLAGE, r.ru.shleyf!, 'sillage'),
-        descriptionRu: r.ru.ob_aromate!,
-        descriptionUz: normalizeUzbek(r.uz.ifor_haqida!),
-        whenToWearRu: r.ru.kogda_nosit!,
-        whenToWearUz: normalizeUzbek(r.uz.qachon_taqish!),
-        keyNotesRu: list(r.ru.klyuchevye_noty!, '·'),
-        keyNotesUz: list(normalizeUzbek(r.uz.asosiy_notalar!), '·'),
-        internalRemark: r.ru.primechanie || null,
-        aliases: SEED_ALIASES[slug] ?? [],
-        updatedAt: new Date(),
-      };
-      const [row] = await tx
-        .insert(fragrances)
-        .values(values)
-        .onConflictDoUpdate({
-          target: fragrances.slug,
-          set: {
-            ...values,
-            aliases: sql`case when cardinality(${fragrances.aliases}) = 0 then excluded.aliases else ${fragrances.aliases} end`,
-          },
-        })
-        .returning({ id: fragrances.id });
-      const fid = row!.id;
-      idBySlug.set(slug, fid);
-      idByGuideId.set(r.id, fid);
-
-      // Notes by level, in the guide's order.
-      await tx.delete(fragranceNotes).where(sql`fragrance_id = ${fid}`);
-      const links = (
-        [
-          ['top', r.ru.verhnie_noty],
-          ['heart', r.ru.noty_serdca],
-          ['base', r.ru.bazovye_noty],
-        ] as const
-      ).flatMap(([level, text]) =>
-        list(text ?? '', ',').map((name, position) => {
-          const nid = noteId.get(name);
-          if (!nid) throw new Error(`catalog guide: note "${name}" is not in the dictionary`);
-          return { fragranceId: fid, noteId: nid, level, position };
-        }),
-      );
-      if (links.length) await tx.insert(fragranceNotes).values(links);
-
-      for (const ml of [10, 30, 50] as const) {
-        const hash = photoHash.get(`${slug}:${ml}`) ?? null;
-        await tx
-          .insert(volumes)
-          .values({
-            fragranceId: fid,
-            ml,
-            price: PLACEHOLDER_PRICES[ml],
-            onHand: PLACEHOLDER_ON_HAND,
-            photoHash: hash,
-            isPlaceholder: true,
-          })
-          .onConflictDoUpdate({
-            target: [volumes.fragranceId, volumes.ml],
-            // Never clobber a price or stock someone has since set; only the photo follows the seed.
-            set: hash ? { photoHash: hash } : { fragranceId: fid },
-          });
-      }
-    }
-
-    // Curated similar fragrances, ordered; ids inside the catalog only.
-    for (const r of guide) {
-      const fid = idByGuideId.get(r.id)!;
-      await tx.delete(fragranceSimilar).where(sql`fragrance_id = ${fid}`);
-      const rows = r.similar_ids.flatMap((gid, position) => {
-        const similarId = idByGuideId.get(gid);
-        return similarId ? [{ fragranceId: fid, similarId, position }] : [];
-      });
-      if (rows.length) await tx.insert(fragranceSimilar).values(rows);
-    }
-    // The search documents follow the rows just written (ADR 0019).
-    await reindexFragrances(tx, [...idByGuideId.values()]);
-  });
-  return { fragrances: guide.length };
+  return { fragrances: raw.fragrances.length };
 }
