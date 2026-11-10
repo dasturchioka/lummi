@@ -29,3 +29,6 @@ materials/_archives/
 .worktrees/
 *.tsbuildinfo
 next-env.d.ts
+
+# test reporter output
+.vitest/

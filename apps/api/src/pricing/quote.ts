@@ -1,6 +1,7 @@
 import type {
   Discount,
   PromoCodeInvalid,
+  PromoCodeRefusal,
   Quote,
   QuoteLine,
   SettingValue,
@@ -47,6 +48,12 @@ export type PromoCode = {
   | { kind: 'fixed'; amount: number }
 );
 
+/** An entered code the shop refused before pricing (unknown, expired, used up, ...): shown with its reason. */
+export interface RefusedPromoCode {
+  code: string;
+  refused: PromoCodeRefusal;
+}
+
 /** The discount the customer switched to in the cart (ADR 0002). */
 export type DiscountChoice =
   { type: 'upgrade_right' | 'birthday_coupon'; id: number } | { type: 'promo_code' };
@@ -61,7 +68,8 @@ export interface PricingSettings {
 export interface QuoteInput {
   lines: QuoteLineInput[];
   entitlements: Entitlement[];
-  promoCode: PromoCode | null;
+  /** The entered code: priced when it passed the DB checks, else echoed with why it was refused. */
+  promoCode: PromoCode | RefusedPromoCode | null;
   choice: DiscountChoice | null;
   /** The region's delivery tariff before the free-delivery threshold. */
   deliveryTariff: number;
@@ -116,9 +124,12 @@ export function quote(input: QuoteInput): Quote {
     const option = entitlementOption(e, billable, settings);
     return option ? [option] : [];
   });
-  const promo = input.promoCode
-    ? promoOutcome(input.promoCode, billable, itemsSubtotal, settings)
-    : null;
+  const entered = input.promoCode;
+  const promo = !entered
+    ? null
+    : 'refused' in entered
+      ? { option: null, invalid: { reason: entered.refused } }
+      : promoOutcome(entered, billable, itemsSubtotal, settings);
   const options = promo?.option ? [...fromEntitlements, promo.option] : fromEntitlements;
 
   // ADR 0002: the customer's switch while it still applies; else an entered valid code; else the
@@ -398,7 +409,7 @@ function assertWholeInputs(input: QuoteInput): void {
     if (e.type === 'birthday_coupon') assertSom(`birthday coupon ${e.id} max`, e.maxAmount);
   }
   const p = input.promoCode;
-  if (p) {
+  if (p && !('refused' in p)) {
     if (p.minOrderTotal !== null) assertSom(`promo ${p.code} minimum`, p.minOrderTotal);
     if (p.kind === 'fixed') assertSom(`promo ${p.code} amount`, p.amount);
     else {

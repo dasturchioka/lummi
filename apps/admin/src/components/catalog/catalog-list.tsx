@@ -164,6 +164,9 @@ export function CatalogList({
         }
         actions={
           <div className="flex items-center gap-5">
+            <Link href="/catalog/import" className={TEXT_LINK}>
+              {c.excel.link}
+            </Link>
             <Link href="/catalog/dictionaries" className={TEXT_LINK}>
               {c.dictionaries}
             </Link>

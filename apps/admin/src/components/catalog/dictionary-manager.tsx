@@ -1,6 +1,6 @@
 'use client';
 
-import { dictionaryInputSchema, type DictionaryInput, type DictionaryItem } from '@lummi/contracts';
+import { dictionaryInputSchema, noteInputSchema, type DictionaryInput, type DictionaryItem } from '@lummi/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { plural, stripApostrophes, type Language } from '@lummi/i18n';
 import { ArrowLeft, Plus } from 'lucide-react';
@@ -242,7 +242,7 @@ function EditContent({
   const [error, setError] = useState<string | null>(null);
   const [aliasText, setAliasText] = useState((item?.aliases ?? []).join('\n'));
   const form = useForm<DictionaryInput>({
-    resolver: zodResolver(dictionaryInputSchema),
+    resolver: zodResolver(kind === 'notes' ? noteInputSchema : dictionaryInputSchema),
     defaultValues: {
       nameRu: item?.nameRu ?? '',
       nameUz: item?.nameUz ?? '',
@@ -281,14 +281,14 @@ function EditContent({
         <Field
           id="dict-ru"
           label={d.nameRu}
-          error={errors.nameRu ? t.catalog.errors.required : undefined}
+          error={errors.nameRu ? (errors.nameRu.message === 'comma_in_note' ? d.noComma : t.catalog.errors.required) : undefined}
         >
           <Input autoComplete="off" {...form.register('nameRu')} />
         </Field>
         <Field
           id="dict-uz"
           label={d.nameUz}
-          error={errors.nameUz ? t.catalog.errors.required : undefined}
+          error={errors.nameUz ? (errors.nameUz.message === 'comma_in_note' ? d.noComma : t.catalog.errors.required) : undefined}
         >
           <Input autoComplete="off" {...form.register('nameUz')} />
         </Field>

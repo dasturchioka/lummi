@@ -96,6 +96,31 @@ export const settingDefinitions = {
       uz: 'Avval qoʻlda tanlanganlar, keyin xuddi shu oila va turdagilar, faqat mavjudlari.',
     },
   },
+  // Excel catalog import (spec Changes 2026-11-07, #26)
+  /** The largest `LUMMI_Katalog.xlsx` the import accepts. */
+  'catalog.import.maxBytes': {
+    schema: z.number().int().min(100_000).max(20_000_000),
+    default: 5_000_000,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Импорт каталога: размер файла, байт', uz: 'Katalog importi: fayl hajmi, bayt' },
+    hint: {
+      ru: 'Файл Excel больше этого размера отклоняется до разбора.',
+      uz: 'Shundan katta Excel fayl oʻqilmasdan rad etiladi.',
+    },
+  },
+  /** The most data rows on each sheet of the import file. */
+  'catalog.import.maxRows': {
+    schema: z.number().int().min(10).max(20_000),
+    default: 2_000,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Импорт каталога: строк на листе', uz: 'Katalog importi: varaqdagi qatorlar' },
+    hint: {
+      ru: 'Лист с большим числом строк отклоняется целиком.',
+      uz: 'Qatorlari bundan koʻp varaq butunlay rad etiladi.',
+    },
+  },
   // ---- Pricing
   /** Delivery is free once the threshold base reaches this many so'm (TZ §8). */
   'pricing.freeDeliveryThreshold': {
@@ -298,6 +323,29 @@ export const settingDefinitions = {
     hint: {
       ru: 'Объёмы, на которые действует право на апгрейд. Только больше 10 мл, через запятую.',
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
+    },
+  },
+  /** Promo codes are guessable: a customer may type this many per window (ticket #29). */
+  'promo.attemptLimit': {
+    schema: z.number().int().min(1).max(1000),
+    default: 10,
+    area: 'pricing',
+    unit: 'count',
+    label: { ru: 'Попыток ввести промокод', uz: 'Promokod kiritish urinishlari' },
+    hint: {
+      ru: 'Сколько кодов клиент может ввести за окно ниже. Защищает от подбора кодов.',
+      uz: 'Mijoz quyidagi oyna ichida nechta kod kirita oladi. Kodlarni taxmin qilishdan himoya.',
+    },
+  },
+  'promo.attemptWindowSeconds': {
+    schema: z.number().int().min(60).max(7 * 86_400),
+    default: 3600,
+    area: 'pricing',
+    unit: 'seconds',
+    label: { ru: 'Окно попыток ввода промокода', uz: 'Promokod urinishlari oynasi' },
+    hint: {
+      ru: 'После стольких попыток новый код можно ввести, когда окно закончится.',
+      uz: 'Shuncha urinishdan keyin yangi kodni oyna tugagach kiritish mumkin.',
     },
   },
   // ---- Bot and orders group

@@ -1002,6 +1002,96 @@ describe('quote(): promo code (ADR 0007, 0008, 0009)', () => {
       },
       expected: { thresholdBase: 'before', deliveryFee: 0, total: 234_000 },
     },
+    {
+      name: 'a 100% code without a max takes every eligible item but never delivery',
+      given: {
+        lines: [volume('t10', TYGAR, 10, 69_000)],
+        promoCode: percentPromo('GIFT100', 100),
+      },
+      expected: {
+        discount: { type: 'promo_code', amount: 69_000 },
+        thresholdBaseAmount: 0,
+        deliveryFee: 25_000,
+        total: 25_000,
+      },
+    },
+    {
+      name: 'a code on marked-down items only, flagged for them, discounts the markdown price and ships by its base',
+      given: {
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, {
+            qty: 2,
+            markdown: { price: 150_000, endsAt: TOMORROW },
+          }),
+        ],
+        promoCode: percentPromo('SALE5', 5, { appliesToMarkedDown: true }),
+      },
+      // 300 000 of markdown prices, 5% = 15 000; 285 000 after it still reaches 250 000
+      expected: {
+        itemsSubtotal: 300_000,
+        discount: { amount: 15_000 },
+        thresholdBaseAmount: 285_000,
+        deliveryFee: 0,
+        total: 285_000,
+      },
+    },
+  ]);
+});
+
+describe('quote(): a code the shop refused before pricing it (ticket #29)', () => {
+  const refusals = [
+    'unknown',
+    'inactive',
+    'expired',
+    'exhausted',
+    'already_used',
+    'not_new_customer',
+  ] as const;
+  it.each(refusals)(
+    'a %s code is not applied, says why, and the order is priced as without it',
+    (reason) => {
+      const q = quote(
+        input({
+          lines: [volume('t30', TYGAR, 30, 149_000)],
+          promoCode: { code: 'BLOGGER10', refused: reason },
+        }),
+      );
+      expect(q).toMatchObject({
+        discount: null,
+        thresholdBase: 'before',
+        deliveryFee: 25_000,
+        total: 174_000,
+        promoCode: { code: 'BLOGGER10', invalid: { reason } },
+        alternatives: [],
+        staleChoice: false,
+      });
+      expect(quoteSchema.parse(q)).toEqual(q);
+    },
+  );
+
+  runTable([
+    {
+      name: 'a refused code leaves the automatic choice to the entitlements',
+      given: {
+        lines: [volume('g50', GUIDANCE, 50, 219_000), volume('t30', TYGAR, 30, 149_000)],
+        entitlements: [setRight(7, [GUIDANCE])],
+        promoCode: { code: 'GONE', refused: 'expired' },
+      },
+      expected: {
+        discount: { type: 'upgrade_right', id: 7, amount: 43_800 },
+        total: 324_200,
+        promoCode: { code: 'GONE', invalid: { reason: 'expired' } },
+      },
+    },
+    {
+      name: 'a stored switch to the code falls back once the code is refused',
+      given: {
+        lines: [volume('t30', TYGAR, 30, 149_000)],
+        promoCode: { code: 'GONE', refused: 'exhausted' },
+        choice: { type: 'promo_code' },
+      },
+      expected: { discount: null, total: 174_000, staleChoice: true },
+    },
   ]);
 });
 

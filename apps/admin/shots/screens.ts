@@ -2,9 +2,18 @@ import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
+import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
 import { customerScreens, stockScreens } from './stock-data';
+import {
+  forgetPromoList,
+  forgetUses,
+  holdUses,
+  seedPromoList,
+  WORST_PROMO,
+  WORST_FIXED_PROMO,
+} from './promo-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
@@ -69,6 +78,41 @@ function photoError(
     },
   };
 }
+
+
+/** The current catalog export, opened for editing (the owner's session rides on `page.request`). */
+async function exportWorkbook(page: Page, edit: (wb: ExcelJS.Workbook) => void) {
+  const bytes = await (await page.request.get(new URL('/api/admin/catalog/export', page.url()).href)).body();
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(bytes as unknown as ArrayBuffer);
+  edit(wb);
+  return {
+    name: 'LUMMI_Katalog.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: Buffer.from(await wb.xlsx.writeBuffer()),
+  };
+}
+const cell = (ws: ExcelJS.Worksheet, row: number, header: string) => {
+  let col = 0;
+  ws.getRow(1).eachCell((c, n) => {
+    if (c.text === header) col = n;
+  });
+  return ws.getRow(row).getCell(col);
+};
+
+/** Prices are changed by the «applied» shot; the run puts them back for the screens after it. */
+const importRestore: Pick<Screen, 'setup' | 'teardown'> = {
+  setup: async ({ db }) => {
+    await db.query('drop table if exists shot_volume_backup');
+    await db.query('create table shot_volume_backup as select id, price from volumes');
+  },
+  teardown: async ({ db }) => {
+    await db.query(
+      'update volumes v set price = b.price from shot_volume_backup b where b.id = v.id',
+    );
+    await db.query('drop table if exists shot_volume_backup');
+  },
+};
 
 /** A real bottle photo for the composer's image slot (kept in the repo under materials/). */
 const BROADCAST_IMAGE = resolve(
@@ -197,6 +241,8 @@ export type ScreenContext = {
   language: 'ru' | 'uz';
   outsiderId: number;
   width: number;
+  /** The shot database, for a change that has to land while the page is open (a race). */
+  db: ShotSql;
 };
 
 /** The run's own shot database, for a state no admin form reaches without changing what later screens see. */
@@ -429,6 +475,92 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // Promo codes (ticket #29): the list, the editor of the worst-case code, a new code with every
+  // error, the delete dialog, and the audit entries.
+  { id: 'promo-list', path: '/promo-codes', as: 'owner' },
+  {
+    id: 'promo-editor',
+    path: '/promo-codes',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_PROMO, exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+  },
+  { id: 'promo-new', path: '/promo-codes/new', as: 'owner' },
+  {
+    id: 'promo-new-errors',
+    path: '/promo-codes/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#p-code').fill('ЛУММИ');
+      await page.locator('#p-percent').fill('120');
+      await page.getByRole('button', { name: t.promo.save, exact: true }).click();
+      await page.getByText(t.promo.fixErrors, { exact: true }).waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
+  {
+    id: 'promo-remove',
+    path: '/promo-codes',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('link', { name: 'LUMMI10', exact: true }).first().click();
+      await page.getByRole('button', { name: t.promo.remove, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    // a code orders have used: the count, and the note in place of «Удалить»
+    id: 'promo-used',
+    path: '/promo-codes',
+    as: 'owner',
+    setup: ({ db }) => holdUses(db, 'MINUS50', 12),
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: 'MINUS50', exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+    teardown: ({ db }) => forgetUses(db),
+  },
+  {
+    // an order takes the code while its editor is open: the delete is refused, «only switch it off»
+    id: 'promo-remove-refused',
+    path: '/promo-codes',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, db }) => {
+      await page.getByRole('link', { name: 'LUMMI10', exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+      await holdUses(db, 'LUMMI10', 1);
+      await page.getByRole('button', { name: t.promo.remove, exact: true }).click();
+      await page
+        .getByRole('alertdialog')
+        .getByRole('button', { name: t.promo.remove, exact: true })
+        .click();
+      await page.getByText(t.promo.inUse, { exact: true }).waitFor();
+    },
+    teardown: ({ db }) => forgetUses(db),
+  },
+  { id: 'promo-audit', path: '/audit?action=promo.created', as: 'owner' },
+  // break-ui (#29), captured into shots/29/worst-case/: sixty codes in every state, and the editor
+  // of a seven-digit fixed code with every condition (the 32-character percent code is promo-editor).
+  {
+    id: 'promo-list-worst',
+    path: '/promo-codes',
+    as: 'owner',
+    setup: ({ db }) => seedPromoList(db),
+    teardown: ({ db }) => forgetPromoList(db),
+  },
+  {
+    id: 'promo-editor-fixed-worst',
+    path: '/promo-codes',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_FIXED_PROMO, exact: true }).first().click();
+      await page.locator('#p-code').waitFor();
+    },
+  },
   // «Карта для оплаты» (ticket #28): owner only. No card first, so the card is back for the rest.
   {
     id: 'shop-card-none',
@@ -584,6 +716,109 @@ export const screens: Screen[] = [
       await page.locator('#page-body').fill(v.body);
       // filling scrolls the field into view; the capture starts at the top like the others
       await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
+  // Excel import (ticket #26)
+  { id: 'catalog-import', path: '/catalog/import', as: 'owner' },
+  {
+    id: 'catalog-import-errors',
+    path: '/catalog/import',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      const file = await exportWorkbook(page, (wb) => {
+        const v = wb.getWorksheet('Объёмы')!;
+        cell(v, 3, 'Цена, сум').value = 'дорого';
+        cell(v, 4, 'В наличии, шт.').value = -2;
+        cell(v, 5, 'Объём, мл').value = 20;
+        const f = wb.getWorksheet('Ароматы')!;
+        cell(f, 6, 'Верхние ноты').value = 'бергамот, ноты которой нет в справочнике';
+        cell(f, 7, 'Хит').value = 'возможно';
+      });
+      await page.getByTestId('excel-file').setInputFiles(file);
+      await page.getByTestId('excel-report').waitFor();
+      await page.getByText(t.catalog.excel.errorsHint).waitFor();
+    },
+  },
+  {
+    id: 'catalog-import-warnings',
+    path: '/catalog/import',
+    as: 'owner',
+    act: async ({ page }) => {
+      // Reserves come from orders; stub 25 held on the first listed volume of the dry run's
+      // answer, so the on hand the file sets shows the warning an open order would give it.
+      await page.route('**/api/admin/catalog/import/dry-run', async (route) => {
+        const response = await route.fetch();
+        const report = (await response.json()) as {
+          stock: { reserved: number; newOnHand: number; available: number; negative: boolean }[];
+          warnings: unknown[];
+          warningTotal: number;
+        };
+        const s = report.stock[0];
+        if (s) {
+          Object.assign(s, { reserved: 25, available: s.newOnHand - 25, negative: true });
+          report.warnings.push({ sheet: 'volumes', row: 2, column: null, code: 'below_reserve' });
+          report.warningTotal += 1;
+        }
+        await route.fulfill({ response, json: report });
+      });
+      const file = await exportWorkbook(page, (wb) => {
+        const v = wb.getWorksheet('Объёмы')!;
+        cell(v, 2, 'В наличии, шт.').value = 18;
+        cell(v, 3, 'Цена, сум').value = 155_000;
+        cell(v, 4, 'Цена, сум').value = 160_000;
+      });
+      await page.getByTestId('excel-file').setInputFiles(file);
+      await page.getByTestId('excel-apply').waitFor();
+    },
+  },
+  {
+    id: 'catalog-import-applied',
+    path: '/catalog/import',
+    as: 'owner',
+    ...importRestore,
+    act: async ({ page, t }) => {
+      const file = await exportWorkbook(page, (wb) => {
+        const v = wb.getWorksheet('Объёмы')!;
+        cell(v, 3, 'Цена, сум').value = 155_000;
+        cell(v, 4, 'Цена, сум').value = 160_000;
+      });
+      await page.getByTestId('excel-file').setInputFiles(file);
+      await page.getByTestId('excel-apply').click();
+      await page.getByRole('button', { name: t.catalog.excel.applyConfirm }).click();
+      await page.getByTestId('excel-applied').waitFor();
+    },
+  },
+  {
+    id: 'catalog-import-applied-warning',
+    path: '/catalog/import',
+    as: 'owner',
+    ...importRestore,
+    act: async ({ page, t }) => {
+      // The reserve grew between the check and the write: the apply answer carries the warning
+      // (the shot data has no orders, so the answer is patched).
+      await page.route('**/api/admin/catalog/import/apply**', async (route) => {
+        const response = await route.fetch();
+        const body = (await response.json()) as { warnings: unknown[] };
+        body.warnings = [
+          {
+            sheet: 'volumes',
+            row: 2,
+            column: null,
+            code: 'below_reserve',
+            params: { name: 'Guidance', ml: 10, onHand: 18, reserved: 25 },
+          },
+        ];
+        await route.fulfill({ response, json: body });
+      });
+      const file = await exportWorkbook(page, (wb) => {
+        const v = wb.getWorksheet('Объёмы')!;
+        cell(v, 3, 'Цена, сум').value = 155_000;
+        cell(v, 4, 'Цена, сум').value = 160_000;
+      });
+      await page.getByTestId('excel-file').setInputFiles(file);
+      await page.getByTestId('excel-apply').click();
+      await page.getByRole('button', { name: t.catalog.excel.applyConfirm }).click();
+      await page.getByTestId('excel-applied').waitFor();
     },
   },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).

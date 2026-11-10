@@ -156,6 +156,7 @@ function body(over: Partial<CreateOrderBody> & { confirmedTotal: number; pointId
     delivery: { kind: 'point' as const, pointId: pointId ?? 0 },
     consent: true,
     idempotencyKey: randomUUID(),
+    confirmedDiscount: null,
     ...rest,
   } satisfies CreateOrderBody;
 }

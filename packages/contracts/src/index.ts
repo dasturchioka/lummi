@@ -16,6 +16,8 @@ export * from './sets';
 export * from './content';
 export * from './broadcast';
 export * from './orders';
+export * from './catalog-import';
 export * from './payment';
 export * from './order-transition-payloads';
 export * from './admin-stock';
+export * from './promo';

@@ -5,7 +5,9 @@ import { AdminAuthController } from './admin/admin-auth.controller';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
+import { CatalogImportController } from './admin/catalog-import.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
+import { CatalogImportService } from './catalog-import/catalog-import.service';
 import { BroadcastController } from './broadcast/broadcast.controller';
 import { BroadcastService } from './broadcast/broadcast.service';
 import { SettingsController } from './admin/settings.controller';
@@ -60,6 +62,8 @@ import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { ContentAdminController, ContentController } from './content/content.controller';
 import { ContentService } from './content/content.service';
+import { PromoAdminController } from './promo/promo-admin.controller';
+import { PromoAdminService } from './promo/promo-admin.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
 
@@ -95,6 +99,7 @@ export class AppModule {
         SettingsController,
         AuditController,
         CatalogAdminController,
+        CatalogImportController,
         OnHandController,
         SetsAdminController,
         StockAdminController,
@@ -105,6 +110,7 @@ export class AppModule {
         BtsAdminController,
         HumoFeedController,
         BroadcastController,
+        PromoAdminController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -128,6 +134,7 @@ export class AppModule {
         DiscountSourceHooks,
         ReserveSweeps,
         CatalogAdminService,
+        CatalogImportService,
         SetsAdminService,
         StockAdminService,
         CustomersAdminService,
@@ -147,6 +154,7 @@ export class AppModule {
         CreditEvents,
         HumoFeedService,
         BroadcastService,
+        PromoAdminService,
       ],
       exports: [
         CreditEvents,

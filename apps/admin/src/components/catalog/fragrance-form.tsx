@@ -202,12 +202,14 @@ export function FragranceForm({
   const errors = formState.errors;
   const v = watch();
   const err = (e?: FieldError) => message(t, e);
+  const noteError = (['top', 'heart', 'base'] as const)
+    .map((l) => errors.notes?.[l] as FieldError | undefined)
+    .find(Boolean) ?? (errors.notes as FieldError | undefined);
   const reg = (name: Parameters<typeof register>[0], opts?: Parameters<typeof register>[1]) =>
     register(name, opts) as UseFormRegisterReturn;
 
   const noteName = (n: DictionaryItem) => (language === 'uz' ? n.nameUz : n.nameRu);
   const noteById = new Map(notes.map((n) => [n.id, n]));
-  const chosenNotes = new Set([...v.notes.top, ...v.notes.heart, ...v.notes.base]);
   const setLevel = (level: Level, ids: number[]) =>
     setValue(`notes.${level}`, ids, { shouldDirty: true, shouldValidate: true });
   const setSimilar = (ids: number[]) =>
@@ -449,7 +451,7 @@ export function FragranceForm({
         </Section>
 
         <Section title={c.sectionNotes}>
-          {errors.notes && <Notice title={err(errors.notes as FieldError) ?? c.errors.invalid} />}
+          {noteError && <Notice title={err(noteError) ?? c.errors.invalid} />}
           {LEVELS.map((level) => {
             const label = { top: c.noteTop, heart: c.noteHeart, base: c.noteBase }[level];
             const ids = v.notes[level];
@@ -496,7 +498,7 @@ export function FragranceForm({
                   >
                     <option value="">{c.addNote}</option>
                     {notes
-                      .filter((n) => !chosenNotes.has(n.id))
+                      .filter((n) => !v.notes[level].includes(n.id))
                       .map((n) => (
                         <option key={n.id} value={n.id}>
                           {noteName(n)}

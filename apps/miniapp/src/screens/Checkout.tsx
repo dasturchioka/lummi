@@ -9,6 +9,7 @@ import { fill, formatPhone } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { promoReasonText } from '../cart/promo';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
@@ -20,6 +21,7 @@ import { useRegistration } from '../lib/registration';
 import { hapticSuccess, openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { CodeText } from '../ui/DiscountRow';
 import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
 import { Figure } from '../ui/Figure';
 import {
@@ -29,6 +31,7 @@ import {
   ChevronIcon,
   GiftIcon,
   PhoneIcon,
+  TagIcon,
   TruckIcon,
 } from '../ui/icons';
 import { Money } from '../ui/Money';
@@ -42,8 +45,8 @@ type Destination = Exclude<Picked, { kind: 'city' }>;
 
 interface Conflict {
   code: 'total_changed' | 'nothing_to_order';
-  /** The total the shopper had confirmed. */
-  was: number;
+  /** The quote the shopper had confirmed: its total, discount and delivery show struck beside the new ones. */
+  was: CheckoutDto['quote'];
   checkout: CheckoutDto;
 }
 
@@ -330,7 +333,8 @@ export function Checkout() {
       ? (cities.data?.find((c) => c.city === dest.point.city)?.pointCount ?? 0)
       : 0;
 
-  const submit = (confirmedTotal: number) => {
+  /** The total and the discount the shopper sees are what they confirm (the server re-checks both). */
+  const submit = (confirmed: CheckoutDto['quote']) => {
     if (!dest || invalid) {
       // show every field's error, then focus the first one and bring it to the middle of the screen
       setAttempted(true);
@@ -362,7 +366,8 @@ export function Checkout() {
       gift,
       giftMessage: gift && giftMessage.trim() ? giftMessage.trim() : undefined,
       consent,
-      confirmedTotal,
+      confirmedTotal: confirmed.total,
+      confirmedDiscount: confirmed.discount,
       idempotencyKey: attemptKey.current,
     };
     create.mutate(body, {
@@ -380,7 +385,7 @@ export function Checkout() {
         } else if (r.kind === 'conflict') {
           // the new numbers replace the old ones on the screen too
           qc.setQueryData(checkoutKey(regionId), r.checkout);
-          setConflict({ code: r.code, was: confirmedTotal, checkout: r.checkout });
+          setConflict({ code: r.code, was: confirmed, checkout: r.checkout });
         } else if (r.kind === 'try_again') {
           setConflict(null);
           setError(o.checkout.tryAgain);
@@ -431,7 +436,7 @@ export function Checkout() {
         data-testid="submit"
         // while another region is being quoted, the total on the button is the last one: wait for it
         loading={(create.isPending && !conflict) || checkout.isPlaceholderData}
-        onClick={() => submit(total)}
+        onClick={() => submit(data.quote)}
       >
         <span className="min-w-0 truncate">{o.checkout.submit}</span>
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
@@ -636,7 +641,7 @@ export function Checkout() {
         conflict={conflict}
         busy={create.isPending}
         place={place}
-        onConfirm={(newTotal) => submit(newTotal)}
+        onConfirm={(quote) => submit(quote)}
         onCart={toCart}
         onClose={() => setConflict(null)}
       />
@@ -674,29 +679,64 @@ function ConflictSheet({
   conflict: Conflict | null;
   busy: boolean;
   place: string | null;
-  onConfirm: (total: number) => void;
+  onConfirm: (quote: CheckoutDto['quote']) => void;
   onCart: () => void;
   onClose: () => void;
 }) {
-  const { t } = usePrefs();
+  const { t, language } = usePrefs();
   const o = useOrdersText();
   // keep the last conflict on screen while the sheet slides away
   const [shown, setShown] = useState(conflict);
   if (conflict && conflict !== shown) setShown(conflict);
   const c = conflict ?? shown;
   const gone = c?.code === 'nothing_to_order';
+  const promo = c?.checkout.quote.promoCode;
+  const lost = promo?.invalid ? { code: promo.code, invalid: promo.invalid } : null;
+  // a lost discount can leave the total as it was (free delivery offsets it): say what changed
+  const sameTotal = !!c && !gone && c.checkout.quote.total === c.was.total;
   return (
     <Sheet
       open={!!conflict}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={gone ? o.checkout.goneTitle : o.checkout.changedTitle}
-      description={gone ? o.checkout.goneText : o.checkout.changedText}
+      title={
+        gone
+          ? o.checkout.goneTitle
+          : sameTotal
+            ? o.checkout.discountChangedTitle
+            : o.checkout.changedTitle
+      }
+      description={
+        gone
+          ? o.checkout.goneText
+          : sameTotal
+            ? o.checkout.discountChangedText
+            : lost
+              ? o.checkout.promoLostText
+              : o.checkout.changedText
+      }
       closeLabel={t.common.close}
     >
       {c && !gone ? (
         <div className="flex flex-col pb-1" data-testid="total-changed">
+          {lost ? (
+            // the code the shopper confirmed no longer applies: the cart's own field, read-only,
+            // with why, above the numbers it changed (#29)
+            <Card className="mb-3 flex items-start gap-2.5 px-3.5 py-3" data-testid="changed-promo">
+              <span aria-hidden="true" className="flex h-[22px] shrink-0 items-center text-muted">
+                <TagIcon size={18} />
+              </span>
+              <p className="min-w-0 text-pretty">
+                <span className="block text-base leading-[22px] font-semibold tracking-[0.04em] [overflow-wrap:anywhere]">
+                  <CodeText code={lost.code} />
+                </span>
+                <span className="type-small mt-0.5 block text-muted">
+                  {promoReasonText(lost.invalid, t, language)}
+                </span>
+              </p>
+            </Card>
+          ) : null}
           <MoneySummary
             itemCount={c.checkout.itemCount}
             itemsSubtotal={c.checkout.quote.itemsSubtotal}
@@ -704,10 +744,12 @@ function ConflictSheet({
             deliveryFee={c.checkout.quote.deliveryFee}
             total={c.checkout.quote.total}
             place={place}
-            was={c.was}
+            was={c.was.total}
+            wasDiscount={c.was.discount}
+            wasDeliveryFee={c.was.deliveryFee}
           />
           <div className="mt-4 flex flex-col gap-2">
-            <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote.total)}>
+            <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote)}>
               <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>
               <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
               <Money amount={c.checkout.quote.total} className="text-current" />
