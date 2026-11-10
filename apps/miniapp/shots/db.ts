@@ -16,8 +16,11 @@ export interface ShotDb {
   end(): Promise<void>;
 }
 
-/** The card the shots pay to: 16 digits that pass the check digit, and a holder as banks show it. */
-export const SHOT_CARD = { number: '9860100245817364', holder: 'JORAMAXAMADOV FAYZALI' } as const;
+/**
+ * The card the shots pay to: 16 digits that pass the check digit, and a made-up holder as banks
+ * show it (the shots reach a customer-facing page: never a real person's name).
+ */
+export const SHOT_CARD = { number: '9860100245817364', holder: 'RAHIMOVA SEVARA' } as const;
 
 export function connectShotDb(url: string): ShotDb {
   const pool = new pg.Pool({ connectionString: url, max: 1 });
