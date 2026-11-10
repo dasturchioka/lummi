@@ -24,13 +24,13 @@ import {
   staff,
 } from '@lummi/db';
 import { initClient } from '@ts-rest/core';
-import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper, whileLockedUntil } from './harness/orders';
+import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import {
   createTestApp,
@@ -121,19 +121,15 @@ async function orderRow(number: number) {
 
 const machine = () => t.app.get(OrderStatusService);
 
-/** A small receipt screenshot for the intake. */
-const RECEIPT_IMAGE = sharp({
-  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
-})
-  .png()
-  .toBuffer();
-
 /** The shopper sends a receipt through the intake (#28): the order goes «Чек на проверке». */
 async function sendReceipt(number: number) {
   const { customerId } = await orderRow(number);
   const sent = await t.app
     .get(ReceiptsService)
-    .submit(customerId, number, await RECEIPT_IMAGE, { fileName: 'chek.png', source: 'miniapp' });
+    .submit(customerId, number, await uniqueReceiptImage(), {
+      fileName: 'chek.png',
+      source: 'miniapp',
+    });
   if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
   return sent.receipt.id;
 }
@@ -144,24 +140,25 @@ async function holdForManualReview(receiptId: number) {
 }
 
 /**
- * The payment is confirmed (the AI, until #32's seam takes over this step), then each fulfilment
- * step a manager makes, up to `status`.
+ * The money arrives and the receipt AI confirms the receipt with it through #32's
+ * `PaymentConfirmation`, then each fulfilment step a manager makes, up to `status`.
  */
 async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_payment'>) {
-  await sendReceipt(number);
+  const receiptId = await sendReceipt(number);
   if (status === 'receipt_review') return;
-  const { id } = await orderRow(number);
+  const order = await orderRow(number);
+  await payWithCredit(t, order, receiptId);
+  if (status === 'payment_confirmed') return;
   const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
   const path = [
-    ['payment_confirmed', 'confirm_payment', { type: 'ai' as const }, undefined],
-    ['accepted', 'accept', manager, undefined],
-    ['assembling', 'start_assembly', manager, undefined],
-    ['handed_to_bts', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
-    ['delivered', 'deliver', manager, undefined],
+    ['accepted', 'accept', undefined],
+    ['assembling', 'start_assembly', undefined],
+    ['handed_to_bts', 'hand_to_bts', { trackingNumber: 'BTS 4471 0098' }],
+    ['delivered', 'deliver', undefined],
   ] as const;
-  let from: OrderStatus = 'receipt_review';
-  for (const [to, action, actor, payload] of path) {
-    const out = await machine().transition(id, action, actor, from, payload as never);
+  let from: OrderStatus = 'payment_confirmed';
+  for (const [to, action, payload] of path) {
+    const out = await machine().transition(order.id, action, manager, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);
     if (to === status) return;
     from = to;
