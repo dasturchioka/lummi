@@ -323,7 +323,6 @@ function Line({
                 >
                   {line.kind === 'discovery_set' ? s.lineDiscovery : s.lineBuilder}
                 </p>
-                <SetFragranceList items={line.fragrances} />
               </>
             )}
           </div>
@@ -341,6 +340,8 @@ function Line({
             </p>
           ) : null}
         </div>
+        {/* the five under the name and price, over the column's full width */}
+        {line.kind === 'volume' ? null : <SetFragranceList items={line.fragrances} muted={out} />}
         <div className="mt-auto flex items-center gap-2.5 pt-3">
           {out ? (
             <span className="type-caption inline-flex h-7 items-center rounded-pill bg-field px-2.5 font-medium text-muted">

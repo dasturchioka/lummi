@@ -30,9 +30,10 @@ function Line({ line }: { line: OrderLineDto }) {
   const o = useOrdersText();
   return (
     <li className="flex gap-3 p-3" data-testid="order-line">
+      {/* top-aligned: a set's five names make the row taller than its thumbnail */}
       <Thumb
         photo={line.photo}
-        className="w-12"
+        className="w-12 self-start"
         set={line.kind === 'volume' ? undefined : line.kind}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -40,6 +41,9 @@ function Line({ line }: { line: OrderLineDto }) {
           <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
             {attribution(t.card.basedOn, line.brand)}
           </p>
+        ) : line.kind !== 'volume' ? (
+          // a set is labelled as the brand names a set: «НАБОР» over its name
+          <p className="type-label text-muted">{t.home.discoveryLabel}</p>
         ) : null}
         <p className="type-name mt-px text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
           {line.name[language]}

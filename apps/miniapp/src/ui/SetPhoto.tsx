@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { photoSrcSet, photoUrl } from '../lib/media';
-import { BoxIcon } from './icons';
 
 /** The customer's Discovery box photo (materials/photos), cropped to the box, 420 px wide WebP. */
 export const BOX_PHOTO = '/home/discovery-set.webp';
@@ -32,14 +31,5 @@ export function SetPhoto({
       onError={() => setFailed(true)}
       className="absolute inset-0 size-full object-cover"
     />
-  );
-}
-
-/** A set with no photo of its own (a builder set): the box icon on the Photo Blush ground. */
-export function SetPhotoEmpty() {
-  return (
-    <div className="absolute inset-0 grid place-items-center text-faint" aria-hidden="true">
-      <BoxIcon size={28} />
-    </div>
   );
 }
