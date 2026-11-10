@@ -3,6 +3,7 @@ import {
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
   ORDER_STATUSES,
+  RECEIPT_FILE_KINDS,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -727,7 +728,94 @@ export const orderEvents = pgTable(
   (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
 );
 
+/**
+ * The shop card shoppers transfer to (spec §4, #28): one row, owner-only, every change audited
+ * with the number masked. No row means no card: checkout is closed («Оплата временно недоступна»).
+ * Its own record, not a setting: it is the shop's payment detail, not a rule value, and the
+ * settings audit keeps raw values.
+ */
+export const shopCard = pgTable(
+  'shop_card',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    /** 16 digits, no spaces. */
+    number: text('number').notNull(),
+    /** The holder as the bank shows it (a person, an IP or an LLC). */
+    holder: text('holder').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('shop_card_one_row', sql`${t.id}`),
+    check('shop_card_number', sql`${t.number} ~ '^[0-9]{16}$'`),
+  ],
+);
+
+/**
+ * A Receipt's verdict (ADR 0011, 0012): it waits (`pending`) until the AI or a manager confirms
+ * it, a manager sends it to manual review or rejects it with a reason, or the wait window ends
+ * with `payment_not_found`. The order's status is separate.
+ */
+export const receiptVerdictEnum = pgEnum('receipt_verdict', [
+  'pending',
+  'ai_confirmed',
+  'manual_review',
+  'manager_confirmed',
+  'rejected',
+  'payment_not_found',
+]);
+/** Where the shopper sent it from: the payment screen, or the chat with the bot (#31). */
+export const receiptSourceEnum = pgEnum('receipt_source', ['miniapp', 'bot']);
+/** The original's kind, by its first bytes (ADR 0020). */
+export const receiptFileKindEnum = pgEnum('receipt_file_kind', RECEIPT_FILE_KINDS);
+
+/**
+ * A Receipt (GLOSSARY): one upload for an order; an order may hold several (ADR 0011). The files
+ * live in the private FileStore (`/media/private`, ADR 0020) under random UUID names, served only
+ * through the API: the original as evidence, and a PNG/JPEG normalised for the AI (first PDF page
+ * rasterised, WebP converted, each side 280-1568 px). `sha256` is the original's, `phash` the
+ * normalised image's 64-bit difference hash (16 hex digits), both for duplicate checks (#36).
+ */
+export const receipts = pgTable(
+  'receipts',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id),
+    source: receiptSourceEnum('source').notNull(),
+    verdict: receiptVerdictEnum('verdict').notNull().default('pending'),
+    /** The name the shopper's device gave the file, if any. */
+    fileName: text('file_name'),
+    kind: receiptFileKindEnum('kind').notNull(),
+    size: integer('size').notNull(),
+    originalKey: text('original_key').notNull().unique(),
+    normalizedKey: text('normalized_key').notNull().unique(),
+    normalizedMime: text('normalized_mime').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    sha256: text('sha256').notNull(),
+    phash: text('phash').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('receipts_order_idx').on(t.orderId, t.id),
+    index('receipts_sha256_idx').on(t.sha256),
+    index('receipts_phash_idx').on(t.phash),
+    check('receipts_size', sql`${t.size} > 0`),
+    check('receipts_sha256', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
+    check('receipts_phash', sql`${t.phash} ~ '^[0-9a-f]{16}$'`),
+    check('receipts_normalized_mime', sql`${t.normalizedMime} in ('image/png', 'image/jpeg')`),
+    check(
+      'receipts_judge_size',
+      sql`${t.width} between 280 and 1568 and ${t.height} between 280 and 1568`,
+    ),
+  ],
+);
+
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
+export type ShopCardRow = typeof shopCard.$inferSelect;
+export type ReceiptRow = typeof receipts.$inferSelect;

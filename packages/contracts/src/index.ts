@@ -14,4 +14,5 @@ export * from './constants';
 export * from './cart';
 export * from './broadcast';
 export * from './orders';
+export * from './payment';
 export * from './order-transition-payloads';

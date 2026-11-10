@@ -23,6 +23,7 @@ export const SETTING_UNITS = [
   'ms',
   'sum',
   'ml',
+  'mb',
   'count',
   'ratio',
   'perSecond',
@@ -189,6 +190,21 @@ export const settingDefinitions = {
     hint: {
       ru: 'Коды стран без «+», например 998 (Узбекистан). Номер получателя из другой страны не примем.',
       uz: 'Mamlakat kodlari «+»siz, masalan 998 (Oʻzbekiston). Boshqa mamlakat raqami qabul qilinmaydi.',
+    },
+  },
+  /**
+   * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020). The
+   * bound stays under the body parser's ceiling (`RECEIPT_UPLOAD_CEILING_BYTES`).
+   */
+  'receipts.maxUploadMb': {
+    schema: z.number().int().min(1).max(20),
+    default: 10,
+    area: 'shop',
+    unit: 'mb',
+    label: { ru: 'Размер файла чека', uz: 'Chek faylining hajmi' },
+    hint: {
+      ru: 'Самый большой скриншот или PDF чека, который примет приложение.',
+      uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
     },
   },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
