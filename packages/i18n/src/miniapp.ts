@@ -74,6 +74,8 @@ export const miniappMessages = defineMessages(
       from: 'от {price}',
       soldOut: 'Нет в наличии',
       open: 'Открыть {name}',
+      /** The list «+» with several volumes available asks which one (#25). */
+      chooseVolume: 'Выберите объём',
     },
     /** The empty screens behind the tabs until their tickets build them. */
     placeholder: {
@@ -180,6 +182,7 @@ export const miniappMessages = defineMessages(
       nudgeDone: 'Доставка до пункта BTS — бесплатно',
       suggest: 'Подойдёт любой аромат 10 мл',
       addSuggestion: 'Добавить в корзину: {name}',
+      addFailed: 'Не удалось добавить. Попробуйте ещё раз.',
       soldOut: 'Нет в наличии',
       onlyLeft: 'Осталось {n}',
       added: 'Добавлено в корзину',
@@ -334,6 +337,7 @@ export const miniappMessages = defineMessages(
       from: '{price}dan',
       soldOut: 'Sotuvda yoʻq',
       open: '{name}’ni ochish',
+      chooseVolume: 'Hajmni tanlang',
     },
     placeholder: {
       catalog: {
@@ -437,6 +441,7 @@ export const miniappMessages = defineMessages(
       nudgeDone: 'BTS punktigacha yetkazish — bepul',
       suggest: 'Istalgan 10 ml ifor mos keladi',
       addSuggestion: 'Savatga qoʻshish: {name}',
+      addFailed: 'Qoʻshib boʻlmadi. Qaytadan urinib koʻring.',
       soldOut: 'Sotuvda yoʻq',
       onlyLeft: 'Qoldi: {n}',
       added: 'Savatga qoʻshildi',

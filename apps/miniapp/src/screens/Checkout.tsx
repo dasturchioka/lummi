@@ -1,4 +1,4 @@
-import type { CheckoutDto, CreateOrderBody } from '@lummi/contracts';
+import type { BuyNowLineDto, CheckoutDto, CreateOrderBody, SavedPointDto } from '@lummi/contracts';
 import {
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
@@ -6,24 +6,31 @@ import {
   normalizeRecipientPhone,
 } from '@lummi/contracts/constants';
 import { fill, formatPhone } from '@lummi/i18n';
+import { setsMessages } from '@lummi/i18n/sets';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
+import { SavedPointPicker } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
+import { goBackOrCatalog } from '../lib/navigation';
 import { useRegistration } from '../lib/registration';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
 import { Figure } from '../ui/Figure';
+import { NameLockup } from '../ui/NameLockup';
+import { SetFragranceList } from '../ui/SetFragranceList';
+import { Thumb } from '../ui/Thumb';
 import {
   AlertIcon,
   BagIcon,
+  BottleIcon,
   CheckIcon,
   ChevronIcon,
   GiftIcon,
@@ -137,6 +144,50 @@ function newAttemptKey(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/**
+ * The one item of a «Купить сейчас» checkout, as an order line reads (thumbnail, «по мотивам» and
+ * the italic name, or «НАБОР» and the set's name with its five), with the server's line total, and
+ * the note that the cart stays as it is.
+ */
+function BuyNowItem({ line, total }: { line: BuyNowLineDto; total: number | undefined }) {
+  const { t, language } = usePrefs();
+  const o = useOrdersText();
+  const sets = setsMessages[language].sets;
+  return (
+    <>
+      <Card className="flex gap-3 p-3" data-testid="buy-now-item">
+        <Thumb
+          photo={line.photo}
+          className="w-12 self-start"
+          set={line.kind === 'volume' ? undefined : line.kind}
+        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          {line.kind === 'volume' ? (
+            <NameLockup brand={line.brand} name={line.name} />
+          ) : (
+            <>
+              <p className="type-label text-muted">{t.home.discoveryLabel}</p>
+              <p className="type-name mt-px text-[18px] text-ink">
+                {line.kind === 'discovery_set' ? sets.lineDiscovery : sets.lineBuilder}
+              </p>
+              <SetFragranceList items={line.fragrances} />
+            </>
+          )}
+          <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
+            <p className="type-small min-w-0 text-muted">
+              {line.kind === 'volume'
+                ? fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })
+                : `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`}
+            </p>
+            {total !== undefined && !line.soldOut ? <Money amount={total} /> : null}
+          </div>
+        </div>
+      </Card>
+      <p className="type-small mt-2 mb-3 text-muted">{o.checkout.buyNowNote}</p>
+    </>
+  );
+}
+
 function Loading() {
   const o = useOrdersText();
   const field = (
@@ -159,17 +210,22 @@ function Loading() {
   );
 }
 
-/** Mockup 06, restyled to the approved chrome: recipient, BTS point, comment, gift, the server's total. */
+/**
+ * Mockup 06, restyled to the approved chrome: «Мои пункты BTS» first, then recipient, BTS point,
+ * comment, gift, the server's total. `?item=…` is «Купить сейчас»: that one item instead of the
+ * cart, which stays as it is (spec Changes 2026-11-11).
+ */
 export function Checkout() {
   const o = useOrdersText();
   const { t, language } = usePrefs();
   const router = useRouter();
   const qc = useQueryClient();
   const { ensurePhone } = useRegistration();
+  const { item } = useSearch({ from: '/checkout' });
 
   const [dest, setDest] = useState<Destination | null>(null);
   const regionId = dest?.region.id;
-  const checkout = useCheckout(regionId);
+  const checkout = useCheckout(regionId, item);
   const create = useCreateOrder();
   const cities = useCities(dest?.kind === 'point' ? dest.region.id : undefined);
 
@@ -186,9 +242,25 @@ export function Checkout() {
   const [attempted, setAttempted] = useState(false);
   const [phoneRefused, setPhoneRefused] = useState(false);
   const attemptKey = useRef<string | null>(null);
+  const [startedOnSaved, setStartedOnSaved] = useState(false);
 
   const data = checkout.data;
   const noPhone = !!data && data.phone === null;
+
+  /** A saved pair fills the recipient and the point in one tap. */
+  const pickSaved = (s: SavedPointDto) => {
+    setDest({ kind: 'point', region: s.region, point: s.point });
+    setName(s.recipientName);
+    setPhone(formatPhone(s.recipientPhone));
+    setPhoneRefused(false);
+    setError(null);
+  };
+  // Checkout starts on the server's default pair (the last used that BTS still offers), once.
+  if (data && !startedOnSaved) {
+    setStartedOnSaved(true);
+    const first = data.savedPoints.find((s) => s.id === data.defaultSavedPointId);
+    if (first && !dest) pickSaved(first);
+  }
 
   // Checkout needs the account phone (ADR 0004): the registration step opens once on arrival.
   const askedPhone = useRef(false);
@@ -209,9 +281,29 @@ export function Checkout() {
         <ErrorState fill retrying={checkout.isFetching} onRetry={() => void checkout.refetch()} />
       </Screen>
     );
-  if (!data) return <Loading />;
+  if (data === undefined) return <Loading />;
 
-  const toCart = () => void router.navigate({ to: '/cart' });
+  // «Купить сейчас» goes back to where the item was; a cart checkout to the cart.
+  const toCart = item ? () => goBackOrCatalog(router) : () => void router.navigate({ to: '/cart' });
+  const backLabel = item ? o.checkout.back : o.checkout.backToCart;
+
+  if (data === null)
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <EmptyState
+          fill
+          icon={<BottleIcon size={28} />}
+          title={o.checkout.itemNotFoundTitle}
+          text={o.checkout.itemNotFoundText}
+          action={
+            <Button block onClick={() => void router.navigate({ to: '/catalog', replace: true })}>
+              {o.checkout.toCatalog}
+            </Button>
+          }
+        />
+      </Screen>
+    );
 
   if (noPhone)
     return (
@@ -228,7 +320,7 @@ export function Checkout() {
                 {o.checkout.phoneShare}
               </Button>
               <Button block variant="secondary" onClick={toCart}>
-                {o.checkout.backToCart}
+                {backLabel}
               </Button>
             </>
           }
@@ -246,11 +338,23 @@ export function Checkout() {
         <EmptyState
           fill
           icon={<BagIcon size={28} />}
-          title={soldOutMeanwhile ? o.checkout.goneTitle : o.checkout.emptyTitle}
-          text={soldOutMeanwhile ? o.checkout.goneText : o.checkout.emptyText}
+          title={
+            item
+              ? o.checkout.itemGoneTitle
+              : soldOutMeanwhile
+                ? o.checkout.goneTitle
+                : o.checkout.emptyTitle
+          }
+          text={
+            item
+              ? o.checkout.itemGoneText
+              : soldOutMeanwhile
+                ? o.checkout.goneText
+                : o.checkout.emptyText
+          }
           action={
             <Button block onClick={toCart}>
-              {o.checkout.toCart}
+              {item ? o.checkout.back : o.checkout.toCart}
             </Button>
           }
         />
@@ -335,6 +439,7 @@ export function Checkout() {
       consent,
       confirmedTotal,
       idempotencyKey: attemptKey.current,
+      ...(item ? { item } : {}),
     };
     create.mutate(body, {
       onSuccess: (r) => {
@@ -349,7 +454,7 @@ export function Checkout() {
           });
         } else if (r.kind === 'conflict') {
           // the new numbers replace the old ones on the screen too
-          qc.setQueryData(checkoutKey(regionId), r.checkout);
+          qc.setQueryData(checkoutKey(regionId, item), r.checkout);
           setConflict({ code: r.code, was: confirmedTotal, checkout: r.checkout });
         } else if (r.kind === 'try_again') {
           setConflict(null);
@@ -409,6 +514,20 @@ export function Checkout() {
   return (
     <Screen tabBar={false} dock={dock}>
       <ScreenHeader title={o.checkout.title} />
+
+      {data.savedPoints.length > 0 ? (
+        <div className="mb-[26px]">
+          <SavedPointPicker
+            saved={data.savedPoints}
+            isSelected={(s) =>
+              dest?.kind === 'point' &&
+              dest.point.id === s.point.id &&
+              normalizeRecipientPhone(phoneValue, codes) === s.recipientPhone
+            }
+            onPick={pickSaved}
+          />
+        </div>
+      ) : null}
 
       <section className="flex flex-col gap-3.5">
         <SectionTitle flush>{o.checkout.recipient}</SectionTitle>
@@ -551,6 +670,7 @@ export function Checkout() {
 
       <section className="mt-[26px]">
         <SectionTitle>{o.checkout.summary}</SectionTitle>
+        {data.item ? <BuyNowItem line={data.item} total={data.quote.lines[0]?.lineTotal} /> : null}
         <MoneySummary
           itemCount={data.itemCount}
           itemsSubtotal={data.quote.itemsSubtotal}
@@ -602,6 +722,9 @@ export function Checkout() {
         conflict={conflict}
         busy={create.isPending}
         place={place}
+        backLabel={backLabel}
+        goneTitle={item ? o.checkout.itemGoneTitle : o.checkout.goneTitle}
+        goneText={item ? o.checkout.itemGoneText : o.checkout.goneText}
         onConfirm={(newTotal) => submit(newTotal)}
         onCart={toCart}
         onClose={() => setConflict(null)}
@@ -633,6 +756,9 @@ function ConflictSheet({
   conflict,
   busy,
   place,
+  backLabel,
+  goneTitle,
+  goneText,
   onConfirm,
   onCart,
   onClose,
@@ -640,6 +766,10 @@ function ConflictSheet({
   conflict: Conflict | null;
   busy: boolean;
   place: string | null;
+  /** «Вернуться в корзину», or «Вернуться назад» for «Купить сейчас». */
+  backLabel: string;
+  goneTitle: string;
+  goneText: string;
   onConfirm: (total: number) => void;
   onCart: () => void;
   onClose: () => void;
@@ -657,8 +787,8 @@ function ConflictSheet({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={gone ? o.checkout.goneTitle : o.checkout.changedTitle}
-      description={gone ? o.checkout.goneText : o.checkout.changedText}
+      title={gone ? goneTitle : o.checkout.changedTitle}
+      description={gone ? goneText : o.checkout.changedText}
       closeLabel={t.common.close}
     >
       {c && !gone ? (
@@ -679,14 +809,14 @@ function ConflictSheet({
               <Money amount={c.checkout.quote.total} className="text-current" />
             </Button>
             <Button block variant="secondary" onClick={onCart}>
-              {o.checkout.backToCart}
+              {backLabel}
             </Button>
           </div>
         </div>
       ) : (
         <div className="pb-1">
           <Button block onClick={onCart}>
-            {o.checkout.backToCart}
+            {backLabel}
           </Button>
         </div>
       )}

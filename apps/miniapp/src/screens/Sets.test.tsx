@@ -32,6 +32,7 @@ const item = (n: number): FragranceListItem => ({
   fromPrice: 69_000,
   soldOut: false,
   photo: null,
+  volumes: [],
 });
 const builder = (n = 7): Builder => ({
   price: 299_000,

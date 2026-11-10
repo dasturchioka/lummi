@@ -3,6 +3,7 @@ import { fill, formatMoney } from '@lummi/i18n';
 import { useState } from 'react';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
+import { AddButton } from './AddButton';
 import { FragranceBadge } from './Badge';
 
 /**
@@ -19,8 +20,9 @@ import { FragranceBadge } from './Badge';
  *
  * The whole card is one button (`onSelect(slug)` opens the fragrance card; the caller owns
  * navigation), laid over the content rather than wrapping it. The heart (top-left of the photo,
- * #45) and the «+» (right of the price, a 30 px square, #25) are siblings above it: the price line
- * is already 30 px tall and leaves them the right edge, so they arrive without re-laying the card.
+ * #45) and the «+» (`AddButton`, bottom-right of the photo, #25) sit above it, never inside it.
+ * The «+» stays off the price line, so a seven-digit price («1 250 000 soʻmdan») keeps its full
+ * size and its own line on a 360 px phone (#15, #16 reviews). A compact row has no «+».
  */
 export interface FragranceListCardProps {
   item: FragranceListItem;
@@ -94,13 +96,12 @@ export function FragranceListCard({
   // reaches «Нет в наличии» on the price line.
   const faded = item.soldOut ? 'opacity-55' : '';
 
-  // The price line, or «Нет в наличии» in its place; 30 px tall on cards, the «+» square's height.
-  // A grid card under 155 px inside (a 360 px phone) steps the price down to 13.5 px, so
-  // «69 000 soʻmdan» and the 30 px «+» share the line.
+  // The price line, or «Нет в наличии» in its place; 30 px tall on cards. It has the card's whole
+  // width (the «+» is on the photo), so it never steps down.
   const price = item.soldOut ? (
     <span className="type-small text-muted">{t.list.soldOut}</span>
   ) : item.fromPrice !== null ? (
-    <span className={`type-price text-ink ${grid ? '@max-[154px]:text-[13.5px]' : ''}`}>
+    <span className="type-price text-ink">
       {fill(t.list.from, { price: formatMoney(item.fromPrice, language) })}
     </span>
   ) : null;
@@ -171,13 +172,16 @@ export function FragranceListCard({
   if (grid)
     return (
       <div
-        className={`@container relative flex h-full flex-col rounded-card bg-card p-2 pb-3 text-ink ${press}`}
+        className={`relative flex h-full flex-col rounded-card bg-card p-2 pb-3 text-ink ${press}`}
       >
-        <Thumb
-          hash={item.photo}
-          sizes="(min-width: 520px) 240px, 45vw"
-          className={`aspect-[3/4] w-full rounded-photo ${faded}`}
-        />
+        <div className="relative">
+          <Thumb
+            hash={item.photo}
+            sizes="(min-width: 520px) 240px, 45vw"
+            className={`aspect-[3/4] w-full rounded-photo ${faded}`}
+          />
+          <AddButton item={item} />
+        </div>
         <span className="flex flex-1 flex-col px-1 pt-2.5">
           {lockup}
           <span className="mt-auto flex min-h-[30px] items-end pt-2.5">{price}</span>
@@ -191,11 +195,22 @@ export function FragranceListCard({
         compact ? 'px-1 py-2.5' : 'rounded-card bg-card p-2 pr-3'
       }`}
     >
-      <Thumb
-        hash={item.photo}
-        sizes={compact ? '48px' : '96px'}
-        className={`${compact ? 'aspect-[3/4] w-12 rounded-thumb' : 'aspect-[3/4] w-24 rounded-photo'} ${faded}`}
-      />
+      {compact ? (
+        <Thumb
+          hash={item.photo}
+          sizes="48px"
+          className={`aspect-[3/4] w-12 rounded-thumb ${faded}`}
+        />
+      ) : (
+        <div className="relative shrink-0">
+          <Thumb
+            hash={item.photo}
+            sizes="96px"
+            className={`aspect-[3/4] w-24 rounded-photo ${faded}`}
+          />
+          <AddButton item={item} />
+        </div>
+      )}
       <span className="flex min-w-0 flex-1 flex-col">
         {lockup}
         {price ? (

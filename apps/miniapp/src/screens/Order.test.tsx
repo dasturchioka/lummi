@@ -16,12 +16,20 @@ vi.mock('../lib/prefs', () => ({
     customer: managerUsername ? { config: { managerUsername } } : undefined,
   }),
 }));
-vi.mock('../lib/telegram', () => ({ openManagerChat: (u: string) => openManagerChat(u) }));
+vi.mock('../lib/telegram', () => ({
+  openManagerChat: (u: string) => openManagerChat(u),
+  hapticSuccess: () => undefined,
+}));
 const cancelOrder = vi.fn();
 const getOrder = vi.fn();
+const repeatOrder = vi.fn();
 vi.mock('../lib/api', () => ({
   api: {
-    orders: { cancel: (req: unknown) => cancelOrder(req), get: (req: unknown) => getOrder(req) },
+    orders: {
+      cancel: (req: unknown) => cancelOrder(req),
+      get: (req: unknown) => getOrder(req),
+      repeat: (req: unknown) => repeatOrder(req),
+    },
   },
   unwrap: (res: { status: number; body: unknown }, status: number) => {
     if (res.status !== status) throw new Error(`HTTP ${res.status}`);
@@ -275,5 +283,83 @@ describe('cancelling an order', () => {
     ]);
     fireEvent.click(screen.getByRole('button', { name: 'Понятно' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('«Повторить заказ» says how many went in and names what did not, as the server reported it', async () => {
+    repeatOrder.mockResolvedValue({
+      status: 200,
+      body: {
+        result: {
+          lines: [
+            {
+              kind: 'volume',
+              name: { ru: 'Symphony', uz: 'Symphony' },
+              brand: 'Louis Vuitton',
+              ml: 30,
+              ordered: 2,
+              added: 1,
+            },
+            {
+              kind: 'volume',
+              name: { ru: 'Guidance', uz: 'Guidance' },
+              brand: 'Amouage',
+              ml: 10,
+              ordered: 1,
+              added: 0,
+            },
+            {
+              kind: 'discovery_set',
+              name: { ru: 'Discovery set', uz: 'Discovery set' },
+              brand: null,
+              ml: 10,
+              ordered: 1,
+              added: 1,
+            },
+          ],
+          added: 2,
+          of: 3,
+        },
+        cart: { lines: [], count: 2 },
+      },
+    });
+    renderView(<OrderView order={order({ status: 'delivered' })} />);
+    fireEvent.click(screen.getByTestId('repeat-order'));
+    const dialog = await screen.findByRole('dialog', { name: 'Добавили 2 из 3 товаров' });
+    expect(repeatOrder).toHaveBeenCalledWith({ params: { number: 1001 } });
+    expect(dialog.textContent).toContain('Guidance, 10 мл');
+    expect(dialog.textContent).toContain('Нет в наличии');
+    expect(dialog.textContent).toContain('Symphony, 30 мл');
+    expect(dialog.textContent).toContain('Добавили 1 из 2 шт.');
+    expect(screen.getByRole('button', { name: 'Перейти в корзину' })).toBeTruthy();
+  });
+
+  it('«Повторить заказ» with nothing available says so and leads to the catalog', async () => {
+    repeatOrder.mockResolvedValue({
+      status: 200,
+      body: {
+        result: {
+          lines: [
+            {
+              kind: 'builder_set',
+              name: { ru: 'Свой набор', uz: 'Oʻz toʻplamingiz' },
+              brand: null,
+              ml: 10,
+              ordered: 1,
+              added: 0,
+            },
+          ],
+          added: 0,
+          of: 1,
+        },
+        cart: { lines: [], count: 0 },
+      },
+    });
+    renderView(<OrderView order={order({ status: 'cancelled' })} />);
+    fireEvent.click(screen.getByTestId('repeat-order'));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Сейчас ничего из заказа нет в наличии',
+    });
+    expect(dialog.textContent).toContain('Свой набор');
+    expect(screen.getByRole('button', { name: 'В каталог' })).toBeTruthy();
   });
 });

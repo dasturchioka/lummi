@@ -5,8 +5,7 @@ import { CardSkeleton } from './GridSkeleton';
 
 /**
  * A card's width in a rail: about two and a half cards on a phone, so the next one always peeks in
- * at the edge (DESIGN.md: 158 px). Every item stretches to it: the list card is a size container,
- * so without a width of its own it would collapse to nothing.
+ * at the edge (DESIGN.md: 158 px). Every item stretches to it, so the cards of a rail line up.
  */
 const ITEM = 'flex w-[clamp(148px,42vw,172px)] shrink-0 snap-start *:min-w-0 *:flex-1';
 
