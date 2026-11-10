@@ -19,11 +19,13 @@ import {
   volumes,
 } from '@lummi/db';
 import pg from 'pg';
+import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
+import { ReceiptsService } from '../src/receipts/receipts.service';
 import { WorkerRuntime } from '../src/worker/runtime';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
@@ -148,22 +150,34 @@ async function staff(): Promise<TransitionActor> {
   return { type: 'staff', id: (await t.managerSession()).staff.id };
 }
 
+/** A small receipt screenshot for the intake. */
+const RECEIPT_IMAGE = sharp({
+  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
+})
+  .png()
+  .toBuffer();
+
 /**
  * Moves an order through the door (ADR 0011) to `status`, as the shopper, the receipt AI and a
  * manager would: each step is a real `transition()` with its history and message.
  */
 async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_payment'>) {
   const { id, customerId } = await orderRow(number);
+  // the receipt goes in as the shopper sends it (#28): the intake records it and makes the move
+  const sent = await t.app
+    .get(ReceiptsService)
+    .submit(customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
+  if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
+  if (status === 'receipt_review') return;
   const manager = await staff();
   const path = [
-    ['receipt_review', 'submit_receipt', { type: 'customer', id: customerId }, undefined],
     ['payment_confirmed', 'confirm_payment', { type: 'ai' }, undefined],
     ['accepted', 'accept', manager, undefined],
     ['assembling', 'start_assembly', manager, undefined],
     ['handed_to_bts', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
     ['delivered', 'deliver', manager, undefined],
   ] as const;
-  let from: OrderStatus = 'awaiting_payment';
+  let from: OrderStatus = 'receipt_review';
   for (const [to, action, actor, payload] of path) {
     const out = await machine().transition(id, action, actor, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);

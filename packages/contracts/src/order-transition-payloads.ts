@@ -7,13 +7,14 @@ const nothing = z.object({}).strict().optional();
 const typedReason = z.string().trim().min(1).max(500);
 
 /**
- * What each move must carry (ADR 0011, 0006): the tracking number for «Передан в BTS», a reason for
- * every cancel and for a rejected receipt, and for a return its reason plus a back-to-stock flag
- * for each line. Whoever calls `transition()` (the Mini App, the bot, the admin panel, a sweep)
+ * What each move must carry (ADR 0011, 0006): the Receipt a submission brought, the tracking
+ * number for «Передан в BTS», a reason for every cancel and for a rejected receipt, and for a
+ * return its reason plus a back-to-stock flag for each line. Whoever calls `transition()` (the Mini App, the bot, the admin panel, a sweep)
  * is checked against the same schemas.
  */
 export const transitionPayloadSchemas = {
-  submit_receipt: nothing,
+  /** The Receipt that went in with this move (#28); a receipt never moves an order twice. */
+  submit_receipt: z.object({ receiptId: z.number().int().positive() }).strict(),
   confirm_payment: nothing,
   reject_receipt: z.object({ reason: typedReason }).strict(),
   payment_not_found: nothing,

@@ -140,6 +140,10 @@ _Avoid_: Check, чек (in code), payment proof, fiscal receipt
 The part of an order's total the customer must transfer to the shop card. Equals the total in stage 1.
 _Avoid_: Payable, balance, sum to pay
 
+**Shop card**:
+The one card customers transfer the amount due to, shown on the payment screen with its holder. Only the owner sets, changes or removes it, and every change is audited with the number masked. While none is set, checkout is closed («Оплата временно недоступна»).
+_Avoid_: Requisites, реквизиты (in code), the customer's card
+
 **Humo message**:
 A message from the official Humo bot in the account that receives the shop card's notifications, as the userbot posts it to the API. One with a ➕ line becomes a credit; one with a ➖ line (a debit) is ignored and not stored; anything else is stored raw and flagged.
 _Avoid_: notification (in code), Humo notification, SMS

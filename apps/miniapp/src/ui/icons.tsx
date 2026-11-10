@@ -1,7 +1,11 @@
 import type { SVGProps } from 'react';
 
 /** Linear icons: 24 px grid, 1.5 px stroke, round caps and joins, currentColor (DESIGN.md). */
-function Icon({ d, size = 24, ...rest }: { d: string; size?: number } & SVGProps<SVGSVGElement>) {
+export function Icon({
+  d,
+  size = 24,
+  ...rest
+}: { d: string; size?: number } & SVGProps<SVGSVGElement>) {
   return (
     <svg
       width={size}
@@ -20,7 +24,7 @@ function Icon({ d, size = 24, ...rest }: { d: string; size?: number } & SVGProps
   );
 }
 
-type P = { size?: number } & SVGProps<SVGSVGElement>;
+export type P = { size?: number } & SVGProps<SVGSVGElement>;
 export const HomeIcon = (p: P) => (
   <Icon d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z" {...p} />
 );

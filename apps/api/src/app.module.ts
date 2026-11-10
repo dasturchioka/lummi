@@ -21,6 +21,10 @@ import { DeliveryService } from './delivery/delivery.service';
 import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
+import { ShopCardController } from './payment/shop-card.controller';
+import { ShopCardService } from './payment/shop-card.service';
+import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
+import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
 import { OrderStatusService } from './order-status/order-status.service';
@@ -80,6 +84,9 @@ export class AppModule {
         CartController,
         SetsController,
         OrdersController,
+        ReceiptsController,
+        ReceiptsAdminController,
+        ShopCardController,
         MediaController,
         WebhookController,
         AdminAuthController,
@@ -113,6 +120,8 @@ export class AppModule {
         CartService,
         SetsService,
         OrdersService,
+        ReceiptsService,
+        ShopCardService,
         OrderStatusService,
         DiscountSourceHooks,
         ReserveSweeps,
