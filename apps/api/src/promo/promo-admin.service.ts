@@ -26,22 +26,19 @@ export type PromoFailure = { ok: false; reason: 'not_found' | 'code_taken' | 'in
 export type PromoOutcome<T> = { ok: true; value: T } | PromoFailure;
 const fail = (reason: PromoFailure['reason']): PromoFailure => ({ ok: false, reason });
 
-/** The stored columns an input sets; `expiresOn` becomes the instant 23:59:59 Tashkent that day. */
-function toColumns(input: PromoCodeInput) {
-  return {
-    code: input.code,
-    kind: input.kind,
-    percent: input.percent,
-    amount: input.amount,
-    maxDiscount: input.maxDiscount,
-    expiresAt: input.expiresOn === null ? null : lastInstantOf(input.expiresOn),
-    minOrderTotal: input.minOrderTotal,
-    totalLimit: input.totalLimit,
-    perCustomerLimit: input.perCustomerLimit,
-    newCustomersOnly: input.newCustomersOnly,
-    appliesToMarkedDown: input.appliesToMarkedDown,
-    active: input.active,
-  };
+/**
+ * The editable fields, both ways. They are the input's own fields except the last day, which is
+ * stored as an instant (23:59:59 Tashkent that day): a new field is one edit in the schema and
+ * the contract, nothing here.
+ */
+function toColumns({ expiresOn, ...rest }: PromoCodeInput) {
+  return { ...rest, expiresAt: expiresOn === null ? null : lastInstantOf(expiresOn) };
+}
+
+/** The editable fields as the form shows them: what the audit diffs and the list returns. */
+function fieldsOf(r: PromoCodeRow): PromoCodeInput {
+  const { id: _id, createdAt: _c, updatedAt: _u, expiresAt, ...rest } = r;
+  return { ...rest, expiresOn: tashkentDateOf(expiresAt) };
 }
 
 /** The last second a code works: 23:59:59 Asia/Tashkent of its last day (spec Changes 2026-11-07). */
@@ -52,28 +49,11 @@ function lastInstantOf(day: string): Date {
   return at;
 }
 
-function dayOf(at: Date | null): string | null {
+/** The Tashkent calendar day (`YYYY-MM-DD`) of an instant. */
+function tashkentDateOf(at: Date | null): string | null {
   if (!at) return null;
   const t = utcToTashkent(at);
   return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
-}
-
-/** The editable fields as the form shows them, for the audit diff. */
-function fieldsOf(r: PromoCodeRow): Record<string, unknown> {
-  return {
-    code: r.code,
-    kind: r.kind,
-    percent: r.percent,
-    amount: r.amount,
-    maxDiscount: r.maxDiscount,
-    expiresOn: dayOf(r.expiresAt),
-    minOrderTotal: r.minOrderTotal,
-    totalLimit: r.totalLimit,
-    perCustomerLimit: r.perCustomerLimit,
-    newCustomersOnly: r.newCustomersOnly,
-    appliesToMarkedDown: r.appliesToMarkedDown,
-    active: r.active,
-  };
 }
 
 function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
@@ -210,18 +190,7 @@ export class PromoAdminService {
       const uses = Number(c?.uses ?? 0);
       return {
         id: r.id,
-        code: r.code,
-        kind: r.kind,
-        percent: r.percent,
-        amount: r.amount,
-        maxDiscount: r.maxDiscount,
-        expiresOn: dayOf(r.expiresAt),
-        minOrderTotal: r.minOrderTotal,
-        totalLimit: r.totalLimit,
-        perCustomerLimit: r.perCustomerLimit,
-        newCustomersOnly: r.newCustomersOnly,
-        appliesToMarkedDown: r.appliesToMarkedDown,
-        active: r.active,
+        ...fieldsOf(r),
         uses,
         everUsed: Number(c?.ever ?? 0) > 0,
         state: promoState(r, uses, now),
