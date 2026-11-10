@@ -3,10 +3,11 @@
 #   CADDY_SCHEME  ""          production: automatic HTTPS on 80/443
 #                 "http://"   staging: plain HTTP behind the host's nginx, which terminates TLS
 {
-	# Staging: nginx on the host reaches us from a private address and sets X-Forwarded-*;
-	# trust those headers from private ranges only, so a direct internet client cannot forge them.
+	# Only the real hop in front of us may set X-Forwarded-*. Staging: the Compose gateway (host nginx
+	# arrives from it), set in TRUSTED_PROXIES. Production: nobody (the default is loopback, which no
+	# published-port request comes from), so a client can never forge them.
 	servers {
-		trusted_proxies static private_ranges
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
 	}
 }
 
@@ -16,6 +17,9 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 	}
+	# HSTS only where Caddy itself terminates TLS (production); behind nginx the request is plain HTTP.
+	@secure protocol https
+	header @secure Strict-Transport-Security "max-age=31536000"
 	encode zstd gzip
 
 	# Whatever a host serves, a path with a `..` segment is never meant: refuse it outright.
@@ -38,21 +42,30 @@
 		uri strip_prefix /api
 		reverse_proxy api:4000
 	}
-	# Vite names these by content hash: cache forever. Missing ones stay 404 (no SPA fallback).
-	handle /assets/* {
+	# Static files (anything with an extension): a missing one is a 404, never index.html.
+	# /assets/* are content-hashed by Vite: cache forever. Fonts and brand files: a week.
+	@file path_regexp \.[A-Za-z0-9]+$
+	handle @file {
 		root * /srv/miniapp
-		header Cache-Control "public, max-age=31536000, immutable"
+		@hashed {
+			path /assets/*
+			file
+		}
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@other {
+			not path /assets/* /index.html
+			file
+		}
+		header @other Cache-Control "public, max-age=604800"
+		header /index.html Cache-Control "no-cache"
 		file_server
 	}
+	# App routes have no extension (/orders/42): they get index.html, which must never be stale.
+	# The Mini App host stays frameable on purpose: Telegram Web embeds it.
 	handle {
 		root * /srv/miniapp
-		header /fonts/* Cache-Control "public, max-age=604800"
-		header /brand/* Cache-Control "public, max-age=604800"
-		header /home/* Cache-Control "public, max-age=604800"
-		# Deep links (/orders/42, /product/...) fall back to index.html, which must never be stale.
-		@spa not path /fonts/* /brand/* /home/*
-		header @spa Cache-Control "no-cache"
-		try_files {path} /index.html
+		header Cache-Control "no-cache"
+		rewrite * /index.html
 		file_server
 	}
 }
@@ -73,6 +86,10 @@
 # The admin panel; /api/* goes to the API so the session cookie is same-origin (ADR 0027).
 {$CADDY_SCHEME}admin.{$DOMAIN} {
 	import hardening
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+	}
 
 	@blocked path /api/internal/* /api/media/private* /media/private*
 	handle @blocked {

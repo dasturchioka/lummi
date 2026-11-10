@@ -1,7 +1,10 @@
 import { openLink, shareURL } from '@telegram-apps/sdk-react';
 
-/** The bot's link, no trailing slash. Dev bot locally via `VITE_BOT_LINK` (ADR 0023). */
-const botLink = (import.meta.env.VITE_BOT_LINK || 'https://t.me/Lummiuz_bot').replace(/\/$/, '');
+/**
+ * The bot's link, no trailing slash. A deploy build must set `VITE_BOT_LINK` (the Dockerfile refuses an
+ * empty one); the dev bot is only the local fallback, never the customer's production bot (ADR 0023).
+ */
+const botLink = (import.meta.env.VITE_BOT_LINK || 'https://t.me/lummi_dev_bot').replace(/\/$/, '');
 
 /** `p_<slug>` is the Mini App deep link of a fragrance (ADR 0016). */
 export const fragranceLink = (slug: string) => `${botLink}?startapp=p_${slug}`;

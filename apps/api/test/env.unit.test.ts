@@ -16,6 +16,11 @@ describe('parseEnv', () => {
     expect(env.API_PORT).toBe(4000);
   });
 
+  it('does not read an empty NODE_ENV as unset, so production checks cannot be skipped', () => {
+    expect(() => parseEnv({ ...valid, NODE_ENV: '' })).toThrow(/NODE_ENV/);
+    expect(() => parseEnv({ ...valid, LOG_LEVEL: 'loud' })).toThrow(/LOG_LEVEL/);
+  });
+
   it('requires an https BOT_LINK in production, and defaults to none elsewhere', () => {
     const { BOT_LINK: _omit, ...noLink } = valid;
     const prod = { ...noLink, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' };

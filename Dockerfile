@@ -74,6 +74,7 @@ CMD ["node", "apps/admin/server.js"]
 # only baked value is the bot link used by share buttons.
 FROM build-deps AS miniapp-build
 ARG VITE_BOT_LINK=
+RUN test -n "$VITE_BOT_LINK" || { echo 'VITE_BOT_LINK build arg is required (the GitHub variable STAGING_BOT_LINK)'; exit 1; }
 ENV VITE_BOT_LINK=${VITE_BOT_LINK}
 COPY apps/miniapp apps/miniapp
 RUN npm run build -w @lummi/miniapp && npm run size -w @lummi/miniapp

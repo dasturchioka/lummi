@@ -26,3 +26,12 @@ it('keeps a message without a context and respects the level', () => {
   expect(lines).toHaveLength(1);
   expect(JSON.parse(lines[0]!)).toMatchObject({ service: 'worker', level: 50, msg: 'boom' });
 });
+
+it('logs an Error with its message, not as {}', () => {
+  const { lines, stream } = capture();
+  const log = new PinoLogger('api', stream, 'info');
+  log.error(new Error('connect ECONNREFUSED 127.0.0.1:5432'), 'Main');
+  log.error('boot failed', new TypeError('bad config'), 'Main');
+  expect(JSON.parse(lines[0]!).msg).toBe('Error: connect ECONNREFUSED 127.0.0.1:5432');
+  expect(JSON.parse(lines[1]!).msg).toBe('boot failed TypeError: bad config');
+});

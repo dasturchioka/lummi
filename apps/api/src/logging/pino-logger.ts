@@ -1,4 +1,5 @@
 import type { LoggerService } from '@nestjs/common';
+import { describeError } from './describe-error';
 import { pino, type DestinationStream, type Logger as Pino } from 'pino';
 
 /**
@@ -12,7 +13,7 @@ export class PinoLogger implements LoggerService {
   constructor(
     service: string,
     destination?: DestinationStream,
-    level = process.env.LOG_LEVEL ?? 'info',
+    level = process.env.LOG_LEVEL || 'info',
   ) {
     this.pino = pino(
       { level, base: { service }, timestamp: pino.stdTimeFunctions.isoTime },
@@ -28,7 +29,11 @@ export class PinoLogger implements LoggerService {
     const last = rest.at(-1);
     const context = typeof last === 'string' ? last : undefined;
     const extra = context === undefined ? rest : rest.slice(0, -1);
-    const msg = typeof message === 'string' ? message : JSON.stringify(message);
+    // An Error (or any non-string) goes through describeError: pino would print `{}`, and a raw
+    // query error carries personal data in its parameters.
+    const text = (v: unknown) => (typeof v === 'string' ? v : describeError(v));
+    const errors = extra.filter((v) => typeof v === 'object' && v !== null).map(text);
+    const msg = [text(message), ...errors].join(' ');
     const trace = level === 'error' && typeof extra[0] === 'string' ? extra[0] : undefined;
     this.pino[level]({ context, ...(trace ? { trace } : {}) }, msg);
   }
