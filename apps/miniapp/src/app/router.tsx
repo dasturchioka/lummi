@@ -7,6 +7,7 @@ import {
   lazyRouteComponent,
   redirect,
   useRouter,
+  useRouterState,
 } from '@tanstack/react-router';
 import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
 import { useEffect } from 'react';
@@ -21,7 +22,9 @@ const TAB_ROOTS: string[] = TABS.map((t) => t.to);
 
 function Shell() {
   const router = useRouter();
-  const pathname = router.state.location.pathname;
+  // subscribed: `router.state` read directly does not re-render the shell on navigation, so a
+  // task screen opened from another screen (an order → its payment) kept the tab bar over its dock
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isRoot = TAB_ROOTS.includes(pathname);
   // The fragrance card (it carries its own dock, also on its fixtures), the search, the checkout and the payment screen are task screens: no tab bar.
   const showTabBar =
