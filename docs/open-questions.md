@@ -44,6 +44,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Checkout (ticket #23, 2026-11-10).**
   - Consent wording: built as the mockup's «Согласен(на) на обработку персональных данных, включая дату рождения.» (TZ §9 asks consent incl. birthday on the first order); the lawyer should approve it with the public offer, and say whether it needs a link to a privacy page.
   - The Recipient phone is accepted only from the countries in the setting `orders.recipientPhoneCountryCodes` (default +998 only). Should a foreign number be allowed for a recipient collecting at a BTS point?
+- **Tracking number length (ticket #33).** «Передан в BTS» takes a tracking number of 6–64 characters, trimmed, with no pattern. Confirm the minimum against a real BTS waybill once the first parcel is shipped, and tighten it (a pattern setting) only if staff mistype.
 - **A transfer that differs from the amount due (ticket #32).** The AI confirms only an exact transfer to the shop card. A manager may link a credit with another amount (tiyin included) or on another card, with a typed reason; the difference is recorded on the order. Who handles the difference? An overpayment: refund the difference (a Refund) or keep it? An underpayment: accept it, or ask the customer for the rest before the order is «Принят»? Built: nothing happens automatically; the manager's reason records what was decided.
 - **Favourites.** Not in the TZ; it comes from the approved design (heart on cards). The list lives in Profile → «Избранное».
 - **Delivery city on Home.**

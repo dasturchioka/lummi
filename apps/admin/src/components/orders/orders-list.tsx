@@ -12,6 +12,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent, num } from '@/lib/setting-copy';
 import { TEXT_LINK } from '@/lib/ui-classes';
+import { listHref } from '@/lib/list-page';
 import { fill } from '@/lib/utils';
 import { PaymentBadge, StatusBadge } from './badges';
 import { OrdersFiltersForm, type OrderFilters } from './orders-filters';
@@ -44,13 +45,7 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
   const o = t.orders;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const filtered = Object.values(filters).some(Boolean);
-  const href = (p: number) => {
-    const q = new URLSearchParams();
-    for (const [k, v] of Object.entries(filters)) if (v) q.set(k, v);
-    if (p > 1) q.set('page', String(p));
-    const s = q.toString();
-    return s ? `/orders?${s}` : '/orders';
-  };
+  const href = (p: number) => listHref('/orders', filters, p);
 
   const number = (it: AdminOrderListItemDto) => (
     <Link

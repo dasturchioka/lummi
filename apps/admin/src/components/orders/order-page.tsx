@@ -22,7 +22,13 @@ import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent } from '@/lib/setting-copy';
 import { fill } from '@/lib/utils';
 import { PaymentBadge, StatusBadge } from './badges';
-import { CancelDialog, HandToBtsDialog, RejectDialog } from './order-dialogs';
+import {
+  CancelDialog,
+  ConfirmPaymentDialog,
+  HandToBtsDialog,
+  RejectDialog,
+  type Failure,
+} from './order-dialogs';
 import {
   AuditSection,
   CustomerSection,
@@ -41,6 +47,7 @@ const staffMay = (status: AdminOrderDto['order']['status'], action: FulfilAction
 
 type Dialog =
   | { kind: 'reject'; receipt: AdminReceiptDto; key: number }
+  | { kind: 'confirm'; receiptId: number | null; key: number }
   | { kind: 'cancel'; key: number }
   | { kind: 'hand'; key: number }
   | null;
@@ -72,9 +79,9 @@ export function OrderPage({
   const status = page.order.status;
   const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
-  /** Applies a move's answer; returns an error for the dialog, or null when it is done. */
-  const apply = (res: MoveResponse | null): string | null => {
-    if (!res) return t.errors.generic;
+  /** Applies a move's answer; returns what failed for the dialog, or null when it is done. */
+  const apply = (res: MoveResponse | null): Failure | null => {
+    if (!res) return { text: t.errors.generic };
     switch (res.status) {
       case 200:
         setPage(res.body);
@@ -82,24 +89,36 @@ export function OrderPage({
         setDialog(null);
         return null;
       case 409:
-        if (res.body.code === 'try_again') return o.tryAgain;
+        if (res.body.code === 'try_again') return { text: o.tryAgain };
         setPage(res.body.order);
         setDialog(null);
         setNotice(
           res.body.code === 'receipt_changed'
             ? o.receiptChanged
-            : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
+            : res.body.code === 'credit_taken'
+              ? o.creditTaken
+              : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
         );
         return null;
       case 422:
-        return res.body.code === 'note_too_long' && res.body.max
-          ? fill(o.rejectNoteTooLong, { max: String(res.body.max) })
-          : o.notAllowed;
+        switch (res.body.code) {
+          case 'note_too_long':
+            return { text: fill(o.rejectNoteTooLong, { max: String(res.body.max ?? '') }) };
+          case 'reason_required':
+            return { text: o.linkReasonRequired, mismatch: res.body.mismatch ?? [] };
+          case 'reason_invalid':
+            return {
+              text: fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
+              mismatch: [],
+            };
+          default:
+            return { text: o.notAllowed };
+        }
       case 401:
         router.push('/login');
         return null;
       default:
-        return t.errors.generic;
+        return { text: t.errors.generic };
     }
   };
   const number = page.order.number;
@@ -117,7 +136,7 @@ export function OrderPage({
       .catch(() => null);
     setBusy(null);
     const failed = apply(res);
-    if (failed) setNotice(failed);
+    if (failed) setNotice(failed.text);
   };
 
   const manual = page.payment === 'manual_review';
@@ -164,11 +183,20 @@ export function OrderPage({
               hint && <p className="text-sm text-pretty text-muted-foreground">{hint}</p>
             )}
             {notice && <Notice title={notice} />}
-            {(next || canCancel) && (
+            {(next || canCancel || status === 'awaiting_payment') && (
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {next && (
                   <Button onClick={() => void step(next)} loading={busy === next} data-next={next}>
                     {o.step[next]}
+                  </Button>
+                )}
+                {/* a credit that came with no receipt (TZ §4): money on the card is what counts */}
+                {status === 'awaiting_payment' && (
+                  <Button
+                    onClick={() => setDialog({ kind: 'confirm', receiptId: null, key: Date.now() })}
+                    data-confirm-payment
+                  >
+                    {d.confirm}
                   </Button>
                 )}
                 {canCancel && (
@@ -187,6 +215,9 @@ export function OrderPage({
             page={page}
             t={t}
             onReject={(receipt) => setDialog({ kind: 'reject', receipt, key: Date.now() })}
+            onConfirm={(receipt) =>
+              setDialog({ kind: 'confirm', receiptId: receipt.id, key: Date.now() })
+            }
           />
           <LinesSection page={page} t={t} language={language} />
         </div>
@@ -213,6 +244,20 @@ export function OrderPage({
           t={t}
           onSubmit={async (body) =>
             apply(await browserApi.orders.rejectReceipt({ params, body }).catch(() => null))
+          }
+        />
+      )}
+      {dialog?.kind === 'confirm' && (
+        <ConfirmPaymentDialog
+          key={dialog.key}
+          open
+          onOpenChange={(v) => !v && setDialog(null)}
+          page={page}
+          receiptId={dialog.receiptId}
+          t={t}
+          language={language}
+          onSubmit={async (body) =>
+            apply(await browserApi.orders.confirmPayment({ params, body }).catch(() => null))
           }
         />
       )}

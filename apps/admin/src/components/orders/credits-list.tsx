@@ -4,6 +4,7 @@ import { CREDIT_LINK_FILTERS, type AdminCreditDto } from '@lummi/contracts';
 import { formatTiyin, plural, type Language } from '@lummi/i18n';
 import { SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -19,8 +20,10 @@ import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent, num } from '@/lib/setting-copy';
-import { TEXT_LINK } from '@/lib/ui-classes';
+import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
+import { listHref } from '@/lib/list-page';
 import { cn, fill } from '@/lib/utils';
+import { LinkCreditDialog } from './link-credit-dialog';
 
 export type CreditFilters = { linked?: string; amount?: string; from?: string; to?: string };
 
@@ -42,18 +45,15 @@ type Props = {
 export function CreditsList({ t, language, items, total, page, pageSize, filters }: Props) {
   const c = t.credits;
   const f = c.filters;
+  const router = useRouter();
+  const [linking, setLinking] = useState<AdminCreditDto | null>(null);
+  const [linked, setLinked] = useState<number | null>(null);
   const active = [filters.linked, filters.amount, filters.from, filters.to].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
   const hidden = !open && 'max-sm:hidden';
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  const href = (p: number) => {
-    const q = new URLSearchParams();
-    for (const [k, v] of Object.entries(filters)) if (v) q.set(k, v);
-    if (p > 1) q.set('page', String(p));
-    const s = q.toString();
-    return s ? `/credits?${s}` : '/credits';
-  };
+  const href = (p: number) => listHref('/credits', filters, p);
 
   const amount = (it: AdminCreditDto) => (
     <span className="font-semibold whitespace-nowrap tabular-nums">
@@ -71,7 +71,21 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
         {fill(c.order, { number: String(it.order.number) })}
       </Link>
     ) : (
-      <Badge>{c.unlinked}</Badge>
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Badge>{c.unlinked}</Badge>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn('-mx-1 px-2', QUIET_ACTION)}
+          onClick={() => {
+            setLinked(null);
+            setLinking(it);
+          }}
+          data-link-credit={it.id}
+        >
+          {c.linkAction}
+        </Button>
+      </span>
     );
 
   return (
@@ -152,6 +166,10 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
         </form>
         {badRange && <Notice title={t.orders.badRange} className="mt-3" />}
       </Card>
+
+      {linked !== null && (
+        <Notice title={fill(c.linked, { number: String(linked) })} className="mb-4" />
+      )}
 
       {items.length === 0 ? (
         <EmptyState
@@ -245,6 +263,21 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
             </Table>
           </div>
         </Card>
+      )}
+
+      {linking && (
+        <LinkCreditDialog
+          key={linking.id}
+          credit={linking}
+          t={t}
+          language={language}
+          onOpenChange={(open) => !open && setLinking(null)}
+          onLinked={(number) => {
+            setLinking(null);
+            setLinked(number);
+            router.refresh();
+          }}
+        />
       )}
 
       <Pager

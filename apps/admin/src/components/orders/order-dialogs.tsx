@@ -1,19 +1,21 @@
 'use client';
 
 import {
+  CANCEL_NOTE_MAX,
   CANCEL_REASON_ONLY_FROM,
   CANCEL_REASONS_BY_ACTOR,
-  PAID_STATUSES,
   RECEIPT_REJECT_REASONS,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
   type AdminOrderDto,
   type CancelReason,
+  type CreditOptionDto,
+  type CreditOptionsDto,
   type ReceiptRejectReason,
 } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
+import { formatTiyin, type Language } from '@lummi/i18n';
 import { receiptRejectedText } from '@lummi/i18n/bot';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,12 +28,21 @@ import {
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Textarea } from '@/components/ui/textarea';
+import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
+import { formatTashkent } from '@/lib/setting-copy';
 import { cn, fill } from '@/lib/utils';
 
-/** The parent makes the request; it answers an error to show in the dialog, or null to close it. */
-export type Submit<B> = (body: B) => Promise<string | null>;
+/**
+ * Why a move did not go through, for the dialog: the text to show, and, when a credit differs
+ * from the order and needs a reason, what differs (#32's `reason_required`).
+ */
+export type Failure = { text: string; mismatch?: ('amount' | 'card')[] };
+
+/** The parent makes the request; it answers what failed (shown in the dialog), or null to close it. */
+export type Submit<B> = (body: B) => Promise<Failure | null>;
 
 type Common = {
   open: boolean;
@@ -91,7 +102,8 @@ function ReasonList<R extends string>({
   );
 }
 
-function Frame({
+/** A form dialog with a sticky footer: the shared frame of the order dialogs. */
+export function Frame({
   open,
   onOpenChange,
   title,
@@ -184,7 +196,7 @@ export function RejectDialog({
     setBusy(true);
     const failed = await onSubmit({ receiptId, reason, ...(trimmed ? { note: trimmed } : {}) });
     setBusy(false);
-    if (failed) setError(failed);
+    if (failed) setError(failed.text);
   };
 
   return (
@@ -281,7 +293,7 @@ export function CancelDialog({
     const trimmed = note.trim();
     const failed = await onSubmit({ reason, ...(trimmed ? { note: trimmed } : {}) });
     setBusy(false);
-    if (failed) setError(failed);
+    if (failed) setError(failed.text);
   };
 
   return (
@@ -289,7 +301,7 @@ export function CancelDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={fill(o.cancelTitle, { number: String(page.order.number) })}
-      description={PAID_STATUSES.includes(status) ? o.cancelPaidText : o.cancelText}
+      description={page.payment === 'paid' ? o.cancelPaidText : o.cancelText}
       onSubmit={submit}
       error={error}
       busy={busy}
@@ -310,7 +322,7 @@ export function CancelDialog({
         <Textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          maxLength={500}
+          maxLength={CANCEL_NOTE_MAX}
           rows={2}
           className="min-h-16"
         />
@@ -343,7 +355,7 @@ export function HandToBtsDialog({
     setBusy(true);
     const failed = await onSubmit({ trackingNumber: trimmed });
     setBusy(false);
-    if (failed) setError(failed);
+    if (failed) setError(failed.text);
   };
 
   return (
@@ -376,6 +388,263 @@ export function HandToBtsDialog({
           className="tracking-[0.04em] tabular-nums"
         />
       </Field>
+    </Frame>
+  );
+}
+
+/** The staff reason for linking a credit that differs (#32): counted as the server counts it. */
+export function LinkReasonField({
+  value,
+  onChange,
+  limits,
+  tried,
+  t,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  limits: AdminOrderDto['limits'];
+  tried: boolean;
+  t: AdminMessages;
+}) {
+  const o = t.orders;
+  const n = length(value.trim());
+  const error =
+    n > limits.linkReasonMax
+      ? fill(o.linkReasonLong, { max: String(limits.linkReasonMax) })
+      : tried && n === 0
+        ? o.linkReasonRequired
+        : tried && n < limits.linkReasonMin
+          ? fill(o.linkReasonShort, { min: String(limits.linkReasonMin) })
+          : undefined;
+  return (
+    <Field
+      id="link-reason"
+      label={o.linkReason}
+      hint={o.linkReasonHint}
+      error={error}
+      aside={
+        <span
+          className={cn(
+            'text-xs text-muted-foreground tabular-nums',
+            n > limits.linkReasonMax && 'font-medium text-foreground',
+          )}
+        >
+          {fill(o.noteCount, { n: String(n), max: String(limits.linkReasonMax) })}
+        </span>
+      }
+    >
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={2}
+        className="min-h-16"
+      />
+    </Field>
+  );
+}
+
+/** A reason the server will take: within the limits, trimmed. */
+export const reasonFits = (reason: string, limits: AdminOrderDto['limits']) => {
+  const n = length(reason.trim());
+  return n >= limits.linkReasonMin && n <= limits.linkReasonMax;
+};
+
+/** How a credit differs from the order, in words: more or less than the amount due, another card. */
+export function creditFlags(
+  c: { differenceTiyin: number; onShopCard: boolean },
+  t: AdminMessages,
+  language: Language,
+): string[] {
+  const d = t.orders.detail;
+  const amount = formatTiyin(Math.abs(c.differenceTiyin), language);
+  return [
+    c.differenceTiyin > 0 && fill(d.more, { amount }),
+    c.differenceTiyin < 0 && fill(d.less, { amount }),
+    !c.onShopCard && d.offShopCard,
+  ].filter((x): x is string => Boolean(x));
+}
+
+/**
+ * «Подтвердить оплату»: pick the credit that paid the order, its Candidate credits first and the
+ * others behind «Показать другие». A credit of another amount or card asks for a reason (so does
+ * the server's `reason_required`, should the shop card have changed meanwhile). With `receiptId`
+ * it confirms that receipt; without, a credit that came with no receipt (TZ §4).
+ */
+export function ConfirmPaymentDialog({
+  open,
+  onOpenChange,
+  page,
+  receiptId,
+  t,
+  language,
+  onSubmit,
+}: Common & {
+  receiptId: number | null;
+  language: Language;
+  onSubmit: Submit<{ creditId: number; receiptId: number | null; reason?: string }>;
+}) {
+  const o = t.orders;
+  const [options, setOptions] = useState<CreditOptionsDto | 'loading' | 'failed'>('loading');
+  const [creditId, setCreditId] = useState<number | null>(null);
+  const [showOthers, setShowOthers] = useState(false);
+  const [reason, setReason] = useState('');
+  const [mismatch, setMismatch] = useState<Failure['mismatch']>(undefined);
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void browserApi.orders
+      .creditOptions({ params: { number: page.order.number } })
+      .then((res) => live && setOptions(res.status === 200 ? res.body : 'failed'))
+      .catch(() => live && setOptions('failed'));
+    return () => {
+      live = false;
+    };
+  }, [page.order.number]);
+
+  const all = typeof options === 'object' ? [...options.candidates, ...options.others] : [];
+  const selected = all.find((c) => c.id === creditId) ?? null;
+  const differs =
+    (selected !== null && (selected.differenceTiyin !== 0 || !selected.onShopCard)) ||
+    Boolean(mismatch?.length);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setTried(true);
+    setError(null);
+    if (!selected || (differs && !reasonFits(reason, page.limits))) return;
+    setBusy(true);
+    const failed = await onSubmit({
+      creditId: selected.id,
+      receiptId,
+      ...(differs ? { reason: reason.trim() } : {}),
+    });
+    setBusy(false);
+    if (failed?.mismatch) {
+      setMismatch(failed.mismatch);
+      setTried(false);
+    } else if (failed) setError(failed.text);
+  };
+
+  const row = (c: CreditOptionDto) => {
+    const flags = creditFlags(c, t, language);
+    return (
+      <label
+        key={c.id}
+        className="flex cursor-pointer touch-manipulation items-start gap-3 rounded-button px-2.5 py-2 transition-colors duration-150 select-none hover:bg-milk active:bg-field"
+        data-credit-option={c.id}
+      >
+        <input
+          type="radio"
+          name="credit"
+          value={c.id}
+          checked={creditId === c.id}
+          onChange={() => {
+            setCreditId(c.id);
+            setMismatch(undefined);
+          }}
+          className="mt-0.5 size-[18px] shrink-0 accent-graphite"
+        />
+        <span className="grid min-w-0 gap-0.5">
+          <span className="font-semibold whitespace-nowrap tabular-nums">
+            {formatTiyin(c.amountTiyin, language)}
+          </span>
+          <MetaLine
+            className="text-small text-muted-foreground tabular-nums"
+            parts={[
+              formatTashkent(c.occurredAt),
+              <span key="card" className="whitespace-nowrap">
+                {c.cardMask}
+              </span>,
+              c.counterparty && (
+                <span key="from" className="[overflow-wrap:anywhere]">
+                  {c.counterparty}
+                </span>
+              ),
+            ]}
+          />
+          {flags.map((f) => (
+            <span key={f} className="text-small font-medium">
+              {f}
+            </span>
+          ))}
+        </span>
+      </label>
+    );
+  };
+
+  return (
+    <Frame
+      open={open}
+      onOpenChange={onOpenChange}
+      title={fill(o.confirmTitle, { number: String(page.order.number) })}
+      description={receiptId === null ? o.confirmNoReceipt : o.confirmText}
+      onSubmit={submit}
+      error={error}
+      busy={busy}
+      submit={o.detail.confirm}
+      cancel={t.actions.cancel}
+      wide
+    >
+      {options === 'loading' ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {o.loadingCredits}
+        </p>
+      ) : options === 'failed' ? (
+        <Notice title={o.creditsFailed} />
+      ) : (
+        <fieldset className="grid gap-1.5" data-credit-options>
+          <legend className="mb-1.5 text-[12.5px] font-medium text-muted-foreground">
+            {o.candidates}
+          </legend>
+          {options.candidates.length === 0 ? (
+            <p className="text-sm text-pretty text-muted-foreground">{o.noCandidates}</p>
+          ) : (
+            <div className="-mx-2.5 grid gap-0.5">{options.candidates.map(row)}</div>
+          )}
+          {options.othersTotal > 0 && !showOthers && (
+            <div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-3"
+                onClick={() => setShowOthers(true)}
+              >
+                {fill(o.showOthers, { n: String(options.othersTotal) })}
+              </Button>
+            </div>
+          )}
+          {showOthers && (
+            <div className="mt-2 grid gap-1.5 border-t border-border pt-3">
+              <p className="text-[12.5px] font-medium text-muted-foreground">{o.others}</p>
+              <div className="-mx-2.5 grid gap-0.5">{options.others.map(row)}</div>
+              {options.othersTotal > options.others.length && (
+                <p className="text-small text-muted-foreground">
+                  {fill(o.othersMore, { n: String(options.others.length) })}
+                </p>
+              )}
+            </div>
+          )}
+          {options.candidates.length === 0 && options.othersTotal === 0 && (
+            <p className="text-sm text-muted-foreground">{o.noOthers}</p>
+          )}
+          {tried && !selected && (
+            <p className="text-xs leading-snug font-medium">{o.chooseCredit}</p>
+          )}
+        </fieldset>
+      )}
+      {differs && (
+        <LinkReasonField
+          value={reason}
+          onChange={setReason}
+          limits={page.limits}
+          tried={tried}
+          t={t}
+        />
+      )}
     </Frame>
   );
 }

@@ -9,7 +9,7 @@ import {
   type ReceiptRejectReason,
 } from '@lummi/contracts';
 import { formatMoney, formatPhone, formatTiyin, type Language } from '@lummi/i18n';
-import { ExternalLink, FileText, Gift } from 'lucide-react';
+import { ChevronRight, ExternalLink, FileText, Gift } from 'lucide-react';
 import Link from 'next/link';
 import { actionLabel, Details, who } from '@/components/audit-view';
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,10 @@ import { MetaLine } from '@/components/ui/meta-line';
 import { Section } from '@/components/ui/section';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent } from '@/lib/setting-copy';
-import { TEXT_LINK } from '@/lib/ui-classes';
+import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
 import { cn, fill } from '@/lib/utils';
 import { VerdictBadge } from './badges';
+import { creditFlags } from './order-dialogs';
 
 type Props = { page: AdminOrderDto; t: AdminMessages; language: Language };
 
@@ -29,11 +30,12 @@ const receiptFile = (id: number, variant: 'original' | 'normalized') =>
 
 const minus = (amount: number, language: Language) => `−${formatMoney(amount, language)}`;
 
-/** A size in KB or MB with one decimal, for the receipt's meta line. */
-function fileSize(bytes: number) {
+/** A size in KB or MB with one decimal, in the panel's words («74 КБ», «1,2 МБ»). */
+function fileSize(bytes: number, t: AdminMessages) {
+  const d = t.orders.detail;
   return bytes >= 1_000_000
-    ? `${(bytes / 1_000_000).toFixed(1).replace('.', ',')}\u00a0MB`
-    : `${Math.max(1, Math.round(bytes / 1000))}\u00a0KB`;
+    ? fill(d.sizeMb, { n: (bytes / 1_000_000).toFixed(1).replace('.', ',') }).replace(' ', '\u00a0')
+    : fill(d.sizeKb, { n: String(Math.max(1, Math.round(bytes / 1000))) }).replace(' ', '\u00a0');
 }
 
 /** A label: value row of a side card (Muted Ink label above, the value under it). */
@@ -55,7 +57,11 @@ export function ReceiptsSection({
   page,
   t,
   onReject,
-}: Omit<Props, 'language'> & { onReject: (r: AdminReceiptDto) => void }) {
+  onConfirm,
+}: Omit<Props, 'language'> & {
+  onReject: (r: AdminReceiptDto) => void;
+  onConfirm: (r: AdminReceiptDto) => void;
+}) {
   const d = t.orders.detail;
   const open = page.order.status === 'receipt_review';
   return (
@@ -116,10 +122,25 @@ export function ReceiptsSection({
                         </span>
                       ),
                       <span key="size" className="whitespace-nowrap">
-                        {fileSize(r.size)}
+                        {fileSize(r.size, t)}
                       </span>,
                     ]}
                   />
+                  {r.reviewReason && WAITING_RECEIPT_VERDICTS.includes(r.verdict) && (
+                    <p className="text-[13.5px] leading-snug font-medium text-pretty">
+                      {d.reviewReason[r.reviewReason]}
+                    </p>
+                  )}
+                  {r.confirmation && (
+                    <p className="text-small text-muted-foreground">
+                      {r.confirmation.by.type === 'ai'
+                        ? fill(d.confirmedByAi, { at: formatTashkent(r.confirmation.at) })
+                        : fill(d.confirmedBy, {
+                            name: r.confirmation.by.name ?? d.actor.removed,
+                            at: formatTashkent(r.confirmation.at),
+                          })}
+                    </p>
+                  )}
                   {r.rejection && (
                     <div className="grid gap-1 border-l-2 border-border pl-3 text-[13.5px] leading-snug">
                       <p className="font-medium">{rejectLabel(t, r.rejection.reason)}</p>
@@ -136,9 +157,14 @@ export function ReceiptsSection({
                   )}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5">
                     {waiting && (
-                      <Button size="sm" variant="outline" onClick={() => onReject(r)}>
-                        {d.reject}
-                      </Button>
+                      <>
+                        <Button size="sm" onClick={() => onConfirm(r)} data-confirm-receipt={r.id}>
+                          {d.confirm}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onReject(r)}>
+                          {d.reject}
+                        </Button>
+                      </>
                     )}
                     <a
                       href={receiptFile(r.id, 'original')}
@@ -150,6 +176,7 @@ export function ReceiptsSection({
                       <ExternalLink className="size-3.5" strokeWidth={1.5} aria-hidden />
                     </a>
                   </div>
+                  {r.checks.length > 0 && <Checks checks={r.checks} t={t} />}
                 </div>
               </li>
             );
@@ -157,6 +184,64 @@ export function ReceiptsSection({
         </ul>
       )}
     </Section>
+  );
+}
+
+/** A probability in 0..1 as the panel shows it: «0,92». */
+const score = (n: number) => n.toFixed(2).replace('.', ',');
+
+/**
+ * The receipt AI's answers about one receipt (#32), newest first: when, which provider, how many
+ * credits it was shown, its four numbers and what came of it. Read-only: only `confirmed` ever
+ * paid anything (ADR 0013); the numbers are for staff and for tuning the thresholds.
+ */
+function Checks({ checks, t }: { checks: AdminReceiptDto['checks']; t: AdminMessages }) {
+  const d = t.orders.detail;
+  const keys = ['isReceipt', 'amountMatches', 'recipientMatches', 'choiceConfidence'] as const;
+  return (
+    <details className="group mt-1 text-[13px]" open={checks.length === 1} data-checks>
+      <summary
+        className={cn(
+          'inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm select-none [&::-webkit-details-marker]:hidden',
+          QUIET_ACTION,
+        )}
+      >
+        <ChevronRight
+          className="size-3.5 transition-transform duration-150 ease-out group-open:rotate-90 motion-reduce:transition-none"
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        {d.checks} · {checks.length}
+      </summary>
+      <ul className="mt-1 grid gap-2.5">
+        {checks.map((c) => (
+          <li key={c.id} className="grid gap-1 rounded-button bg-field px-3 py-2.5">
+            <MetaLine
+              className="text-small text-muted-foreground tabular-nums"
+              parts={[
+                formatTashkent(c.at),
+                d.provider[c.provider],
+                fill(d.checkMeta, { n: String(c.candidates) }),
+              ]}
+            />
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums sm:grid-cols-4">
+              {keys.map((k) => (
+                <div key={k} className="flex items-baseline justify-between gap-2 sm:block">
+                  <dt className="text-small text-muted-foreground">{d.scores[k]}</dt>
+                  <dd className="font-medium">{score(c[k])}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="font-medium">{d.checkOutcome[c.outcome ?? 'waiting']}</p>
+            {c.reason && (
+              <p className="text-small text-pretty text-muted-foreground [overflow-wrap:anywhere]">
+                {c.reason}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -347,21 +432,71 @@ export function PaymentSection({ page, t, language }: Props) {
         </Fact>
         <Fact label={d.credit}>
           {page.credit ? (
-            <>
-              <span className="block font-medium whitespace-nowrap tabular-nums">
-                {formatTiyin(page.credit.amountTiyin, language)}
-              </span>
-              <MetaLine
-                className="text-small text-muted-foreground tabular-nums"
-                parts={[formatTashkent(page.credit.occurredAt), page.credit.cardMask]}
-              />
-            </>
+            <MatchedCredit credit={page.credit} t={t} language={language} />
           ) : (
             <span className="text-muted-foreground">{d.noCredit}</span>
           )}
         </Fact>
       </dl>
     </Section>
+  );
+}
+
+/**
+ * The Credit that paid the order: its exact amount, when and to which card it came, how it
+ * differs from the Amount due, the reason staff gave for that, and who linked it.
+ */
+function MatchedCredit({
+  credit,
+  t,
+  language,
+}: {
+  credit: NonNullable<AdminOrderDto['credit']>;
+  t: AdminMessages;
+  language: Language;
+}) {
+  const d = t.orders.detail;
+  const flags = creditFlags(
+    { differenceTiyin: credit.link.differenceTiyin, onShopCard: !credit.link.offShopCard },
+    t,
+    language,
+  );
+  const at = formatTashkent(credit.link.at);
+  return (
+    <span className="grid gap-0.5" data-matched-credit>
+      <span className="font-medium whitespace-nowrap tabular-nums">
+        {formatTiyin(credit.amountTiyin, language)}
+      </span>
+      <MetaLine
+        className="text-small text-muted-foreground tabular-nums"
+        parts={[
+          formatTashkent(credit.occurredAt),
+          <span key="card" className="whitespace-nowrap">
+            {credit.cardMask}
+          </span>,
+          credit.counterparty && (
+            <span key="from" className="[overflow-wrap:anywhere]">
+              {credit.counterparty}
+            </span>
+          ),
+        ]}
+      />
+      {flags.map((f) => (
+        <span key={f} className="text-small font-medium">
+          {f}
+        </span>
+      ))}
+      {credit.link.reason && (
+        <span className="text-small text-pretty [overflow-wrap:anywhere]">
+          {fill(d.linkReason, { reason: credit.link.reason })}
+        </span>
+      )}
+      <span className="text-small text-muted-foreground">
+        {credit.link.by.type === 'ai'
+          ? fill(d.linkedByAi, { at })
+          : fill(d.linkedBy, { name: credit.link.by.name ?? d.actor.removed, at })}
+      </span>
+    </span>
   );
 }
 
