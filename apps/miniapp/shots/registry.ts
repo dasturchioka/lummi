@@ -76,6 +76,29 @@ const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
   for (const slug of CART_SLUGS) await db.restore(slug);
 };
 
+/** BLOGER10, 10 % on items, no limits: the code the promo shots apply (#29). Written straight to
+ * the dev DB, as the owner's admin would. */
+async function shotPromo(db: ShotDb) {
+  await db.query(
+    `insert into promo_codes (code, kind, percent) values ('BLOGER10', 'percent', 10)
+     on conflict (code) do update set kind = 'percent', percent = 10, amount = null,
+       max_discount = null, expires_at = null, min_order_total = null, total_limit = null,
+       per_customer_limit = null, new_customers_only = false, applies_to_marked_down = false,
+       active = true`,
+  );
+}
+/** The longest code the admin allows, 32 characters (break-ui, #29); not one the admin shots seed. */
+const SHOT_LONG_CODE = 'MALIKA_BLOGER_YANGI_YIL_2026_UZB';
+/** Takes the code out of the cart and forgets the typed attempts and their settings. */
+async function forgetPromo({ api, db }: { api: ApiClient; db: ShotDb }) {
+  await api.cart.removePromoCode();
+  await db.query(`delete from settings where key in ('promo.attemptLimit')`);
+  await db.query(`update carts set promo_attempts = 0, promo_attempts_since = null`);
+}
+async function typePromo(page: Page, code: string) {
+  await page.getByTestId('promo-input').fill(code);
+}
+
 /** Taps the first n fragrances of the builder's list. */
 function pickForBuilder(n: number) {
   return async ({ page }: { page: Page }) => {
@@ -197,6 +220,7 @@ async function placeOrder(
         : { kind: 'point', pointId: point.id },
       consent: true,
       confirmedTotal: checkout.body.quote.total,
+      confirmedDiscount: checkout.body.quote.discount,
       idempotencyKey: randomUUID(),
       gift: extra.gift,
       giftMessage: extra.giftMessage,
@@ -1114,6 +1138,110 @@ export const screens: ScreenDef[] = [
     },
   },
   {
+    // #29: the code stopped working while the shopper was on the screen, and free delivery offsets
+    // it (260 000 − 25 000 + 25 000 = 260 000 shipped free): the same total, a different order, so
+    // the sheet says the discount changed and names the code and why
+    id: 'checkout-promo-lost',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await db.query(
+        `update volumes set price = price + 41000 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await db.query(
+        `insert into promo_codes (code, kind, amount) values ('MINUS25', 'fixed', 25000)
+         on conflict (code) do update set kind = 'fixed', amount = 25000, percent = null,
+           max_discount = null, expires_at = null, min_order_total = null, total_limit = null,
+           per_customer_limit = null, new_customers_only = false, applies_to_marked_down = false,
+           active = true`,
+      );
+      await forgetPromo({ api, db });
+      await fillCart(api, [['symphony', 50]]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'MINUS25' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(`update promo_codes set active = false where code = 'MINUS25'`);
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.query(
+        `update volumes set price = price - 41000 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+      await ctx.db.query(`update promo_codes set active = true where code = 'MINUS25'`);
+      await forgetPromo(ctx);
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    // #29: the code stopped working while the shopper was on the screen and the total grew
+    // (268 200 → 298 000): the sheet strikes the old total and names the code and why
+    id: 'checkout-promo-changed',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(`update promo_codes set active = false where code = 'BLOGER10'`);
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await ctx.db.query(`update promo_codes set active = true where code = 'BLOGER10'`);
+      await forgetPromo(ctx);
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    // break-ui (#29): a 32-character code with a seven-digit fixed discount (7 × 219 000 −
+    // 1 250 000 = 283 000) is switched off at checkout: the sheet names it over 1 533 000
+    id: 'checkout-promo-changed-worst',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await db.query(
+        `insert into promo_codes (code, kind, amount) values ($1, 'fixed', 1250000)
+         on conflict (code) do update set kind = 'fixed', amount = 1250000, percent = null,
+           max_discount = null, expires_at = null, min_order_total = null, total_limit = null,
+           per_customer_limit = null, new_customers_only = false, applies_to_marked_down = false,
+           active = true`,
+        [SHOT_LONG_CODE],
+      );
+      await forgetPromo({ api, db });
+      await fillCart(api, [['symphony', 50, 7]]);
+      const res = await api.cart.applyPromoCode({ body: { code: SHOT_LONG_CODE } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page, db }) => {
+      await pickFirstPoint(page);
+      await db.query(`update promo_codes set active = false where code = $1`, [SHOT_LONG_CODE]);
+      await page.getByTestId('submit').click();
+      await page.getByTestId('total-changed').waitFor();
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await checkoutDone(ctx);
+      await ctx.db.query(`delete from promo_codes where code = $1`, [SHOT_LONG_CODE]);
+    },
+  },
+  {
     // no account phone yet: checkout opens the registration step on arrival
     id: 'checkout-no-phone',
     path: '/checkout',
@@ -1878,6 +2006,170 @@ export const screens: ScreenDef[] = [
     act: hideFixtureToggle,
   },
   { id: 'cart-unavailable', path: '/dev/cart?data=unavailable', act: hideFixtureToggle },
+  // Promo codes (#29): the field typed, a code applied through the real API, the attempt limit,
+  // then every reason the quote can refuse a code with (fixtures: the reasons need orders and dates).
+  {
+    id: 'cart-promo-typed',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => typePromo(page, 'bloger10'),
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-promo-applied',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'bloger10' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await emptyCart(ctx);
+    },
+  },
+  {
+    // One code a window: the second one typed is refused until the window ends.
+    id: 'cart-promo-wait',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await db.query(
+        `insert into settings (key, value) values ('promo.attemptLimit', '1')
+         on conflict (key) do update set value = excluded.value`,
+      );
+      await fillCart(api, [['symphony', 30]]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'LUMMI' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page }) => {
+      await typePromo(page, 'BLOGER10');
+      await page.getByTestId('promo-apply').click();
+      await page.getByTestId('promo-status').waitFor();
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await emptyCart(ctx);
+    },
+  },
+  ...[
+    'unknown',
+    'inactive',
+    'expired',
+    'exhausted',
+    'already-used',
+    'not-new-customer',
+    'below-minimum',
+    'no-eligible-items',
+  ].map((reason) => ({
+    id: `cart-promo-${reason}`,
+    path: `/dev/cart?data=promo-${reason}`,
+    act: async ({ page }: { page: Page }) => {
+      await hideFixtureToggle({ page });
+      // the field sits under the sticky totals until the page is scrolled to its end
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    },
+  })),
+  {
+    // The keyboard is up: Telegram's WebView shrinks to what is left above it (Android), so the
+    // field has to clear the floating tab bar sitting on the keyboard, not just the screen edge.
+    id: 'cart-promo-typing',
+    path: '/cart',
+    setup: async ({ api, db }) => {
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await page.getByTestId('promo-input').focus();
+      await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 500 });
+      await page.waitForTimeout(300); // the keyboard slides up
+      await page.keyboard.type('bloger10');
+    },
+    teardown: emptyCart,
+  },
+  {
+    // The request is on its way: the button holds its width and spins.
+    id: 'cart-promo-applying',
+    path: '/cart',
+    loading: true,
+    setup: async ({ api, db }) => {
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await page.route('**/api/cart/promo-code', () => undefined);
+      await typePromo(page, 'bloger10');
+      await page.getByTestId('promo-apply').click();
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await emptyCart(ctx);
+    },
+  },
+  // The applied code on a 360 px Android: the field, its line and the totals' source caption.
+  {
+    id: 'cart-promo-applied-360',
+    path: '/dev/cart?data=promo-applied',
+    width: 360,
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
+  // break-ui (#29), captured into shots/29/worst-case/: the 32-character code with a seven-digit
+  // fixed discount, a 100 % code (the delivery is still paid: discounts never touch it), and the
+  // longest UZ refusal (the 32-character code under a seven-digit minimum) at 360 px.
+  {
+    id: 'cart-promo-worst',
+    path: '/dev/cart?data=promo-worst',
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
+  {
+    id: 'cart-promo-worst-360',
+    path: '/dev/cart?data=promo-worst',
+    width: 360,
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
+  {
+    id: 'cart-promo-full',
+    path: '/dev/cart?data=promo-full',
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
+  {
+    id: 'cart-promo-worst-refused-360',
+    path: '/dev/cart?data=promo-worst-refused',
+    width: 360,
+    fullPage: true,
+    act: hideFixtureToggle,
+  },
   {
     // The cart request never answers: the cart's own skeleton.
     id: 'cart-loading',

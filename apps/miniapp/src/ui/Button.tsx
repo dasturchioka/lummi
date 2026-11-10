@@ -18,7 +18,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * the same curve. `data-pressed` forces that look for the component gallery.
  */
 const base =
-  'type-button relative inline-flex items-center justify-center gap-2 rounded-btn transition-[transform,background-color,color,box-shadow,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] enabled:active:scale-[0.97] data-[pressed]:scale-[0.97] disabled:cursor-default';
+  'type-button relative inline-flex items-center justify-center gap-2 rounded-btn transition-[scale,background-color,color,box-shadow,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] enabled:active:scale-[0.97] data-[pressed]:scale-[0.97] disabled:cursor-default';
 const variants: Record<Variant, string> = {
   primary: 'bg-btn text-btn-ink enabled:hover:opacity-90 disabled:bg-field disabled:text-muted',
   secondary:

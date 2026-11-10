@@ -1,16 +1,17 @@
-import type {
-  CartDto,
-  CartLineDto,
-  CartSuggestionDto,
-  Discount,
-  QuoteLine,
-} from '@lummi/contracts';
+import type { CartDto, CartLineDto, CartSuggestionDto, QuoteLine } from '@lummi/contracts';
 import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
+import {
+  useAddToCart,
+  useApplyPromoCode,
+  useCart,
+  useRemoveLine,
+  useRemovePromoCode,
+  useSetQuantity,
+} from '../cart/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
 import { usePrefs } from '../lib/prefs';
@@ -18,6 +19,7 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Figure } from '../ui/Figure';
 import { BagIcon, CheckIcon, MinusIcon, PlusIcon, Spinner, TrashIcon } from '../ui/icons';
+import { DiscountRow } from '../ui/DiscountRow';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -26,8 +28,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
-
-type T = ReturnType<typeof usePrefs>['t'];
+import { PromoField, type PromoNotice } from './cart/PromoField';
 
 /** What is in flight, so only the control that was tapped shows it. */
 export interface CartPending {
@@ -36,6 +37,8 @@ export interface CartPending {
   kind?: 'qty' | 'remove';
   /** The suggestion being added. */
   slug?: string;
+  /** The promo code being applied or removed. */
+  promo?: 'apply' | 'remove';
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
@@ -109,7 +112,13 @@ function Nudge({
         />
       </div>
       <div className="type-caption mt-1.5 flex justify-between gap-3 text-muted tabular-nums">
-        <span>{formatMoney(quote.thresholdBaseAmount, language)}</span>
+        <span>
+          {formatMoney(quote.thresholdBaseAmount, language)}
+          {/* the server counted the threshold after the discount: say so, or it reads as «Товары» */}
+          {quote.discount && quote.thresholdBase === 'after' ? (
+            <span data-testid="nudge-after-discount"> · {t.cart.afterDiscount}</span>
+          ) : null}
+        </span>
         <span>{formatMoney(quote.freeDeliveryThreshold, language)}</span>
       </div>
       <div
@@ -453,12 +462,6 @@ function useRows(cart: CartDto): Row[] {
   return rows;
 }
 
-function discountLabel(d: Discount, t: T): string {
-  if (d.type === 'promo_code') return fill(t.cart.sourcePromo, { code: d.code });
-  if (d.type === 'birthday_coupon') return t.cart.sourceBirthday;
-  return d.source === 'set' ? t.cart.sourceSet : t.cart.sourceSingle;
-}
-
 /**
  * The dark totals block (approved variant 2): the server's numbers, a hairline, «Итого», then
  * «Оформить заказ» inside it. Labels sit at 75 % Milk, the values at full Milk; the discount and a
@@ -482,19 +485,7 @@ function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void })
             <Figure amount={quote.itemsSubtotal} />
           </dd>
         </div>
-        {quote.discount ? (
-          <div className={`${row} text-totals-accent`} data-testid="discount-row">
-            <dt className="flex min-w-0 flex-col">
-              <span>{t.cart.discount}</span>
-              <span className="type-caption [overflow-wrap:anywhere] opacity-80">
-                {discountLabel(quote.discount, t)}
-              </span>
-            </dt>
-            <dd className="type-price">
-              <Figure amount={quote.discount.amount} minus />
-            </dd>
-          </div>
-        ) : null}
+        {quote.discount ? <DiscountRow discount={quote.discount} testId="discount-row" /> : null}
         <div className={row}>
           <dt className="min-w-0 text-pretty text-totals-ink/75">
             {cart.deliveryCity
@@ -570,6 +561,9 @@ export function CartView({
   onQty = () => undefined,
   onRemove = () => undefined,
   onCheckout = () => undefined,
+  promoNotice = null,
+  onApplyPromo = () => undefined,
+  onRemovePromo = () => undefined,
 }: {
   cart: CartDto;
   busy?: boolean;
@@ -578,6 +572,9 @@ export function CartView({
   onQty?: (lineId: number, qty: number) => void;
   onRemove?: (lineId: number) => void;
   onCheckout?: () => void;
+  promoNotice?: PromoNotice;
+  onApplyPromo?: (code: string) => void;
+  onRemovePromo?: () => void;
 }) {
   const rows = useRows(data);
   return (
@@ -611,6 +608,15 @@ export function CartView({
           ),
         )}
       </Card>
+      <PromoField
+        stored={data.promoCode}
+        quote={data.quote}
+        busy={busy}
+        pending={pending.promo}
+        notice={promoNotice}
+        onApply={onApplyPromo}
+        onRemove={onRemovePromo}
+      />
     </Screen>
   );
 }
@@ -625,6 +631,8 @@ export function Cart() {
   const add = useAddToCart();
   const setQty = useSetQuantity();
   const remove = useRemoveLine();
+  const applyPromo = useApplyPromoCode();
+  const removePromo = useRemovePromoCode();
   const busy = useIsMutating() > 0;
 
   if (cart.isError && !cart.data)
@@ -661,7 +669,17 @@ export function Cart() {
       ? { line: remove.variables, kind: 'remove' }
       : add.isPending
         ? { slug: add.variables?.slug }
-        : {};
+        : applyPromo.isPending
+          ? { promo: 'apply' }
+          : removePromo.isPending
+            ? { promo: 'remove' }
+            : {};
+  const sent = applyPromo.variables ?? '';
+  const promoNotice: PromoNotice = applyPromo.isError
+    ? { kind: 'failed', code: sent }
+    : applyPromo.data && 'tooManyFor' in applyPromo.data
+      ? { kind: 'tooMany', code: sent, seconds: applyPromo.data.tooManyFor }
+      : null;
 
   return (
     <CartView
@@ -672,6 +690,9 @@ export function Cart() {
       onQty={(lineId, qty) => setQty.mutate({ lineId, qty })}
       onRemove={(lineId) => remove.mutate(lineId)}
       onCheckout={() => void router.navigate({ to: '/checkout' })}
+      promoNotice={promoNotice}
+      onApplyPromo={(code) => applyPromo.mutate(code)}
+      onRemovePromo={() => removePromo.mutate()}
     />
   );
 }

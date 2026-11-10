@@ -19,3 +19,4 @@ export * from './orders';
 export * from './catalog-import';
 export * from './payment';
 export * from './order-transition-payloads';
+export * from './promo';

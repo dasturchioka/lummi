@@ -55,10 +55,27 @@ export const discountAlternativeSchema = z.object({
 });
 export type DiscountAlternative = z.infer<typeof discountAlternativeSchema>;
 
+/**
+ * Why the shop refuses an entered code before pricing it (the checks needing the DB, ticket #29):
+ * no such code, switched off by the owner, past its last day, every use taken, this customer's
+ * uses taken, or a new-customers-only code for a customer with an order.
+ */
+export const PROMO_CODE_REFUSALS = [
+  'unknown',
+  'inactive',
+  'expired',
+  'exhausted',
+  'already_used',
+  'not_new_customer',
+] as const;
+export const promoCodeRefusalSchema = z.enum(PROMO_CODE_REFUSALS);
+export type PromoCodeRefusal = z.infer<typeof promoCodeRefusalSchema>;
+
 /** Why an entered promo code is not applied; the order is never blocked by it. */
 export const promoCodeInvalidSchema = z.discriminatedUnion('reason', [
   z.object({ reason: z.literal('below_minimum'), minOrderTotal: som }),
   z.object({ reason: z.literal('no_eligible_items') }),
+  z.object({ reason: promoCodeRefusalSchema }),
 ]);
 export type PromoCodeInvalid = z.infer<typeof promoCodeInvalidSchema>;
 

@@ -28,14 +28,17 @@ const SECTION_OF: { prefix: string; tab: TabId }[] = [{ prefix: '/info/', tab: '
  * Milk disc and its label turns Milk at 600. A press dips the disc. A label never truncates: the
  * longest one (UZ «Buyurtmalar») may spill a few pixels past its cell, centred, beside short
  * neighbours. The count sits outside the icon's top-right corner, capped at «9+».
- * `floating={false}` renders it in the flow (component gallery).
+ * `floating={false}` renders it in the flow (component gallery). `hidden` slides it below the
+ * screen edge while the keyboard is up (the shell decides), and back when it goes down.
  */
 export function TabBar({
   badges = {},
   floating = true,
+  hidden = false,
 }: {
   badges?: Partial<Record<TabId, number>>;
   floating?: boolean;
+  hidden?: boolean;
 }) {
   const { t } = usePrefs();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -43,9 +46,10 @@ export function TabBar({
   return (
     <nav
       aria-label="LUMMI"
-      className={`z-30 mx-auto flex h-[var(--tabbar-h)] max-w-[480px] items-center rounded-pill bg-bar px-1 shadow-[inset_0_0_0_1px_var(--c-line)] select-none ${
+      inert={hidden || undefined}
+      className={`z-30 mx-auto flex h-[var(--tabbar-h)] max-w-[480px] items-center rounded-pill bg-bar px-1 shadow-[inset_0_0_0_1px_var(--c-line)] transition-[translate,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] select-none ${
         floating ? 'fixed' : 'relative w-full'
-      }`}
+      } ${hidden ? 'translate-y-[calc(100%+var(--tabbar-inset)+var(--safe-b,0px))] opacity-0' : ''}`}
       style={
         floating
           ? {
