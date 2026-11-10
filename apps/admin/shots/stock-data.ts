@@ -304,7 +304,7 @@ export const customerScreens: Screen[] = [
     setup: ({ db }) => seedCustomers(db),
     teardown: ({ db }) => clearCustomers(db),
     act: async ({ page }) => {
-      await page.locator('main a[href^="/customers/"]').first().click();
+      await page.locator('main a[href^="/customers/"]:visible').first().click();
       await page.locator('[data-testid^="order-row-"]').first().waitFor();
     },
   },
@@ -329,7 +329,7 @@ export const customerScreens: Screen[] = [
     setup: ({ db }) => seedCustomers(db, 0, true),
     teardown: ({ db }) => clearCustomers(db),
     act: async ({ page }) => {
-      await page.locator('main a[href^="/customers/"]').first().click();
+      await page.locator('main a[href^="/customers/"]:visible').first().click();
       await page.locator('[data-testid^="order-row-"]').first().waitFor();
     },
   },
