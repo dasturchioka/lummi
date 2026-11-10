@@ -263,7 +263,7 @@ function Editor({
   const inputId = `on-hand-${row.key}`;
   if (edit.step === 'below') {
     return (
-      <div className="grid max-w-[60ch] gap-3">
+      <div className="sticky left-5 grid w-[min(60ch,calc(100vw-5.5rem))] gap-3">
         <Notice
           title={fill(s.belowTitle, { onHand: num(edit.value), reserved: num(row.reserved) })}
         >
@@ -282,7 +282,7 @@ function Editor({
   }
   if (edit.step === 'conflict') {
     return (
-      <div className="grid max-w-[60ch] gap-3">
+      <div className="sticky left-5 grid w-[min(60ch,calc(100vw-5.5rem))] gap-3">
         <Notice title={fill(s.changedTitle, { current: num(edit.current) })}>
           {s.changedText}
         </Notice>
@@ -299,7 +299,7 @@ function Editor({
   }
   return (
     <form
-      className="grid max-w-[34rem] gap-3"
+      className="sticky left-5 grid w-[min(34rem,calc(100vw-5.5rem))] gap-3"
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(edit.value);

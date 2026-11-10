@@ -75,15 +75,14 @@ export async function seedCustomers(db: ShotSql, extra = 0, hugeTotals = false) 
   if (extra > 0) {
     await db.query(
       `insert into customers (telegram_id, first_name, last_name, language, created_at)
-       select $1 + 100 + g, 'Клиент', 'N' || g, case when g % 3 = 0 then 'uz' else 'ru' end,
+       select $1 + 100 + g, 'Клиент', 'N' || g, (case when g % 3 = 0 then 'uz' else 'ru' end)::language,
          now() - (g || ' minutes')::interval
        from generate_series(1, $2::int) g on conflict do nothing`,
       [FIRST, extra],
     );
   }
-  const big = hugeTotals ? 9_999_000 : 1;
-  await addOrder(db, FIRST, 'delivered', 620_000 * big, '2026-11-02T08:00:00Z');
-  await addOrder(db, FIRST, 'delivered', 330_000 * big, '2026-11-05T08:00:00Z');
+  await addOrder(db, FIRST, 'delivered', hugeTotals ? 4_820_000 : 620_000, '2026-11-02T08:00:00Z');
+  await addOrder(db, FIRST, 'delivered', hugeTotals ? 3_950_000 : 330_000, '2026-11-05T08:00:00Z');
   await addOrder(db, FIRST, 'cancelled', 150_000, '2026-11-08T08:00:00Z');
   await addOrder(db, FIRST, 'awaiting_payment', 99_000, '2026-11-10T08:00:00Z');
   await addOrder(db, FIRST + 1, 'handed_to_bts', 210_000, '2026-11-09T08:00:00Z');
@@ -160,9 +159,15 @@ async function restoreStock(db: ShotSql) {
 }
 
 const editFirst = async (page: Page) => {
-  await page.locator('tbody button').first().click();
+  await page.locator('tbody tr[data-testid^="stock-row-v"] button').first().click();
   await page.locator('input[id^="on-hand-"]').waitFor();
 };
+/** The state screens are viewport shots of the open row: the full stock table is hundreds of rows tall. */
+const showEditor = (page: Page) =>
+  page
+    .locator('input[id^="on-hand-"], [role=alert]')
+    .first()
+    .evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
 export const stockScreens: Screen[] = [
   {
@@ -190,14 +195,17 @@ export const stockScreens: Screen[] = [
   { id: 'stock-search', path: '/stock?q=aven', as: 'owner' },
   {
     id: 'stock-editing',
+    fullPage: false,
     path: '/stock',
     as: 'manager',
     act: async ({ page }) => {
       await editFirst(page);
+      await showEditor(page);
     },
   },
   {
     id: 'stock-below-reserve',
+    fullPage: false,
     path: '/stock',
     as: 'manager',
     setup: ({ db }) => reserveTen(db, 3),
@@ -207,10 +215,12 @@ export const stockScreens: Screen[] = [
       await page.locator('input[id^="on-hand-"]').fill('1');
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]').first().waitFor();
+      await showEditor(page);
     },
   },
   {
     id: 'stock-conflict',
+    fullPage: false,
     path: '/stock',
     as: 'manager',
     act: async ({ page }) => {
@@ -227,10 +237,12 @@ export const stockScreens: Screen[] = [
       });
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]').first().waitFor();
+      await showEditor(page);
     },
   },
   {
     id: 'w-stock-long-name',
+    fullPage: false,
     path: '/stock',
     as: 'owner',
     setup: ({ db }) => longName(db),
