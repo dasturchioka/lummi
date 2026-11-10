@@ -1,0 +1,109 @@
+name: Deploy staging
+# ADR 0024. Stage 1 lands on `stage-1`, so it deploys too; production deploys only from `v*` tags (not here).
+on:
+  push:
+    branches: [stage-1, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  images:
+    needs: check
+    if: github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        include:
+          - { target: api, image: lummi-api }
+          - { target: admin, image: lummi-admin }
+          - { target: web, image: lummi-web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          echo "ref=$(echo "$REF_NAME" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: true
+          # The bot link is the only value baked into a build (Mini App share buttons).
+          build-args: |
+            VITE_BOT_LINK=${{ vars.STAGING_BOT_LINK }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ steps.meta.outputs.ref }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  deploy:
+    needs: images
+    if: github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH setup
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Copy the Compose file
+        env:
+          TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
+        run: |
+          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes docker-compose.yml "$TARGET:/opt/lummi-staging/docker-compose.yml"
+      - name: Pull, migrate, seed, start
+        env:
+          TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+        run: |
+          # The token is the first stdin line, read by the remote shell: never in argv, never in `ps`.
+          { printf '%s\n' "$GHCR_TOKEN"; cat deploy/remote-deploy.sh; } |
+            ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$TARGET" \
+              "read -r GHCR_TOKEN; export GHCR_TOKEN; bash -s -- '$SHA' '$OWNER' '$GHCR_ACTOR'"
+      - name: Smoke test
+        env:
+          DOMAIN: ${{ vars.STAGING_DOMAIN }}
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 "https://api.${DOMAIN}/health"
+          curl -fsS -o /dev/null "https://${DOMAIN}/"

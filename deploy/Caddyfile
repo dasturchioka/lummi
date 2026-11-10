@@ -1,0 +1,123 @@
+# One Caddyfile for staging and production (ADR 0024). Hosts and mode come from the environment:
+#   DOMAIN        lummi.example.uz           -> <DOMAIN>, api.<DOMAIN>, admin.<DOMAIN>, media.<DOMAIN>
+#   CADDY_SCHEME  ""          production: automatic HTTPS on 80/443
+#                 "http://"   staging: plain HTTP behind the host's nginx, which terminates TLS
+{
+	# Only the real hop in front of us may set X-Forwarded-*. Staging: the Compose gateway (host nginx
+	# arrives from it), set in TRUSTED_PROXIES. Production: nobody (the default is loopback, which no
+	# published-port request comes from), so a client can never forge them.
+	servers {
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+	}
+}
+
+(hardening) {
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	# HSTS only where Caddy itself terminates TLS (production); behind nginx the request is plain HTTP.
+	@secure protocol https
+	header @secure Strict-Transport-Security "max-age=31536000"
+	encode zstd gzip
+
+	# Whatever a host serves, a path with a `..` segment is never meant: refuse it outright.
+	# (the raw URI: Caddy's path matchers see the cleaned path, where `..` is already gone)
+	@dotdot expression `{http.request.uri}.matches('(^|/)[.][.](/|$|[?])')`
+	handle @dotdot {
+		respond 404
+	}
+}
+
+# The Mini App: static build with an SPA fallback; /api/* is the API (prefix stripped), same origin.
+{$CADDY_SCHEME}{$DOMAIN} {
+	import hardening
+
+	@blocked path /api/internal/* /api/media/private* /media/private*
+	handle @blocked {
+		respond 404
+	}
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+	# Static files (anything with an extension): a missing one is a 404, never index.html.
+	# /assets/* are content-hashed by Vite: cache forever. Fonts and brand files: a week.
+	@file path_regexp \.[A-Za-z0-9]+$
+	handle @file {
+		root * /srv/miniapp
+		@hashed {
+			path /assets/*
+			file
+		}
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+		@other {
+			not path /assets/* /index.html
+			file
+		}
+		header @other Cache-Control "public, max-age=604800"
+		header /index.html Cache-Control "no-cache"
+		file_server
+	}
+	# App routes have no extension (/orders/42): they get index.html, which must never be stale.
+	# The Mini App host stays frameable on purpose: Telegram Web embeds it.
+	handle {
+		root * /srv/miniapp
+		header Cache-Control "no-cache"
+		rewrite * /index.html
+		file_server
+	}
+}
+
+# The API, including the bot webhook (POST /telegram/webhook). /internal/* is never routed (ADR 0031).
+{$CADDY_SCHEME}api.{$DOMAIN} {
+	import hardening
+
+	@blocked path /internal/* /media/private*
+	handle @blocked {
+		respond 404
+	}
+	handle {
+		reverse_proxy api:4000
+	}
+}
+
+# The admin panel; /api/* goes to the API so the session cookie is same-origin (ADR 0027).
+{$CADDY_SCHEME}admin.{$DOMAIN} {
+	import hardening
+	header {
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options DENY
+	}
+
+	@blocked path /api/internal/* /api/media/private* /media/private*
+	handle @blocked {
+		respond 404
+	}
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy admin:3000
+	}
+}
+
+# Public product photos straight from the files volume (ADR 0020). Nothing else is served here:
+# only the volume's public/ subfolder is mounted into this container (read-only), so receipts
+# under private/ are not even present here (ADR 0025).
+{$CADDY_SCHEME}media.{$DOMAIN} {
+	import hardening
+
+	@photo path_regexp ^/media/public/[a-f0-9]{16}-(400|800|1200)\.webp$
+	handle @photo {
+		uri strip_prefix /media/public
+		root * /srv/public
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	handle {
+		respond 404
+	}
+}
