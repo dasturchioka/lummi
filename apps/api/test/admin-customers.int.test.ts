@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OrderStatus } from '@lummi/contracts';
 import { customers, eq, orders } from '@lummi/db';
+import { ReceiptsService } from '../src/receipts/receipts.service';
+import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
@@ -51,27 +53,33 @@ async function place(user: TestUser, phone: string, qty = 1) {
   return res.body.number;
 }
 
-/** Walks an order forward with real transitions. */
+/** A small receipt screenshot for the intake. */
+const RECEIPT_IMAGE = sharp({
+  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
+})
+  .png()
+  .toBuffer();
+
+/** Walks an order forward: the receipt goes in through the intake (#28), the rest are real transitions. */
 async function walkTo(
   number: number,
   status: Exclude<OrderStatus, 'awaiting_payment' | 'cancelled' | 'returned'>,
 ) {
   const [order] = await t.db.select().from(orders).where(eq(orders.number, number));
+  const sent = await t.app
+    .get(ReceiptsService)
+    .submit(order!.customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
+  if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
+  if (status === 'receipt_review') return;
   const mgr: TransitionActor = { type: 'staff', id: manager.staff.id };
   const path = [
-    [
-      'receipt_review',
-      'submit_receipt',
-      { type: 'customer', id: order!.customerId } as TransitionActor,
-      undefined,
-    ],
     ['payment_confirmed', 'confirm_payment', { type: 'ai' } as TransitionActor, undefined],
     ['accepted', 'accept', mgr, undefined],
     ['assembling', 'start_assembly', mgr, undefined],
     ['handed_to_bts', 'hand_to_bts', mgr, { trackingNumber: 'BTS 1' }],
     ['delivered', 'deliver', mgr, undefined],
   ] as const;
-  let from: OrderStatus = 'awaiting_payment';
+  let from: OrderStatus = 'receipt_review';
   for (const [to, action, actor, payload] of path) {
     const out = await machine().transition(order!.id, action, actor, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);
