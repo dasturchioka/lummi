@@ -1,5 +1,7 @@
 import {
   useId,
+  useLayoutEffect,
+  useRef,
   type InputHTMLAttributes,
   type ReactNode,
   type TextareaHTMLAttributes,
@@ -82,6 +84,10 @@ export function TextField({
   );
 }
 
+/**
+ * Grows with its text (a greeting at its limit reads whole, never scrolled inside a 3-line box),
+ * from its `rows` up to 240 px, then scrolls.
+ */
 export function TextArea({
   label,
   aside,
@@ -91,13 +97,21 @@ export function TextArea({
   ...area
 }: FieldFrame & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const id = useId();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [area.value]);
   return (
     <Frame id={id} label={label} aside={aside} hint={hint} error={error}>
       <textarea
+        ref={ref}
         id={id}
         aria-describedby={hint || error ? `${id}-hint` : undefined}
         aria-invalid={error ? true : undefined}
-        className={`${FIELD} block min-h-[88px] resize-none py-3 leading-snug ${className}`}
+        className={`${FIELD} block max-h-[240px] min-h-[88px] resize-none py-3 leading-snug ${className}`}
         {...area}
       />
     </Frame>
@@ -123,7 +137,10 @@ export function Checkbox({
   invalid?: boolean;
 }) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-start gap-3 py-1" data-testid={testId}>
+    <label
+      className="group flex min-h-11 cursor-pointer items-start gap-3 py-1 select-none"
+      data-testid={testId}
+    >
       <input
         type="checkbox"
         checked={checked}
@@ -131,17 +148,24 @@ export function Checkbox({
         aria-invalid={invalid || undefined}
         className="peer sr-only"
       />
+      {/* pressed, the box gives a little; the check grows in from 60 % on the way on, never from nothing */}
       <span
         aria-hidden="true"
-        className={`mt-px grid size-[22px] shrink-0 place-items-center rounded-[6px] transition-[background-color,box-shadow] duration-150 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-sage ${
+        className={`mt-px grid size-[22px] shrink-0 place-items-center rounded-[6px] transition-[background-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-active:scale-[0.92] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-sage ${
           checked
             ? 'bg-btn text-btn-ink'
             : invalid
-              ? 'bg-transparent text-transparent shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
-              : 'inset-line bg-transparent text-transparent'
+              ? 'bg-transparent shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+              : 'inset-line bg-transparent'
         }`}
       >
-        <CheckIcon size={16} strokeWidth={2} />
+        <span
+          className={`grid place-items-center transition-[opacity,transform] ease-[cubic-bezier(0.23,1,0.32,1)] ${
+            checked ? 'scale-100 opacity-100 duration-200' : 'scale-[0.6] opacity-0 duration-100'
+          }`}
+        >
+          <CheckIcon size={16} strokeWidth={2} />
+        </span>
       </span>
       <span className="type-body min-w-0 flex-1 text-pretty text-ink">{children}</span>
     </label>

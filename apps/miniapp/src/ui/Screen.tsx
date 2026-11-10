@@ -66,22 +66,67 @@ export function Screen({
           {footer}
         </StickyFooter>
       ) : null}
-      {dock ? (
-        <div
-          className="sticky bottom-0 z-20 mt-auto border-t border-line bg-ground pt-2.5"
-          style={{
-            paddingLeft: GUTTER_L,
-            paddingRight: GUTTER_R,
-            paddingBottom: 'max(12px, var(--safe-b, 0px))',
-            ...(bleed
-              ? undefined
-              : { marginLeft: `calc(-1 * ${GUTTER_L})`, marginRight: `calc(-1 * ${GUTTER_R})` }),
-          }}
-        >
-          {dock}
-        </div>
-      ) : null}
+      {dock ? <Dock bleed={bleed}>{dock}</Dock> : null}
     </main>
+  );
+}
+
+/**
+ * The `dock` slot. It also keeps the field being typed in clear of itself: focus scrolling stops
+ * short of the dock (scroll padding at its height), and once the keyboard has shrunk the viewport,
+ * or a growing text area reaches down to it, a field of the screen the dock (or the keyboard)
+ * still covers is lifted into view. Fields in a sheet are the sheet's business.
+ */
+function Dock({ children, bleed }: { children: ReactNode; bleed: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dock = ref.current;
+    if (!dock) return;
+    const root = document.documentElement;
+    const pad = () => {
+      root.style.scrollPaddingBottom = `${dock.offsetHeight + 12}px`;
+    };
+    pad();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(pad);
+    ro?.observe(dock);
+    const vv = window.visualViewport;
+    const lift = () => {
+      const field = document.activeElement;
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return;
+      if (dock.contains(field) || !dock.parentElement?.contains(field)) return;
+      const visible = Math.min(
+        dock.getBoundingClientRect().top,
+        vv ? vv.offsetTop + vv.height : window.innerHeight,
+      );
+      const over = field.getBoundingClientRect().bottom + 12 - visible;
+      if (over > 0) window.scrollBy({ top: over, behavior: 'smooth' });
+    };
+    // after typing, once React has re-rendered and a text area has grown to its new height
+    const liftAfterInput = () => requestAnimationFrame(lift);
+    vv?.addEventListener('resize', lift);
+    document.addEventListener('input', liftAfterInput);
+    return () => {
+      ro?.disconnect();
+      vv?.removeEventListener('resize', lift);
+      document.removeEventListener('input', liftAfterInput);
+      root.style.scrollPaddingBottom = '';
+    };
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className="sticky bottom-0 z-20 mt-auto border-t border-line bg-ground pt-2.5"
+      style={{
+        paddingLeft: GUTTER_L,
+        paddingRight: GUTTER_R,
+        paddingBottom: 'max(12px, var(--safe-b, 0px))',
+        ...(bleed
+          ? undefined
+          : { marginLeft: `calc(-1 * ${GUTTER_L})`, marginRight: `calc(-1 * ${GUTTER_R})` }),
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

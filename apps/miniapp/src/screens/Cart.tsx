@@ -14,6 +14,7 @@ import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/qu
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Figure } from '../ui/Figure';
 import { BagIcon, CheckIcon, MinusIcon, PlusIcon, Spinner, TrashIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
@@ -35,36 +36,6 @@ export interface CartPending {
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
-
-/** How many times a value has changed since mount (0 = never), to replay a small settle on change. */
-function useChanges<V>(value: V): number {
-  const [seen, setSeen] = useState({ value, n: 0 });
-  if (!Object.is(seen.value, value)) setSeen({ value, n: seen.n + 1 });
-  return seen.n;
-}
-
-/** A server amount that settles in place when it changes, so the totals never jump or flicker. */
-function Figure({
-  amount,
-  minus = false,
-  className = '',
-}: {
-  amount: number;
-  minus?: boolean;
-  className?: string;
-}) {
-  const { language } = usePrefs();
-  const n = useChanges(amount);
-  return (
-    <span
-      key={n}
-      className={`whitespace-nowrap tabular-nums ${n ? 'animate-[tick_0.22s_ease-out]' : ''} ${className}`}
-    >
-      {minus ? '−' : null}
-      {formatMoney(amount, language)}
-    </span>
-  );
-}
 
 /** A message whose one value is set apart, from the i18n template («Добавьте ещё {amount} — …»). */
 function withValue(template: string, key: string, value: ReactNode): ReactNode {
