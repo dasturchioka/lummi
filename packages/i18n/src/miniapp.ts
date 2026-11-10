@@ -178,6 +178,8 @@ export const miniappMessages = defineMessages(
       toCatalog: 'В каталог',
       nudge: 'Добавьте ещё {amount} — и доставка до пункта BTS будет бесплатной',
       nudgeDone: 'Доставка до пункта BTS — бесплатно',
+      /** Beside the free-delivery bar's amount when the server counted it after the discount. */
+      afterDiscount: 'с учётом скидки',
       suggest: 'Подойдёт любой аромат 10 мл',
       addSuggestion: 'Добавить в корзину: {name}',
       soldOut: 'Нет в наличии',
@@ -467,6 +469,7 @@ export const miniappMessages = defineMessages(
       toCatalog: 'Katalogga',
       nudge: 'Yana {amount} qoʻshing — BTS punktigacha yetkazish bepul boʻladi',
       nudgeDone: 'BTS punktigacha yetkazish — bepul',
+      afterDiscount: 'chegirma bilan',
       suggest: 'Istalgan 10 ml ifor mos keladi',
       addSuggestion: 'Savatga qoʻshish: {name}',
       soldOut: 'Sotuvda yoʻq',

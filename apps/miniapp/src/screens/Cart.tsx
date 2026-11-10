@@ -112,7 +112,13 @@ function Nudge({
         />
       </div>
       <div className="type-caption mt-1.5 flex justify-between gap-3 text-muted tabular-nums">
-        <span>{formatMoney(quote.thresholdBaseAmount, language)}</span>
+        <span>
+          {formatMoney(quote.thresholdBaseAmount, language)}
+          {/* the server counted the threshold after the discount: say so, or it reads as «Товары» */}
+          {quote.discount && quote.thresholdBase === 'after' ? (
+            <span data-testid="nudge-after-discount"> · {t.cart.afterDiscount}</span>
+          ) : null}
+        </span>
         <span>{formatMoney(quote.freeDeliveryThreshold, language)}</span>
       </div>
       <div
