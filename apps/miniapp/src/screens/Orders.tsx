@@ -3,6 +3,7 @@ import { fill, formatDayMonth, plural } from '@lummi/i18n';
 import { useRouter } from '@tanstack/react-router';
 import { StatusPill } from '../orders/parts';
 import { useOrders, useOrdersText } from '../orders/queries';
+import { RepeatLink } from '../orders/repeat';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -136,6 +137,8 @@ export function Orders() {
                 })
               }
             />
+            {/* a sibling of the row's button, never inside it (mockup 08) */}
+            <RepeatLink number={order.number} status={order.status} />
           </li>
         ))}
       </Card>

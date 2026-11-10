@@ -15,6 +15,7 @@ export function Sheet({
   ownDescription = false,
   closeLabel,
   tall = false,
+  heading = false,
   children,
 }: {
   open: boolean;
@@ -29,6 +30,11 @@ export function Sheet({
    * change length, so the sheet and its search field never jump while the customer types.
    */
   tall?: boolean;
+  /**
+   * The title is a sentence (a state's outcome, «Добавили 4 из 7 товаров»): DESIGN.md's Heading
+   * role, Manrope 600 in sentence case, never tracked caps. Short labels keep the Section caps.
+   */
+  heading?: boolean;
   children: ReactNode;
 }) {
   // Telegram's back button (and Android's system back) closes an open sheet, not the screen or the app.
@@ -57,7 +63,11 @@ export function Sheet({
             aria-hidden="true"
           />
           <div className="flex shrink-0 items-start justify-between gap-3 pt-2 pr-2 pl-4">
-            <Dialog.Title className="type-section min-w-0 pt-3 pb-2">{title}</Dialog.Title>
+            <Dialog.Title
+              className={`min-w-0 pt-3 pb-2 ${heading ? 'type-heading text-pretty' : 'type-section'}`}
+            >
+              {title}
+            </Dialog.Title>
             <Dialog.Close
               aria-label={closeLabel}
               className="grid size-11 shrink-0 place-items-center rounded-pill text-ink transition-[background-color,transform] duration-150 hover:bg-field active:scale-95 active:bg-field"

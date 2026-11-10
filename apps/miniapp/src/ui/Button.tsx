@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent } from 'react';
-import { Spinner } from './icons';
+import { Spinner } from './icons-core';
 
 type Variant = 'primary' | 'secondary' | 'tonal';
 type Size = 'md' | 'sm' | 'pair';

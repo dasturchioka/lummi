@@ -159,6 +159,7 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     fromPrice: lowestPrice(e.cards),
     soldOut: soldOut(e.cards),
     photo: e.cards[0]?.photo ?? null,
+    volumes: e.cards,
   };
 }
 

@@ -99,6 +99,17 @@ describe('search', () => {
       fromPrice: 69_000,
       soldOut: false,
       photo: null,
+      // the volumes as the card's tiles show them (the list «+» reads them, #25)
+      volumes: [10, 30, 50].map((ml) => ({
+        ml,
+        price: expect.any(Number),
+        salePrice: null,
+        salePercent: null,
+        saleEndsAt: null,
+        effectivePrice: expect.any(Number),
+        available: 20,
+        photo: null,
+      })),
     });
   });
 

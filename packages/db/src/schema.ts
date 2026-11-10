@@ -972,6 +972,35 @@ export type CreditRow = typeof credits.$inferSelect;
 export type ReceiptCheckRow = typeof receiptChecks.$inferSelect;
 
 /**
+ * «Мои пункты BTS» (spec Changes 2026-11-07 BTS point selection, 2026-11-11): a Recipient and BTS
+ * point pair the customer ordered to, remembered by checkout. One row per recipient phone (E.164)
+ * and point; a later order with the same pair renames it and moves it first (`last_used_at`).
+ * Removing one is a hard delete: every order keeps its own snapshot, so nothing else points here.
+ * The setting `delivery.savedPointsMax` caps how many a customer keeps.
+ */
+export const savedPoints = pgTable(
+  'saved_points',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    recipientName: text('recipient_name').notNull(),
+    recipientPhone: text('recipient_phone').notNull(),
+    btsPointId: bigint('bts_point_id', { mode: 'number' })
+      .notNull()
+      .references(() => btsPoints.id, { onDelete: 'cascade' }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('saved_points_customer_pair_idx').on(t.customerId, t.recipientPhone, t.btsPointId),
+    index('saved_points_customer_used_idx').on(t.customerId, t.lastUsedAt),
+  ],
+);
+export type SavedPointRow = typeof savedPoints.$inferSelect;
+
+/**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
  * partial unique index is what enforces it. It sits in its own slot under the Discovery set
  * banner, which it never replaces; with none active Home shows only the Discovery banner.
