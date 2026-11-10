@@ -4,7 +4,7 @@ import { useInfoPages } from '../content/queries';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
-import { ChevronIcon, ContrastIcon, DocIcon, GlobeIcon, PhoneIcon } from '../ui/icons';
+import { ChevronIcon, ContrastIcon, GlobeIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -116,15 +116,13 @@ export function Profile() {
         />
       </CardList>
       {pages && pages.length > 0 ? (
-        <section aria-labelledby="info-title" className="mt-6">
-          <h2 id="info-title" className="type-label mb-2 px-1 text-muted">
-            {t.profile.info}
-          </h2>
+        // The info pages close the screen as one plain card of rows (mockup 08-profile): the
+        // titles name themselves, so there is no section label and no icon per row.
+        <nav aria-label={t.profile.info} className="mt-3">
           <CardList>
             {pages.map((p) => (
               <ListRow
                 key={p.slug}
-                leading={<DocIcon size={20} />}
                 label={language === 'uz' ? p.titleUz : p.titleRu}
                 trailing={<ChevronIcon size={18} />}
                 onClick={() =>
@@ -133,7 +131,7 @@ export function Profile() {
               />
             ))}
           </CardList>
-        </section>
+        </nav>
       ) : null}
     </Screen>
   );

@@ -36,6 +36,20 @@ export function isTelegramLink(href: string): boolean {
   return /^(?:https:\/\/(?:t|telegram)\.me(?:[/?#]|$)|tg:)/i.test(href);
 }
 
+const NBSP = '\u00A0';
+// a space inside a number's thousands («250 000»), and the space after a number before its word
+const THOUSANDS = /(\d) (?=\d{3}(?!\d))/g;
+const NUMBER_WORD = /(\d) (?=\p{L})/gu;
+
+/**
+ * Display typography for owner-typed text (the info pages, the promo banner): a number never
+ * breaks inside its thousands or away from its word, so «250 000 сум», «48 часов» and «10 мл»
+ * stay on one line (DESIGN.md: a number stays on the line of its word). Text only, never markup.
+ */
+export function keepNumbersTogether(text: string): string {
+  return text.replace(THOUSANDS, `$1${NBSP}`).replace(NUMBER_WORD, `$1${NBSP}`);
+}
+
 const ESCAPABLE = /[\\`*_{}[\]()#+\-.!<>|]/;
 const MAX_DEPTH = 3;
 // bounded, so a run of unclosed brackets costs a constant per bracket

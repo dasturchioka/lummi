@@ -55,7 +55,7 @@ export const ChatIcon = (p: P) => (
 export const AlertIcon = (p: P) => (
   <Icon d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.5v5.5M12 16.3v.1" {...p} />
 );
-/** A page of text: the info pages in Profile. */
+/** A page of text: an info page that is not there (its not-found state). */
 export const DocIcon = (p: P) => (
   <Icon
     d="M7 3.5h7.5L19 8v12a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 7 20zM14.5 3.5V8H19M9.5 12.5h6M9.5 16h6"

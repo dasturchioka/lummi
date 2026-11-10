@@ -1,3 +1,5 @@
+import type { InfoPageListItem } from '@lummi/contracts';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import { RichText } from '../content/RichText';
 import { useInfoPage } from '../content/queries';
@@ -7,15 +9,31 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
-import { AlertIcon } from '../ui/icons';
+import { DocIcon } from '../ui/icons';
 
-function PageSkeleton() {
+/**
+ * The page while it loads, in its own shape: the title line (or the real title, when Profile's
+ * list already knows it), then a heading and two paragraphs at the text's 24 px line height.
+ */
+function PageSkeleton({ title }: { title: string | undefined }) {
+  const line = (w: string, key: number) => (
+    <Skeleton key={key} className={`h-3.5 ${w}`} rounded="pill" />
+  );
   return (
-    <div aria-hidden="true" className="space-y-3 pt-1">
-      {['w-full', 'w-11/12', 'w-full', 'w-3/5'].map((w, i) => (
-        <Skeleton key={i} className={`h-3.5 ${w}`} rounded="pill" />
-      ))}
-    </div>
+    <>
+      {title ? (
+        <ScreenHeader title={title} />
+      ) : (
+        <div aria-hidden="true" className="flex min-h-[72px] items-center pt-5 pb-4">
+          <Skeleton className="h-[18px] w-44" rounded="pill" />
+        </div>
+      )}
+      <div aria-hidden="true" className="flex flex-col gap-2.5 pt-1">
+        {['w-full', 'w-11/12', 'w-full', 'w-3/5'].map(line)}
+        <Skeleton className="mt-6 mb-1 h-4 w-2/3" rounded="pill" />
+        {['w-full', 'w-10/12', 'w-1/2'].map(line)}
+      </div>
+    </>
   );
 }
 
@@ -25,6 +43,10 @@ export function InfoPage() {
   const { t, language } = usePrefs();
   const router = useRouter();
   const page = useInfoPage(slug);
+  // Profile's list is usually in the cache already: its title stands from the first frame.
+  const listed = useQueryClient()
+    .getQueryData<InfoPageListItem[]>(['content', 'pages'])
+    ?.find((p) => p.slug === slug);
 
   if (page.isError) {
     return (
@@ -38,7 +60,7 @@ export function InfoPage() {
       <Screen>
         <EmptyState
           fill
-          icon={<AlertIcon size={28} />}
+          icon={<DocIcon size={28} />}
           title={t.info.notFoundTitle}
           text={t.info.notFoundText}
           action={
@@ -51,17 +73,32 @@ export function InfoPage() {
     );
   }
   const data = page.data;
+  if (!data) {
+    return (
+      <Screen>
+        <div role="status" aria-label={t.info.loadingLabel}>
+          <PageSkeleton title={listed && (language === 'uz' ? listed.titleUz : listed.titleRu)} />
+        </div>
+      </Screen>
+    );
+  }
+  const body = language === 'uz' ? data.bodyUz : data.bodyRu;
   return (
     <Screen>
-      <ScreenHeader title={data ? (language === 'uz' ? data.titleUz : data.titleRu) : ''} />
-      {data ? (
-        <article lang={language}>
-          <RichText source={language === 'uz' ? data.bodyUz : data.bodyRu} />
+      <ScreenHeader title={language === 'uz' ? data.titleUz : data.titleRu} />
+      {body.trim() ? (
+        <article lang={language} className="pb-2">
+          <RichText source={body} />
         </article>
       ) : (
-        <div role="status" aria-label={t.info.loadingLabel}>
-          <PageSkeleton />
-        </div>
+        // the owner saved the page without its text yet: say so instead of a blank screen (the
+        // tab bar and Telegram's back button lead on)
+        <EmptyState
+          fill
+          icon={<DocIcon size={28} />}
+          title={t.info.emptyTitle}
+          text={t.info.emptyText}
+        />
       )}
     </Screen>
   );

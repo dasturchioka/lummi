@@ -1,4 +1,5 @@
 import type { PromoBanner as Banner } from '@lummi/contracts';
+import { keepNumbersTogether } from '@lummi/rich-text';
 import { useRouter } from '@tanstack/react-router';
 import { routeForStartParam } from '../../lib/startapp';
 import { photoSrcSet, photoUrl } from '../../lib/media';
@@ -15,9 +16,10 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
   const router = useRouter();
   const uz = language === 'uz';
   const to = routeForStartParam(banner.target);
-  const title = uz ? banner.titleUz : banner.titleRu;
-  const subtitle = uz ? banner.subtitleUz : banner.subtitleRu;
-  const priceLine = uz ? banner.priceLineUz : banner.priceLineRu;
+  // the owner types the text: a number stays with its thousands and its word («69 000 soʻmdan»)
+  const title = keepNumbersTogether(uz ? banner.titleUz : banner.titleRu);
+  const subtitle = keepNumbersTogether(uz ? banner.subtitleUz : banner.subtitleRu);
+  const priceLine = keepNumbersTogether((uz ? banner.priceLineUz : banner.priceLineRu) ?? '');
   return (
     <a
       data-slot="promo"
@@ -42,14 +44,19 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-4 pr-4 pl-4">
         <div>
-          <h2 className="type-heading text-balance [overflow-wrap:anywhere]">{title}</h2>
-          <p className="type-body mt-2 text-pretty opacity-80 [overflow-wrap:anywhere]">
+          {/* at most 3 + 3 lines, so a banner at its field limits stays a banner (the admin preview clamps alike) */}
+          <h2 className="type-heading line-clamp-3 text-balance [overflow-wrap:anywhere]">
+            {title}
+          </h2>
+          <p className="type-body mt-2 line-clamp-3 text-pretty opacity-80 [overflow-wrap:anywhere]">
             {subtitle}
           </p>
         </div>
         <div className="flex items-center justify-between gap-3">
           {priceLine ? (
-            <span className="type-row font-semibold [overflow-wrap:anywhere]">{priceLine}</span>
+            <span className="type-price leading-snug whitespace-normal text-pretty [overflow-wrap:anywhere]">
+              {priceLine}
+            </span>
           ) : (
             <span />
           )}

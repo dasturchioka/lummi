@@ -6,7 +6,7 @@ import {
   bannerInputSchema,
   type AdminBanner,
 } from '@lummi/contracts';
-import { Check, ImageOff } from 'lucide-react';
+import { Check, ImageOff, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { photoUrl } from '@/components/catalog/photo';
@@ -26,6 +26,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
@@ -145,10 +146,12 @@ function Form({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start">
+    // the preview column is a 390 px phone: the drawing inside is the banner's real 358 px
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,390px)] lg:items-start">
       <div className="order-first lg:order-last lg:sticky lg:top-6">
         <p className="mb-2 text-[12.5px] font-medium text-muted-foreground">{b.preview}</p>
-        <div className="rounded-card bg-field p-4" data-banner-preview>
+        {/* on a phone the drawing takes the full width (a 360 px phone's banner); wider, it sits on a tray */}
+        <div className="rounded-card sm:bg-field sm:p-4" data-banner-preview>
           <BannerPreview banner={preview} label={b.previewLabel} />
         </div>
       </div>
@@ -179,10 +182,19 @@ function Form({
                 />
               </Field>
               <Field id={`bn-sub-${l}`} label={b.subtitle} error={err(`subtitle${S}`)}>
-                <Input
+                {/* up to 160 characters: a field that grows, so the whole line stays in view */}
+                <Textarea
+                  rows={2}
+                  className="min-h-0 resize-none"
                   value={draft[`subtitle${S}` as keyof Draft]}
                   maxLength={160}
                   onChange={(e) => set(`subtitle${S}` as keyof Draft, e.target.value as never)}
+                  onKeyDown={(e) => {
+                    // one line of text, as before: Enter saves instead of breaking the line
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }}
                 />
               </Field>
               <Field id={`bn-price-${l}`} label={b.priceLine} hint={b.priceLineHint}>
@@ -304,52 +316,61 @@ export function BannerEditor({
           <p className="mt-1 max-w-[64ch] text-sm text-pretty text-muted-foreground">{b.hint}</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
+          <Plus strokeWidth={1.5} aria-hidden />
           {b.add}
         </Button>
       </div>
       {banners.length === 0 ? (
         <p className="text-sm text-muted-foreground">{b.empty}</p>
       ) : (
-        <ul className="grid gap-2">
+        // One hairline row per banner, as the panel's other lists; the one open in the editor
+        // below sits on Milk Field, so the list and the form read as one.
+        <ul className="divide-y divide-border">
           {banners.map((x) => (
-            <li
-              key={x.id}
-              className="flex flex-wrap items-center gap-3 rounded-button bg-field p-2.5 pr-3"
-            >
-              <div className="grid aspect-[3/4] h-14 shrink-0 place-items-center overflow-hidden rounded-[6px] bg-card">
-                {x.imageHash ? (
-                  <img src={photoUrl(x.imageHash, 400)} alt="" className="size-full object-cover" />
-                ) : (
-                  <ImageOff
-                    className="size-4 text-muted-foreground"
-                    strokeWidth={1.5}
-                    aria-hidden
-                  />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 basis-40">
-                <p className="truncate text-[15px] font-semibold">
-                  {language === 'uz' ? x.titleUz : x.titleRu}
-                </p>
-                <div className="mt-1">
-                  <Badge tone={x.active ? 'sage' : 'neutral'}>{x.active ? b.on : b.off}</Badge>
+            <li key={x.id} className="py-1">
+              <div
+                aria-current={editing === x.id ? 'true' : undefined}
+                className="-mx-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-button px-2 py-2 transition-colors duration-150 aria-current:bg-field"
+              >
+                <div className="grid aspect-[3/4] h-14 shrink-0 place-items-center overflow-hidden rounded-[6px] bg-field shadow-[inset_0_0_0_1px_var(--hairline)]">
+                  {x.imageHash ? (
+                    <img
+                      src={photoUrl(x.imageHash, 400)}
+                      alt=""
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <ImageOff
+                      className="size-4 text-muted-foreground"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                  )}
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEditing(x.id)}>
-                  {b.edit}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  loading={busy === x.id}
-                  onClick={() => void toggle(x)}
-                >
-                  {x.active ? b.turnOff : b.turnOn}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setRemoving(x)}>
-                  {b.remove}
-                </Button>
+                <div className="min-w-0 flex-1 basis-40">
+                  <p className="line-clamp-2 text-[15px] font-semibold [overflow-wrap:anywhere]">
+                    {(language === 'uz' ? x.titleUz : x.titleRu) || b.untitled}
+                  </p>
+                  <div className="mt-1">
+                    <Badge tone={x.active ? 'sage' : 'neutral'}>{x.active ? b.on : b.off}</Badge>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button variant="outline" size="sm" onClick={() => setEditing(x.id)}>
+                    {b.edit}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={busy === x.id}
+                    onClick={() => void toggle(x)}
+                  >
+                    {x.active ? b.turnOff : b.turnOn}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setRemoving(x)}>
+                    {b.remove}
+                  </Button>
+                </div>
               </div>
             </li>
           ))}

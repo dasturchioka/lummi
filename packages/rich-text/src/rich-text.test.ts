@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parseRichText, safeHref, isTelegramLink, type RichBlock, type RichInline } from './index';
+import {
+  isTelegramLink,
+  keepNumbersTogether,
+  parseRichText,
+  safeHref,
+  type RichBlock,
+  type RichInline,
+} from './index';
 
 /** Every string a renderer would print, flattened: if it is here it is text, never markup. */
 function texts(nodes: RichInline[]): string[] {
@@ -25,7 +32,13 @@ describe('rich text', () => {
   });
 
   it('drops links that are not https, tg, mailto or tel, keeping their text', () => {
-    for (const bad of ['javascript:void0', 'data:text/html,x', 'http://plain.test', 'JaVaScRiPt:void0', '//evil.test']) {
+    for (const bad of [
+      'javascript:void0',
+      'data:text/html,x',
+      'http://plain.test',
+      'JaVaScRiPt:void0',
+      '//evil.test',
+    ]) {
       expect(safeHref(bad)).toBeNull();
       const [p] = parseRichText(`[click](${bad})`);
       expect(p).toMatchObject({ t: 'p', c: [{ t: 'text', v: 'click' }] });
@@ -63,5 +76,12 @@ describe('rich text', () => {
     const started = performance.now();
     parseRichText('['.repeat(200_000));
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('keeps a number with its thousands and its word, and leaves other spaces alone', () => {
+    const nb = (x: string) => x.replace(/_/g, '\u00A0');
+    expect(keepNumbersTogether('от 1 234 567 сум за набор')).toBe(nb('от 1_234_567_сум за набор'));
+    expect(keepNumbersTogether('до 48 часов, по 10 мл')).toBe(nb('до 48_часов, по 10_мл'));
+    expect(keepNumbersTogether('48 soatgacha · 2026 2027')).toBe(nb('48_soatgacha · 2026 2027'));
   });
 });

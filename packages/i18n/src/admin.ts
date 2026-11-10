@@ -345,7 +345,13 @@ export const adminMessages = defineMessages(
           bodyField: 'Текст',
           bodyHint:
             'Форматирование: ### заголовок, **жирный**, - список, [ссылка](https://…). HTML не поддерживается.',
-          placeholders: 'Из настроек подставляется: {list}. Например, порог бесплатной доставки.',
+          placeholders: 'Подставляется из настроек',
+          tokens: {
+            freeDeliveryThreshold: 'Порог бесплатной доставки',
+            defaultTariff: 'Тариф доставки по умолчанию',
+            managerUsername: 'Ник менеджера',
+            managerLink: 'Ссылка на чат с менеджером',
+          },
           write: 'Текст',
           preview: 'Предпросмотр',
           previewEmpty: 'Здесь появится текст страницы.',
@@ -952,8 +958,13 @@ export const adminMessages = defineMessages(
           bodyField: 'Matn',
           bodyHint:
             'Formatlash: ### sarlavha, **qalin**, - roʻyxat, [havola](https://…). HTML ishlamaydi.',
-          placeholders:
-            'Sozlamalardan qoʻyiladi: {list}. Masalan, bepul yetkazib berish chegarasi.',
+          placeholders: 'Sozlamalardan qoʻyiladi',
+          tokens: {
+            freeDeliveryThreshold: 'Bepul yetkazib berish chegarasi',
+            defaultTariff: 'Standart yetkazib berish narxi',
+            managerUsername: 'Menejerning Telegram nomi',
+            managerLink: 'Menejer bilan chat havolasi',
+          },
           write: 'Matn',
           preview: 'Koʻrib chiqish',
           previewEmpty: 'Sahifa matni shu yerda koʻrinadi.',

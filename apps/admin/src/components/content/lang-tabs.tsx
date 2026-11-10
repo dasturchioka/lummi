@@ -18,7 +18,7 @@ export function LangTabs({
     <div
       role="tablist"
       aria-label={label}
-      className="inline-flex h-9 items-center rounded-full bg-field p-[3px]"
+      className="inline-flex h-9 w-fit items-center justify-self-start rounded-full bg-field p-[3px]"
     >
       {(['ru', 'uz'] as const).map((lang) => (
         <button

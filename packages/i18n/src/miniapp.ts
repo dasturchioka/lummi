@@ -224,6 +224,8 @@ export const miniappMessages = defineMessages(
       notFoundTitle: 'Страница не найдена',
       notFoundText: 'Возможно, её уже нет. Загляните в профиль.',
       toProfile: 'В профиль',
+      emptyTitle: 'Скоро здесь будет текст',
+      emptyText: 'Мы его готовим. Загляните чуть позже.',
       loadingLabel: 'Загружаем страницу',
     },
     registration: {
@@ -481,6 +483,8 @@ export const miniappMessages = defineMessages(
       notFoundTitle: 'Sahifa topilmadi',
       notFoundText: 'Balki u endi yoʻqdir. Profilga qayting.',
       toProfile: 'Profilga',
+      emptyTitle: 'Tez orada bu yerda matn boʻladi',
+      emptyText: 'Uni tayyorlayapmiz. Birozdan keyin qayting.',
       loadingLabel: 'Sahifa yuklanmoqda',
     },
     registration: {

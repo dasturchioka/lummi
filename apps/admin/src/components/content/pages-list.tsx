@@ -37,7 +37,7 @@ export function PagesList({
                 <p className="truncate text-[15px] font-semibold">
                   {language === 'uz' ? x.titleUz : x.titleRu}
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                   {fill(p.updated, { date: date.format(new Date(x.updatedAt)) })}
                 </p>
               </div>

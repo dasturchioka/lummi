@@ -1,4 +1,10 @@
-import { HEADING_TAG, parseRichText, type RichBlock, type RichInline } from '@lummi/rich-text';
+import {
+  HEADING_TAG,
+  keepNumbersTogether,
+  parseRichText,
+  type RichBlock,
+  type RichInline,
+} from '@lummi/rich-text';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { openContentLink } from '../lib/open-content-link';
 
@@ -11,7 +17,7 @@ function Inline({ nodes }: { nodes: RichInline[] }): ReactNode {
   return nodes.map((n, i) => {
     switch (n.t) {
       case 'text':
-        return <Fragment key={i}>{n.v}</Fragment>;
+        return <Fragment key={i}>{keepNumbersTogether(n.v)}</Fragment>;
       case 'br':
         return <br key={i} />;
       case 'strong':
@@ -36,7 +42,7 @@ function Inline({ nodes }: { nodes: RichInline[] }): ReactNode {
             onClick={(e) => {
               if (openContentLink(n.href)) e.preventDefault();
             }}
-            className="font-medium underline decoration-line-strong underline-offset-[3px]"
+            className="rounded-[2px] font-medium underline decoration-line-strong decoration-1 underline-offset-[3px] transition-opacity duration-150 active:opacity-60"
           >
             <Inline nodes={n.c} />
           </a>

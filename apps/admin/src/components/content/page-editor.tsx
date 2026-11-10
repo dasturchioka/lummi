@@ -1,7 +1,6 @@
 'use client';
 
 import { CONTENT_PLACEHOLDERS, infoPageInputSchema, type AdminInfoPage } from '@lummi/contracts';
-import { fill } from '@lummi/i18n';
 import { ArrowLeft, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -16,14 +15,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
+import { fillForPreview, placeholderValues, type PlaceholderSettings } from './placeholders';
 import { RichTextView } from './rich-text-view';
 
 export function PageEditor({
   page,
+  fills,
   t,
   language,
 }: {
   page: AdminInfoPage;
+  /** The settings behind the placeholders, so the preview reads as the customer's page. */
+  fills: PlaceholderSettings;
   t: AdminMessages;
   language: 'ru' | 'uz';
 }) {
@@ -42,6 +45,7 @@ export function PageEditor({
   const S = lang === 'ru' ? 'Ru' : 'Uz';
   const titleKey = `title${S}` as 'titleRu' | 'titleUz';
   const bodyKey = `body${S}` as 'bodyRu' | 'bodyUz';
+  const values = placeholderValues(fills, lang);
 
   const save = async () => {
     const parsed = infoPageInputSchema.safeParse(v);
@@ -102,25 +106,46 @@ export function PageEditor({
                   onChange={(e) => setV({ ...v, [titleKey]: e.target.value })}
                 />
               </Field>
-              <Field
-                id="page-body"
-                label={p.bodyField}
-                hint={`${p.bodyHint} ${fill(p.placeholders, { list: CONTENT_PLACEHOLDERS.map((n) => `{${n}}`).join(', ') })}`}
-              >
+              <Field id="page-body" label={p.bodyField} hint={p.bodyHint}>
                 <Textarea
-                  className="min-h-56 font-mono text-[14px]"
+                  className="min-h-56 max-h-[70vh] leading-[1.6]"
                   value={v[bodyKey]}
                   spellCheck
                   onChange={(e) => setV({ ...v, [bodyKey]: e.target.value })}
                 />
               </Field>
+              {/* What `{name}` turns into for the customer: the name to type, what it is, its value now. */}
+              <div className="grid gap-2">
+                <p className="text-[12.5px] font-medium text-muted-foreground">{p.placeholders}</p>
+                <dl className="grid gap-x-3 gap-y-1.5 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+                  {CONTENT_PLACEHOLDERS.map((name) => (
+                    <div key={name} className="contents">
+                      <dt>
+                        <code className="rounded-[4px] bg-field px-1.5 py-0.5 font-mono text-[12.5px] select-all">
+                          {`{${name}}`}
+                        </code>
+                      </dt>
+                      <dd className="mb-1.5 text-pretty text-muted-foreground sm:mb-0">
+                        {p.tokens[name]}
+                        {values[name] ? (
+                          <span className="text-foreground [overflow-wrap:anywhere]">
+                            {' · '}
+                            {values[name]}
+                          </span>
+                        ) : null}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
             <div className="grid gap-1.5" data-page-preview>
               <p className="text-[12.5px] font-medium text-muted-foreground">{p.preview}</p>
-              <div className="rounded-card bg-field p-4 sm:p-5">
-                <p className="mb-4 text-[17px] font-semibold">{v[titleKey]}</p>
+              {/* The Mini App's page on its Milk ground: the Tenor caps title, then the text. */}
+              <div className="rounded-card bg-background px-4 pt-5 pb-5 shadow-[inset_0_0_0_1px_var(--hairline)] sm:px-5">
+                <p className="title mb-4 [overflow-wrap:anywhere]">{v[titleKey]}</p>
                 {v[bodyKey].trim() ? (
-                  <RichTextView source={v[bodyKey]} />
+                  <RichTextView source={fillForPreview(v[bodyKey], values)} />
                 ) : (
                   <p className="text-sm text-muted-foreground">{p.previewEmpty}</p>
                 )}

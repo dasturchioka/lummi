@@ -1,17 +1,38 @@
-import { HEADING_TAG, parseRichText, type RichBlock, type RichInline } from '@lummi/rich-text';
+import {
+  HEADING_TAG,
+  keepNumbersTogether,
+  parseRichText,
+  type RichBlock,
+  type RichInline,
+} from '@lummi/rich-text';
 import { Fragment } from 'react';
+import { FILLED } from './placeholders';
 
 /**
  * The info page as the Mini App renders it, for the page editor's preview. Same parser and the same heading table (`HEADING_TAG`) as the Mini App's `RichText`, so what
  * the owner sees is what the customer reads; React escapes every string, nothing is HTML.
  */
+/** A text run; a value the settings fill in (see `fillForPreview`) sits on a Sage Wash ground. */
+function Text({ v }: { v: string }) {
+  const parts = keepNumbersTogether(v).split(FILLED);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="rounded-[3px] bg-sage-wash px-0.5 [box-decoration-break:clone]">
+        {part}
+      </span>
+    ) : (
+      <Fragment key={i}>{part}</Fragment>
+    ),
+  );
+}
+
 function Inline({ nodes }: { nodes: RichInline[] }) {
   return (
     <>
       {nodes.map((n, i) => {
         switch (n.t) {
           case 'text':
-            return <Fragment key={i}>{n.v}</Fragment>;
+            return <Text key={i} v={n.v} />;
           case 'br':
             return <br key={i} />;
           case 'strong':
@@ -33,7 +54,7 @@ function Inline({ nodes }: { nodes: RichInline[] }) {
                 href={n.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium underline underline-offset-[3px]"
+                className="rounded-[2px] font-medium underline decoration-border-strong decoration-1 underline-offset-[3px]"
               >
                 <Inline nodes={n.c} />
               </a>
@@ -67,7 +88,7 @@ function Block({ block }: { block: RichBlock }) {
       const List = block.t;
       return (
         <List
-          className={`mt-3 space-y-1.5 pl-5 first:mt-0 ${block.t === 'ul' ? 'list-disc' : 'list-decimal'}`}
+          className={`mt-3 space-y-1.5 pl-5 first:mt-0 ${block.t === 'ul' ? 'list-disc' : 'list-decimal'} marker:text-muted-foreground`}
         >
           {block.items.map((item, i) => (
             <li key={i} className="pl-1">
