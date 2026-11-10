@@ -955,7 +955,7 @@ export const screens: ScreenDef[] = [
         actor: 'customer',
       });
       await sheet(page)
-        .getByRole('button', { name: /^(Отменить заказ|Ha, bekor qilish)$/ })
+        .getByRole('button', { name: /^(Отменить заказ|Buyurtmani bekor qilish)$/ })
         .click();
       await sheet(page).getByTestId('cancel-changed').waitFor();
     },

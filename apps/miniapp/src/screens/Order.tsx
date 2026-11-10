@@ -161,8 +161,9 @@ function AmountDue({ order }: { order: OrderDto }) {
  * touch about the money (ADR 0006). The status pill above already says «Отменён».
  */
 function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cancellation']> }) {
-  const { language } = usePrefs();
+  const { language, customer } = usePrefs();
   const o = useOrdersText();
+  const managerUsername = customer?.config.managerUsername;
   return (
     <Card className="mt-3 flex gap-3 p-4" data-testid="cancelled">
       <span className="grid size-9 shrink-0 place-items-center rounded-pill bg-block text-ink">
@@ -176,9 +177,22 @@ function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cance
           {fill(o.orders.cancelledAt, { at: formatDateTime(cancellation.at, language) })}
         </p>
         {cancellation.afterPayment ? (
-          <p className="type-small mt-2.5 border-t border-line pt-2.5 text-pretty text-ink">
-            {o.orders.cancelledRefund}
-          </p>
+          <div className="mt-2.5 border-t border-line pt-2.5">
+            <p className="type-small text-pretty text-ink">{o.orders.cancelledRefund}</p>
+            {/* right here: the footer's manager link sits below the first screen */}
+            {managerUsername ? (
+              <p className="type-small mt-1">
+                <button
+                  type="button"
+                  onClick={() => openManagerChat(managerUsername)}
+                  data-testid="refund-manager"
+                  className="-my-2 rounded-btn py-2 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+                >
+                  {o.orders.writeManager}
+                </button>
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </Card>

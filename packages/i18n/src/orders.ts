@@ -124,7 +124,7 @@ export const ordersMessages = defineMessages(
       cancelTitle: 'Отменить заказ № {number}?',
       /** `{manager}` is the «напишите менеджеру» link (`cancelManager`). */
       cancelText:
-        'Бронь снимется, и ароматы вернутся в продажу. Если вы уже перевели деньги, не отменяйте заказ, а {manager}.',
+        'Бронь снимется, и ароматы вернутся в продажу. Отменить это будет нельзя. Если вы уже перевели деньги, не отменяйте заказ, а {manager}.',
       cancelManager: 'напишите менеджеру',
       cancelConfirm: 'Отменить заказ',
       cancelKeep: 'Не отменять',
@@ -262,10 +262,10 @@ export const ordersMessages = defineMessages(
       cancel: 'Buyurtmani bekor qilish',
       cancelTitle: '№ {number} buyurtma bekor qilinsinmi?',
       cancelText:
-        'Bandlik olib tashlanadi va atirlar yana sotuvga qaytadi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang, {manager}.',
+        'Atirlar endi band qilinmaydi va yana sotuvga qaytadi. Buni ortga qaytarib boʻlmaydi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang, {manager}.',
       cancelManager: 'menejerga yozing',
-      cancelConfirm: 'Ha, bekor qilish',
-      cancelKeep: 'Buyurtmani qoldirish',
+      cancelConfirm: 'Buyurtmani bekor qilish',
+      cancelKeep: 'Bekor qilmaslik',
       cancelFailed: 'Buyurtmani bekor qilib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
       changedTitle: 'Buyurtma allaqachon oʻzgardi',
       changedText:

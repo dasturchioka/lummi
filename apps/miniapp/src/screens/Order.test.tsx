@@ -208,12 +208,16 @@ describe('cancelling an order', () => {
     expect(screen.getByTestId('cancelled').textContent).toContain(
       'Менеджер свяжется с вами, чтобы вернуть деньги.',
     );
+    // the manager is one tap away inside the card, not only in the footer below the fold
+    fireEvent.click(screen.getByTestId('refund-manager'));
+    expect(openManagerChat).toHaveBeenCalledWith('@lummi_shop');
   });
 
   it('a shopper who already paid is sent to the manager from the confirmation', () => {
     renderView(<OrderView order={order()} />);
     fireEvent.click(screen.getByTestId('cancel-order'));
     const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('Отменить это будет нельзя.');
     expect(dialog.textContent).toContain('не отменяйте заказ, а напишите менеджеру.');
     fireEvent.click(screen.getByTestId('sheet-manager'));
     expect(openManagerChat).toHaveBeenCalledWith('@lummi_shop');
