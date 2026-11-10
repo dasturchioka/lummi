@@ -13,6 +13,7 @@ import {
 } from '@lummi/db';
 import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
+import { loadEntitlements } from '../entitlements/entitlements';
 import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { judgePromoCode, type JudgedPromoCode } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
@@ -135,10 +136,13 @@ export function loadCartQuote(
  * Lines capped at available, priced through `quote()` (ADR 0001). The one place that turns stored
  * lines into a Quote: the cart screen, checkout (inside its transaction, after the stock rows are
  * locked) and «Купить сейчас» all come through here, so a line is judged and priced one way.
- * `entitlements` is for the discount tickets; none are held yet. The cart's entered promo code is
- * judged here (the DB checks, ticket #29) and `quote()` applies it or says why not; lines quoted on
- * their own («Купить сейчас») never carry it (spec Changes 2026-11-11). `deliveryTariff` is
- * checkout's: the chosen BTS point's region tariff, which wins over the saved delivery city's.
+ * The customer's active Entitlements (a birthday coupon, #30) are loaded here for every source,
+ * cart or not: without an entered code the server picks the one giving the lowest total (ADR
+ * 0002), so «Купить сейчас» takes it too. The cart's entered promo code is judged here (the DB
+ * checks, ticket #29) and `quote()` applies it or says why not; lines quoted on their own («Купить
+ * сейчас») never carry it (spec Changes 2026-11-11). `deliveryTariff` is checkout's: the chosen BTS
+ * point's region tariff, which wins over the saved delivery city's. `entitlements` replaces the
+ * loaded ones (a test gives a source not built yet).
  */
 export async function loadQuote(
   tx: DbOrTx,
@@ -336,7 +340,7 @@ export async function loadQuote(
   quoteLines.sort((a, b) => Number(a.key) - Number(b.key));
   const q = quote({
     lines: quoteLines,
-    entitlements: opts.entitlements ?? [],
+    entitlements: opts.entitlements ?? (await loadEntitlements(tx, customerId, now)),
     promoCode: judged?.promoCode ?? null,
     choice: cartState?.discountChoice ?? null,
     deliveryTariff:

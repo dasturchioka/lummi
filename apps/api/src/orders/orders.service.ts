@@ -50,6 +50,12 @@ import { readDiscoverySet } from '../sets/sets';
 import { toRegionDto } from '../delivery/dto';
 import { defaultSavedPoint, listSavedPoints, rememberPoint } from '../delivery/saved-points';
 import { buyNowLine } from './buy-now';
+import { isPlausibleBirthDate, recordBirthDate } from '../birthday/birthday.service';
+import {
+  EntitlementLostError,
+  holdEntitlement,
+  isEntitlementDiscount,
+} from '../entitlements/entitlements';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
@@ -188,12 +194,20 @@ export class OrdersService {
    *    created" message goes into the outbox.
    */
   async create(customerId: number, input: CreateOrderInput): Promise<CreateOutcome | null> {
+    const attempt = () =>
+      retryTransientOnce(() => this.outbox.withTx((tx) => this.createIn(tx, customerId, input)));
     try {
-      return await retryTransientOnce(() =>
-        this.outbox.withTx((tx) => this.createIn(tx, customerId, input)),
-      );
+      try {
+        return await attempt();
+      } catch (e) {
+        // The entitlement the quote applied could not be held (ADR 0005): once more, where the
+        // re-quote no longer has it, so the shopper gets 409 with the new total.
+        if (!(e instanceof EntitlementLostError)) throw e;
+        return await attempt();
+      }
     } catch (e) {
-      if (e instanceof TryAgainError) return { kind: 'try_again' };
+      if (e instanceof TryAgainError || e instanceof EntitlementLostError)
+        return { kind: 'try_again' };
       throw e;
     }
   }
@@ -241,6 +255,10 @@ export class OrdersService {
       const giftMessage = input.gift && input.giftMessage ? input.giftMessage : null;
       if (giftMessage && giftMessage.length > settings['orders.giftMessageMaxLength'])
         return { kind: 'invalid', code: 'gift_message_too_long' } as const;
+      // the optional date of birth (TZ §3.6), kept only while the customer has none (#30)
+      const birthDate = c.birthDate === null ? (input.birthDate ?? null) : null;
+      if (birthDate !== null && !isPlausibleBirthDate(birthDate, this.edges.clock.now()))
+        return { kind: 'invalid', code: 'invalid_birth_date' } as const;
       const destination = await this.destination(tx, input.delivery);
       if ('code' in destination) return { kind: 'invalid', code: destination.code } as const;
       const { region } = destination;
@@ -309,11 +327,12 @@ export class OrdersService {
       )
         return conflict('total_changed');
 
-      // ADR 0005 seam: the discount source the quote applied is held here, in this transaction,
-      // before the snapshot (a conditional UPDATE on the upgrade right #38 or the birthday coupon
-      // #30); cancelling the order (#24) releases it within its validity. A promo code (#29) was
-      // locked in 1, so the quote counted its uses under the lock; its use is written with the
-      // order below and voided by a cancel. No entitlement reaches the quote yet: none is held.
+      // ADR 0005 seam: the discount source the quote applied is held in this transaction with the
+      // order. An entitlement (the birthday coupon #30, an upgrade right #38) by a conditional
+      // UPDATE once the order row exists, below; a promo code (#29) was locked in 1, so the quote
+      // counted its uses under the lock, and its use is written with the order. Cancelling the
+      // order (#24) releases either within its validity.
+      const heldEntitlement = isEntitlementDiscount(quote.discount) ? quote.discount : null;
       const heldPromoCodeId = quote.discount?.type === 'promo_code' ? loaded.promoCodeId : null;
       if (quote.discount?.type === 'promo_code' && heldPromoCodeId === null)
         throw new Error(`promo ${quote.discount.code}: applied without passing its checks`);
@@ -365,6 +384,15 @@ export class OrdersService {
         })
         .returning();
       if (!order) throw new Error('order insert returned nothing');
+      if (
+        heldEntitlement &&
+        !(await holdEntitlement(tx, heldEntitlement, {
+          customerId: c.id,
+          orderId: order.id,
+          now,
+        }))
+      )
+        throw new EntitlementLostError(heldEntitlement);
       if (heldPromoCodeId !== null)
         await recordPromoUse(tx, {
           promoCodeId: heldPromoCodeId,
@@ -453,6 +481,7 @@ export class OrdersService {
           btsPointId: point.id,
           at: now,
         });
+      if (birthDate !== null) await recordBirthDate(tx, this.audit, c, birthDate, now, 'checkout');
       if (c.dataConsentAt === null) {
         await tx
           .update(customers)

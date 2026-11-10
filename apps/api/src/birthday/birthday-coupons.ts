@@ -51,10 +51,10 @@ export async function birthdayEntitlements(
   tx: DbOrTx,
   customerId: number,
   now: Date,
-): Promise<Entitlement[]> {
+): Promise<Extract<Entitlement, { type: 'birthday_coupon' }>[]> {
   const rows = await activeBirthdayCoupons(tx, customerId, now);
   return rows.map((c) => ({
-    type: 'birthday_coupon',
+    type: 'birthday_coupon' as const,
     id: c.id,
     percent: c.percent,
     maxAmount: c.maxAmount,
