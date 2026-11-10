@@ -72,9 +72,10 @@ export const ordersMessages = defineMessages(
     payment: {
       title: 'Оплата',
       payUntil:
-        'Оплатите до {until}. Загрузите чек до этого времени — тогда бронь сохранится до проверки.',
+        'Оплатите до {until}. Загрузите чек до этого времени\u00a0— тогда бронь сохранится до проверки.',
       amount: 'Сумма к переводу',
-      amountHint: 'Переведите ровно эту сумму, без округления, — так оплата подтвердится быстрее.',
+      amountHint:
+        'Переведите ровно эту сумму, без округления,\u00a0— так оплата подтвердится быстрее.',
       card: 'Карта получателя',
       holder: 'Получатель: {holder}',
       copyAmount: 'Скопировать сумму',
@@ -82,11 +83,11 @@ export const ordersMessages = defineMessages(
       copied: 'Скопировано',
       copyFailed: 'Не удалось скопировать. Выделите текст и скопируйте его вручную.',
       steps: {
-        transfer: 'Переведите сумму на карту в приложении банка',
+        transfer: 'Переведите сумму на карту в\u00a0приложении банка',
         save: 'Сохраните скриншот или PDF чека',
         upload: 'Загрузите чек сюда',
       },
-      choose: 'Выберите скриншот или PDF чека',
+      choose: 'Выберите скриншот или PDF\u00a0чека',
       formats: 'JPG, PNG, WebP или PDF, до {mb} МБ',
       replace: 'Заменить',
       ready: 'готов к отправке',
@@ -97,18 +98,18 @@ export const ordersMessages = defineMessages(
       send: 'Отправить чек',
       pickAnother: 'Выбрать другой файл',
       sendFailed: 'Не удалось отправить чек. Проверьте соединение и попробуйте ещё раз.',
-      tryAgain: 'Сервер сейчас занят. Попробуйте ещё раз через минуту — файл уже выбран.',
+      tryAgain: 'Сервер сейчас занят. Попробуйте ещё раз через минуту\u00a0— файл уже выбран.',
       /** Why a file was refused, by the app or the server (`RECEIPT_UPLOAD_ERRORS`). */
       refused: {
         unsupported_type:
           'Этот файл не подходит. Загрузите скриншот (JPG, PNG, WebP) или PDF чека.',
-        too_large: 'Файл больше {mb} МБ. Сделайте скриншот чека — он весит меньше.',
+        too_large: 'Файл больше {mb} МБ. Сделайте скриншот чека\u00a0— он весит меньше.',
         unreadable: 'Не удалось открыть файл. Загрузите скриншот чека или другой PDF.',
       },
       question: 'Вопрос по оплате?',
       reviewTitle: 'Чек получен, проверяем оплату',
       reviewText:
-        'Сверяем чек с поступлением на карту. Напишем в чат с ботом, как только оплата подтвердится.',
+        'Сверяем чек с\u00a0поступлением на карту. Напишем в\u00a0чат с\u00a0ботом, как только оплата подтвердится.',
       sentAt: 'отправлен {at}',
       doneTitle: 'Спасибо! Оплата подтверждена',
       doneText:
@@ -117,9 +118,9 @@ export const ordersMessages = defineMessages(
       toShop: 'В магазин',
       unavailableTitle: 'Оплата временно недоступна',
       unavailableText:
-        'Мы обновляем реквизиты для оплаты. Не переводите деньги, пока здесь нет карты. Если вопрос срочный, напишите менеджеру.',
+        'Мы обновляем реквизиты для оплаты. Не\u00a0переводите деньги, пока здесь нет карты. Если вопрос срочный, напишите менеджеру.',
       /** Above the upload while no card is set: a shopper who paid before still sends the receipt. */
-      alreadyPaid: 'Если вы уже оплатили — загрузите чек.',
+      alreadyPaid: 'Если вы уже оплатили\u00a0— загрузите чек.',
       /** On the order page while it waits for payment. */
       goToPay: 'Перейти к оплате',
     },
@@ -264,9 +265,9 @@ export const ordersMessages = defineMessages(
     payment: {
       title: 'Toʻlov',
       payUntil:
-        '{until} gacha toʻlang. Chekni shu vaqtgacha yuklang — shunda bandlik tekshiruvgacha saqlanadi.',
+        '{until} gacha toʻlang. Chekni shu vaqtgacha yuklang\u00a0— shunda bandlik tekshiruvgacha saqlanadi.',
       amount: 'Oʻtkaziladigan summa',
-      amountHint: 'Aynan shu summani yaxlitlamasdan oʻtkazing — toʻlov tezroq tasdiqlanadi.',
+      amountHint: 'Aynan shu summani yaxlitlamasdan oʻtkazing\u00a0— toʻlov tezroq tasdiqlanadi.',
       card: 'Qabul qiluvchi karta',
       holder: 'Qabul qiluvchi: {holder}',
       copyAmount: 'Summani koʻchirib olish',
@@ -278,7 +279,7 @@ export const ordersMessages = defineMessages(
         save: 'Chek skrinshoti yoki PDF faylini saqlang',
         upload: 'Chekni shu yerga yuklang',
       },
-      choose: 'Chek skrinshoti yoki PDF faylini tanlang',
+      choose: 'Chek skrinshoti yoki PDF faylini\u00a0tanlang',
       formats: 'JPG, PNG, WebP yoki PDF, {mb} MB gacha',
       replace: 'Almashtirish',
       ready: 'yuborishga tayyor',
@@ -289,11 +290,12 @@ export const ordersMessages = defineMessages(
       send: 'Chekni yuborish',
       pickAnother: 'Boshqa fayl tanlash',
       sendFailed: 'Chekni yuborib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
-      tryAgain: 'Server hozir band. Bir daqiqadan keyin qayta urinib koʻring — fayl tanlangan.',
+      tryAgain:
+        'Server hozir band. Bir daqiqadan keyin qayta urinib koʻring\u00a0— fayl tanlangan.',
       refused: {
         unsupported_type:
           'Bu fayl mos emas. Chek skrinshotini (JPG, PNG, WebP) yoki PDF faylini yuklang.',
-        too_large: 'Fayl {mb} MB dan katta. Chek skrinshotini oling — u yengilroq.',
+        too_large: 'Fayl {mb} MB dan katta. Chek skrinshotini oling\u00a0— u yengilroq.',
         unreadable: 'Faylni ochib boʻlmadi. Chek skrinshotini yoki boshqa PDF faylni yuklang.',
       },
       question: 'Toʻlov boʻyicha savol bormi?',

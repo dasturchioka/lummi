@@ -73,7 +73,7 @@ export function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolea
     <>
       {customerMayCancel(order.status) ? (
         // under «Написать менеджеру», or on its own when that line is not there
-        <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
+        <p className={`type-small mb-4 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
           <button
             type="button"
             onClick={show}

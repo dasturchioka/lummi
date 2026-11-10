@@ -66,12 +66,20 @@ function ManagerLine() {
   );
 }
 
-/** A short confirmation over the dock («Скопировано»), read out by screen readers. */
+/**
+ * A short confirmation over the dock («Скопировано»), read out by screen readers. It rises in,
+ * stays, and fades out; a failure stays longer, since it says what to do instead. A copy while
+ * one is on screen keeps it there rather than replaying its entrance.
+ */
 function useToast() {
-  const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 1800);
+    const { id, ok, leaving } = toast;
+    const timer = setTimeout(
+      () => setToast((t) => (t?.id !== id ? t : leaving ? null : { ...t, leaving: true })),
+      leaving ? 160 : ok ? 1600 : 4000,
+    );
     return () => clearTimeout(timer);
   }, [toast]);
   const view = (
@@ -83,19 +91,32 @@ function useToast() {
     >
       {toast ? (
         <span
-          key={toast.id}
-          className="type-small inline-flex max-w-[340px] animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-center gap-2 rounded-pill bg-btn px-4 py-2.5 font-medium text-btn-ink"
+          key={toast.ok ? 'ok' : 'failed'}
+          className={`type-small inline-flex max-w-[340px] items-start gap-2 bg-btn px-4 py-2.5 font-medium text-pretty text-btn-ink ${
+            toast.leaving
+              ? 'animate-[fade-out_0.16s_ease-out_forwards]'
+              : 'animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)]'
+          } ${toast.ok ? 'rounded-pill' : 'rounded-card'}`}
         >
-          <CheckIcon size={16} className="shrink-0" />
+          <span className="mt-px shrink-0">
+            {toast.ok ? <CheckIcon size={16} /> : <AlertIcon size={16} />}
+          </span>
           {toast.text}
         </span>
       ) : null}
     </div>
   );
-  return { show: (text: string) => setToast({ text, id: Date.now() }), view };
+  return {
+    show: (text: string, ok: boolean) => setToast({ text, ok, id: Date.now() }),
+    view,
+  };
 }
+type Toast = { text: string; ok: boolean; id: number; leaving?: boolean };
 
-/** A 48 px outlined square that copies `value` (the bank app takes plain digits). */
+/**
+ * A 48 px outlined square that copies `value` (the bank app takes plain digits). Once copied, its
+ * icon turns into a Sage Ink check for a moment, where the thumb is, beside the toast.
+ */
 function CopyButton({
   value,
   label,
@@ -107,15 +128,34 @@ function CopyButton({
   onCopied: (ok: boolean) => void;
   testId: string;
 }) {
+  const [copiedAt, setCopiedAt] = useState(0);
+  useEffect(() => {
+    if (!copiedAt) return;
+    const timer = setTimeout(() => setCopiedAt(0), 1400);
+    return () => clearTimeout(timer);
+  }, [copiedAt]);
+  const done = copiedAt > 0;
+  const swap = `[grid-area:1/1] transition-[opacity,transform,filter] duration-200 ${EASE_OUT}`;
+  const away = 'scale-[0.6] opacity-0 blur-[2px]';
   return (
     <button
       type="button"
       aria-label={label}
       data-testid={testId}
-      onClick={async () => onCopied(await copyText(value))}
+      data-copied={done || undefined}
+      onClick={async () => {
+        const ok = await copyText(value);
+        if (ok) setCopiedAt(Date.now());
+        onCopied(ok);
+      }}
       className={`grid size-12 shrink-0 place-items-center rounded-btn text-ink inset-line transition-[transform,background-color] duration-150 ${EASE_OUT} active:scale-[0.95] active:bg-field`}
     >
-      <CopyIcon size={20} />
+      <span className={`${swap} ${done ? away : ''}`}>
+        <CopyIcon size={20} />
+      </span>
+      <span className={`${swap} text-sage-ink ${done ? '' : away}`}>
+        <CheckIcon size={20} />
+      </span>
     </button>
   );
 }
@@ -138,7 +178,8 @@ function TransferCard({
     <Card className="p-4" data-testid="transfer">
       <p className="type-small text-muted">{o.payment.amount}</p>
       <div className="mt-1 flex items-center justify-between gap-3">
-        <Money amount={order.amountDue} size="amount" className="min-w-0" />
+        {/* a long press takes the whole value, for when the copy button cannot reach the clipboard */}
+        <Money amount={order.amountDue} size="amount" className="min-w-0 select-all" />
         <CopyButton
           value={String(order.amountDue)}
           label={o.payment.copyAmount}
@@ -150,8 +191,9 @@ function TransferCard({
       <div className="mt-4 border-t border-line pt-4">
         <p className="type-small text-muted">{o.payment.card}</p>
         <div className="mt-1 flex items-center justify-between gap-3">
+          {/* DESIGN.md: 18 px / 600 with +0.04em, so the groups read digit by digit */}
           <p
-            className="min-w-0 font-ui text-[20px] leading-tight font-semibold tracking-[0.02em] whitespace-nowrap tabular-nums text-ink"
+            className="min-w-0 font-ui text-[18px] leading-tight font-semibold tracking-[0.04em] whitespace-nowrap tabular-nums text-ink select-all"
             data-testid="card-number"
           >
             {groupCardNumber(card.number)}
@@ -163,11 +205,25 @@ function TransferCard({
             testId="copy-card"
           />
         </div>
-        <p className="type-small mt-2 break-words text-muted" data-testid="card-holder">
-          {fill(o.payment.holder, { holder: card.holder })}
-        </p>
+        <Holder holder={card.holder} />
       </div>
     </Card>
+  );
+}
+
+/**
+ * «Получатель: <holder>»: the name in ink, since it is what the shopper checks against the name
+ * the bank app shows before the transfer goes.
+ */
+function Holder({ holder }: { holder: string }) {
+  const o = useOrdersText();
+  const [before = '', after = ''] = o.payment.holder.split('{holder}');
+  return (
+    <p className="type-small mt-2 text-pretty break-words text-muted" data-testid="card-holder">
+      {before}
+      <span className="font-medium text-ink">{holder}</span>
+      {after}
+    </p>
   );
 }
 
@@ -247,12 +303,70 @@ type Upload =
 
 const mb = (bytes: number) => String(Math.round(bytes / (1024 * 1024)));
 
+/** How much of a file name's end a middle cut keeps: a bank app's time and the extension. */
+const NAME_TAIL = 12;
+let measure: CanvasRenderingContext2D | null | undefined;
+
+/** `name` cut in the middle («Kvitansiya_pe…23-41-07.pdf») to fit `width` px in `font`. */
+function middleCut(name: string, width: number, font: string): string {
+  measure ??= document.createElement('canvas').getContext('2d');
+  const ctx = measure;
+  if (!ctx || width <= 0 || name.length <= NAME_TAIL) return name;
+  ctx.font = font;
+  const fits = (s: string) => ctx.measureText(s).width <= width - 1;
+  if (fits(name)) return name;
+  const tail = name.slice(-NAME_TAIL);
+  let lo = 0;
+  let hi = name.length - NAME_TAIL;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (fits(`${name.slice(0, mid)}…${tail}`)) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${name.slice(0, lo)}…${tail}`;
+}
+
+/**
+ * A file name cut in the middle when it does not fit, so its end stays in view: a bank app's
+ * «Kvitansiya_perevod_…_23-41-07.pdf» keeps its time and its kind. Measured, so the ellipsis
+ * sits right against the end (two CSS-truncated halves leave a gap); until then, and should the
+ * measure ever run long, it truncates at the end. Read out whole.
+ */
+function FileName({ name }: { name: string }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [shown, setShown] = useState(name);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const fit = () => {
+      const css = getComputedStyle(el);
+      setShown(
+        middleCut(name, el.clientWidth, `${css.fontWeight} ${css.fontSize} ${css.fontFamily}`),
+      );
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    void document.fonts?.ready.then(fit);
+    return () => ro.disconnect();
+  }, [name]);
+  return (
+    <span ref={box} className="type-row block truncate text-ink">
+      <span className="sr-only">{name}</span>
+      <span aria-hidden="true">{shown}</span>
+    </span>
+  );
+}
+
 /** The file's own picture (an image), or a page for a PDF. */
 function FileThumb({ preview }: { preview: string | null }) {
   return (
     <span className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-thumb bg-field text-muted">
       {preview ? (
-        <img src={preview} alt="" className="absolute inset-0 size-full object-cover" />
+        <>
+          <img src={preview} alt="" className="absolute inset-0 size-full object-cover" />
+          {/* a hairline edge, so a white bank screen does not melt into the white card */}
+          <span className="absolute inset-0 rounded-thumb shadow-[inset_0_0_0_1px_var(--c-line)]" />
+        </>
       ) : (
         <DocIcon size={24} />
       )}
@@ -319,14 +433,19 @@ function ReceiptZone({
   const sending = upload.phase === 'sending';
   const percent = sending ? Math.round(upload.progress * 100) : 0;
   const processing = sending && upload.progress >= 1;
+  // the dashed slot is filled: the file sits in a plain card, as in mockup 07
   return (
     <div className="mt-5">
-      <div className={`${frame} flex items-center gap-3 p-3`} data-testid="receipt-file">
+      <div
+        className="flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-center gap-3 rounded-card bg-card p-3"
+        data-testid="receipt-file"
+      >
         <FileThumb preview={preview} />
         <div className="min-w-0 flex-1">
-          <p className="type-row truncate text-ink">{file.name || o.payment.receipt}</p>
+          <FileName name={file.name || o.payment.receipt} />
           {sending ? (
-            <>
+            // the meta line becomes the Sage thread and its count, at the same size
+            <div className="animate-[fade-in_0.2s_ease-out]">
               <div
                 role="progressbar"
                 aria-valuemin={0}
@@ -341,14 +460,14 @@ function ReceiptZone({
                 />
               </div>
               <p
-                className="type-caption mt-1.5 text-muted tabular-nums"
+                className="type-small mt-1.5 text-muted tabular-nums"
                 data-testid="upload-progress"
               >
                 {processing
                   ? o.payment.processing
                   : fill(o.payment.uploading, { percent: String(percent) })}
               </p>
-            </>
+            </div>
           ) : (
             <p className="type-small mt-0.5 text-muted">
               {formatFileSize(file.size, language)} · {o.payment.ready}
@@ -360,7 +479,7 @@ function ReceiptZone({
             type="button"
             onClick={onPick}
             data-testid="receipt-replace"
-            className={`type-small -my-2 shrink-0 px-1 py-2 text-ink ${LINK}`}
+            className={`type-small -my-3 shrink-0 px-1 py-3 text-ink ${LINK}`}
           >
             {o.payment.replace}
           </button>
@@ -369,7 +488,7 @@ function ReceiptZone({
       {upload.phase === 'failed' ? (
         <p
           role="alert"
-          className="type-small mt-2.5 flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+          className="type-small mt-2.5 flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
         >
           <span className="shrink-0">
             <AlertIcon size={18} />
@@ -472,7 +591,7 @@ function PayStep({ payment }: { payment: PaymentDto }) {
             card={card}
             onCopied={(ok) => {
               if (ok) hapticSuccess();
-              toast.show(ok ? o.payment.copied : o.payment.copyFailed);
+              toast.show(ok ? o.payment.copied : o.payment.copyFailed, ok);
             }}
           />
           <Steps />
@@ -551,9 +670,7 @@ function SentReceipt({ receipt }: { receipt: ReceiptSummaryDto }) {
         {receipt.kind === 'pdf' ? <DocIcon size={22} /> : <ImageIcon size={22} />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="type-row block truncate text-ink">
-          {receipt.fileName ?? o.payment.receipt}
-        </span>
+        <FileName name={receipt.fileName ?? o.payment.receipt} />
         <span className="type-small block text-muted">
           {formatFileSize(receipt.size, language)} ·{' '}
           {fill(o.payment.sentAt, { at: formatTime(receipt.createdAt) })}
