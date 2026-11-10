@@ -141,6 +141,13 @@
       "when": 1794351440345,
       "tag": "0019_bot_pending_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794352109739,
+      "tag": "0020_campaign_links",
+      "breakpoints": true
     }
   ]
 }

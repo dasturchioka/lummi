@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { START_TARGETS } from '@lummi/contracts/constants';
+import { START_TARGETS, campaignCodeOf, isStartTarget } from '@lummi/contracts/constants';
 import { routeForStartParam } from './startapp';
 
 it('maps known parameters and sends everything else home', () => {
@@ -35,4 +35,15 @@ it('opens an order from o_<number> and rejects malformed ones', () => {
   expect(routeForStartParam('o_0')).toBe('/');
   expect(routeForStartParam('o_12a')).toBe('/');
   expect(routeForStartParam('o_')).toBe('/');
+});
+
+it('leaves a campaign link to the API: l_<code> is Home here, never an error', () => {
+  expect(routeForStartParam('l_insta-nov')).toBe('/');
+  expect(campaignCodeOf('l_insta-nov')).toBe('insta-nov');
+  expect(campaignCodeOf('l_ab')).toBeNull();
+  expect(campaignCodeOf('l_../x')).toBeNull();
+  expect(campaignCodeOf('p_tygar')).toBeNull();
+  expect(campaignCodeOf(null)).toBeNull();
+  // a link's target is a plain target, never another link
+  expect(isStartTarget('l_insta-nov')).toBe(false);
 });

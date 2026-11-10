@@ -39,6 +39,7 @@ import { fill, formatDateTime, formatMoney } from '@lummi/i18n';
 import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { attributedLinkId } from '../campaigns/attribution';
 import {
   loadQuote,
   readCartLines,
@@ -332,6 +333,7 @@ export class OrdersService {
         .values({
           customerId: c.id,
           status: 'awaiting_payment',
+          campaignLinkId: await attributedLinkId(tx, c.id, now),
           reserveUntil,
           recipientName: input.recipientName,
           recipientPhone,

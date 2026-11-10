@@ -25,6 +25,7 @@ export type SettingArea = (typeof SETTING_AREAS)[number];
 export const SETTING_UNITS = [
   'none',
   'seconds',
+  'days',
   'ms',
   'sum',
   'ml',
@@ -376,6 +377,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Объёмы, на которые действует право на апгрейд. Только больше 10 мл, через запятую.',
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
+    },
+  },
+  /** Orders take the last campaign link opened within this many days before ordering (#35, ADR 0022). */
+  'campaigns.attributionWindowDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 7,
+    area: 'shop',
+    unit: 'days',
+    label: { ru: 'Окно атрибуции ссылок', uz: 'Havolalarni hisobga olish oynasi' },
+    hint: {
+      ru: 'Заказ получает источник из последней рекламной ссылки, открытой за столько суток до заказа (сутки = ровно 24 часа).',
+      uz: 'Buyurtma manbasi — buyurtmadan shuncha sutka oldin ochilgan oxirgi reklama havolasi (sutka = roppa-rosa 24 soat).',
     },
   },
   /** Promo codes are guessable: a customer may type this many per window (ticket #29). */

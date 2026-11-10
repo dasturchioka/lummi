@@ -2,6 +2,14 @@ import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
+  adminCampaignLinkSchema,
+  campaignErrorSchema,
+  campaignLinkInputSchema,
+  campaignOpenErrorSchema,
+  openCampaignBodySchema,
+  openCampaignResultSchema,
+} from './campaign';
+import {
   adminPromoCodeSchema,
   applyPromoCodeBodySchema,
   promoAttemptsErrorSchema,
@@ -417,6 +425,21 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: cartSchema, 401: cartErrorSchema },
       summary: 'Remove the entered promo code',
+    },
+  },
+  campaigns: {
+    open: {
+      method: 'POST',
+      path: '/campaigns/open',
+      body: openCampaignBodySchema,
+      responses: {
+        200: openCampaignResultSchema,
+        401: campaignOpenErrorSchema,
+        404: campaignOpenErrorSchema,
+        429: promoAttemptsErrorSchema,
+      },
+      summary:
+        'Log that the signed-in customer opened `l_<code>`, prefill its promo code in the cart, and return the target to route to; 404 for an unknown code (the app lands on Home); a 404 spends one `promo.attemptLimit` attempt of the customer, and past them every open is 429',
     },
   },
   checkout: {
@@ -1203,12 +1226,86 @@ const adminPromo = c.router({
   },
 });
 
+/** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
+const adminCampaigns = c.router({
+  campaignLinks: {
+    list: {
+      method: 'GET',
+      path: '/admin/campaign-links',
+      responses: {
+        200: z.array(adminCampaignLinkSchema),
+        401: campaignErrorSchema,
+        403: campaignErrorSchema,
+      },
+      summary:
+        'Owner only: every campaign link with unique opens and attributed orders, newest first',
+    },
+    get: {
+      method: 'GET',
+      path: '/admin/campaign-links/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      responses: {
+        200: adminCampaignLinkSchema,
+        401: campaignErrorSchema,
+        403: campaignErrorSchema,
+        404: campaignErrorSchema,
+      },
+      summary: 'Owner only: one campaign link',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/campaign-links',
+      body: campaignLinkInputSchema,
+      responses: {
+        201: adminCampaignLinkSchema,
+        400: z.unknown(),
+        401: campaignErrorSchema,
+        403: campaignErrorSchema,
+        409: campaignErrorSchema,
+        422: campaignErrorSchema,
+      },
+      summary: 'Owner only: add a link (a code is generated when none is given)',
+    },
+    update: {
+      method: 'PUT',
+      path: '/admin/campaign-links/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: campaignLinkInputSchema,
+      responses: {
+        200: adminCampaignLinkSchema,
+        400: z.unknown(),
+        401: campaignErrorSchema,
+        403: campaignErrorSchema,
+        404: campaignErrorSchema,
+        409: campaignErrorSchema,
+        422: campaignErrorSchema,
+      },
+      summary: 'Owner only: edit a link; 409 code_locked when the code changes after an open',
+    },
+    remove: {
+      method: 'DELETE',
+      path: '/admin/campaign-links/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: z.object({ ok: z.literal(true) }),
+        401: campaignErrorSchema,
+        403: campaignErrorSchema,
+        404: campaignErrorSchema,
+        409: campaignErrorSchema,
+      },
+      summary: 'Owner only: delete a link nobody opened and no order took; 409 in_use otherwise',
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
   ...adminDelivery,
   ...adminSets,
   ...adminBroadcasts,
   ...adminPromo,
+  ...adminCampaigns,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */

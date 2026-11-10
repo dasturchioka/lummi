@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { useEffect, useSyncExternalStore } from 'react';
 import { session } from '../lib/api';
@@ -9,11 +9,8 @@ import { Button } from '../ui/Button';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { EmptyState, ErrorState } from '../ui/States';
+import { queryClient } from './queryClient';
 import { router } from './router';
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false } },
-});
 
 function Gate() {
   const { t } = usePrefs();

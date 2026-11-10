@@ -107,3 +107,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - Returns window «[3] дней» is written as «3 дней»: confirm the number, and have the customer's lawyer check the whole returns text (the 3-day window and the rule for opened perfume). The FAQ's first question was reworded to avoid the banned word «оригинал»; confirm the wording. Longevity in the FAQ reads «до 24 часов» (customer, 2026-11-07), not the draft's «[8–12] часов».
 - **Uzum Market store URL.** Ask the customer for the link to the LUMMI store on Uzum Market. The Contacts page names the store as plain text until then (there is no setting or placeholder for it yet); once the URL arrives, the owner can make it a link in the admin. The page also lists @lummi_manager (from `shop.managerUsername`), t.me/lummi_uz and instagram.com/lummi.uz.
 - Promo banner title is set in Manrope 600, not the Cormorant italic (promo copy is not a fragrance or set name). Ask the customer to confirm the font for banner titles.
+
+## Campaign links (ticket #35)
+- **Share mark.** ADR 0022 says plain navigation links are "not tracked beyond a share mark". We log nothing for them (the `p_<slug>` shape is the mark). If the owner wants shares counted, we need a separate event, since «Поделиться» opens by someone else are indistinguishable from direct launches.
+- **Prefill replaces the cart's code.** A link's promo code overwrites a code the shopper already entered. Confirm, or keep the shopper's own code.
+- **Automatic links for promo codes** lead to the catalog with source «Другое»; the owner edits them (target, source, label) per campaign.
