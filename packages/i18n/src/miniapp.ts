@@ -24,7 +24,6 @@ export const miniappMessages = defineMessages(
       discoveryLabel: 'Набор',
       discoveryTitle: 'Discovery set',
       discoveryText: 'Пять ароматов по 10 мл',
-      discoverySoon: 'Скоро',
       filterLabel: 'Тип аромата',
     },
     /** The catalog screen: type chips, the four filters, the sort and the counter. */
@@ -58,8 +57,6 @@ export const miniappMessages = defineMessages(
       emptyText: 'Мы собираем коллекцию. Загляните чуть позже.',
       nothingTitle: 'Ничего не нашлось',
       nothingText: 'Попробуйте убрать часть фильтров или изменить цену.',
-      setsTitle: 'Наборы скоро появятся',
-      setsText: 'Discovery set и наборы на выбор мы добавим здесь.',
     },
     /** The search screen and the list card (search results now, the catalog next). */
     search: {
@@ -217,6 +214,16 @@ export const miniappMessages = defineMessages(
       phoneAdd: 'Добавить',
       phoneWhy: 'Нужен для заказа и доставки',
       phoneFrom: 'Из Telegram',
+      info: 'Информация',
+    },
+    /** Info pages (about, delivery, returns, FAQ, contacts, offer); the texts themselves come from the API. */
+    info: {
+      notFoundTitle: 'Страница не найдена',
+      notFoundText: 'Возможно, её уже нет. Загляните в профиль.',
+      toProfile: 'В профиль',
+      emptyTitle: 'Скоро здесь будет текст',
+      emptyText: 'Мы его готовим. Загляните чуть позже.',
+      loadingLabel: 'Загружаем страницу',
     },
     registration: {
       title: 'Ваш номер телефона',
@@ -273,7 +280,6 @@ export const miniappMessages = defineMessages(
       discoveryLabel: 'Toʻplam',
       discoveryTitle: 'Discovery set',
       discoveryText: '10 ml li beshta ifor',
-      discoverySoon: 'Tez orada',
       filterLabel: 'Ifor turi',
     },
     catalog: {
@@ -312,8 +318,6 @@ export const miniappMessages = defineMessages(
       emptyText: 'Kolleksiyani tayyorlayapmiz. Birozdan keyin kiring.',
       nothingTitle: 'Hech narsa topilmadi',
       nothingText: 'Ba’zi filtrlarni olib tashlang yoki narxni oʻzgartiring.',
-      setsTitle: 'Toʻplamlar tez orada paydo boʻladi',
-      setsText: 'Discovery set va tanlov toʻplamlarini shu yerga qoʻshamiz.',
     },
     search: {
       label: 'Nomi yoki nota',
@@ -467,6 +471,15 @@ export const miniappMessages = defineMessages(
       phoneAdd: 'Qoʻshish',
       phoneWhy: 'Buyurtma va yetkazib berish uchun',
       phoneFrom: 'Telegram’dan',
+      info: 'Ma’lumot',
+    },
+    info: {
+      notFoundTitle: 'Sahifa topilmadi',
+      notFoundText: 'Balki u endi yoʻqdir. Profilga qayting.',
+      toProfile: 'Profilga',
+      emptyTitle: 'Tez orada bu yerda matn boʻladi',
+      emptyText: 'Uni tayyorlayapmiz. Birozdan keyin qayting.',
+      loadingLabel: 'Sahifa yuklanmoqda',
     },
     registration: {
       title: 'Telefon raqamingiz',

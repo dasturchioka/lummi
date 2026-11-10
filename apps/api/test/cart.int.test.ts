@@ -98,7 +98,7 @@ describe('cart read and add', () => {
     });
     const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug!));
     expect(f!.originalBrand).not.toBe('');
-    expect(res.body.lines[0]?.brand).toBe(f!.originalBrand);
+    expect((res.body.lines[0] as { brand?: string } | undefined)?.brand).toBe(f!.originalBrand);
     expect(res.body.count).toBe(1);
     expect(res.body.quote).toMatchObject({
       itemsSubtotal: 69_000,
@@ -200,7 +200,9 @@ describe('quantity is capped at available', () => {
     const two = await add(s2!, 30);
     if (two.status !== 200) throw new Error();
     const res = await client.cart.removeLine({ params: { lineId: two.body.lines[1]!.id } });
-    expect(res.status === 200 && res.body.lines.map((l) => l.ml)).toEqual([10]);
+    expect(
+      res.status === 200 && res.body.lines.map((l) => (l.kind === 'volume' ? l.ml : 0)),
+    ).toEqual([10]);
     expect(res.status === 200 && res.body.quote.itemsSubtotal).toBe(69_000);
   });
 });
@@ -214,7 +216,7 @@ describe('sold-out lines', () => {
     await setStock(s1!, 10, 0);
     const cart = await get();
     expect(cart.lines).toHaveLength(2);
-    const gone = cart.lines.find((l) => l.slug === s1);
+    const gone = cart.lines.find((l) => l.kind === 'volume' && l.slug === s1);
     expect(gone).toMatchObject({ soldOut: true, available: 0 });
     expect(cart.quote.lines.find((l) => l.key === String(gone!.id))?.soldOut).toBe(true);
     expect(cart.quote.itemsSubtotal).toBe(2 * 69_000);
@@ -516,7 +518,9 @@ describe('relink', () => {
     });
     const cart = await client.cart.get();
     if (cart.status !== 200) throw new Error();
-    const byMl = Object.fromEntries(cart.body.lines.map((l) => [`${l.slug}:${l.ml}`, l.qty]));
+    const byMl = Object.fromEntries(
+      cart.body.lines.flatMap((l) => (l.kind === 'volume' ? [[`${l.slug}:${l.ml}`, l.qty]] : [])),
+    );
     expect(byMl).toEqual({ [`${s1}:10`]: 3, [`${s2}:30`]: 1 });
     expect(cart.body.promoCode).toBe('FRESH');
     // the merged-away customer leaves no lines or cart row behind

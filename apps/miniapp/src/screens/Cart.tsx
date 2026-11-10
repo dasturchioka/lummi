@@ -12,6 +12,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
 import { deliveryPlace } from '../delivery/queries';
+import { useSetsText } from '../sets/actions';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -22,6 +23,7 @@ import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
+import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
 
@@ -280,6 +282,8 @@ function Line({
   onRemove: () => void;
 }) {
   const { t } = usePrefs();
+  const s = useSetsText();
+  const router = useRouter();
   const out = line.soldOut;
   return (
     <div
@@ -288,22 +292,40 @@ function Line({
       data-sold-out={out}
     >
       <div className={out ? 'opacity-50' : undefined}>
-        <Thumb photo={line.photo} className="w-16" />
+        <Thumb
+          photo={line.photo}
+          className="w-16"
+          set={line.kind === 'volume' ? undefined : line.kind}
+        />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
-              {attribution(t.card.basedOn, line.brand)}
-            </p>
-            <p
-              className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
-            >
-              {line.name}
-            </p>
-            <p className="type-small mt-1 text-muted">
-              {line.ml}&nbsp;{t.card.ml}
-            </p>
+            {line.kind === 'volume' ? (
+              <>
+                <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
+                  {attribution(t.card.basedOn, line.brand)}
+                </p>
+                <p
+                  className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
+                >
+                  {line.name}
+                </p>
+                <p className="type-small mt-1 text-muted">
+                  {line.ml}&nbsp;{t.card.ml}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="type-label text-pretty text-muted">{t.home.discoveryLabel}</p>
+                <p
+                  className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
+                  data-testid="set-name"
+                >
+                  {line.kind === 'discovery_set' ? s.lineDiscovery : s.lineBuilder}
+                </p>
+              </>
+            )}
           </div>
           {priced && !out ? (
             <p className="flex shrink-0 flex-col items-end pt-px">
@@ -319,6 +341,45 @@ function Line({
             </p>
           ) : null}
         </div>
+        {/* the five under the name and price, over the column's full width */}
+        {line.kind === 'volume' ? null : <SetFragranceList items={line.fragrances} muted={out} />}
+        {line.kind === 'builder_set' && out && line.short.length > 0 ? (
+          <div className="mt-2 flex flex-col gap-1" data-testid="set-short">
+            {line.short.some((f) => !f.inCart) ? (
+              <p className="type-caption text-pretty text-muted [overflow-wrap:anywhere]">
+                {fill(s.unavailableShort, {
+                  names: line.short
+                    .filter((f) => !f.inCart)
+                    .map((f) => f.name)
+                    .join(', '),
+                })}
+              </p>
+            ) : null}
+            {line.short
+              .filter((f) => f.inCart)
+              .map((f) => (
+                <p
+                  key={f.slug}
+                  className="type-caption text-pretty text-muted [overflow-wrap:anywhere]"
+                >
+                  {fill(s.inCartAbove, { name: f.name })}
+                </p>
+              ))}
+            <button
+              type="button"
+              data-testid="edit-builder"
+              onClick={() =>
+                void router.navigate({
+                  to: '/sets/builder',
+                  search: { pick: line.fragrances.map((f) => f.slug).join(',') },
+                })
+              }
+              className="type-caption self-start font-medium text-ink underline underline-offset-4"
+            >
+              {s.editBuilder}
+            </button>
+          </div>
+        ) : null}
         <div className="mt-auto flex items-center gap-2.5 pt-3">
           {out ? (
             <span className="type-caption inline-flex h-7 items-center rounded-pill bg-field px-2.5 font-medium text-muted">

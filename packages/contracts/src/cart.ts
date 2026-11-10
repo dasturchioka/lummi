@@ -7,14 +7,9 @@ import { quoteSchema } from './quote';
  * The server-side cart (spec Changes 2026-11-10, cart). Every response carries a fresh Quote; the
  * Mini App displays its numbers and never adds, multiplies or formats a total itself (ADR 0001).
  */
-export const cartLineSchema = z.object({
+const lineBase = {
   /** The cart line id; the quote's line `key` is this id as a string. */
   id: z.number().int(),
-  slug: z.string(),
-  name: z.string(),
-  /** The original the fragrance is inspired by: every row names it («по мотивам …»). */
-  brand: z.string(),
-  ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
   photo: z.string().nullable(),
   /** What the quote counts: the stored quantity, never above `available` (a sold-out line keeps its own). */
   qty: z.number().int().positive(),
@@ -23,8 +18,44 @@ export const cartLineSchema = z.object({
   soldOut: z.boolean(),
   /** The customer asked for more than is available; `qty` is what is left («Осталось N»). */
   limited: z.boolean(),
+};
+
+export const volumeLineSchema = z.object({
+  ...lineBase,
+  kind: z.literal('volume'),
+  slug: z.string(),
+  name: z.string(),
+  /** The original the fragrance is inspired by: every row names it («по мотивам …»). */
+  brand: z.string(),
+  ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
 });
+
+/** The five fragrances a set line holds, named on the row (spec Changes 2026-11-10, sets). */
+const setFragrances = z.array(z.object({ slug: z.string(), name: z.string(), brand: z.string() }));
+export const discoveryLineSchema = z.object({
+  ...lineBase,
+  kind: z.literal('discovery_set'),
+  fragrances: setFragrances,
+});
+export const builderLineSchema = z.object({
+  ...lineBase,
+  kind: z.literal('builder_set'),
+  fragrances: setFragrances,
+  /**
+   * The picks whose 10 ml cannot fill this line (empty unless it is sold out). `inCart` marks one
+   * that is short only because an earlier line of this cart already holds it (spec Changes 2026-11-10).
+   */
+  short: z.array(z.object({ slug: z.string(), name: z.string(), inCart: z.boolean() })),
+});
+
+export const cartLineSchema = z.discriminatedUnion('kind', [
+  volumeLineSchema,
+  discoveryLineSchema,
+  builderLineSchema,
+]);
 export type CartLineDto = z.infer<typeof cartLineSchema>;
+export type VolumeLineDto = z.infer<typeof volumeLineSchema>;
+export type SetLineDto = z.infer<typeof discoveryLineSchema> | z.infer<typeof builderLineSchema>;
 
 /** A 10 ml bottle that alone would close the gap to free delivery. */
 export const cartSuggestionSchema = z.object({

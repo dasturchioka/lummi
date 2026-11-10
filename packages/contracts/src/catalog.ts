@@ -4,6 +4,7 @@ import {
   CATALOG_PAGE_SIZE,
   CATALOG_SORTS,
   FRAGRANCE_TYPES,
+  MAX_PRICE,
   SEARCH_QUERY_MAX,
   SEASONS,
   SILLAGES,
@@ -96,7 +97,6 @@ export const searchResultSchema = z.object({
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
 /** The same ceiling the other so'm schemas use. */
-const MAX_PRICE = 100_000_000;
 
 const volumeFilter = z.coerce
   .number()

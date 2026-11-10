@@ -26,11 +26,10 @@ import {
 } from '@lummi/db';
 import { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
-import sharp from 'sharp';
 import { AuditService } from '../audit/audit.service';
 import { available, reservedByVolume } from '../catalog/catalog.service';
 import { reindexFragrances } from '../search/search-index';
-import { storePhoto } from '../catalog/photo-pipeline';
+import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
@@ -69,7 +68,6 @@ function isUniqueViolation(e: unknown): boolean {
 
 /** Advisory lock that serialises handing out internal product codes. */
 const PRODUCT_CODE_LOCK = 1701;
-const MIN_PHOTO = { width: 400, height: 533 } as const;
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null : s.trim());
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -688,17 +686,10 @@ export class CatalogAdminService {
       .from(volumes)
       .where(eq(volumes.id, volumeId));
     if (!exists) return fail('not_found');
-    let hash: string;
-    try {
-      // The 400 px rendition must not be an upscale: refuse anything smaller than that.
-      const meta = await sharp(bytes).metadata();
-      if ((meta.width ?? 0) < MIN_PHOTO.width || (meta.height ?? 0) < MIN_PHOTO.height) {
-        return fail('invalid', ['photo']);
-      }
-      ({ hash } = await storePhoto(this.edges.files, bytes));
-    } catch {
-      return fail('invalid', ['photo']);
-    }
+    // magic bytes and the minimum size (the 400 px rendition must not be an upscale) live in one place
+    const stored = await storeUploadedPhoto(this.edges.files, bytes);
+    if (!stored) return fail('invalid', ['photo']);
+    const hash = stored.hash;
     return this.db.transaction(async (tx) => {
       // read the previous photo under the lock, so the audit pair is never stale
       const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');

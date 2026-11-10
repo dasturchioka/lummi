@@ -15,10 +15,12 @@ import net from 'node:net';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
+import pg from 'pg';
 import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
-import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
+import { seedShotContent } from './content-data';
+import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
 const WIDTHS = [390, 1280] as const;
@@ -214,6 +216,8 @@ async function signIn(context: BrowserContext, telegramId: number) {
     throw new Error(`browser dev sign-in as ${telegramId} failed: ${res.status()}`);
 }
 
+let client: pg.Client | undefined;
+
 async function main() {
   await ensureServices();
   // The BTS points come from the committed snapshot (idempotent); the points screens need them.
@@ -224,7 +228,12 @@ async function main() {
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
   await seedShotBroadcasts(databaseUrl);
+  await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
   mkdirSync(outDir, { recursive: true });
+  // a screen's own database state (setup / teardown), on one connection for the run
+  client = new pg.Client({ connectionString: databaseUrl });
+  await client.connect();
+  const db: ShotSql = { query: (sql, params) => client!.query(sql, params) };
   let count = 0;
   for (const lang of LANGS) {
     // one browser per language: `--lang` is what makes date fields show the local format
@@ -235,6 +244,7 @@ async function main() {
       const t = adminMessages[lang].admin;
       for (const screen of selected) {
         for (const width of screen.widths ?? WIDTHS) {
+          await screen.setup?.({ db });
           const phone = width < 768;
           const context = await browser.newContext({
             viewport: { width, height: phone ? 844 : 800 },
@@ -276,6 +286,7 @@ async function main() {
           if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
           await page.screenshot({ path: file, fullPage });
           await context.close();
+          await screen.teardown?.({ db });
           count++;
           console.log(`  ${screen.id}-${width}-${lang}.png`);
         }
@@ -292,4 +303,7 @@ main()
     console.error(e instanceof Error ? e.message : e);
     process.exitCode = 1;
   })
-  .finally(stopServices);
+  .finally(async () => {
+    await client?.end();
+    stopServices();
+  });

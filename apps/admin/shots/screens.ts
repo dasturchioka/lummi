@@ -3,6 +3,7 @@ import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
+import { LIMIT_BANNER, LONG_PAGE } from './content-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -177,10 +178,19 @@ export type ScreenContext = {
   width: number;
 };
 
+/** The run's own shot database, for a state no admin form reaches without changing what later screens see. */
+export type ShotSql = {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+};
+
 export type Screen = {
   /** File name prefix: `<id>-<width>-<lang>.png`. */
   id: string;
   path: string;
+  /** Put the database in this screen's state before each capture… */
+  setup?: (ctx: { db: ShotSql }) => Promise<void>;
+  /** …and back again after it, so the next screen (and the next run) starts from the seed. */
+  teardown?: (ctx: { db: ShotSql }) => Promise<void>;
   /** Who is signed in; omitted = nobody. */
   as?: 'owner' | 'manager';
   /** Defaults to 390 and 1280. */
@@ -189,6 +199,53 @@ export type Screen = {
   act?: (ctx: ScreenContext) => Promise<void>;
   /** Full-page capture (default); overlays use the viewport. */
   fullPage?: boolean;
+};
+
+/*
+ * The «Наборы» page at its worst (break-ui, #22): a fragrance hidden from the catalog (the shot
+ * catalog's longest name) and the four longest names of the guide in the composition, a
+ * seven-digit price still marked as a placeholder, and four-digit stock.
+ */
+let savedSet: { price: unknown; onHand: unknown; ids: unknown[] } | undefined;
+const setsWorst: Pick<Screen, 'setup' | 'teardown'> = {
+  setup: async ({ db }) => {
+    const [set] = (await db.query('select price, on_hand from discovery_set')).rows;
+    const items = await db.query('select fragrance_id from discovery_set_items order by position');
+    savedSet ??= {
+      price: set?.price,
+      onHand: set?.on_hand,
+      ids: items.rows.map((r) => r.fragrance_id),
+    };
+    await db.query(
+      'update discovery_set set price = 1250000, on_hand = 1250, is_placeholder = true',
+    );
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select 1, id from fragrances where name = $1
+       union all
+       select 1 + i, (select id from fragrances where slug = ($2::text[])[i])
+       from generate_subscripts($2::text[], 1) as i`,
+      [
+        WORST_NAME,
+        ['baccarat-rouge-540', 'blue-sapphire', 'le-male-le-parfum', 'pink-molecule-090-09'],
+      ],
+    );
+  },
+  teardown: async ({ db }) => {
+    if (!savedSet) return;
+    await db.query('update discovery_set set price = $1, on_hand = $2', [
+      savedSet.price,
+      savedSet.onHand,
+    ]);
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
+      [savedSet.ids],
+    );
+    savedSet = undefined;
+  },
 };
 
 export const screens: Screen[] = [
@@ -351,6 +408,66 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
+  { id: 'content', path: '/content', as: 'owner' },
+  {
+    id: 'content-banner-editor',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.locator('[data-banner-preview]').waitFor();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'content-banner-uz',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.getByRole('tab', { name: t.content.langUz }).click();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  { id: 'content-page-editor', path: '/content/pages/faq', as: 'owner' },
+  { id: 'content-page-offer', path: '/content/pages/offer', as: 'owner' },
+  // Worst cases (break-ui): a new banner typed to every field's limit, with its live preview; a
+  // long page with the 80-character title typed into the editor (nothing is saved).
+  {
+    id: 'content-banner-limit',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, language }) => {
+      await page.getByRole('button', { name: t.content.banner.add }).click();
+      const v = LIMIT_BANNER[language];
+      await page.locator(`#bn-title-${language}`).fill(v.title);
+      await page.locator(`#bn-sub-${language}`).fill(v.subtitle);
+      await page.locator(`#bn-price-${language}`).fill(v.priceLine);
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'content-page-long',
+    path: '/content/pages/about',
+    as: 'owner',
+    act: async ({ page, language }) => {
+      const v = LONG_PAGE[language];
+      await page.locator('#page-title').fill(v.title);
+      await page.locator('#page-body').fill(v.body);
+      // filling scrolls the field into view; the capture starts at the top like the others
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },
   {
@@ -506,6 +623,23 @@ export const screens: Screen[] = [
       'base64',
     ),
   }),
+  // Sets (#22): the Discovery set's stock, price, composition and photo.
+  { id: 'sets', path: '/sets', as: 'owner' },
+  { id: 'sets-manager', path: '/sets', as: 'manager' },
+  {
+    // The same fragrance picked twice: the second field says so and «Сохранить» stays off.
+    id: 'sets-duplicate',
+    path: '/sets',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      const first = page.locator('#set-pick-0');
+      const value = await first.inputValue();
+      await page.locator('#set-pick-1').selectOption(value);
+      await page.getByText(t.sets.duplicate).waitFor();
+    },
+  },
+  { id: 'sets-worst', path: '/sets', as: 'owner', ...setsWorst },
+  { id: 'sets-manager-worst', path: '/sets', as: 'manager', ...setsWorst },
   { id: 'catalog-dictionaries', path: '/catalog/dictionaries', as: 'owner' },
   {
     id: 'catalog-dictionaries-search',

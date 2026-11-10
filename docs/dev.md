@@ -68,6 +68,8 @@ To add a screen, append to `registry.ts`: `{ id, path, setup?, initDataAgeSecond
 
 ### Catalog and photos
 
+The content texts (Home slogan and the six info pages, as drafts) are seeded by the API itself at start (`seedContent` in `main.ts`): idempotent, they never overwrite what the owner edited, so there is no `seed:*` command for them. Delete a row to get its seed text back.
+
 `npm run seed:catalog` (needs `DATABASE_URL`, `FILES_DIR`) loads the 67 fragrances with placeholder prices and renders their photos into `FILES_DIR/public/` (about a minute the first time; idempotent). The API serves them at `/media/public/<hash>-<400|800|1200>.webp` for development; the Mini App reads `VITE_MEDIA_URL` (default `/api/media/public`). Share links use `VITE_BOT_LINK` (default `https://t.me/Lummiuz_bot`; set the dev bot's link locally). The screenshot run seeds the catalog itself when it starts the stack; for a stack that is already running, seed it first.
 
 ## Migrations

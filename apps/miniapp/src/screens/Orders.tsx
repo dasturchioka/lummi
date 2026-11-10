@@ -20,6 +20,8 @@ function OrderRow({ order, onOpen }: { order: OrderSummaryDto; onOpen: () => voi
   const { language } = usePrefs();
   const o = useOrdersText();
   const title = fill(o.orders.number, { number: String(order.number) });
+  // a cancelled order stays in the list, quieter: its bottles dimmed, its total in Muted Ink
+  const cancelled = order.status === 'cancelled';
   return (
     <button
       type="button"
@@ -48,13 +50,13 @@ function OrderRow({ order, onOpen }: { order: OrderSummaryDto; onOpen: () => voi
         ]}
       />
       <span className="flex w-full items-center justify-between gap-3">
-        <span className="flex gap-1.5" aria-hidden="true">
+        <span className={`flex gap-1.5 ${cancelled ? 'opacity-55' : ''}`} aria-hidden="true">
           {order.photos.map((p, i) => (
             <Thumb key={`${p}-${i}`} photo={p} className="w-9" />
           ))}
         </span>
         <span className="flex items-center gap-1.5">
-          <Money amount={order.total} />
+          <Money amount={order.total} className={cancelled ? 'text-muted' : ''} />
           <span className="text-muted">
             <ChevronIcon size={18} />
           </span>

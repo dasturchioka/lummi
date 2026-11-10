@@ -20,6 +20,7 @@ import {
   eq,
   inArray,
   lt,
+  or,
   orderLines,
   orders,
   regions,
@@ -37,9 +38,11 @@ import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { loadCartQuote } from '../cart/load-cart';
+import { readDiscoverySet } from '../sets/sets';
 import { toRegionDto } from '../delivery/dto';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
+import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
@@ -121,8 +124,10 @@ export class OrdersService {
    * failure, then answered with `try_again`):
    * 0. the customer row is locked, so a repeat of the same request (same idempotency key) waits
    *    for the first and then returns the order it made, never a second one;
-   * 1. the cart row and the stock rows of its lines are locked (`FOR UPDATE`, ascending id), so a
-   *    concurrent checkout for the same last unit waits here and then sees this order's reserve;
+   * 1. the cart row, then the Discovery set row (when the cart holds it), then the stock rows of
+   *    its lines (a volume line's volume, the five 10 ml of a builder line) are locked
+   *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
+   *    waits here and then sees this order's reserve; every checkout takes them in this order;
    * 2. the quote is recomputed under that lock with the destination region's tariff, its lines
    *    capped at available; a total other than the one the shopper confirmed is refused (409)
    *    with the new checkout, since they will transfer exactly that amount;
@@ -159,7 +164,11 @@ export class OrdersService {
         .select()
         .from(orders)
         .where(and(eq(orders.customerId, c.id), eq(orders.idempotencyKey, input.idempotencyKey)));
-      if (made) return { kind: 'created', order: toOrderDto(made, await linesOf(tx, made.id)) };
+      if (made)
+        return {
+          kind: 'created',
+          order: toOrderDto(made, await linesOf(tx, made.id), await cancellationOf(tx, made.id)),
+        };
 
       if (!c.phone) return { kind: 'phone_required' } as const;
       if (c.dataConsentAt === null && !input.consent)
@@ -183,24 +192,37 @@ export class OrdersService {
       if ('code' in destination) return { kind: 'invalid', code: destination.code } as const;
       const { region } = destination;
 
-      // 1. Freeze the cart, then the stock of every line in id order (no deadlock between checkouts).
+      // 1. Freeze the cart, then the Discovery set row (when it is in the cart), then the stock of
+      // every volume in id order: the same order in every checkout, so none can deadlock another.
       await tx
         .select({ id: carts.customerId })
         .from(carts)
         .where(eq(carts.customerId, c.id))
         .for('update');
       const wanted = await tx
-        .select({ volumeId: cartLines.volumeId })
+        .select({
+          kind: cartLines.kind,
+          volumeId: cartLines.volumeId,
+          fragranceIds: cartLines.fragranceIds,
+        })
         .from(cartLines)
         .where(eq(cartLines.customerId, c.id));
-      if (wanted.length > 0) {
+      if (wanted.some((w) => w.kind === 'discovery_set')) await readDiscoverySet(tx, true);
+      // a volume line locks its volume; a builder line the 10 ml of each of its five
+      const lockVolumes = wanted.flatMap((w) => w.volumeId ?? []);
+      const lockFragrances = [
+        ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
+      ];
+      if (lockVolumes.length > 0 || lockFragrances.length > 0) {
         await tx
           .select({ id: volumes.id })
           .from(volumes)
           .where(
-            inArray(
-              volumes.id,
-              wanted.map((w) => w.volumeId),
+            or(
+              lockVolumes.length > 0 ? inArray(volumes.id, lockVolumes) : undefined,
+              lockFragrances.length > 0
+                ? and(eq(volumes.ml, 10), inArray(volumes.fragranceId, lockFragrances))
+                : undefined,
             ),
           )
           .orderBy(asc(volumes.id))
@@ -277,24 +299,47 @@ export class OrdersService {
           bought.map((l, position) => {
             const priced = quote.lines.find((q) => q.key === String(l.lineId));
             if (!priced) throw new Error(`quote has no line ${l.lineId}`);
-            return {
+            const base = {
               orderId: order.id,
               position,
-              kind: 'volume' as const,
-              volumeId: l.volumeId,
-              fragranceId: l.fragranceId,
-              slug: l.slug,
-              // a fragrance has one name in both languages (ADR 0018); a set line (#22) has two
-              nameRu: l.name,
-              nameUz: l.name,
-              brand: l.brand,
-              ml: l.ml,
-              photo: l.photo,
               unitPrice: priced.unitPrice,
               regularUnitPrice: priced.regularUnitPrice,
               markedDown: priced.markedDown,
               qty: priced.qty,
               lineTotal: priced.lineTotal,
+            };
+            if (l.kind === 'volume')
+              return {
+                ...base,
+                kind: 'volume' as const,
+                volumeId: l.volumeId,
+                fragranceId: l.fragranceId,
+                slug: l.slug,
+                // a fragrance has one name in both languages (ADR 0018)
+                nameRu: l.name,
+                nameUz: l.name,
+                brand: l.brand,
+                ml: l.ml,
+                photo: l.photo,
+              };
+            // A set line (ADR 0009): its five fragrances as bought. A builder set also records the
+            // five 10 ml volumes its reserve takes one of each from; the Discovery set holds none
+            // (its own stock is its reserve) and its snapshot is the composition alone.
+            const name = (t: typeof dictionaries.ru.sets) =>
+              l.kind === 'discovery_set' ? t.lineDiscovery : t.lineBuilder;
+            return {
+              ...base,
+              kind: l.kind,
+              nameRu: name(dictionaries.ru.sets),
+              nameUz: name(dictionaries.uz.sets),
+              ml: 10,
+              photo: l.photo,
+              setVolumeIds: l.kind === 'builder_set' ? l.items.map((i) => i.volumeId) : null,
+              setComposition: l.items.map((i) => ({
+                fragranceId: i.fragranceId,
+                name: i.name,
+                brand: i.brand,
+              })),
             };
           }),
         )
@@ -331,7 +376,7 @@ export class OrdersService {
         payload: { number: order.number, total: order.total, status: order.status },
       });
       await this.outbox.enqueue(tx, this.createdMessage(c, order));
-      return { kind: 'created', order: toOrderDto(order, lines) } as const;
+      return { kind: 'created', order: toOrderDto(order, lines, null) } as const;
     }
   }
 
@@ -389,7 +434,11 @@ export class OrdersService {
       .from(orders)
       .where(and(eq(orders.customerId, customerId), eq(orders.number, number)));
     if (!order) return null;
-    return toOrderDto(order, await linesOf(this.db, order.id));
+    return toOrderDto(
+      order,
+      await linesOf(this.db, order.id),
+      await cancellationOf(this.db, order.id),
+    );
   }
 
   private async destination(
@@ -426,7 +475,7 @@ export class OrdersService {
   }
 }
 
-async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
+export async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
   return db
     .select()
     .from(orderLines)
@@ -462,7 +511,12 @@ export function orderUrl(miniAppUrl: string, number: number): string {
   return new URL(`orders/${number}`, base).toString();
 }
 
-function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
+/** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */
+export function toOrderDto(
+  o: OrderRow,
+  lines: OrderLineRow[],
+  cancellation: OrderDto['cancellation'],
+): OrderDto {
   return {
     number: o.number,
     status: o.status,
@@ -484,6 +538,7 @@ function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
     thresholdBaseAmount: o.thresholdBaseAmount,
     total: o.total,
     amountDue: o.amountDue,
+    cancellation,
   };
 }
 

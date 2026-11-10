@@ -71,10 +71,11 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Tell the customer about our TZ deviations** (2026-11-07, via Nurmuhammad). The internal decisions in `docs/spec.md` → Changes alter visible behaviour: status «Возвращён» and refunds; customer can cancel an unpaid order; orders reach the group only once paid; group topics; fully automatic payment matching and "payment not found" instead of manual review; account phone only via Telegram contact; BTS point list instead of street address. None needs approval to build, but acceptance runs against the TZ.
 
 - **UZ disclaimer text (2026-11-09).** The approved RU line is «Аромат LUMMI по мотивам, не оригинальный парфюм». Our UZ version on the card is «LUMMI ifori ilhom asosida yaratilgan, asl parfyum emas» (we avoid «original» in UZ too). Needs the customer's or a native reviewer's approval, with the RU text.
+- **A shopper who pays but never uploads a receipt** (2026-11-10, ticket #24). The expiry sweep cancels an order still «Ожидает оплаты» at `reserve_until` (12 h), while their credit sits «Не привязано». A manager can confirm such an order by linking the credit before then (the table allows it from «Ожидает оплаты»), but once it is «Отменён» it is terminal and the only way out is a Refund and a new order. Does the customer want something else, e.g. a manager alert for unlinked credits near a reserve's end, or longer reserves?
 
 ## Bracketed values to confirm (TZ placeholders)
 
-- Discovery set price (expected after 2026-11-09).
+- Discovery set price (expected after 2026-11-09). The seed carries our placeholder 299 000 сум, flagged in the database; the admin «Наборы» page says so until the owner saves a price (the builder set costs the same).
 - Card disclaimer text: «Аромат LUMMI по мотивам, не оригинальный парфюм» (+ UZ version).
 - Birthday coupon: max discount (so'm) and free-delivery threshold base. Our defaults (2026-11-07): threshold computed **after** the coupon, like a promo code; cap 100 000 so'm (placeholder). Both are admin settings; confirm with the customer.
 - Defaults to confirm: top-sales window 30 d, reserve 12 h, review delay 24 h, receipt-unchecked alert 15 min, match window 5 min, AI thresholds (now P ≥ 0.8 for predicates, confidence ≥ 0.6 for the date-time choice, ADR 0013), no-credit wait 2 h (TZ had 10 min to manual review; ADR 0012), Humo-silence alert 30 min, review period 3 working days, returns window 3 days.
@@ -98,3 +99,9 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Removing a volume in the admin** (2026-11-10, ticket #17). TZ §7 does not say whether the owner can delete a 10 / 30 / 50 ml volume of a fragrance. Our build lets the owner add one but not remove it (hiding the fragrance takes it off sale), so order history and stock counts never point at a vanished row. Confirm with the customer that this is acceptable, or say when a volume should be removable.
 
 - **Broadcast button label (#14).** The link button under a broadcast reads a fixed «Открыть» / «Ochish». Does the owner want to write the label per broadcast (RU and UZ)? Default until answered: fixed.
+
+## Info pages (ticket #21)
+- The info pages are seeded as drafts from the TZ appendix and wait for the customer's approval (the owner ticks «Текст готов» in the admin). The public offer is a placeholder until the customer's lawyer sends the text.
+- Returns window «[3] дней» is written as «3 дней»: confirm the number, and have the customer's lawyer check the whole returns text (the 3-day window and the rule for opened perfume). The FAQ's first question was reworded to avoid the banned word «оригинал»; confirm the wording. Longevity in the FAQ reads «до 24 часов» (customer, 2026-11-07), not the draft's «[8–12] часов».
+- **Uzum Market store URL.** Ask the customer for the link to the LUMMI store on Uzum Market. The Contacts page names the store as plain text until then (there is no setting or placeholder for it yet); once the URL arrives, the owner can make it a link in the admin. The page also lists @lummi_manager (from `shop.managerUsername`), t.me/lummi_uz and instagram.com/lummi.uz.
+- Promo banner title is set in Manrope 600, not the Cormorant italic (promo copy is not a fragrance or set name). Ask the customer to confirm the font for banner titles.

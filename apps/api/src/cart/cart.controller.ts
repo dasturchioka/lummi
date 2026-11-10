@@ -29,6 +29,37 @@ export class CartController {
     });
   }
 
+  @TsRestHandler(contract.cart.addDiscovery)
+  addDiscovery(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.cart.addDiscovery, async ({ body }) => {
+      const res = await this.cart.addDiscovery(customerId, body.qty);
+      if (res.result !== 'ok') return { status: 409 as const, body: { code: 'sold_out' as const } };
+      return { status: 200 as const, body: await this.cart.get(customerId) };
+    });
+  }
+
+  @TsRestHandler(contract.cart.addBuilder)
+  addBuilder(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.cart.addBuilder, async ({ body }) => {
+      const res = await this.cart.addBuilder(customerId, body.slugs, body.qty);
+      switch (res.result) {
+        case 'ok':
+          return { status: 200 as const, body: await this.cart.get(customerId) };
+        case 'not_found':
+          return { status: 404 as const, body: { code: 'not_found' as const } };
+        case 'invalid':
+          return { status: 422 as const, body: { code: 'invalid' as const } };
+        case 'unavailable':
+          return {
+            status: 409 as const,
+            body: { code: 'unavailable' as const, slugs: res.slugs },
+          };
+        case 'sold_out':
+          return { status: 409 as const, body: { code: 'sold_out' as const } };
+      }
+    });
+  }
+
   @TsRestHandler(contract.cart.setQuantity)
   setQuantity(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.cart.setQuantity, async ({ params, body }) => {

@@ -465,6 +465,11 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
       qty: 2,
       lineTotal: 598_000,
       setVolumeIds: vols.map((v) => v.id),
+      setComposition: five.map((name, i) => ({
+        fragranceId: vols[i]!.fragranceId,
+        name,
+        brand: 'B',
+      })),
     });
     for (const slug of five) {
       const card = await client.catalog.fragrance({ params: { slug } });

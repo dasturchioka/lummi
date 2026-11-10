@@ -30,11 +30,25 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 
 /**
- * The Reserve per volume (ADR 0010): units held by order lines whose order is neither handed to
- * BTS nor cancelled (`RESERVING_STATUSES`). A volume line holds its quantity; a builder set line
- * holds one 10 ml of each of its five fragrances per set unit (ADR 0009). The Discovery set has
- * its own stock and never touches 10 ml (#22 adds its reserve beside this). This is the one place
- * that knows, so "available" is on hand minus reserve everywhere: card, list, cart, order creation.
+ * The 10/30/50 ml bottles each order line holds, one row per line and volume
+ * (`order_id, position, volume_id, qty`): a volume line its quantity of its volume, a builder set
+ * line one 10 ml of each of its five fragrances per set (ADR 0009). The one definition of a
+ * line's bottles: the Reserve sums it over orders not yet handed to BTS, and a status change
+ * moves on hand by it (ADR 0010). The Discovery set has its own stock and never touches 10 ml.
+ */
+export const lineVolumeUnits = sql`
+  select ol.order_id, ol.position, ol.volume_id, ol.qty
+  from order_lines ol
+  where ol.kind = 'volume'
+  union all
+  select ol.order_id, ol.position, v.id, ol.qty
+  from order_lines ol cross join lateral unnest(ol.set_volume_ids) as v(id)
+  where ol.kind = 'builder_set'`;
+
+/**
+ * The Reserve per volume (ADR 0010): the bottles (`lineVolumeUnits`) of orders neither handed to
+ * BTS nor cancelled (`RESERVING_STATUSES`). This is the one place that knows, so "available" is
+ * on hand minus reserve everywhere: card, list, cart, order creation.
  */
 export async function reservedByVolume(
   db: DbOrTx,
@@ -51,18 +65,10 @@ export async function reservedByVolume(
     sql`, `,
   );
   const { rows } = await db.execute<{ volume_id: string; reserved: string }>(sql`
-    select held.volume_id, sum(held.qty) as reserved
-    from (
-      select ol.volume_id, ol.qty
-      from order_lines ol join orders o on o.id = ol.order_id
-      where o.status in (${statuses}) and ol.volume_id in (${ids})
-      union all
-      select v.id, ol.qty
-      from order_lines ol join orders o on o.id = ol.order_id
-      cross join lateral unnest(ol.set_volume_ids) as v(id)
-      where o.status in (${statuses}) and ol.kind = 'builder_set' and v.id in (${ids})
-    ) held
-    group by held.volume_id`);
+    select u.volume_id, sum(u.qty) as reserved
+    from (${lineVolumeUnits}) u join orders o on o.id = u.order_id
+    where o.status in (${statuses}) and u.volume_id in (${ids})
+    group by u.volume_id`);
   for (const r of rows) out.set(Number(r.volume_id), Number(r.reserved));
   return out;
 }

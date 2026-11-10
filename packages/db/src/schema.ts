@@ -1,5 +1,11 @@
 import type { Discount } from '@lummi/contracts';
-import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
+import {
+  LINE_KINDS,
+  ORDER_ACTIONS,
+  ORDER_ACTOR_TYPES,
+  ORDER_STATUSES,
+  type OrderStatus,
+} from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -27,7 +33,8 @@ export const languageEnum = pgEnum('language', LANGUAGES);
 export const staffRoleEnum = pgEnum('staff_role', ['owner', 'manager']);
 export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const writeAccessEnum = pgEnum('write_access', ['granted', 'refused']);
-export const actorTypeEnum = pgEnum('actor_type', ['customer', 'staff', 'ai', 'system']);
+/** Who acted: the same list as an order move's actor (`ORDER_ACTOR_TYPES`). */
+export const actorTypeEnum = pgEnum('actor_type', ORDER_ACTOR_TYPES);
 
 export const broadcastAudienceEnum = pgEnum('broadcast_audience', ['all', 'ru', 'uz']);
 export const broadcastDeliveryStatusEnum = pgEnum('broadcast_delivery_status', [
@@ -471,7 +478,53 @@ export const carts = pgTable('carts', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** One volume x quantity in a cart. Quantity is what the customer asked for; the server caps it at available on read. */
+/**
+ * The Discovery set (ADR 0009): one row, true to its own `id` like the heartbeat. It is a product
+ * with its own price, photo and stock; `on_hand` never touches 10 ml stock. A builder set has no
+ * row of its own and costs `price` too (spec Changes 2026-11-10, sets). The composition is the
+ * five ordered fragrances in `discovery_set_items`.
+ */
+export const discoverySet = pgTable(
+  'discovery_set',
+  {
+    id: boolean('id').primaryKey().default(true),
+    /** Integer so'm. */
+    price: integer('price').notNull(),
+    /** Boxes assembled and in the warehouse; available = on hand - reserve (ADR 0010). */
+    onHand: integer('on_hand').notNull().default(0),
+    /** Content hash of the rendered photo set; null falls back to the box photo shipped with the app. */
+    photoHash: text('photo_hash'),
+    /** Seed price that is ours, not the customer's; none may reach launch. */
+    isPlaceholder: boolean('is_placeholder').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('discovery_set_one_row', sql`${t.id}`),
+    check('discovery_set_money_check', sql`${t.price} >= 0 and ${t.onHand} >= 0`),
+  ],
+);
+
+/** The Discovery set's fragrances in the order the owner picked; exactly five when it is for sale. */
+export const discoverySetItems = pgTable(
+  'discovery_set_items',
+  {
+    position: smallint('position').primaryKey(),
+    fragranceId: bigint('fragrance_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => fragrances.id),
+  },
+  (t) => [check('discovery_set_items_position', sql`${t.position} between 1 and 5`)],
+);
+
+export const cartLineKindEnum = pgEnum('cart_line_kind', LINE_KINDS);
+
+/**
+ * One cart line: a volume x quantity, the Discovery set x quantity, or a builder set x quantity.
+ * Quantity is what the customer asked for; the server caps it at available on read. A builder
+ * line keeps the five chosen fragrance ids (sorted, so the same five add up on one line); their
+ * 10 ml volumes are resolved on read.
+ */
 export const cartLines = pgTable(
   'cart_lines',
   {
@@ -479,21 +532,41 @@ export const cartLines = pgTable(
     customerId: bigint('customer_id', { mode: 'number' })
       .notNull()
       .references(() => customers.id, { onDelete: 'cascade' }),
-    volumeId: bigint('volume_id', { mode: 'number' })
-      .notNull()
-      .references(() => volumes.id, { onDelete: 'cascade' }),
+    kind: cartLineKindEnum('kind').notNull().default('volume'),
+    volumeId: bigint('volume_id', { mode: 'number' }).references(() => volumes.id, {
+      onDelete: 'cascade',
+    }),
+    fragranceIds: bigint('fragrance_ids', { mode: 'number' }).array(),
     qty: integer('qty').notNull(),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
+    uniqueIndex('cart_lines_customer_discovery_idx')
+      .on(t.customerId)
+      .where(sql`kind = 'discovery_set'`),
+    uniqueIndex('cart_lines_customer_builder_idx')
+      .on(t.customerId, t.fragranceIds)
+      .where(sql`kind = 'builder_set'`),
     index('cart_lines_volume_idx').on(t.volumeId),
     check('cart_lines_qty_check', sql`${t.qty} > 0`),
+    // exactly five fragrance ids and none NULL (distinctness is judged by the builder's rules)
+    check(
+      'cart_lines_fragrance_ids_check',
+      sql`${t.fragranceIds} is null or (cardinality(${t.fragranceIds}) = 5 and array_position(${t.fragranceIds}, null) is null)`,
+    ),
+    check(
+      'cart_lines_kind_check',
+      sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null)
+        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)
+        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)`,
+    ),
   ],
 );
 
 export type CartRow = typeof carts.$inferSelect;
 export type CartLineRow = typeof cartLines.$inferSelect;
+export type DiscoverySetRow = typeof discoverySet.$inferSelect;
 
 /**
  * A broadcast (owner only, spec Changes 2026-11-07): the durable record of what was sent, to whom
@@ -565,8 +638,8 @@ export const RESERVING_STATUSES = [
   'assembling',
 ] as const satisfies readonly OrderStatus[];
 export const thresholdBaseEnum = pgEnum('threshold_base', ['before', 'after']);
-/** A single volume, or a builder set (five 10 ml volumes, ADR 0009). The Discovery set comes with #22. */
-export const orderLineKindEnum = pgEnum('order_line_kind', ['volume', 'builder_set']);
+/** A single volume, a builder set (five 10 ml volumes) or the Discovery set (its own stock), ADR 0009. */
+export const orderLineKindEnum = pgEnum('order_line_kind', LINE_KINDS);
 
 export const orders = pgTable(
   'orders',
@@ -615,6 +688,10 @@ export const orders = pgTable(
     amountDue: integer('amount_due').notNull(),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
+    /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
+    trackingNumber: text('tracking_number'),
+    /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
+    reserveReminderSentAt: timestamp('reserve_reminder_sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -622,6 +699,10 @@ export const orders = pgTable(
     index('orders_customer_idx').on(t.customerId, t.createdAt),
     uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
     index('orders_status_idx').on(t.status),
+    // the reserve sweeps read unpaid orders by when their reserve ends
+    index('orders_awaiting_reserve_idx')
+      .on(t.reserveUntil)
+      .where(sql`${t.status} = 'awaiting_payment'`),
     // A chosen point is all there (code, name, city, address), or the address was typed instead.
     check(
       'orders_point_or_typed',
@@ -663,7 +744,7 @@ export const orderLines = pgTable(
     markedDown: boolean('marked_down').notNull().default(false),
     qty: integer('qty').notNull(),
     lineTotal: integer('line_total').notNull(),
-    /** A builder set's five 10 ml volumes: the reserve takes one of each per set unit. */
+    /** A set's five 10 ml volumes. A builder set's reserve takes one of each per set unit; the Discovery set only records them (its own stock is the reserve). */
     setVolumeIds: bigint('set_volume_ids', { mode: 'number' }).array(),
     /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
     setComposition:
@@ -675,7 +756,7 @@ export const orderLines = pgTable(
     check('order_lines_qty_check', sql`${t.qty} > 0`),
     check(
       'order_lines_kind_check',
-      sql`(${t.kind} = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind} = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5)`,
+      sql`(${t.kind}::text = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind}::text = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5 and jsonb_array_length(${t.setComposition}) = 5) or (${t.kind}::text = 'discovery_set' and ${t.volumeId} is null and ${t.setVolumeIds} is null and jsonb_array_length(${t.setComposition}) = 5)`,
     ),
     check(
       'order_lines_money_check',
@@ -684,6 +765,91 @@ export const orderLines = pgTable(
   ],
 );
 
+/** Every way an order changes status (the transition table lives in the contracts). */
+export const orderActionEnum = pgEnum('order_action', ORDER_ACTIONS);
+
+/**
+ * The order's history (ADR 0011): one row per status change, written by `transition()` in the
+ * same transaction as the change, its audit entry and its customer message. `reason` is the
+ * cancel reason code, or the text staff typed for a rejected receipt or a return; `payload` keeps
+ * the rest (a tracking number, per-line back-to-stock flags, the on-hand changes).
+ */
+export const orderEvents = pgTable(
+  'order_events',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    fromStatus: orderStatusEnum('from_status').notNull(),
+    toStatus: orderStatusEnum('to_status').notNull(),
+    action: orderActionEnum('action').notNull(),
+    actorType: actorTypeEnum('actor_type').notNull(),
+    /** Customer or staff id; null for ai/system. */
+    actorId: bigint('actor_id', { mode: 'number' }),
+    reason: text('reason'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
+);
+
 export type OrderRow = typeof orders.$inferSelect;
+export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
+
+/**
+ * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
+ * partial unique index is what enforces it. It sits in its own slot under the Discovery set
+ * banner, which it never replaces; with none active Home shows only the Discovery banner.
+ * `image_hash` names a rendition set of the photo pipeline (`public/<hash>-<w>.webp`).
+ */
+export const promoBanners = pgTable(
+  'promo_banners',
+  {
+    id: id(),
+    imageHash: text('image_hash'),
+    titleRu: text('title_ru').notNull(),
+    titleUz: text('title_uz').notNull(),
+    subtitleRu: text('subtitle_ru').notNull(),
+    subtitleUz: text('subtitle_uz').notNull(),
+    priceLineRu: text('price_line_ru'),
+    priceLineUz: text('price_line_uz'),
+    /** A `startapp` value (`catalog`, `p_<slug>`, ...); the Mini App maps it to a route. */
+    target: text('target').notNull().default('catalog'),
+    active: boolean('active').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('promo_banners_one_active_idx')
+      .on(t.active)
+      .where(sql`${t.active}`),
+  ],
+);
+
+/** Editable one-line texts by key (today only `home.slogan`), RU/UZ. */
+export const contentTexts = pgTable('content_texts', {
+  key: text('key').primaryKey(),
+  ru: text('ru').notNull(),
+  uz: text('uz').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Info pages (about, delivery and payment, returns, FAQ, contacts, public offer): limited Markdown, RU/UZ. */
+export const infoPages = pgTable('info_pages', {
+  id: id(),
+  slug: text('slug').notNull().unique(),
+  sort: smallint('sort').notNull(),
+  titleRu: text('title_ru').notNull(),
+  titleUz: text('title_uz').notNull(),
+  bodyRu: text('body_ru').notNull(),
+  bodyUz: text('body_uz').notNull(),
+  /** A draft is text pending the customer's approval; customers still read it (marked internally). */
+  draft: boolean('draft').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PromoBannerRow = typeof promoBanners.$inferSelect;
+export type InfoPageRow = typeof infoPages.$inferSelect;

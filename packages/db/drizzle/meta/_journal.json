@@ -85,6 +85,27 @@
       "when": 1794296901527,
       "tag": "0011_broadcasts",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794299739743,
+      "tag": "0012_foamy_tarot",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794300570813,
+      "tag": "0013_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794336424519,
+      "tag": "0014_sets",
+      "breakpoints": true
     }
   ]
 }

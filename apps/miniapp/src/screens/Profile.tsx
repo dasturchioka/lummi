@@ -1,4 +1,6 @@
 import { formatPhone } from '@lummi/i18n';
+import { useRouter } from '@tanstack/react-router';
+import { useInfoPages } from '../content/queries';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
@@ -12,6 +14,8 @@ import { ErrorState } from '../ui/States';
 
 export function Profile() {
   const { ensurePhone } = useRegistration();
+  const router = useRouter();
+  const pages = useInfoPages().data;
   const { t, language, theme, setLanguage, setTheme, customer, customerQuery } = usePrefs();
 
   if (customerQuery.isError) {
@@ -111,6 +115,24 @@ export function Profile() {
           }
         />
       </CardList>
+      {pages && pages.length > 0 ? (
+        // The info pages close the screen as one plain card of rows (mockup 08-profile): the
+        // titles name themselves, so there is no section label and no icon per row.
+        <nav aria-label={t.profile.info} className="mt-3">
+          <CardList>
+            {pages.map((p) => (
+              <ListRow
+                key={p.slug}
+                label={language === 'uz' ? p.titleUz : p.titleRu}
+                trailing={<ChevronIcon size={18} />}
+                onClick={() =>
+                  void router.navigate({ to: '/info/$slug', params: { slug: p.slug } })
+                }
+              />
+            ))}
+          </CardList>
+        </nav>
+      ) : null}
     </Screen>
   );
 }

@@ -1,22 +1,25 @@
+import { customerMayCancel } from '@lummi/contracts/constants';
 import type { OrderDto, OrderLineDto } from '@lummi/contracts';
 import { fill, formatDateTime, formatPhone } from '@lummi/i18n';
 import { useParams, useRouter } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { PointMeta } from '../delivery/Hours';
 import { MoneySummary, SectionTitle, StatusPill, Timeline } from '../orders/parts';
-import { useOrder, useOrdersText } from '../orders/queries';
+import { useCancelOrder, useOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
 import { openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { attribution } from '../ui/FragranceListCard';
-import { BoxIcon, ClockIcon, GiftIcon, PinIcon } from '../ui/icons';
+import { BoxIcon, ClockIcon, CloseIcon, GiftIcon, PinIcon } from '../ui/icons';
 import { MetaLine } from '../ui/MetaLine';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
+import { Sheet, SheetDescription } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
+import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 
 /**
@@ -29,24 +32,28 @@ function Line({ line }: { line: OrderLineDto }) {
   const o = useOrdersText();
   return (
     <li className="flex gap-3 p-3" data-testid="order-line">
-      <Thumb photo={line.photo} className="w-12" />
+      {/* top-aligned: a set's five names make the row taller than its thumbnail */}
+      <Thumb
+        photo={line.photo}
+        className="w-12 self-start"
+        set={line.kind === 'volume' ? undefined : line.kind}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         {line.brand ? (
           <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
             {attribution(t.card.basedOn, line.brand)}
           </p>
+        ) : line.kind !== 'volume' ? (
+          // a set is labelled as the brand names a set: «НАБОР» over its name
+          <p className="type-label text-muted">{t.home.discoveryLabel}</p>
         ) : null}
         <p className="type-name mt-px text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
           {line.name[language]}
         </p>
-        {line.setComposition ? (
-          <p className="type-small mt-0.5 text-muted">
-            {line.setComposition.map((f) => f.name).join(' · ')}
-          </p>
-        ) : null}
+        {line.setComposition ? <SetFragranceList items={line.setComposition} /> : null}
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
           <p className="type-small min-w-0 text-muted">
-            {line.kind === 'builder_set'
+            {line.kind !== 'volume'
               ? `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`
               : fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })}
           </p>
@@ -153,6 +160,178 @@ function AmountDue({ order }: { order: OrderDto }) {
   );
 }
 
+/**
+ * A cancelled order in place of the timeline: why, in the shopper's words (their own cancel, the
+ * expired reserve, a manager's reason), and when; for a paid order, that the manager will be in
+ * touch about the money (ADR 0006). The status pill above already says «Отменён».
+ */
+function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cancellation']> }) {
+  const { language, customer } = usePrefs();
+  const o = useOrdersText();
+  const managerUsername = customer?.config.managerUsername;
+  return (
+    <Card className="mt-3 flex gap-3 p-4" data-testid="cancelled">
+      <span className="grid size-9 shrink-0 place-items-center rounded-pill bg-block text-ink">
+        <CloseIcon size={18} />
+      </span>
+      <div className="min-w-0 flex-1 pt-px">
+        <p className="type-row font-semibold text-pretty text-ink">
+          {o.orders.cancelReason[cancellation.reason]}
+        </p>
+        <p className="type-small mt-0.5 text-muted">
+          {fill(o.orders.cancelledAt, { at: formatDateTime(cancellation.at, language) })}
+        </p>
+        {cancellation.afterPayment ? (
+          <div className="mt-2.5 border-t border-line pt-2.5">
+            <p className="type-small text-pretty text-ink">{o.orders.cancelledRefund}</p>
+            {/* right here: the footer's manager link sits below the first screen */}
+            {managerUsername ? (
+              <p className="type-small mt-1">
+                <button
+                  type="button"
+                  onClick={() => openManagerChat(managerUsername)}
+                  data-testid="refund-manager"
+                  className="-my-2 rounded-btn py-2 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+                >
+                  {o.orders.writeManager}
+                </button>
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * A sentence with a `{manager}` slot that opens the shop's manager account (`openManagerChat`);
+ * the words stay plain text until the customer's config has the username.
+ */
+function WithManagerLink({ text, link }: { text: string; link: string }) {
+  const { customer } = usePrefs();
+  const username = customer?.config.managerUsername;
+  const [before = '', after = ''] = text.split('{manager}');
+  return (
+    <>
+      {before}
+      {username ? (
+        <button
+          type="button"
+          onClick={() => openManagerChat(username)}
+          data-testid="sheet-manager"
+          className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+        >
+          {link}
+        </button>
+      ) : (
+        link
+      )}
+      {after}
+    </>
+  );
+}
+
+/**
+ * «Отменить заказ» (ADR 0011: only while «Ожидает оплаты»), a quiet link under the manager line as
+ * in the payment mockup, behind a confirmation sheet that sends a shopper who already paid to the
+ * manager instead. The status the screen showed goes along. If the order moved on meanwhile (a
+ * receipt went in, the reserve expired), the screen already shows it as it is now and the sheet
+ * says so, rather than closing on a press that seemed to do nothing. Mounted whatever the status,
+ * so the sheet can finish after the link has gone.
+ */
+function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolean }) {
+  const { t } = usePrefs();
+  const o = useOrdersText();
+  const [open, setOpen] = useState(false);
+  const [changed, setChanged] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const cancel = useCancelOrder(order.number);
+  const show = () => {
+    setFailed(false);
+    setChanged(false);
+    setOpen(true);
+  };
+  const confirm = () => {
+    setFailed(false);
+    cancel.mutate(order.status, {
+      onSuccess: (result) => {
+        if (result.kind === 'try_again') setFailed(true);
+        else if (result.kind === 'changed') setChanged(true);
+        else setOpen(false);
+      },
+      onError: () => setFailed(true),
+    });
+  };
+  const gone = order.status === 'cancelled';
+  return (
+    <>
+      {customerMayCancel(order.status) ? (
+        // under «Написать менеджеру», or on its own when that line is not there
+        <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
+          <button
+            type="button"
+            onClick={show}
+            data-testid="cancel-order"
+            className="-my-3 rounded-btn px-1 py-3 font-medium text-muted underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+          >
+            {o.orders.cancel}
+          </button>
+        </p>
+      ) : null}
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title={
+          changed
+            ? gone
+              ? o.orders.changedCancelledTitle
+              : o.orders.changedTitle
+            : fill(o.orders.cancelTitle, { number: String(order.number) })
+        }
+        ownDescription
+        closeLabel={t.common.close}
+      >
+        <SheetDescription className="type-small pb-3 text-pretty text-muted">
+          {changed ? (
+            gone && order.cancellation ? (
+              `${o.orders.cancelReason[order.cancellation.reason]}.`
+            ) : (
+              <WithManagerLink text={o.orders.changedText} link={o.orders.cancelManager} />
+            )
+          ) : (
+            <WithManagerLink text={o.orders.cancelText} link={o.orders.cancelManager} />
+          )}
+        </SheetDescription>
+        {changed ? (
+          <div className="flex flex-col gap-4 pb-1" data-testid="cancel-changed">
+            <div className="flex items-center gap-3">
+              <StatusPill status={order.status} />
+            </div>
+            <Button block onClick={() => setOpen(false)}>
+              {o.orders.gotIt}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
+            {failed ? (
+              <p className="type-small mb-2 text-ink" role="alert">
+                {o.orders.cancelFailed}
+              </p>
+            ) : null}
+            <Button block loading={cancel.isPending} onClick={confirm}>
+              {o.orders.cancelConfirm}
+            </Button>
+            <Button block variant="secondary" onClick={() => setOpen(false)}>
+              {o.orders.cancelKeep}
+            </Button>
+          </div>
+        )}
+      </Sheet>
+    </>
+  );
+}
+
 /** The number is known before the order is: the title stands from the first frame, the rest holds its shape. */
 function Loading({ title }: { title: string }) {
   return (
@@ -232,7 +411,9 @@ export function OrderView({ order }: { order: OrderDto }) {
 
       {order.status === 'awaiting_payment' ? <AmountDue order={order} /> : null}
 
-      {order.status !== 'cancelled' ? (
+      {order.cancellation ? (
+        <Cancelled cancellation={order.cancellation} />
+      ) : order.status !== 'cancelled' ? (
         <Card className="mt-3 p-4">
           <Timeline status={order.status} createdAt={order.createdAt} />
         </Card>
@@ -299,6 +480,8 @@ export function OrderView({ order }: { order: OrderDto }) {
           </button>
         </p>
       ) : null}
+
+      <CancelOrder order={order} spaced={!managerUsername} />
     </Screen>
   );
 }

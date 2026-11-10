@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { SET_SIZE } from '@lummi/contracts/constants';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, eq, fragrances, volumes, type Db } from '@lummi/db';
+import { and, asc, discoverySet, discoverySetItems, eq, fragrances, sql, volumes, type Db, type DbOrTx } from '@lummi/db';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService } from '../admin/catalog-admin.service';
 import { CatalogImportService } from '../catalog-import/catalog-import.service';
@@ -23,6 +24,7 @@ import { storePhoto } from './photo-pipeline';
  */
 export const PLACEHOLDER_PRICES = { 10: 69_000, 30: 149_000, 50: 219_000 } as const;
 export const PLACEHOLDER_ON_HAND = 20;
+export const PLACEHOLDER_DISCOVERY_ON_HAND = 10;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
 export const SEED_WORKBOOK = fileURLToPath(new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url));
@@ -52,6 +54,44 @@ export interface SeedOptions {
   limit?: number;
   /** Another workbook in the template (tests); default is the committed seed. */
   workbook?: string;
+}
+
+/**
+ * The Discovery set (ADR 0009) starts as the first five fragrances with 10 boxes in stock, both
+ * ours (the composition is the owner's to choose, the boxes his to count). Only while the owner
+ * has not set a composition, so a re-run never undoes his choice.
+ */
+async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
+  const [has] = await tx.select().from(discoverySetItems).limit(1);
+  if (has || fragranceIds.length < SET_SIZE) return;
+  await tx
+    .insert(discoverySetItems)
+    .values(
+      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })),
+    );
+  await tx
+    .update(discoverySet)
+    .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
+    .where(sql`id and is_placeholder and on_hand = 0`);
+}
+
+/**
+ * The Discovery set (ADR 0009) starts as the first five fragrances with 10 boxes in stock, both
+ * ours (the composition is the owner's to choose, the boxes his to count). Only while the owner
+ * has not set a composition, so a re-run never undoes his choice.
+ */
+async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
+  const [has] = await tx.select().from(discoverySetItems).limit(1);
+  if (has || fragranceIds.length < SET_SIZE) return;
+  await tx
+    .insert(discoverySetItems)
+    .values(
+      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })),
+    );
+  await tx
+    .update(discoverySet)
+    .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
+    .where(sql`id and is_placeholder and on_hand = 0`);
 }
 
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
@@ -108,5 +148,8 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
       }
     }
   }
+  // Discovery set (#22): outside the workbook, by the first five fragrances in workbook order.
+  const first = await db.select({ id: fragrances.id }).from(fragrances).orderBy(asc(fragrances.id)).limit(SET_SIZE);
+  await db.transaction((tx) => seedDiscoverySet(tx, first.map((f) => f.id)));
   return { fragrances: raw.fragrances.length };
 }

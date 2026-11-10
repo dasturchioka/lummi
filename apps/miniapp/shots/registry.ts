@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
+import { LIMIT_BANNER, LONG_PAGE, longSlogan, onInfoPage } from './content-data';
 import type { ShotDb } from './db';
 
 /**
@@ -74,6 +75,15 @@ const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
   await fillCart(api, []);
   for (const slug of CART_SLUGS) await db.restore(slug);
 };
+
+/** Taps the first n fragrances of the builder's list. */
+function pickForBuilder(n: number) {
+  return async ({ page }: { page: Page }) => {
+    const picks = page.getByTestId('pick');
+    await picks.first().waitFor();
+    for (let i = 0; i < n; i++) await picks.nth(i).click();
+  };
+}
 
 /** Types a search and submits it, as the keyboard's «Найти» does. */
 async function searchFor(page: Page, text: string) {
@@ -169,9 +179,12 @@ async function placeOrder(
     recipientName?: string;
     /** A typed address in the point's region instead of the point. */
     typed?: string;
+    /** Fills the cart itself (set lines), instead of the volumes in `items`. */
+    fill?: (api: ApiClient) => Promise<void>;
   } = {},
 ) {
-  await fillCart(api, items);
+  if (extra.fill) await extra.fill(api);
+  else await fillCart(api, items);
   const { region, point } = await firstPoint(api);
   const checkout = await api.checkout.get({ query: { regionId: region.id } });
   if (checkout.status !== 200) throw new Error(`checkout: HTTP ${checkout.status}`);
@@ -192,6 +205,87 @@ async function placeOrder(
     },
   });
   if (res.status !== 201) throw new Error(`order: HTTP ${res.status}`);
+}
+
+/** A cart of one volume, the Discovery set twice and a builder set of the five best sellers. */
+async function fillSetsCart(api: ApiClient) {
+  await fillCart(api, [['symphony', 30]]);
+  await api.cart.addDiscovery({ body: { qty: 2 } });
+  const options = await api.sets.builder();
+  if (options.status !== 200) throw new Error(`builder: HTTP ${options.status}`);
+  const slugs = options.body.options.slice(0, 5).map((o) => o.slug);
+  const res = await api.cart.addBuilder({ body: { slugs, qty: 1 } });
+  if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+}
+
+/*
+ * Sets at their worst (break-ui, #22): the five longest names and brands of the guide in the
+ * Discovery set, a seven-digit set price (the builder costs the same), 99 of each set in the cart,
+ * and a builder set whose five 10 ml bottles all ran out after it was added. `bestSets` puts back
+ * the seed's set (the first five fragrances, 299 000, 10 boxes; `seedDiscoverySet`), whatever an
+ * interrupted run left behind.
+ */
+const LONG_FIVE = [
+  'baccarat-rouge-540',
+  'blue-sapphire',
+  'le-male-le-parfum',
+  'pink-molecule-090-09',
+  'montabaco-intensivo',
+];
+const LONG_FIVE_NAMES = [
+  'Baccarat Rouge 540',
+  'Blue Sapphire',
+  'Le Male Le Parfum',
+  'Pink Molécule 090.09',
+  'Montabaco Intensivo',
+];
+const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
+const tenMlOf = `ml = 10 and fragrance_id in (select id from fragrances where slug = any($1))`;
+async function worstSets(db: ShotDb) {
+  await db.query('update discovery_set set price = 1250000, on_hand = 120');
+  await db.query('delete from discovery_set_items');
+  await db.query(
+    `insert into discovery_set_items (position, fragrance_id)
+     select i, (select id from fragrances where slug = ($1::text[])[i])
+     from generate_subscripts($1::text[], 1) as i`,
+    [LONG_FIVE],
+  );
+  await db.query(`update volumes set on_hand = 120 where ${tenMlOf}`, [LONG_FIVE]);
+}
+async function bestSets(db: ShotDb) {
+  await db.query('update discovery_set set price = 299000, on_hand = 10');
+  await db.query('delete from discovery_set_items');
+  await db.query(
+    `insert into discovery_set_items (position, fragrance_id)
+     select row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
+  );
+  for (const slug of [...LONG_FIVE, ...SOLD_FIVE]) await db.restore(slug);
+}
+/** Taps the builder rows of these fragrances, then brings the set box back into view. */
+async function pickByName(page: Page, names: string[]) {
+  const picks = page.getByTestId('pick');
+  await picks.first().waitFor();
+  for (const name of names) await picks.filter({ hasText: name }).first().click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+/** A cart of the worst sets: 99 Discovery sets, 99 builder sets of the longest five, and a builder set gone. */
+async function fillWorstSetsCart(api: ApiClient, db: ShotDb) {
+  await fillCart(api, []);
+  const discovery = await api.cart.addDiscovery({ body: { qty: 99 } });
+  if (discovery.status !== 200) throw new Error(`discovery add: HTTP ${discovery.status}`);
+  const long = await api.cart.addBuilder({ body: { slugs: LONG_FIVE, qty: 99 } });
+  if (long.status !== 200) throw new Error(`builder add: HTTP ${long.status}`);
+  const gone = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
+  if (gone.status !== 200) throw new Error(`builder add: HTTP ${gone.status}`);
+  await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [SOLD_FIVE]);
+}
+/** The name of the n-th builder row, and its slug, so a shot can take its 10 ml away. */
+let builderVictim: string | undefined;
+async function sellOutPicked(page: Page, db: ShotDb) {
+  const name = await page.getByTestId('pick').first().locator('.type-name').innerText();
+  const { rows } = await db.query('select slug from fragrances where name = $1', [name]);
+  builderVictim = String(rows[0]?.slug);
+  await db.setOnHand(builderVictim, 0);
 }
 
 /** Checkout's state for a shot: phone shared, Samarkand saved, the mockup's 243 000 cart. */
@@ -217,11 +311,59 @@ async function pickFirstPoint(page: Page) {
   await page.getByTestId('chosen-point').waitFor();
 }
 
-/** Opens the newest order from the «Заказы» list. */
-async function openFirstOrder(page: Page) {
+/** Opens the newest order from the «Заказы» list (a cancelled one shows its reason instead of the timeline). */
+async function openFirstOrder(page: Page, shows: 'timeline' | 'cancelled' = 'timeline') {
   await page.getByTestId('order-row').first().click();
-  await page.getByTestId('timeline').waitFor();
+  await page.getByTestId(shows).waitFor();
 }
+
+/** The shot customer's newest order, cancelled by the shopper through the real API. */
+async function cancelNewestOrder(api: ApiClient) {
+  const list = await api.orders.list({ query: {} });
+  const number = list.status === 200 ? list.body.orders[0]?.number : undefined;
+  if (!number) throw new Error('no order to cancel');
+  const res = await api.orders.cancel({
+    params: { number },
+    body: { expectedStatus: 'awaiting_payment' },
+  });
+  if (res.status !== 200) throw new Error(`cancel: HTTP ${res.status}`);
+}
+
+/**
+ * Moves the shot customer's newest order as `transition()` would, straight in the database (the
+ * staff and system callers have no route the shots can drive yet): its status and its history row.
+ */
+async function moveNewestOrder(
+  db: ShotDb,
+  move: {
+    from: string;
+    to: string;
+    action: string;
+    actor: 'staff' | 'system' | 'customer';
+    reason?: string;
+  },
+) {
+  await db.query(
+    `with o as (
+       update orders set status = $3::order_status, updated_at = now()
+       where id = (select o.id from orders o join customers c on c.id = o.customer_id
+                   where c.telegram_id = $1 order by o.number desc limit 1)
+       returning id)
+     insert into order_events (order_id, from_status, to_status, action, actor_type, reason)
+     select id, $2::order_status, $3::order_status, $4::order_action, $5::actor_type, $6 from o`,
+    [SHOT_USER.id, move.from, move.to, move.action, move.actor, move.reason ?? null],
+  );
+}
+
+/** The newest order cancelled by the expiry sweep, as the worker would (it does not run here). */
+const expireNewestOrder = (db: ShotDb) =>
+  moveNewestOrder(db, {
+    from: 'awaiting_payment',
+    to: 'cancelled',
+    action: 'cancel',
+    actor: 'system',
+    reason: 'reserve_expired',
+  });
 
 /*
  * The realistic worst case for checkout and orders (break-ui): a 60-character name (a full UZ
@@ -435,6 +577,26 @@ const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
     await db.restore('blue-sapphire');
   },
 };
+
+interface ShotBanner {
+  titleRu: string;
+  titleUz: string;
+  subtitleRu: string;
+  subtitleUz: string;
+  priceLineRu: string;
+  priceLineUz: string;
+}
+/** An active promo banner whose photo is a seeded bottle photo (the photo set already exists). */
+async function promoBanner(db: ShotDb, b: ShotBanner) {
+  await clearBanners(db);
+  await db.query(
+    `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
+     values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
+    [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
+  );
+}
+const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
+const sloganAtLimit = longSlogan();
 
 export const screens: ScreenDef[] = [
   {
@@ -823,6 +985,140 @@ export const screens: ScreenDef[] = [
     act: async ({ page }) => openFirstOrder(page),
     teardown: checkoutDone,
   },
+  // #24: «Отменить заказ» while unpaid, its confirmation, and a cancelled order (detail and list).
+  {
+    id: 'order-cancel',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-cancelled',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await expireNewestOrder(db);
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // a paid order the shop could not fulfil: the reason, and the manager will be in touch
+    id: 'order-cancelled-paid',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]]);
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'payment_confirmed',
+        action: 'confirm_payment',
+        actor: 'system',
+      });
+      await moveNewestOrder(db, {
+        from: 'payment_confirmed',
+        to: 'cancelled',
+        action: 'cancel',
+        actor: 'staff',
+        reason: 'out_of_stock',
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // the receipt went in while the sheet was open: the press answers 409 and says so
+    id: 'order-cancel-changed',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page, db }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'receipt_review',
+        action: 'submit_receipt',
+        actor: 'customer',
+      });
+      await sheet(page)
+        .getByRole('button', { name: /^(Отменить заказ|Buyurtmani bekor qilish)$/ })
+        .click();
+      await sheet(page).getByTestId('cancel-changed').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'orders-cancelled',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+      await cancelNewestOrder(api);
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: checkoutDone,
+  },
+  // Sets (#22) through checkout: the cart with set lines, then the order as bought.
+  {
+    id: 'checkout-sets',
+    path: '/checkout',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await chooseCity(api);
+      await clearOrders(db, { consent: 'given' });
+      await fillSetsCart(api);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-detail-sets',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [], { fill: fillSetsCart });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: async (ctx) => {
+      await ctx.db.query('update discovery_set set on_hand = 10');
+      await checkoutDone(ctx);
+    },
+  },
   // break-ui (#23): the worst case enters through the API, as real data does.
   { id: 'checkout-worst', ...checkoutWorst },
   // the narrowest phone: the seven-digit total still shares the confirm button with its label
@@ -995,6 +1291,103 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Content (#21): the owner's promo banner on Home (the plain `home` shot is the Discovery fallback).
+  {
+    id: 'home-promo',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Осенняя подборка',
+        titleUz: 'Kuzgi tanlov',
+        subtitleRu: 'Тёплые, древесные ароматы на вечер',
+        subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
+        priceLineRu: 'от 69 000 сум',
+        priceLineUz: '69 000 soʻmdan',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  {
+    // Worst case: long unbroken words, a long price line.
+    id: 'home-promo-worst',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
+        titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
+        subtitleRu:
+          'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
+        subtitleUz:
+          'Bir necha qatorga cho‘ziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
+        priceLineRu: 'от 1 234 567 сум за набор',
+        priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  // Info pages (#21): the long RU/UZ texts, a short one, and an unknown slug.
+  { id: 'info-faq', path: '/info/faq', fullPage: true },
+  { id: 'info-about', path: '/info/about' },
+  { id: 'info-contacts', path: '/info/contacts' },
+  { id: 'info-not-found', path: '/info/nope' },
+  // While the body loads (a fresh app: Profile's list is not cached, so the title is a bar too),
+  // and a failed read.
+  {
+    id: 'info-loading',
+    path: '/info/faq',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/content\/pages\/faq$/),
+  },
+  {
+    id: 'info-error',
+    path: '/info/faq',
+    act: ({ page }) => failRead(page, /\/content\/pages\/faq$/),
+  },
+  // Worst cases (break-ui): a ~2 000-word page with every block, the 80-character UZ title with ʻ,
+  // placeholders and refused link targets; a page the owner left empty; the long title in
+  // Profile's list; a promo banner at every field's limit.
+  { id: 'info-long', path: '/info/about', fullPage: true, ...onInfoPage('about', LONG_PAGE) },
+  { id: 'info-empty', path: '/info/offer', ...onInfoPage('offer', { bodyRu: '', bodyUz: '' }) },
+  {
+    id: 'profile-long-title',
+    path: '/profile',
+    fullPage: true,
+    ...onInfoPage('about', { titleRu: LONG_PAGE.titleRu, titleUz: LONG_PAGE.titleUz }),
+  },
+  {
+    id: 'home-promo-limit',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+    },
+    teardown: ({ db }) => clearBanners(db),
+  },
+  // the narrowest phone, with the banner and the slogan at their limits (one slogan line)
+  {
+    id: 'home-content-limit-360',
+    path: '/',
+    width: 360,
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+      await sloganAtLimit.setup({ db });
+    },
+    teardown: async ({ db }) => {
+      await clearBanners(db);
+      await sloganAtLimit.teardown({ db });
+    },
+  },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {
     id: 'cart-lines',
@@ -1229,6 +1622,216 @@ export const screens: ScreenDef[] = [
       await page.getByRole('searchbox').focus();
       await page.setViewportSize({ width: 390, height: 480 });
       await page.evaluate(() => window.scrollBy(0, 160));
+    },
+  },
+  // Sets (#22): the «Наборы» page, the Discovery set, the builder and the cart with set lines.
+  { id: 'sets-catalog', path: '/catalog?type=sets' },
+  { id: 'set-discovery', path: '/sets/discovery', fullPage: true },
+  {
+    // Boxes ran out: the dock says so and the set stays on view.
+    id: 'set-discovery-sold-out',
+    path: '/sets/discovery',
+    setup: async ({ db }) => void (await db.query('update discovery_set set on_hand = 0')),
+    teardown: async ({ db }) => void (await db.query('update discovery_set set on_hand = 10')),
+  },
+  { id: 'builder-empty', path: '/sets/builder' },
+  { id: 'builder-3', path: '/sets/builder', act: pickForBuilder(3) },
+  { id: 'builder-3-360', path: '/sets/builder', width: 360, act: pickForBuilder(3) },
+  { id: 'builder-5', path: '/sets/builder', act: pickForBuilder(5) },
+  {
+    // A chosen fragrance's 10 ml ran out before the tap: the server answers 409 naming it, the page
+    // names it over the button, and the box drops it (four left to fill one).
+    id: 'builder-unavailable',
+    path: '/sets/builder',
+    act: async ({ page, db }) => {
+      await pickForBuilder(5)({ page });
+      await sellOutPicked(page, db);
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.getByTestId('dock-alert').waitFor();
+      await page.waitForFunction(
+        () => document.querySelectorAll('[data-testid="pick"][data-chosen="true"]').length === 4,
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: async ({ db }) => {
+      if (builderVictim) await db.restore(builderVictim);
+      builderVictim = undefined;
+    },
+  },
+  {
+    // The add failed on the way (no connection): «Повторить» over the button, the five kept.
+    id: 'builder-failed',
+    path: '/sets/builder',
+    act: async ({ page }) => {
+      await pickForBuilder(5)({ page });
+      await page.route('**/cart/sets/builder', (route) => route.abort());
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.getByRole('button', { name: /Повторить|Qayta urinish/ }).waitFor();
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
+  {
+    id: 'builder-loading',
+    path: '/sets/builder',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/sets\/builder$/),
+  },
+  {
+    id: 'builder-error',
+    path: '/sets/builder',
+    act: ({ page }) => failRead(page, /\/sets\/builder$/),
+  },
+  {
+    id: 'set-discovery-loading',
+    path: '/sets/discovery',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/sets\/discovery$/),
+  },
+  {
+    id: 'set-discovery-error',
+    path: '/sets/discovery',
+    act: ({ page }) => failRead(page, /\/sets\/discovery$/),
+  },
+  {
+    id: 'cart-sets',
+    path: '/cart',
+    setup: async ({ api }) => {
+      await fillCart(api, [['symphony', 30]]);
+      await api.cart.addDiscovery({ body: { qty: 2 } });
+      const options = await api.sets.builder();
+      if (options.status !== 200) throw new Error(`builder: HTTP ${options.status}`);
+      const slugs = options.body.options.slice(0, 5).map((o) => o.slug);
+      const res = await api.cart.addBuilder({ body: { slugs, qty: 1 } });
+      if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+    },
+    teardown: emptyCart,
+    fullPage: true,
+  },
+  {
+    // One 10 ml left, shared: the volume line takes it, so the builder set after it cannot be
+    // bought (the server shares each 10 ml across the lines in order).
+    id: 'cart-sets-shared',
+    path: '/cart',
+    setup: async ({ api, db }) => {
+      await fillCart(api, [['symphony', 10]]);
+      const res = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
+      if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+      await db.query(`update volumes set on_hand = 1 where ml = 10 and fragrance_id =
+        (select id from fragrances where slug = 'symphony')`);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      for (const slug of SOLD_FIVE) await ctx.db.restore(slug);
+    },
+    fullPage: true,
+  },
+  // break-ui (#22): the longest five in the Discovery set, a seven-digit set price, 99 of each set.
+  {
+    id: 'set-discovery-worst',
+    path: '/sets/discovery',
+    fullPage: true,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'set-discovery-worst-360',
+    path: '/sets/discovery',
+    width: 360,
+    fullPage: true,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    // the Discovery card sold out beside its seven-digit price, on the narrowest phone
+    id: 'sets-catalog-worst-360',
+    path: '/catalog?type=sets',
+    width: 360,
+    setup: async ({ db }) => {
+      await worstSets(db);
+      await db.query('update discovery_set set on_hand = 0');
+    },
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'home-sets-worst-360',
+    path: '/',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'builder-worst-360',
+    path: '/sets/builder',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    act: ({ page }) => pickByName(page, LONG_FIVE_NAMES),
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    // all five chosen ran out at once: the 409 names every one of them over the button
+    id: 'builder-gone-worst-360',
+    path: '/sets/builder',
+    width: 360,
+    setup: ({ db }) => worstSets(db),
+    act: async ({ page, db }) => {
+      await pickByName(page, LONG_FIVE_NAMES);
+      await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [LONG_FIVE]);
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.getByTestId('dock-alert').waitFor();
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="pick"][data-chosen="true"]'),
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+    teardown: ({ db }) => bestSets(db),
+  },
+  {
+    id: 'cart-sets-worst',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await fillWorstSetsCart(api, db);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      await bestSets(ctx.db);
+    },
+  },
+  {
+    id: 'cart-sets-worst-360',
+    path: '/cart',
+    width: 360,
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await fillWorstSetsCart(api, db);
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      await bestSets(ctx.db);
+    },
+  },
+  {
+    id: 'order-detail-sets-worst',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await worstSets(db);
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [], {
+        fill: async (a) => {
+          await fillCart(a, []);
+          await a.cart.addDiscovery({ body: { qty: 99 } });
+          await a.cart.addBuilder({ body: { slugs: LONG_FIVE, qty: 99 } });
+        },
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: async (ctx) => {
+      await checkoutDone(ctx);
+      await bestSets(ctx.db);
     },
   },
   // FragranceListCard on dev fixtures: grid (the catalog's), row and compact, worst cases included.

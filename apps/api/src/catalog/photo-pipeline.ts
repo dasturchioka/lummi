@@ -47,3 +47,26 @@ export function looksLikeImage(b: Uint8Array): boolean {
     b[11] === 0x50;
   return jpeg || png || webp;
 }
+
+/** The smallest source photo accepted: the 400 px rendition must never be an upscale. */
+export const MIN_SOURCE_PHOTO = { width: 400, height: 533 } as const;
+
+/** Validate an uploaded image by magic bytes and size, render the served set; null when refused. */
+export async function storeUploadedPhoto(
+  files: FileStore,
+  bytes: Uint8Array,
+): Promise<{ hash: string } | null> {
+  if (!looksLikeImage(bytes)) return null;
+  try {
+    const meta = await sharp(bytes).metadata();
+    if (
+      (meta.width ?? 0) < MIN_SOURCE_PHOTO.width ||
+      (meta.height ?? 0) < MIN_SOURCE_PHOTO.height
+    ) {
+      return null;
+    }
+    return await storePhoto(files, bytes);
+  } catch {
+    return null;
+  }
+}
