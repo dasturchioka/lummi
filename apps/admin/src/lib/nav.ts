@@ -1,6 +1,7 @@
 import type { StaffDto } from '@lummi/contracts';
 import {
   ChartColumn,
+  CreditCard,
   Droplet,
   FileText,
   House,
@@ -73,6 +74,7 @@ export const NAV: NavGroup[] = [
     key: 'manage',
     items: [
       { key: 'reports', icon: ChartColumn, href: null, roles: OWNER },
+      { key: 'shopCard', icon: CreditCard, href: '/payment-card', roles: OWNER },
       { key: 'settings', icon: SlidersHorizontal, href: '/settings', roles: OWNER },
       { key: 'audit', icon: ScrollText, href: '/audit', roles: OWNER },
       { key: 'staff', icon: UserCog, href: '/staff', roles: OWNER },
