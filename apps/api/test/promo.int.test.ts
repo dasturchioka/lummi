@@ -13,6 +13,7 @@ import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
+import { payWithCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
@@ -736,8 +737,10 @@ describe('the order holds a use; the limits count uses that were not voided', ()
         source: 'miniapp',
       });
     expect(sent.kind).toBe('submitted');
+    if (sent.kind !== 'submitted') return;
+    // the money arrives and the receipt AI confirms it (#32)
+    await payWithCredit(t, row!, sent.receipt.id);
     const path = [
-      ['receipt_review', 'confirm_payment', { type: 'ai' }, undefined],
       ['payment_confirmed', 'accept', manager, undefined],
       ['accepted', 'start_assembly', manager, undefined],
       ['assembling', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
