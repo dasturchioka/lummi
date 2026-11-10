@@ -220,9 +220,15 @@ const unavailable: CartDto = {
   },
 };
 
+/** The plain cart with its bottle photos (the `discount` fixture keeps them missing on purpose). */
+const PHOTOGRAPHED = plain.lines.map((l) =>
+  l.kind === 'volume' ? { ...l, photo: PHOTO[l.ml] } : l,
+);
+
 /** The entered code BLOGER10 as the quote judged it: applied (10 %), or refused with its reason. */
 const withCode = (invalid: PromoCodeInvalid | null, code = 'BLOGER10'): CartDto => ({
   ...plain,
+  lines: PHOTOGRAPHED,
   promoCode: code,
   quote: {
     ...plain.quote,
@@ -271,6 +277,7 @@ const promoWorst: CartDto = {
  */
 const promoFull: CartDto = {
   ...plain,
+  lines: PHOTOGRAPHED,
   deliveryCity: KARAKALPAKSTAN,
   promoCode: 'LUMMI100',
   freeDeliveryProgress: 0,
