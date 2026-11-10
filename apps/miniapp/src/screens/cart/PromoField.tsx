@@ -22,9 +22,9 @@ const same = (typed: string, stored: string | null) =>
 
 /**
  * The keyboard is up: Telegram has shrunk the WebView (Android) or the visual viewport (iOS) to
- * what is left above it. The WebView scrolls the caret just into view, not knowing that the
- * floating tab bar sits on the keyboard, so the field is lifted clear of it (the clearance is the
- * block's scroll-margin-bottom, which the browser's own focus scroll honours too).
+ * what is left above it, and the shell has put the tab bar away. The WebView scrolls just the
+ * caret into view; the field is lifted further, so the top of the totals under it shows too (the
+ * clearance is the block's scroll-margin-bottom, which the browser's own focus scroll honours).
  */
 function liftAboveKeyboard(block: HTMLElement | null, input: HTMLInputElement | null) {
   if (!block || !input || document.activeElement !== input) return;
@@ -117,8 +117,9 @@ export function PromoField({
   return (
     <section
       ref={block}
-      // pb-1: the focus ring's 4 px, which the totals' positioned ground would otherwise paint over
-      className="mt-3 pb-1 scroll-mb-[calc(var(--tabbar-h)+var(--tabbar-inset)+var(--safe-b,0px)+12px)]"
+      // pb-1: the focus ring's 4 px, which the totals' positioned ground would otherwise paint over;
+      // scroll-mb: with the keyboard up, the totals' first row stays in view under the field
+      className="mt-3 scroll-mb-16 pb-1"
       aria-label={p.label}
       data-testid="promo"
     >
