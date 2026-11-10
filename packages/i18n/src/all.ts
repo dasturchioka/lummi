@@ -2,6 +2,7 @@ import type { Language } from './language';
 import { adminMessages } from './admin';
 import { botMessages } from './bot';
 import { miniappMessages } from './miniapp';
+import { ordersMessages } from './orders';
 import { sharedMessages } from './shared';
 
 /**
@@ -9,6 +10,18 @@ import { sharedMessages } from './shared';
  * admin import their own namespace instead, so they never bundle another surface's strings.
  */
 export const dictionaries = {
-  ru: { ...sharedMessages.ru, ...botMessages.ru, ...miniappMessages.ru, ...adminMessages.ru },
-  uz: { ...sharedMessages.uz, ...botMessages.uz, ...miniappMessages.uz, ...adminMessages.uz },
+  ru: {
+    ...sharedMessages.ru,
+    ...botMessages.ru,
+    ...miniappMessages.ru,
+    ...ordersMessages.ru,
+    ...adminMessages.ru,
+  },
+  uz: {
+    ...sharedMessages.uz,
+    ...botMessages.uz,
+    ...miniappMessages.uz,
+    ...ordersMessages.uz,
+    ...adminMessages.uz,
+  },
 } satisfies Record<Language, object>;

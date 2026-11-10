@@ -250,6 +250,8 @@ export function FragranceForm({
         for (const f of (res.body as { fields?: string[] }).fields ?? [])
           setError(f as never, { type: 'server', message: 'server' });
         setBanner({ kind: 'error', text: c.onHandChanged });
+      } else if (res?.status === 409 && (res.body as { code?: string }).code === 'try_again') {
+        setBanner({ kind: 'error', text: c.tryAgain });
       } else if (res?.status === 409) {
         setError('name', { type: 'server', message: 'server' });
         setBanner({ kind: 'error', text: c.nameTaken });

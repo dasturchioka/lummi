@@ -42,14 +42,16 @@ export interface LoadedCart {
 
 /**
  * The cart's lines capped at available, priced through `quote()` (ADR 0001). The one place that
- * turns stored lines into a Quote: the cart screen and checkout (#23, inside its transaction)
- * both come through here. `entitlements` is for the discount tickets; none are held yet.
+ * turns stored lines into a Quote: the cart screen and checkout (inside its transaction, after
+ * the stock rows are locked) both come through here. `entitlements` is for the discount tickets;
+ * none are held yet. `deliveryTariff` is checkout's: the chosen BTS point's region tariff, which
+ * wins over the saved delivery city's.
  */
 export async function loadCartQuote(
   tx: DbOrTx,
   now: Date,
   customerId: number,
-  opts: { entitlements?: Entitlement[] } = {},
+  opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
 ): Promise<LoadedCart> {
   const rows = await tx
     .select({
@@ -128,7 +130,8 @@ export async function loadCartQuote(
     entitlements: opts.entitlements ?? [],
     promoCode: null,
     choice: state?.discountChoice ?? null,
-    deliveryTariff: city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
+    deliveryTariff:
+      opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
     settings: {
       freeDeliveryThreshold: settings['pricing.freeDeliveryThreshold'],
       thresholdBase: settings['pricing.thresholdBase'],

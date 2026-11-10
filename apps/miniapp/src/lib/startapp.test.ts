@@ -16,3 +16,10 @@ it('opens a fragrance card from p_<slug> and rejects malformed ones', () => {
   expect(routeForStartParam('p_../admin')).toBe('/');
   expect(routeForStartParam('p_Tygar')).toBe('/');
 });
+
+it('opens an order from o_<number> and rejects malformed ones', () => {
+  expect(routeForStartParam('o_1001')).toBe('/orders/1001');
+  expect(routeForStartParam('o_0')).toBe('/');
+  expect(routeForStartParam('o_12a')).toBe('/');
+  expect(routeForStartParam('o_')).toBe('/');
+});
