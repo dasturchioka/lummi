@@ -706,12 +706,15 @@ export const screens: ScreenDef[] = [
     },
   },
   {
-    // «Перейти к оплате» with nothing chosen on a first order: every field says what it needs
+    // «Перейти к оплате» on a first order with the name cleared, half a phone and no point:
+    // every field says what it needs
     id: 'checkout-errors',
     path: '/checkout',
     fullPage: true,
     setup: ({ api, db }) => checkoutReady(api, db, 'none'),
     act: async ({ page }) => {
+      await page.getByRole('textbox', { name: /^(Имя|Ism)$/ }).fill('');
+      await page.getByRole('textbox', { name: /Телефон получателя|telefoni/ }).fill('+998 90 12');
       await page.getByTestId('submit').click();
       await page.getByTestId('consent').getByRole('alert').waitFor();
       await page.evaluate(() => window.scrollTo(0, 0));
