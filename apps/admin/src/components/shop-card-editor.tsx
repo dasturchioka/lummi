@@ -160,13 +160,20 @@ function EditCard({
             {groupCardNumber(parsed.data.number)}
           </p>
           <p className="text-[15px] [overflow-wrap:anywhere]">{parsed.data.holder}</p>
+          {/*
+           * A warning about the number, not a form error: it sits on the number's own plate, in
+           * regular weight, and «Сохранить карту» stays as it is.
+           */}
+          {!valid && (
+            <p
+              className="mt-2.5 flex items-start gap-2 border-t border-border-strong pt-3 text-[13px] leading-snug text-pretty"
+              data-testid="confirm-checksum"
+            >
+              <CircleAlert className="mt-px size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+              {s.checksum}
+            </p>
+          )}
         </div>
-        {!valid && (
-          <p className="mt-3 flex items-start gap-1.5 text-[13px] leading-snug font-medium">
-            <CircleAlert className="mt-px size-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
-            {s.checksum}
-          </p>
-        )}
         {error && <Notice title={error} className="mt-4" />}
         <DialogFooter>
           <Button variant="outline" onClick={() => setStep('form')} disabled={pending}>
