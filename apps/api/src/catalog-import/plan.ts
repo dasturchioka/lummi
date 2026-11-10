@@ -424,15 +424,28 @@ function parseFragrance(
     if (parts.length !== 3) bad(k, 'three_key_notes', { n: parts.length });
     return parts;
   };
-  const noteList = (k: 'topNotes' | 'heartNotes' | 'baseNotes') =>
-    splitList(c[k], /,/).flatMap((name) => {
-      const canon = refs.noteNames.get(name.toLowerCase());
-      if (!canon) {
-        bad(k, 'unknown_note', { value: name });
-        return [];
+  /** Split on commas, but a dictionary note that itself contains commas wins (longest match first). */
+  const noteList = (k: 'topNotes' | 'heartNotes' | 'baseNotes') => {
+    const tokens = splitList(c[k], /,/);
+    const out: string[] = [];
+    for (let i = 0; i < tokens.length; ) {
+      let took = 0;
+      for (let j = tokens.length; j > i; j--) {
+        const canon = refs.noteNames.get(tokens.slice(i, j).join(', ').toLowerCase());
+        if (canon) {
+          out.push(canon);
+          took = j - i;
+          break;
+        }
       }
-      return [canon];
-    });
+      if (!took) {
+        bad(k, 'unknown_note', { value: tokens[i]! });
+        took = 1;
+      }
+      i += took;
+    }
+    return out;
+  };
 
   const name = required('name');
   const originalBrand = required('originalBrand');

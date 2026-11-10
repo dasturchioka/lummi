@@ -75,24 +75,6 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
     .where(sql`id and is_placeholder and on_hand = 0`);
 }
 
-/**
- * The Discovery set (ADR 0009) starts as the first five fragrances with 10 boxes in stock, both
- * ours (the composition is the owner's to choose, the boxes his to count). Only while the owner
- * has not set a composition, so a re-run never undoes his choice.
- */
-async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
-  const [has] = await tx.select().from(discoverySetItems).limit(1);
-  if (has || fragranceIds.length < SET_SIZE) return;
-  await tx
-    .insert(discoverySetItems)
-    .values(
-      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })),
-    );
-  await tx
-    .update(discoverySet)
-    .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
-    .where(sql`id and is_placeholder and on_hand = 0`);
-}
 
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
   const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);

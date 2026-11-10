@@ -89,8 +89,10 @@ export const fragranceInputSchema = z
     if (new Set(v.similarIds).size !== v.similarIds.length) {
       ctx.addIssue({ code: 'custom', path: ['similarIds'], message: 'duplicate_similar' });
     }
-    const all = NOTE_LEVELS.flatMap((l) => v.notes[l]);
-    if (new Set(all).size !== all.length) {
+    // The same note may sit on two levels (the customer's guide does: lavender top and heart);
+    // twice inside one level is a mistake.
+    const repeated = NOTE_LEVELS.some((l) => new Set(v.notes[l]).size !== v.notes[l].length);
+    if (repeated) {
       ctx.addIssue({ code: 'custom', path: ['notes'], message: 'duplicate_note' });
     }
   });
