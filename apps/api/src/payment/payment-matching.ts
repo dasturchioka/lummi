@@ -83,9 +83,12 @@ class JudgeUnavailable extends Error {
  *   (the shopper still reads «Чек на проверке»). A receipt in manual review is still re-checked
  *   when a new candidate arrives, until a person decides (TZ §4: «система перепроверяет, пока
  *   менеджер не решит»).
- * - Every answer is a `receipt_checks` row with the candidates it was shown, so the same event or
- *   job twice asks nothing the second time. Whoever loses a race for a credit (two receipts, one
- *   credit) hears `credit_taken` from the door and keeps waiting for its own money.
+ * - Every answer is a `receipt_checks` row with the candidates it was shown, stored before it is
+ *   acted on, so the same event, job or retry asks nothing the second time. A judge that could
+ *   not answer is not an answer: the job's attempts retry it, and only the last one sends the
+ *   receipt to manual review. Whoever loses a race for a credit (two receipts, one credit) hears
+ *   `credit_taken` from the door and keeps waiting for its own money.
+ * - A duplicate receipt (`IS_DUPLICATE`) goes to manual review at once and is never asked about.
  */
 @Injectable()
 export class PaymentMatching implements OnApplicationShutdown {
