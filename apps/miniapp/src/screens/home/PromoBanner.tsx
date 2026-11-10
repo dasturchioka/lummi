@@ -43,7 +43,7 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
             alt=""
             decoding="async"
             onError={() => setFailed(true)}
-            className="absolute inset-0 size-full object-cover"
+            className="absolute inset-0 size-full object-cover object-[center_top]"
           />
         ) : null}
       </div>

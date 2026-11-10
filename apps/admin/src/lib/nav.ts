@@ -9,6 +9,7 @@ import {
   MapPin,
   Megaphone,
   MessageSquareText,
+  Package,
   ScrollText,
   ShoppingBag,
   SlidersHorizontal,
@@ -59,6 +60,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: 'catalog', icon: Droplet, href: '/catalog', roles: OWNER },
       { key: 'stock', icon: Warehouse, href: null, roles: ALL },
+      { key: 'sets', icon: Package, href: '/sets', roles: ALL },
       { key: 'content', icon: FileText, href: '/content', roles: OWNER },
     ],
   },

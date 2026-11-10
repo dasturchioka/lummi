@@ -35,6 +35,20 @@ export type CatalogSort = (typeof CATALOG_SORTS)[number];
 export const CATALOG_PAGE_SIZE = 24;
 export const CATALOG_PAGE_MAX = 100;
 
+/** The ceiling of every so'm amount an input may carry (ADR 0016). */
+export const MAX_PRICE = 100_000_000;
+
+/**
+ * What a cart or order line holds: one volume, the Discovery set, or a builder set (ADR 0009). One
+ * list for the cart and the order, so one name per kind everywhere; the DB enums are built from it.
+ */
+export const LINE_KINDS = ['volume', 'builder_set', 'discovery_set'] as const;
+export type LineKind = (typeof LINE_KINDS)[number];
+export type SetLineKind = Exclude<LineKind, 'volume'>;
+
+/** Both kinds of set hold exactly this many different fragrances, 10 ml each (ADR 0009). */
+export const SET_SIZE = 5;
+
 /**
  * `startapp` parameter -> Mini App route: the one list of targets. The Mini App routes with it,
  * the admin banner editor validates against it, and later tickets (broadcasts, set links) add
@@ -47,6 +61,8 @@ export const STATIC_START_TARGETS = {
   cart: '/cart',
   orders: '/orders',
   profile: '/profile',
+  set_discovery: '/sets/discovery',
+  builder: '/sets/builder',
 } as const;
 
 /** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */

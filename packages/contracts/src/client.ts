@@ -43,8 +43,14 @@ export const clientRoutes = {
   cart: {
     get: route('GET', '/cart', [200, 401]),
     addLine: route('POST', '/cart/lines', [200, 401, 404, 409]),
+    addDiscovery: route('POST', '/cart/sets/discovery', [200, 401, 409]),
+    addBuilder: route('POST', '/cart/sets/builder', [200, 401, 404, 409, 422]),
     setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
+  },
+  sets: {
+    discovery: route('GET', '/sets/discovery', [200, 401]),
+    builder: route('GET', '/sets/builder', [200, 401]),
   },
   content: {
     home: route('GET', '/content/home', [200, 401]),

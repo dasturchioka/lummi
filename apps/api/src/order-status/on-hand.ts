@@ -1,18 +1,30 @@
-import { asc, eq, inArray, sql, volumes, type DbOrTx, type OrderLineRow } from '@lummi/db';
+import {
+  asc,
+  discoverySet,
+  eq,
+  inArray,
+  sql,
+  volumes,
+  type DbOrTx,
+  type OrderLineRow,
+} from '@lummi/db';
 import { lineVolumeUnits } from '../catalog/catalog.service';
 
 type LineKind = OrderLineRow['kind'];
 
 /**
  * Where a line kind's bottles are on hand. A volume line and a builder set line both hold
- * 10/30/50 ml volumes (`lineVolumeUnits`, the Reserve's own rule). #22 adds the Discovery set,
- * whose on hand is its own row: one case here and one shelf below, or this stops compiling.
+ * 10/30/50 ml volumes (`lineVolumeUnits`, the Reserve's own rule); the Discovery set's on hand is
+ * its own row (ADR 0009). A new line kind needs a case here and a shelf below, or this stops
+ * compiling.
  */
 function shelfOf(kind: LineKind) {
   switch (kind) {
     case 'volume':
     case 'builder_set':
       return 'volumes' as const;
+    case 'discovery_set':
+      return 'discovery_set' as const;
     default: {
       const unknown: never = kind;
       throw new Error(`no shelf for order line kind ${String(unknown)}`);
@@ -37,7 +49,41 @@ interface ShelfOps {
   write(tx: DbOrTx, id: number, onHand: number): Promise<void>;
 }
 
+/** The row id of the single Discovery set row, as a number for `OnHandChange` (its key is `true`). */
+const DISCOVERY_ROW = 1;
+
+/**
+ * The shelves in lock order: the Discovery row first, then volumes by ascending id. Checkout takes
+ * them in the same order, so a handover and a concurrent checkout cannot wait on each other.
+ */
+const SHELF_ORDER: readonly Shelf[] = ['discovery_set', 'volumes'];
+
 const SHELVES: Record<Shelf, ShelfOps> = {
+  discovery_set: {
+    async bottles(tx, orderId, positions) {
+      if (positions.length === 0) return new Map();
+      const { rows } = await tx.execute<{ qty: string | null }>(sql`
+        select sum(qty) as qty from order_lines
+        where order_id = ${orderId} and kind = 'discovery_set'
+          and position in (${sql.join(
+            positions.map((p) => sql`${p}`),
+            sql`, `,
+          )})`);
+      const qty = Number(rows[0]?.qty ?? 0);
+      return qty > 0 ? new Map([[DISCOVERY_ROW, qty]]) : new Map();
+    },
+    async lock(tx, ids) {
+      if (ids.length === 0) return new Map();
+      const [row] = await tx
+        .select({ onHand: discoverySet.onHand })
+        .from(discoverySet)
+        .for('update');
+      return new Map(row ? [[DISCOVERY_ROW, row.onHand]] : []);
+    },
+    async write(tx, _id, onHand) {
+      await tx.update(discoverySet).set({ onHand }).where(eq(discoverySet.id, true));
+    },
+  },
   volumes: {
     async bottles(tx, orderId, positions) {
       if (positions.length === 0) return new Map();
@@ -97,7 +143,9 @@ export async function changeOnHand(
     byShelf.set(shelf, own);
   }
   const changes: OnHandChange[] = [];
-  for (const [shelf, positions] of byShelf) {
+  for (const shelf of SHELF_ORDER) {
+    const positions = byShelf.get(shelf);
+    if (!positions) continue;
     const ops = SHELVES[shelf];
     const held = await ops.bottles(tx, orderId, positions.all);
     const locked = await ops.lock(tx, [...held.keys()]);
