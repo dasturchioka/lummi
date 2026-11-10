@@ -10,7 +10,8 @@ export default async function BroadcastPage({ params }: { params: Promise<{ id: 
   const one = await api.broadcasts.get({ params: { id } });
   if (one.status === 401) redirect('/login');
   if (one.status === 404) notFound();
-  if (one.status !== 200) redirect('/');
+  if (one.status === 403) redirect('/'); // broadcasts are the owner's
+  if (one.status !== 200) throw new Error(`broadcast failed to load: ${one.status}`);
   const { t, language } = await getAdminMessages();
   return <BroadcastDetail key={one.body.id} initial={one.body} language={language} t={t} />;
 }
