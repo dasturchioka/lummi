@@ -5,9 +5,10 @@ import { EDGES } from '../tokens';
 import { PHOTO_FILE, PUBLIC_PREFIX } from './photo-pipeline';
 
 /**
- * Product photos for development and tests. In production Caddy serves the same files from the
- * VPS volume on `media.<domain>` with the same header (ADR 0020). Names are content hashes, so a
- * file never changes and may be cached forever. Receipts are NOT here: they are private.
+ * Product photos for development and tests. In production Caddy serves the same files on
+ * `media.<domain>` with the same header (ADR 0020), from `FILES_DIR/public` only, never from
+ * `FILES_DIR` itself: receipts live beside it under `private/` and are served only through the API
+ * (#28). Names are content hashes, so a file never changes and may be cached forever.
  */
 @Controller('media/public')
 export class MediaController {

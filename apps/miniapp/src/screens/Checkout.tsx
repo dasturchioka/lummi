@@ -12,11 +12,12 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
+import { CardIcon } from '../orders/icons';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
-import { hapticSuccess } from '../lib/telegram';
+import { hapticSuccess, openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
@@ -162,7 +163,7 @@ function Loading() {
 /** Mockup 06, restyled to the approved chrome: recipient, BTS point, comment, gift, the server's total. */
 export function Checkout() {
   const o = useOrdersText();
-  const { t, language } = usePrefs();
+  const { t, language, customer } = usePrefs();
   const router = useRouter();
   const qc = useQueryClient();
   const { ensurePhone } = useRegistration();
@@ -212,6 +213,34 @@ export function Checkout() {
   if (!data) return <Loading />;
 
   const toCart = () => void router.navigate({ to: '/cart' });
+
+  // No shop card: nowhere to transfer, so checkout is closed (#28); the server refuses it too.
+  if (!data.paymentAvailable) {
+    const username = customer?.config.managerUsername;
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <EmptyState
+          fill
+          icon={<CardIcon size={28} />}
+          title={o.checkout.unavailableTitle}
+          text={o.checkout.unavailableText}
+          action={
+            <>
+              {username ? (
+                <Button block onClick={() => openManagerChat(username)}>
+                  {o.checkout.writeManager}
+                </Button>
+              ) : null}
+              <Button block variant={username ? 'secondary' : 'primary'} onClick={toCart}>
+                {o.checkout.backToCart}
+              </Button>
+            </>
+          }
+        />
+      </Screen>
+    );
+  }
 
   if (noPhone)
     return (
@@ -342,8 +371,9 @@ export function Checkout() {
           setConflict(null);
           attemptKey.current = null;
           hapticSuccess();
+          // straight on to paying for it (#28)
           void router.navigate({
-            to: '/orders/$number',
+            to: '/orders/$number/pay',
             params: { number: String(r.order.number) },
             replace: true,
           });
@@ -356,6 +386,10 @@ export function Checkout() {
           setError(o.checkout.tryAgain);
         } else if (r.kind === 'phone_required') {
           void askPhone();
+        } else if (r.kind === 'payment_unavailable') {
+          // the card was removed while the shopper was here: the screen closes with the reason
+          setConflict(null);
+          void qc.invalidateQueries({ queryKey: ['checkout'] });
         } else {
           setConflict(null);
           setAttempted(true);

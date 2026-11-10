@@ -18,6 +18,8 @@ export async function createApp(deps: AppDeps): Promise<INestApplication> {
     type: ['image/jpeg', 'image/png', 'image/webp'],
     limit: MAX_PHOTO_BYTES + 1024,
   });
+  // Receipt uploads (#28) have no parser here: their handler reads the bytes itself, after the
+  // session guard and only up to the setting `receipts.maxUploadMb` (`receipts/read-body.ts`).
   // Query parameters (personal data) never reach the log, whatever the endpoint.
   app.useGlobalFilters(new SafeExceptionFilter(app.getHttpAdapter()));
   await app.init();

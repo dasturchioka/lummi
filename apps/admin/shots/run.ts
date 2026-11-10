@@ -20,6 +20,7 @@ import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
+import { seedShotShopCard } from './shop-card-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
@@ -227,6 +228,7 @@ async function main() {
   // staff after the slow seeds, so the owner's API connection is fresh for the shot rows
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
+  await seedShotShopCard(ownerCall);
   await seedShotBroadcasts(databaseUrl);
   await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
   mkdirSync(outDir, { recursive: true });

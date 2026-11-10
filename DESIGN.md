@@ -119,7 +119,6 @@ typography:
     fontSize: "28px"
     fontWeight: 600
     lineHeight: 1.15
-    letterSpacing: "-0.01em"
     fontFeature: "tnum"
   button:
     fontFamily: "Manrope, system-ui, sans-serif"
@@ -350,7 +349,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 - **Caption** (Manrope 400, 11px, 1.3, `type-caption`): the smallest readable line, in Muted Ink: characteristic labels, «Доставка» over the Home delivery city, a sold-out volume's «нет в наличии», the discount badge (at 600). The tab bar label is the same size at 500.
 - **Value** (Manrope 600, 13px, 1.3, `type-value`): a short value under a caption, in the characteristics row.
 - **Hint** (Manrope 400, 12px, 1.45, `type-hint`, Muted Ink): the hint under a field, and secondary counts such as «Самарканд: ещё 4 пункта» under the chosen point.
-- **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. A price inside a control (volume tiles) is **Price small** (Manrope 500, 12.5px, 1.3, tabular, `<Money size="small">`). The amount to pay is 28px / 600, and the card number is 18px / 600 with +0.04em tracking.
+- **Price / Button** (Manrope 600, 15px, tabular numerals, no-wrap): prices, totals (16px) and button labels. A price inside a control (volume tiles) is **Price small** (Manrope 500, 12.5px, 1.3, tabular, `<Money size="small">`). The amount to pay is 28px / 600 with no negative tracking and its digit groups set apart (+0.14em, +0.2em before the currency, `Money size="amount"`), so «9 999 000» never closes into one block; the card number is 18px / 600 with +0.04em tracking.
 - **Badge** (Tenor 400, 10px, +0.2em, caps, `type-badge`): ХИТ and НОВИНКА only.
 
 ### Named Rules
@@ -453,7 +452,7 @@ Photo (3:4, 12 px, Photo Blush behind it) with the back and share discs; the lab
 The Discovery box redrawn: a white 12px card. The lid has the logo, the "DISCOVERY SET" label caps at +0.3em, the label divider and "5 × 10 мл". Below it, five vial compartments sit on a Milk Field tray. The next empty slot has a 1.5 px ink outline. Italic names sit under the slots, and the Sage thread runs underneath.
 
 ### Payment
-The amount card shows the 28px amount, the card number with copy buttons, and the reserve deadline with a clock icon. Steps are numbered in Sage-outlined circles. The receipt drop zone has a 1.5 px dashed hairline-strong border. The status pill is Milk Field (pending) or Sage Wash with Sage Ink (confirmed). The confirmed state shows a 64 px Sage disc with a Graphite check.
+The amount card shows the 28px amount, the card number with copy buttons, and the reserve deadline with a clock icon. A copy button answers in place: its icon turns into a Sage Ink check for a moment, beside the «Скопировано» toast. The holder's name is in ink after a muted «Получатель:», since the shopper checks it against the bank app. Steps are numbered in Sage-outlined circles. The receipt drop zone has a 1.5 px dashed hairline-strong border; once a file is chosen it sits in a plain white card instead (thumbnail, the name cut in the middle so its end and extension stay, the size, «Заменить»), and while it uploads its meta line becomes the Sage thread with the percentage. The status pill is Milk Field (pending) or Sage Wash with Sage Ink (confirmed). The confirmed state shows a 64 px Sage disc with a Graphite check.
 
 ## Do's and Don'ts
 

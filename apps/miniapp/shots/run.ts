@@ -14,7 +14,7 @@ import net from 'node:net';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
-import { connectShotDb } from './db';
+import { SHOT_CARD, connectShotDb } from './db';
 import { SHOT_USER, signInitData, signedInClient } from './api';
 import { screens } from './registry';
 
@@ -162,6 +162,8 @@ async function main() {
   const shotDb = connectShotDb(
     process.env.DATABASE_URL ?? `postgres://lummi:lummi@127.0.0.1:${dbPort}/lummi`,
   );
+  // checkout is closed without a shop card (#28): every order a screen places needs one
+  await shotDb.shopCard(SHOT_CARD);
   mkdirSync(outDir, { recursive: true });
   const browser = await chromium.launch();
   let count = 0;

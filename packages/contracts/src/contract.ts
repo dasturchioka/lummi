@@ -125,6 +125,13 @@ import {
   phoneRequiredSchema,
 } from './orders';
 import {
+  adminShopCardSchema,
+  paymentSchema,
+  paymentUnavailableSchema,
+  shopCardBodySchema,
+  shopCardErrorSchema,
+} from './payment';
+import {
   humoLastMessageIdSchema,
   humoMessageBodySchema,
   humoMessageResultSchema,
@@ -386,9 +393,10 @@ export const contract = c.router({
         403: phoneRequiredSchema,
         409: checkoutConflictSchema,
         422: orderInputErrorSchema,
+        503: paymentUnavailableSchema,
       },
       summary:
-        'Create the order in one transaction: re-quote, lock and reserve, snapshot (ADR 0001, 0010); 409 with the new checkout when the confirmed total is stale',
+        'Create the order in one transaction: re-quote, lock and reserve, snapshot (ADR 0001, 0010); 409 with the new checkout when the confirmed total is stale; 503 while no shop card is set',
     },
     list: {
       method: 'GET',
@@ -403,6 +411,14 @@ export const contract = c.router({
       pathParams: z.object({ number: z.coerce.number().int().positive() }),
       responses: { 200: orderSchema, 401: orderErrorSchema, 404: orderErrorSchema },
       summary: "One of the customer's orders by its number, as its snapshot froze it",
+    },
+    payment: {
+      method: 'GET',
+      path: '/orders/:number/payment',
+      pathParams: z.object({ number: z.coerce.number().int().positive() }),
+      responses: { 200: paymentSchema, 401: orderErrorSchema, 404: orderErrorSchema },
+      summary:
+        'The payment screen: the order, the shop card (null while none is set), the receipts sent and the upload limit. The upload itself is `POST /orders/:number/receipts` (raw bytes, outside the contract)',
     },
     cancel: {
       method: 'POST',
@@ -518,6 +534,34 @@ const adminCore = c.router({
         404: adminErrorSchema,
       },
       summary: 'Owner only: validate against the registry, store, and audit actor, old and new',
+    },
+  },
+  shopCard: {
+    get: {
+      method: 'GET',
+      path: '/admin/shop-card',
+      responses: { 200: adminShopCardSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+      summary: 'Owner only: the card shoppers transfer to; null while none is set',
+    },
+    set: {
+      method: 'PUT',
+      path: '/admin/shop-card',
+      body: shopCardBodySchema,
+      responses: {
+        200: adminShopCardSchema,
+        400: shopCardErrorSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+      },
+      summary: 'Owner only: set the card number and holder; audited with the number masked',
+    },
+    clear: {
+      method: 'DELETE',
+      path: '/admin/shop-card',
+      body: c.noBody(),
+      responses: { 200: adminShopCardSchema, 401: adminErrorSchema, 403: adminErrorSchema },
+      summary:
+        'Owner only: remove the card, which closes checkout («Оплата временно недоступна»); audited',
     },
   },
   audit: {
