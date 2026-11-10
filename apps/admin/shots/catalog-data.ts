@@ -24,12 +24,12 @@ async function json<T>(res: Response, what: string): Promise<T> {
 export async function seedShotCatalog(call: Call) {
   const list = await json<Item[]>(await call('/admin/catalog/fragrances', 'GET'), 'list');
   const families = await json<Item[]>(await call('/admin/catalog/families', 'GET'), 'families');
-  const longNote = 'аккорд тёплой амбры, ванильной кожи и дымного дерева с бархатной пудрой';
+  const longNote = 'аккорд тёплой амбры и ванильной кожи с дымным деревом и бархатной пудрой';
   let notes = await json<Item[]>(await call('/admin/catalog/notes', 'GET'), 'notes');
   if (!notes.some((n) => n.nameRu === longNote)) {
     const res = await call('/admin/catalog/notes', 'POST', {
       nameRu: longNote,
-      nameUz: 'iliq ambra, vanilli teri va tutunli yogʻoch akkordi, baxmal upa bilan',
+      nameUz: 'iliq ambra va vanilli teri va tutunli yogʻoch va baxmal upa akkordi',
       aliases: ['ambre velours', 'amber suede', 'тёплая амбра', 'vanilla leather', 'smoky wood'],
     });
     if (res.status !== 201) throw new Error(`could not add the long note: ${res.status}`);
