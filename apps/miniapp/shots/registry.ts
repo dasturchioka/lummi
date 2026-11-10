@@ -217,11 +217,59 @@ async function pickFirstPoint(page: Page) {
   await page.getByTestId('chosen-point').waitFor();
 }
 
-/** Opens the newest order from the «Заказы» list. */
-async function openFirstOrder(page: Page) {
+/** Opens the newest order from the «Заказы» list (a cancelled one shows its reason instead of the timeline). */
+async function openFirstOrder(page: Page, shows: 'timeline' | 'cancelled' = 'timeline') {
   await page.getByTestId('order-row').first().click();
-  await page.getByTestId('timeline').waitFor();
+  await page.getByTestId(shows).waitFor();
 }
+
+/** The shot customer's newest order, cancelled by the shopper through the real API. */
+async function cancelNewestOrder(api: ApiClient) {
+  const list = await api.orders.list({ query: {} });
+  const number = list.status === 200 ? list.body.orders[0]?.number : undefined;
+  if (!number) throw new Error('no order to cancel');
+  const res = await api.orders.cancel({
+    params: { number },
+    body: { expectedStatus: 'awaiting_payment' },
+  });
+  if (res.status !== 200) throw new Error(`cancel: HTTP ${res.status}`);
+}
+
+/**
+ * Moves the shot customer's newest order as `transition()` would, straight in the database (the
+ * staff and system callers have no route the shots can drive yet): its status and its history row.
+ */
+async function moveNewestOrder(
+  db: ShotDb,
+  move: {
+    from: string;
+    to: string;
+    action: string;
+    actor: 'staff' | 'system' | 'customer';
+    reason?: string;
+  },
+) {
+  await db.query(
+    `with o as (
+       update orders set status = $3::order_status, updated_at = now()
+       where id = (select o.id from orders o join customers c on c.id = o.customer_id
+                   where c.telegram_id = $1 order by o.number desc limit 1)
+       returning id)
+     insert into order_events (order_id, from_status, to_status, action, actor_type, reason)
+     select id, $2::order_status, $3::order_status, $4::order_action, $5::actor_type, $6 from o`,
+    [SHOT_USER.id, move.from, move.to, move.action, move.actor, move.reason ?? null],
+  );
+}
+
+/** The newest order cancelled by the expiry sweep, as the worker would (it does not run here). */
+const expireNewestOrder = (db: ShotDb) =>
+  moveNewestOrder(db, {
+    from: 'awaiting_payment',
+    to: 'cancelled',
+    action: 'cancel',
+    actor: 'system',
+    reason: 'reserve_expired',
+  });
 
 /*
  * The realistic worst case for checkout and orders (break-ui): a 60-character name (a full UZ
@@ -821,6 +869,111 @@ export const screens: ScreenDef[] = [
       });
     },
     act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
+  // #24: «Отменить заказ» while unpaid, its confirmation, and a cancelled order (detail and list).
+  {
+    id: 'order-cancel',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-cancelled',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await expireNewestOrder(db);
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // a paid order the shop could not fulfil: the reason, and the manager will be in touch
+    id: 'order-cancelled-paid',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]]);
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'payment_confirmed',
+        action: 'confirm_payment',
+        actor: 'system',
+      });
+      await moveNewestOrder(db, {
+        from: 'payment_confirmed',
+        to: 'cancelled',
+        action: 'cancel',
+        actor: 'staff',
+        reason: 'out_of_stock',
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // the receipt went in while the sheet was open: the press answers 409 and says so
+    id: 'order-cancel-changed',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page, db }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'receipt_review',
+        action: 'submit_receipt',
+        actor: 'customer',
+      });
+      await sheet(page)
+        .getByRole('button', { name: /^(Отменить заказ|Buyurtmani bekor qilish)$/ })
+        .click();
+      await sheet(page).getByTestId('cancel-changed').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'orders-cancelled',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+      await cancelNewestOrder(api);
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
     teardown: checkoutDone,
   },
   // break-ui (#23): the worst case enters through the API, as real data does.

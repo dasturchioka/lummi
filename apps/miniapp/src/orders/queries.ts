@@ -4,6 +4,7 @@ import type {
   CreateOrderBody,
   OrderDto,
   OrderInputError,
+  OrderStatus,
 } from '@lummi/contracts';
 import { ordersMessages } from '@lummi/i18n/orders';
 import {
@@ -96,6 +97,43 @@ export function useOrder(number: number) {
       const res = await api.orders.get({ params: { number } });
       if (res.status === 404) return null;
       return unwrap(res, 200);
+    },
+  });
+}
+
+export type CancelResult =
+  /** Cancelled now; the order as it reads after. */
+  | { kind: 'cancelled'; order: OrderDto }
+  /** Its status moved on before the press (a receipt went in, the reserve expired, a second press). */
+  | { kind: 'changed'; order: OrderDto }
+  | { kind: 'try_again' };
+
+/**
+ * «Отменить заказ» (ADR 0011: only while «Ожидает оплаты»). The status the shopper saw goes along,
+ * so a stale screen or a second press is answered with the order as it is now, never a second
+ * cancel. Either way the screen shows what the server says.
+ */
+export function useCancelOrder(number: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (expectedStatus: OrderStatus): Promise<CancelResult> => {
+      const res = await api.orders.cancel({ params: { number }, body: { expectedStatus } });
+      if (res.status === 200) return { kind: 'cancelled', order: res.body };
+      if (res.status === 409)
+        return 'order' in res.body
+          ? { kind: 'changed', order: res.body.order }
+          : { kind: 'try_again' };
+      if (res.status === 403 || res.status === 404) {
+        // not cancellable from what the screen showed: read the order again
+        const fresh = await api.orders.get({ params: { number } });
+        if (fresh.status === 200) return { kind: 'changed', order: fresh.body };
+      }
+      throw new Error(`HTTP ${res.status}`);
+    },
+    onSuccess: (result) => {
+      if (result.kind === 'try_again') return;
+      qc.setQueryData(orderKey(number), result.order);
+      void qc.invalidateQueries({ queryKey: [...ORDERS_KEY, 'list'] });
     },
   });
 }

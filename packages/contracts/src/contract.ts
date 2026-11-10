@@ -75,6 +75,8 @@ import {
   telegramAuthBodySchema,
 } from './auth';
 import {
+  cancelOrderBodySchema,
+  cancelRefusedSchema,
   checkoutConflictSchema,
   checkoutQuerySchema,
   checkoutSchema,
@@ -84,6 +86,7 @@ import {
   orderSchema,
   ordersPageSchema,
   ordersQuerySchema,
+  orderStatusConflictSchema,
   phoneRequiredSchema,
 } from './orders';
 import {
@@ -308,6 +311,21 @@ export const contract = c.router({
       pathParams: z.object({ number: z.coerce.number().int().positive() }),
       responses: { 200: orderSchema, 401: orderErrorSchema, 404: orderErrorSchema },
       summary: "One of the customer's orders by its number, as its snapshot froze it",
+    },
+    cancel: {
+      method: 'POST',
+      path: '/orders/:number/cancel',
+      pathParams: z.object({ number: z.coerce.number().int().positive() }),
+      body: cancelOrderBodySchema,
+      responses: {
+        200: orderSchema,
+        401: orderErrorSchema,
+        403: cancelRefusedSchema,
+        404: orderErrorSchema,
+        409: orderStatusConflictSchema,
+      },
+      summary:
+        'The shopper cancels their own order, only while «Ожидает оплаты» (ADR 0011); the reserve frees at once. 409 with the order when its status is no longer the expected one',
     },
   },
 });
