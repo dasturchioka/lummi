@@ -1,4 +1,7 @@
 import { defineMessages } from './define';
+import { fill } from './fill';
+import type { Language } from './language';
+import { ordersMessages } from './orders';
 
 /** Bot messages. Import from `@lummi/i18n/bot`; the Mini App never bundles them. Keys must match in both languages or typecheck fails. */
 export const botMessages = defineMessages(
@@ -72,3 +75,29 @@ export const botMessages = defineMessages(
   },
 );
 export type BotMessages = (typeof botMessages)['ru'];
+
+/** A preset reason a manager rejects a receipt with (contracts `RECEIPT_REJECT_REASONS`). */
+export type ReceiptRejectReasonKey =
+  keyof (typeof ordersMessages)['ru']['orders']['receiptRejectReason'];
+
+/**
+ * The shopper's «Чек не принят» message (#33): the preset as a sentence in their language, the
+ * manager's note on its own line under it, or, for `other`, the note itself as the reason. The
+ * bot sends it and the admin's rejection dialog previews it.
+ */
+export function receiptRejectedText(
+  language: Language,
+  number: number,
+  reason: ReceiptRejectReasonKey,
+  note?: string | null,
+): string {
+  const t = botMessages[language].bot;
+  const why =
+    reason === 'other'
+      ? (note ?? '')
+      : [
+          ordersMessages[language].orders.receiptRejectReason[reason],
+          ...(note ? [fill(t.rejectNote, { note })] : []),
+        ].join('\n');
+  return fill(t.receiptRejected, { number: String(number), reason: why });
+}

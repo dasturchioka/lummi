@@ -8,6 +8,7 @@ import {
   formatDuration,
   formatMoney,
   formatPhone,
+  formatTiyin,
   languageFromTelegram,
   normalizeUzbek,
   plural,
@@ -24,6 +25,19 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('formatTiyin', () => {
+  it('reads a Humo credit to the tiyin, and a whole amount as formatMoney does', () => {
+    expect(formatTiyin(7_575_050, 'ru')).toBe('75\u202f750,50\u202fсум');
+    expect(formatTiyin(125_000_005, 'uz')).toBe('1\u202f250\u202f000,05\u202fsoʻm');
+    expect(formatTiyin(14_900_000, 'ru')).toBe('149\u202f000\u202fсум');
+    expect(formatTiyin(99, 'ru')).toBe('0,99\u202fсум');
+  });
+  it('refuses fractions and negatives', () => {
+    expect(() => formatTiyin(10.5, 'ru')).toThrow();
+    expect(() => formatTiyin(-100, 'ru')).toThrow();
   });
 });
 
