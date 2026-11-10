@@ -840,6 +840,28 @@ async function savedPairsDone(ctx: { api: ApiClient; db: ShotDb }) {
   await clearSaved(ctx.db);
   await checkoutDone(ctx);
 }
+/** Marks the shot customer's orders, newest first, with these statuses (only finished ones repeat). */
+async function setStatuses(db: ShotDb, statuses: string[]) {
+  const { rows } = await db.query(
+    `select o.id from orders o join customers c on c.id = o.customer_id
+     where c.telegram_id = $1 order by o.number desc`,
+    [SHOT_USER.id],
+  );
+  for (const [i, status] of statuses.entries())
+    if (rows[i])
+      await db.query('update orders set status = $2 where id = $1', [rows[i]!.id, status]);
+}
+const REPEAT_FIVE = [
+  'power-of-you',
+  'rain-tea',
+  'baccarat-rouge-540',
+  'blue-sapphire',
+  'le-male-le-parfum',
+];
+async function restoreRepeat(ctx: { api: ApiClient; db: ShotDb }) {
+  await checkoutDone(ctx);
+  for (const slug of REPEAT_FIVE) await ctx.db.restore(slug);
+}
 /** Opens the newest order and presses «Повторить заказ»; the result sheet rises. */
 async function repeatNewest(page: Page) {
   await openFirstOrder(page);
@@ -875,12 +897,14 @@ const shortcutScreens: ScreenDef[] = [
   },
   { id: 'catalog-worst-360-plus', path: '/catalog', ...worstData, width: 360 },
   {
+    // a markdown on the 50 ml: the line total in Sage Ink, as on an order
     id: 'checkout-buy-now',
     path: '/checkout?item=volume:symphony:50',
     fullPage: true,
     setup: async ({ api, db }) => {
       await checkoutReady(api, db, 'given');
       await clearSaved(db);
+      await db.markdown('symphony', 50, 175_000, 5);
     },
     act: async ({ page }) => pickFirstPoint(page),
     teardown: checkoutDone,
@@ -940,32 +964,83 @@ const shortcutScreens: ScreenDef[] = [
         ['symphony', 10],
         ['tygar', 30],
       ]);
+      await setStatuses(db, ['delivered']);
     },
     act: async ({ page }) => repeatNewest(page),
     teardown: checkoutDone,
   },
   {
-    // One line gone, one capped: the sheet names both, as the server reported them
+    // Every reason a line comes back short, as the server says it: stock (capped), the 99 ceiling,
+    // gone, and a builder set one of whose 10 ml ran out
     id: 'order-repeat-some',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [], {
+        fill: async (a) => {
+          await fillCart(a, [
+            ['symphony', 10, 3],
+            ['tygar', 30, 2],
+            ['ink-mark', 50],
+          ]);
+          const set = await a.cart.addBuilder({ body: { slugs: REPEAT_FIVE, qty: 1 } });
+          if (set.status !== 200) throw new Error(`builder add: HTTP ${set.status}`);
+        },
+      });
+      await setStatuses(db, ['delivered']);
+      const vol = (slug: string, ml: number, onHand: number) =>
+        db.query(
+          `update volumes set on_hand = $3 where ml = $2 and fragrance_id = (select id from fragrances where slug = $1)`,
+          [slug, ml, onHand],
+        );
+      await vol('symphony', 10, 1);
+      await vol('tygar', 30, 200);
+      await vol('ink-mark', 50, 0);
+      await vol('rain-tea', 10, 0);
+      // the cart already holds 98 of the 30 ml: one more fits
+      await api.cart.addLine({ body: { slug: 'tygar', ml: 30, qty: 98 } });
+    },
+    act: async ({ page }) => repeatNewest(page),
+    teardown: restoreRepeat,
+  },
+  {
+    // «Заказы»: «Повторить заказ» under the delivered and the cancelled rows, not the unpaid one
+    id: 'orders-list-repeat',
     path: '/orders',
     setup: async ({ api, db }) => {
       await sharePhone(api);
       await clearOrders(db, { consent: 'given' });
-      await placeOrder(api, [
-        ['symphony', 10, 3],
-        ['tygar', 30],
-        ['ink-mark', 50],
-      ]);
-      // ink-mark 50 ml: only the order's own bottle is left; symphony 10 ml: one more than the order holds
-      await db.query(
-        `update volumes set on_hand = 1 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'ink-mark')`,
-      );
-      await db.query(
-        `update volumes set on_hand = 4 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
-      );
+      await placeOrder(api, [['symphony', 10]]);
+      await placeOrder(api, [['tygar', 30]]);
+      await placeOrder(api, [['ink-mark', 50]]);
+      await setStatuses(db, ['awaiting_payment', 'delivered', 'cancelled']);
     },
-    act: async ({ page }) => repeatNewest(page),
     teardown: checkoutDone,
+  },
+  {
+    // the order page of an unpaid order: no «Повторить заказ»
+    id: 'order-no-repeat',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['symphony', 10]]);
+    },
+    act: async ({ page }) => openFirstOrder(page),
+    teardown: checkoutDone,
+  },
+  {
+    // a builder set one of whose 10 ml ran out: the screen names it
+    id: 'checkout-buy-now-gone-set',
+    path: `/checkout?item=builder_set:${REPEAT_FIVE.join(',')}`,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await db.setOnHand('rain-tea', 0);
+    },
+    teardown: restoreRepeat,
   },
 ];
 
