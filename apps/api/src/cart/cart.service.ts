@@ -1,5 +1,6 @@
 import {
   CART_MAX_QTY,
+  normalizePromoCode,
   type CartDto,
   type CartLineDto,
   type CartSuggestionDto,
@@ -271,13 +272,16 @@ export class CartService {
     });
   }
 
-  /** An entered or link-prefilled code. A typed code is always applied, so it clears any stored choice (ADR 0002). */
-  async setPromoCode(customerId: number, code: string | null): Promise<void> {
+  /**
+   * Takes the entered code out of the cart, and the choice made against it (ADR 0002). Setting a
+   * code goes only through `applyPromoCode`, which counts the attempt.
+   */
+  async clearPromoCode(customerId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
       await this.touch(tx, customerId);
       await tx
         .update(carts)
-        .set({ promoCode: code ? normalizeCode(code) : null, discountChoice: null })
+        .set({ promoCode: null, discountChoice: null })
         .where(eq(carts.customerId, customerId));
     });
   }
@@ -312,7 +316,7 @@ export class CartService {
       await tx
         .update(carts)
         .set({
-          promoCode: normalizeCode(code),
+          promoCode: normalizePromoCode(code),
           discountChoice: null,
           promoAttempts: attempts + 1,
           promoAttemptsSince: fresh ? now : since,
@@ -330,9 +334,6 @@ export class CartService {
       .onConflictDoUpdate({ target: carts.customerId, set: { updatedAt: this.edges.clock.now() } });
   }
 }
-
-/** Codes are stored trimmed and upper-case, so they match case-insensitively (spec Changes 2026-11-07). */
-const normalizeCode = (code: string) => code.trim().toUpperCase();
 
 /** The Sage thread's fill, whole percent: 100 once reached (or with no threshold), never 100 before. */
 function progress(q: {

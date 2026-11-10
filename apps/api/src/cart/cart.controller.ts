@@ -84,7 +84,7 @@ export class CartController {
   @TsRestHandler(contract.cart.removePromoCode)
   removePromoCode(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.cart.removePromoCode, async () => {
-      await this.cart.setPromoCode(customerId, null);
+      await this.cart.clearPromoCode(customerId);
       return { status: 200 as const, body: await this.cart.get(customerId) };
     });
   }
