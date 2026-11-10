@@ -8,11 +8,12 @@ import { normalizeUzbek } from '@lummi/i18n';
 import type { ZodIssue } from 'zod';
 import { saleEndInstant } from '../admin/catalog-admin.service';
 import { slugify } from '../catalog/slug';
+import type {
+  LABELS} from './workbook';
 import {
   DICTIONARY_COLUMNS,
   FRAGRANCE_COLUMNS,
   KEY_NOTE_SEP,
-  LABELS,
   VOLUME_COLUMNS,
   headerOf,
   labelsOf,
@@ -79,7 +80,7 @@ export function normaliseCode(text: string): string | null {
 }
 
 const integer = (text: string): number | null => {
-  const t = text.replace(/[\s  ]/g, '');
+  const t = text.replace(/[\s\u00a0\u202f]/g, '');
   return /^\d{1,12}$/.test(t) ? Number(t) : null;
 };
 

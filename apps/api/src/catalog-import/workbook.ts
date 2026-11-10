@@ -291,7 +291,7 @@ function cellText(cell: ExcelJS.Cell): string {
   return String(v).trim();
 }
 
-function readTable<K extends string>(
+function readTable(
   ws: ExcelJS.Worksheet,
   cols: readonly ColumnDef<string>[],
   sheet: 'fragrances' | 'volumes' | 'dictionary',
