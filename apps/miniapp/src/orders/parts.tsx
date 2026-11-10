@@ -3,6 +3,7 @@ import { fill, formatDateTime } from '@lummi/i18n';
 import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Figure } from '../ui/Figure';
+import { DiscountRow } from '../ui/DiscountRow';
 import { CheckIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { useOrdersText } from './queries';
@@ -54,12 +55,6 @@ export function SectionTitle({
   return <h2 className={`type-section text-ink ${flush ? '' : 'mb-3'}`}>{children}</h2>;
 }
 
-function discountSource(d: Discount, t: ReturnType<typeof usePrefs>['t']): string {
-  if (d.type === 'promo_code') return fill(t.cart.sourcePromo, { code: d.code });
-  if (d.type === 'birthday_coupon') return t.cart.sourceBirthday;
-  return d.source === 'set' ? t.cart.sourceSet : t.cart.sourceSingle;
-}
-
 /**
  * The money of a checkout or an order exactly as the server worked it out (ADR 0001), in the
  * cart's dark totals block (approved variant 2): items, the one discount with its source, BTS
@@ -105,19 +100,7 @@ export function MoneySummary({
             <Figure amount={itemsSubtotal} />
           </dd>
         </div>
-        {discount ? (
-          <div className={`${row} text-totals-accent`}>
-            <dt className="flex min-w-0 flex-col">
-              <span>{t.cart.discount}</span>
-              <span className="type-caption [overflow-wrap:anywhere] opacity-80">
-                {discountSource(discount, t)}
-              </span>
-            </dt>
-            <dd className="type-price">
-              <Figure amount={discount.amount} minus />
-            </dd>
-          </div>
-        ) : null}
+        {discount ? <DiscountRow discount={discount} /> : null}
         <div className={row}>
           <dt className="min-w-0 text-pretty text-totals-ink/75">
             {place ? fill(t.cart.delivery, { city: place }) : t.cart.deliveryNoCity}
