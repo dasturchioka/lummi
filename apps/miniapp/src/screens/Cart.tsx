@@ -23,7 +23,7 @@ import { DiscountRow } from '../ui/DiscountRow';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
-import { attribution } from '../ui/FragranceListCard';
+import { attribution } from '../ui/attribution';
 import { Skeleton } from '../ui/Skeleton';
 import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';

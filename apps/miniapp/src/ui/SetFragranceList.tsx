@@ -1,5 +1,5 @@
 import { usePrefs } from '../lib/prefs';
-import { attribution } from './FragranceListCard';
+import { attribution } from './attribution';
 
 /**
  * The five fragrances of a set line, one per row: the name, then «по мотивам <brand>» (the brand

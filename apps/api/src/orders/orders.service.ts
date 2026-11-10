@@ -1,5 +1,6 @@
 import {
   normalizeRecipientPhone,
+  type BuyNowItem,
   type CheckoutConflictCode,
   type CheckoutDto,
   type CreateOrderInput,
@@ -38,9 +39,17 @@ import { fill, formatDateTime, formatMoney } from '@lummi/i18n';
 import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { loadCartQuote } from '../cart/load-cart';
+import {
+  loadQuote,
+  readCartLines,
+  toLineDto,
+  type LineSource,
+  type StoredLine,
+} from '../cart/load-cart';
 import { readDiscoverySet } from '../sets/sets';
 import { toRegionDto } from '../delivery/dto';
+import { defaultSavedPoint, listSavedPoints, rememberPoint } from '../delivery/saved-points';
+import { buyNowLine } from './buy-now';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
@@ -50,6 +59,12 @@ import { lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
+
+export type CheckoutOutcome =
+  | { kind: 'ok'; checkout: CheckoutDto }
+  /** «Купить сейчас» named a fragrance or set that is unknown or no longer sold. */
+  | { kind: 'unknown_item' }
+  | { kind: 'unauthorized' };
 
 export type CreateOutcome =
   | { kind: 'created'; order: OrderDto }
@@ -88,36 +103,51 @@ export class OrdersService {
   ) {}
 
   /**
-   * The cart as checkout shows it: quoted with the tariff of `regionId` (the chosen point's
-   * region), else the saved delivery city's, else the default. An unknown region is ignored.
+   * The cart as checkout shows it, or the one «Купить сейчас» `item` instead (the cart is not
+   * read): quoted with the tariff of `regionId` (the chosen point's region), else the saved
+   * delivery city's, else the default. An unknown region is ignored.
    */
   async checkout(
     customerId: number,
     regionId?: number,
+    item?: BuyNowItem,
     tx: DbOrTx = this.db,
-  ): Promise<CheckoutDto | null> {
+  ): Promise<CheckoutOutcome> {
     const [c] = await tx.select().from(customers).where(eq(customers.id, customerId));
-    if (!c) return null;
+    if (!c) return { kind: 'unauthorized' };
+    const source = await this.sourceOf(tx, item);
+    if (!source) return { kind: 'unknown_item' };
     const [region] =
       regionId === undefined ? [] : await tx.select().from(regions).where(eq(regions.id, regionId));
-    return this.checkoutOf(tx, c, region ?? null);
+    return { kind: 'ok', checkout: await this.checkoutOf(tx, c, region ?? null, source) };
+  }
+
+  /** The cart, or the one line of a «Купить сейчас» item; null when the item is not sold. */
+  private async sourceOf(tx: DbOrTx, item: BuyNowItem | undefined): Promise<LineSource | null> {
+    if (!item) return { kind: 'cart' };
+    const line = await buyNowLine(tx, item);
+    return line ? { kind: 'lines', lines: [line] } : null;
   }
 
   private async checkoutOf(
     tx: DbOrTx,
     c: CustomerRow,
     region: RegionRow | null,
+    source: LineSource,
   ): Promise<CheckoutDto> {
-    const loaded = await loadCartQuote(
+    const loaded = await loadQuote(
       tx,
       this.edges.clock.now(),
       c.id,
+      source,
       region ? { deliveryTariff: region.deliveryTariff } : {},
     );
     const settings = await readSettings(tx, [
       'orders.giftMessageMaxLength',
       'orders.recipientPhoneCountryCodes',
     ]);
+    const saved = await listSavedPoints(tx, c.id);
+    const item = source.kind === 'lines' ? loaded.lines[0] : undefined;
     return {
       quote: loaded.quote,
       itemCount: loaded.lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
@@ -128,13 +158,17 @@ export class OrdersService {
       needsConsent: c.dataConsentAt === null,
       giftMessageMax: settings['orders.giftMessageMaxLength'],
       recipientPhoneCountryCodes: settings['orders.recipientPhoneCountryCodes'],
+      item: item ? toLineDto(item) : null,
+      savedPoints: saved,
+      defaultSavedPointId: defaultSavedPoint(saved)?.id ?? null,
       paymentAvailable: (await readShopCard(tx)) !== null,
     };
   }
 
   /**
-   * Creates the order, all in one transaction (retried once on a deadlock or serialization
-   * failure, then answered with `try_again`):
+   * Creates the order from the cart, or from the one «Купить сейчас» `item` (the cart is then
+   * neither locked, read nor changed; spec Changes 2026-11-11), all in one transaction (retried
+   * once on a deadlock or serialization failure, then answered with `try_again`):
    * 0. the customer row is locked, so a repeat of the same request (same idempotency key) waits
    *    for the first and then returns the order it made, never a second one;
    * 1. the cart row, then the Discovery set row (when the cart holds it), then the stock rows of
@@ -147,8 +181,9 @@ export class OrdersService {
    *    with the new checkout, since they will transfer exactly that amount;
    * 3. the order and its lines are written as a snapshot, with `reserve_until`, «Ожидает оплаты»
    *    and its number; the lines are the reserve (ADR 0010);
-   * 4. the ordered cart lines are removed, consent is stored on the first order, and the
-   *    "order created" message goes into the outbox.
+   * 4. the ordered cart lines are removed (a cart order only), the recipient and point pair is
+   *    remembered («Мои пункты BTS»), consent is stored on the first order, and the "order
+   *    created" message goes into the outbox.
    */
   async create(customerId: number, input: CreateOrderInput): Promise<CreateOutcome | null> {
     try {
@@ -207,22 +242,21 @@ export class OrdersService {
       const destination = await this.destination(tx, input.delivery);
       if ('code' in destination) return { kind: 'invalid', code: destination.code } as const;
       const { region } = destination;
+      const source = await this.sourceOf(tx, input.item);
+      if (!source) return { kind: 'invalid', code: 'unknown_item' } as const;
 
-      // 1. Freeze the cart, then the Discovery set row (when it is in the cart), then the stock of
-      // every volume in id order: the same order in every checkout, so none can deadlock another.
-      await tx
-        .select({ id: carts.customerId })
-        .from(carts)
-        .where(eq(carts.customerId, c.id))
-        .for('update');
-      const wanted = await tx
-        .select({
-          kind: cartLines.kind,
-          volumeId: cartLines.volumeId,
-          fragranceIds: cartLines.fragranceIds,
-        })
-        .from(cartLines)
-        .where(eq(cartLines.customerId, c.id));
+      // 1. Freeze the cart (a cart order), then the Discovery set row (when a line holds it), then
+      // the stock of every volume in id order: the same order in every checkout, buy-now included,
+      // so none can deadlock another.
+      let wanted: readonly StoredLine[];
+      if (source.kind === 'cart') {
+        await tx
+          .select({ id: carts.customerId })
+          .from(carts)
+          .where(eq(carts.customerId, c.id))
+          .for('update');
+        wanted = await readCartLines(tx, c.id);
+      } else wanted = source.lines;
       if (wanted.some((w) => w.kind === 'discovery_set')) await readDiscoverySet(tx, true);
       // a volume line locks its volume; a builder line the 10 ml of each of its five
       const lockVolumes = wanted.flatMap((w) => w.volumeId ?? []);
@@ -245,16 +279,23 @@ export class OrdersService {
           .for('update');
       }
       // The entered promo code's row last (ADR 0005): a concurrent order for its last use waits
-      // here, then the quote below counts the use the first one held.
-      await lockEnteredPromoCode(tx, c.id);
+      // here, then the quote below counts the use the first one held. A buy-now order never uses
+      // the cart's code, so it takes no such lock.
+      if (source.kind === 'cart') await lockEnteredPromoCode(tx, c.id);
 
       // 2. Re-quote under the lock: lines are capped at available (on hand - reserve).
       const now = this.edges.clock.now();
-      const loaded = await loadCartQuote(tx, now, c.id, { deliveryTariff: region.deliveryTariff });
+      const loaded = await loadQuote(tx, now, c.id, source, {
+        deliveryTariff: region.deliveryTariff,
+      });
       const { quote } = loaded;
       const bought = loaded.lines.filter((l) => !l.soldOut);
       const conflict = async (code: CheckoutConflictCode) =>
-        ({ kind: 'conflict', code, checkout: await this.checkoutOf(tx, c, region) }) as const;
+        ({
+          kind: 'conflict',
+          code,
+          checkout: await this.checkoutOf(tx, c, region, source),
+        }) as const;
       if (quote.itemsSubtotal === 0 || bought.length === 0) return conflict('nothing_to_order');
       // The quote capped every line at what is available under the lock, so the total is the
       // check: a line that no longer fits changed it. The discount is checked too: a code lost
@@ -381,24 +422,35 @@ export class OrdersService {
         )
         .returning();
 
-      // 4. The cart, consent, audit and the message. The order takes the entered code with it,
-      // held or refused, so the next cart starts without one (spec Changes 2026-11-11 (4), #29).
-      await tx
-        .update(carts)
-        .set({
-          promoCode: null,
-          discountChoice: sql`case when ${carts.discountChoice}->>'type' = 'promo_code' then null else ${carts.discountChoice} end`,
-        })
-        .where(eq(carts.customerId, c.id));
-      await tx.delete(cartLines).where(
-        and(
-          eq(cartLines.customerId, c.id),
-          inArray(
-            cartLines.id,
-            bought.map((l) => l.lineId),
+      // 4. The cart, the saved pair, consent, audit and the message. A cart order takes the entered
+      // code with it, held or refused, so the next cart starts without one (spec Changes 2026-11-11
+      // (4), #29); a buy-now order leaves the cart, its code included, exactly as it was.
+      if (source.kind === 'cart') {
+        await tx
+          .update(carts)
+          .set({
+            promoCode: null,
+            discountChoice: sql`case when ${carts.discountChoice}->>'type' = 'promo_code' then null else ${carts.discountChoice} end`,
+          })
+          .where(eq(carts.customerId, c.id));
+        await tx.delete(cartLines).where(
+          and(
+            eq(cartLines.customerId, c.id),
+            inArray(
+              cartLines.id,
+              bought.map((l) => l.lineId),
+            ),
           ),
-        ),
-      );
+        );
+      }
+      if (point)
+        await rememberPoint(tx, {
+          customerId: c.id,
+          recipientName: input.recipientName,
+          recipientPhone,
+          btsPointId: point.id,
+          at: now,
+        });
       if (c.dataConsentAt === null) {
         await tx
           .update(customers)
@@ -574,7 +626,7 @@ export function toOrderDto(
     },
     comment: o.comment,
     gift: { isGift: o.isGift, message: o.giftMessage },
-    lines: [...lines].sort((a, b) => a.position - b.position).map(toLineDto),
+    lines: [...lines].sort((a, b) => a.position - b.position).map(toOrderLineDto),
     itemsSubtotal: o.itemsSubtotal,
     discount: o.discount,
     deliveryFee: o.deliveryFee,
@@ -586,7 +638,7 @@ export function toOrderDto(
   };
 }
 
-function toLineDto(l: OrderLineRow): OrderLineDto {
+function toOrderLineDto(l: OrderLineRow): OrderLineDto {
   return {
     kind: l.kind,
     slug: l.slug,

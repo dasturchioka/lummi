@@ -1,5 +1,5 @@
 import { usePrefs } from '../lib/prefs';
-import { attribution } from './FragranceListCard';
+import { attribution } from './attribution';
 
 /**
  * The compact name block of a row (DESIGN.md Label Lockup Rule): the caps line «ПО МОТИВАМ <BRAND>»

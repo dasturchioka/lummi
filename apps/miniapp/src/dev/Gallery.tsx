@@ -45,6 +45,19 @@ import thumbA from './thumbs/symphony.webp';
 import thumbB from './thumbs/althair.webp';
 import thumbC from './thumbs/absolu-aventus.webp';
 
+/** The card's volumes as the list carries them: `prices` per 10 / 30 / 50 ml, 0 stock = sold out. */
+const volumesOf = (prices: [number, number, number], stock: [number, number, number]) =>
+  ([10, 30, 50] as const).map((ml, i) => ({
+    ml,
+    price: prices[i]!,
+    salePrice: null,
+    salePercent: null,
+    saleEndsAt: null,
+    effectivePrice: prices[i]!,
+    available: stock[i]!,
+    photo: null,
+  }));
+
 const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', FragranceListItem> = {
   normal: {
     slug: 'baccarat-rouge-540',
@@ -61,6 +74,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     fromPrice: 69_000,
     soldOut: false,
     photo: '32c0930f6c672207',
+    volumes: volumesOf([69_000, 149_000, 219_000], [20, 20, 20]),
   },
   // The longest real attribution: «ПО МОТИВАМ BOADICEA THE VICTORIOUS» wraps in every layout.
   longBrand: {
@@ -75,6 +89,8 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     fromPrice: 69_000,
     soldOut: false,
     photo: 'd11347a1d027622c',
+    // one volume left: «+» adds it without asking
+    volumes: volumesOf([69_000, 149_000, 219_000], [3, 0, 0]),
   },
   // The realistic worst case: very long name and brand, no family, a seven-digit price, no photo.
   worst: {
@@ -92,6 +108,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     fromPrice: 1_249_000,
     soldOut: false,
     photo: null,
+    volumes: volumesOf([1_249_000, 1_890_000, 2_450_000], [5, 5, 5]),
   },
   soldOut: {
     slug: 'ink-mark',
@@ -105,6 +122,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     fromPrice: 69_000,
     soldOut: true,
     photo: 'bdee0c5f88c675d9',
+    volumes: volumesOf([69_000, 149_000, 219_000], [0, 0, 0]),
   },
 };
 

@@ -17,6 +17,7 @@ import { goBackOrCatalog } from '../lib/navigation';
 import { parseCatalogSearch } from '../catalog/filters';
 import { Home } from '../screens/Home';
 import { useCartCount } from '../cart/queries';
+import { ShopNoteHost } from '../ui/ShopNoteHost';
 import { TabBar, TABS } from '../ui/TabBar';
 
 const TAB_ROOTS: string[] = TABS.map((t) => t.to);
@@ -52,6 +53,7 @@ function Shell() {
   return (
     <>
       <Outlet />
+      <ShopNoteHost tabBar={showTabBar && !keyboardOpen} />
       {showTabBar ? <TabBar badges={{ cart: cartCount }} hidden={keyboardOpen} /> : null}
     </>
   );
@@ -148,6 +150,10 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/checkout'),
+    // `?item=volume:<slug>:<ml>` and the like: «Купить сейчас», one item instead of the cart. The
+    // checkout reads it (`parseBuyNowParam`, in its own chunk) and takes the cart for a malformed one.
+    validateSearch: (s: Record<string, unknown>): { item?: string } =>
+      typeof s.item === 'string' ? { item: s.item } : {},
     component: lazyRouteComponent(() => import('../screens/Checkout'), 'Checkout'),
   }),
   createRoute({
