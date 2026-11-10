@@ -1,4 +1,4 @@
-import type { CheckoutDto, CreateOrderBody, Discount } from '@lummi/contracts';
+import type { CheckoutDto, CreateOrderBody } from '@lummi/contracts';
 import {
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
@@ -44,8 +44,8 @@ type Destination = Exclude<Picked, { kind: 'city' }>;
 
 interface Conflict {
   code: 'total_changed' | 'nothing_to_order';
-  /** The total the shopper had confirmed. */
-  was: number;
+  /** The quote the shopper had confirmed: its total, discount and delivery show struck beside the new ones. */
+  was: CheckoutDto['quote'];
   checkout: CheckoutDto;
 }
 
@@ -305,7 +305,7 @@ export function Checkout() {
       : 0;
 
   /** The total and the discount the shopper sees are what they confirm (the server re-checks both). */
-  const submit = (confirmedTotal: number, confirmedDiscount: Discount | null) => {
+  const submit = (confirmed: CheckoutDto['quote']) => {
     if (!dest || invalid) {
       // show every field's error, then focus the first one and bring it to the middle of the screen
       setAttempted(true);
@@ -337,8 +337,8 @@ export function Checkout() {
       gift,
       giftMessage: gift && giftMessage.trim() ? giftMessage.trim() : undefined,
       consent,
-      confirmedTotal,
-      confirmedDiscount,
+      confirmedTotal: confirmed.total,
+      confirmedDiscount: confirmed.discount,
       idempotencyKey: attemptKey.current,
     };
     create.mutate(body, {
@@ -355,7 +355,7 @@ export function Checkout() {
         } else if (r.kind === 'conflict') {
           // the new numbers replace the old ones on the screen too
           qc.setQueryData(checkoutKey(regionId), r.checkout);
-          setConflict({ code: r.code, was: confirmedTotal, checkout: r.checkout });
+          setConflict({ code: r.code, was: confirmed, checkout: r.checkout });
         } else if (r.kind === 'try_again') {
           setConflict(null);
           setError(o.checkout.tryAgain);
@@ -402,7 +402,7 @@ export function Checkout() {
         data-testid="submit"
         // while another region is being quoted, the total on the button is the last one: wait for it
         loading={(create.isPending && !conflict) || checkout.isPlaceholderData}
-        onClick={() => submit(total, data.quote.discount)}
+        onClick={() => submit(data.quote)}
       >
         <span className="min-w-0 truncate">{o.checkout.submit}</span>
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
@@ -607,7 +607,7 @@ export function Checkout() {
         conflict={conflict}
         busy={create.isPending}
         place={place}
-        onConfirm={(quote) => submit(quote.total, quote.discount)}
+        onConfirm={(quote) => submit(quote)}
         onCart={toCart}
         onClose={() => setConflict(null)}
       />
@@ -659,7 +659,7 @@ function ConflictSheet({
   const promo = c?.checkout.quote.promoCode;
   const lost = promo?.invalid ? { code: promo.code, invalid: promo.invalid } : null;
   // a lost discount can leave the total as it was (free delivery offsets it): say what changed
-  const sameTotal = !!c && !gone && c.checkout.quote.total === c.was;
+  const sameTotal = !!c && !gone && c.checkout.quote.total === c.was.total;
   return (
     <Sheet
       open={!!conflict}
@@ -710,7 +710,9 @@ function ConflictSheet({
             deliveryFee={c.checkout.quote.deliveryFee}
             total={c.checkout.quote.total}
             place={place}
-            was={c.was}
+            was={c.was.total}
+            wasDiscount={c.was.discount}
+            wasDeliveryFee={c.was.deliveryFee}
           />
           <div className="mt-4 flex flex-col gap-2">
             <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote)}>

@@ -59,8 +59,10 @@ export function SectionTitle({
  * The money of a checkout or an order exactly as the server worked it out (ADR 0001), in the
  * cart's dark totals block (approved variant 2): items, the one discount with its source, BTS
  * delivery to the named place, a hairline and «Итого». Labels at 75 % Milk, values at full Milk;
- * the discount and a free delivery in Dark Sage Ink. `was` strikes the total the shopper had
- * confirmed in front of the new one (the 409 sheet).
+ * the discount and a free delivery in Dark Sage Ink. The 409 sheet passes what the shopper had
+ * confirmed: a total, a delivery fee that differ show struck in front of the new ones, and a
+ * discount that is gone or changed shows struck above the new one, so «the total stayed» and
+ * «the total grew» both read from the numbers. Display only: no arithmetic.
  */
 export function MoneySummary({
   itemCount,
@@ -70,6 +72,8 @@ export function MoneySummary({
   total,
   place,
   was,
+  wasDiscount,
+  wasDeliveryFee,
 }: {
   itemCount: number;
   itemsSubtotal: number;
@@ -80,11 +84,19 @@ export function MoneySummary({
   place: string | null;
   /** The total the shopper confirmed before it changed. */
   was?: number;
+  /** The discount the shopper confirmed (the 409 sheet). */
+  wasDiscount?: Discount | null;
+  /** The delivery fee the shopper confirmed (the 409 sheet). */
+  wasDeliveryFee?: number;
 }) {
   const { t } = usePrefs();
   const o = useOrdersText();
   const row = 'flex items-baseline justify-between gap-4';
   const changed = was !== undefined && was !== total;
+  // both come from the server's quotes, serialised the same way
+  const lostDiscount =
+    wasDiscount && JSON.stringify(wasDiscount) !== JSON.stringify(discount) ? wasDiscount : null;
+  const deliveryChanged = wasDeliveryFee !== undefined && wasDeliveryFee !== deliveryFee;
   return (
     <section
       aria-label={t.cart.total}
@@ -100,12 +112,19 @@ export function MoneySummary({
             <Figure amount={itemsSubtotal} />
           </dd>
         </div>
+        {lostDiscount ? <DiscountRow discount={lostDiscount} was={o.checkout.changedWas} /> : null}
         {discount ? <DiscountRow discount={discount} /> : null}
         <div className={row}>
           <dt className="min-w-0 text-pretty text-totals-ink/75">
             {place ? fill(t.cart.delivery, { city: place }) : t.cart.deliveryNoCity}
           </dt>
-          <dd className="type-price">
+          <dd className="type-price flex flex-wrap items-baseline justify-end gap-x-2.5 gap-y-0.5">
+            {deliveryChanged ? (
+              <s className="font-medium text-totals-ink/60 decoration-totals-ink/60">
+                <span className="sr-only">{o.checkout.changedWas}: </span>
+                <Money amount={wasDeliveryFee} className="!font-medium" />
+              </s>
+            ) : null}
             {deliveryFee === 0 && itemsSubtotal > 0 ? (
               <span className="text-totals-accent">{t.cart.deliveryFree}</span>
             ) : (

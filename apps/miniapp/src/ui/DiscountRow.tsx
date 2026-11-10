@@ -40,17 +40,34 @@ function source(d: Discount, t: T): ReactNode {
  * items and the delivery it never touches: «Скидка» and its amount on one line in Dark Sage Ink,
  * its source on the line under them across the whole width, so a 32-character code never
  * squeezes beside a seven-digit amount. A `<dl>` row: one term, the amount, the source.
+ * `was` (its screen-reader word, «Было») draws a discount the shopper had and lost: Milk at 60 %,
+ * its amount struck, as the old total is struck on the 409 sheet.
  */
-export function DiscountRow({ discount, testId }: { discount: Discount; testId?: string }) {
+export function DiscountRow({
+  discount,
+  testId,
+  was,
+}: {
+  discount: Discount;
+  testId?: string;
+  was?: string;
+}) {
   const { t } = usePrefs();
   return (
     <div
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 text-totals-accent"
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 ${was ? 'text-totals-ink/60' : 'text-totals-accent'}`}
       data-testid={testId}
     >
       <dt className="min-w-0">{t.cart.discount}</dt>
       <dd className="type-price">
-        <Figure amount={discount.amount} minus />
+        {was ? (
+          <s className="font-medium decoration-totals-ink/60">
+            <span className="sr-only">{was}: </span>
+            <Figure amount={discount.amount} minus />
+          </s>
+        ) : (
+          <Figure amount={discount.amount} minus />
+        )}
       </dd>
       <dd className="type-caption col-span-2 [overflow-wrap:anywhere] opacity-80">
         {source(discount, t)}
