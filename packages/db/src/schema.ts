@@ -1001,10 +1001,13 @@ export const savedPoints = pgTable(
 export type SavedPointRow = typeof savedPoints.$inferSelect;
 
 /**
- * A file the shopper sent to the bot while several orders waited for payment (#31): the bot asks
- * which order it is for and keeps the Telegram `file_id` (never the bytes) until they choose.
- * Short-lived: a choice later than the setting `receipts.botChoiceSeconds` after `created_at`
- * is refused, and the worker sweep deletes old rows.
+ * A receipt the shopper sent to the bot (#31), kept until it is dealt with: the Telegram `file_id`
+ * (never the bytes), written in the update's own transaction so a restart cannot lose it (ADR 0021).
+ * With `order_number` null it waits for the shopper's choice among several orders (valid for the
+ * setting `receipts.botChoiceSeconds` after `created_at`; the worker sweep deletes older ones).
+ * With an order it is in flight: a BullMQ job (`bot-receipt-<id>`, re-queued by a sweep if the
+ * queue entry was lost) downloads the file and calls the receipt intake, and the row is deleted
+ * only when the outcome is final (attached, or refused and answered).
  */
 export const botPendingReceipts = pgTable(
   'bot_pending_receipts',
@@ -1016,6 +1019,8 @@ export const botPendingReceipts = pgTable(
     fileId: text('file_id').notNull(),
     /** The document's own name; null for a photo. */
     fileName: text('file_name'),
+    /** The order it goes to; null until the shopper chooses. */
+    orderNumber: bigint('order_number', { mode: 'number' }),
     createdAt: createdAt(),
   },
   (t) => [index('bot_pending_receipts_created_idx').on(t.createdAt)],

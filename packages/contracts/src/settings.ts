@@ -5,6 +5,9 @@ import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 
+/** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
+export const BOT_CHOICE_MAX_SECONDS = 86_400;
+
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
   'shop',
@@ -263,7 +266,7 @@ export const settingDefinitions = {
    * until they choose the order with a button (#31). Later, the bot asks them to send it again.
    */
   'receipts.botChoiceSeconds': {
-    schema: z.number().int().min(60).max(86_400),
+    schema: z.number().int().min(60).max(BOT_CHOICE_MAX_SECONDS),
     default: 3600,
     area: 'shop',
     unit: 'seconds',

@@ -1,4 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { Api, GrammyError } from 'grammy';
+import { describeError } from '../logging/describe-error';
+import { withTimeout } from '../util/with-timeout';
+
+/** Technical guards, not rules: how long `getFile` and the download may take before the attempt fails and is retried. */
+const GET_FILE_TIMEOUT_MS = 15_000;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 /** What a download of a user's file from Telegram came to. */
 export type FileDownload =
@@ -26,17 +33,19 @@ export class UnconfiguredTelegramFiles implements TelegramFiles {
 /** The real download: grammY `getFile`, then a streamed GET that stops at `maxBytes`. */
 export class GrammyFiles implements TelegramFiles {
   private readonly api: Api;
+  private readonly log = new Logger('TelegramFiles');
   constructor(private readonly token: string) {
     this.api = new Api(token);
   }
 
   async download(fileId: string, maxBytes: number): Promise<FileDownload> {
     try {
-      const file = await this.api.getFile(fileId);
+      const file = await withTimeout(this.api.getFile(fileId), GET_FILE_TIMEOUT_MS);
       if (file.file_size !== undefined && file.file_size > maxBytes) return { kind: 'too_large' };
       if (!file.file_path) return { kind: 'unavailable' };
       const res = await fetch(`https://api.telegram.org/file/bot${this.token}/${file.file_path}`, {
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+        redirect: 'error',
       });
       if (!res.ok || !res.body) return { kind: 'unavailable' };
       const chunks: Uint8Array[] = [];
@@ -44,15 +53,15 @@ export class GrammyFiles implements TelegramFiles {
       for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
         total += chunk.length;
         if (total > maxBytes) {
-          await res.body.cancel().catch(() => undefined);
           return { kind: 'too_large' };
         }
         chunks.push(chunk);
       }
       return { kind: 'ok', bytes: Buffer.concat(chunks) };
     } catch (e) {
-      // The message of a fetch or grammY error can carry the URL (and so the token): drop it.
       if (e instanceof GrammyError && /too big/i.test(e.description)) return { kind: 'too_large' };
+      // describeError keeps the error's name and code, never the request URL (which holds the token)
+      this.log.warn(`download failed: ${describeError(e)}`);
       return { kind: 'unavailable' };
     }
   }

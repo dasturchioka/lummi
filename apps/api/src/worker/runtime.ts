@@ -1,4 +1,4 @@
-import { botPendingReceipts, lt, processedUpdates, type Db, type DbOrTx } from '@lummi/db';
+import { lt, processedUpdates, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Worker, type Job } from 'bullmq';
 import { Redis } from 'ioredis';
@@ -14,8 +14,6 @@ import { describeError } from '../logging/describe-error';
 const SEND_RATE_PER_SECOND = 25;
 /** update_id is only an identity; after a long idle gap Telegram may restart the counter. */
 const PROCESSED_UPDATES_KEEP_MS = 72 * 3600 * 1000;
-/** A file waiting for the shopper's choice of order (#31); above the largest `receipts.botChoiceSeconds`. */
-const PENDING_RECEIPT_KEEP_MS = 24 * 3600 * 1000;
 
 /** What `tick()` hands every sweep, so it can keep the marker rule below. */
 export interface SweepContext {
@@ -80,16 +78,6 @@ export class WorkerRuntime implements OnApplicationShutdown {
           .delete(processedUpdates)
           .where(
             lt(processedUpdates.createdAt, new Date(now.getTime() - PROCESSED_UPDATES_KEEP_MS)),
-          );
-      },
-    });
-    this.register({
-      name: 'prune-bot-pending-receipts',
-      run: async ({ now, db: d }) => {
-        await d
-          .delete(botPendingReceipts)
-          .where(
-            lt(botPendingReceipts.createdAt, new Date(now.getTime() - PENDING_RECEIPT_KEEP_MS)),
           );
       },
     });

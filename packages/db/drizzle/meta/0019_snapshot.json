@@ -1,5 +1,5 @@
 {
-  "id": "8c30bf17-5667-4a24-aa28-97cd46259d29",
+  "id": "996f5fb5-3e87-4abe-9259-eec14926854c",
   "prevId": "1a71c023-2068-47e4-a625-00153b559f5a",
   "version": "7",
   "dialect": "postgresql",
@@ -152,6 +152,12 @@
         "file_name": {
           "name": "file_name",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order_number": {
+          "name": "order_number",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },

@@ -3,6 +3,7 @@ CREATE TABLE "bot_pending_receipts" (
 	"customer_id" bigint NOT NULL,
 	"file_id" text NOT NULL,
 	"file_name" text,
+	"order_number" bigint,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

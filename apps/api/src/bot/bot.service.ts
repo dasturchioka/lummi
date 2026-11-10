@@ -11,7 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import type { Edges } from '../edges';
 import { EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
-import { BotReceipts, type IncomingReceipt } from './bot-receipts.service';
+import { BotReceipts, RECEIPT_CALLBACK, type IncomingReceipt } from './bot-receipts.service';
 
 export const BOT_INFO = Symbol('BOT_INFO');
 
@@ -46,7 +46,7 @@ export class BotService implements OnApplicationShutdown {
     this.bot.use((ctx, next) => this.dedupe(ctx, next));
     this.bot.command('start', (ctx) => this.onStart(ctx));
     this.bot.on(['message:photo', 'message:document'], (ctx) => this.onReceiptFile(ctx));
-    this.bot.on('callback_query:data', (ctx) => this.onCallback(ctx));
+    this.bot.callbackQuery(RECEIPT_CALLBACK, (ctx) => this.onReceiptChoice(ctx));
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
     this.bot.catch((err) =>
@@ -176,8 +176,8 @@ export class BotService implements OnApplicationShutdown {
     if (job) ctx.afterCommit.push(job);
   }
 
-  /** A tapped inline button: today only the "which order is this receipt for?" choice. */
-  private async onCallback(ctx: BotContext): Promise<void> {
+  /** The "which order is this receipt for?" button. Each feature's buttons have their own namespace. */
+  private async onReceiptChoice(ctx: BotContext): Promise<void> {
     const query = ctx.callbackQuery;
     if (!query?.data || query.from.is_bot) return;
     const id = query.id;

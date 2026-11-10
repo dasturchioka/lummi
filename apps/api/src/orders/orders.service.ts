@@ -609,8 +609,7 @@ export function ordersUrl(miniAppUrl: string): string {
 
 /** The Mini App route of an order, under the Mini App's own URL (its path kept). */
 export function orderUrl(miniAppUrl: string, number: number): string {
-  const base = miniAppUrl.endsWith('/') ? miniAppUrl : `${miniAppUrl}/`;
-  return new URL(`orders/${number}`, base).toString();
+  return `${ordersUrl(miniAppUrl)}/${number}`;
 }
 
 /** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */
