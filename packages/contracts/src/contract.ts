@@ -71,7 +71,6 @@ import {
   adminDiscoverySetSchema,
   adminSetsErrorSchema,
   builderSchema,
-  discoveryOnHandBodySchema,
   discoverySetInputSchema,
   discoverySetSchema,
   setsErrorSchema,
@@ -607,7 +606,7 @@ const adminSets = c.router({
     setOnHand: {
       method: 'PATCH',
       path: '/admin/sets/discovery/on-hand',
-      body: discoveryOnHandBodySchema,
+      body: onHandBodySchema,
       responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
       summary: 'Owner and manager: boxes in the warehouse (audited)',
     },

@@ -19,17 +19,22 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export function PhotoUpload({
   ml,
   volumeId,
+  uploadUrl,
   hash,
   onUploaded,
   t,
 }: {
-  ml: number;
-  volumeId: number | null;
+  /** The volume this photo belongs to; omitted for a photo that is not a volume's (the Discovery set). */
+  ml?: number;
+  volumeId?: number | null;
+  /** Where the bytes go when it is not a volume's photo route. */
+  uploadUrl?: string;
   hash: string | null;
   onUploaded: (hash: string) => void;
   t: AdminMessages;
 }) {
   const c = t.catalog;
+  const url = uploadUrl ?? (volumeId == null ? null : `/api/admin/volumes/${volumeId}/photo`);
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [state, setState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'error'; text?: string }>({
@@ -38,12 +43,12 @@ export function PhotoUpload({
   useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview]);
 
   const pick = async (file: File | undefined) => {
-    if (!file || volumeId === null) return;
+    if (!file || url === null) return;
     if (!TYPES.includes(file.type)) return setState({ kind: 'error', text: c.photoBadType });
     if (file.size > MAX_PHOTO_BYTES) return setState({ kind: 'error', text: c.photoTooBig });
     setPreview(URL.createObjectURL(file));
     setState({ kind: 'busy', text: c.photoUploading });
-    const res = await fetch(`/api/admin/volumes/${volumeId}/photo`, {
+    const res = await fetch(url, {
       method: 'PUT',
       headers: { 'content-type': file.type },
       body: file,
@@ -73,7 +78,7 @@ export function PhotoUpload({
   return (
     <div className="grid gap-1.5" data-photo={ml}>
       <p className="text-[12.5px] font-medium text-muted-foreground">{c.photo}</p>
-      {volumeId === null ? (
+      {url === null ? (
         <p className="text-xs text-pretty text-muted-foreground">{c.photoSaveFirst}</p>
       ) : (
         <div className="flex flex-col gap-3 @xs:flex-row @xs:items-start @xs:gap-4">
@@ -100,7 +105,7 @@ export function PhotoUpload({
               accept={TYPES.join(',')}
               className="sr-only"
               tabIndex={-1}
-              aria-label={`${c.photo} ${ml} ${c.ml}`}
+              aria-label={ml === undefined ? c.photo : `${c.photo} ${ml} ${c.ml}`}
               onChange={(e) => {
                 void pick(e.target.files?.[0]);
                 e.target.value = '';

@@ -9,16 +9,15 @@ import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
-import { attribution } from '../ui/FragranceListCard';
+import { DockNote } from '../ui/DockNote';
+import { NameLockup } from '../ui/NameLockup';
+import { DISC, EASE_OUT } from '../ui/photoDisc';
 import { ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { SetPhoto } from '../ui/SetPhoto';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
-
-const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
-const DISC = `relative grid size-10 place-items-center rounded-pill bg-photo-disc text-photo-disc-ink transition-transform duration-150 ${EASE_OUT} after:absolute after:-inset-1 active:scale-95`;
 
 /** A status line that rises above the dock for a moment and never moves the buttons. */
 function useNote(): [string | undefined, (n: string) => void] {
@@ -29,25 +28,6 @@ function useNote(): [string | undefined, (n: string) => void] {
     return () => clearTimeout(id);
   }, [note]);
   return [note, setNote];
-}
-
-function Note({ text }: { text: string | undefined }) {
-  const [shown, setShown] = useState(text);
-  if (text && text !== shown) setShown(text);
-  return (
-    <>
-      <span role="status" className="sr-only">
-        {text ?? ''}
-      </span>
-      <span
-        aria-hidden="true"
-        data-open={text ? '' : undefined}
-        className="type-caption pointer-events-none absolute bottom-full left-1/2 mb-[22px] -translate-x-1/2 translate-y-1 rounded-pill bg-btn px-3 py-1.5 font-semibold whitespace-nowrap text-btn-ink opacity-0 transition-[opacity,translate] duration-150 ease-out data-[open]:translate-y-0 data-[open]:opacity-100 data-[open]:duration-200"
-      >
-        {shown}
-      </span>
-    </>
-  );
 }
 
 function Loading() {
@@ -87,7 +67,7 @@ export function DiscoverySetView({
       tabBar={false}
       dock={
         <div className="relative">
-          <Note text={note} />
+          <DockNote text={note} />
           {!ready ? (
             <Button block disabled>
               {t.sets.notReady}
@@ -126,13 +106,8 @@ export function DiscoverySetView({
             {t.sets.discoveryTitle}
           </h1>
           <p className="type-body mt-2 text-muted">{t.sets.discoveryLead}</p>
-          <p className="mt-3 flex items-baseline gap-3">
+          <p className="mt-3">
             <Money amount={set.price} size="amount" />
-            {!set.soldOut && set.available <= 5 && ready ? (
-              <span className="type-caption text-muted" data-testid="only-left">
-                {fill(t.sets.onlyLeft, { n: String(set.available) })}
-              </span>
-            ) : null}
           </p>
         </header>
 
@@ -142,28 +117,32 @@ export function DiscoverySetView({
               {t.sets.inside}
             </h2>
             <ul className="mt-2 divide-y divide-line overflow-hidden rounded-card bg-card">
-              {set.fragrances.map((f) => (
-                <li key={f.slug}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(f.slug)}
-                    className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 active:bg-field"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="type-label block text-pretty text-muted [overflow-wrap:anywhere]">
-                        {attribution(t.card.basedOn, f.brand)}
+              {set.fragrances.map((f, i) => (
+                <li key={f.slug ?? `hidden-${i}`}>
+                  {f.slug === null ? (
+                    // hidden from the catalog: the box still holds it, but there is no card to open
+                    <div className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5">
+                      <span className="min-w-0 flex-1">
+                        <NameLockup brand={f.brand} name={f.name} />
                       </span>
-                      <span className="type-name mt-px block text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
-                        {f.name}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onOpen(f.slug as string)}
+                      className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 active:bg-field"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <NameLockup brand={f.brand} name={f.name} />
+                        <span className="type-small mt-0.5 block text-muted">
+                          {t.sets.from} · {f.keyNotes[language].slice(0, 3).join(' · ')}
+                        </span>
                       </span>
-                      <span className="type-small mt-0.5 block text-muted">
-                        {t.sets.from} · {f.keyNotes[language].slice(0, 3).join(' · ')}
+                      <span className="shrink-0 text-muted" aria-hidden="true">
+                        <ChevronIcon size={16} />
                       </span>
-                    </span>
-                    <span className="shrink-0 text-muted" aria-hidden="true">
-                      <ChevronIcon size={16} />
-                    </span>
-                  </button>
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -230,7 +209,7 @@ function PickRow({
       type="button"
       role="checkbox"
       aria-checked={chosen}
-      aria-label={(chosen ? t.sets.unpick : t.sets.pick).replace('{name}', item.name)}
+      aria-label={fill(chosen ? t.sets.unpick : t.sets.pick, { name: item.name })}
       aria-disabled={locked || undefined}
       data-testid="pick"
       data-chosen={chosen}
@@ -256,12 +235,7 @@ function PickRow({
         ) : null}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="type-label block text-pretty text-muted [overflow-wrap:anywhere]">
-          {attribution(t.card.basedOn, item.brand)}
-        </span>
-        <span className="type-name mt-px block text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
-          {item.name}
-        </span>
+        <NameLockup brand={item.brand} name={item.name} />
         <span className="type-small mt-0.5 block text-muted">
           {item.keyNotes[language].slice(0, 3).join(' · ')}
         </span>
@@ -284,6 +258,7 @@ export function BuilderView({
   picked,
   adding = false,
   note,
+  failed = false,
   onBack = () => undefined,
   onToggle = () => undefined,
   onAdd = () => undefined,
@@ -292,6 +267,8 @@ export function BuilderView({
   picked: string[];
   adding?: boolean;
   note?: string;
+  /** The add did not go through (network or server error): say so and offer «Повторить». */
+  failed?: boolean;
   onBack?: () => void;
   onToggle?: (slug: string) => void;
   onAdd?: () => void;
@@ -304,7 +281,19 @@ export function BuilderView({
       tabBar={false}
       dock={
         <div className="relative">
-          <Note text={note} />
+          <DockNote text={note} />
+          {failed ? (
+            <div
+              role="alert"
+              className="mb-2 flex items-center justify-between gap-3"
+              data-testid="add-failed"
+            >
+              <p className="type-small text-pretty text-ink">{t.sets.failed}</p>
+              <Button variant="secondary" size="sm" className="shrink-0" onClick={onAdd}>
+                {t.common.retry}
+              </Button>
+            </div>
+          ) : null}
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="type-small text-ink" data-testid="chosen">
               {fill(t.sets.chosen, { n: String(picked.length), size: String(SET_SIZE) })}
@@ -384,6 +373,7 @@ export function BuilderScreen() {
   const add = useAddBuilder();
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useNote();
+  const [failed, setFailed] = useState(false);
 
   // a fragrance that ran out of 10 ml while it was chosen drops from the choice
   const options = query.data?.options;
@@ -406,20 +396,26 @@ export function BuilderScreen() {
       picked={picked}
       adding={add.isPending}
       note={note}
+      failed={failed}
       onBack={() => goBackOrCatalog(router)}
       onToggle={(slug) =>
         setPicked((p) => (p.includes(slug) ? p.filter((s) => s !== slug) : [...p, slug]))
       }
-      onAdd={() =>
+      onAdd={() => {
+        setFailed(false);
         add.mutate(picked, {
           onSuccess: () => {
             hapticSuccess();
             setPicked([]);
             setNote(t.sets.added);
           },
-          onError: () => setNote(t.sets.unavailable),
-        })
-      }
+          // 409: a chosen 10 ml ran out (the list re-reads itself); anything else is retryable
+          onError: (e) =>
+            e instanceof Error && e.message === 'HTTP 409'
+              ? setNote(t.sets.unavailable)
+              : setFailed(true),
+        });
+      }}
     />
   );
 }

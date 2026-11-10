@@ -528,6 +528,11 @@ export const cartLines = pgTable(
       .where(sql`kind = 'builder'`),
     index('cart_lines_volume_idx').on(t.volumeId),
     check('cart_lines_qty_check', sql`${t.qty} > 0`),
+    // exactly five fragrance ids and none NULL (distinctness is judged by the builder's rules)
+    check(
+      'cart_lines_fragrance_ids_check',
+      sql`${t.fragranceIds} is null or (cardinality(${t.fragranceIds}) = 5 and array_position(${t.fragranceIds}, null) is null)`,
+    ),
     check(
       'cart_lines_kind_check',
       sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null)

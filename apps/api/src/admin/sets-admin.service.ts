@@ -10,16 +10,12 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import sharp from 'sharp';
 import { AuditService } from '../audit/audit.service';
-import { available } from '../catalog/catalog.service';
-import { storePhoto } from '../catalog/photo-pipeline';
+import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import type { Edges } from '../edges';
-import { readComposition, readDiscoverySet, reservedDiscovery } from '../sets/sets';
+import { loadDiscovery, readComposition, readDiscoverySet } from '../sets/sets';
 import { DB, EDGES } from '../tokens';
 import type { Outcome } from './catalog-admin.service';
-
-const MIN_PHOTO_WIDTH = 400;
 
 /** The Discovery set's price, composition, photo and own on hand; the builder shares its price (ADR 0009). */
 @Injectable()
@@ -31,19 +27,16 @@ export class SetsAdminService {
   ) {}
 
   async get(db: DbOrTx = this.db): Promise<AdminDiscoverySet> {
-    const [row, composition, reserved] = await Promise.all([
-      readDiscoverySet(db),
-      readComposition(db),
-      reservedDiscovery(db),
-    ]);
+    const { row, composition, reserved, available } = await loadDiscovery(db);
     return {
       price: row.price,
       onHand: row.onHand,
       reserved,
-      available: available(row.onHand, reserved),
+      // the same not-for-sale rule as the shop: fewer than five fragrances sells nothing
+      available,
       photo: row.photoHash,
       isPlaceholder: row.isPlaceholder,
-      composition: composition.map((f) => ({ id: f.id, name: f.name })),
+      composition: composition.map((f) => ({ id: f.id, name: f.name, hidden: f.hidden })),
     };
   }
 
@@ -67,7 +60,8 @@ export class SetsAdminService {
         .update(discoverySet)
         .set({
           price: input.price,
-          isPlaceholder: old.price === input.price ? old.isPlaceholder : false,
+          // any owner save of the price is a real decision, even confirming the seed value
+          isPlaceholder: false,
           updatedAt: this.edges.clock.now(),
         })
         .where(eq(discoverySet.id, true));
@@ -106,14 +100,8 @@ export class SetsAdminService {
 
   /** Same WebP pipeline as the bottle photos (the original bytes are kept). */
   async setPhoto(actor: StaffRow, bytes: Uint8Array): Promise<Outcome<string>> {
-    let hash: string;
-    try {
-      const meta = await sharp(bytes).metadata();
-      if ((meta.width ?? 0) < MIN_PHOTO_WIDTH) return { ok: false, reason: 'invalid' };
-      ({ hash } = await storePhoto(this.edges.files, bytes));
-    } catch {
-      return { ok: false, reason: 'invalid' };
-    }
+    const hash = await storeUploadedPhoto(this.edges.files, bytes);
+    if (!hash) return { ok: false, reason: 'invalid' };
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, true);
       await tx

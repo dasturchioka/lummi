@@ -3,10 +3,10 @@
 import type { AdminDiscoverySet } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
-import { Check, CircleAlert, ImageOff, ImagePlus } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
-import { photoUrl } from '@/components/catalog/photo';
+import { useState } from 'react';
+import { PhotoUpload } from '@/components/catalog/photo-upload';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,7 +19,6 @@ import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
 
 type Option = { id: number; name: string; hidden: boolean };
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 /**
  * The Discovery set (ADR 0009): its own boxes on hand (owner and manager), and the owner's price
@@ -44,6 +43,14 @@ export function SetsManager({
   return (
     <>
       <PageHeader title={s.title} description={s.description} />
+      {initial.composition.some((c) => c.hidden) && (
+        <Notice title={s.hiddenWarning} className="mb-6">
+          {initial.composition
+            .filter((c) => c.hidden)
+            .map((c) => c.name)
+            .join(', ')}
+        </Notice>
+      )}
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <StockCard set={initial} t={t} onSaved={() => router.refresh()} />
         <Card className="grid gap-5 p-5">
@@ -63,7 +70,13 @@ export function SetsManager({
         {owner && (
           <Card className="grid gap-4 p-5">
             <h2 className="text-base font-semibold">{s.photoTitle}</h2>
-            <SetPhotoUpload hash={initial.photo} t={t} onUploaded={() => router.refresh()} />
+            <p className="text-xs text-pretty text-muted-foreground">{s.photoHint}</p>
+            <PhotoUpload
+              uploadUrl="/api/admin/sets/discovery/photo"
+              hash={initial.photo}
+              t={t}
+              onUploaded={() => router.refresh()}
+            />
           </Card>
         )}
       </div>
@@ -264,107 +277,5 @@ function PriceForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-function SetPhotoUpload({
-  hash,
-  t,
-  onUploaded,
-}: {
-  hash: string | null;
-  t: AdminMessages;
-  onUploaded: () => void;
-}) {
-  const c = t.catalog;
-  const input = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [state, setState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'error'; text?: string }>({
-    kind: 'idle',
-  });
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    if (!IMAGE_TYPES.includes(file.type)) return setState({ kind: 'error', text: c.photoBadType });
-    setPreview(URL.createObjectURL(file));
-    setState({ kind: 'busy', text: c.photoUploading });
-    const res = await fetch('/api/admin/sets/discovery/photo', {
-      method: 'PUT',
-      headers: { 'content-type': file.type },
-      body: file,
-    }).catch(() => null);
-    if (res?.ok) {
-      setState({ kind: 'ok', text: c.photoUploaded });
-      onUploaded();
-    } else {
-      setPreview(null);
-      setState({
-        kind: 'error',
-        text:
-          res?.status === 413
-            ? c.photoTooBig
-            : res?.status === 415
-              ? c.photoBadType
-              : res?.status === 422
-                ? c.photoTooSmall
-                : c.photoFailed,
-      });
-    }
-  };
-  const shown = preview ?? (hash ? photoUrl(hash, 400) : null);
-  const busy = state.kind === 'busy';
-  return (
-    <div className="flex flex-col gap-3 @xs:flex-row @xs:items-start @xs:gap-4">
-      <div
-        className={`grid aspect-[3/4] w-28 shrink-0 place-items-center overflow-hidden rounded-[8px] bg-field transition-opacity duration-200 ${busy ? 'opacity-60' : ''}`}
-      >
-        {shown ? (
-          <img src={shown} alt="" className="size-full object-cover" decoding="async" />
-        ) : (
-          <span className="grid justify-items-center gap-1.5 px-2 text-center text-xs text-muted-foreground">
-            <ImageOff className="size-5" strokeWidth={1.5} aria-hidden />
-            {c.noPhoto}
-          </span>
-        )}
-      </div>
-      <div className="grid min-w-0 content-start justify-items-start gap-2">
-        <p className="text-xs text-pretty text-muted-foreground">{t.sets.photoHint}</p>
-        <input
-          ref={input}
-          type="file"
-          accept={IMAGE_TYPES.join(',')}
-          className="sr-only"
-          tabIndex={-1}
-          aria-label={t.sets.photoTitle}
-          onChange={(e) => {
-            void pick(e.target.files?.[0]);
-            e.target.value = '';
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          loading={busy}
-          onClick={() => input.current?.click()}
-        >
-          <ImagePlus strokeWidth={1.5} aria-hidden />
-          {shown ? c.photoReplace : c.photoChoose}
-        </Button>
-        {state.text && !busy && (
-          <p
-            key={state.text}
-            role={state.kind === 'error' ? 'alert' : 'status'}
-            className="flex items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
-          >
-            {state.kind === 'error' ? (
-              <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-            ) : (
-              <Check className="size-3.5 shrink-0 text-sage-ink" strokeWidth={1.5} aria-hidden />
-            )}
-            {state.text}
-          </p>
-        )}
-      </div>
-    </div>
   );
 }

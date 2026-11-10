@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { FRAGRANCE_TYPES, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './constants';
+import { FRAGRANCE_TYPES, MAX_PRICE, NOTE_LEVELS, SEASONS, SILLAGES, TIMES_OF_DAY } from './constants';
 
 /**
  * Admin catalog editing (ticket #17). Text is trimmed; the API normalises Uzbek apostrophes on
@@ -16,7 +16,7 @@ export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
 
 const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date');
-const som = z.number().int().min(0).max(100_000_000);
+const som = z.number().int().min(0).max(MAX_PRICE);
 
 /** What staff type for one volume. `saleEndsOn` is a Tashkent calendar day: it ends at 23:59:59. */
 export const volumeInputSchema = z

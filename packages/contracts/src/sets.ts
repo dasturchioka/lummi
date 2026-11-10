@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CART_MAX_QTY, SET_SIZE } from './constants';
+import { CART_MAX_QTY, MAX_PRICE, SET_SIZE } from './constants';
 import { fragranceListItemSchema } from './catalog';
 
 /**
@@ -8,7 +8,8 @@ import { fragranceListItemSchema } from './catalog';
  * so'm and comes from the server (ADR 0001).
  */
 export const setFragranceSchema = z.object({
-  slug: z.string(),
+  /** Null for a fragrance hidden from the catalog: the box stays on sale, but it has no card to open. */
+  slug: z.string().nullable(),
   name: z.string(),
   brand: z.string(),
   keyNotes: z.object({ ru: z.array(z.string()), uz: z.array(z.string()) }),
@@ -65,12 +66,11 @@ export const adminDiscoverySetSchema = z.object({
   available: z.number().int().nonnegative(),
   photo: z.string().nullable(),
   isPlaceholder: z.boolean(),
-  /** Ordered; its length is below five until the owner completes it. */
-  composition: z.array(z.object({ id: z.number().int(), name: z.string() })),
+  /** Ordered; its length is below five until the owner completes it. `hidden`: the catalog hides it (the box still sells). */
+  composition: z.array(z.object({ id: z.number().int(), name: z.string(), hidden: z.boolean() })),
 });
 export type AdminDiscoverySet = z.infer<typeof adminDiscoverySetSchema>;
 
-const MAX_PRICE = 100_000_000;
 /** The owner's edit: the shared price of both sets and the five fragrances, in order. */
 export const discoverySetInputSchema = z.object({
   price: z.number().int().min(0).max(MAX_PRICE),
@@ -80,10 +80,6 @@ export const discoverySetInputSchema = z.object({
     .refine((s) => new Set(s).size === s.length, 'duplicate'),
 });
 export type DiscoverySetInput = z.infer<typeof discoverySetInputSchema>;
-
-export const discoveryOnHandBodySchema = z.object({
-  onHand: z.number().int().min(0).max(1_000_000),
-});
 
 export const adminSetsErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid']),

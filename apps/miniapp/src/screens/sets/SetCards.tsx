@@ -58,7 +58,7 @@ export function SetCards() {
           className={card}
         >
           <span className="min-w-0 flex-1 py-1 pl-1">
-            <span className="type-name-lg block text-ink [overflow-wrap:anywhere]">
+            <span className="type-heading block text-ink [overflow-wrap:anywhere]">
               {t.sets.builderCardTitle}
             </span>
             <span className="type-small mt-1 block text-pretty text-muted">

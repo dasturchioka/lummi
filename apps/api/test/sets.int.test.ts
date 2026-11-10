@@ -161,6 +161,7 @@ describe('the builder', () => {
     expect(res.body.lines).toHaveLength(1);
     const line = res.body.lines[0]!;
     expect(line).toMatchObject({ kind: 'builder', qty: 2 });
+    expect(line.kind === 'builder' && line.fragrances.every((f) => f.brand.length > 0)).toBe(true);
     expect(line.kind === 'builder' && line.fragrances.map((f) => f.slug).sort()).toEqual(
       [...five].sort(),
     );
@@ -367,5 +368,92 @@ describe('relink', () => {
         .from(cartLines)
         .where(eq(cartLines.customerId, idOf(52))),
     ).toHaveLength(0);
+  });
+});
+
+describe('hidden fragrances', () => {
+  it('the builder answers a hidden slug like an unknown one', async () => {
+    const five = await slugs(5);
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, five[1]!));
+    const { client } = await t.signIn(ali);
+    const hidden = await client.cart.addBuilder({ body: { slugs: five, qty: 1 } });
+    const unknown = await client.cart.addBuilder({
+      body: { slugs: [...five.slice(0, 4), 'no-such-one'], qty: 1 },
+    });
+    expect(hidden.status).toBe(404);
+    expect(hidden.body).toEqual(unknown.body);
+  });
+
+  it('the Discovery box shows a hidden fragrance by name and attribution only, and stays on sale', async () => {
+    const { client } = await t.signIn(ali);
+    const before = await client.sets.discovery();
+    const first = before.status === 200 ? before.body.fragrances[0]! : null;
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, first!.slug!));
+    const res = await client.sets.discovery();
+    expect(res.status).toBe(200);
+    if (res.status !== 200) return;
+    expect(res.body.soldOut).toBe(false);
+    expect(res.body.fragrances[0]).toEqual({
+      slug: null,
+      name: first!.name,
+      brand: first!.brand,
+      keyNotes: { ru: [], uz: [] },
+    });
+    expect(res.body.fragrances[1]!.slug).not.toBeNull();
+    const added = await client.cart.addDiscovery({ body: { qty: 1 } });
+    expect(added.status).toBe(200);
+  });
+
+  it('the admin set marks the hidden fragrance so the page can warn', async () => {
+    const first = (await owner.client.admin.sets.get()).body as { composition: { id: number }[] };
+    await t.db
+      .update(fragrances)
+      .set({ hidden: true })
+      .where(eq(fragrances.id, first.composition[0]!.id));
+    const res = await owner.client.admin.sets.get();
+    expect(res.status === 200 && res.body.composition.map((c) => c.hidden)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+});
+
+describe('admin: the not-for-sale rule and the placeholder flag', () => {
+  it('reports available 0 while the composition is not five, as the shop does', async () => {
+    await t.db.delete(discoverySetItems).where(eq(discoverySetItems.position, 5));
+    const res = await manager.client.admin.sets.get();
+    expect(res.status === 200 && [res.body.onHand, res.body.available]).toEqual([10, 0]);
+  });
+
+  it('clears the placeholder flag on any owner save of the price, even unchanged', async () => {
+    const got = await owner.client.admin.sets.get();
+    expect(got.status === 200 && got.body.isPlaceholder).toBe(true);
+    const ids = (got.body as { composition: { id: number }[] }).composition.map((c) => c.id);
+    const res = await owner.client.admin.sets.update({
+      body: { price: 299_000, composition: ids },
+    });
+    expect(res.status === 200 && res.body.isPlaceholder).toBe(false);
+  });
+});
+
+describe('relink keeps the per-line ceiling', () => {
+  it('caps volume and set lines at 99 when two carts of 60 merge', async () => {
+    const five = await slugs(5);
+    await t.db.update(volumes).set({ onHand: 500 });
+    await t.db.update(discoverySet).set({ onHand: 500 });
+    const a = await t.signIn(ali);
+    const b = await t.signIn({ id: 53, first_name: 'Sam', language_code: 'ru' });
+    for (const c of [a, b]) {
+      await c.client.cart.addLine({ body: { slug: five[0]!, ml: 10, qty: 60 } });
+      await c.client.cart.addDiscovery({ body: { qty: 60 } });
+    }
+    const rows = await t.db.select({ id: customers.id, tg: customers.telegramId }).from(customers);
+    const idOf = (tg: number) => rows.find((r) => Number(r.tg) === tg)!.id;
+    await t.db.transaction((tx) => moveCartData(tx, idOf(53), idOf(51), new Date()));
+    const cart = await a.client.cart.get();
+    expect(cart.status === 200 && cart.body.lines.map((l) => l.qty)).toEqual([99, 99]);
   });
 });

@@ -30,6 +30,9 @@ export type CatalogSort = (typeof CATALOG_SORTS)[number];
 export const CATALOG_PAGE_SIZE = 24;
 export const CATALOG_PAGE_MAX = 100;
 
+/** The ceiling of every so'm amount an input may carry (ADR 0016). */
+export const MAX_PRICE = 100_000_000;
+
 /** Both kinds of set hold exactly this many different fragrances, 10 ml each (ADR 0009). */
 export const SET_SIZE = 5;
 

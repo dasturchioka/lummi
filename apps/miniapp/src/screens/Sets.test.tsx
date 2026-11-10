@@ -108,4 +108,31 @@ describe('DiscoverySetView', () => {
         .disabled,
     ).toBe(true);
   });
+
+  it('shows a hidden fragrance without a link', () => {
+    const base = set();
+    const hidden = { ...base.fragrances[0]!, slug: null, keyNotes: { ru: [], uz: [] } };
+    render(
+      <DiscoverySetView set={{ ...base, fragrances: [hidden, ...base.fragrances.slice(1)] }} />,
+    );
+    expect(screen.queryByRole('button', { name: /Fragrance 0/ })).toBeNull();
+    expect(screen.getByText('Fragrance 0')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Fragrance 1/ })).toBeTruthy();
+  });
+});
+
+describe('BuilderView failure', () => {
+  it('offers a retry that adds again', () => {
+    const onAdd = vi.fn();
+    render(
+      <BuilderView
+        builder={builder()}
+        picked={['f-1', 'f-2', 'f-3', 'f-4', 'f-5']}
+        failed
+        onAdd={onAdd}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(onAdd).toHaveBeenCalled();
+  });
 });

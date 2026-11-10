@@ -47,3 +47,23 @@ export function looksLikeImage(b: Uint8Array): boolean {
     b[11] === 0x50;
   return jpeg || png || webp;
 }
+
+/** The smallest upload that does not upscale the 400 px rendition (3:4). */
+export const MIN_PHOTO = { width: 400, height: 533 } as const;
+
+/**
+ * Judges an uploaded photo's dimensions and stores its renditions; null when it is unreadable or
+ * too small. The one path for every admin photo upload (bottles, the Discovery set).
+ */
+export async function storeUploadedPhoto(
+  files: FileStore,
+  bytes: Uint8Array,
+): Promise<string | null> {
+  try {
+    const meta = await sharp(bytes).metadata();
+    if ((meta.width ?? 0) < MIN_PHOTO.width || (meta.height ?? 0) < MIN_PHOTO.height) return null;
+    return (await storePhoto(files, bytes)).hash;
+  } catch {
+    return null;
+  }
+}

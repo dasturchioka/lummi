@@ -1,3 +1,4 @@
+import { SET_SIZE } from '@lummi/contracts/constants';
 import {
   discoverySet,
   discoverySetItems,
@@ -100,10 +101,10 @@ export interface SeedOptions {
  */
 async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
   const [has] = await tx.select().from(discoverySetItems).limit(1);
-  if (has || fragranceIds.length < 5) return;
+  if (has || fragranceIds.length < SET_SIZE) return;
   await tx
     .insert(discoverySetItems)
-    .values(fragranceIds.slice(0, 5).map((fragranceId, i) => ({ position: i + 1, fragranceId })));
+    .values(fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })));
   await tx
     .update(discoverySet)
     .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })

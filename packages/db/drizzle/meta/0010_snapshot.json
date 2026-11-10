@@ -1,5 +1,5 @@
 {
-  "id": "8cb99745-4be0-49de-83fc-b9ca9fb59354",
+  "id": "3e42e2f3-fbc7-48f8-a91d-86b49bfe3a97",
   "prevId": "e889758a-7a1c-43c2-8e02-dc357eda4d89",
   "version": "7",
   "dialect": "postgresql",
@@ -431,6 +431,10 @@
         "cart_lines_qty_check": {
           "name": "cart_lines_qty_check",
           "value": "\"cart_lines\".\"qty\" > 0"
+        },
+        "cart_lines_fragrance_ids_check": {
+          "name": "cart_lines_fragrance_ids_check",
+          "value": "\"cart_lines\".\"fragrance_ids\" is null or (cardinality(\"cart_lines\".\"fragrance_ids\") = 5 and array_position(\"cart_lines\".\"fragrance_ids\", null) is null)"
         },
         "cart_lines_kind_check": {
           "name": "cart_lines_kind_check",

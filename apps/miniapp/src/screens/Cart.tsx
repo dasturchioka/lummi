@@ -384,9 +384,17 @@ function Line({
                 >
                   {line.kind === 'discovery' ? t.sets.lineDiscovery : t.sets.lineBuilder}
                 </p>
-                <p className="type-small mt-1 text-pretty text-muted [overflow-wrap:anywhere]">
-                  {line.fragrances.map((f) => f.name).join(' · ')}
-                </p>
+                <ul
+                  className="type-small mt-1 flex flex-col gap-0.5 text-muted"
+                  data-testid="set-fragrances"
+                >
+                  {line.fragrances.map((f) => (
+                    <li key={f.slug} className="text-pretty [overflow-wrap:anywhere]">
+                      <span className="text-ink">{f.name}</span>{' '}
+                      {attribution(t.card.basedOn, f.brand)}
+                    </li>
+                  ))}
+                </ul>
               </>
             )}
           </div>

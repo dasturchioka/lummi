@@ -31,7 +31,7 @@ export const volumeLineSchema = z.object({
 });
 
 /** The five fragrances a set line holds, named on the row (spec Changes 2026-11-10, sets). */
-const setFragrances = z.array(z.object({ slug: z.string(), name: z.string() }));
+const setFragrances = z.array(z.object({ slug: z.string(), name: z.string(), brand: z.string() }));
 export const discoveryLineSchema = z.object({
   ...lineBase,
   kind: z.literal('discovery'),

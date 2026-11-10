@@ -1,3 +1,4 @@
+import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { cartLines, carts, eq, sql, type DbOrTx } from '@lummi/db';
 
 /**
@@ -15,18 +16,18 @@ export async function moveCartData(
   await tx.execute(sql`
     insert into cart_lines (customer_id, volume_id, qty)
     select ${toId}, volume_id, qty from cart_lines where customer_id = ${fromId} and kind = 'volume'
-    on conflict (customer_id, volume_id) do update set qty = cart_lines.qty + excluded.qty
+    on conflict (customer_id, volume_id) do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
   `);
   // set lines (ADR 0009): the Discovery set adds up, and so do builder sets of the same five
   await tx.execute(sql`
     insert into cart_lines (customer_id, kind, qty)
     select ${toId}, kind, qty from cart_lines where customer_id = ${fromId} and kind = 'discovery'
-    on conflict (customer_id) where kind = 'discovery' do update set qty = cart_lines.qty + excluded.qty
+    on conflict (customer_id) where kind = 'discovery' do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
   `);
   await tx.execute(sql`
     insert into cart_lines (customer_id, kind, fragrance_ids, qty)
     select ${toId}, kind, fragrance_ids, qty from cart_lines where customer_id = ${fromId} and kind = 'builder'
-    on conflict (customer_id, fragrance_ids) where kind = 'builder' do update set qty = cart_lines.qty + excluded.qty
+    on conflict (customer_id, fragrance_ids) where kind = 'builder' do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
   `);
   await tx.delete(cartLines).where(eq(cartLines.customerId, fromId));
   if (from) {

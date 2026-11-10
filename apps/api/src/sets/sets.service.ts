@@ -1,9 +1,10 @@
 import type { Builder, DiscoverySet } from '@lummi/contracts';
-import { and, eq, fragrances, volumes, type Db } from '@lummi/db';
+import { SET_SIZE } from '@lummi/contracts/constants';
+import type { Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
+import { CatalogService } from '../catalog/catalog.service';
 import { DB } from '../tokens';
-import { discoveryAvailable, readComposition, readDiscoverySet, reservedDiscovery } from './sets';
+import { loadDiscovery, readDiscoverySet, tenMlOf } from './sets';
 
 /** The two kinds of set the customer sees (ADR 0009). Both cost the Discovery set's price. */
 @Injectable()
@@ -14,22 +15,19 @@ export class SetsService {
   ) {}
 
   async discovery(): Promise<DiscoverySet> {
-    const [row, composition, reserved] = await Promise.all([
-      readDiscoverySet(this.db),
-      readComposition(this.db),
-      reservedDiscovery(this.db),
-    ]);
-    const left = discoveryAvailable(row, reserved, composition.length);
+    const { row, composition, available } = await loadDiscovery(this.db);
     return {
       price: row.price,
-      available: left,
-      soldOut: left === 0,
+      available,
+      soldOut: available === 0,
       photo: row.photoHash,
+      // The box stays on sale on its own stock, but a fragrance hidden from the catalog shows as
+      // its name and attribution only: no card to open, no notes to read.
       fragrances: composition.map((f) => ({
-        slug: f.slug,
+        slug: f.hidden ? null : f.slug,
         name: f.name,
         brand: f.brand,
-        keyNotes: { ru: f.keyNotesRu, uz: f.keyNotesUz },
+        keyNotes: f.hidden ? { ru: [], uz: [] } : { ru: f.keyNotesRu, uz: f.keyNotesUz },
       })),
     };
   }
@@ -39,27 +37,11 @@ export class SetsService {
     const [row, rank, tenMl] = await Promise.all([
       readDiscoverySet(this.db),
       this.catalog.topSellersOrder(),
-      this.db
-        .select({
-          fragranceId: fragrances.id,
-          volumeId: volumes.id,
-          onHand: volumes.onHand,
-        })
-        .from(volumes)
-        .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-        .where(and(eq(volumes.ml, 10), eq(fragrances.hidden, false))),
+      tenMlOf(this.db, { all: true }),
     ]);
-    const reserved = await reservedByVolume(
-      this.db,
-      tenMl.map((v) => v.volumeId),
-    );
-    const offered = new Set(
-      tenMl
-        .filter((v) => available(v.onHand, reserved.get(v.volumeId) ?? 0) > 0)
-        .map((v) => v.fragranceId),
-    );
+    const offered = new Set(tenMl.filter((t) => t.available > 0).map((t) => t.fragranceId));
     // `rank` holds every visible fragrance in top-sellers order
     const ids = rank.filter((id) => offered.has(id));
-    return { price: row.price, size: 5, options: await this.catalog.listItems(ids) };
+    return { price: row.price, size: SET_SIZE, options: await this.catalog.listItems(ids) };
   }
 }

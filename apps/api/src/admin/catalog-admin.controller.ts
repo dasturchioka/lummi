@@ -1,4 +1,4 @@
-import { MAX_PHOTO_BYTES, adminContract } from '@lummi/contracts';
+import { adminContract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
 import {
   Controller,
@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
-import { looksLikeImage } from '../catalog/photo-pipeline';
+import { photoBytes } from './photo-body';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { CatalogAdminService, type Failure } from './catalog-admin.service';
 
@@ -138,17 +138,7 @@ export class CatalogAdminController {
     @CurrentStaff() actor: StaffRow,
     @Req() req: Request,
   ) {
-    const body: unknown = req.body;
-    const bytes = Buffer.isBuffer(body) ? body : null;
-    if (!bytes || bytes.length === 0) {
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 415);
-    }
-    if (bytes.length > MAX_PHOTO_BYTES) {
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 413);
-    }
-    if (!looksLikeImage(bytes)) {
-      throw new HttpException({ code: 'invalid', fields: ['photo'] }, 415);
-    }
+    const bytes = photoBytes(req.body);
     const res = await this.catalog.setPhoto(actor, id, bytes);
     if (res.ok) return { photo: res.value };
     if (res.reason === 'not_found') throw new HttpException({ code: 'not_found' }, 404);

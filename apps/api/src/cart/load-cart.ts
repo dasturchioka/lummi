@@ -1,4 +1,5 @@
 import type { DeliveryCityDto, Quote } from '@lummi/contracts';
+import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -17,10 +18,7 @@ import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import {
   builderAvailable,
-  discoveryAvailable,
-  readComposition,
-  readDiscoverySet,
-  reservedDiscovery,
+  loadDiscovery,
   tenMlOf,
 } from '../sets/sets';
 
@@ -50,7 +48,7 @@ export interface VolumeLineView extends LineBase {
 /** The Discovery set or a builder set: five fragrances, 10 ml each. */
 export interface SetLineView extends LineBase {
   kind: 'discovery' | 'builder';
-  fragrances: { slug: string; name: string }[];
+  fragrances: { slug: string; name: string; brand: string }[];
 }
 
 export type CartLineView = VolumeLineView | SetLineView;
@@ -61,7 +59,8 @@ function capped(wanted: number, left: number) {
     wanted,
     available: left,
     soldOut: left === 0,
-    qty: left === 0 ? wanted : Math.min(wanted, left),
+    // never above the per-line ceiling either, whatever a relink added up
+    qty: left === 0 ? Math.min(wanted, CART_MAX_QTY) : Math.min(wanted, left, CART_MAX_QTY),
     limited: left > 0 && wanted > left,
   };
 }
@@ -145,23 +144,23 @@ export async function loadCartQuote(
   const setLines: SetLineView[] = [];
   let setPrice = 0;
   if (setRows.length > 0) {
-    const discovery = await readDiscoverySet(tx);
-    setPrice = discovery.price;
+    const discovery = await loadDiscovery(tx);
+    setPrice = discovery.row.price;
     const builderIds = [...new Set(setRows.flatMap((r) => r.fragranceIds ?? []))];
-    const [composition, discoveryReserved, tenMl] = await Promise.all([
-      setRows.some((r) => r.kind === 'discovery') ? readComposition(tx) : [],
-      reservedDiscovery(tx),
-      tenMlOf(tx, { ids: builderIds }),
-    ]);
+    const tenMl = await tenMlOf(tx, { ids: builderIds });
     const tenMlOfFragrance = new Map(tenMl.map((t) => [t.fragranceId, t]));
     for (const r of setRows) {
       if (r.kind === 'discovery') {
         setLines.push({
           kind: 'discovery',
           lineId: r.lineId,
-          photo: discovery.photoHash,
-          fragrances: composition.map((f) => ({ slug: f.slug, name: f.name })),
-          ...capped(r.qty, discoveryAvailable(discovery, discoveryReserved, composition.length)),
+          photo: discovery.row.photoHash,
+          fragrances: discovery.composition.map((f) => ({
+            slug: f.slug,
+            name: f.name,
+            brand: f.brand,
+          })),
+          ...capped(r.qty, discovery.available),
         });
       } else {
         const five = (r.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
@@ -169,7 +168,7 @@ export async function loadCartQuote(
           kind: 'builder',
           lineId: r.lineId,
           photo: null,
-          fragrances: five.map((t) => ({ slug: t.slug, name: t.name })),
+          fragrances: five.map((t) => ({ slug: t.slug, name: t.name, brand: t.brand })),
           ...capped(r.qty, builderAvailable(five)),
         });
       }

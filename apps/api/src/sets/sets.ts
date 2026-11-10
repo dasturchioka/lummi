@@ -69,11 +69,41 @@ export function discoveryAvailable(
   return composed === SET_SIZE ? available(row.onHand, reserved) : 0;
 }
 
+export interface DiscoveryState {
+  row: DiscoverySetRow;
+  composition: SetFragranceRow[];
+  reserved: number;
+  /** Own on hand minus own reserve; 0 while the composition is not five fragrances. */
+  available: number;
+}
+
+/**
+ * The one read of the Discovery set: row, composition, reserve and what is available. The shop,
+ * the cart, the admin and (with `lock`) order creation all go through it, so "available" is
+ * judged in one place.
+ */
+export async function loadDiscovery(
+  db: DbOrTx,
+  opts: { lock?: boolean } = {},
+): Promise<DiscoveryState> {
+  const row = await readDiscoverySet(db, opts.lock);
+  const [composition, reserved] = await Promise.all([readComposition(db), reservedDiscovery(db)]);
+  return {
+    row,
+    composition,
+    reserved,
+    available: discoveryAvailable(row, reserved, composition.length),
+  };
+}
+
 export interface TenMl {
   fragranceId: number;
   volumeId: number;
   slug: string;
   name: string;
+  brand: string;
+  /** Hidden from the catalog: not for sale and not offered to the builder. */
+  hidden: boolean;
   /** On hand minus reserve of the 10 ml; 0 for a hidden fragrance (not for sale). */
   available: number;
 }
@@ -81,16 +111,17 @@ export interface TenMl {
 /** The 10 ml bottle of each fragrance (by id or slug) with what is available now. */
 export async function tenMlOf(
   db: DbOrTx,
-  by: { ids: readonly number[] } | { slugs: readonly string[] },
+  by: { ids: readonly number[] } | { slugs: readonly string[] } | { all: true },
   lock = false,
 ): Promise<TenMl[]> {
-  if (('ids' in by ? by.ids : by.slugs).length === 0) return [];
+  if (!('all' in by) && ('ids' in by ? by.ids : by.slugs).length === 0) return [];
   const q = db
     .select({
       fragranceId: fragrances.id,
       volumeId: volumes.id,
       slug: fragrances.slug,
       name: fragrances.name,
+      brand: fragrances.originalBrand,
       hidden: fragrances.hidden,
       onHand: volumes.onHand,
     })
@@ -99,7 +130,11 @@ export async function tenMlOf(
     .where(
       and(
         eq(volumes.ml, 10),
-        'ids' in by ? inArray(fragrances.id, [...by.ids]) : inArray(fragrances.slug, [...by.slugs]),
+        'all' in by
+          ? undefined
+          : 'ids' in by
+            ? inArray(fragrances.id, [...by.ids])
+            : inArray(fragrances.slug, [...by.slugs]),
       ),
     )
     .orderBy(asc(volumes.id));
@@ -113,6 +148,8 @@ export async function tenMlOf(
     volumeId: r.volumeId,
     slug: r.slug,
     name: r.name,
+    brand: r.brand,
+    hidden: r.hidden,
     available: r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0),
   }));
 }
@@ -135,7 +172,8 @@ export function judgeBuilderPick(slugs: readonly string[], found: readonly TenMl
   if (slugs.length !== SET_SIZE || new Set(slugs).size !== SET_SIZE) {
     return { ok: false, reason: 'invalid' };
   }
-  const bySlug = new Map(found.map((f) => [f.slug, f]));
+  // a hidden fragrance answers like an unknown one: the builder never confirms it exists
+  const bySlug = new Map(found.filter((f) => !f.hidden).map((f) => [f.slug, f]));
   const picked = slugs.map((s) => bySlug.get(s));
   if (picked.some((p) => p === undefined)) return { ok: false, reason: 'not_found' };
   const all = picked as TenMl[];

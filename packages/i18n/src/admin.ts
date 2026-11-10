@@ -539,6 +539,8 @@ export const adminMessages = defineMessages(
         photoTitle: 'Фото набора',
         photoHint: 'Пока фото нет, клиенты видят снимок коробки из приложения.',
         notForSale: 'Пока в составе меньше пяти ароматов, набор не продаётся.',
+        hiddenWarning:
+          'В составе есть аромат, скрытый из каталога. Коробка продаётся, клиенты видят его только по названию, без карточки.',
         failed: 'Не удалось сохранить. Попробуйте ещё раз.',
         invalidComposition: 'Аромат не найден. Обновите страницу.',
       },
@@ -1086,6 +1088,8 @@ export const adminMessages = defineMessages(
         photoTitle: 'Toʻplam rasmi',
         photoHint: 'Rasm yuklanmaguncha mijozlar ilovadagi quti suratini koʻradi.',
         notForSale: 'Tarkibda beshtadan kam atir boʻlsa, toʻplam sotilmaydi.',
+        hiddenWarning:
+          'Tarkibda katalogdan yashirilgan atir bor. Quti sotiladi, mijozlar uni faqat nomi bilan koʻradi, kartochkasiz.',
         failed: 'Saqlab boʻlmadi. Yana urinib koʻring.',
         invalidComposition: 'Atir topilmadi. Sahifani yangilang.',
       },

@@ -1,6 +1,5 @@
 import {
   CART_MAX_QTY,
-  SET_SIZE,
   type CartDto,
   type CartLineDto,
   type CartSuggestionDto,
@@ -26,11 +25,8 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import {
   builderAvailable,
-  discoveryAvailable,
   judgeBuilderPick,
-  readComposition,
-  readDiscoverySet,
-  reservedDiscovery,
+  loadDiscovery,
   tenMlOf,
 } from '../sets/sets';
 import { loadCartQuote } from './load-cart';
@@ -184,12 +180,7 @@ export class CartService {
   /** Adds the Discovery set; the total on the line never passes the set's own stock. */
   async addDiscovery(customerId: number, qty: number): Promise<AddSetOutcome> {
     return this.db.transaction(async (tx) => {
-      const [row, composition, reserved] = await Promise.all([
-        readDiscoverySet(tx),
-        readComposition(tx),
-        reservedDiscovery(tx),
-      ]);
-      const left = discoveryAvailable(row, reserved, composition.length);
+      const { available: left } = await loadDiscovery(tx);
       if (left === 0) return { result: 'sold_out' } as const;
       await this.touch(tx, customerId);
       await tx
@@ -217,7 +208,7 @@ export class CartService {
           : ({ result: picked.reason } as const);
       }
       const left = builderAvailable(picked.tenMl);
-      if (picked.tenMl.length !== SET_SIZE || left === 0) return { result: 'sold_out' } as const;
+      if (left === 0) return { result: 'sold_out' } as const;
       const fragranceIds = picked.tenMl.map((t) => t.fragranceId).sort((a, b) => a - b);
       await this.touch(tx, customerId);
       await tx
