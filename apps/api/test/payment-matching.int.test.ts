@@ -14,7 +14,6 @@ import {
   shopCard,
 } from '@lummi/db';
 import { Queue } from 'bullmq';
-import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
@@ -24,7 +23,7 @@ import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { PaymentMatching } from '../src/payment/payment-matching';
 import type { WorkerRuntime } from '../src/worker/runtime';
 import { orderBody, samarkandPoint, shopper } from './harness/orders';
-import { recordCredit, SHOP_LAST4 } from './harness/payments';
+import { recordCredit, SHOP_LAST4, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_SHOP_CARD, type TestApp } from './harness/test-app';
 
@@ -81,19 +80,12 @@ async function placeOrder(user: TestUser = ali, phone = '998901234567') {
 }
 type Placed = Awaited<ReturnType<typeof placeOrder>>;
 
-/** A receipt-like screenshot. */
-const RECEIPT_PNG = sharp({
-  create: { width: 600, height: 1200, channels: 3, background: '#ffffff' },
-})
-  .png()
-  .toBuffer();
-
-/** `POST /orders/:number/receipts` as the Mini App sends it; the new receipt's id. */
-async function upload(p: Placed): Promise<number> {
+/** `POST /orders/:number/receipts` as the Mini App sends it (a fresh screenshot unless `file`); the new receipt's id. */
+async function upload(p: Placed, file?: Buffer): Promise<number> {
   const res = await fetch(`${t.baseUrl}/orders/${p.order.number}/receipts`, {
     method: 'POST',
     headers: { 'content-type': 'application/octet-stream', authorization: `Bearer ${p.token}` },
-    body: await RECEIPT_PNG,
+    body: file ?? (await uniqueReceiptImage()),
   });
   if (res.status !== 201) throw new Error(`upload ${res.status}`);
   return ((await res.json()) as { receipt: { id: number } }).receipt.id;

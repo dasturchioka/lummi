@@ -27,8 +27,9 @@ import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce } from '../util/transient';
 import { withTimeout } from '../util/with-timeout';
 import { WorkerRuntime } from '../worker/runtime';
-import { PaymentConfirmation, WAITING_VERDICTS } from './payment-confirmation';
-import { readShopCard } from './shop-card.service';
+import { PaymentConfirmation } from './payment-confirmation';
+import { CANDIDATE, sqlList, WAITING_VERDICTS } from './rules';
+import { lastFour, readShopCard } from './shop-card.service';
 
 const JOB = 'receipt.check';
 const ATTEMPTS = 3;
@@ -54,19 +55,6 @@ const NOT_CONFIRMED: Omit<ReceiptJudgement, 'reason'> = {
   confirmed: false,
   provider: 'none',
 };
-
-const lastFour = (card: ShopCardRow) => card.number.slice(-4);
-
-/**
- * THE Candidate credit rule (GLOSSARY; ADR 0012, 0013) over `o` (the order), `c` (a credit) and
- * `sc` (the shop card): not linked to any order, `amount_som` equal to the order's Amount due (a
- * credit with tiyin has none), on the shop card (its last 4), and no earlier than the minute the
- * order was created, since Humo keeps only the minute (`PaymentConfirmation` checks the same).
- */
-const CANDIDATE = sql`c.amount_som = o.amount_due
-  and c.card_last4 = right(sc.number, 4)
-  and c.occurred_at >= date_trunc('minute', o.created_at, 'UTC')
-  and not exists (select 1 from ${orders} paid where paid.credit_id = c.id)`;
 
 /**
  * Automatic payment matching (ADR 0012, 0013): a receipt under check is confirmed by the AI once
@@ -224,7 +212,7 @@ export class PaymentMatching implements OnApplicationShutdown {
       join ${shopCard} sc on true
       join ${credits} c on ${CANDIDATE}
       where o.status = 'receipt_review'
-        and r.verdict in ('pending', 'manual_review')
+        and r.verdict in (${sqlList(WAITING_VERDICTS)})
         and not exists (
           select 1 from ${receiptChecks} k where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
         )
@@ -287,12 +275,16 @@ export class PaymentMatching implements OnApplicationShutdown {
       .from(orders)
       .where(eq(orders.id, receipt.orderId))
       .for('update');
-    const [now] = await tx
+    const [verdictNow] = await tx
       .select({ verdict: receipts.verdict })
       .from(receipts)
       .where(eq(receipts.id, receipt.id));
     // decided while the AI was answering (a manager, the wait window): the answer changes nothing
-    if (order?.status !== 'receipt_review' || !now || !WAITING_VERDICTS.includes(now.verdict))
+    if (
+      order?.status !== 'receipt_review' ||
+      !verdictNow ||
+      !WAITING_VERDICTS.includes(verdictNow.verdict)
+    )
       return record('stale');
 
     const chosen = judgement.chosenCreditId;

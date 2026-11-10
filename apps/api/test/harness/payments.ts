@@ -1,5 +1,6 @@
 import { internalContract, utcToTashkent } from '@lummi/contracts';
 import { initClient } from '@ts-rest/core';
+import sharp from 'sharp';
 import { PaymentConfirmation } from '../../src/payment/payment-confirmation';
 import { TEST_INTERNAL_SECRET, TEST_SHOP_CARD, type TestApp } from './test-app';
 
@@ -65,4 +66,27 @@ export async function payWithCredit(
     .confirmPayment({ orderId: order.id, creditId, receiptId, actor: { type: 'ai' } });
   if (out.kind !== 'confirmed') throw new Error(`confirm_payment: ${out.kind}`);
   return creditId;
+}
+
+let uploads = 0;
+/**
+ * A receipt-like screenshot that no other upload of the run shares: dark bars whose widths spell
+ * a counter, so both its SHA-256 and its perceptual hash differ. Two orders sending the same file
+ * is a duplicate (#32, #36) and never confirms itself.
+ */
+export function uniqueReceiptImage(width = 600, height = 1200): Promise<Buffer> {
+  uploads += 1;
+  const bars = Array.from({ length: 12 }, (_, i) => {
+    const on = (uploads >> i) & 1;
+    const w = Math.round(width * (on ? 0.8 : 0.3));
+    const y = Math.round((height / 14) * (i + 1));
+    return `<rect x="${Math.round(width * 0.08)}" y="${y}" width="${w}" height="${Math.round(height / 40)}" fill="#222"/>`;
+  }).join('');
+  return sharp(
+    Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#fff"/>${bars}</svg>`,
+    ),
+  )
+    .png()
+    .toBuffer();
 }

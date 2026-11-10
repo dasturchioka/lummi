@@ -15,15 +15,15 @@ import {
   receipts,
 } from '@lummi/db';
 import pg from 'pg';
-import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
+import { SettingsService } from '../src/settings/settings.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { orderBody, samarkandPoint, shopper } from './harness/orders';
-import { payWithCredit, recordCredit } from './harness/payments';
+import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
 
@@ -70,18 +70,11 @@ async function placeOrder(user: TestUser = ali, phone = '998901234567') {
 const confirm = (input: Parameters<PaymentConfirmation['confirmPayment']>[0]) =>
   t.app.get(PaymentConfirmation).confirmPayment(input);
 
-/** A small receipt screenshot for the intake. */
-const RECEIPT_IMAGE = sharp({
-  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
-})
-  .png()
-  .toBuffer();
-
 /** The shopper sends a receipt for the order (#28): the order is then «Чек на проверке». */
 async function sendReceipt(order: { customerId: number; number: number }) {
   const sent = await t.app
     .get(ReceiptsService)
-    .submit(order.customerId, order.number, await RECEIPT_IMAGE, {
+    .submit(order.customerId, order.number, await uniqueReceiptImage(), {
       fileName: null,
       source: 'miniapp',
     });
@@ -207,8 +200,9 @@ describe('the credit must be able to pay the order', () => {
     ).rejects.toThrow();
   });
 
-  it('another amount, or tiyin on top, never pays the order', async () => {
+  it('another amount, or tiyin on top: never for the AI; a manager must say why', async () => {
     const { order } = await placeOrder();
+    const receiptId = await sendReceipt(order);
     const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
     for (const credit of [
       { som: order.amountDue - 1 },
@@ -217,10 +211,109 @@ describe('the credit must be able to pay the order', () => {
     ]) {
       const creditId = await recordCredit(t, credit);
       expect(
-        await confirm({ orderId: order.id, creditId, receiptId: null, actor: manager }),
-      ).toEqual({ kind: 'credit_mismatch', reason: 'amount' });
+        await confirm({ orderId: order.id, creditId, receiptId, actor: { type: 'ai' } }),
+      ).toEqual({ kind: 'credit_mismatch', what: 'amount' });
+      // a reason never lets the AI through
+      expect(
+        await confirm({
+          orderId: order.id,
+          creditId,
+          receiptId,
+          actor: { type: 'ai' },
+          reason: 'Округлил сумму',
+        }),
+      ).toEqual({ kind: 'credit_mismatch', what: 'amount' });
+      expect(await confirm({ orderId: order.id, creditId, receiptId, actor: manager })).toEqual({
+        kind: 'reason_required',
+        mismatch: ['amount'],
+      });
     }
-    expect(await orderNow(order.id)).toMatchObject({ status: 'awaiting_payment', creditId: null });
+    expect(await orderNow(order.id)).toMatchObject({ status: 'receipt_review', creditId: null });
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+  });
+
+  it('a manager links an overpayment with a reason: the difference is in the history and the audit', async () => {
+    const { order } = await placeOrder();
+    const creditId = await recordCredit(t, { som: order.amountDue + 1000 });
+    const manager = await t.managerSession();
+    const reason = 'Клиент округлил перевод, разницу вернём';
+
+    const out = await confirm({
+      orderId: order.id,
+      creditId,
+      receiptId: null,
+      actor: { type: 'staff', id: manager.staff.id },
+      reason: `  ${reason} `,
+    });
+
+    expect(out).toMatchObject({ kind: 'confirmed', offShopCard: false });
+    const facts = {
+      creditId,
+      receiptId: null,
+      amountDue: order.amountDue,
+      creditAmountTiyin: (order.amountDue + 1000) * 100,
+      differenceTiyin: 100_000,
+      cardLast4: '1234',
+      offShopCard: false,
+    };
+    const [event] = await t.db
+      .select()
+      .from(orderEvents)
+      .where(eq(orderEvents.action, 'confirm_payment'));
+    expect(event).toMatchObject({ reason, payload: facts });
+    const owner = await t.ownerSession();
+    const audit = await owner.client.admin.audit.list({
+      query: { action: 'order.payment_confirmed' },
+    });
+    expect(audit.status === 200 && audit.body.items[0]!.payload).toMatchObject({
+      ...facts,
+      reason,
+    });
+  });
+
+  it('an underpayment by tiyin, with a reason, records the exact difference', async () => {
+    const { order } = await placeOrder();
+    const creditId = await recordCredit(t, { som: order.amountDue - 1, tiyin: 50 });
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const out = await confirm({
+      orderId: order.id,
+      creditId,
+      receiptId: null,
+      actor: manager,
+      reason: 'Не хватает 50 тийинов, принимаем',
+    });
+    expect(out.kind).toBe('confirmed');
+    const [event] = await t.db
+      .select()
+      .from(orderEvents)
+      .where(eq(orderEvents.action, 'confirm_payment'));
+    expect(event!.payload).toMatchObject({
+      creditAmountTiyin: order.amountDue * 100 - 50,
+      differenceTiyin: -50,
+    });
+  });
+
+  it('a reason is a few characters at least, and no longer than the setting', async () => {
+    const { order } = await placeOrder();
+    const creditId = await recordCredit(t, { som: order.amountDue + 1000 });
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    await t.app.get(SettingsService).set('payments.linkReasonMaxLength', 30, { type: 'system' });
+    for (const reason of ['  ', 'ok', 'x'.repeat(31)]) {
+      expect(
+        await confirm({ orderId: order.id, creditId, receiptId: null, actor: manager, reason }),
+      ).toEqual({ kind: 'reason_invalid', min: 3, max: 30 });
+    }
+    expect(
+      (
+        await confirm({
+          orderId: order.id,
+          creditId,
+          receiptId: null,
+          actor: manager,
+          reason: 'x'.repeat(30),
+        })
+      ).kind,
+    ).toBe('confirmed');
   });
 
   it("a credit from before the order never pays it; one in the order's own minute does", async () => {
@@ -233,7 +326,7 @@ describe('the credit must be able to pay the order', () => {
     });
     expect(
       await confirm({ orderId: order.id, creditId: before, receiptId: null, actor: manager }),
-    ).toEqual({ kind: 'credit_mismatch', reason: 'before_order' });
+    ).toEqual({ kind: 'credit_mismatch', what: 'before_order' });
     const sameMinute = await recordCredit(t, {
       som: order.amountDue,
       at: new Date('2026-11-09T10:00:05Z'),
@@ -323,17 +416,36 @@ describe('a receipt under check', () => {
     expect(await orderNow(order.id)).toMatchObject({ status: 'awaiting_payment', creditId: null });
   });
 
-  it('the AI only links a credit on the shop card; a manager may link one from an earlier card', async () => {
+  it('a credit on another card: never for the AI; a manager with a reason, marked off the shop card', async () => {
     const { order } = await placeOrder();
     const receiptId = await sendReceipt(order);
     const creditId = await recordCredit(t, { som: order.amountDue, last4: '9999' });
     expect(
       await confirm({ orderId: order.id, creditId, receiptId, actor: { type: 'ai' } }),
-    ).toEqual({ kind: 'credit_mismatch', reason: 'card' });
+    ).toEqual({ kind: 'credit_mismatch', what: 'card' });
     const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
-    expect((await confirm({ orderId: order.id, creditId, receiptId, actor: manager })).kind).toBe(
-      'confirmed',
-    );
+    expect(await confirm({ orderId: order.id, creditId, receiptId, actor: manager })).toEqual({
+      kind: 'reason_required',
+      mismatch: ['card'],
+    });
+
+    const out = await confirm({
+      orderId: order.id,
+      creditId,
+      receiptId,
+      actor: manager,
+      reason: 'Перевёл на старую карту магазина',
+    });
+
+    expect(out).toMatchObject({ kind: 'confirmed', offShopCard: true });
+    const [event] = await t.db
+      .select()
+      .from(orderEvents)
+      .where(eq(orderEvents.action, 'confirm_payment'));
+    expect(event).toMatchObject({
+      reason: 'Перевёл на старую карту магазина',
+      payload: { cardLast4: '9999', offShopCard: true, differenceTiyin: 0 },
+    });
   });
 
   it('a stale screen is a conflict: the order moved on, or a receipt arrived meanwhile', async () => {

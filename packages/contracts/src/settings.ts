@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Bilingual } from './catalog';
 import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
+import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
@@ -233,6 +234,25 @@ export const settingDefinitions = {
       uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
     },
   },
+  /**
+   * The longest reason staff may type when they link a credit that does not match its order
+   * exactly: another amount (tiyin included) or another card (#32, #33), up to the technical
+   * bound `PAYMENT_LINK_REASON_MAX`.
+   */
+  'payments.linkReasonMaxLength': {
+    schema: z.number().int().min(20).max(PAYMENT_LINK_REASON_MAX),
+    default: 500,
+    area: 'shop',
+    unit: 'count',
+    label: {
+      ru: 'Длина причины при ручной привязке платежа',
+      uz: 'Toʻlovni qoʻlda bogʻlash sababining uzunligi',
+    },
+    hint: {
+      ru: 'Сколько символов сотрудник может написать, привязывая к заказу поступление с другой суммой или на другую карту.',
+      uz: 'Xodim buyurtmaga boshqa summadagi yoki boshqa kartaga tushgan toʻlovni bogʻlaganda yozishi mumkin boʻlgan belgilar soni.',
+    },
+  },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
   'cart.suggestionsLimit': {
     schema: z.number().int().min(0).max(12),
@@ -326,7 +346,11 @@ export const settingDefinitions = {
     },
   },
   'promo.attemptWindowSeconds': {
-    schema: z.number().int().min(60).max(7 * 86_400),
+    schema: z
+      .number()
+      .int()
+      .min(60)
+      .max(7 * 86_400),
     default: 3600,
     area: 'pricing',
     unit: 'seconds',
