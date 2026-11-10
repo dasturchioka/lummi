@@ -171,6 +171,8 @@ export class AppModule {
         CreditEvents,
         OrderStatusService,
         PaymentConfirmation,
+        // the one reject door: the orders group (#37) rejects through it too
+        ReceiptRejection,
         HumoFeedService,
         SettingsService,
         AuditService,

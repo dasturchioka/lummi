@@ -112,8 +112,8 @@ export type AdminCreditDto = z.infer<typeof adminCreditSchema>;
 export const creditOptionSchema = adminCreditSchema.extend({ differenceTiyin: z.number().int() });
 export type CreditOptionDto = z.infer<typeof creditOptionSchema>;
 
-/** At most this many «other» credits come with the options, newest first. */
-export const CREDIT_OTHERS_LIMIT = 50;
+/** At most this many credits of each list (candidates, others) come with the options. */
+export const CREDIT_OPTIONS_LIMIT = 50;
 
 /**
  * `GET /admin/orders/:number/credit-options`: the Candidate credits first (unlinked, the Amount

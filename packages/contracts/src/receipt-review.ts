@@ -38,8 +38,16 @@ export const RECEIPT_CHECK_OUTCOMES = [
 ] as const;
 export type ReceiptCheckOutcome = (typeof RECEIPT_CHECK_OUTCOMES)[number];
 
-/** Verdicts still open: the receipt may yet be confirmed or rejected. */
+/**
+ * Verdicts still open, the one list both doors read (ADR 0012): `pending` waits for a fitting
+ * credit, `manual_review` for a person. Either may still be confirmed or rejected.
+ */
 export const WAITING_RECEIPT_VERDICTS: readonly ReceiptVerdict[] = ['pending', 'manual_review'];
+/** A receipt that confirmed its order's payment; an order has at most one. */
+export const ACCEPTED_RECEIPT_VERDICTS: readonly ReceiptVerdict[] = [
+  'ai_confirmed',
+  'manager_confirmed',
+];
 
 /**
  * Why a manager rejects a receipt (only a manager does, ADR 0013). The shopper reads the reason

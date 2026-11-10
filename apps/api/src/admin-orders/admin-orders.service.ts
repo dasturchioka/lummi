@@ -1,5 +1,5 @@
 import {
-  CREDIT_OTHERS_LIMIT,
+  CREDIT_OPTIONS_LIMIT,
   ORDER_NUMBER_MAX,
   PAYMENT_LINK_REASON_MIN,
   tashkentDayStart as dayStart,
@@ -52,7 +52,7 @@ import { OrderStatusService, type TransitionOutcome } from '../order-status/orde
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
-import { CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
+import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
 import { readShopCard } from '../payment/shop-card.service';
 import { readSettings } from '../settings/settings.service';
 import { DB } from '../tokens';
@@ -286,7 +286,7 @@ export class AdminOrdersService {
           reviewReason: r.reviewReason,
           checks: checks.filter((c) => c.receiptId === r.id).map(toCheckDto),
           confirmation:
-            ACCEPTED.includes(r.verdict) && confirmed
+            ACCEPTED_VERDICTS.includes(r.verdict) && confirmed
               ? { by: confirmerOf(confirmed), at: confirmed.at }
               : null,
           rejection:
@@ -440,13 +440,14 @@ export class AdminOrdersService {
         .select()
         .from(credits)
         .where(over(CANDIDATE))
-        .orderBy(asc(credits.occurredAt), asc(credits.id)),
+        .orderBy(asc(credits.occurredAt), asc(credits.id))
+        .limit(CREDIT_OPTIONS_LIMIT),
       this.db
         .select()
         .from(credits)
         .where(over(other))
         .orderBy(desc(credits.occurredAt), desc(credits.id))
-        .limit(CREDIT_OTHERS_LIMIT),
+        .limit(CREDIT_OPTIONS_LIMIT),
       this.db
         .select({ total: sql<number>`count(*)::int` })
         .from(credits)
@@ -566,10 +567,12 @@ export class AdminOrdersService {
         return { kind: 'conflict', code: 'receipt_changed', order: await this.pageOf(out.order) };
       case 'note_too_long':
         return { kind: 'refused', code: 'note_too_long', max: out.max };
-      case 'not_found':
       case 'refused':
+        return { kind: 'refused', code: out.code };
+      case 'not_found':
+        return { kind: 'not_found' };
       case 'try_again':
-        return out.kind === 'refused' ? { kind: 'refused', code: out.code } : { kind: out.kind };
+        return { kind: 'try_again' };
     }
   }
 
@@ -626,8 +629,6 @@ type EventRow = AdminOrderEventDto & {
   creditId: number | null;
   link?: { differenceTiyin: number; offShopCard: boolean };
 };
-
-const ACCEPTED: readonly ReceiptVerdict[] = ['ai_confirmed', 'manager_confirmed'];
 
 /** Who confirmed a payment, from its history row: the receipt AI or a staff member. */
 function confirmerOf(e: AdminOrderEventDto): NonNullable<AdminReceiptDto['confirmation']>['by'] {
