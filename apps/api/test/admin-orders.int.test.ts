@@ -438,9 +438,9 @@ describe('the order page', () => {
     });
     expect(page.credit).toBeNull();
     expect(page.events.map((e) => [e.action, e.from, e.to, e.actor.type, e.actor.name])).toEqual([
-      ['submit_receipt', 'awaiting_payment', 'receipt_review', 'customer', 'Ali'],
+      ['submit_receipt', 'awaiting_payment', 'receipt_review', 'customer', 'Ali Karimov'],
       ['reject_receipt', 'receipt_review', 'awaiting_payment', 'staff', 'Manager'],
-      ['submit_receipt', 'awaiting_payment', 'receipt_review', 'customer', 'Ali'],
+      ['submit_receipt', 'awaiting_payment', 'receipt_review', 'customer', 'Ali Karimov'],
     ]);
     expect(page.events[1]).toMatchObject({
       reason: 'amount_mismatch',

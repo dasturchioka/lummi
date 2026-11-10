@@ -1,7 +1,7 @@
 import { PAID_STATUSES, type OrderAction, type TransitionPayload } from '@lummi/contracts';
 import type { OrderLineRow, OrderRow, orders } from '@lummi/db';
 import { fill, formatMoney, type Language } from '@lummi/i18n';
-import { botMessages } from '@lummi/i18n/bot';
+import { botMessages, receiptRejectedText } from '@lummi/i18n/bot';
 import { ordersMessages } from '@lummi/i18n/orders';
 import type { OnHandMove } from './on-hand';
 
@@ -67,22 +67,11 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   reject_receipt: {
     audit: 'order.receipt_rejected',
-    // the preset reads as a sentence in the shopper's language; `other` is the manager's own words,
-    // and a note under a preset follows it on its own line (#33)
-    message: (m, lang) => {
-      const { reason, note } = m.payload;
-      const why =
-        reason === 'other'
-          ? (note ?? '')
-          : [
-              ordersMessages[lang].orders.receiptRejectReason[reason],
-              ...(note ? [fill(bot(lang).rejectNote, { note })] : []),
-            ].join('\n');
-      return {
-        text: fill(bot(lang).receiptRejected, { number: number(m), reason: why }),
-        manager: true,
-      };
-    },
+    // the preset reads as a sentence in the shopper's language, the manager's note under it (#33)
+    message: (m, lang) => ({
+      text: receiptRejectedText(lang, m.order.number, m.payload.reason, m.payload.note),
+      manager: true,
+    }),
   },
   payment_not_found: {
     audit: 'order.payment_not_found',

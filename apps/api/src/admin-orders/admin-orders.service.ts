@@ -238,7 +238,12 @@ export class AdminOrdersService {
   /** The order's history, oldest first, with the actor's name. */
   private async events(orderId: number): Promise<AdminOrderEventDto[]> {
     const rows = await this.db
-      .select({ e: orderEvents, staffName: staff.name, customerFirst: customers.firstName })
+      .select({
+        e: orderEvents,
+        staffName: staff.name,
+        customerFirst: customers.firstName,
+        customerLast: customers.lastName,
+      })
       .from(orderEvents)
       .leftJoin(
         staff,
@@ -250,7 +255,7 @@ export class AdminOrdersService {
       )
       .where(eq(orderEvents.orderId, orderId))
       .orderBy(asc(orderEvents.id));
-    return rows.map(({ e, staffName, customerFirst }) => {
+    return rows.map(({ e, staffName, customerFirst, customerLast }) => {
       const p = e.payload;
       const text = (v: unknown) => (typeof v === 'string' ? v : null);
       return {
@@ -259,7 +264,15 @@ export class AdminOrdersService {
         from: e.fromStatus,
         to: e.toStatus,
         action: e.action,
-        actor: { type: e.actorType, id: e.actorId, name: staffName ?? customerFirst ?? null },
+        actor: {
+          type: e.actorType,
+          id: e.actorId,
+          name:
+            staffName ??
+            (customerFirst === null
+              ? null
+              : customerName({ firstName: customerFirst, lastName: customerLast })),
+        },
         reason: e.reason,
         note: text(p.note),
         trackingNumber: text(p.trackingNumber),
