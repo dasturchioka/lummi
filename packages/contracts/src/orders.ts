@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { deliveryCitySchema, regionSchema } from './delivery';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
+import { CANCEL_REASONS } from './order-machine';
 import {
-  CANCEL_REASONS,
   CHECKOUT_CONFLICTS,
   ORDER_INPUT_ERRORS,
   ORDER_STATUSES,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CANCEL_REASONS, type OrderAction } from './order-status';
+import { CANCEL_REASONS, type OrderAction } from './order-machine';
 
 /** A move that needs nothing: no payload, or an empty one. */
 const nothing = z.object({}).strict().optional();
