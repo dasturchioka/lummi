@@ -1691,6 +1691,7 @@ export const screens: ScreenDef[] = [
     act: async ({ page }) => {
       await page.getByTestId('promo-input').focus();
       await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 500 });
+      await page.waitForTimeout(300); // the keyboard slides up
       await page.keyboard.type('bloger10');
     },
     teardown: emptyCart,
