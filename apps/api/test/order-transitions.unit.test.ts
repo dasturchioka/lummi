@@ -37,6 +37,16 @@ const ALLOWED: Record<string, { to: OrderStatus; actors: OrderActorType[] }> = {
   'handed_to_bts|cancel': { to: 'cancelled', actors: ['staff'] },
 };
 
+/** What a credit was against its order, as `confirm_payment` records it (#32). */
+const CREDIT_FACTS = {
+  creditId: 3,
+  amountDue: 94_000,
+  creditAmountTiyin: 9_400_000,
+  differenceTiyin: 0,
+  cardLast4: '1234',
+  offShopCard: false,
+};
+
 /** A payload each action accepts from that actor, so the table checks stand alone. */
 function validPayload(action: OrderAction, actor: OrderActorType, from: OrderStatus): unknown {
   switch (action) {
@@ -46,6 +56,8 @@ function validPayload(action: OrderAction, actor: OrderActorType, from: OrderSta
       return { reason: from === 'handed_to_bts' ? 'not_collected_at_bts' : 'out_of_stock' };
     case 'submit_receipt':
       return { receiptId: 7 };
+    case 'confirm_payment':
+      return { ...CREDIT_FACTS, receiptId: from === 'awaiting_payment' ? null : 7 };
     case 'reject_receipt':
       return { receiptId: 7, reason: 'amount_mismatch' };
     case 'hand_to_bts':
@@ -111,6 +123,30 @@ describe('required payloads', () => {
     expect(
       planTransition('awaiting_payment', 'submit_receipt', 'customer', { receiptId: 12 }),
     ).toMatchObject({ ok: true, to: 'receipt_review', payload: { receiptId: 12 } });
+  });
+
+  it('a payment is confirmed only with the Credit that paid it (#32)', () => {
+    expect(planTransition('receipt_review', 'confirm_payment', 'ai', undefined)).toEqual(invalid);
+    expect(planTransition('receipt_review', 'confirm_payment', 'ai', { receiptId: 7 })).toEqual(
+      invalid,
+    );
+    expect(
+      planTransition('awaiting_payment', 'confirm_payment', 'staff', { receiptId: null }),
+    ).toEqual(invalid);
+    expect(
+      planTransition('receipt_review', 'confirm_payment', 'ai', { creditId: 3, receiptId: 7 }),
+    ).toEqual(invalid);
+    expect(
+      planTransition('receipt_review', 'confirm_payment', 'ai', { ...CREDIT_FACTS, receiptId: 7 }),
+    ).toMatchObject({ ok: true, to: 'payment_confirmed', payload: { creditId: 3, receiptId: 7 } });
+    // a staff reason is a few characters at least
+    expect(
+      planTransition('awaiting_payment', 'confirm_payment', 'staff', {
+        ...CREDIT_FACTS,
+        receiptId: null,
+        reason: ' ok ',
+      }),
+    ).toEqual(invalid);
   });
 
   it('a cancel always has a reason, and only one its actor may give', () => {

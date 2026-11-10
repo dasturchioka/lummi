@@ -64,8 +64,11 @@ export class FakeReceiptJudge implements ReceiptJudge {
       provider: 'none',
     },
   ];
+  /** Answers from the question itself when set (a judge that picks a candidate it was shown); wins over `verdicts`. */
+  respond?: (input: ReceiptJudgeInput) => ReceiptJudgement | Promise<ReceiptJudgement>;
   async judge(input: ReceiptJudgeInput): Promise<ReceiptJudgement> {
     this.calls.push(input);
+    if (this.respond) return this.respond(input);
     const verdict = this.verdicts.length > 1 ? this.verdicts.shift()! : this.verdicts[0]!;
     return verdict;
   }
