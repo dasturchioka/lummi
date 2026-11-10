@@ -374,8 +374,8 @@ export const screens: Screen[] = [
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
   // «Карта для оплаты» (ticket #28): owner only. No card first, so the card is back for the rest.
   {
-    id: 'payment-card-none',
-    path: '/payment-card',
+    id: 'shop-card-none',
+    path: '/shop-card',
     as: 'owner',
     act: async ({ page, t }) => {
       await shopCard(page, null);
@@ -383,8 +383,8 @@ export const screens: Screen[] = [
     },
   },
   {
-    id: 'payment-card',
-    path: '/payment-card',
+    id: 'shop-card',
+    path: '/shop-card',
     as: 'owner',
     act: async ({ page }) => {
       await shopCard(page, SHOT_CARD);
@@ -392,15 +392,15 @@ export const screens: Screen[] = [
     },
   },
   {
-    id: 'payment-card-edit',
-    path: '/payment-card',
+    id: 'shop-card-edit',
+    path: '/shop-card',
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => editCard(page, t),
   },
   {
-    id: 'payment-card-invalid',
-    path: '/payment-card',
+    id: 'shop-card-invalid',
+    path: '/shop-card',
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
@@ -412,8 +412,8 @@ export const screens: Screen[] = [
     },
   },
   {
-    id: 'payment-card-confirm',
-    path: '/payment-card',
+    id: 'shop-card-confirm',
+    path: '/shop-card',
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
@@ -423,8 +423,8 @@ export const screens: Screen[] = [
     },
   },
   {
-    id: 'payment-card-typo',
-    path: '/payment-card',
+    id: 'shop-card-typo',
+    path: '/shop-card',
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
@@ -435,8 +435,8 @@ export const screens: Screen[] = [
     },
   },
   {
-    id: 'payment-card-remove',
-    path: '/payment-card',
+    id: 'shop-card-remove',
+    path: '/shop-card',
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {

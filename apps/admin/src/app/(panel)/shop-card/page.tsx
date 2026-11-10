@@ -4,7 +4,7 @@ import { getAdminMessages } from '@/lib/i18n';
 import { serverApi } from '@/lib/server-api';
 
 /** Owner only (#28): the card shoppers transfer to. */
-export default async function PaymentCardPage() {
+export default async function ShopCardPage() {
   const api = await serverApi();
   const res = await api.shopCard.get();
   if (res.status === 401) redirect('/login');
