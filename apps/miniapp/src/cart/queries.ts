@@ -78,3 +78,25 @@ export function addNote(
         : fill(t.cart.onlyLeft, { n: String(after.available) }),
   };
 }
+
+/** A typed code: the cart comes back with the quote saying whether it applies (ticket #29). */
+export type ApplyPromoResult = { cart: CartDto } | { tooManyFor: number };
+
+export function useApplyPromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string): Promise<ApplyPromoResult> => {
+      const res = await api.cart.applyPromoCode({ body: { code } });
+      // codes are guessable: past the limit the server keeps the stored code and says how long to wait
+      if (res.status === 429) return { tooManyFor: res.body.retryAfterSeconds };
+      return { cart: unwrap(res, 200) };
+    },
+    onSuccess: (r) => {
+      if ('cart' in r) qc.setQueryData(CART_KEY, r.cart);
+    },
+  });
+}
+
+export function useRemovePromoCode() {
+  return useCartMutation(async () => unwrap(await api.cart.removePromoCode(), 200));
+}

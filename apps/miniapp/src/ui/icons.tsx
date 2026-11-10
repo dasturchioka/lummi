@@ -171,6 +171,13 @@ export const PinIcon = (p: P) => (
   />
 );
 export const PlusIcon = (p: P) => <Icon d="M12 5.5v13M5.5 12h13" {...p} />;
+/** A price tag: the promo code field. */
+export const TagIcon = (p: P) => (
+  <Icon
+    d="M3.5 11.6V4.5a1 1 0 0 1 1-1h7.1a1 1 0 0 1 .7.3l8.2 8.2a1 1 0 0 1 0 1.4l-7.1 7.1a1 1 0 0 1-1.4 0l-8.2-8.2a1 1 0 0 1-.3-.7zM8 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+    {...p}
+  />
+);
 export const MinusIcon = (p: P) => <Icon d="M5.5 12h13" {...p} />;
 export const TrashIcon = (p: P) => (
   <Icon d="M4.5 7h15M9.5 7V5h5v2M6.5 7l.8 12h9.4l.8-12M10 10.5v5.5M14 10.5v5.5" {...p} />

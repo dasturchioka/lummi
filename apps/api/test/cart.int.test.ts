@@ -475,7 +475,8 @@ describe('the stored discount choice and prefilled code', () => {
     const { CartService } = await import('../src/cart/cart.service');
     const svc = t.app.get(CartService);
     await svc.setDiscountChoice(row!.customerId, { type: 'birthday_coupon', id: 7 });
-    await svc.setPromoCode(row!.customerId, 'summer');
+    // the one way a code gets in: the typed path, which counts the attempt
+    await svc.applyPromoCode(row!.customerId, 'summer');
     const [after] = await t.db.select().from(carts);
     expect(after).toMatchObject({ discountChoice: null, promoCode: 'SUMMER' });
     await svc.setDiscountChoice(row!.customerId, { type: 'promo_code' });

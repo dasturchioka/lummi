@@ -11,7 +11,8 @@ export function PageHeader({
   actions,
   titleAction,
 }: {
-  title: string;
+  /** Text, or a node when the title needs its own break points (a promo code). */
+  title: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
   /** Phones only: a compact control beside the title (an icon «+»), instead of a full-width button. */

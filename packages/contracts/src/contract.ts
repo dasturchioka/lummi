@@ -2,6 +2,13 @@ import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
+  adminPromoCodeSchema,
+  applyPromoCodeBodySchema,
+  promoAttemptsErrorSchema,
+  promoCodeInputSchema,
+  promoErrorSchema,
+} from './promo';
+import {
   catalogErrorSchema,
   catalogQuerySchema,
   catalogResultSchema,
@@ -386,6 +393,21 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: cartSchema, 401: cartErrorSchema },
       summary: 'Remove a line',
+    },
+    applyPromoCode: {
+      method: 'PUT',
+      path: '/cart/promo-code',
+      body: applyPromoCodeBodySchema,
+      responses: { 200: cartSchema, 401: cartErrorSchema, 429: promoAttemptsErrorSchema },
+      summary:
+        'Enter a promo code (stored upper-case, clears the discount choice); the quote applies it or says why not. 429 after too many codes in the window',
+    },
+    removePromoCode: {
+      method: 'DELETE',
+      path: '/cart/promo-code',
+      body: c.noBody(),
+      responses: { 200: cartSchema, 401: cartErrorSchema },
+      summary: 'Remove the entered promo code',
     },
   },
   checkout: {
@@ -1068,11 +1090,82 @@ const adminBroadcasts = c.router({
   },
 });
 
+/** Promo codes (ticket #29): owner only, every change audited. */
+const adminPromo = c.router({
+  promoCodes: {
+    list: {
+      method: 'GET',
+      path: '/admin/promo-codes',
+      responses: {
+        200: z.array(adminPromoCodeSchema),
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+      },
+      summary: 'Owner only: every promo code with its uses (non-voided) and state, newest first',
+    },
+    get: {
+      method: 'GET',
+      path: '/admin/promo-codes/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      responses: {
+        200: adminPromoCodeSchema,
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+        404: promoErrorSchema,
+      },
+      summary: 'Owner only: one promo code',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/promo-codes',
+      body: promoCodeInputSchema,
+      responses: {
+        201: adminPromoCodeSchema,
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+        409: promoErrorSchema,
+        422: promoErrorSchema,
+      },
+      summary: 'Owner only: add a promo code; 409 code_taken when the code exists in any case',
+    },
+    update: {
+      method: 'PUT',
+      path: '/admin/promo-codes/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: promoCodeInputSchema,
+      responses: {
+        200: adminPromoCodeSchema,
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+        404: promoErrorSchema,
+        409: promoErrorSchema,
+        422: promoErrorSchema,
+      },
+      summary: 'Owner only: edit a promo code (orders already placed keep their snapshot)',
+    },
+    remove: {
+      method: 'DELETE',
+      path: '/admin/promo-codes/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: z.object({ ok: z.literal(true) }),
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+        404: promoErrorSchema,
+        409: promoErrorSchema,
+      },
+      summary: 'Owner only: delete a code no order ever took; 409 in_use otherwise (switch it off)',
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
   ...adminDelivery,
   ...adminSets,
   ...adminBroadcasts,
+  ...adminPromo,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */

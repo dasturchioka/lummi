@@ -13,6 +13,7 @@ import { parseBuyNowParam } from '@lummi/contracts/buy-now';
 import { SEARCH_QUERY_MAX } from '@lummi/contracts/constants';
 import { useEffect } from 'react';
 import { showBackButton } from '../lib/back-button';
+import { useKeyboardOpen } from '../lib/keyboard';
 import { goBackOrCatalog } from '../lib/navigation';
 import { parseCatalogSearch } from '../catalog/filters';
 import { Home } from '../screens/Home';
@@ -45,6 +46,7 @@ function Shell() {
     pathname !== '/checkout' &&
     !PAY_PATH.test(pathname);
   const cartCount = useCartCount();
+  const keyboardOpen = useKeyboardOpen();
 
   // Telegram's native back button: visible on screens deeper than a tab root.
   useEffect(() => showBackButton(!isRoot, () => goBackOrCatalog(router)), [isRoot, router]);
@@ -52,8 +54,8 @@ function Shell() {
   return (
     <>
       <Outlet />
-      <ShopNote tabBar={showTabBar} />
-      {showTabBar ? <TabBar badges={{ cart: cartCount }} /> : null}
+      <ShopNote tabBar={showTabBar && !keyboardOpen} />
+      {showTabBar ? <TabBar badges={{ cart: cartCount }} hidden={keyboardOpen} /> : null}
     </>
   );
 }
@@ -90,11 +92,9 @@ const devRoutes = import.meta.env.DEV
       }),
       createRoute({
         ...at('/dev/cart'),
+        // the fixture names live in the lazy chunk; an unknown one shows the default fixture
         validateSearch: (s: Record<string, unknown>) => ({
-          data:
-            (['discount', 'plain', 'worst', 'worst-nudge', 'unavailable'] as const).find(
-              (n) => n === s.data,
-            ) ?? 'discount',
+          data: typeof s.data === 'string' ? s.data : 'discount',
         }),
         component: lazyRouteComponent(() => import('../dev/CartFixtures'), 'CartFixtures'),
       }),

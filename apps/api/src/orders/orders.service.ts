@@ -25,6 +25,7 @@ import {
   orderLines,
   orders,
   regions,
+  sql,
   volumes,
   type BtsPointRow,
   type CustomerRow,
@@ -54,6 +55,7 @@ import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readShopCard } from '../payment/shop-card.service';
+import { lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
@@ -71,6 +73,14 @@ export type CreateOutcome =
   | { kind: 'try_again' }
   | { kind: 'invalid'; code: OrderInputError }
   | { kind: 'payment_unavailable' };
+
+/** The same discount source and amount; an upgrade right's line key may differ (it names a cart line). */
+export function sameDiscount(a: Discount | null, b: Discount | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.type !== b.type || a.amount !== b.amount) return false;
+  if (a.type === 'promo_code') return b.type === 'promo_code' && a.code === b.code;
+  return 'id' in b && a.id === b.id;
+}
 
 /** Where the parcel goes: a point from our list (its region), or a typed address in a region. */
 type Destination =
@@ -165,6 +175,7 @@ export class OrdersService {
    *    its lines (a volume line's volume, the five 10 ml of a builder line) are locked
    *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
    *    waits here and then sees this order's reserve; every checkout takes them in this order;
+   *    then the entered promo code's row, so one for its last use waits and then sees this use;
    * 2. the quote is recomputed under that lock with the destination region's tariff, its lines
    *    capped at available; a total other than the one the shopper confirmed is refused (409)
    *    with the new checkout, since they will transfer exactly that amount;
@@ -267,6 +278,10 @@ export class OrdersService {
           .orderBy(asc(volumes.id))
           .for('update');
       }
+      // The entered promo code's row last (ADR 0005): a concurrent order for its last use waits
+      // here, then the quote below counts the use the first one held. A buy-now order never uses
+      // the cart's code, so it takes no such lock.
+      if (source.kind === 'cart') await lockEnteredPromoCode(tx, c.id);
 
       // 2. Re-quote under the lock: lines are capped at available (on hand - reserve).
       const now = this.edges.clock.now();
@@ -283,13 +298,23 @@ export class OrdersService {
         }) as const;
       if (quote.itemsSubtotal === 0 || bought.length === 0) return conflict('nothing_to_order');
       // The quote capped every line at what is available under the lock, so the total is the
-      // check: a line that no longer fits changed it.
-      if (quote.total !== input.confirmedTotal) return conflict('total_changed');
+      // check: a line that no longer fits changed it. The discount is checked too: a code lost
+      // meanwhile can leave the total as it was (free delivery offsets it), and the order the
+      // shopper confirmed had that discount.
+      if (
+        quote.total !== input.confirmedTotal ||
+        !sameDiscount(quote.discount, input.confirmedDiscount)
+      )
+        return conflict('total_changed');
 
       // ADR 0005 seam: the discount source the quote applied is held here, in this transaction,
       // before the snapshot (a conditional UPDATE on the upgrade right #38 or the birthday coupon
-      // #30, a promo use counted under a FOR UPDATE lock on the code #29); cancelling the order
-      // (#24) releases it within its validity. No entitlement reaches the quote yet: none is held.
+      // #30); cancelling the order (#24) releases it within its validity. A promo code (#29) was
+      // locked in 1, so the quote counted its uses under the lock; its use is written with the
+      // order below and voided by a cancel. No entitlement reaches the quote yet: none is held.
+      const heldPromoCodeId = quote.discount?.type === 'promo_code' ? loaded.promoCodeId : null;
+      if (quote.discount?.type === 'promo_code' && heldPromoCodeId === null)
+        throw new Error(`promo ${quote.discount.code}: applied without passing its checks`);
 
       // 3. The snapshot.
       const reserveUntil = new Date(now.getTime() + settings['orders.reserveTtlSeconds'] * 1000);
@@ -338,6 +363,13 @@ export class OrdersService {
         })
         .returning();
       if (!order) throw new Error('order insert returned nothing');
+      if (heldPromoCodeId !== null)
+        await recordPromoUse(tx, {
+          promoCodeId: heldPromoCodeId,
+          orderId: order.id,
+          customerId: c.id,
+          at: now,
+        });
       const lines = await tx
         .insert(orderLines)
         .values(
@@ -390,8 +422,17 @@ export class OrdersService {
         )
         .returning();
 
-      // 4. The cart (a buy-now order leaves it as it was), the saved pair, consent, audit and the message.
-      if (source.kind === 'cart')
+      // 4. The cart, the saved pair, consent, audit and the message. A cart order takes the entered
+      // code with it, held or refused, so the next cart starts without one (spec Changes 2026-11-11
+      // (4), #29); a buy-now order leaves the cart, its code included, exactly as it was.
+      if (source.kind === 'cart') {
+        await tx
+          .update(carts)
+          .set({
+            promoCode: null,
+            discountChoice: sql`case when ${carts.discountChoice}->>'type' = 'promo_code' then null else ${carts.discountChoice} end`,
+          })
+          .where(eq(carts.customerId, c.id));
         await tx.delete(cartLines).where(
           and(
             eq(cartLines.customerId, c.id),
@@ -401,6 +442,7 @@ export class OrdersService {
             ),
           ),
         );
+      }
       if (point)
         await rememberPoint(tx, {
           customerId: c.id,

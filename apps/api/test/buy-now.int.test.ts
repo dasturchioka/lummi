@@ -11,6 +11,7 @@ import {
   fragrances,
   orderLines,
   orders,
+  promoCodeUses,
   volumes,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -119,9 +120,57 @@ describe('«Купить сейчас»: one line, the cart untouched (spec Chan
     expect(res.body.lines).toHaveLength(1);
     expect(res.body.lines[0]).toMatchObject({ kind: 'volume', slug: s[7], ml: 50, qty: 1 });
     expect(res.body.total).toBe(244_000);
-    // the cart's promo code and choice never reach a buy-now order (spec Changes 2026-11-11)
-    expect(res.body.discount).toBeNull();
     expect(await cartRows(id)).toBe(before);
+  });
+
+  it('a promo code applied in the cart never reaches a buy-now order, and the cart keeps it (#29)', async () => {
+    const owner = await t.ownerSession();
+    const created = await owner.client.admin.promoCodes.create({
+      body: {
+        code: 'BLOGER10',
+        kind: 'percent',
+        percent: 10,
+        amount: null,
+        maxDiscount: null,
+        expiresOn: null,
+        minOrderTotal: null,
+        totalLimit: null,
+        perCustomerLimit: null,
+        newCustomersOnly: false,
+        appliesToMarkedDown: false,
+        active: true,
+      },
+    });
+    expect(created.status).toBe(201);
+    const p = await point();
+    const client = await shopper(t, ali, '998901234567');
+    const [s] = await slugs(1);
+    await client.cart.addLine({ body: { slug: s!, ml: 30, qty: 1 } });
+    const applied = await client.cart.applyPromoCode({ body: { code: 'bloger10' } });
+    expect(applied.status === 200 && applied.body.quote.discount).toMatchObject({
+      type: 'promo_code',
+      code: 'BLOGER10',
+      amount: 14_900,
+    });
+    const id = await customerIdOf(client);
+    const before = await cartRows(id);
+
+    const item = `volume:${s}:50`;
+    const checkout = await client.checkout.get({ query: { regionId: p.regionId, item } });
+    expect(checkout.status === 200 && checkout.body.quote.discount).toBeNull();
+    const res = await client.orders.create({ body: { ...orderBody(p.id, 244_000), item } });
+    expect(res.status).toBe(201);
+    if (res.status !== 201) return;
+    expect(res.body.discount).toBeNull();
+    expect(res.body.total).toBe(244_000);
+    // no use of the code was held, and the cart still has it, applied
+    expect(await t.db.select().from(promoCodeUses)).toHaveLength(0);
+    expect(await cartRows(id)).toBe(before);
+    const cart = await client.cart.get();
+    expect(cart.status === 200 && [cart.body.promoCode, cart.body.quote.discount?.type]).toEqual([
+      'BLOGER10',
+      'promo_code',
+    ]);
   });
 
   it('the Discovery set: reserved from its own stock, the cart untouched', async () => {

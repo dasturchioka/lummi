@@ -3,7 +3,13 @@
  * the top swaps the fixture at the data boundary (the server cart), so the screen is tested
  * exactly as the API would feed it. Numbers are written out, as the server would send them.
  */
-import type { CartDto, CartLineDto, QuoteLine, VolumeLineDto } from '@lummi/contracts';
+import type {
+  CartDto,
+  CartLineDto,
+  PromoCodeInvalid,
+  QuoteLine,
+  VolumeLineDto,
+} from '@lummi/contracts';
 import { Link, useSearch } from '@tanstack/react-router';
 import { CartView } from '../screens/Cart';
 
@@ -214,26 +220,121 @@ const unavailable: CartDto = {
   },
 };
 
+/** The plain cart with its bottle photos (the `discount` fixture keeps them missing on purpose). */
+const PHOTOGRAPHED = plain.lines.map((l) =>
+  l.kind === 'volume' ? { ...l, photo: PHOTO[l.ml] } : l,
+);
+
+/** The entered code BLOGER10 as the quote judged it: applied (10 %), or refused with its reason. */
+const withCode = (invalid: PromoCodeInvalid | null, code = 'BLOGER10'): CartDto => ({
+  ...plain,
+  lines: PHOTOGRAPHED,
+  promoCode: code,
+  quote: {
+    ...plain.quote,
+    ...(invalid
+      ? {}
+      : {
+          discount: { type: 'promo_code', code, amount: 28_700 },
+          thresholdBase: 'after',
+          thresholdBaseAmount: 258_300,
+          total: 258_300,
+        }),
+    promoCode: { code, invalid },
+  },
+});
+
+/** The longest code the admin allows (32 characters), for the break-ui cases (#29). */
+const LONG_CODE = 'BLOGER_MALIKA_NOVOGODNIY_2026_UZ';
+
+/** A seven-digit fixed discount under the 32-character code, delivered to the longest city. */
+const promoWorst: CartDto = {
+  lines: [line(1, LONG_NAME, 50, 5), line(2, 'Baccarat Rouge 540', 50, 4)],
+  count: 9,
+  deliveryCity: KARAKALPAKSTAN,
+  suggestions: [],
+  promoCode: LONG_CODE,
+  freeDeliveryProgress: 100,
+  quote: {
+    lines: [priced(1, 5, 219_000, 1_095_000), priced(2, 4, 219_000, 876_000)],
+    itemsSubtotal: 1_971_000,
+    discount: { type: 'promo_code', code: LONG_CODE, amount: 1_250_000 },
+    thresholdBase: 'after',
+    thresholdBaseAmount: 721_000,
+    freeDeliveryThreshold: 250_000,
+    amountToFreeDelivery: 0,
+    deliveryFee: 0,
+    total: 721_000,
+    alternatives: [],
+    promoCode: { code: LONG_CODE, invalid: null },
+    staleChoice: false,
+  },
+};
+
+/**
+ * A 100 % code: the items cost nothing and the delivery is still paid (a discount never touches
+ * it; the free-delivery threshold counts after the code, so it is far away again).
+ */
+const promoFull: CartDto = {
+  ...plain,
+  lines: PHOTOGRAPHED,
+  deliveryCity: KARAKALPAKSTAN,
+  promoCode: 'LUMMI100',
+  freeDeliveryProgress: 0,
+  quote: {
+    ...plain.quote,
+    discount: { type: 'promo_code', code: 'LUMMI100', amount: 287_000 },
+    thresholdBase: 'after',
+    thresholdBaseAmount: 0,
+    amountToFreeDelivery: 250_000,
+    deliveryFee: 25_000,
+    total: 25_000,
+    promoCode: { code: 'LUMMI100', invalid: null },
+  },
+};
+const PROMO_REASONS = [
+  { reason: 'unknown' },
+  { reason: 'inactive' },
+  { reason: 'expired' },
+  { reason: 'exhausted' },
+  { reason: 'already_used' },
+  { reason: 'not_new_customer' },
+  { reason: 'below_minimum', minOrderTotal: 300_000 },
+  { reason: 'no_eligible_items' },
+] as const satisfies PromoCodeInvalid[];
+const promoFixtures = Object.fromEntries(
+  PROMO_REASONS.map((r) => [`promo-${r.reason.replaceAll('_', '-')}`, withCode(r)]),
+) as Record<`promo-${string}`, CartDto>;
+
 export const CART_FIXTURES = {
   discount,
   plain,
   worst,
   'worst-nudge': worstNudge,
   unavailable,
+  'promo-applied': withCode(null),
+  ...promoFixtures,
+  'promo-worst': promoWorst,
+  'promo-full': promoFull,
+  // the longest refusal: the 32-character code under a seven-digit minimum
+  'promo-worst-refused': withCode({ reason: 'below_minimum', minOrderTotal: 1_250_000 }, LONG_CODE),
 } satisfies Record<string, CartDto>;
 export type CartFixtureName = keyof typeof CART_FIXTURES;
 const NAMES = Object.keys(CART_FIXTURES) as CartFixtureName[];
 
 export function CartFixtures() {
   // The dev routes are outside the typed tree in a build, so the search is read loosely.
-  const search: { data?: CartFixtureName } = useSearch({ strict: false });
-  const data = search.data ?? 'discount';
+  const search: { data?: string } = useSearch({ strict: false });
+  const data: CartFixtureName =
+    search.data && Object.hasOwn(CART_FIXTURES, search.data)
+      ? (search.data as CartFixtureName)
+      : 'discount';
   return (
     <>
       <CartView key={data} cart={CART_FIXTURES[data]} />
       <nav
         aria-label="fixture"
-        className="fixed top-[calc(var(--safe-t,0px)+8px)] right-2 z-50 flex gap-0.5 rounded-pill bg-field p-0.5"
+        className="fixed top-[calc(var(--safe-t,0px)+8px)] right-2 z-50 flex max-w-[calc(100vw-16px)] flex-wrap justify-end gap-0.5 rounded-[14px] bg-field p-0.5"
       >
         {NAMES.map((n) => (
           <Link

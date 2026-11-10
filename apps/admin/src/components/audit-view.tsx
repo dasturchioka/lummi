@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AuditFiltersForm, type AuditFilters } from '@/components/audit-filters';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import { CodeText } from '@/components/promo/code-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetaLine } from '@/components/ui/meta-line';
@@ -55,6 +56,16 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
     return <>{pick(settingMeta(e.targetId).label, language)}</>;
   }
   if (e.targetType === 'staff') return <>{e.targetName ?? t.audit.actors.unknownStaff}</>;
+  // a promo code by its code, which every promo entry carries (a deleted one has no page to open)
+  if (e.targetType === 'promo_code' && typeof e.payload.code === 'string')
+    return (
+      <>
+        {targetLabel(t, e.targetType)}{' '}
+        <span className="font-medium tracking-[0.04em]">
+          <CodeText code={e.payload.code} />
+        </span>
+      </>
+    );
   return (
     <>
       {targetLabel(t, e.targetType)}

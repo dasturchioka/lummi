@@ -49,6 +49,8 @@ export const clientRoutes = {
     addBuilder: route('POST', '/cart/sets/builder', [200, 401, 404, 409, 422]),
     setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
+    applyPromoCode: route('PUT', '/cart/promo-code', [200, 401, 429]),
+    removePromoCode: route('DELETE', '/cart/promo-code', [200, 401]),
   },
   sets: {
     discovery: route('GET', '/sets/discovery', [200, 401]),

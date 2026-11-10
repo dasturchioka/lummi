@@ -14,6 +14,7 @@ import {
 import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
+import { judgePromoCode, type JudgedPromoCode } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { loadDiscovery, tenMlOf, type DiscoveryState, type TenMl } from '../sets/sets';
 
@@ -84,6 +85,8 @@ export interface LoadedQuote {
   /** The cart row (discount choice, promo code); undefined for lines quoted on their own. */
   cartState: CartRow | undefined;
   city: DeliveryCityDto | null;
+  /** The entered promo code's id when it passed the DB checks; the order holds a use of it. */
+  promoCodeId: number | null;
 }
 
 /** A line as stored: what was asked for. Volume, price and stock are resolved when it is read. */
@@ -132,8 +135,10 @@ export function loadCartQuote(
  * Lines capped at available, priced through `quote()` (ADR 0001). The one place that turns stored
  * lines into a Quote: the cart screen, checkout (inside its transaction, after the stock rows are
  * locked) and «Купить сейчас» all come through here, so a line is judged and priced one way.
- * `entitlements` is for the discount tickets; none are held yet. `deliveryTariff` is checkout's:
- * the chosen BTS point's region tariff, which wins over the saved delivery city's.
+ * `entitlements` is for the discount tickets; none are held yet. The cart's entered promo code is
+ * judged here (the DB checks, ticket #29) and `quote()` applies it or says why not; lines quoted on
+ * their own («Купить сейчас») never carry it (spec Changes 2026-11-11). `deliveryTariff` is
+ * checkout's: the chosen BTS point's region tariff, which wins over the saved delivery city's.
  */
 export async function loadQuote(
   tx: DbOrTx,
@@ -297,6 +302,10 @@ export async function loadQuote(
       ? await tx.select().from(carts).where(eq(carts.customerId, customerId))
       : [];
   const city = await readDeliveryCity(tx, customerId);
+  // the entered promo code lives on the cart: lines quoted on their own (buy-now) never see it
+  const judged: JudgedPromoCode | null = cartState?.promoCode
+    ? await judgePromoCode(tx, cartState.promoCode, customerId, now)
+    : null;
   const settings = await readSettings(tx, [
     'pricing.freeDeliveryThreshold',
     'pricing.thresholdBase',
@@ -328,7 +337,7 @@ export async function loadQuote(
   const q = quote({
     lines: quoteLines,
     entitlements: opts.entitlements ?? [],
-    promoCode: null,
+    promoCode: judged?.promoCode ?? null,
     choice: cartState?.discountChoice ?? null,
     deliveryTariff:
       opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
@@ -345,6 +354,7 @@ export async function loadQuote(
     quote: q,
     cartState,
     city,
+    promoCodeId: judged?.promoCodeId ?? null,
   };
 }
 

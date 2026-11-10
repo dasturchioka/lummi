@@ -1,6 +1,7 @@
 import {
   CART_MAX_QTY,
   orderRepeatable,
+  normalizePromoCode,
   type CartDto,
   type CartLineDto,
   type CartSuggestionDto,
@@ -34,6 +35,8 @@ import { loadCartQuote, loadQuote, readCartLines, toLineDto, type StoredLine } f
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
 export type RepeatOutcome =
   { kind: 'done'; result: RepeatResultDto } | { kind: 'not_found' } | { kind: 'not_repeatable' };
+export type ApplyCodeOutcome =
+  { kind: 'ok' } | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 export type AddSetOutcome =
   | { result: 'ok' }
   | { result: 'sold_out' | 'not_found' | 'invalid' }
@@ -344,14 +347,57 @@ export class CartService {
     });
   }
 
-  /** An entered or link-prefilled code. A typed code is always applied, so it clears any stored choice (ADR 0002). */
-  async setPromoCode(customerId: number, code: string | null): Promise<void> {
+  /**
+   * Takes the entered code out of the cart, and the choice made against it (ADR 0002). Setting a
+   * code goes only through `applyPromoCode`, which counts the attempt.
+   */
+  async clearPromoCode(customerId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
       await this.touch(tx, customerId);
       await tx
         .update(carts)
-        .set({ promoCode: code ? code.trim().toUpperCase() : null, discountChoice: null })
+        .set({ promoCode: null, discountChoice: null })
         .where(eq(carts.customerId, customerId));
+    });
+  }
+
+  /**
+   * A code the customer typed (ticket #29). Codes are guessable, so each customer may type
+   * `promo.attemptLimit` of them per `promo.attemptWindowSeconds` (a fixed window from the first);
+   * past that the stored code stays as it was. Whatever the code, it is stored and the quote says
+   * whether it applies.
+   */
+  async applyPromoCode(customerId: number, code: string): Promise<ApplyCodeOutcome> {
+    return this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
+      const [row] = await tx
+        .select({ attempts: carts.promoAttempts, since: carts.promoAttemptsSince })
+        .from(carts)
+        .where(eq(carts.customerId, customerId))
+        .for('update');
+      const s = await readSettings(tx, ['promo.attemptLimit', 'promo.attemptWindowSeconds']);
+      const now = this.edges.clock.now();
+      const windowMs = s['promo.attemptWindowSeconds'] * 1000;
+      const since = row?.since ?? null;
+      const fresh = since === null || now.getTime() - since.getTime() >= windowMs;
+      const attempts = fresh ? 0 : (row?.attempts ?? 0);
+      if (!fresh && attempts >= s['promo.attemptLimit']) {
+        const left = since.getTime() + windowMs - now.getTime();
+        return {
+          kind: 'too_many_attempts',
+          retryAfterSeconds: Math.max(1, Math.ceil(left / 1000)),
+        };
+      }
+      await tx
+        .update(carts)
+        .set({
+          promoCode: normalizePromoCode(code),
+          discountChoice: null,
+          promoAttempts: attempts + 1,
+          promoAttemptsSince: fresh ? now : since,
+        })
+        .where(eq(carts.customerId, customerId));
+      return { kind: 'ok' };
     });
   }
 

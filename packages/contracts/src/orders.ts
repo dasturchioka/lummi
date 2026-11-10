@@ -140,6 +140,12 @@ export const createOrderBodySchema = z.object({
   /** The «Итого» the shopper saw and confirmed: they will transfer exactly this (ADR 0001). */
   confirmedTotal: som,
   /**
+   * The discount the shopper saw with that total, as the quote gave it (null: none). A discount
+   * that changed source or amount is refused like a changed total, even when the total came out
+   * the same (a lost promo code can be offset by free delivery, ticket #29).
+   */
+  confirmedDiscount: discountSchema.nullable(),
+  /**
    * One per checkout attempt, made by the Mini App and kept until an order comes back: a repeat
    * (a lost 201, a double tap) returns the order this key already made instead of a second one.
    */

@@ -20,6 +20,7 @@ import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
+import { seedShotPromo } from './promo-data';
 import { seedShotShopCard } from './shop-card-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
 
@@ -228,6 +229,7 @@ async function main() {
   // staff after the slow seeds, so the owner's API connection is fresh for the shot rows
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
+  await seedShotPromo(ownerCall);
   await seedShotShopCard(ownerCall);
   await seedShotBroadcasts(databaseUrl);
   await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
@@ -278,7 +280,7 @@ async function main() {
             waitUntil: 'networkidle',
             timeout: 120_000,
           });
-          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width });
+          await screen.act?.({ page, t, language: lang, outsiderId: OUTSIDER_ID, width, db });
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);

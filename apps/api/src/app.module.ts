@@ -59,6 +59,8 @@ import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { ContentAdminController, ContentController } from './content/content.controller';
 import { ContentService } from './content/content.service';
+import { PromoAdminController } from './promo/promo-admin.controller';
+import { PromoAdminService } from './promo/promo-admin.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
 
@@ -103,6 +105,7 @@ export class AppModule {
         BtsAdminController,
         HumoFeedController,
         BroadcastController,
+        PromoAdminController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -144,6 +147,7 @@ export class AppModule {
         CreditEvents,
         HumoFeedService,
         BroadcastService,
+        PromoAdminService,
       ],
       exports: [
         CreditEvents,

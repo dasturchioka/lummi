@@ -6,6 +6,7 @@
 export * from './order-status';
 export * from './order-machine';
 export * from './recipient';
+export * from './promo-code';
 export * from './receipt-upload';
 export const POINT_SEARCH_MIN = 2;
 export const POINT_SEARCH_LIMIT = 50;

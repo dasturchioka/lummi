@@ -1,5 +1,5 @@
 {
-  "id": "4fa3581b-8f04-48f9-903d-4f09a476d81b",
+  "id": "2772f8b4-b200-4027-ae3f-641acf090b8c",
   "prevId": "384daf7d-0874-4437-806b-ca6d3fdb8f85",
   "version": "7",
   "dialect": "postgresql",
@@ -671,6 +671,19 @@
         "promo_code": {
           "name": "promo_code",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_attempts": {
+          "name": "promo_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "promo_attempts_since": {
+          "name": "promo_attempts_since",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2869,6 +2882,279 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.promo_code_uses": {
+      "name": "promo_code_uses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "promo_code_uses_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "promo_code_id": {
+          "name": "promo_code_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "promo_code_uses_counted_idx": {
+          "name": "promo_code_uses_counted_idx",
+          "columns": [
+            {
+              "expression": "promo_code_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"promo_code_uses\".\"voided_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "promo_code_uses_promo_code_id_promo_codes_id_fk": {
+          "name": "promo_code_uses_promo_code_id_promo_codes_id_fk",
+          "tableFrom": "promo_code_uses",
+          "tableTo": "promo_codes",
+          "columnsFrom": [
+            "promo_code_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "promo_code_uses_order_id_orders_id_fk": {
+          "name": "promo_code_uses_order_id_orders_id_fk",
+          "tableFrom": "promo_code_uses",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "promo_code_uses_customer_id_customers_id_fk": {
+          "name": "promo_code_uses_customer_id_customers_id_fk",
+          "tableFrom": "promo_code_uses",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "promo_code_uses_order_id_unique": {
+          "name": "promo_code_uses_order_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "order_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.promo_codes": {
+      "name": "promo_codes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "promo_codes_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "promo_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "percent": {
+          "name": "percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_discount": {
+          "name": "max_discount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_order_total": {
+          "name": "min_order_total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_limit": {
+          "name": "total_limit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "per_customer_limit": {
+          "name": "per_customer_limit",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "new_customers_only": {
+          "name": "new_customers_only",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "applies_to_marked_down": {
+          "name": "applies_to_marked_down",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "promo_codes_code_unique": {
+          "name": "promo_codes_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "promo_codes_code_check": {
+          "name": "promo_codes_code_check",
+          "value": "\"promo_codes\".\"code\" = upper(btrim(\"promo_codes\".\"code\")) and \"promo_codes\".\"code\" <> ''"
+        },
+        "promo_codes_terms_check": {
+          "name": "promo_codes_terms_check",
+          "value": "(\"promo_codes\".\"kind\" = 'percent' and \"promo_codes\".\"percent\" between 1 and 100 and \"promo_codes\".\"amount\" is null) or (\"promo_codes\".\"kind\" = 'fixed' and \"promo_codes\".\"amount\" > 0 and \"promo_codes\".\"percent\" is null and \"promo_codes\".\"max_discount\" is null)"
+        },
+        "promo_codes_limits_check": {
+          "name": "promo_codes_limits_check",
+          "value": "coalesce(\"promo_codes\".\"max_discount\", 1) > 0 and coalesce(\"promo_codes\".\"min_order_total\", 0) >= 0 and coalesce(\"promo_codes\".\"total_limit\", 1) > 0 and coalesce(\"promo_codes\".\"per_customer_limit\", 1) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.receipts": {
       "name": "receipts",
       "schema": "",
@@ -3174,149 +3460,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.saved_points": {
-      "name": "saved_points",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "saved_points_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipient_name": {
-          "name": "recipient_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipient_phone": {
-          "name": "recipient_phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bts_point_id": {
-          "name": "bts_point_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "saved_points_customer_pair_idx": {
-          "name": "saved_points_customer_pair_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recipient_phone",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bts_point_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "saved_points_customer_used_idx": {
-          "name": "saved_points_customer_used_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_used_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "saved_points_customer_id_customers_id_fk": {
-          "name": "saved_points_customer_id_customers_id_fk",
-          "tableFrom": "saved_points",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "saved_points_bts_point_id_bts_points_id_fk": {
-          "name": "saved_points_bts_point_id_bts_points_id_fk",
-          "tableFrom": "saved_points",
-          "tableTo": "bts_points",
-          "columnsFrom": [
-            "bts_point_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -3838,6 +3981,14 @@
         "delivered",
         "returned",
         "cancelled"
+      ]
+    },
+    "public.promo_kind": {
+      "name": "promo_kind",
+      "schema": "public",
+      "values": [
+        "percent",
+        "fixed"
       ]
     },
     "public.receipt_file_kind": {
