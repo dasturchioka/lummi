@@ -1,20 +1,22 @@
+import { customerMayCancel } from '@lummi/contracts/constants';
 import type { OrderDto, OrderLineDto } from '@lummi/contracts';
 import { fill, formatDateTime, formatPhone } from '@lummi/i18n';
 import { useParams, useRouter } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { PointMeta } from '../delivery/Hours';
 import { MoneySummary, SectionTitle, StatusPill, Timeline } from '../orders/parts';
-import { useOrder, useOrdersText } from '../orders/queries';
+import { useCancelOrder, useOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
 import { openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { attribution } from '../ui/FragranceListCard';
-import { BoxIcon, ClockIcon, GiftIcon, PinIcon } from '../ui/icons';
+import { BoxIcon, ClockIcon, CloseIcon, GiftIcon, PinIcon } from '../ui/icons';
 import { MetaLine } from '../ui/MetaLine';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
+import { Sheet } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { Thumb } from '../ui/Thumb';
@@ -153,6 +155,93 @@ function AmountDue({ order }: { order: OrderDto }) {
   );
 }
 
+/**
+ * A cancelled order in place of the timeline: why, in the shopper's words (their own cancel, the
+ * expired reserve, a manager's reason), and when. The status pill above already says «Отменён».
+ */
+function Cancelled({ cancellation }: { cancellation: NonNullable<OrderDto['cancellation']> }) {
+  const { language } = usePrefs();
+  const o = useOrdersText();
+  return (
+    <Card className="mt-3 flex gap-3 p-4" data-testid="cancelled">
+      <span className="grid size-9 shrink-0 place-items-center rounded-pill bg-block text-ink">
+        <CloseIcon size={18} />
+      </span>
+      <div className="min-w-0 flex-1 pt-px">
+        <p className="type-row font-semibold text-pretty text-ink">
+          {o.orders.cancelReason[cancellation.reason]}
+        </p>
+        <p className="type-small mt-0.5 text-muted">
+          {fill(o.orders.cancelledAt, { at: formatDateTime(cancellation.at, language) })}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * «Отменить заказ» (ADR 0011: only while «Ожидает оплаты»), a quiet link under the manager line as
+ * in the payment mockup, behind a confirmation sheet that warns a shopper who already paid. The
+ * status the screen showed goes along; if it moved on meanwhile, the screen shows the order as it
+ * is now and the sheet closes.
+ */
+function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolean }) {
+  const { t } = usePrefs();
+  const o = useOrdersText();
+  const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const cancel = useCancelOrder(order.number);
+  const confirm = () => {
+    setFailed(false);
+    cancel.mutate(order.status, {
+      onSuccess: (result) => {
+        if (result.kind === 'try_again') setFailed(true);
+        else setOpen(false);
+      },
+      onError: () => setFailed(true),
+    });
+  };
+  return (
+    <>
+      {/* under «Написать менеджеру», or on its own when that line is not there */}
+      <p className={`type-small mb-2 text-center ${spaced ? 'mt-6' : 'mt-4'}`}>
+        <button
+          type="button"
+          onClick={() => {
+            setFailed(false);
+            setOpen(true);
+          }}
+          data-testid="cancel-order"
+          className="-my-3 rounded-btn px-1 py-3 font-medium text-muted underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
+        >
+          {o.orders.cancel}
+        </button>
+      </p>
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title={fill(o.orders.cancelTitle, { number: String(order.number) })}
+        description={o.orders.cancelText}
+        closeLabel={t.common.close}
+      >
+        <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
+          {failed ? (
+            <p className="type-small mb-2 text-ink" role="alert">
+              {o.orders.cancelFailed}
+            </p>
+          ) : null}
+          <Button block loading={cancel.isPending} onClick={confirm}>
+            {o.orders.cancelConfirm}
+          </Button>
+          <Button block variant="secondary" onClick={() => setOpen(false)}>
+            {o.orders.cancelKeep}
+          </Button>
+        </div>
+      </Sheet>
+    </>
+  );
+}
+
 /** The number is known before the order is: the title stands from the first frame, the rest holds its shape. */
 function Loading({ title }: { title: string }) {
   return (
@@ -232,7 +321,9 @@ export function OrderView({ order }: { order: OrderDto }) {
 
       {order.status === 'awaiting_payment' ? <AmountDue order={order} /> : null}
 
-      {order.status !== 'cancelled' ? (
+      {order.cancellation ? (
+        <Cancelled cancellation={order.cancellation} />
+      ) : order.status !== 'cancelled' ? (
         <Card className="mt-3 p-4">
           <Timeline status={order.status} createdAt={order.createdAt} />
         </Card>
@@ -298,6 +389,10 @@ export function OrderView({ order }: { order: OrderDto }) {
             {o.orders.writeManager}
           </button>
         </p>
+      ) : null}
+
+      {customerMayCancel(order.status) ? (
+        <CancelOrder order={order} spaced={!managerUsername} />
       ) : null}
     </Screen>
   );
