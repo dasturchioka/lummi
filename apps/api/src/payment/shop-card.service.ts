@@ -11,6 +11,9 @@ export async function readShopCard(db: DbOrTx): Promise<ShopCardRow | null> {
   return row ?? null;
 }
 
+/** A card number's last 4 digits: what a Humo credit shows of the card it went to. */
+export const lastFour = (card: Pick<ShopCardRow, 'number'>) => card.number.slice(-4);
+
 /** How the audit log keeps a card: the number masked, the holder as typed. */
 const audited = (c: Pick<ShopCardRow, 'number' | 'holder'>) => ({
   number: maskCardNumber(c.number),

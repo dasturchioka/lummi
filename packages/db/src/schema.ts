@@ -691,6 +691,11 @@ export const orders = pgTable(
     total: integer('total').notNull(),
     /** What the customer transfers to the shop card; payment matching compares this (ADR 0012). */
     amountDue: integer('amount_due').notNull(),
+    /**
+     * The Credit that paid it, linked when the payment is confirmed (`PaymentConfirmation`, the
+     * one door for the receipt AI and staff). Unique: a credit never pays two orders (ADR 0012).
+     */
+    creditId: bigint('credit_id', { mode: 'number' }).references(() => credits.id),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
     /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
@@ -704,6 +709,7 @@ export const orders = pgTable(
     index('orders_customer_idx').on(t.customerId, t.createdAt),
     uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
     index('orders_status_idx').on(t.status),
+    uniqueIndex('orders_credit_idx').on(t.creditId),
     // the reserve sweeps read unpaid orders by when their reserve ends
     index('orders_awaiting_reserve_idx')
       .on(t.reserveUntil)
@@ -835,6 +841,16 @@ export const receiptVerdictEnum = pgEnum('receipt_verdict', [
   'rejected',
   'payment_not_found',
 ]);
+/**
+ * Why a receipt went to manual review (#32): the same file as another receipt (`duplicate`, #36
+ * adds the perceptual hash), the AI's answer did not confirm it (`not_confirmed`), or the AI could
+ * not be asked, attempt after attempt (`judge_failed`).
+ */
+export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', [
+  'duplicate',
+  'not_confirmed',
+  'judge_failed',
+]);
 /** Where the shopper sent it from: the payment screen, or the chat with the bot (#31). */
 export const receiptSourceEnum = pgEnum('receipt_source', ['miniapp', 'bot']);
 /** The original's kind, by its first bytes (ADR 0020). */
@@ -856,6 +872,8 @@ export const receipts = pgTable(
       .references(() => orders.id),
     source: receiptSourceEnum('source').notNull(),
     verdict: receiptVerdictEnum('verdict').notNull().default('pending'),
+    /** Why it last went to manual review; null until it did. */
+    reviewReason: receiptReviewReasonEnum('review_reason'),
     /** The name the shopper's device gave the file, if any. */
     fileName: text('file_name'),
     kind: receiptFileKindEnum('kind').notNull(),
@@ -873,6 +891,10 @@ export const receipts = pgTable(
     index('receipts_order_idx').on(t.orderId, t.id),
     index('receipts_sha256_idx').on(t.sha256),
     index('receipts_phash_idx').on(t.phash),
+    // an order may hold several receipts, but at most one is accepted (ADR 0011)
+    uniqueIndex('receipts_one_accepted_idx')
+      .on(t.orderId)
+      .where(sql`${t.verdict} in ('ai_confirmed', 'manager_confirmed')`),
     check('receipts_size', sql`${t.size} > 0`),
     check('receipts_sha256', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check('receipts_phash', sql`${t.phash} ~ '^[0-9a-f]{16}$'`),
@@ -884,12 +906,70 @@ export const receipts = pgTable(
   ],
 );
 
+/** What the receipt AI answered (ADR 0013), kept for the audit trail and threshold tuning only. */
+export interface StoredJudgement {
+  isReceipt: number;
+  amountMatches: number;
+  recipientMatches: number;
+  chosenCreditId: number | null;
+  choiceConfidence: number;
+  /** The judge's own verdict; only this ever confirmed anything. */
+  confirmed: boolean;
+  /** The provider that answered; 'none' when none could (no answer, only a failure). */
+  provider: 'typesafe' | 'openai' | 'none';
+  reason?: string;
+}
+
+/**
+ * What became of one look at a receipt: the order was paid with the chosen credit (`confirmed`),
+ * a person must decide (`manual_review`), the chosen credit had just paid another order
+ * (`credit_taken`, the receipt keeps waiting for its own money), or the receipt was decided
+ * while the AI was answering (`stale`).
+ */
+export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', [
+  'confirmed',
+  'manual_review',
+  'credit_taken',
+  'stale',
+]);
+
+/**
+ * Every answer the receipt AI gave about a Receipt (ADR 0013, #32): the candidate credits it was
+ * shown, its answer and what came of it. A receipt is asked again only when a candidate it was
+ * never shown appears, so a repeated event, job or retry asks nothing twice. A judge that could
+ * not answer leaves no row until its last attempt.
+ */
+export const receiptChecks = pgTable(
+  'receipt_checks',
+  {
+    id: id(),
+    receiptId: bigint('receipt_id', { mode: 'number' })
+      .notNull()
+      .references(() => receipts.id),
+    /** The Candidate credits shown to the judge, oldest first. */
+    candidateCreditIds: bigint('candidate_credit_ids', { mode: 'number' }).array().notNull(),
+    judgement: jsonb('judgement').$type<StoredJudgement>().notNull(),
+    /**
+     * Null from the moment the answer is stored (in its own transaction, right after the judge
+     * answered) until it is acted on, so a crash in between acts on it again without asking twice.
+     */
+    outcome: receiptCheckOutcomeEnum('outcome'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('receipt_checks_receipt_idx').on(t.receiptId, t.id),
+    check('receipt_checks_candidates', sql`cardinality(${t.candidateCreditIds}) > 0`),
+  ],
+);
+
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
 export type ShopCardRow = typeof shopCard.$inferSelect;
 export type ReceiptRow = typeof receipts.$inferSelect;
+export type CreditRow = typeof credits.$inferSelect;
+export type ReceiptCheckRow = typeof receiptChecks.$inferSelect;
 
 /**
  * «Мои пункты BTS» (spec Changes 2026-11-07 BTS point selection, 2026-11-11): a Recipient and BTS

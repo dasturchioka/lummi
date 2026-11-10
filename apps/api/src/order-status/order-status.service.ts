@@ -59,6 +59,10 @@ export type TransitionOutcome =
  */
 @Injectable()
 export class OrderStatusService {
+  /** The capability `confirm_payment` needs (ADR 0012): issued once, to `PaymentConfirmation`. */
+  private readonly paymentDoor = Symbol('confirm_payment');
+  private paymentDoorIssued = false;
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(ENV) private readonly env: Env,
@@ -67,6 +71,18 @@ export class OrderStatusService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(DiscountSourceHooks) private readonly discountSources: DiscountSourceHooks,
   ) {}
+
+  /**
+   * Money on the card is ground truth: only `PaymentConfirmation`, which checks and links the
+   * credit, may make the `confirm_payment` move. It takes this capability when the app starts; a
+   * second taker throws, so the app fails loudly instead of growing a second door.
+   */
+  issuePaymentDoor(): symbol {
+    if (this.paymentDoorIssued)
+      throw new Error('the confirm_payment capability was already issued');
+    this.paymentDoorIssued = true;
+    return this.paymentDoor;
+  }
 
   /**
    * In its own transaction, retried once on a deadlock or serialization failure; the message is
@@ -94,6 +110,7 @@ export class OrderStatusService {
   /**
    * Inside the caller's transaction (a receipt intake writing its receipt, a sweep), so the move
    * commits or rolls back with the caller's own rows. A refusal or a conflict writes nothing.
+   * `confirm_payment` is refused as `forbidden` without the capability `issuePaymentDoor()` gave.
    */
   async transitionIn<A extends OrderAction>(
     tx: DbOrTx,
@@ -102,7 +119,10 @@ export class OrderStatusService {
     actor: TransitionActor,
     expectedStatus: OrderStatus,
     payload: TransitionPayloadInput<A>,
+    door?: symbol,
   ): Promise<Exclude<TransitionOutcome, { kind: 'try_again' }>> {
+    if (action === 'confirm_payment' && door !== this.paymentDoor)
+      return { kind: 'refused', code: 'forbidden' };
     const plan = planTransition(expectedStatus, action, actor.type, payload);
     if (!plan.ok) return { kind: 'refused', code: plan.code };
 

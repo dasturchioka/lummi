@@ -10,6 +10,7 @@ import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { orderBody, samarkandPoint, shopper, slugs as slugsOf, tenMl } from './harness/orders';
+import { payWithCredit } from './harness/payments';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -63,15 +64,17 @@ async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_pay
     .submit(customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
   if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
   if (status === 'receipt_review') return id;
+  // the money arrives and the receipt AI confirms it (#32): the only way to «Оплата подтверждена»
+  await payWithCredit(t, order!, sent.receipt.id);
+  if (status === 'payment_confirmed') return id;
   const manager = await staff();
   const path = [
-    ['payment_confirmed', 'confirm_payment', { type: 'ai' }, undefined],
     ['accepted', 'accept', manager, undefined],
     ['assembling', 'start_assembly', manager, undefined],
     ['handed_to_bts', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
     ['delivered', 'deliver', manager, undefined],
   ] as const;
-  let from: OrderStatus = 'receipt_review';
+  let from: OrderStatus = 'payment_confirmed';
   for (const [to, action, actor, payload] of path) {
     const out = await machine().transition(id, action, actor, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);

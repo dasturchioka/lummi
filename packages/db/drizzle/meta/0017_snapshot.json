@@ -1,5 +1,5 @@
 {
-  "id": "e91851a4-c744-4a50-abef-b15929d6db6b",
+  "id": "8945a665-3994-47ac-935a-7f2890aa972a",
   "prevId": "2772f8b4-b200-4027-ae3f-641acf090b8c",
   "version": "7",
   "dialect": "postgresql",
@@ -2444,6 +2444,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "credit_id": {
+          "name": "credit_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "idempotency_key": {
           "name": "idempotency_key",
           "type": "uuid",
@@ -2535,6 +2541,21 @@
           "method": "btree",
           "with": {}
         },
+        "orders_credit_idx": {
+          "name": "orders_credit_idx",
+          "columns": [
+            {
+              "expression": "credit_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "orders_awaiting_reserve_idx": {
           "name": "orders_awaiting_reserve_idx",
           "columns": [
@@ -2585,6 +2606,19 @@
           "tableTo": "bts_points",
           "columnsFrom": [
             "bts_point_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "orders_credit_id_credits_id_fk": {
+          "name": "orders_credit_id_credits_id_fk",
+          "tableFrom": "orders",
+          "tableTo": "credits",
+          "columnsFrom": [
+            "credit_id"
           ],
           "columnsTo": [
             "id"
@@ -3155,6 +3189,109 @@
       },
       "isRLSEnabled": false
     },
+    "public.receipt_checks": {
+      "name": "receipt_checks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "receipt_checks_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_credit_ids": {
+          "name": "candidate_credit_ids",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "judgement": {
+          "name": "judgement",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "receipt_check_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "receipt_checks_receipt_idx": {
+          "name": "receipt_checks_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "receipt_checks_receipt_id_receipts_id_fk": {
+          "name": "receipt_checks_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_checks",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "receipt_checks_candidates": {
+          "name": "receipt_checks_candidates",
+          "value": "cardinality(\"receipt_checks\".\"candidate_credit_ids\") > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.receipts": {
       "name": "receipts",
       "schema": "",
@@ -3196,6 +3333,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
+        },
+        "review_reason": {
+          "name": "review_reason",
+          "type": "receipt_review_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "file_name": {
           "name": "file_name",
@@ -3314,6 +3458,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "receipts_one_accepted_idx": {
+          "name": "receipts_one_accepted_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"receipts\".\"verdict\" in ('ai_confirmed', 'manager_confirmed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3460,149 +3620,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.saved_points": {
-      "name": "saved_points",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "saved_points_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipient_name": {
-          "name": "recipient_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipient_phone": {
-          "name": "recipient_phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bts_point_id": {
-          "name": "bts_point_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "saved_points_customer_pair_idx": {
-          "name": "saved_points_customer_pair_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recipient_phone",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bts_point_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "saved_points_customer_used_idx": {
-          "name": "saved_points_customer_used_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_used_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "saved_points_customer_id_customers_id_fk": {
-          "name": "saved_points_customer_id_customers_id_fk",
-          "tableFrom": "saved_points",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "saved_points_bts_point_id_bts_points_id_fk": {
-          "name": "saved_points_bts_point_id_bts_points_id_fk",
-          "tableFrom": "saved_points",
-          "tableTo": "bts_points",
-          "columnsFrom": [
-            "bts_point_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -4134,6 +4151,16 @@
         "fixed"
       ]
     },
+    "public.receipt_check_outcome": {
+      "name": "receipt_check_outcome",
+      "schema": "public",
+      "values": [
+        "confirmed",
+        "manual_review",
+        "credit_taken",
+        "stale"
+      ]
+    },
     "public.receipt_file_kind": {
       "name": "receipt_file_kind",
       "schema": "public",
@@ -4142,6 +4169,15 @@
         "png",
         "webp",
         "pdf"
+      ]
+    },
+    "public.receipt_review_reason": {
+      "name": "receipt_review_reason",
+      "schema": "public",
+      "values": [
+        "duplicate",
+        "not_confirmed",
+        "judge_failed"
       ]
     },
     "public.receipt_source": {

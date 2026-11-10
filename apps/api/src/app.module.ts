@@ -24,6 +24,8 @@ import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
 import { ShopCardController } from './payment/shop-card.controller';
+import { PaymentConfirmation } from './payment/payment-confirmation';
+import { PaymentMatching } from './payment/payment-matching';
 import { ShopCardService } from './payment/shop-card.service';
 import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
 import { ReceiptsService } from './receipts/receipts.service';
@@ -125,6 +127,8 @@ export class AppModule {
         OrdersService,
         ReceiptsService,
         ShopCardService,
+        PaymentConfirmation,
+        PaymentMatching,
         OrderStatusService,
         DiscountSourceHooks,
         ReserveSweeps,
@@ -152,6 +156,7 @@ export class AppModule {
       exports: [
         CreditEvents,
         OrderStatusService,
+        PaymentConfirmation,
         HumoFeedService,
         SettingsService,
         AuditService,
