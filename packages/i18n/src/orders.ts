@@ -37,7 +37,7 @@ export const ordersMessages = defineMessages(
       items: 'Товары ({n})',
       consent: 'Согласен(на) на обработку персональных данных, включая дату рождения.',
       submit: 'Перейти к оплате',
-      needPoint: 'Выберите пункт BTS',
+      needPoint: 'Выберите пункт, куда доставить заказ',
       needName: 'Укажите имя получателя',
       needPhone: 'Проверьте телефон получателя',
       needConsent: 'Отметьте согласие на обработку данных',
@@ -82,6 +82,7 @@ export const ordersMessages = defineMessages(
         returned: 'Возвращён',
         cancelled: 'Отменён',
       },
+      amountDue: 'Сумма к переводу',
       reservedUntil: 'Ароматы забронированы до {until}.',
       steps: {
         created: 'Заказ создан',
@@ -141,7 +142,7 @@ export const ordersMessages = defineMessages(
       items: 'Mahsulotlar ({n})',
       consent: 'Shaxsiy maʼlumotlarim, jumladan tugʻilgan sanam qayta ishlanishiga roziman.',
       submit: 'Toʻlovga oʻtish',
-      needPoint: 'BTS punktini tanlang',
+      needPoint: 'Buyurtma qaysi punktga yetkazilishini tanlang',
       needName: 'Qabul qiluvchining ismini kiriting',
       needPhone: 'Qabul qiluvchi telefonini tekshiring',
       needConsent: 'Maʼlumotlarni qayta ishlashga rozilik bering',
@@ -192,6 +193,7 @@ export const ordersMessages = defineMessages(
         returned: 'Qaytarildi',
         cancelled: 'Bekor qilindi',
       },
+      amountDue: 'Oʻtkaziladigan summa',
       reservedUntil: 'Atirlar {until} gacha band qilingan.',
       steps: {
         created: 'Buyurtma yaratildi',

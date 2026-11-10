@@ -8,7 +8,7 @@ import {
 import { fill, formatPhone } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { regionName, useCities, type Picked } from '../delivery/queries';
@@ -20,6 +20,7 @@ import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Checkbox, TextArea, TextField } from '../ui/Field';
+import { Figure } from '../ui/Figure';
 import {
   AlertIcon,
   BagIcon,
@@ -108,6 +109,16 @@ function ChoosePoint({ onOpen, error }: { onOpen: () => void; error: string | nu
       ) : null}
     </div>
   );
+}
+
+/** «Далее» on the keyboard moves to the next field the shopper can type in (the account phone is read-only). */
+function toNextField(e: KeyboardEvent<HTMLInputElement>) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const fields = [
+    ...document.querySelectorAll<HTMLElement>('main input:not([readonly]), main textarea'),
+  ];
+  fields[fields.indexOf(e.currentTarget) + 1]?.focus();
 }
 
 /** A fresh idempotency key for one checkout attempt (the API keeps one order per key). */
@@ -220,6 +231,9 @@ export function Checkout() {
       </Screen>
     );
 
+  // Everything sold out while the shopper was on the screen (409 nothing_to_order): its quote
+  // lands here with nothing left, so this state says what happened, not just that it is empty.
+  const soldOutMeanwhile = conflict?.code === 'nothing_to_order';
   if (data.itemCount === 0)
     return (
       <Screen tabBar={false}>
@@ -227,8 +241,8 @@ export function Checkout() {
         <EmptyState
           fill
           icon={<BagIcon size={28} />}
-          title={o.checkout.emptyTitle}
-          text={o.checkout.emptyText}
+          title={soldOutMeanwhile ? o.checkout.goneTitle : o.checkout.emptyTitle}
+          text={soldOutMeanwhile ? o.checkout.goneText : o.checkout.emptyText}
           action={
             <Button block onClick={toCart}>
               {o.checkout.toCart}
@@ -354,9 +368,11 @@ export function Checkout() {
   const dock = (
     <div className="flex flex-col gap-2">
       {error ? (
+        // a new message settles up into place, so the dock growing under the thumb reads as news
         <p
+          key={error}
           role="alert"
-          className="type-small flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+          className="type-small flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
         >
           <span className="shrink-0">
             <AlertIcon size={18} />
@@ -373,7 +389,7 @@ export function Checkout() {
       >
         <span className="min-w-0 truncate">{o.checkout.submit}</span>
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
-        <Money amount={total} className="text-current" />
+        <Figure amount={total} />
       </Button>
     </div>
   );
@@ -389,6 +405,11 @@ export function Checkout() {
           value={nameValue}
           onChange={(e) => setName(e.target.value)}
           autoComplete="name"
+          autoCapitalize="words"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="next"
+          onKeyDown={toNextField}
           maxLength={RECIPIENT_NAME_MAX}
           error={errors.name}
         />
@@ -418,6 +439,11 @@ export function Checkout() {
           type="tel"
           inputMode="tel"
           autoComplete="tel"
+          autoCorrect="off"
+          enterKeyHint="done"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
           maxLength={RECIPIENT_PHONE_INPUT_MAX}
           className="tabular-nums"
           placeholder={onlyUzbekistan ? '+998 90 123 45 67' : undefined}
@@ -492,7 +518,12 @@ export function Checkout() {
                 rows={3}
                 error={errors.gift}
                 hint={
-                  <span className="block text-right tabular-nums">
+                  // at the limit the count steps up to ink: the card can take no more
+                  <span
+                    className={`block text-right tabular-nums ${
+                      giftMessage.trim().length >= data.giftMessageMax ? 'font-medium text-ink' : ''
+                    }`}
+                  >
                     {fill(o.checkout.giftMessageCount, {
                       n: String(giftMessage.trim().length),
                       max: String(data.giftMessageMax),
@@ -622,19 +653,7 @@ function ConflictSheet({
       closeLabel={t.common.close}
     >
       {c && !gone ? (
-        <div className="flex flex-col gap-3 pb-1" data-testid="total-changed">
-          <div className="flex items-end justify-between gap-4 px-0.5">
-            <div>
-              <p className="type-small text-muted">{o.checkout.changedWas}</p>
-              <s className="text-muted">
-                <Money amount={c.was} />
-              </s>
-            </div>
-            <div className="text-right">
-              <p className="type-small text-muted">{o.checkout.changedNow}</p>
-              <Money amount={c.checkout.quote.total} size="amount" />
-            </div>
-          </div>
+        <div className="flex flex-col pb-1" data-testid="total-changed">
           <MoneySummary
             itemCount={c.checkout.itemCount}
             itemsSubtotal={c.checkout.quote.itemsSubtotal}
@@ -642,15 +661,18 @@ function ConflictSheet({
             deliveryFee={c.checkout.quote.deliveryFee}
             total={c.checkout.quote.total}
             place={place}
+            was={c.was}
           />
-          <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote.total)}>
-            <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>
-            <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
-            <Money amount={c.checkout.quote.total} className="text-current" />
-          </Button>
-          <Button block variant="secondary" onClick={onCart}>
-            {o.checkout.backToCart}
-          </Button>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote.total)}>
+              <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>
+              <span aria-hidden="true" className="h-4 w-px shrink-0 bg-current opacity-35" />
+              <Money amount={c.checkout.quote.total} className="text-current" />
+            </Button>
+            <Button block variant="secondary" onClick={onCart}>
+              {o.checkout.backToCart}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="pb-1">

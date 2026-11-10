@@ -2,7 +2,7 @@ import type { Discount, OrderStatus } from '@lummi/contracts';
 import { fill, formatDateTime } from '@lummi/i18n';
 import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
-import { Card } from '../ui/Card';
+import { Figure } from '../ui/Figure';
 import { CheckIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { useOrdersText } from './queries';
@@ -52,9 +52,11 @@ function discountSource(d: Discount, t: ReturnType<typeof usePrefs>['t']): strin
 }
 
 /**
- * The money of a checkout or an order exactly as the server worked it out (ADR 0001): items, the
- * one discount with its source, BTS delivery to the named place, a hairline and «Итого». A white
- * card (mockup 06 «Ваш заказ»); the discount and a free delivery are Sage Ink.
+ * The money of a checkout or an order exactly as the server worked it out (ADR 0001), in the
+ * cart's dark totals block (approved variant 2): items, the one discount with its source, BTS
+ * delivery to the named place, a hairline and «Итого». Labels at 75 % Milk, values at full Milk;
+ * the discount and a free delivery in Dark Sage Ink. `was` strikes the total the shopper had
+ * confirmed in front of the new one (the 409 sheet).
  */
 export function MoneySummary({
   itemCount,
@@ -63,6 +65,7 @@ export function MoneySummary({
   deliveryFee,
   total,
   place,
+  was,
 }: {
   itemCount: number;
   itemsSubtotal: number;
@@ -71,52 +74,71 @@ export function MoneySummary({
   total: number;
   /** The city or region delivery goes to; null before one is chosen. */
   place: string | null;
+  /** The total the shopper confirmed before it changed. */
+  was?: number;
 }) {
   const { t } = usePrefs();
   const o = useOrdersText();
   const row = 'flex items-baseline justify-between gap-4';
+  const changed = was !== undefined && was !== total;
   return (
-    <Card className="p-4" data-testid="money-summary">
+    <section
+      aria-label={t.cart.total}
+      data-testid="money-summary"
+      className="rounded-card bg-totals p-4 text-totals-ink"
+    >
       <dl className="type-body flex flex-col gap-2.5">
         <div className={row}>
-          <dt className="min-w-0 text-muted">{fill(o.checkout.items, { n: String(itemCount) })}</dt>
-          <dd>
-            <Money amount={itemsSubtotal} />
+          <dt className="min-w-0 text-totals-ink/75">
+            {fill(o.checkout.items, { n: String(itemCount) })}
+          </dt>
+          <dd className="type-price">
+            <Figure amount={itemsSubtotal} />
           </dd>
         </div>
         {discount ? (
-          <div className={`${row} text-sage-ink`}>
+          <div className={`${row} text-totals-accent`}>
             <dt className="flex min-w-0 flex-col">
               <span>{t.cart.discount}</span>
-              <span className="type-caption [overflow-wrap:anywhere]">
+              <span className="type-caption [overflow-wrap:anywhere] opacity-80">
                 {discountSource(discount, t)}
               </span>
             </dt>
-            <dd className="type-price whitespace-nowrap">
-              −<Money amount={discount.amount} />
+            <dd className="type-price">
+              <Figure amount={discount.amount} minus />
             </dd>
           </div>
         ) : null}
         <div className={row}>
-          <dt className="min-w-0 text-pretty text-muted">
+          <dt className="min-w-0 text-pretty text-totals-ink/75">
             {place ? fill(t.cart.delivery, { city: place }) : t.cart.deliveryNoCity}
           </dt>
-          <dd>
+          <dd className="type-price">
             {deliveryFee === 0 && itemsSubtotal > 0 ? (
-              <span className="type-price text-sage-ink">{t.cart.deliveryFree}</span>
+              <span className="text-totals-accent">{t.cart.deliveryFree}</span>
             ) : (
-              <Money amount={deliveryFee} />
+              <Figure amount={deliveryFee} />
             )}
           </dd>
         </div>
       </dl>
-      <div className="mt-3.5 flex items-baseline justify-between gap-4 border-t border-line pt-3.5">
+      <div className="mt-3.5 flex items-baseline justify-between gap-4 border-t border-totals-ink/20 pt-3.5">
         <span className="type-total">{t.cart.total}</span>
-        <span className="type-total" data-testid="total">
-          <Money amount={total} className="!text-[16px]" />
+        {/* a changed total: the old one struck in front, and the pair wraps rather than squeezes */}
+        <span className="flex min-w-0 flex-wrap items-baseline justify-end gap-x-2.5 gap-y-0.5">
+          {changed ? (
+            <s className="type-price font-medium text-totals-ink/60 decoration-totals-ink/60">
+              <span className="sr-only">{o.checkout.changedWas}: </span>
+              <Money amount={was} className="!font-medium" />
+            </s>
+          ) : null}
+          <span className="type-total" data-testid="total">
+            {changed ? <span className="sr-only">{o.checkout.changedNow}: </span> : null}
+            <Figure amount={total} />
+          </span>
         </span>
       </div>
-    </Card>
+    </section>
   );
 }
 
