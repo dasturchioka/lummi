@@ -40,8 +40,7 @@ COPY apps/api/package.json apps/api/tsconfig.json apps/api/
 COPY apps/api/src apps/api/src
 # The seed workbook (the guide in the import template) that `seed:catalog` loads through the import.
 COPY apps/api/seed apps/api/seed
-# The 67-fragrance guide and the bottle photos: only `seed:catalog` reads them.
-COPY materials/catalog materials/catalog
+# The bottle photos: `seed:catalog` renders them.
 COPY materials/flakons materials/flakons
 # Receipts and public photos live on this volume (FILES_DIR); the node user must own it.
 RUN mkdir -p /data/files/public /data/files/private && chown -R node:node /data

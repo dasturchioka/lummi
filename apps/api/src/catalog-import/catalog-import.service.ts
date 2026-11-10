@@ -11,9 +11,8 @@ import {
   asc,
   eq,
   families,
-  fragranceNotes,
-  fragranceSimilar,
   fragrances,
+  inArray,
   notes,
   sql,
   volumes,
@@ -23,14 +22,19 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { CatalogAdminService, normalise } from '../admin/catalog-admin.service';
+import { CatalogAdminService, isUniqueViolation, normalise } from '../admin/catalog-admin.service';
 import { reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
-import { reindexFragrances } from '../search/search-index';
 import { DB, EDGES } from '../tokens';
 import { planImport, type FragranceOp, type Plan } from './plan';
 import { fingerprint, readSnapshot, snapshotToData, type Snapshot } from './snapshot';
-import { readWorkbook, writeWorkbook, type RawWorkbook } from './workbook';
+import {
+  UNPACK_RATIO,
+  readWorkbook,
+  writeWorkbook,
+  zipUnpackedBytes,
+  type RawWorkbook,
+} from './workbook';
 
 /** Serialises imports; the row locks below keep other writers out while one runs. */
 const IMPORT_LOCK = 1702;
@@ -40,7 +44,7 @@ export interface ImportLimits {
   maxRows: number;
 }
 export type ApplyResult =
-  | { ok: true; counts: ImportCounts }
+  | { ok: true; counts: ImportCounts; warnings: ImportIssue[] }
   | { ok: false; reason: 'invalid'; report: ImportReport }
   | { ok: false; reason: 'stale' };
 
@@ -103,6 +107,11 @@ export class CatalogImportService {
       return { issues: [fileIssue('too_big', { max: limits.maxBytes })] };
     }
     if (!zipMagic(bytes)) return { issues: [fileIssue('not_xlsx')] };
+    const unpacked = zipUnpackedBytes(bytes);
+    if (unpacked === null) return { issues: [fileIssue('not_xlsx')] };
+    if (unpacked > limits.maxBytes * UNPACK_RATIO) {
+      return { issues: [fileIssue('too_unpacked', { max: limits.maxBytes * UNPACK_RATIO })] };
+    }
     try {
       return { raw: await readWorkbook(bytes, { maxRows: limits.maxRows }) };
     } catch {
@@ -165,7 +174,10 @@ export class CatalogImportService {
     try {
       return await this.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(${IMPORT_LOCK})`);
-        // like the admin form and checkout: fragrance rows, then volume rows, ascending id
+        // dictionary rows first (the import may rename them), then like the admin form and
+        // checkout: fragrance rows, then volume rows, ascending id
+        await tx.select({ id: families.id }).from(families).orderBy(asc(families.id)).for('update');
+        await tx.select({ id: notes.id }).from(notes).orderBy(asc(notes.id)).for('update');
         await tx.select({ id: fragrances.id }).from(fragrances).orderBy(asc(fragrances.id)).for('update');
         await tx.select({ id: volumes.id }).from(volumes).orderBy(asc(volumes.id)).for('update');
         const snap = await readSnapshot(tx);
@@ -180,13 +192,12 @@ export class CatalogImportService {
             report: this.report(plan.counts, plan.errors, plan.warnings, [], null),
           });
         }
-        await this.write(tx, actor, plan, fileHash, opts);
-        return { ok: true, counts: plan.counts } as const;
+        const warnings = await this.write(tx, actor, plan, fileHash, opts);
+        return { ok: true, counts: plan.counts, warnings } as const;
       });
     } catch (e) {
       if (e instanceof Abort) return e.result;
-      const code = (e as { code?: string; cause?: { code?: string } }) ?? {};
-      if (code.code === '23505' || code.cause?.code === '23505') {
+      if (isUniqueViolation(e)) {
         return {
           ok: false,
           reason: 'invalid',
@@ -301,43 +312,38 @@ export class CatalogImportService {
     plan: Plan,
     fileHash: string,
     opts: { seed?: boolean },
-  ) {
+  ): Promise<ImportIssue[]> {
     const who = actor ? ({ type: 'staff', id: actor.id } as const) : null;
-    const reindex = new Set<number>();
 
-    // dictionaries first: fragrances refer to them by name
+    const reject = (sheet: 'fragrances' | 'dictionary', row: number | null, fields: string[]) =>
+      new Abort({
+        ok: false,
+        reason: 'invalid',
+        report: this.report(
+          plan.counts,
+          [{ sheet, row, column: null, code: 'rejected', params: { fields: fields.join(', ') } }],
+          [],
+          [],
+          null,
+        ),
+      });
+    const fail = (op: FragranceOp, fields: string[] = []) => reject('fragrances', op.row, fields);
+
+    // dictionaries first: fragrances refer to them by name. The admin's own dictionary save (same
+    // rules, reindex of the fragrances that use the entry, audit); an existing entry keeps its aliases.
     for (const kind of ['families', 'notes'] as const) {
       const table = kind === 'families' ? families : notes;
-      const target = kind === 'families' ? 'family' : 'note';
       for (const o of plan[kind]) {
-        let id = o.existingId;
-        if (id === null) {
-          const [row] = await tx
-            .insert(table)
-            .values({ nameRu: o.nameRu, nameUz: o.nameUz })
-            .returning({ id: table.id });
-          id = row!.id;
-        } else {
-          await tx.update(table).set({ nameUz: o.nameUz }).where(eq(table.id, id));
-          const used =
-            kind === 'families'
-              ? await tx.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.familyId, id))
-              : await tx
-                  .select({ id: fragranceNotes.fragranceId })
-                  .from(fragranceNotes)
-                  .where(eq(fragranceNotes.noteId, id))
-                  .groupBy(fragranceNotes.fragranceId);
-          for (const u of used) reindex.add(u.id);
-        }
-        if (who) {
-          await this.audit.record(tx, {
-            actor: who,
-            action: `catalog.${target}_${o.existingId === null ? 'created' : 'updated'}`,
-            targetType: target,
-            targetId: id,
-            payload: { nameRu: o.nameRu, nameUz: o.nameUz, source: 'import' },
-          });
-        }
+        const [have] =
+          o.existingId === null
+            ? []
+            : await tx.select({ aliases: table.aliases }).from(table).where(eq(table.id, o.existingId));
+        const res = await this.admin.saveDictionaryWithin(tx, actor, kind, o.existingId, {
+          nameRu: o.nameRu,
+          nameUz: o.nameUz,
+          aliases: have?.aliases ?? [],
+        });
+        if (!res.ok) throw reject('dictionary', null, [o.nameRu]);
       }
     }
     const ids = {
@@ -345,27 +351,6 @@ export class CatalogImportService {
       note: new Map((await tx.select().from(notes)).map((r) => [r.nameRu, r.id])),
       fragrance: new Map<string, number>(),
     };
-    const fail = (op: FragranceOp, fields?: string[]) =>
-      new Abort({
-        ok: false,
-        reason: 'invalid',
-        report: this.report(
-          plan.counts,
-          [
-            {
-              sheet: 'fragrances',
-              row: op.row,
-              column: null,
-              code: 'rejected',
-              params: { fields: (fields ?? []).join(', ') },
-            },
-          ],
-          [],
-          [],
-          null,
-        ),
-      });
-
     // new fragrances first (similar links may point at them), then the changed ones
     const fresh = plan.fragrances.filter((o) => o.existingId === null);
     for (const op of fresh) {
@@ -391,26 +376,56 @@ export class CatalogImportService {
       if (!res.ok) throw fail(op, res.fields);
     }
     for (const op of fresh.filter((o) => o.draft.similar.length)) {
-      const id = ids.fragrance.get(op.code)!;
-      await tx
-        .insert(fragranceSimilar)
-        .values(
-          op.draft.similar.map((c, position) => ({
-            fragranceId: id,
-            similarId: ids.fragrance.get(c)!,
-            position,
-          })),
-        );
+      const linked = await this.admin.linkSimilarWithin(
+        tx,
+        ids.fragrance.get(op.code)!,
+        op.draft.similar.map((c) => ids.fragrance.get(c)!),
+      );
+      if (!linked) throw fail(op, ['similarIds']);
     }
-    if (reindex.size) await reindexFragrances(tx, [...reindex]);
+    // The dry run's reserve numbers may be old: count again under the volume locks, and say so if
+    // any count the file set now sits below what open orders hold (never written unseen, ADR 0010).
+    const below = await this.belowReserveNow(tx, plan);
     if (who) {
       await this.audit.record(tx, {
         actor: who,
         action: 'catalog.import_applied',
         targetType: 'catalog',
-        payload: { counts: plan.counts, file: fileHash.slice(0, 16) },
+        payload: {
+          counts: plan.counts,
+          file: fileHash.slice(0, 16),
+          ...(below.length ? { belowReserve: below.map((w) => w.params) } : {}),
+        },
       });
     }
+    return below;
+  }
+
+  /** Volumes the file set a count for that now hold less than the open orders reserve. */
+  private async belowReserveNow(tx: DbOrTx, plan: Plan): Promise<ImportIssue[]> {
+    if (!plan.stock.length) return [];
+    const rows = await tx
+      .select({ id: volumes.id, code: fragrances.code, ml: volumes.ml, onHand: volumes.onHand })
+      .from(volumes)
+      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+      .where(inArray(fragrances.code, [...new Set(plan.stock.map((s) => s.code))]));
+    const touched = new Map(plan.stock.map((s) => [`${s.code}|${s.ml}`, s]));
+    const now = rows.filter((r) => touched.has(`${r.code}|${r.ml}`));
+    const reserved = await reservedByVolume(tx, now.map((r) => r.id));
+    return now.flatMap((r) => {
+      const held = reserved.get(r.id) ?? 0;
+      if (r.onHand >= held) return [];
+      const s = touched.get(`${r.code}|${r.ml}`)!;
+      return [
+        {
+          sheet: 'volumes' as const,
+          row: s.row,
+          column: null,
+          code: 'below_reserve',
+          params: { name: s.name, ml: r.ml, onHand: r.onHand, reserved: held },
+        },
+      ];
+    });
   }
 }
 

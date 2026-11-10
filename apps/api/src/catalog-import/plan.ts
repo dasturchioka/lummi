@@ -1,5 +1,10 @@
 import {
+  KEY_NOTE_COUNT,
+  MAX_ON_HAND,
+  MAX_PRICE,
+  dictionaryInputSchema,
   fragranceInputSchema,
+  noteInputSchema,
   volumeInputSchema,
   type ImportIssue,
   type ImportStockRow,
@@ -67,8 +72,6 @@ export interface PlanOptions {
    */
   seed?: boolean;
 }
-
-const PRICE_MAX = 100_000_000;
 
 type Frag = RawRow<FragranceKey>;
 
@@ -164,10 +167,22 @@ export function planImport(
     for (const r of rows) {
       const nameRu = r.cells.nameRu.trim();
       const nameUz = normalizeUzbek(r.cells.nameUz.trim());
-      if (!nameRu) err('dictionary', r.row, ruH, 'required');
-      if (!nameUz) err('dictionary', r.row, uzH, 'required');
-      if (nameRu.length > 80) err('dictionary', r.row, ruH, 'too_long', { max: 80 });
-      if (nameUz.length > 80) err('dictionary', r.row, uzH, 'too_long', { max: 80 });
+      // the dictionary form's own rules (required, length, no comma in a note name)
+      const parsedName = (kind === 'notes' ? noteInputSchema : dictionaryInputSchema).safeParse({
+        nameRu,
+        nameUz,
+        aliases: [],
+      });
+      let valid = true;
+      if (!parsedName.success) {
+        for (const i of parsedName.error.issues) {
+          const col = i.path[0] === 'nameUz' ? uzH : ruH;
+          const { code, params } = issueCode(i);
+          err('dictionary', r.row, col, code, params);
+          valid = false;
+        }
+      }
+      if (!valid) continue;
       if (!nameRu || !nameUz) continue;
       const key = nameRu.toLowerCase();
       const first = inFile.get(key);
@@ -422,31 +437,18 @@ function parseFragrance(
     const text = required(k);
     if (!text) return [];
     const parts = splitList(text, text.includes('·') ? /·/ : /,/);
-    if (parts.length !== 3) bad(k, 'three_key_notes', { n: parts.length });
+    if (parts.length !== KEY_NOTE_COUNT) bad(k, 'three_key_notes', { n: parts.length });
     return parts;
   };
-  /** Split on commas, but a dictionary note that itself contains commas wins (longest match first). */
-  const noteList = (k: 'topNotes' | 'heartNotes' | 'baseNotes') => {
-    const tokens = splitList(c[k], /,/);
-    const out: string[] = [];
-    for (let i = 0; i < tokens.length; ) {
-      let took = 0;
-      for (let j = tokens.length; j > i; j--) {
-        const canon = refs.noteNames.get(tokens.slice(i, j).join(', ').toLowerCase());
-        if (canon) {
-          out.push(canon);
-          took = j - i;
-          break;
-        }
+  const noteList = (k: 'topNotes' | 'heartNotes' | 'baseNotes') =>
+    splitList(c[k], /,/).flatMap((name) => {
+      const canon = refs.noteNames.get(name.toLowerCase());
+      if (!canon) {
+        bad(k, 'unknown_note', { value: name });
+        return [];
       }
-      if (!took) {
-        bad(k, 'unknown_note', { value: tokens[i]! });
-        took = 1;
-      }
-      i += took;
-    }
-    return out;
-  };
+      return [canon];
+    });
 
   const name = required('name');
   const originalBrand = required('originalBrand');
@@ -537,7 +539,11 @@ function parseFragrance(
       const head = i.path[0];
       switch (head) {
         case 'notes':
-          return i.message === 'duplicate_note' ? 'topNotes' : null;
+          return i.message === 'duplicate_note'
+            ? ({ top: 'topNotes', heart: 'heartNotes', base: 'baseNotes' } as const)[
+                String(i.path[1]) as 'top' | 'heart' | 'base'
+              ]
+            : null;
         case 'similarIds':
           return 'similar';
         case 'volumes':
@@ -584,7 +590,7 @@ function parseVolume(
     }
     const n = integer(c[k]);
     if (n === null) bad(k, 'bad_number', { value: c[k] });
-    else if (n > PRICE_MAX) bad(k, 'too_big', { max: PRICE_MAX });
+    else if (n > MAX_PRICE) bad(k, 'too_big', { max: MAX_PRICE });
     return n;
   };
   const price = money('price', false);
@@ -599,7 +605,7 @@ function parseVolume(
   else {
     onHand = integer(c.onHand);
     if (onHand === null) bad('onHand', 'bad_number', { value: c.onHand });
-    else if (onHand > 1_000_000) bad('onHand', 'too_big', { max: 1_000_000 });
+    else if (onHand > MAX_ON_HAND) bad('onHand', 'too_big', { max: MAX_ON_HAND });
   }
   if (!ok || price === null || onHand === null) return null;
   // the sale rules of the admin form: below the price, an end only with a sale

@@ -1,4 +1,5 @@
 import { CATALOG_SHEETS, type ImportIssue } from '@lummi/contracts';
+import { normalizeUzbek } from '@lummi/i18n';
 import ExcelJS from 'exceljs';
 
 /**
@@ -99,10 +100,11 @@ export function parseLabel<K extends keyof typeof LABELS>(
 export const labelsOf = (field: keyof typeof LABELS) => Object.values(LABELS[field]) as string[];
 
 export function parseYesNo(text: string): boolean | null {
-  const t = text.trim().toLowerCase();
+  // every apostrophe spelling of yoʻq (yo'q, yo`q, yo’q …) reads the same
+  const t = normalizeUzbek(text.trim().toLowerCase());
   if (t === '') return false;
   if (['да', 'yes', 'ha', 'true', '1', 'x', '✓', '+'].includes(t)) return true;
-  if (['нет', 'no', "yo'q", 'yoq', 'false', '0', '-'].includes(t)) return false;
+  if (['нет', 'no', normalizeUzbek("yo'q"), 'yoq', 'false', '0', '-'].includes(t)) return false;
   return null;
 }
 
@@ -278,17 +280,51 @@ export interface RawWorkbook {
 
 const fold1 = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
-function cellText(cell: ExcelJS.Cell): string {
+/** A cell's text, or why it cannot be trusted: a formula (its stored result may be stale) or an error value. */
+function cellText(cell: ExcelJS.Cell): { text: string; bad?: 'formula_cell' | 'error_cell' } {
   const v = cell.value;
-  if (v === null || v === undefined) return '';
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return v ? YES : NO;
+  if (v === null || v === undefined) return { text: '' };
+  if (v instanceof Date) return { text: v.toISOString().slice(0, 10) };
+  if (typeof v === 'number') return { text: String(v) };
+  if (typeof v === 'boolean') return { text: v ? YES : NO };
   if (typeof v === 'object') {
-    // formulas, rich text, hyperlinks: the displayed text
-    return cell.text.trim();
+    if ('formula' in v || 'sharedFormula' in v) return { text: '', bad: 'formula_cell' };
+    if ('error' in v) return { text: '', bad: 'error_cell' };
+    // rich text, hyperlinks: the displayed text
+    return { text: cell.text.trim() };
   }
-  return String(v).trim();
+  const text = String(v).trim();
+  return /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!|NULL!)$/.test(text)
+    ? { text: '', bad: 'error_cell' }
+    : { text };
+}
+
+/**
+ * A technical guard against decompression bombs, not a shop rule (so not a setting): the unpacked
+ * size of an xlsx may be this many times the upload cap (a real catalog file unpacks to about 10x).
+ */
+export const UNPACK_RATIO = 20;
+
+/** The sum of the uncompressed sizes in a zip's central directory, read without unpacking; null if unreadable. */
+export function zipUnpackedBytes(b: Buffer): number | null {
+  let eocd = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 22 - 65_535); i--) {
+    if (b.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return null;
+  const count = b.readUInt16LE(eocd + 10);
+  let at = b.readUInt32LE(eocd + 16);
+  let total = 0;
+  for (let n = 0; n < count; n++) {
+    if (at + 46 > b.length || b.readUInt32LE(at) !== 0x02014b50) return null;
+    const size = b.readUInt32LE(at + 24);
+    total += size === 0xffffffff ? Number.MAX_SAFE_INTEGER : size;
+    at += 46 + b.readUInt16LE(at + 28) + b.readUInt16LE(at + 30) + b.readUInt16LE(at + 32);
+  }
+  return total;
 }
 
 function readTable(
@@ -300,7 +336,7 @@ function readTable(
 ): { found: Map<string, number>; rows: { row: number; get: (key: string) => string }[] } | null {
   const headers = new Map<string, number>();
   ws.getRow(1).eachCell((cell, n) => {
-    const t = fold1(cellText(cell));
+    const t = fold1(cellText(cell).text);
     if (t && !headers.has(t)) headers.set(t, n);
   });
   const found = new Map<string, number>();
@@ -319,9 +355,21 @@ function readTable(
     return null;
   }
   const rows: { row: number; get: (key: string) => string }[] = [];
+  const flagged = new Set<string>();
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
-    const get = (key: string) => cellText(row.getCell(found.get(key)!));
+    const get = (key: string) => {
+      const { text, bad } = cellText(row.getCell(found.get(key)!));
+      if (bad) {
+        const column = cols.find((c) => c.key === key)!.header;
+        const id = `${r}|${column}`;
+        if (!flagged.has(id)) {
+          flagged.add(id);
+          issues.push({ sheet, row: r, column, code: bad });
+        }
+      }
+      return text;
+    };
     if ([...found.keys()].every((k) => get(k) === '')) continue;
     rows.push({ row: r, get });
   }

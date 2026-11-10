@@ -61,4 +61,49 @@ export const IMPORT_ISSUE_CAP = 200;
 
 export interface ImportApplied {
   counts: ImportCounts;
+  /** Counts the file set that now sit below what open orders reserve (recounted under the locks). */
+  warnings: ImportIssue[];
 }
+
+/** Every `code` an `ImportIssue` can carry; the admin has an RU and a UZ text for each (tested). */
+export const IMPORT_ISSUE_CODES = [
+  'not_xlsx',
+  'too_big',
+  'too_unpacked',
+  'too_many_rows',
+  'missing_sheet',
+  'missing_column',
+  'write_conflict',
+  'rejected',
+  'required',
+  'invalid',
+  'too_long',
+  'bad_url',
+  'bad_code',
+  'duplicate_code',
+  'duplicate_value',
+  'duplicate_volume',
+  'duplicate_similar',
+  'duplicate_note',
+  'unknown_code',
+  'need_a_volume',
+  'bad_name',
+  'name_taken',
+  'bad_flag',
+  'bad_option',
+  'unknown_note',
+  'unknown_family',
+  'unknown_similar',
+  'self_similar',
+  'three_key_notes',
+  'bad_ml',
+  'bad_number',
+  'bad_date',
+  'sale_below_price',
+  'end_without_sale',
+  'sale_ended',
+  'below_reserve',
+  'comma_in_note',
+  'formula_cell',
+  'error_cell',
+] as const;

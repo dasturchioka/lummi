@@ -80,7 +80,7 @@ export class CatalogImportController {
       throw new HttpException({ code: 'invalid', fields: ['token'] }, 422);
     }
     const res = await this.imports.apply(actor, bytes, token, await this.limits());
-    if (res.ok) return { counts: res.counts };
+    if (res.ok) return { counts: res.counts, warnings: res.warnings };
     if (res.reason === 'stale') throw new HttpException({ code: 'stale' }, 409);
     throw new HttpException({ code: 'invalid', report: res.report }, 422);
   }

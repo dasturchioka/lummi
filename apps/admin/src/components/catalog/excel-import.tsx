@@ -29,7 +29,7 @@ type State =
   | { kind: 'idle' }
   | { kind: 'busy' }
   | { kind: 'report'; file: File; report: ImportReport }
-  | { kind: 'applied'; counts: ImportApplied['counts'] }
+  | { kind: 'applied'; counts: ImportApplied['counts']; warnings: ImportIssue[] }
   | { kind: 'error'; text: string };
 
 /**
@@ -46,10 +46,25 @@ export function ExcelImport({ language, t }: { language: Language; t: AdminMessa
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
 
+  const fieldLabel = (f: string) => {
+    const key = f.replace(/^volumes\.\d+\./, '') as keyof typeof x.fields;
+    return x.fields[f as keyof typeof x.fields] ?? x.fields[key] ?? f;
+  };
   const issueText = (i: ImportIssue) =>
     fill(
       x.issues[i.code as keyof typeof x.issues] ?? x.issues.invalid,
-      Object.fromEntries(Object.entries(i.params ?? {}).map(([k, v]) => [k, String(v)])),
+      Object.fromEntries(
+        Object.entries(i.params ?? {}).map(([k, v]) => [
+          k,
+          k === 'fields'
+            ? String(v)
+                .split(', ')
+                .filter(Boolean)
+                .map(fieldLabel)
+                .join(', ')
+            : String(v),
+        ]),
+      ),
     );
 
   const pick = async (file: File | undefined) => {
@@ -80,13 +95,18 @@ export function ExcelImport({ language, t }: { language: Language; t: AdminMessa
     setApplying(false);
     if (res?.ok) {
       setConfirming(false);
-      setState({ kind: 'applied', counts: ((await res.json()) as ImportApplied).counts });
+      const done = (await res.json()) as ImportApplied;
+      setState({ kind: 'applied', counts: done.counts, warnings: done.warnings ?? [] });
       return;
     }
     setConfirming(false);
     if (res?.status === 409) setApplyError(x.stale);
-    else if (res?.status === 422) setApplyError(x.failed);
-    else setApplyError(x.failed);
+    else if (res?.status === 422) {
+      // the file was refused at write time: nothing written; show why, keep the report
+      const body = (await res.json().catch(() => null)) as { report?: ImportReport } | null;
+      if (body?.report) setState({ kind: 'report', file: state.file, report: body.report });
+      else setApplyError(x.failed);
+    } else setApplyError(x.failed);
   };
 
   const reset = () => {
@@ -178,6 +198,16 @@ export function ExcelImport({ language, t }: { language: Language; t: AdminMessa
               </div>
             </div>
             <Counts counts={state.counts} x={x} />
+            {state.warnings.length > 0 && (
+              <div className="grid gap-2" data-testid="excel-applied-warnings">
+                <Notice title={x.warnedTitle}>{x.warnedHint}</Notice>
+                <ul className="list-disc pl-9 text-sm text-pretty">
+                  {state.warnings.map((w, i) => (
+                    <li key={i}>{issueText(w)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div>
               <Button variant="outline" onClick={reset}>
                 {x.again}
@@ -274,7 +304,20 @@ function Report({
             >
               {x.errorsHint}
             </Notice>
-            <Card className="overflow-hidden bg-milk p-0">
+            {/* phones: each problem is a block, where it is (sheet · row · column) over what is wrong */}
+            <ul className="grid gap-2 sm:hidden" data-testid="excel-errors-list">
+              {report.errors.map((e, i) => (
+                <li key={i} className="rounded-button bg-milk px-4 py-3 text-sm">
+                  <p className="text-[12.5px] text-muted-foreground">
+                    {[x.sheets[e.sheet], e.row ? `${x.colRow} ${e.row}` : null, e.column]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <p className="mt-1 text-pretty">{issueText(e)}</p>
+                </li>
+              ))}
+            </ul>
+            <Card className="hidden overflow-hidden bg-milk p-0 sm:block">
               <Table>
                 <THead>
                   <TR>

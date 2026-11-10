@@ -61,7 +61,7 @@ async function transient<T>(run: () => Promise<Outcome<T>>): Promise<Outcome<T>>
 }
 
 /** 23505, whether Drizzle wrapped the driver error or not. */
-function isUniqueViolation(e: unknown): boolean {
+export function isUniqueViolation(e: unknown): boolean {
   const code = (e as { code?: string; cause?: { code?: string } }) ?? {};
   return code.code === '23505' || code.cause?.code === '23505';
 }
@@ -444,13 +444,32 @@ export class CatalogAdminService {
       i.notes[level].map((noteId, position) => ({ fragranceId: id, noteId, level, position })),
     );
     if (links.length) await tx.insert(fragranceNotes).values(links);
-    if (i.similarIds.length) {
-      await tx
-        .insert(fragranceSimilar)
-        .values(
-          i.similarIds.map((similarId, position) => ({ fragranceId: id, similarId, position })),
-        );
-    }
+    await this.writeSimilar(tx, id, i.similarIds);
+  }
+
+  private async writeSimilar(tx: DbOrTx, id: number, similarIds: number[]) {
+    if (!similarIds.length) return;
+    await tx
+      .insert(fragranceSimilar)
+      .values(similarIds.map((similarId, position) => ({ fragranceId: id, similarId, position })));
+  }
+
+  /** True when a similar id is the fragrance itself or does not exist. */
+  private async similarBad(tx: DbOrTx, ids: number[], selfId: number | null): Promise<boolean> {
+    if (!ids.length) return false;
+    if (selfId !== null && ids.includes(selfId)) return true;
+    const found = await tx.select({ id: fragrances.id }).from(fragrances).where(inArray(fragrances.id, ids));
+    return found.length !== ids.length;
+  }
+
+  /**
+   * Links a new fragrance to the similar ones the import names (they may be created in the same
+   * file, so they are known only after the first pass), with the form's own checks. False: refused.
+   */
+  async linkSimilarWithin(tx: DbOrTx, id: number, similarIds: number[]): Promise<boolean> {
+    if (await this.similarBad(tx, similarIds, id)) return false;
+    await this.writeSimilar(tx, id, similarIds);
+    return true;
   }
 
   private async insertVolume(
@@ -502,16 +521,7 @@ export class CatalogAdminService {
         if (i.notes[level].some((n) => !have.has(n))) bad.push(`notes.${level}`);
       }
     }
-    if (i.similarIds.length) {
-      if (selfId !== null && i.similarIds.includes(selfId)) bad.push('similarIds');
-      else {
-        const found = await tx
-          .select({ id: fragrances.id })
-          .from(fragrances)
-          .where(inArray(fragrances.id, i.similarIds));
-        if (found.length !== i.similarIds.length) bad.push('similarIds');
-      }
-    }
+    if (await this.similarBad(tx, i.similarIds, selfId)) bad.push('similarIds');
     i.volumes.forEach((v, n) => {
       if (v.saleEndsOn && !saleEndInstant(v.saleEndsOn)) bad.push(`volumes.${n}.saleEndsOn`);
     });
@@ -558,6 +568,22 @@ export class CatalogAdminService {
     id: number | null,
     raw: DictionaryInput,
   ): Promise<Outcome<DictionaryItem>> {
+    try {
+      return await this.db.transaction((tx) => this.saveDictionaryWithin(tx, actor, kind, id, raw));
+    } catch (e) {
+      if (isUniqueViolation(e)) return fail('conflict', ['nameRu']);
+      throw e;
+    }
+  }
+
+  /** The dictionary save inside the caller's transaction (the Excel import uses it); null actor: no audit. */
+  async saveDictionaryWithin(
+    tx: DbOrTx,
+    actor: StaffRow | null,
+    kind: 'families' | 'notes',
+    id: number | null,
+    raw: DictionaryInput,
+  ): Promise<Outcome<DictionaryItem>> {
     const table = kind === 'families' ? families : notes;
     const values = {
       nameRu: raw.nameRu,
@@ -565,51 +591,44 @@ export class CatalogAdminService {
       aliases: [...new Set(raw.aliases.map(normalizeUzbek))],
     };
     const target = kind === 'families' ? 'family' : 'note';
-    try {
-      return await this.db.transaction(async (tx) => {
-        let rowId = id;
-        if (id === null) {
-          const [row] = await tx.insert(table).values(values).returning({ id: table.id });
-          rowId = row!.id;
-        } else {
-          const [row] = await tx
-            .update(table)
-            .set(values)
-            .where(eq(table.id, id))
-            .returning({ id: table.id });
-          if (!row) return fail('not_found');
-        }
-        if (id !== null) {
-          // every fragrance that shows this note or family is searchable by its new name
-          const used =
-            kind === 'families'
-              ? await tx
-                  .select({ id: fragrances.id })
-                  .from(fragrances)
-                  .where(eq(fragrances.familyId, id))
-              : await tx
-                  .selectDistinct({ id: fragranceNotes.fragranceId })
-                  .from(fragranceNotes)
-                  .where(eq(fragranceNotes.noteId, id));
-          await reindexFragrances(
-            tx,
-            used.map((u) => u.id),
-          );
-        }
-        await this.audit.record(tx, {
-          actor: { type: 'staff', id: actor.id },
-          action: `catalog.${target}_${id === null ? 'created' : 'updated'}`,
-          targetType: target,
-          targetId: rowId,
-          payload: values,
-        });
-        const item = (await this.listDictionary(kind, tx)).find((d) => d.id === rowId)!;
-        return { ok: true, value: item } as const;
-      });
-    } catch (e) {
-      if (isUniqueViolation(e)) return fail('conflict', ['nameRu']);
-      throw e;
+    let rowId = id;
+    if (id === null) {
+      const [row] = await tx.insert(table).values(values).returning({ id: table.id });
+      rowId = row!.id;
+    } else {
+      const [row] = await tx
+        .update(table)
+        .set(values)
+        .where(eq(table.id, id))
+        .returning({ id: table.id });
+      if (!row) return fail('not_found');
     }
+    if (id !== null) {
+      // every fragrance that shows this note or family is searchable by its new name
+      const used =
+        kind === 'families'
+          ? await tx.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.familyId, id))
+          : await tx
+              .select({ id: fragranceNotes.fragranceId })
+              .from(fragranceNotes)
+              .where(eq(fragranceNotes.noteId, id))
+              .groupBy(fragranceNotes.fragranceId);
+      await reindexFragrances(
+        tx,
+        used.map((u) => u.id),
+      );
+    }
+    if (actor) {
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: `catalog.${target}_${id === null ? 'created' : 'updated'}`,
+        targetType: target,
+        targetId: rowId,
+        payload: values,
+      });
+    }
+    const item = (await this.listDictionary(kind, tx)).find((d) => d.id === rowId)!;
+    return { ok: true, value: item } as const;
   }
 
   // ---- on hand and photos ----

@@ -574,6 +574,39 @@ export const screens: Screen[] = [
       await page.getByTestId('excel-applied').waitFor();
     },
   },
+  {
+    id: 'catalog-import-applied-warning',
+    path: '/catalog/import',
+    as: 'owner',
+    ...importRestore,
+    act: async ({ page, t }) => {
+      // The reserve grew between the check and the write: the apply answer carries the warning
+      // (the shot data has no orders, so the answer is patched).
+      await page.route('**/api/admin/catalog/import/apply**', async (route) => {
+        const response = await route.fetch();
+        const body = (await response.json()) as { warnings: unknown[] };
+        body.warnings = [
+          {
+            sheet: 'volumes',
+            row: 2,
+            column: null,
+            code: 'below_reserve',
+            params: { name: 'Guidance', ml: 10, onHand: 18, reserved: 25 },
+          },
+        ];
+        await route.fulfill({ response, json: body });
+      });
+      const file = await exportWorkbook(page, (wb) => {
+        const v = wb.getWorksheet('Объёмы')!;
+        cell(v, 3, 'Цена, сум').value = 155_000;
+        cell(v, 4, 'Цена, сум').value = 160_000;
+      });
+      await page.getByTestId('excel-file').setInputFiles(file);
+      await page.getByTestId('excel-apply').click();
+      await page.getByRole('button', { name: t.catalog.excel.applyConfirm }).click();
+      await page.getByTestId('excel-applied').waitFor();
+    },
+  },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },
   {
