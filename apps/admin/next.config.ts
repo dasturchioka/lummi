@@ -5,7 +5,7 @@ import type { NextConfig } from 'next';
 const apiUrl = process.env.API_URL ?? 'http://127.0.0.1:4000';
 
 const config: NextConfig = {
-  transpilePackages: ['@lummi/contracts', '@lummi/i18n'],
+  transpilePackages: ['@lummi/contracts', '@lummi/i18n', '@lummi/rich-text'],
   async rewrites() {
     return [{ source: '/api/:path*', destination: `${apiUrl}/:path*` }];
   },

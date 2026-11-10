@@ -99,3 +99,9 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Removing a volume in the admin** (2026-11-10, ticket #17). TZ §7 does not say whether the owner can delete a 10 / 30 / 50 ml volume of a fragrance. Our build lets the owner add one but not remove it (hiding the fragrance takes it off sale), so order history and stock counts never point at a vanished row. Confirm with the customer that this is acceptable, or say when a volume should be removable.
 
 - **Broadcast button label (#14).** The link button under a broadcast reads a fixed «Открыть» / «Ochish». Does the owner want to write the label per broadcast (RU and UZ)? Default until answered: fixed.
+
+## Info pages (ticket #21)
+- The info pages are seeded as drafts from the TZ appendix and wait for the customer's approval (the owner ticks «Текст готов» in the admin). The public offer is a placeholder until the customer's lawyer sends the text.
+- Returns window «[3] дней» is written as «3 дней»: confirm the number, and have the customer's lawyer check the whole returns text (the 3-day window and the rule for opened perfume). The FAQ's first question was reworded to avoid the banned word «оригинал»; confirm the wording. Longevity in the FAQ reads «до 24 часов» (customer, 2026-11-07), not the draft's «[8–12] часов».
+- **Uzum Market store URL.** Ask the customer for the link to the LUMMI store on Uzum Market. The Contacts page names the store as plain text until then (there is no setting or placeholder for it yet); once the URL arrives, the owner can make it a link in the admin. The page also lists @lummi_manager (from `shop.managerUsername`), t.me/lummi_uz and instagram.com/lummi.uz.
+- Promo banner title is set in Manrope 600, not the Cormorant italic (promo copy is not a fragrance or set name). Ask the customer to confirm the font for banner titles.

@@ -3,6 +3,7 @@ import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
+import { LIMIT_BANNER, LONG_PAGE } from './content-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -351,6 +352,66 @@ export const screens: Screen[] = [
   // a staff member as the target is named like the actor
   { id: 'audit-staff', path: '/audit?action=staff.created', as: 'owner' },
   { id: 'audit-empty', path: '/audit?from=2020-01-01&to=2020-01-02', as: 'owner' },
+  // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
+  { id: 'content', path: '/content', as: 'owner' },
+  {
+    id: 'content-banner-editor',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.locator('[data-banner-preview]').waitFor();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'content-banner-uz',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.content.banner.edit }).first().click();
+      await page.getByRole('tab', { name: t.content.langUz }).click();
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  { id: 'content-page-editor', path: '/content/pages/faq', as: 'owner' },
+  { id: 'content-page-offer', path: '/content/pages/offer', as: 'owner' },
+  // Worst cases (break-ui): a new banner typed to every field's limit, with its live preview; a
+  // long page with the 80-character title typed into the editor (nothing is saved).
+  {
+    id: 'content-banner-limit',
+    path: '/content',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, language }) => {
+      await page.getByRole('button', { name: t.content.banner.add }).click();
+      const v = LIMIT_BANNER[language];
+      await page.locator(`#bn-title-${language}`).fill(v.title);
+      await page.locator(`#bn-sub-${language}`).fill(v.subtitle);
+      await page.locator(`#bn-price-${language}`).fill(v.priceLine);
+      await page
+        .locator('[data-banner-preview]')
+        .evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
+    id: 'content-page-long',
+    path: '/content/pages/about',
+    as: 'owner',
+    act: async ({ page, language }) => {
+      const v = LONG_PAGE[language];
+      await page.locator('#page-title').fill(v.title);
+      await page.locator('#page-body').fill(v.body);
+      // filling scrolls the field into view; the capture starts at the top like the others
+      await page.evaluate(() => window.scrollTo(0, 0));
+    },
+  },
   // Catalog (ticket #17). The shot run adds worst-case rows to the seeded 67 (see catalog-data.ts).
   { id: 'catalog', path: '/catalog', as: 'owner' },
   {

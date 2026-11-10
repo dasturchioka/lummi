@@ -217,6 +217,16 @@ export const miniappMessages = defineMessages(
       phoneAdd: 'Добавить',
       phoneWhy: 'Нужен для заказа и доставки',
       phoneFrom: 'Из Telegram',
+      info: 'Информация',
+    },
+    /** Info pages (about, delivery, returns, FAQ, contacts, offer); the texts themselves come from the API. */
+    info: {
+      notFoundTitle: 'Страница не найдена',
+      notFoundText: 'Возможно, её уже нет. Загляните в профиль.',
+      toProfile: 'В профиль',
+      emptyTitle: 'Скоро здесь будет текст',
+      emptyText: 'Мы его готовим. Загляните чуть позже.',
+      loadingLabel: 'Загружаем страницу',
     },
     registration: {
       title: 'Ваш номер телефона',
@@ -467,6 +477,15 @@ export const miniappMessages = defineMessages(
       phoneAdd: 'Qoʻshish',
       phoneWhy: 'Buyurtma va yetkazib berish uchun',
       phoneFrom: 'Telegram’dan',
+      info: 'Ma’lumot',
+    },
+    info: {
+      notFoundTitle: 'Sahifa topilmadi',
+      notFoundText: 'Balki u endi yoʻqdir. Profilga qayting.',
+      toProfile: 'Profilga',
+      emptyTitle: 'Tez orada bu yerda matn boʻladi',
+      emptyText: 'Uni tayyorlayapmiz. Birozdan keyin qayting.',
+      loadingLabel: 'Sahifa yuklanmoqda',
     },
     registration: {
       title: 'Telefon raqamingiz',

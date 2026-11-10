@@ -731,3 +731,58 @@ export type OrderRow = typeof orders.$inferSelect;
 export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
+
+/**
+ * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
+ * partial unique index is what enforces it. It sits in its own slot under the Discovery set
+ * banner, which it never replaces; with none active Home shows only the Discovery banner.
+ * `image_hash` names a rendition set of the photo pipeline (`public/<hash>-<w>.webp`).
+ */
+export const promoBanners = pgTable(
+  'promo_banners',
+  {
+    id: id(),
+    imageHash: text('image_hash'),
+    titleRu: text('title_ru').notNull(),
+    titleUz: text('title_uz').notNull(),
+    subtitleRu: text('subtitle_ru').notNull(),
+    subtitleUz: text('subtitle_uz').notNull(),
+    priceLineRu: text('price_line_ru'),
+    priceLineUz: text('price_line_uz'),
+    /** A `startapp` value (`catalog`, `p_<slug>`, ...); the Mini App maps it to a route. */
+    target: text('target').notNull().default('catalog'),
+    active: boolean('active').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('promo_banners_one_active_idx')
+      .on(t.active)
+      .where(sql`${t.active}`),
+  ],
+);
+
+/** Editable one-line texts by key (today only `home.slogan`), RU/UZ. */
+export const contentTexts = pgTable('content_texts', {
+  key: text('key').primaryKey(),
+  ru: text('ru').notNull(),
+  uz: text('uz').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Info pages (about, delivery and payment, returns, FAQ, contacts, public offer): limited Markdown, RU/UZ. */
+export const infoPages = pgTable('info_pages', {
+  id: id(),
+  slug: text('slug').notNull().unique(),
+  sort: smallint('sort').notNull(),
+  titleRu: text('title_ru').notNull(),
+  titleUz: text('title_uz').notNull(),
+  bodyRu: text('body_ru').notNull(),
+  bodyUz: text('body_uz').notNull(),
+  /** A draft is text pending the customer's approval; customers still read it (marked internally). */
+  draft: boolean('draft').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PromoBannerRow = typeof promoBanners.$inferSelect;
+export type InfoPageRow = typeof infoPages.$inferSelect;

@@ -5,7 +5,7 @@ import {
   BROADCAST_AUDIENCES,
   CAPTION_MAX,
   MAX_PHOTO_BYTES,
-  STARTAPP_TARGETS,
+  START_TARGETS,
   TEXT_MAX,
   broadcastBodySchema,
   copyWarnings,
@@ -351,7 +351,7 @@ export function BroadcastComposer({
         ? slug
           ? fill(b.targetFragrance, { name: fragranceName ?? slug })
           : b.targets.fragrance
-        : b.targets[kind as (typeof STARTAPP_TARGETS)[number]];
+        : b.targets[kind as (typeof START_TARGETS)[number]];
 
   return (
     <>
@@ -496,7 +496,7 @@ export function BroadcastComposer({
               >
                 <Select value={kind} onChange={(e) => pickTarget(e.target.value, slug)}>
                   <option value="">{b.buttonNone}</option>
-                  {STARTAPP_TARGETS.map((target) => (
+                  {START_TARGETS.map((target) => (
                     <option key={target} value={target}>
                       {b.targets[target]}
                     </option>

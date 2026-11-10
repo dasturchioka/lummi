@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
+import { LIMIT_BANNER, LONG_PAGE, longSlogan, onInfoPage } from './content-data';
 import type { ShotDb } from './db';
 
 /**
@@ -483,6 +484,26 @@ const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
     await db.restore('blue-sapphire');
   },
 };
+
+interface ShotBanner {
+  titleRu: string;
+  titleUz: string;
+  subtitleRu: string;
+  subtitleUz: string;
+  priceLineRu: string;
+  priceLineUz: string;
+}
+/** An active promo banner whose photo is a seeded bottle photo (the photo set already exists). */
+async function promoBanner(db: ShotDb, b: ShotBanner) {
+  await clearBanners(db);
+  await db.query(
+    `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
+     values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
+    [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
+  );
+}
+const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
+const sloganAtLimit = longSlogan();
 
 export const screens: ScreenDef[] = [
   {
@@ -1148,6 +1169,103 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Content (#21): the owner's promo banner on Home (the plain `home` shot is the Discovery fallback).
+  {
+    id: 'home-promo',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Осенняя подборка',
+        titleUz: 'Kuzgi tanlov',
+        subtitleRu: 'Тёплые, древесные ароматы на вечер',
+        subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
+        priceLineRu: 'от 69 000 сум',
+        priceLineUz: '69 000 soʻmdan',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  {
+    // Worst case: long unbroken words, a long price line.
+    id: 'home-promo-worst',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
+        titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
+        subtitleRu:
+          'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
+        subtitleUz:
+          'Bir necha qatorga cho‘ziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
+        priceLineRu: 'от 1 234 567 сум за набор',
+        priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  // Info pages (#21): the long RU/UZ texts, a short one, and an unknown slug.
+  { id: 'info-faq', path: '/info/faq', fullPage: true },
+  { id: 'info-about', path: '/info/about' },
+  { id: 'info-contacts', path: '/info/contacts' },
+  { id: 'info-not-found', path: '/info/nope' },
+  // While the body loads (a fresh app: Profile's list is not cached, so the title is a bar too),
+  // and a failed read.
+  {
+    id: 'info-loading',
+    path: '/info/faq',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/content\/pages\/faq$/),
+  },
+  {
+    id: 'info-error',
+    path: '/info/faq',
+    act: ({ page }) => failRead(page, /\/content\/pages\/faq$/),
+  },
+  // Worst cases (break-ui): a ~2 000-word page with every block, the 80-character UZ title with ʻ,
+  // placeholders and refused link targets; a page the owner left empty; the long title in
+  // Profile's list; a promo banner at every field's limit.
+  { id: 'info-long', path: '/info/about', fullPage: true, ...onInfoPage('about', LONG_PAGE) },
+  { id: 'info-empty', path: '/info/offer', ...onInfoPage('offer', { bodyRu: '', bodyUz: '' }) },
+  {
+    id: 'profile-long-title',
+    path: '/profile',
+    fullPage: true,
+    ...onInfoPage('about', { titleRu: LONG_PAGE.titleRu, titleUz: LONG_PAGE.titleUz }),
+  },
+  {
+    id: 'home-promo-limit',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+    },
+    teardown: ({ db }) => clearBanners(db),
+  },
+  // the narrowest phone, with the banner and the slogan at their limits (one slogan line)
+  {
+    id: 'home-content-limit-360',
+    path: '/',
+    width: 360,
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+      await sloganAtLimit.setup({ db });
+    },
+    teardown: async ({ db }) => {
+      await clearBanners(db);
+      await sloganAtLimit.teardown({ db });
+    },
+  },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {
     id: 'cart-lines',

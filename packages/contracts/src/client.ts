@@ -46,6 +46,11 @@ export const clientRoutes = {
     setQuantity: route('PATCH', '/cart/lines/:lineId', [200, 401, 404]),
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
   },
+  content: {
+    home: route('GET', '/content/home', [200, 401]),
+    pages: route('GET', '/content/pages', [200, 401]),
+    page: route('GET', '/content/pages/:slug', [200, 401, 404]),
+  },
   checkout: {
     get: route('GET', '/checkout', [200, 401]),
   },
