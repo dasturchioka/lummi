@@ -1,7 +1,8 @@
 import type { Quote } from '@lummi/contracts';
 import { normalizePromoCode } from '@lummi/contracts/constants';
-import { useState } from 'react';
-import { promoReasonText, promoWaitText } from '../../cart/promo';
+import { fill, formatMoney } from '@lummi/i18n';
+import { useEffect, useRef, useState } from 'react';
+import { promoNextText, promoReasonText, promoWaitText } from '../../cart/promo';
 import { usePrefs } from '../../lib/prefs';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
@@ -11,17 +12,35 @@ import { AlertIcon, CheckIcon, CloseIcon, Spinner, TagIcon } from '../../ui/icon
 export type PromoNotice =
   { kind: 'tooMany'; code: string; seconds: number } | { kind: 'failed'; code: string } | null;
 
+/** The line under the field: what happened, and (for a refusal) what the shopper can do. */
+type Status = { tone: 'ok' | 'alert' | 'muted'; text: string; next?: string };
+
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
 /** The field shows the stored code when it reads as that code (the server's own normalisation). */
 const same = (typed: string, stored: string | null) =>
   stored !== null && normalizePromoCode(typed) === stored;
 
 /**
+ * The keyboard is up: Telegram has shrunk the WebView (Android) or the visual viewport (iOS) to
+ * what is left above it. The WebView scrolls the caret just into view, not knowing that the
+ * floating tab bar sits on the keyboard, so the field is lifted clear of it (the clearance is the
+ * block's scroll-margin-bottom, which the browser's own focus scroll honours too).
+ */
+function liftAboveKeyboard(block: HTMLElement | null, input: HTMLInputElement | null) {
+  if (!block || !input || document.activeElement !== input) return;
+  const vv = window.visualViewport;
+  const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  const clear = parseFloat(getComputedStyle(block).scrollMarginBottom) || 0;
+  const over = block.getBoundingClientRect().bottom + clear - bottom;
+  if (over > 0) window.scrollBy({ top: over, behavior: 'smooth' });
+}
+
+/**
  * The promo code field (approved variant 2: a white row with the tag, the code and a dark
  * «Применить»). The code stays editable: while it is the stored one, the row offers to remove it
- * and the line under it says what the server's quote made of it (applied, or why not); a changed
- * code offers «Применить». The quote is the only judge: nothing is checked here, and a refused
- * code never blocks the order.
+ * and the line under it says what the server's quote made of it (applied and for how much, or
+ * why not and what to do); a changed code offers «Применить». The quote is the only judge: nothing
+ * is checked here, and a refused code never blocks the order.
  */
 export function PromoField({
   stored,
@@ -51,22 +70,42 @@ export function PromoField({
     setSeen(stored);
     setDraft(stored ?? '');
   }
+  const block = useRef<HTMLElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const lift = () => liftAboveKeyboard(block.current, input.current);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => liftAboveKeyboard(block.current, input.current);
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
+
   const typed = draft.trim();
   const showsStored = same(draft, stored);
   const canApply = typed !== '' && !showsStored;
 
   const entered = quote.promoCode;
-  const applied = showsStored && quote.discount?.type === 'promo_code';
-  let status: { tone: 'ok' | 'alert' | 'muted'; text: string } | null = null;
+  const discount = quote.discount?.type === 'promo_code' ? quote.discount : null;
+  const applied = showsStored && discount !== null;
+  let status: Status | null = null;
   // a refused or failed request speaks while the field still holds the code it sent
   if (notice && normalizePromoCode(draft) === normalizePromoCode(notice.code))
+    status =
+      notice.kind === 'tooMany'
+        ? { tone: 'alert', text: p.tooMany, next: promoWaitText(notice.seconds, t, language) }
+        : { tone: 'alert', text: p.failed, next: p.failedNext };
+  else if (applied)
+    status = {
+      tone: 'ok',
+      text: fill(p.applied, { amount: formatMoney(discount.amount, language) }),
+    };
+  else if (showsStored && entered?.invalid)
     status = {
       tone: 'alert',
-      text: notice.kind === 'tooMany' ? promoWaitText(notice.seconds, t, language) : p.failed,
+      text: promoReasonText(entered.invalid, t, language),
+      next: promoNextText(entered.invalid, t),
     };
-  else if (applied) status = { tone: 'ok', text: p.applied };
-  else if (showsStored && entered?.invalid)
-    status = { tone: 'alert', text: promoReasonText(entered.invalid, t, language) };
   else if (showsStored && entered) status = { tone: 'muted', text: p.notChosen };
 
   const submit = () => {
@@ -76,8 +115,14 @@ export function PromoField({
   };
 
   return (
-    <section className="mt-3" aria-label={p.label} data-testid="promo">
-      <Card className="p-1.5 pl-3.5">
+    <section
+      ref={block}
+      // pb-1: the focus ring's 4 px, which the totals' positioned ground would otherwise paint over
+      className="mt-3 pb-1 scroll-mb-[calc(var(--tabbar-h)+var(--tabbar-inset)+var(--safe-b,0px)+12px)]"
+      aria-label={p.label}
+      data-testid="promo"
+    >
+      <Card className="p-1.5 pl-3.5 has-[input:focus-visible]:outline-2 has-[input:focus-visible]:outline-offset-2 has-[input:focus-visible]:outline-sage">
         <form
           noValidate
           className="flex items-center gap-2.5"
@@ -91,8 +136,15 @@ export function PromoField({
             className={`shrink-0 transition-colors duration-200 ${applied ? 'text-sage-ink' : 'text-muted'}`}
           />
           <input
+            ref={input}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              // typing scrolls the caret into view, which stops a lift still under way
+              requestAnimationFrame(lift);
+            }}
+            // a keyboard already up does not resize the viewport again
+            onFocus={() => requestAnimationFrame(lift)}
             aria-label={p.label}
             placeholder={p.label}
             maxLength={64}
@@ -103,8 +155,9 @@ export function PromoField({
             enterKeyHint="go"
             aria-describedby={status ? 'promo-status' : undefined}
             data-testid="promo-input"
-            // 16 px: iOS zooms into anything smaller; the code reads upper-case, the placeholder not
-            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ink uppercase outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case"
+            // 16 px: iOS zooms into anything smaller. The code reads upper-case, the placeholder
+            // not; a code longer than the row ends in an ellipsis until the field is focused.
+            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ellipsis text-ink uppercase outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case"
           />
           {showsStored ? (
             <button
@@ -116,7 +169,8 @@ export function PromoField({
               onClick={() => {
                 if (!busy) onRemove();
               }}
-              className={`relative grid size-9 shrink-0 place-items-center rounded-btn text-muted transition-[color,background-color,transform] duration-150 ${EASE_OUT} after:absolute after:-inset-1 after:content-[''] hover:text-ink active:scale-[0.94] active:bg-field active:text-ink`}
+              // it takes the button's place once the code is the stored one: fades in, not snaps
+              className={`relative grid size-9 shrink-0 place-items-center rounded-btn text-muted transition-[color,background-color,scale,opacity] duration-150 ${EASE_OUT} after:absolute after:-inset-1 after:content-[''] hover:text-ink active:scale-[0.94] active:bg-field active:text-ink starting:scale-[0.92] starting:opacity-0`}
             >
               {pending === 'remove' ? <Spinner size={16} /> : <CloseIcon size={18} />}
             </button>
@@ -128,7 +182,7 @@ export function PromoField({
               loading={pending === 'apply'}
               aria-disabled={busy || undefined}
               data-testid="promo-apply"
-              className="h-9 shrink-0"
+              className="h-9 shrink-0 starting:scale-[0.92] starting:opacity-0"
             >
               {p.apply}
             </Button>
@@ -155,7 +209,12 @@ export function PromoField({
                 {status.tone === 'ok' ? <CheckIcon size={15} /> : <AlertIcon size={14} />}
               </span>
             )}
-            <span className="min-w-0">{status.text}</span>
+            <span className="min-w-0">
+              {status.text}
+              {status.next ? (
+                <span className="block font-normal text-muted">{status.next}</span>
+              ) : null}
+            </span>
           </p>
         ) : null}
       </div>

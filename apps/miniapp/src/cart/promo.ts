@@ -12,8 +12,13 @@ export function promoReasonText(invalid: PromoCodeInvalid, t: T, language: Langu
   return r[invalid.reason];
 }
 
-/** «До следующей: 9 минут»: the wait rounded up to whole minutes, so it never says «0 минут». */
+/** What the shopper can do about that reason in the cart: fix the code, add to the order, or go on without it. */
+export function promoNextText(invalid: PromoCodeInvalid, t: T): string {
+  return t.cart.promo.next[invalid.reason];
+}
+
+/** «До следующей попытки — 9 минут»: the wait rounded up to whole minutes, never «0 минут». */
 export function promoWaitText(seconds: number, t: T, language: Language): string {
   const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return fill(t.cart.promo.tooMany, { time: formatDuration(minutes * 60, language) });
+  return fill(t.cart.promo.tooManyNext, { time: formatDuration(minutes * 60, language) });
 }
