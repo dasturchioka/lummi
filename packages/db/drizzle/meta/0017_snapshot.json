@@ -1,5 +1,5 @@
 {
-  "id": "baf25cc6-2227-4fca-b54b-6d957c199f9b",
+  "id": "7e1efb92-fba1-42a2-97f9-3bc70f39b6bc",
   "prevId": "2772f8b4-b200-4027-ae3f-641acf090b8c",
   "version": "7",
   "dialect": "postgresql",
@@ -3189,6 +3189,109 @@
       },
       "isRLSEnabled": false
     },
+    "public.receipt_checks": {
+      "name": "receipt_checks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "receipt_checks_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_credit_ids": {
+          "name": "candidate_credit_ids",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "judgement": {
+          "name": "judgement",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "receipt_check_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "receipt_checks_receipt_idx": {
+          "name": "receipt_checks_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "receipt_checks_receipt_id_receipts_id_fk": {
+          "name": "receipt_checks_receipt_id_receipts_id_fk",
+          "tableFrom": "receipt_checks",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "receipt_checks_candidates": {
+          "name": "receipt_checks_candidates",
+          "value": "cardinality(\"receipt_checks\".\"candidate_credit_ids\") > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.receipts": {
       "name": "receipts",
       "schema": "",
@@ -4039,6 +4142,16 @@
       "values": [
         "percent",
         "fixed"
+      ]
+    },
+    "public.receipt_check_outcome": {
+      "name": "receipt_check_outcome",
+      "schema": "public",
+      "values": [
+        "confirmed",
+        "manual_review",
+        "credit_taken",
+        "stale"
       ]
     },
     "public.receipt_file_kind": {

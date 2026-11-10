@@ -894,6 +894,56 @@ export const receipts = pgTable(
   ],
 );
 
+/** What the receipt AI answered (ADR 0013), kept for the audit trail and threshold tuning only. */
+export interface StoredJudgement {
+  isReceipt: number;
+  amountMatches: number;
+  recipientMatches: number;
+  chosenCreditId: number | null;
+  choiceConfidence: number;
+  /** The judge's own verdict; only this ever confirmed anything. */
+  confirmed: boolean;
+  provider: string;
+  reason?: string;
+}
+
+/**
+ * What became of one look at a receipt: the order was paid with the chosen credit (`confirmed`),
+ * a person must decide (`manual_review`), the chosen credit had just paid another order
+ * (`credit_taken`, the receipt keeps waiting for its own money), or the receipt was decided
+ * while the AI was answering (`stale`).
+ */
+export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', [
+  'confirmed',
+  'manual_review',
+  'credit_taken',
+  'stale',
+]);
+
+/**
+ * Every time the receipt AI was asked about a Receipt (ADR 0013, #32): the candidate credits it
+ * was shown, its answer and what came of it. A receipt is asked again only when a candidate it
+ * was never shown appears, so a repeated event or job asks nothing twice.
+ */
+export const receiptChecks = pgTable(
+  'receipt_checks',
+  {
+    id: id(),
+    receiptId: bigint('receipt_id', { mode: 'number' })
+      .notNull()
+      .references(() => receipts.id),
+    /** The Candidate credits shown to the judge, oldest first. */
+    candidateCreditIds: bigint('candidate_credit_ids', { mode: 'number' }).array().notNull(),
+    judgement: jsonb('judgement').$type<StoredJudgement>().notNull(),
+    outcome: receiptCheckOutcomeEnum('outcome').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('receipt_checks_receipt_idx').on(t.receiptId, t.id),
+    check('receipt_checks_candidates', sql`cardinality(${t.candidateCreditIds}) > 0`),
+  ],
+);
+
 export type OrderRow = typeof orders.$inferSelect;
 export type OrderEventRow = typeof orderEvents.$inferSelect;
 export type { OrderStatus };
@@ -901,6 +951,7 @@ export type OrderLineRow = typeof orderLines.$inferSelect;
 export type ShopCardRow = typeof shopCard.$inferSelect;
 export type ReceiptRow = typeof receipts.$inferSelect;
 export type CreditRow = typeof credits.$inferSelect;
+export type ReceiptCheckRow = typeof receiptChecks.$inferSelect;
 
 /**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
