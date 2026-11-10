@@ -1,6 +1,7 @@
 'use client';
 
 import { CONTENT_PLACEHOLDERS, infoPageInputSchema, type AdminInfoPage } from '@lummi/contracts';
+import { keepNumbersTogether } from '@lummi/rich-text';
 import { ArrowLeft, Check } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -145,7 +146,7 @@ export function PageEditor({
                         {values[name] ? (
                           <span className="text-foreground [overflow-wrap:anywhere]">
                             {' · '}
-                            {values[name]}
+                            {keepNumbersTogether(values[name])}
                           </span>
                         ) : null}
                         {used.has(name) ? (
