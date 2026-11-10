@@ -7,6 +7,8 @@ export function sourceLine(
   t: AdminMessages,
 ): string {
   const name = t.campaigns.sources[l.source];
+  // an automatic link reads «Промокод MINUS50», not «Промокод · MINUS50»
+  if (l.source === 'promo_code' && l.sourceLabel) return `${name} ${l.sourceLabel}`;
   return l.sourceLabel ? `${name} · ${l.sourceLabel}` : name;
 }
 

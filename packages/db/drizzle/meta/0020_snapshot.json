@@ -1,5 +1,5 @@
 {
-  "id": "41280473-8b5c-442c-9de5-e6692e279a26",
+  "id": "fdda5eea-1429-4d31-98df-f3c5705146fd",
   "prevId": "996f5fb5-3e87-4abe-9259-eec14926854c",
   "version": "7",
   "dialect": "postgresql",
@@ -4599,6 +4599,7 @@
         "telegram_channel",
         "store_qr",
         "blogger",
+        "promo_code",
         "other"
       ]
     },

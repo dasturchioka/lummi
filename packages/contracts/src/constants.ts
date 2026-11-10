@@ -69,12 +69,13 @@ export const STATIC_START_TARGETS = {
 /** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
 export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
 
-/** Where a campaign link is placed (ticket #35); `blogger` and `other` carry a label. */
+/** Where a campaign link is placed (ticket #35); `blogger` and `other` carry a label; `promo_code` is the automatic link of a promo code, labelled by it. */
 export const CAMPAIGN_SOURCES = [
   'instagram',
   'telegram_channel',
   'store_qr',
   'blogger',
+  'promo_code',
   'other',
 ] as const;
 export type CampaignSource = (typeof CAMPAIGN_SOURCES)[number];

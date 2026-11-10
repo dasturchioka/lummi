@@ -286,7 +286,7 @@ describe('every promo code has a link', () => {
     const created = await createPromo();
     const list = await owner.client.admin.campaignLinks.list();
     expect(list.status === 200 && list.body).toMatchObject([
-      { promoCode: 'BLOGER10', target: 'catalog', source: 'other' },
+      { promoCode: 'BLOGER10', target: 'catalog', source: 'promo_code', sourceLabel: 'BLOGER10' },
     ]);
     // deleting an unused promo code takes its unopened link along
     await owner.client.admin.promoCodes.remove({ params: { id: created.id } });

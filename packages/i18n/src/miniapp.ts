@@ -215,6 +215,7 @@ export const miniappMessages = defineMessages(
         apply: 'Применить',
         remove: 'Убрать промокод',
         applied: 'Промокод применён: скидка {amount}',
+        inCart: 'Промокод {code} уже в корзине',
         notChosen: 'Сейчас выбрана другая скидка',
         reasons: {
           unknown: 'Такого промокода нет.',
@@ -509,6 +510,7 @@ export const miniappMessages = defineMessages(
         apply: 'Qoʻllash',
         remove: 'Promokodni olib tashlash',
         applied: 'Promokod qoʻllandi: {amount} chegirma',
+        inCart: '{code} promokodi savatda',
         notChosen: 'Hozir boshqa chegirma tanlangan',
         reasons: {
           unknown: 'Bunday promokod yoʻq.',

@@ -232,7 +232,7 @@ export class CampaignsService {
 
   /**
    * Gives a promo code its link (ticket #35: every code has one): target the catalog, source
-   * `other` labelled with the code. The link code is random and never derived from the promo code:
+   * `promo_code` labelled with the code. The link code is random and never derived from the promo code:
    * a code shared in a post must not be guessable from, or lead to, the link, and the open endpoint
    * must not be an oracle for promo codes. The code is marked as having had its link, so a link the
    * owner deletes is not made again. The owner edits it like any other link.
@@ -256,7 +256,7 @@ export class CampaignsService {
           code: randomCode(8),
           target: 'catalog',
           promoCodeId: promo.id,
-          source: 'other',
+          source: 'promo_code',
           sourceLabel: promo.code,
         })
         .onConflictDoNothing()

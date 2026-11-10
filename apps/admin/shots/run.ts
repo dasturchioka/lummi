@@ -20,7 +20,7 @@ import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
-import { seedShotCampaigns } from './campaign-data';
+import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';
 import { seedShotShopCard } from './shop-card-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
@@ -232,6 +232,7 @@ async function main() {
   await seedShotCatalog(ownerCall);
   await seedShotPromo(ownerCall);
   await seedShotCampaigns(ownerCall);
+  await seedShotOpens(databaseUrl);
   await seedShotShopCard(ownerCall);
   await seedShotBroadcasts(databaseUrl);
   await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
