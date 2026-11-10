@@ -1,6 +1,7 @@
 import type { PromoBanner as Banner } from '@lummi/contracts';
 import { keepNumbersTogether } from '@lummi/rich-text';
 import { useRouter } from '@tanstack/react-router';
+import { useState } from 'react';
 import { routeForStartParam } from '../../lib/startapp';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { usePrefs } from '../../lib/prefs';
@@ -14,6 +15,8 @@ import { ArrowRightIcon } from '../../ui/icons';
 export default function PromoBanner({ banner }: { banner: Banner }) {
   const { language } = usePrefs();
   const router = useRouter();
+  // a photo that fails leaves its Photo Blush slot, never a broken image
+  const [failed, setFailed] = useState(false);
   const uz = language === 'uz';
   const to = routeForStartParam(banner.target);
   // the owner types the text: a number stays with its thousands and its word («69 000 soʻmdan»)
@@ -31,13 +34,14 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
       className="flex min-h-[140px] w-full overflow-hidden rounded-card bg-totals text-left text-totals-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.99]"
     >
       <div aria-hidden="true" className="relative w-[34%] shrink-0 bg-photo">
-        {banner.imageHash ? (
+        {banner.imageHash && !failed ? (
           <img
             src={photoUrl(banner.imageHash, 400)}
             srcSet={photoSrcSet(banner.imageHash)}
             sizes="140px"
             alt=""
             decoding="async"
+            onError={() => setFailed(true)}
             className="absolute inset-0 size-full object-cover"
           />
         ) : null}

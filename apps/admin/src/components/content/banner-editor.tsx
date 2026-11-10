@@ -8,7 +8,7 @@ import {
 } from '@lummi/contracts';
 import { Check, ImageOff, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { photoUrl } from '@/components/catalog/photo';
 import { PhotoUpload } from '@/components/catalog/photo-upload';
 import { Badge } from '@/components/ui/badge';
@@ -288,6 +288,19 @@ export function BannerEditor({
   const [removing, setRemoving] = useState<AdminBanner | null>(null);
   const current =
     typeof editing === 'number' ? (banners.find((x) => x.id === editing) ?? null) : null;
+  const editorRef = useRef<HTMLDivElement>(null);
+  /** Opens the editor and, when it lands out of sight (below the list on a phone), brings it up. */
+  const open = (target: number | 'new') => {
+    setEditing(target);
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      if (top >= 0 && top < window.innerHeight * 0.6) return;
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+    });
+  };
 
   const toggle = async (x: AdminBanner) => {
     setBusy(x.id);
@@ -315,7 +328,7 @@ export function BannerEditor({
           <h2 className="text-base font-semibold">{b.section}</h2>
           <p className="mt-1 max-w-[64ch] text-sm text-pretty text-muted-foreground">{b.hint}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
+        <Button variant="outline" size="sm" onClick={() => open('new')}>
           <Plus strokeWidth={1.5} aria-hidden />
           {b.add}
         </Button>
@@ -356,7 +369,7 @@ export function BannerEditor({
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(x.id)}>
+                  <Button variant="outline" size="sm" onClick={() => open(x.id)}>
                     {b.edit}
                   </Button>
                   <Button
@@ -378,7 +391,10 @@ export function BannerEditor({
       )}
       {notice && <Notice title={notice} />}
       {editing !== null && (
-        <div className="grid gap-4 border-t border-border pt-5">
+        <div
+          ref={editorRef}
+          className="grid scroll-mt-24 gap-4 border-t border-border pt-5 lg:scroll-mt-10"
+        >
           <h3 className="text-[15px] font-semibold">
             {editing === 'new' ? b.creating : b.editing}
           </h3>
