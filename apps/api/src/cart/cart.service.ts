@@ -6,6 +6,7 @@ import {
   type CartLineDto,
   type CartSuggestionDto,
   type RepeatResultDto,
+  type RepeatShortReason,
 } from '@lummi/contracts';
 import {
   and,
@@ -30,7 +31,14 @@ import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
-import { loadCartQuote, loadQuote, readCartLines, toLineDto, type StoredLine } from './load-cart';
+import {
+  loadCartQuote,
+  loadQuote,
+  readCartLines,
+  toLineDto,
+  type BuilderLineView,
+  type StoredLine,
+} from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
 export type RepeatOutcome =
@@ -238,6 +246,16 @@ export class CartService {
         const room = CART_MAX_QTY - (cart.find((c) => sameLine(c, w))?.qty ?? 0);
         const added = Math.max(0, Math.min(byStock, room));
         if (added > 0) await this.grow(tx, customerId, w, added);
+        const reason: RepeatShortReason | null =
+          added === l.qty
+            ? null
+            : room < byStock
+              ? 'max_qty'
+              : added > 0
+                ? 'capped'
+                : l.kind === 'builder_set'
+                  ? 'set_incomplete'
+                  : 'sold_out';
         result.push({
           kind: l.kind,
           name: { ru: l.nameRu, uz: l.nameUz },
@@ -245,25 +263,19 @@ export class CartService {
           ml: l.ml,
           ordered: l.qty,
           added,
-          reason:
-            added === l.qty
-              ? null
-              : room < byStock
-                ? 'max_qty'
-                : added > 0
-                  ? 'capped'
-                  : l.kind === 'builder_set'
-                    ? 'set_incomplete'
-                    : 'sold_out',
+          reason,
+          missing:
+            reason === 'set_incomplete' && v?.kind === 'builder_set'
+              ? missingTenMl(v, l.setComposition ?? [])
+              : [],
         });
       }
+      // units, counted as the order's «Товары (N)»
+      const sum = (n: (r: (typeof result)[number]) => number) =>
+        result.reduce((total, r) => total + n(r), 0);
       return {
         kind: 'done',
-        result: {
-          lines: result,
-          added: result.filter((r) => r.added > 0).length,
-          of: result.length,
-        },
+        result: { lines: result, added: sum((r) => r.added), of: sum((r) => r.ordered) },
       } as const;
     });
   }
@@ -428,4 +440,19 @@ function sameLine(a: StoredLine, b: StoredLine): boolean {
   if (a.kind === 'volume') return a.volumeId === b.volumeId;
   if (a.kind === 'discovery_set') return true;
   return (a.fragranceIds ?? []).join(',') === (b.fragranceIds ?? []).join(',');
+}
+
+/**
+ * The fragrances of a builder set whose 10 ml is short, by name: the ones the quote flagged after
+ * sharing with the cart's own lines, and any of the five whose 10 ml no longer exists at all.
+ */
+function missingTenMl(
+  view: BuilderLineView,
+  composition: readonly { fragranceId: number; name: string }[],
+): string[] {
+  const found = new Set(view.items.map((i) => i.fragranceId));
+  return [
+    ...view.short.map((f) => f.name),
+    ...composition.filter((f) => !found.has(f.fragranceId)).map((f) => f.name),
+  ];
 }

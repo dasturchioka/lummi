@@ -34,6 +34,8 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
   const add = useAddToCart();
   const [sheet, setSheet] = useState<'closed' | 'open' | 'unmounted'>('unmounted');
   const [sheetError, setSheetError] = useState<string | null>(null);
+  // volumes found sold out by an add from the sheet, until the list brings fresh stock
+  const [gone, setGone] = useState<VolumeCard['ml'][]>([]);
   const [done, setDone] = useState(false);
   useEffect(armShopNote, []);
   useEffect(() => {
@@ -60,9 +62,18 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
         onError: (e) => {
           // stock moved under the list: say so and let the cards re-read what is true now; with
           // the sheet up, in the sheet (the shell's note would sit under its dim)
-          const text = e.message === 'HTTP 409' ? t.cart.soldOut : t.cart.addFailed;
-          if (sheet === 'open') setSheetError(text);
-          else showShopNote(text);
+          const soldOut = e.message === 'HTTP 409';
+          if (sheet === 'open') {
+            // the tile turns sold out and the choice moves on; the message names the volume
+            const nowGone = soldOut ? [...gone, ml] : gone;
+            setGone(nowGone);
+            const left = item.volumes.some((v) => v.available > 0 && !nowGone.includes(v.ml));
+            setSheetError(
+              soldOut
+                ? fill(left ? t.list.volumeGone : t.list.volumeGoneLast, { ml: String(ml) })
+                : t.cart.addFailed,
+            );
+          } else showShopNote(soldOut ? t.cart.soldOut : t.cart.addFailed);
           void qc.invalidateQueries({ queryKey: ['catalog'] });
           void qc.invalidateQueries({ queryKey: ['search'] });
         },
@@ -108,6 +119,7 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
         <Suspense fallback={null}>
           <VolumeSheet
             item={item}
+            gone={gone}
             open={sheet === 'open'}
             onOpenChange={(open) => setSheet(open ? 'open' : 'closed')}
             adding={add.isPending}

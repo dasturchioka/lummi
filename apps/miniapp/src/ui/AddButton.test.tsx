@@ -122,6 +122,38 @@ describe('the list card «+» (#25)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('a volume that ran out under the sheet turns sold out, names itself, and the choice moves on', async () => {
+    addLine.mockResolvedValue({ status: 409, body: { code: 'sold_out' } });
+    renderAdd(item([volume(10, 69_000, 5), volume(30, 149_000, 5), volume(50, 219_000, 0)]));
+    fireEvent.click(screen.getByTestId('list-add'));
+    await screen.findByRole('dialog', { name: 'Выберите объём' });
+    fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '10 мл закончился — выберите другой объём',
+    );
+    const ten = screen.getByRole('radio', { name: /10 мл/ });
+    expect(ten.hasAttribute('data-sold-out')).toBe(true);
+    expect(screen.getByRole('radio', { name: /30 мл/ }).getAttribute('aria-checked')).toBe('true');
+    const buy = screen.getByRole('button', { name: /В корзину/ });
+    expect(buy.textContent).toContain('149');
+    expect((buy as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('the last volume ran out under the sheet: the button stands down', async () => {
+    addLine.mockResolvedValue({ status: 409, body: { code: 'sold_out' } });
+    renderAdd(item([volume(10, 69_000, 5), volume(30, 149_000, 1), volume(50, 219_000, 0)]));
+    fireEvent.click(screen.getByTestId('list-add'));
+    await screen.findByRole('dialog', { name: 'Выберите объём' });
+    fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
+    await screen.findByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '30 мл закончился, других объёмов сейчас нет',
+    );
+    const buy = screen.getByRole('button', { name: 'Нет в наличии' }) as HTMLButtonElement;
+    expect(buy.disabled).toBe(true);
+  });
+
   it('capped by stock: says what is left instead', async () => {
     addLine.mockResolvedValue({ status: 200, body: cart(2, 2) });
     const client = new QueryClient();

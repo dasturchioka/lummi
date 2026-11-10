@@ -245,7 +245,7 @@ export const ordersMessages = defineMessages(
       /** 409: the order moved back into progress since the screen showed it. */
       repeatNotYet: 'Повторить заказ можно, когда он доставлен или отменён.',
       repeatAllTitle: 'Всё добавили в корзину',
-      /** `{n}` is the order's line count, `{added}` how many went into the cart. */
+      /** `{n}` is the order's units («Товары (N)»), `{added}` how many went into the cart. */
       repeatSomeTitle: {
         one: 'Добавили {added} из {n} товара',
         few: 'Добавили {added} из {n} товаров',
@@ -258,11 +258,16 @@ export const ordersMessages = defineMessages(
       /** Why a line went into the cart short of the order (`REPEAT_SHORT_REASONS`). */
       repeatReason: {
         sold_out: 'Нет в наличии',
-        set_incomplete: 'Одного из пяти ароматов нет в 10 мл',
-        capped: 'Добавили {added} из {ordered} шт.: больше нет в наличии',
-        max_qty: 'Добавили {added} из {ordered} шт.: в корзине не больше {max} шт.',
-        max_qty_none: 'В корзине уже {max} шт., больше не добавить',
+        /** `{names}`: the fragrances whose 10 ml is short, as the server names them. */
+        set_incomplete: 'Нет 10 мл: {names}',
+        capped: 'Больше нет в наличии',
+        max_qty: 'В корзине не больше {max} шт.',
       },
+      /** A short line's count: what went in of what the order had. */
+      repeatCount: '{added} из {ordered}',
+      /** The lines that went in whole, in one sentence under the short ones. */
+      repeatFull: 'Добавили полностью: {names}',
+      repeatFullMore: '{names} и ещё {n}',
       toCart: 'Перейти в корзину',
     },
   },
@@ -506,11 +511,13 @@ export const ordersMessages = defineMessages(
       repeatNoneText: 'Keyinroq kiring yoki katalogdan boshqa iforlarni tanlang.',
       repeatReason: {
         sold_out: 'Mavjud emas',
-        set_incomplete: 'Beshta ifordan biri 10 ml da qolmagan',
-        capped: '{ordered} tadan {added} tasi qoʻshildi: boshqa qolmagan',
-        max_qty: '{ordered} tadan {added} tasi qoʻshildi: savatda {max} tadan koʻp boʻlmaydi',
-        max_qty_none: 'Savatda allaqachon {max} ta, boshqa qoʻshib boʻlmaydi',
+        set_incomplete: '10 ml yoʻq: {names}',
+        capped: 'Boshqa qolmagan',
+        max_qty: 'Savatda {max} tadan koʻp boʻlmaydi',
       },
+      repeatCount: '{ordered} tadan {added}',
+      repeatFull: 'Toʻliq qoʻshildi: {names}',
+      repeatFullMore: '{names} va yana {n} ta',
       toCart: 'Savatga oʻtish',
     },
   },

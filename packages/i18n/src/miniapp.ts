@@ -76,6 +76,9 @@ export const miniappMessages = defineMessages(
       open: 'Открыть {name}',
       /** The list «+» with several volumes available asks which one (#25). */
       chooseVolume: 'Выберите объём',
+      /** The sheet's add found the volume gone (409): it names it and the way on. */
+      volumeGone: '{ml} мл закончился — выберите другой объём',
+      volumeGoneLast: '{ml} мл закончился, других объёмов сейчас нет',
     },
     /** The empty screens behind the tabs until their tickets build them. */
     placeholder: {
@@ -372,6 +375,8 @@ export const miniappMessages = defineMessages(
       soldOut: 'Sotuvda yoʻq',
       open: '{name}’ni ochish',
       chooseVolume: 'Hajmni tanlang',
+      volumeGone: '{ml} ml tugadi — boshqa hajmni tanlang',
+      volumeGoneLast: '{ml} ml tugadi, boshqa hajmlar hozircha yoʻq',
     },
     placeholder: {
       catalog: {

@@ -1,6 +1,7 @@
 import type { SavedPointDto } from '@lummi/contracts';
 import { fill, formatPhone } from '@lummi/i18n';
 import { useState } from 'react';
+import { deliveryPlace } from '../delivery/queries';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -16,13 +17,17 @@ const offeredFirst = (list: SavedPointDto[]) =>
   [...list].sort((a, b) => Number(a.hidden) - Number(b.hidden));
 
 /**
- * One saved pair (spec Changes 2026-11-11): the point's name in 600 and its address, then who
+ * One saved pair (spec Changes 2026-11-11): the point's name in 600, the place (`deliveryPlace`: the
+ * city in RU, the region's UZ name in UZ) and the address as BTS gives it, then who
  * collects it («Dilnoza · +998 90 765 43 21»). A point BTS hid since says so in place of the
  * recipient, with the alert icon: it is shown, never offered. `brief` (checkout's picker): the
  * address stops at two lines.
  */
 function PairText({ s, brief = false }: { s: SavedPointDto; brief?: boolean }) {
   const o = useOrdersText();
+  const { language } = usePrefs();
+  // the city as BTS names it in RU, the region's own name in UZ (#23); the street stays as given
+  const place = deliveryPlace(s.region, s.point.city, language);
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span className={`type-row font-semibold break-words ${s.hidden ? 'text-muted' : ''}`}>
@@ -31,12 +36,12 @@ function PairText({ s, brief = false }: { s: SavedPointDto; brief?: boolean }) {
       {brief ? (
         // enough to recognise it: the chosen point's card below shows the whole address
         <span className="type-small line-clamp-2 text-muted [overflow-wrap:anywhere]">
-          {s.point.city} · {s.point.address}
+          {place} · {s.point.address}
         </span>
       ) : (
         <MetaLine
           className="type-small text-muted [overflow-wrap:anywhere]"
-          parts={[s.point.city, s.point.address]}
+          parts={[place, s.point.address]}
         />
       )}
       {s.hidden ? (

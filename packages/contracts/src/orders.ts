@@ -256,9 +256,9 @@ export type OrdersPageDto = z.infer<typeof ordersPageSchema>;
 export const orderErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_found']) });
 
 /**
- * «Повторить заказ»: what became of each of the order's lines, in its order. `added` is what went
- * into the cart now; when it is below `ordered`, `reason` says why (`REPEAT_SHORT_REASONS`), else
- * it is null. Prices are today's: the cart re-quotes them.
+ * «Повторить заказ»: what became of each of the order's lines, in its order. `ordered` is the
+ * quantity the order had, `added` what went into the cart now; when it is below `ordered`, `reason`
+ * says why (`REPEAT_SHORT_REASONS`), else it is null. Prices are today's: the cart re-quotes them.
  */
 export const repeatResultSchema = z.object({
   lines: z.array(
@@ -271,11 +271,13 @@ export const repeatResultSchema = z.object({
       ordered: z.number().int().positive(),
       added: z.number().int().nonnegative(),
       reason: z.enum(REPEAT_SHORT_REASONS).nullable(),
+      /** `set_incomplete`: the fragrances whose 10 ml is short («Нет 10 мл: Rain Tea»); else empty. */
+      missing: z.array(z.string()),
     }),
   ),
-  /** Lines that went into the cart, at least one unit each: «2 из 3 товаров добавлены». */
+  /** Units that went into the cart, counted as the order's «Товары (N)»: «Добавили 4 из 7». */
   added: z.number().int().nonnegative(),
-  /** The order's lines. */
+  /** The order's units. */
   of: z.number().int().positive(),
 });
 export type RepeatResultDto = z.infer<typeof repeatResultSchema>;

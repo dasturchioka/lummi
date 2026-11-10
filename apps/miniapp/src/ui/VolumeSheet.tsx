@@ -15,10 +15,12 @@ import { VolumeStatus, VolumeTiles } from './VolumeTiles';
  * marked and not choosable; a markdown struck, with its row under the tiles as on the card), and
  * «В корзину · <price>» for the chosen one. It opens on the cheapest available, the card's «от …».
  * An add that fails says so here, above the button, where the shopper is looking (the shell's note
- * would sit under the dim). Loaded lazily, on the first press.
+ * would sit under the dim); a volume found sold out turns its tile sold out at once and the choice
+ * moves to the cheapest still available, or the button stands down. Loaded lazily, on the first press.
  */
 export function VolumeSheet({
   item,
+  gone = [],
   open,
   onOpenChange,
   adding,
@@ -26,6 +28,8 @@ export function VolumeSheet({
   onAdd,
 }: {
   item: FragranceListItem;
+  /** Volumes an add from here found sold out (409): their tiles say so at once. */
+  gone?: VolumeCard['ml'][];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   adding: boolean;
@@ -34,14 +38,19 @@ export function VolumeSheet({
   onAdd: (ml: VolumeCard['ml']) => void;
 }) {
   const { t } = usePrefs();
-  const cheapest = item.volumes
+  const volumes = item.volumes.map((v) => (gone.includes(v.ml) ? { ...v, available: 0 } : v));
+  const cheapest = volumes
     .filter((v) => v.available > 0)
     .reduce<VolumeCard | undefined>(
       (best, v) => (!best || v.effectivePrice < best.effectivePrice ? v : best),
       undefined,
     );
-  const [ml, setMl] = useState(cheapest?.ml);
-  const volume = item.volumes.find((v) => v.ml === ml);
+  const [chosen, setMl] = useState(cheapest?.ml);
+  // a choice that ran out moves to the cheapest still available; none left keeps it, sold out
+  const ml = volumes.some((v) => v.ml === chosen && v.available > 0)
+    ? chosen
+    : (cheapest?.ml ?? chosen);
+  const volume = volumes.find((v) => v.ml === ml);
   const canBuy = !!volume && volume.available > 0;
   return (
     <Sheet
@@ -60,7 +69,7 @@ export function VolumeSheet({
         {ml !== undefined ? (
           <div className="flex flex-col gap-3">
             <VolumeTiles
-              volumes={item.volumes}
+              volumes={volumes}
               selected={ml}
               onSelect={setMl}
               soldOutChoosable={false}

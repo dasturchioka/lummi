@@ -285,7 +285,7 @@ describe('cancelling an order', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('«Повторить заказ» says how many went in and gives the server’s reason for each short line', async () => {
+  it('«Повторить заказ» counts units, gives «1 из 3» and the server’s reason per short line, and sums up the rest', async () => {
     const line = (
       name: string,
       ml: number,
@@ -300,6 +300,7 @@ describe('cancelling an order', () => {
       ordered,
       added,
       reason,
+      missing: [],
     });
     repeatOrder.mockResolvedValue({
       status: 200,
@@ -309,7 +310,6 @@ describe('cancelling an order', () => {
             line('Symphony', 30, 3, 1, 'capped'),
             line('Guidance', 10, 1, 0, 'sold_out'),
             line('Tygar', 50, 5, 2, 'max_qty'),
-            line('Ink Mark', 10, 1, 0, 'max_qty'),
             {
               kind: 'builder_set',
               name: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' },
@@ -318,29 +318,43 @@ describe('cancelling an order', () => {
               ordered: 1,
               added: 0,
               reason: 'set_incomplete',
+              missing: ['Rain Tea', 'Moon Tale'],
             },
             line('Rain Tea', 10, 1, 1, null),
+            line('Black Opium', 30, 2, 2, null),
+            line('Guidance', 50, 1, 1, null),
+            line('Tygar', 10, 1, 1, null),
           ],
-          added: 3,
-          of: 6,
+          // units, as the order's «Товары (N)»: 1 + 0 + 2 + 0 + 1 + 2 + 1 + 1 of 3 + 1 + 5 + 1 + 1 + 2 + 1 + 1
+          added: 8,
+          of: 15,
         },
-        cart: { lines: [], count: 4 },
+        cart: { lines: [], count: 8 },
       },
     });
     renderView(<OrderView order={order({ status: 'delivered' })} />);
     fireEvent.click(screen.getByTestId('repeat-order'));
-    const dialog = await screen.findByRole('dialog', { name: 'Добавили 3 из 6 товаров' });
+    const dialog = await screen.findByRole('dialog', { name: 'Добавили 8 из 15 товаров' });
     expect(repeatOrder).toHaveBeenCalledWith({ params: { number: 1001 } });
-    const reasons = [...dialog.querySelectorAll('li')].map((li) => li.textContent);
-    expect(reasons).toEqual([
-      'Symphony, 30 млДобавили 1 из 3 шт.: больше нет в наличии',
-      'Guidance, 10 млНет в наличии',
-      'Tygar, 50 млДобавили 2 из 5 шт.: в корзине не больше 99 шт.',
-      'Ink Mark, 10 млВ корзине уже 99 шт., больше не добавить',
-      'Свой наборОдного из пяти ароматов нет в 10 мл',
+    const rows = [...dialog.querySelectorAll('li')].map((li) => li.textContent);
+    expect(rows).toEqual([
+      'Symphony, 30 мл1 из 3Больше нет в наличии',
+      'Guidance, 10 мл0 из 1Нет в наличии',
+      'Tygar, 50 мл2 из 5В корзине не больше 99 шт.',
+      'Свой набор0 из 1Нет 10 мл: Rain Tea, Moon Tale',
     ]);
     // a 99 cap is never «Нет в наличии»
-    expect(dialog.querySelectorAll('[data-reason="max_qty"]')).toHaveLength(2);
+    expect(dialog.querySelector('[data-reason="max_qty"]')!.textContent).not.toContain(
+      'Нет в наличии',
+    );
+    // the lines that went in whole, in one sentence: three named, the rest counted
+    expect(screen.getByTestId('repeat-full').textContent).toBe(
+      'Добавили полностью: Rain Tea 10 мл, Black Opium 30 мл, Guidance 50 мл и ещё 1',
+    );
+    // a sentence title: the Heading role, never tracked caps
+    expect(screen.getByRole('heading', { name: 'Добавили 8 из 15 товаров' }).className).toContain(
+      'type-heading',
+    );
     expect(screen.getByRole('button', { name: 'Перейти в корзину' })).toBeTruthy();
   });
 
@@ -358,6 +372,7 @@ describe('cancelling an order', () => {
               ordered: 1,
               added: 0,
               reason: 'sold_out',
+              missing: [],
             },
           ],
           added: 0,

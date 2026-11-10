@@ -65,11 +65,19 @@ async function order(client: Client, status: 'delivered' | 'cancelled' = 'delive
   return res.body.number;
 }
 
+async function nameOf(slug: string) {
+  const [f] = await t.db
+    .select({ name: fragrances.name })
+    .from(fragrances)
+    .where(eq(fragrances.slug, slug));
+  return f!.name;
+}
+
 const outcome = (r: { lines: { added: number; reason: string | null }[] }) =>
   r.lines.map((l) => [l.added, l.reason]);
 
 describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-11-11)', () => {
-  it('adds the old lines at today’s prices, skips what is unavailable and counts «2 из 3»', async () => {
+  it('adds the old lines at today’s prices, skips what is unavailable and counts units, «3 из 4»', async () => {
     const client = await shopper(t, ali, '998901234567');
     const s = await slugsOf(t, 3);
     await client.cart.addLine({ body: { slug: s[0]!, ml: 30, qty: 2 } });
@@ -87,7 +95,7 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
     const res = await client.orders.repeat({ params: { number } });
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
-    expect(res.body.result).toMatchObject({ added: 2, of: 3 });
+    expect(res.body.result).toMatchObject({ added: 3, of: 4 });
     expect(res.body.result.lines.map((l) => [l.kind, l.ordered, l.added, l.reason])).toEqual([
       ['volume', 2, 2, null],
       ['volume', 1, 0, 'sold_out'],
@@ -125,7 +133,7 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
       [5, CART_MAX_QTY - 97, 'max_qty'],
       [1, 0, 'max_qty'],
     ]);
-    expect(res.body.result).toMatchObject({ added: 2, of: 3 });
+    expect(res.body.result).toMatchObject({ added: 4, of: 9 });
     const qty = Object.fromEntries(
       res.body.cart.lines.map((l) => [l.kind === 'volume' ? `${l.slug}:${l.ml}` : l.kind, l.qty]),
     );
@@ -147,6 +155,8 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
     const res = await client.orders.repeat({ params: { number } });
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
+    expect(res.body.result.lines[0]!.missing).toEqual([await nameOf(s[2]!)]);
+    expect(res.body.result.lines[1]!.missing).toEqual([]);
     expect(res.body.result.lines.map((l) => [l.kind, l.added, l.reason])).toEqual([
       ['builder_set', 0, 'set_incomplete'],
       ['builder_set', 1, null],
@@ -173,6 +183,8 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
     if (res.status !== 200) return;
     expect(res.body.result).toMatchObject({ added: 0, of: 1 });
     expect(outcome(res.body.result)).toEqual([[0, 'set_incomplete']]);
+    // the one 10 ml the cart's own line already holds is the one named
+    expect(res.body.result.lines[0]!.missing).toEqual([await nameOf(s[0]!)]);
     expect(res.body.cart.lines.map((l) => [l.kind, l.qty, l.soldOut])).toEqual([
       ['volume', 1, false],
     ]);
@@ -196,7 +208,7 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
       ['volume', 1, null],
       ['discovery_set', 0, 'sold_out'],
     ]);
-    expect(res.body.result).toMatchObject({ added: 1, of: 3 });
+    expect(res.body.result).toMatchObject({ added: 1, of: 4 });
     expect(await t.db.select().from(cartLines)).toHaveLength(1);
   });
 

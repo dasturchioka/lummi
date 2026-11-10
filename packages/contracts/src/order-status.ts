@@ -34,7 +34,10 @@ export type OrderInputError = (typeof ORDER_INPUT_ERRORS)[number];
  * «Отменён» (the shopper's own cancel, staff's or the reserve expiry). Never one still on its way
  * or awaiting payment; the server refuses those with 409 `not_repeatable`.
  */
-export const REPEATABLE_STATUSES = ['delivered', 'cancelled'] as const satisfies readonly OrderStatus[];
+export const REPEATABLE_STATUSES = [
+  'delivered',
+  'cancelled',
+] as const satisfies readonly OrderStatus[];
 export const orderRepeatable = (status: OrderStatus): boolean =>
   (REPEATABLE_STATUSES as readonly OrderStatus[]).includes(status);
 
