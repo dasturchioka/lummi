@@ -13,6 +13,7 @@ import {
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
+import { SHOT_ORDER } from './orders-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
@@ -31,6 +32,14 @@ async function openFragrance(page: Page, which: number | string = 0) {
           .nth(which);
   await link.first().click();
   await page.locator('form [data-volume]').first().waitFor();
+}
+
+/** Presses a button on the order page and waits for the dialog it opens. */
+async function openOrderDialog(page: Page, name: string) {
+  await page.getByRole('button', { name, exact: true }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  return dialog;
 }
 
 /** Brings the volume editor to the top of the viewport (below the phone's top bar). */
@@ -1311,6 +1320,83 @@ export const screens: Screen[] = [
       });
     },
   },
+  // ---- Orders panel (#33): the list, every order state, the three dialogs, the credits
+  { id: 'orders', path: '/orders', as: 'manager' },
+  { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
+  { id: 'orders-search', path: '/orders?q=93+555', as: 'manager' },
+  { id: 'orders-empty', path: '/orders?q=7777777', as: 'manager' },
+  { id: 'order-awaiting', path: `/orders/${SHOT_ORDER.awaiting}`, as: 'manager' },
+  { id: 'order-checking', path: `/orders/${SHOT_ORDER.checking}`, as: 'manager' },
+  { id: 'order-review', path: `/orders/${SHOT_ORDER.review}`, as: 'manager' },
+  { id: 'order-paid', path: `/orders/${SHOT_ORDER.paid}`, as: 'manager' },
+  { id: 'order-assembling', path: `/orders/${SHOT_ORDER.assembling}`, as: 'manager' },
+  { id: 'order-shipped', path: `/orders/${SHOT_ORDER.shipped}`, as: 'manager' },
+  { id: 'order-delivered', path: `/orders/${SHOT_ORDER.delivered}`, as: 'manager' },
+  { id: 'order-cancelled', path: `/orders/${SHOT_ORDER.cancelled}`, as: 'owner' },
+  { id: 'order-expired', path: `/orders/${SHOT_ORDER.expired}`, as: 'manager' },
+  { id: 'order-worst', path: `/orders/${SHOT_ORDER.worst}`, as: 'owner' },
+  {
+    id: 'order-reject',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.amount_mismatch, { exact: true }).check();
+      await dialog
+        .locator('textarea')
+        .fill(
+          'В чеке 144 000 сум, а к переводу 179 100 сум. Переведите разницу и пришлите оба чека.',
+        );
+    },
+  },
+  {
+    // a shopper who reads Uzbek: the preview is in their language, whatever the manager's
+    id: 'order-reject-uz-shopper',
+    path: `/orders/${SHOT_ORDER.checking}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.other, { exact: true }).check();
+      await dialog.locator('textarea').fill('Chekda boshqa kunning sanasi koʻrsatilgan.');
+    },
+  },
+  {
+    id: 'order-reject-empty',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.other, { exact: true }).check();
+      await dialog.getByRole('button', { name: t.orders.detail.reject, exact: true }).click();
+      await dialog.getByText(t.orders.rejectNoteRequired).waitFor();
+    },
+  },
+  {
+    id: 'order-cancel',
+    path: `/orders/${SHOT_ORDER.paid}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.step.cancel);
+      await dialog.getByLabel(t.orders.cancelReasons.out_of_stock, { exact: true }).check();
+      await dialog.locator('textarea').fill('Флакон разбился при сборке');
+    },
+  },
+  {
+    id: 'order-hand',
+    path: `/orders/${SHOT_ORDER.assembling}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.step.hand_to_bts);
+      await dialog.getByLabel(t.orders.trackingLabel).fill('UZB 7704 1131 0058');
+    },
+  },
+  { id: 'credits', path: '/credits', as: 'manager' },
+  { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];
