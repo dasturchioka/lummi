@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { STARTAPP_TARGETS } from '@lummi/contracts';
 import { routeForStartParam } from './startapp';
 
 it('maps known parameters and sends everything else home', () => {
@@ -15,6 +16,13 @@ it('opens a fragrance card from p_<slug> and rejects malformed ones', () => {
   expect(routeForStartParam('p_')).toBe('/');
   expect(routeForStartParam('p_../admin')).toBe('/');
   expect(routeForStartParam('p_Tygar')).toBe('/');
+});
+
+it('opens every target the admin offers on a broadcast button', () => {
+  for (const target of STARTAPP_TARGETS) {
+    const route = routeForStartParam(target);
+    expect(target === 'home' ? route === '/' : route !== '/').toBe(true);
+  }
 });
 
 it('opens an order from o_<number> and rejects malformed ones', () => {

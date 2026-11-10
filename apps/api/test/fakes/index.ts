@@ -1,4 +1,4 @@
-import { BotBlockedError } from '../../src/edges';
+import { BotBlockedError, InvalidFileIdError } from '../../src/edges';
 import type {
   Clock,
   Edges,
@@ -7,6 +7,7 @@ import type {
   ReceiptJudge,
   ReceiptJudgeInput,
   ReceiptJudgement,
+  SendResult,
   TelegramSender,
 } from '../../src/edges';
 
@@ -27,10 +28,25 @@ export class FakeTelegramSender implements TelegramSender {
   readonly sent: OutboundMessage[] = [];
   /** Chats that answer 403, like a user who blocked the bot. */
   readonly blockedChats = new Set<number>();
-  async send(message: OutboundMessage): Promise<{ messageId: number }> {
+  /** One-shot errors per chat, thrown by the next sends to it (a 429, a 400, ...). */
+  readonly failures = new Map<number, Error[]>();
+  /** File ids Telegram no longer accepts. */
+  readonly rejectedFileIds = new Set<string>();
+  async send(message: OutboundMessage): Promise<SendResult> {
+    if (message.photo && 'fileId' in message.photo && this.rejectedFileIds.has(message.photo.fileId)) {
+      throw new InvalidFileIdError();
+    }
+    const failure = this.failures.get(message.chatId)?.shift();
+    if (failure) throw failure;
     if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
     this.sent.push(message);
-    return { messageId: this.sent.length };
+    // an upload yields a file_id, like Telegram; a send by id yields none
+    return {
+      messageId: this.sent.length,
+      ...(message.photo && 'bytes' in message.photo
+        ? { photoFileId: `file-${this.sent.length}` }
+        : {}),
+    };
   }
 }
 

@@ -10,13 +10,23 @@ export const SETTING_AREAS = [
   'search',
   'auth',
   'ai',
+  'messaging',
   'worker',
   'system',
 ] as const;
 export type SettingArea = (typeof SETTING_AREAS)[number];
 
 /** What a number means; the label is in the admin messages (`settings.units`). */
-export const SETTING_UNITS = ['none', 'seconds', 'ms', 'sum', 'ml', 'count', 'ratio'] as const;
+export const SETTING_UNITS = [
+  'none',
+  'seconds',
+  'ms',
+  'sum',
+  'ml',
+  'count',
+  'ratio',
+  'perSecond',
+] as const;
 export type SettingUnit = (typeof SETTING_UNITS)[number];
 
 /**
@@ -519,6 +529,19 @@ export const settingDefinitions = {
     hint: {
       ru: 'Фоновая проверка предупредит владельца один раз после стольких неудач подряд.',
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
+    },
+  },
+  // ---- Messaging
+  /** Broadcast sends per second. Telegram allows about 30 per second to different chats, so 25 is the ceiling (ADR 0021). Read when the worker starts. */
+  'broadcast.sendRatePerSecond': {
+    schema: z.number().int().min(1).max(25),
+    default: 25,
+    area: 'messaging',
+    unit: 'perSecond',
+    label: { ru: 'Скорость рассылки', uz: 'Xabar yuborish tezligi' },
+    hint: {
+      ru: 'Сколько сообщений в секунду уходит клиентам при рассылке. Telegram не принимает больше 30, поэтому предел 25. Применяется после перезапуска сервиса.',
+      uz: 'Ommaviy xabarda mijozlarga soniyasiga nechta xabar ketadi. Telegram 30 tadan ortiq qabul qilmaydi, shuning uchun chegara 25. Xizmat qayta ishga tushirilgach qoʻllanadi.',
     },
   },
 } as const satisfies Record<string, SettingDefinition>;

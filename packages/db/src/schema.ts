@@ -16,6 +16,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -33,6 +34,14 @@ export const themeEnum = pgEnum('theme', ['light', 'dark']);
 export const writeAccessEnum = pgEnum('write_access', ['granted', 'refused']);
 /** Who acted: the same list as an order move's actor (`ORDER_ACTOR_TYPES`). */
 export const actorTypeEnum = pgEnum('actor_type', ORDER_ACTOR_TYPES);
+
+export const broadcastAudienceEnum = pgEnum('broadcast_audience', ['all', 'ru', 'uz']);
+export const broadcastDeliveryStatusEnum = pgEnum('broadcast_delivery_status', [
+  'pending',
+  'sent',
+  'blocked',
+  'failed',
+]);
 
 /** A Customer is a Telegram account (ADR 0004). */
 export const customers = pgTable('customers', {
@@ -440,6 +449,7 @@ export type FragranceRow = typeof fragrances.$inferSelect;
 export type VolumeRow = typeof volumes.$inferSelect;
 
 export type OutboxRow = typeof outbox.$inferSelect;
+export type BroadcastRow = typeof broadcasts.$inferSelect;
 export type CustomerRow = typeof customers.$inferSelect;
 export type RegionRow = typeof regions.$inferSelect;
 export type BtsPointRow = typeof btsPoints.$inferSelect;
@@ -490,6 +500,57 @@ export const cartLines = pgTable(
 
 export type CartRow = typeof carts.$inferSelect;
 export type CartLineRow = typeof cartLines.$inferSelect;
+
+/**
+ * A broadcast (owner only, spec Changes 2026-11-07): the durable record of what was sent, to whom
+ * and by whom. Both texts are required; each customer gets the one in their language. `image_key`
+ * is a FileStore key; `button_target` a `startapp` parameter. Counts come from the deliveries.
+ */
+export const broadcasts = pgTable('broadcasts', {
+  id: id(),
+  audience: broadcastAudienceEnum('audience').notNull(),
+  textRu: text('text_ru').notNull(),
+  textUz: text('text_uz').notNull(),
+  imageKey: text('image_key'),
+  buttonTarget: text('button_target'),
+  /** Telegram's file_id of the image after its first upload; later sends go by id. */
+  photoFileId: text('photo_file_id'),
+  createdBy: bigint('created_by', { mode: 'number' }).references(() => staff.id, {
+    onDelete: 'set null',
+  }),
+  /** The sender's name as it was, so the history survives a removed staff row. */
+  createdByName: text('created_by_name').notNull(),
+  createdAt: createdAt(),
+});
+
+/**
+ * One row per broadcast x customer: the primary key is the idempotency of a send (a retried job
+ * finds its row no longer pending and sends nothing). Customers the bot may not write to are
+ * inserted as `blocked` at once; the rest are `pending` until their job runs. `queued_at` and
+ * `sending_at` work like the outbox's (ADR 0021): the queue stamp, and the claim taken before the Telegram call.
+ */
+export const broadcastDeliveries = pgTable(
+  'broadcast_deliveries',
+  {
+    broadcastId: bigint('broadcast_id', { mode: 'number' })
+      .notNull()
+      .references(() => broadcasts.id, { onDelete: 'cascade' }),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    status: broadcastDeliveryStatusEnum('status').notNull().default('pending'),
+    queuedAt: timestamp('queued_at', { withTimezone: true }),
+    sendingAt: timestamp('sending_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.broadcastId, t.customerId] }),
+    index('broadcast_deliveries_pending_idx')
+      .on(t.broadcastId)
+      .where(sql`status = 'pending'`),
+  ],
+);
 
 /*
  * Orders (ADR 0001, 0010, 0011, 0012). An order is an immutable snapshot of what was bought, at
