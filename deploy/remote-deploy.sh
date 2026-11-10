@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Runs ON the VPS, fed over SSH by the deploy job (ADR 0024). The GHCR token is the FIRST stdin line and
-# is read by the remote command before this script, so it never appears in `ps` (the host is shared):
-#   { printf '%s\n' "$GHCR_TOKEN"; cat deploy/remote-deploy.sh; } |
-#     ssh host "read -r GHCR_TOKEN; export GHCR_TOKEN; bash -s -- <image-tag> <ghcr-owner> <ghcr-actor>"
+# Runs ON the VPS (ADR 0024). The deploy job copies it to the deploy dir next to docker-compose.yml, then
+# sends the GHCR token as the only stdin line, read by the remote command first, so it never appears
+# in `ps` (the host is shared):
+#   printf '%s\n' "$GHCR_TOKEN" |
+#     ssh host "read -r GHCR_TOKEN; export GHCR_TOKEN; bash /opt/lummi-staging/remote-deploy.sh <image-tag> <ghcr-owner> <ghcr-actor> </dev/null"
+# Never pipe this script into `bash -s`: `docker compose run` reads stdin and swallows the rest of it.
 set -euo pipefail
 
 TAG="${1:?image tag}"
@@ -24,8 +26,8 @@ trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 
 dc pull
 dc up -d --wait postgres redis
-dc run --rm -T api node --import tsx ../../packages/db/src/migrate-cli.ts
-dc run --rm -T api node --import tsx src/cli/seed-staging.ts
+dc run --rm -T api node --import tsx ../../packages/db/src/migrate-cli.ts </dev/null
+dc run --rm -T api node --import tsx src/cli/seed-staging.ts </dev/null
 # The API sets the webhook and the menu button itself when it boots (BotService.start).
 dc up -d --wait --remove-orphans
 
