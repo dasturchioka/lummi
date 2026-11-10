@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { usePrefs } from '../../lib/prefs';
 import { useDiscoverySet } from '../../sets/queries';
-import { ArrowRightIcon } from '../../ui/icons';
+import { ArrowRightIcon } from '../../ui/icons-core';
 import { Money } from '../../ui/Money';
 import { SetPhoto } from '../../ui/SetPhoto';
 

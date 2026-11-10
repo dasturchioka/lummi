@@ -227,8 +227,15 @@ describe('sending', () => {
     expect(res.status).toBe(201);
     await finished(res.body.id as number);
     const to = (id: number) => t.edges.telegram.sent.find((m) => m.chatId === id)!;
-    const photo = to(ru.telegramId).photo as { bytes: Uint8Array };
-    expect(Buffer.from(photo.bytes).equals(png)).toBe(true);
+    // Send order isn't fixed, and a recipient reuses the file_id only if an earlier send already
+    // stored it: each photo is either the uploaded image's exact bytes or a file_id, and at least
+    // one carried the bytes.
+    const photos = [ru, uz].map((c) => to(c.telegramId).photo as { bytes?: Uint8Array; fileId?: string });
+    for (const p of photos) {
+      if (p.bytes) expect(Buffer.from(p.bytes).equals(png)).toBe(true);
+      else expect(typeof p.fileId).toBe('string');
+    }
+    expect(photos.some((p) => p.bytes)).toBe(true);
     expect(to(ru.telegramId).options).toEqual({
       reply_markup: {
         inline_keyboard: [

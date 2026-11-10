@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import type { CartDto } from '@lummi/contracts';
-import { CART_MAX_QTY } from '@lummi/contracts/constants';
-import { fill } from '@lummi/i18n';
+import { buyNowParam } from '@lummi/contracts/buy-now';
 import { useEffect, useState } from 'react';
+import { addNote, lineQty } from '../cart/add-note';
 import { CART_KEY, useAddToCart } from '../cart/queries';
 import { hapticSuccess } from '../lib/telegram';
 import { api } from '../lib/api';
@@ -52,10 +52,6 @@ function Loading() {
     </Screen>
   );
 }
-
-/** Units of a volume in the cart (0 when none). */
-const lineQty = (cart: CartDto | undefined, slug: string, ml: number) =>
-  cart?.lines.find((l) => l.kind === 'volume' && l.slug === slug && l.ml === ml)?.qty ?? 0;
 
 /** `/p/<slug>`, also the target of the `p_<slug>` deep link. */
 export function Fragrance() {
@@ -121,27 +117,22 @@ export function Fragrance() {
           { slug: card.slug, ml },
           {
             onSuccess: (next) => {
-              const after = next.lines.find(
-                (l) => l.kind === 'volume' && l.slug === card.slug && l.ml === ml,
-              );
-              if (after && after.qty <= before) {
-                // The server capped it: the 99 limit while stock is above it, else what is left.
-                setNote(
-                  after.qty >= CART_MAX_QTY && after.available > CART_MAX_QTY
-                    ? fill(t.cart.maxQty, { n: String(CART_MAX_QTY) })
-                    : fill(t.cart.onlyLeft, { n: String(after.available) }),
-                );
-              } else {
-                // Telegram Desktop has no haptics and this screen no tab bar: say it in words too.
-                hapticSuccess();
-                setNote(t.cart.added);
-              }
+              const said = addNote(t, before, next, card.slug, ml);
+              // Telegram Desktop has no haptics and this screen no tab bar: say it in words too.
+              if (said.added) hapticSuccess();
+              setNote(said.text);
             },
             // Stock moved under the customer (409/404): re-read the card so the dock tells the truth.
             onError: () => void qc.invalidateQueries({ queryKey: ['fragrance', card.slug] }),
           },
         );
       }}
+      onBuyNow={(ml) =>
+        void router.navigate({
+          to: '/checkout',
+          search: { item: buyNowParam({ kind: 'volume', slug: card.slug, ml }) },
+        })
+      }
     />
   );
 }

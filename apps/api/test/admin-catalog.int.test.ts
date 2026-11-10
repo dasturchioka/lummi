@@ -441,7 +441,7 @@ describe('hide and the list', () => {
 describe('permissions (ADR 0017)', () => {
   it('rejects a signed-out caller with 401', async () => {
     expect((await t.client.admin.catalog.fragrances.list({ query: {} })).status).toBe(401);
-    expect((await t.client.admin.onHand.list({ query: {} })).status).toBe(401);
+    expect((await t.client.admin.stock.list({ query: {} })).status).toBe(401);
   });
 
   it('keeps the whole catalog away from a manager (403) and writes nothing', async () => {
@@ -517,8 +517,11 @@ describe('permissions (ADR 0017)', () => {
 
   it('lists on hand for a manager', async () => {
     await created();
-    const res = await manager.client.admin.onHand.list({ query: { q: 'nuit' } });
-    expect(res.status === 200 && res.body.map((s) => [s.ml, s.onHand, s.available])).toEqual([
+    const res = await manager.client.admin.stock.list({ query: { q: 'nuit' } });
+    expect(
+      res.status === 200 &&
+        res.body.rows.filter((s) => s.kind === 'volume').map((s) => [s.ml, s.onHand, s.available]),
+    ).toEqual([
       [10, 5, 5],
       [30, 5, 5],
     ]);

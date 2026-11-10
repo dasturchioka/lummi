@@ -67,11 +67,47 @@ export const ordersMessages = defineMessages(
       fixErrors: 'Проверьте отмеченные поля.',
       unknownPoint: 'Этот пункт BTS больше недоступен. Выберите другой.',
       giftTooLong: 'Текст открытки длиннее {max} символов.',
+      /** «Купить сейчас» (#25): one item, the cart left as it is. */
+      buyNowNote: 'Только этот товар. Корзина останется как есть.',
+      /** The same, when the cart holds a promo code: it stays there and does not apply here. */
+      buyNowNotePromo: 'Только этот товар. Промокод {code} ждёт в корзине, здесь он не действует.',
+      back: 'Вернуться назад',
+      itemGoneTitle: 'Этого сейчас нет в наличии',
+      /** Why the «Купить сейчас» item cannot be ordered now, by what it is. */
+      itemGone: {
+        volume: 'Этот объём закончился. Выберите другой или загляните позже.',
+        discovery_set: 'Discovery set закончился. Загляните позже или соберите свой набор.',
+        builder_set: 'Закончились 10 мл: {names}. Выберите замену в наборе.',
+      },
+      /** 422 `unknown_item`: the fragrance or set was taken off sale while the shopper looked. */
+      itemUnknown: 'Этот товар больше не продаётся. Выберите другой в каталоге.',
+      itemNotFoundTitle: 'Это больше не продаётся',
+      itemNotFoundText: 'Выберите другой аромат в каталоге.',
+      toCatalog: 'В каталог',
+      /** «Мои пункты BTS» at checkout: a tap fills the recipient and the point. */
+      savedTitle: 'Мои пункты BTS',
       /** No shop card is set (#28): checkout is closed. */
       unavailableTitle: 'Оплата временно недоступна',
       unavailableText:
         'Оформить заказ пока нельзя: мы обновляем реквизиты для оплаты. Загляните чуть позже или напишите менеджеру.',
       writeManager: 'Написать менеджеру',
+    },
+    /** «Мои пункты BTS» in the profile (#25). */
+    saved: {
+      title: 'Мои пункты BTS',
+      note: 'Сохраняем после каждого заказа, чтобы в следующий раз оформить в одно касание.',
+      hidden: 'Пункт больше не принимает заказы',
+      remove: 'Удалить: {name}',
+      removeFailed: 'Не удалось удалить. Попробуйте ещё раз.',
+      /** The bin asks first: the pair goes, the orders stay as they were. */
+      removeTitle: 'Удалить пункт?',
+      removeText: 'Заказы не изменятся. Если снова закажете сюда, пункт сохранится опять.',
+      removeConfirm: 'Удалить',
+      removeKeep: 'Оставить',
+      /** Nothing saved yet: what will appear here and why. */
+      empty:
+        'После первого заказа здесь появятся его пункт BTS и получатель, и следующий заказ вы оформите в одно касание.',
+      loadFailed: 'Не удалось загрузить пункты.',
     },
     /** The payment screen (#28; mockups 07, 12, 13). */
     payment: {
@@ -215,6 +251,36 @@ export const ordersMessages = defineMessages(
       gotIt: 'Понятно',
       /** Under the reason of a cancelled order that had been paid (ADR 0006). */
       cancelledRefund: 'Менеджер свяжется с вами, чтобы вернуть деньги.',
+      /** «Повторить заказ» (#25): the old lines go into the cart at today's prices. */
+      repeat: 'Повторить заказ',
+      repeatFailed: 'Не удалось повторить заказ. Проверьте соединение и попробуйте ещё раз.',
+      /** 409: the order moved back into progress since the screen showed it. */
+      repeatNotYet: 'Повторить заказ можно, когда он доставлен или отменён.',
+      repeatAllTitle: 'Всё добавили в корзину',
+      /** `{n}` is the order's units («Товары (N)»), `{added}` how many went into the cart. */
+      repeatSomeTitle: {
+        one: 'Добавили {added} из {n} товара',
+        few: 'Добавили {added} из {n} товаров',
+        many: 'Добавили {added} из {n} товаров',
+        other: 'Добавили {added} из {n} товара',
+      },
+      repeatNoneTitle: 'Сейчас ничего из заказа нет в наличии',
+      repeatPrices: 'Цены сегодняшние: корзина пересчитала их заново.',
+      repeatNoneText: 'Загляните позже или выберите другие ароматы в каталоге.',
+      /** Why a line went into the cart short of the order (`REPEAT_SHORT_REASONS`). */
+      repeatReason: {
+        sold_out: 'Нет в наличии',
+        /** `{names}`: the fragrances whose 10 ml is short, as the server names them. */
+        set_incomplete: 'Нет 10 мл: {names}',
+        capped: 'Больше нет в наличии',
+        max_qty: 'В корзине не больше {max} шт.',
+      },
+      /** A short line's count: what went in of what the order had. */
+      repeatCount: '{added} из {ordered}',
+      /** The lines that went in whole, in one sentence under the short ones. */
+      repeatFull: 'Добавили полностью: {names}',
+      repeatFullMore: '{names} и ещё {n}',
+      toCart: 'Перейти в корзину',
     },
   },
   {
@@ -279,10 +345,40 @@ export const ordersMessages = defineMessages(
       fixErrors: 'Belgilangan maydonlarni tekshiring.',
       unknownPoint: 'Bu BTS punkti endi mavjud emas. Boshqasini tanlang.',
       giftTooLong: 'Otkritka matni {max} belgidan uzun.',
+      buyNowNote: 'Faqat shu mahsulot. Savat oʻzgarmaydi.',
+      buyNowNotePromo:
+        'Faqat shu mahsulot. {code} promokodi savatda qoladi, bu yerda amal qilmaydi.',
+      back: 'Ortga qaytish',
+      itemGoneTitle: 'Bu hozir mavjud emas',
+      itemGone: {
+        volume: 'Bu hajm tugadi. Boshqasini tanlang yoki keyinroq kiring.',
+        discovery_set: 'Discovery set tugadi. Keyinroq kiring yoki oʻz toʻplamingizni yigʻing.',
+        builder_set: '10 ml tugadi: {names}. Toʻplamda boshqasini tanlang.',
+      },
+      itemUnknown: 'Bu mahsulot endi sotilmaydi. Katalogdan boshqasini tanlang.',
+      itemNotFoundTitle: 'Bu endi sotilmaydi',
+      itemNotFoundText: 'Katalogdan boshqa ifor tanlang.',
+      toCatalog: 'Katalogga',
+      savedTitle: 'Mening BTS punktlarim',
       unavailableTitle: 'Toʻlov vaqtincha mavjud emas',
       unavailableText:
         'Hozircha buyurtma berib boʻlmaydi: toʻlov rekvizitlarini yangilayapmiz. Birozdan keyin qayta kiring yoki menejerga yozing.',
       writeManager: 'Menejerga yozish',
+    },
+    saved: {
+      title: 'Mening BTS punktlarim',
+      note: 'Har bir buyurtmadan keyin saqlaymiz, keyingi safar bir bosishda rasmiylashtirasiz.',
+      hidden: 'Punkt endi buyurtma qabul qilmaydi',
+      remove: 'Oʻchirish: {name}',
+      removeFailed: 'Oʻchirib boʻlmadi. Qaytadan urinib koʻring.',
+      removeTitle: 'Punkt oʻchirilsinmi?',
+      removeText:
+        'Buyurtmalar oʻzgarmaydi. Bu yerga yana buyurtma bersangiz, punkt qayta saqlanadi.',
+      removeConfirm: 'Oʻchirish',
+      removeKeep: 'Qoldirish',
+      empty:
+        'Birinchi buyurtmadan keyin bu yerda uning BTS punkti va qabul qiluvchisi paydo boʻladi, keyingi buyurtmani esa bir bosishda rasmiylashtirasiz.',
+      loadFailed: 'Punktlarni yuklab boʻlmadi.',
     },
     payment: {
       title: 'Toʻlov',
@@ -420,6 +516,29 @@ export const ordersMessages = defineMessages(
       changedCancelledTitle: 'Buyurtma allaqachon bekor qilingan',
       gotIt: 'Tushunarli',
       cancelledRefund: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
+      repeat: 'Buyurtmani takrorlash',
+      repeatFailed: 'Buyurtmani takrorlab boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
+      repeatNotYet: 'Buyurtmani u yetkazilgach yoki bekor qilingach takrorlash mumkin.',
+      repeatAllTitle: 'Hammasi savatga qoʻshildi',
+      repeatSomeTitle: {
+        one: '{n} ta mahsulotdan {added} tasi qoʻshildi',
+        few: '{n} ta mahsulotdan {added} tasi qoʻshildi',
+        many: '{n} ta mahsulotdan {added} tasi qoʻshildi',
+        other: '{n} ta mahsulotdan {added} tasi qoʻshildi',
+      },
+      repeatNoneTitle: 'Buyurtmadagi mahsulotlar hozir mavjud emas',
+      repeatPrices: 'Narxlar bugungi: savat ularni qayta hisobladi.',
+      repeatNoneText: 'Keyinroq kiring yoki katalogdan boshqa iforlarni tanlang.',
+      repeatReason: {
+        sold_out: 'Mavjud emas',
+        set_incomplete: '10 ml yoʻq: {names}',
+        capped: 'Boshqa qolmagan',
+        max_qty: 'Savatda {max} tadan koʻp boʻlmaydi',
+      },
+      repeatCount: '{ordered} tadan {added}',
+      repeatFull: 'Toʻliq qoʻshildi: {names}',
+      repeatFullMore: '{names} va yana {n} ta',
+      toCart: 'Savatga oʻtish',
     },
   },
 );

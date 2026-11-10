@@ -1,11 +1,14 @@
 import { z } from 'zod';
-import { deliveryCitySchema, regionSchema } from './delivery';
+import { parseBuyNowParam, BUY_NOW_ITEM_MAX } from './buy-now';
+import { builderLineSchema, cartSchema, discoveryLineSchema, volumeLineSchema } from './cart';
+import { btsPointSchema, deliveryCitySchema, regionSchema } from './delivery';
 import { LINE_KINDS } from './constants';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
 import { CANCEL_REASONS } from './order-machine';
 import {
   CHECKOUT_CONFLICTS,
   ORDER_INPUT_ERRORS,
+  REPEAT_SHORT_REASONS,
   ORDER_STATUSES,
   ORDERS_PAGE_DEFAULT,
   ORDERS_PAGE_MAX,
@@ -23,6 +26,51 @@ const som = z.number().int().nonnegative();
 const bilingual = z.object({ ru: z.string(), uz: z.string() });
 
 export const orderStatusSchema = z.enum(ORDER_STATUSES);
+
+/**
+ * «Купить сейчас»: the one item a checkout buys instead of the cart, as the `item` text
+ * (`volume:<slug>:<ml>`, `discovery_set`, `builder_set:<five slugs>`; `@lummi/contracts/buy-now`).
+ * Parsed into the item; anything else is a 400.
+ */
+export const buyNowItemParamSchema = z
+  .string()
+  .max(BUY_NOW_ITEM_MAX)
+  .transform((text, ctx) => {
+    const item = parseBuyNowParam(text);
+    if (!item) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'not a buy-now item' });
+      return z.NEVER;
+    }
+    return item;
+  });
+
+/** The line of a «Купить сейчас» checkout: a cart line's shape without a cart line id. */
+export const buyNowLineSchema = z.discriminatedUnion('kind', [
+  volumeLineSchema.omit({ id: true }),
+  discoveryLineSchema.omit({ id: true }),
+  builderLineSchema.omit({ id: true }),
+]);
+export type BuyNowLineDto = z.infer<typeof buyNowLineSchema>;
+
+/**
+ * A Recipient and BTS point pair the customer has ordered to («Мои пункты BTS», spec Changes
+ * 2026-11-07 BTS point selection, 2026-11-11). One per recipient phone and point; the last used
+ * comes first. Removing one never touches an order: each order keeps its own snapshot.
+ */
+export const savedPointSchema = z.object({
+  id: z.number().int(),
+  recipientName: z.string(),
+  /** E.164, as the order stored it. */
+  recipientPhone: z.string(),
+  /** The point as BTS publishes it now (its text may have changed since the order). */
+  point: btsPointSchema,
+  region: regionSchema,
+  /** BTS hid the point since: shown with the reason, never offered as the default. */
+  hidden: z.boolean(),
+  lastUsedAt: z.string().datetime(),
+});
+export type SavedPointDto = z.infer<typeof savedPointSchema>;
+export const savedPointErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_found']) });
 
 /**
  * What checkout shows before the shopper confirms: the cart's Quote with the delivery tariff of
@@ -46,6 +94,12 @@ export const checkoutSchema = z.object({
   giftMessageMax: z.number().int().positive(),
   /** Countries a Recipient phone may be from, digits without `+` (setting `orders.recipientPhoneCountryCodes`). */
   recipientPhoneCountryCodes: z.array(z.string()),
+  /** «Купить сейчас»: the one line this checkout buys (the cart is not read); null for the cart's checkout. */
+  item: buyNowLineSchema.nullable(),
+  /** «Мои пункты BTS», the last used first: offered before the point picker. */
+  savedPoints: z.array(savedPointSchema),
+  /** The pair checkout starts on: the last used whose point BTS still offers; null when none. */
+  defaultSavedPointId: z.number().int().nullable(),
   /** A shop card is set; without one checkout is closed: «Оплата временно недоступна» (#28). */
   paymentAvailable: z.boolean(),
 });
@@ -54,6 +108,8 @@ export type CheckoutDto = z.infer<typeof checkoutSchema>;
 export const checkoutQuerySchema = z.object({
   /** The region of the chosen BTS point (or of the typed address): its tariff prices delivery. */
   regionId: z.coerce.number().int().positive().optional(),
+  /** «Купить сейчас»: quote this one item instead of the cart. */
+  item: buyNowItemParamSchema.optional(),
 });
 
 /** A BTS point from our list, or the customer's own text when the point is missing (flagged on the order). */
@@ -94,6 +150,11 @@ export const createOrderBodySchema = z.object({
    * (a lost 201, a double tap) returns the order this key already made instead of a second one.
    */
   idempotencyKey: z.string().uuid(),
+  /**
+   * «Купить сейчас»: order this one item (quantity 1) instead of the cart, which is neither read
+   * nor changed; the cart's promo code and discount choice do not apply (spec Changes 2026-11-11).
+   */
+  item: buyNowItemParamSchema.optional(),
 });
 export type CreateOrderBody = z.input<typeof createOrderBodySchema>;
 /** The body after validation: the phone is E.164, defaults are filled. */
@@ -193,6 +254,40 @@ export const ordersPageSchema = z.object({
 export type OrdersPageDto = z.infer<typeof ordersPageSchema>;
 
 export const orderErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_found']) });
+
+/**
+ * «Повторить заказ»: what became of each of the order's lines, in its order. `ordered` is the
+ * quantity the order had, `added` what went into the cart now; when it is below `ordered`, `reason`
+ * says why (`REPEAT_SHORT_REASONS`), else it is null. Prices are today's: the cart re-quotes them.
+ */
+export const repeatResultSchema = z.object({
+  lines: z.array(
+    z.object({
+      kind: z.enum(LINE_KINDS),
+      name: bilingual,
+      /** The original («по мотивам …»); null for a set. */
+      brand: z.string().nullable(),
+      ml: z.number().int(),
+      ordered: z.number().int().positive(),
+      added: z.number().int().nonnegative(),
+      reason: z.enum(REPEAT_SHORT_REASONS).nullable(),
+      /** `set_incomplete`: the fragrances whose 10 ml is short («Нет 10 мл: Rain Tea»); else empty. */
+      missing: z.array(z.string()),
+    }),
+  ),
+  /** Units that went into the cart, counted as the order's «Товары (N)»: «Добавили 4 из 7». */
+  added: z.number().int().nonnegative(),
+  /** The order's units. */
+  of: z.number().int().positive(),
+});
+export type RepeatResultDto = z.infer<typeof repeatResultSchema>;
+/** 409: only a delivered or cancelled order can be repeated (`REPEATABLE_STATUSES`). */
+export const repeatRefusedSchema = z.object({ code: z.literal('not_repeatable') });
+export const repeatOrderResponseSchema = z.object({
+  result: repeatResultSchema,
+  /** The cart after, freshly quoted. */
+  cart: cartSchema,
+});
 export const phoneRequiredSchema = z.object({ code: z.literal('phone_required') });
 /**
  * 409: the total changed since the shopper saw it, or nothing is left to order (the new checkout

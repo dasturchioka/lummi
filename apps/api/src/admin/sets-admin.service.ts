@@ -11,6 +11,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { belowReserve } from '../catalog/catalog.service';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import type { Edges } from '../edges';
 import { loadDiscovery, readComposition, readDiscoverySet } from '../sets/sets';
@@ -34,6 +35,7 @@ export class SetsAdminService {
       reserved,
       // the same not-for-sale rule as the shop: fewer than five fragrances sells nothing
       available,
+      belowReserve: belowReserve(row.onHand, reserved),
       photo: row.photoHash,
       isPlaceholder: row.isPlaceholder,
       composition: composition.map((f) => ({ id: f.id, name: f.name, hidden: f.hidden })),
@@ -80,9 +82,17 @@ export class SetsAdminService {
     });
   }
 
-  async setOnHand(actor: StaffRow, onHand: number): Promise<AdminDiscoverySet> {
+  /** Same rule as a volume's count (`CatalogAdminService.setOnHand`): `expected` guards a concurrent edit; below the reserve is allowed. */
+  async setOnHand(
+    actor: StaffRow,
+    onHand: number,
+    expected?: number,
+  ): Promise<Outcome<AdminDiscoverySet>> {
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, true);
+      if (expected !== undefined && old.onHand !== expected) {
+        return { ok: false, reason: 'on_hand_changed', current: old.onHand } as const;
+      }
       await tx
         .update(discoverySet)
         .set({ onHand, updatedAt: this.edges.clock.now() })
@@ -94,7 +104,7 @@ export class SetsAdminService {
         targetId: 'discovery',
         payload: { onHand: [old.onHand, onHand] },
       });
-      return this.get(tx);
+      return { ok: true, value: await this.get(tx) } as const;
     });
   }
 

@@ -1,18 +1,24 @@
 import {
   CART_MAX_QTY,
+  orderRepeatable,
   normalizePromoCode,
   type CartDto,
   type CartLineDto,
   type CartSuggestionDto,
+  type RepeatResultDto,
+  type RepeatShortReason,
 } from '@lummi/contracts';
 import {
   and,
+  asc,
   cartLines,
   carts,
   eq,
   fragrances,
   gte,
   notInArray,
+  orderLines,
+  orders,
   sql,
   volumes,
   type Db,
@@ -25,9 +31,18 @@ import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
-import { loadCartQuote } from './load-cart';
+import {
+  loadCartQuote,
+  loadQuote,
+  readCartLines,
+  toLineDto,
+  type BuilderLineView,
+  type StoredLine,
+} from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
+export type RepeatOutcome =
+  { kind: 'done'; result: RepeatResultDto } | { kind: 'not_found' } | { kind: 'not_repeatable' };
 export type ApplyCodeOutcome =
   { kind: 'ok' } | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 export type AddSetOutcome =
@@ -47,40 +62,10 @@ export class CartService {
   /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
     const now = this.edges.clock.now();
-    const { lines, quote: q, state, city } = await loadCartQuote(tx, now, customerId);
+    const { lines, quote: q, cartState, city } = await loadCartQuote(tx, now, customerId);
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
-      lines: lines.map((l): CartLineDto => {
-        const base = {
-          id: l.lineId,
-          photo: l.photo,
-          qty: l.qty,
-          available: l.available,
-          soldOut: l.soldOut,
-          limited: l.limited,
-        };
-        return l.kind === 'volume'
-          ? {
-              ...base,
-              kind: 'volume',
-              slug: l.slug,
-              name: l.name,
-              brand: l.brand,
-              ml: l.ml as 10 | 30 | 50,
-            }
-          : l.kind === 'builder_set'
-            ? {
-                ...base,
-                kind: l.kind,
-                fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
-                short: l.short,
-              }
-            : {
-                ...base,
-                kind: l.kind,
-                fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
-              };
-      }),
+      lines: lines.map((l): CartLineDto => ({ id: l.lineId, ...toLineDto(l) })),
       quote: q,
       count: lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
       deliveryCity: city,
@@ -93,7 +78,7 @@ export class CartService {
             now,
           )
         : [],
-      promoCode: state?.promoCode ?? null,
+      promoCode: cartState?.promoCode ?? null,
     };
   }
 
@@ -175,13 +160,7 @@ export class CartService {
       const left = available(v.onHand, reserved.get(v.id) ?? 0);
       if (left === 0) return 'sold_out' as const;
       await this.touch(tx, customerId);
-      await tx
-        .insert(cartLines)
-        .values({ customerId, volumeId: v.id, qty: Math.min(qty, left, CART_MAX_QTY) })
-        .onConflictDoUpdate({
-          target: [cartLines.customerId, cartLines.volumeId],
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
-        });
+      await this.grow(tx, customerId, { kind: 'volume', volumeId: v.id }, qty, left);
       return 'ok' as const;
     });
   }
@@ -192,14 +171,7 @@ export class CartService {
       const { available: left } = await loadDiscovery(tx);
       if (left === 0) return { result: 'sold_out' } as const;
       await this.touch(tx, customerId);
-      await tx
-        .insert(cartLines)
-        .values({ customerId, kind: 'discovery_set', qty: Math.min(qty, left, CART_MAX_QTY) })
-        .onConflictDoUpdate({
-          target: [cartLines.customerId],
-          targetWhere: sql`kind = 'discovery_set'`,
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
-        });
+      await this.grow(tx, customerId, { kind: 'discovery_set' }, qty, left);
       return { result: 'ok' } as const;
     });
   }
@@ -220,26 +192,142 @@ export class CartService {
       if (left === 0) return { result: 'sold_out' } as const;
       const fragranceIds = picked.tenMl.map((t) => t.fragranceId).sort((a, b) => a - b);
       await this.touch(tx, customerId);
+      await this.grow(tx, customerId, { kind: 'builder_set', fragranceIds }, qty, left);
+      return { result: 'ok' } as const;
+    });
+  }
+
+  /**
+   * «Повторить заказ» (spec Changes 2026-11-07 cart, 2026-11-11): a delivered or cancelled order's
+   * lines go into the cart at today's prices (the cart re-quotes them). Each old line is weighed
+   * after the cart's own lines, through the same quote that judges the cart, so it takes only what
+   * they leave: capped at available and at the per-line ceiling, skipped when nothing is left (a
+   * builder set needs all five 10 ml). A line already in the cart (the same volume, the Discovery
+   * set, the same five) grows by what was added. Each line short of what was ordered says why.
+   */
+  async repeat(customerId: number, number: number): Promise<RepeatOutcome> {
+    return this.db.transaction(async (tx) => {
+      const [order] = await tx
+        .select({ id: orders.id, status: orders.status })
+        .from(orders)
+        .where(and(eq(orders.customerId, customerId), eq(orders.number, number)));
+      if (!order) return { kind: 'not_found' } as const;
+      if (!orderRepeatable(order.status)) return { kind: 'not_repeatable' } as const;
+      const old = await tx
+        .select()
+        .from(orderLines)
+        .where(eq(orderLines.orderId, order.id))
+        .orderBy(asc(orderLines.position));
+      // the cart row first, like every cart write: a concurrent add or change waits for this one
+      await this.touch(tx, customerId);
+      const cart = await readCartLines(tx, customerId);
+
+      // The old lines after every cart line (ids above the cart's), as the cart would hold them.
+      const after = Math.max(0, ...cart.map((l) => l.lineId)) + 1;
+      const wanted = old.map((l, i): StoredLine => {
+        const line = { lineId: after + i, qty: l.qty, volumeId: null, fragranceIds: null };
+        if (l.kind === 'volume') return { ...line, kind: 'volume', volumeId: l.volumeId };
+        if (l.kind === 'discovery_set') return { ...line, kind: 'discovery_set' };
+        const ids = (l.setComposition ?? []).map((f) => f.fragranceId).sort((a, b) => a - b);
+        return { ...line, kind: 'builder_set', fragranceIds: ids };
+      });
+      const { lines: views } = await loadQuote(tx, this.edges.clock.now(), customerId, {
+        kind: 'lines',
+        lines: [...cart, ...wanted],
+      });
+      const viewOf = new Map(views.map((v) => [v.lineId, v]));
+
+      const result: RepeatResultDto['lines'] = [];
+      for (const [i, l] of old.entries()) {
+        const w = wanted[i]!;
+        const v = viewOf.get(w.lineId);
+        // what stock leaves for it, and what the line it joins may still take (99 at most)
+        const byStock = !v || v.soldOut ? 0 : Math.min(l.qty, v.available);
+        const room = CART_MAX_QTY - (cart.find((c) => sameLine(c, w))?.qty ?? 0);
+        const added = Math.max(0, Math.min(byStock, room));
+        if (added > 0) await this.grow(tx, customerId, w, added);
+        const reason: RepeatShortReason | null =
+          added === l.qty
+            ? null
+            : room < byStock
+              ? 'max_qty'
+              : added > 0
+                ? 'capped'
+                : l.kind === 'builder_set'
+                  ? 'set_incomplete'
+                  : 'sold_out';
+        result.push({
+          kind: l.kind,
+          name: { ru: l.nameRu, uz: l.nameUz },
+          brand: l.brand,
+          ml: l.ml,
+          ordered: l.qty,
+          added,
+          reason,
+          missing:
+            reason === 'set_incomplete' && v?.kind === 'builder_set'
+              ? missingTenMl(v, l.setComposition ?? [])
+              : [],
+        });
+      }
+      // units, counted as the order's «Товары (N)»
+      const sum = (n: (r: (typeof result)[number]) => number) =>
+        result.reduce((total, r) => total + n(r), 0);
+      return {
+        kind: 'done',
+        result: { lines: result, added: sum((r) => r.added), of: sum((r) => r.ordered) },
+      } as const;
+    });
+  }
+
+  /**
+   * The one way a line grows: adds `qty` to the cart line holding this volume, the Discovery set or
+   * these five (or makes it), never past `left` (what is available, when the caller judged it) nor
+   * the per-line ceiling. The caller has touched the cart row first.
+   */
+  private async grow(
+    tx: DbOrTx,
+    customerId: number,
+    line:
+      | { kind: 'volume'; volumeId: number | null }
+      | { kind: 'discovery_set' }
+      | { kind: 'builder_set'; fragranceIds: number[] | null },
+    qty: number,
+    left: number = CART_MAX_QTY,
+  ) {
+    const cap = Math.min(left, CART_MAX_QTY);
+    const values = { customerId, qty: Math.min(qty, cap) };
+    const set = { qty: sql`least(${cartLines.qty} + ${qty}, ${cap})` };
+    if (line.kind === 'volume')
       await tx
         .insert(cartLines)
-        .values({
-          customerId,
-          kind: 'builder_set',
-          fragranceIds,
-          qty: Math.min(qty, left, CART_MAX_QTY),
-        })
+        .values({ ...values, volumeId: line.volumeId })
+        .onConflictDoUpdate({ target: [cartLines.customerId, cartLines.volumeId], set });
+    else if (line.kind === 'discovery_set')
+      await tx
+        .insert(cartLines)
+        .values({ ...values, kind: 'discovery_set' })
+        .onConflictDoUpdate({
+          target: [cartLines.customerId],
+          targetWhere: sql`kind = 'discovery_set'`,
+          set,
+        });
+    else
+      await tx
+        .insert(cartLines)
+        .values({ ...values, kind: 'builder_set', fragranceIds: line.fragranceIds })
         .onConflictDoUpdate({
           target: [cartLines.customerId, cartLines.fragranceIds],
           targetWhere: sql`kind = 'builder_set'`,
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
+          set,
         });
-      return { result: 'ok' } as const;
-    });
   }
 
   /** Sets a quantity, capped at available; false when the line is not this customer's. */
   async setQuantity(customerId: number, lineId: number, qty: number): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      // the cart row before the line, as every cart write takes them, so none deadlocks another
+      await this.touch(tx, customerId);
       const { lines } = await loadCartQuote(tx, this.edges.clock.now(), customerId);
       const line = lines.find((l) => l.lineId === lineId);
       if (!line) return false;
@@ -250,7 +338,6 @@ export class CartService {
           .set({ qty: Math.min(qty, line.available, CART_MAX_QTY) })
           .where(eq(cartLines.id, lineId));
       }
-      await this.touch(tx, customerId);
       return true;
     });
   }
@@ -345,4 +432,27 @@ function progress(q: {
   if (q.itemsSubtotal === 0) return 0;
   if (q.amountToFreeDelivery === 0 || q.freeDeliveryThreshold === 0) return 100;
   return Math.min(99, Math.floor((q.thresholdBaseAmount * 100) / q.freeDeliveryThreshold));
+}
+
+/** Two stored lines hold the same thing: the same volume, the Discovery set, or the same five. */
+function sameLine(a: StoredLine, b: StoredLine): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'volume') return a.volumeId === b.volumeId;
+  if (a.kind === 'discovery_set') return true;
+  return (a.fragranceIds ?? []).join(',') === (b.fragranceIds ?? []).join(',');
+}
+
+/**
+ * The fragrances of a builder set whose 10 ml is short, by name: the ones the quote flagged after
+ * sharing with the cart's own lines, and any of the five whose 10 ml no longer exists at all.
+ */
+function missingTenMl(
+  view: BuilderLineView,
+  composition: readonly { fragranceId: number; name: string }[],
+): string[] {
+  const found = new Set(view.items.map((i) => i.fragranceId));
+  return [
+    ...view.short.map((f) => f.name),
+    ...composition.filter((f) => !found.has(f.fragranceId)).map((f) => f.name),
+  ];
 }

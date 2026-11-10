@@ -39,6 +39,10 @@ import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
+import { CustomersAdminController } from './admin/customers-admin.controller';
+import { StockAdminController } from './admin/stock-admin.controller';
+import { CustomersAdminService } from './admin/customers-admin.service';
+import { StockAdminService } from './admin/stock-admin.service';
 import { SetsAdminService } from './admin/sets-admin.service';
 import { SetsController } from './sets/sets.controller';
 import { SetsService } from './sets/sets.service';
@@ -104,6 +108,8 @@ export class AppModule {
         CatalogImportController,
         OnHandController,
         SetsAdminController,
+        StockAdminController,
+        CustomersAdminController,
         ContentController,
         ContentAdminController,
         DeliveryController,
@@ -139,6 +145,8 @@ export class AppModule {
         CatalogAdminService,
         CatalogImportService,
         SetsAdminService,
+        StockAdminService,
+        CustomersAdminService,
         ContentService,
         SearchService,
         CustomersService,

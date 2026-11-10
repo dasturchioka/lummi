@@ -1,24 +1,18 @@
 import type { Bilingual, FragranceCard, VolumeCard } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react';
-import { keepNumberWithWord, saleEndDate } from '../../lib/format';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { keepNumberWithWord } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
-import { Badge, FragranceBadge } from '../../ui/Badge';
+import { FragranceBadge } from '../../ui/Badge';
+import { BuyPair } from '../../ui/BuyPair';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { DockNote } from '../../ui/DockNote';
 import { LabelDivider } from '../../ui/LabelDivider';
-import { DISC, EASE_OUT } from '../../ui/photoDisc';
+import { DISC } from '../../ui/photoDisc';
 import {
   ArrowLeftIcon,
   BottleIcon,
@@ -31,8 +25,8 @@ import {
   SunMoonIcon,
   WaveIcon,
 } from '../../ui/icons';
-import { Money } from '../../ui/Money';
 import { Screen } from '../../ui/Screen';
+import { VolumeStatus, VolumeTiles } from '../../ui/VolumeTiles';
 
 const TIME_ICON = {
   day: <SunIcon size={24} />,
@@ -212,165 +206,6 @@ function Traits({ card }: { card: FragranceCard }) {
   );
 }
 
-/**
- * One volume, top-aligned so «10 мл / 30 мл / 50 мл» share one baseline whatever sits under them:
- * the volume, then (when any tile shows a markdown) the struck regular price or an empty slot of
- * the same height, then the price to pay, Sage Ink on an unselected tile during a markdown.
- * Selected is the Graphite fill. Sold out is transparent with a faint outline and says so; a
- * sold-out volume can still be chosen (to see its photo), and then gets the selected fill at
- * reduced emphasis (Muted Ink), so it reads as chosen but never as buyable.
- */
-function VolumeTile({
-  volume: v,
-  selected,
-  strikeSlot,
-  onSelect,
-  onKeyDown,
-  tileRef,
-}: {
-  volume: VolumeCard;
-  selected: boolean;
-  /** Some tile shows a struck regular price: every tile keeps a line for it. */
-  strikeSlot: boolean;
-  onSelect: (ml: VolumeCard['ml']) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
-  tileRef: (el: HTMLButtonElement | null) => void;
-}) {
-  const { t } = usePrefs();
-  const soldOut = v.available === 0;
-  const struck = !soldOut && v.salePrice !== null;
-  const look = soldOut
-    ? selected
-      ? 'bg-muted text-btn-ink'
-      : 'bg-transparent text-faint shadow-[inset_0_0_0_1px_var(--c-line)]'
-    : selected
-      ? 'bg-btn text-btn-ink'
-      : 'bg-card text-ink inset-line';
-  const quiet = selected ? 'opacity-80' : 'text-muted';
-  return (
-    <button
-      ref={tileRef}
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      tabIndex={selected ? 0 : -1}
-      data-sold-out={soldOut || undefined}
-      onClick={() => onSelect(v.ml)}
-      onKeyDown={onKeyDown}
-      className={`flex min-h-16 min-w-0 flex-col items-center justify-start rounded-btn px-1 pt-3 pb-2.5 transition-[background-color,color,box-shadow,transform] duration-150 ${EASE_OUT} active:scale-[0.97] ${look}`}
-    >
-      <span className="type-price leading-5">
-        {v.ml} {t.card.ml}
-      </span>
-      {struck ? (
-        <s className={`mt-0.5 ${selected ? 'opacity-60' : 'text-muted'}`}>
-          <Money amount={v.price} size="small" />
-        </s>
-      ) : strikeSlot ? (
-        <span aria-hidden="true" className="type-price-sm invisible mt-0.5">
-          0
-        </span>
-      ) : null}
-      {soldOut ? (
-        <span className={`type-caption mt-1 ${quiet}`}>{t.card.soldOut}</span>
-      ) : (
-        <Money
-          amount={v.effectivePrice}
-          size="small"
-          className={`${strikeSlot ? '' : 'mt-0.5'} ${
-            struck && !selected ? 'text-sage-ink' : quiet
-          }`}
-        />
-      )}
-    </button>
-  );
-}
-
-/** The 10 / 30 / 50 ml radio group: one tab stop, arrows move the choice (as `Segmented`). */
-function VolumeTiles({
-  volumes,
-  selected,
-  onSelect,
-}: {
-  volumes: VolumeCard[];
-  selected: VolumeCard['ml'];
-  onSelect: (ml: VolumeCard['ml']) => void;
-}) {
-  const { t } = usePrefs();
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const strikeSlot = volumes.some((v) => v.available > 0 && v.salePrice !== null);
-  const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
-    const dir =
-      e.key === 'ArrowRight' || e.key === 'ArrowDown'
-        ? 1
-        : e.key === 'ArrowLeft' || e.key === 'ArrowUp'
-          ? -1
-          : 0;
-    if (!dir) return;
-    e.preventDefault();
-    const next = (i + dir + volumes.length) % volumes.length;
-    const v = volumes[next];
-    if (v) {
-      onSelect(v.ml);
-      refs.current[next]?.focus();
-    }
-  };
-  return (
-    <div role="radiogroup" aria-label={t.card.volume} className="grid grid-cols-3 gap-2">
-      {volumes.map((v, i) => (
-        <VolumeTile
-          key={v.ml}
-          volume={v}
-          selected={v.ml === selected}
-          strikeSlot={strikeSlot}
-          onSelect={onSelect}
-          onKeyDown={(e) => onKey(e, i)}
-          tileRef={(el) => {
-            refs.current[i] = el;
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * Under the tiles, for the chosen volume that can be bought: «В наличии» with a Sage dot and,
- * during a markdown, a row that names the volume it belongs to («10 мл · −20% · до 15 ноября»;
- * ADR 0008: no timer). A sold-out volume shows nothing here: its tile and the dock already say it.
- */
-function VolumeStatus({ volume }: { volume: VolumeCard }) {
-  const { t, language } = usePrefs();
-  if (volume.available === 0) return null;
-  const until =
-    volume.saleEndsAt !== null
-      ? fill(t.card.saleUntil, { date: saleEndDate(volume.saleEndsAt, language) })
-      : null;
-  return (
-    <div className="type-small flex flex-col gap-1.5 text-muted">
-      <span className="flex items-center gap-2" data-availability="in-stock">
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-pill bg-sage" />
-        {t.card.inStock}
-      </span>
-      {volume.salePrice !== null ? (
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          <span className="text-ink">
-            {volume.ml} {t.card.ml}
-          </span>
-          <span aria-hidden="true">·</span>
-          <Badge tone="discount">−{volume.salePercent}%</Badge>
-          {until ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="whitespace-nowrap">{until}</span>
-            </>
-          ) : null}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 /** The notes pyramid (top / heart / base); an empty level is left out, and with it no card at all. */
 function Pyramid({ card }: { card: FragranceCard }) {
   const { t, language } = usePrefs();
@@ -392,13 +227,8 @@ function Pyramid({ card }: { card: FragranceCard }) {
 }
 
 /**
- * The dock (approved comp): «В корзину · <price>» and «Купить сейчас» for the chosen volume; a sold-out
- * volume turns it into one disabled button with the reason. This is its final shape; the cart
- * ticket (#18) wires «В корзину» and the purchase shortcuts ticket (#25) «Купить сейчас».
- *
- * The comp's single line needs about 356 px with a seven-digit UZ price; on a narrower phone
- * (360 px Androids, 375 px iPhones) the price steps under «В корзину» instead of being clipped. An
- * invisible copy of the single line measures what it needs, so the choice follows the real text.
+ * The dock (approved comp): «В корзину · <price>» and «Купить сейчас» for the chosen volume
+ * (`BuyPair`); a sold-out volume turns it into one disabled button with the reason.
  */
 function Dock({
   volume,
@@ -415,76 +245,22 @@ function Dock({
   onBuyNow?: (ml: VolumeCard['ml']) => void;
 }) {
   const { t } = usePrefs();
-  const row = useRef<HTMLDivElement>(null);
-  const probe = useRef<HTMLDivElement>(null);
-  const [stacked, setStacked] = useState(false);
-  const canBuy = volume !== undefined && volume.available > 0;
-  useLayoutEffect(() => {
-    const r = row.current;
-    const p = probe.current;
-    if (!r || !p || typeof ResizeObserver === 'undefined') return;
-    const check = () => setStacked(p.scrollWidth > r.clientWidth);
-    check();
-    const observer = new ResizeObserver(check);
-    observer.observe(r);
-    observer.observe(p); // the fonts arriving change what the line needs
-    return () => observer.disconnect();
-  }, [canBuy]);
-
-  if (!canBuy)
+  if (volume === undefined || volume.available === 0)
     return (
       <Button block disabled data-availability="sold-out">
         {t.card.unavailable}
       </Button>
     );
-  const price = <Money amount={volume.effectivePrice} />;
-  const oneLine = (
-    <span className="flex items-center gap-1.5">
-      {t.card.toCart}
-      <span aria-hidden="true" className="opacity-60">
-        ·
-      </span>
-      {price}
-    </span>
-  );
   return (
     <div className="relative">
       <DockNote text={note} />
-      <div ref={row} className="relative flex gap-2">
-        {/* Clipped to the row, so the measuring copy never widens the page. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none invisible absolute inset-0 overflow-hidden"
-        >
-          <div ref={probe} className="type-button flex w-max gap-2">
-            <span className="px-3.5">{oneLine}</span>
-            <span className="px-3.5">{t.card.buyNow}</span>
-          </div>
-        </div>
-        <Button
-          size="pair"
-          className="min-w-0 flex-1"
-          loading={adding}
-          onClick={() => onAddToCart?.(volume.ml)}
-        >
-          {stacked ? (
-            <span className="flex flex-col items-center gap-1">
-              {t.card.toCart}
-              <Money amount={volume.effectivePrice} size="small" className="opacity-80" />
-            </span>
-          ) : (
-            oneLine
-          )}
-        </Button>
-        <Button
-          variant="tonal"
-          size="pair"
-          className="shrink-0"
-          onClick={() => onBuyNow?.(volume.ml)}
-        >
-          {t.card.buyNow}
-        </Button>
-      </div>
+      <BuyPair
+        toCart={t.card.toCart}
+        price={volume.effectivePrice}
+        adding={adding}
+        onAdd={() => onAddToCart?.(volume.ml)}
+        onBuyNow={() => onBuyNow?.(volume.ml)}
+      />
     </div>
   );
 }

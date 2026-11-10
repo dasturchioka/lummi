@@ -1,4 +1,12 @@
-import type { CheckoutDto, CreateOrderBody } from '@lummi/contracts';
+import type {
+  BuyNowLineDto,
+  CartDto,
+  CheckoutDto,
+  CreateOrderBody,
+  QuoteLine,
+  SavedPointDto,
+} from '@lummi/contracts';
+import { parseBuyNowParam } from '@lummi/contracts/buy-now';
 import {
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
@@ -6,17 +14,22 @@ import {
   normalizeRecipientPhone,
 } from '@lummi/contracts/constants';
 import { fill, formatPhone } from '@lummi/i18n';
+import { setsMessages } from '@lummi/i18n/sets';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { promoReasonText } from '../cart/promo';
+import { CART_KEY } from '../cart/queries';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
 import { CardIcon } from '../orders/icons';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
+import { OrderLine } from '../orders/OrderLine';
+import { SavedPointPicker } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
+import { goBackOrCatalog } from '../lib/navigation';
 import { useRegistration } from '../lib/registration';
 import { hapticSuccess, openManagerChat } from '../lib/telegram';
 import { Button } from '../ui/Button';
@@ -27,6 +40,7 @@ import { Figure } from '../ui/Figure';
 import {
   AlertIcon,
   BagIcon,
+  BottleIcon,
   CheckIcon,
   ChevronIcon,
   GiftIcon,
@@ -141,6 +155,66 @@ function newAttemptKey(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/**
+ * The one item of a «Купить сейчас» checkout, as an order line reads (`OrderLine`: thumbnail,
+ * «по мотивам» and the italic name, or «НАБОР» and the set's name with its five, the line total in
+ * Sage Ink during a markdown), priced by the server's quote, then the note that the cart stays.
+ * When the cart holds a promo code (as the shell last read it; no request of its own), the note
+ * names it: it waits in the cart and does not apply here, so a missing discount reads as meant.
+ */
+function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }) {
+  const o = useOrdersText();
+  const code = useQueryClient().getQueryData<CartDto>(CART_KEY)?.promoCode;
+  const [before = '', after = ''] = o.checkout.buyNowNotePromo.split('{code}');
+  const name =
+    line.kind === 'volume'
+      ? { ru: line.name, uz: line.name }
+      : line.kind === 'discovery_set'
+        ? { ru: setsMessages.ru.sets.lineDiscovery, uz: setsMessages.uz.sets.lineDiscovery }
+        : { ru: setsMessages.ru.sets.lineBuilder, uz: setsMessages.uz.sets.lineBuilder };
+  return (
+    <>
+      <Card as="ul" className="overflow-hidden" data-testid="buy-now-item">
+        <OrderLine
+          line={{
+            kind: line.kind,
+            brand: line.kind === 'volume' ? line.brand : null,
+            name,
+            setComposition: line.kind === 'volume' ? null : line.fragrances,
+            photo: line.photo,
+            ml: line.kind === 'volume' ? line.ml : 10,
+            qty: priced.qty,
+            lineTotal: priced.lineTotal,
+            markedDown: priced.markedDown,
+          }}
+        />
+      </Card>
+      <p className="type-small mt-2 mb-3 text-pretty text-muted" data-testid="buy-now-note">
+        {code ? (
+          <>
+            {before}
+            <span className="font-medium text-ink">
+              <CodeText code={code} />
+            </span>
+            {after}
+          </>
+        ) : (
+          o.checkout.buyNowNote
+        )}
+      </p>
+    </>
+  );
+}
+
+/** Why the «Купить сейчас» item cannot be ordered now: its volume, the Discovery set, or the five's short 10 ml. */
+function itemGoneText(o: ReturnType<typeof useOrdersText>, line: BuyNowLineDto | null): string {
+  if (!line || line.kind === 'volume') return o.checkout.itemGone.volume;
+  if (line.kind === 'discovery_set') return o.checkout.itemGone.discovery_set;
+  return fill(o.checkout.itemGone.builder_set, {
+    names: line.short.map((f) => f.name).join(', '),
+  });
+}
+
 function Loading() {
   const o = useOrdersText();
   const field = (
@@ -163,17 +237,24 @@ function Loading() {
   );
 }
 
-/** Mockup 06, restyled to the approved chrome: recipient, BTS point, comment, gift, the server's total. */
+/**
+ * Mockup 06, restyled to the approved chrome: «Мои пункты BTS» first, then recipient, BTS point,
+ * comment, gift, the server's total. `?item=…` is «Купить сейчас»: that one item instead of the
+ * cart, which stays as it is (spec Changes 2026-11-11).
+ */
 export function Checkout() {
   const o = useOrdersText();
   const { t, language, customer } = usePrefs();
   const router = useRouter();
   const qc = useQueryClient();
   const { ensurePhone } = useRegistration();
+  // «Купить сейчас» names its item in the address; a malformed one checks out the cart instead.
+  const asked = useSearch({ from: '/checkout' }).item;
+  const item = asked && parseBuyNowParam(asked) ? asked : undefined;
 
   const [dest, setDest] = useState<Destination | null>(null);
   const regionId = dest?.region.id;
-  const checkout = useCheckout(regionId);
+  const checkout = useCheckout(regionId, item);
   const create = useCreateOrder();
   const cities = useCities(dest?.kind === 'point' ? dest.region.id : undefined);
 
@@ -190,9 +271,25 @@ export function Checkout() {
   const [attempted, setAttempted] = useState(false);
   const [phoneRefused, setPhoneRefused] = useState(false);
   const attemptKey = useRef<string | null>(null);
+  const [startedOnSaved, setStartedOnSaved] = useState(false);
 
   const data = checkout.data;
   const noPhone = !!data && data.phone === null;
+
+  /** A saved pair fills the recipient and the point in one tap. */
+  const pickSaved = (s: SavedPointDto) => {
+    setDest({ kind: 'point', region: s.region, point: s.point });
+    setName(s.recipientName);
+    setPhone(formatPhone(s.recipientPhone));
+    setPhoneRefused(false);
+    setError(null);
+  };
+  // Checkout starts on the server's default pair (the last used that BTS still offers), once.
+  if (data && !startedOnSaved) {
+    setStartedOnSaved(true);
+    const first = data.savedPoints.find((s) => s.id === data.defaultSavedPointId);
+    if (first && !dest) pickSaved(first);
+  }
 
   // Checkout needs the account phone (ADR 0004): the registration step opens once on arrival.
   const askedPhone = useRef(false);
@@ -213,9 +310,29 @@ export function Checkout() {
         <ErrorState fill retrying={checkout.isFetching} onRetry={() => void checkout.refetch()} />
       </Screen>
     );
-  if (!data) return <Loading />;
+  if (data === undefined) return <Loading />;
 
-  const toCart = () => void router.navigate({ to: '/cart' });
+  // «Купить сейчас» goes back to where the item was; a cart checkout to the cart.
+  const toCart = item ? () => goBackOrCatalog(router) : () => void router.navigate({ to: '/cart' });
+  const backLabel = item ? o.checkout.back : o.checkout.backToCart;
+
+  if (data === null)
+    return (
+      <Screen tabBar={false}>
+        <ScreenHeader title={o.checkout.title} />
+        <EmptyState
+          fill
+          icon={<BottleIcon size={28} />}
+          title={o.checkout.itemNotFoundTitle}
+          text={o.checkout.itemNotFoundText}
+          action={
+            <Button block onClick={() => void router.navigate({ to: '/catalog', replace: true })}>
+              {o.checkout.toCatalog}
+            </Button>
+          }
+        />
+      </Screen>
+    );
 
   // No shop card: nowhere to transfer, so checkout is closed (#28); the server refuses it too.
   if (!data.paymentAvailable) {
@@ -260,7 +377,7 @@ export function Checkout() {
                 {o.checkout.phoneShare}
               </Button>
               <Button block variant="secondary" onClick={toCart}>
-                {o.checkout.backToCart}
+                {backLabel}
               </Button>
             </>
           }
@@ -278,11 +395,23 @@ export function Checkout() {
         <EmptyState
           fill
           icon={<BagIcon size={28} />}
-          title={soldOutMeanwhile ? o.checkout.goneTitle : o.checkout.emptyTitle}
-          text={soldOutMeanwhile ? o.checkout.goneText : o.checkout.emptyText}
+          title={
+            item
+              ? o.checkout.itemGoneTitle
+              : soldOutMeanwhile
+                ? o.checkout.goneTitle
+                : o.checkout.emptyTitle
+          }
+          text={
+            item
+              ? itemGoneText(o, data.item)
+              : soldOutMeanwhile
+                ? o.checkout.goneText
+                : o.checkout.emptyText
+          }
           action={
             <Button block onClick={toCart}>
-              {o.checkout.toCart}
+              {item ? o.checkout.back : o.checkout.toCart}
             </Button>
           }
         />
@@ -369,6 +498,7 @@ export function Checkout() {
       confirmedTotal: confirmed.total,
       confirmedDiscount: confirmed.discount,
       idempotencyKey: attemptKey.current,
+      ...(item ? { item } : {}),
     };
     create.mutate(body, {
       onSuccess: (r) => {
@@ -384,7 +514,7 @@ export function Checkout() {
           });
         } else if (r.kind === 'conflict') {
           // the new numbers replace the old ones on the screen too
-          qc.setQueryData(checkoutKey(regionId), r.checkout);
+          qc.setQueryData(checkoutKey(regionId, item), r.checkout);
           setConflict({ code: r.code, was: confirmed, checkout: r.checkout });
         } else if (r.kind === 'try_again') {
           setConflict(null);
@@ -403,6 +533,10 @@ export function Checkout() {
             setError(o.checkout.unknownPoint);
           } else if (r.code === 'gift_message_too_long') {
             setError(fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }));
+          } else if (r.code === 'unknown_item') {
+            // taken off sale while the shopper looked: say so; the re-read shows the not-found state
+            setError(o.checkout.itemUnknown);
+            void qc.invalidateQueries({ queryKey: ['checkout'] });
           } else {
             // the allowed countries or the consent changed meanwhile: re-read what checkout asks
             if (r.code === 'invalid_recipient_phone') setPhoneRefused(true);
@@ -448,6 +582,20 @@ export function Checkout() {
   return (
     <Screen tabBar={false} dock={dock}>
       <ScreenHeader title={o.checkout.title} />
+
+      {data.savedPoints.length > 0 ? (
+        <div className="mb-[26px]">
+          <SavedPointPicker
+            saved={data.savedPoints}
+            isSelected={(s) =>
+              dest?.kind === 'point' &&
+              dest.point.id === s.point.id &&
+              normalizeRecipientPhone(phoneValue, codes) === s.recipientPhone
+            }
+            onPick={pickSaved}
+          />
+        </div>
+      ) : null}
 
       <section className="flex flex-col gap-3.5">
         <SectionTitle flush>{o.checkout.recipient}</SectionTitle>
@@ -590,6 +738,9 @@ export function Checkout() {
 
       <section className="mt-[26px]">
         <SectionTitle>{o.checkout.summary}</SectionTitle>
+        {data.item && data.quote.lines[0] ? (
+          <BuyNowItem line={data.item} priced={data.quote.lines[0]} />
+        ) : null}
         <MoneySummary
           itemCount={data.itemCount}
           itemsSubtotal={data.quote.itemsSubtotal}
@@ -641,6 +792,11 @@ export function Checkout() {
         conflict={conflict}
         busy={create.isPending}
         place={place}
+        backLabel={backLabel}
+        goneTitle={item ? o.checkout.itemGoneTitle : o.checkout.goneTitle}
+        goneText={
+          item ? itemGoneText(o, conflict?.checkout.item ?? data.item) : o.checkout.goneText
+        }
         onConfirm={(quote) => submit(quote)}
         onCart={toCart}
         onClose={() => setConflict(null)}
@@ -672,6 +828,9 @@ function ConflictSheet({
   conflict,
   busy,
   place,
+  backLabel,
+  goneTitle,
+  goneText,
   onConfirm,
   onCart,
   onClose,
@@ -679,6 +838,10 @@ function ConflictSheet({
   conflict: Conflict | null;
   busy: boolean;
   place: string | null;
+  /** «Вернуться в корзину», or «Вернуться назад» for «Купить сейчас». */
+  backLabel: string;
+  goneTitle: string;
+  goneText: string;
   onConfirm: (quote: CheckoutDto['quote']) => void;
   onCart: () => void;
   onClose: () => void;
@@ -701,15 +864,11 @@ function ConflictSheet({
         if (!open) onClose();
       }}
       title={
-        gone
-          ? o.checkout.goneTitle
-          : sameTotal
-            ? o.checkout.discountChangedTitle
-            : o.checkout.changedTitle
+        gone ? goneTitle : sameTotal ? o.checkout.discountChangedTitle : o.checkout.changedTitle
       }
       description={
         gone
-          ? o.checkout.goneText
+          ? goneText
           : sameTotal
             ? o.checkout.discountChangedText
             : lost
@@ -755,14 +914,14 @@ function ConflictSheet({
               <Money amount={c.checkout.quote.total} className="text-current" />
             </Button>
             <Button block variant="secondary" onClick={onCart}>
-              {o.checkout.backToCart}
+              {backLabel}
             </Button>
           </div>
         </div>
       ) : (
         <div className="pb-1">
           <Button block onClick={onCart}>
-            {o.checkout.backToCart}
+            {backLabel}
           </Button>
         </div>
       )}

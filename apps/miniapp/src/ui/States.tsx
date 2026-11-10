@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Button } from './Button';
-import { AlertIcon } from './icons';
+import { AlertIcon } from './icons-core';
 
 /** `fill`: take the free height of the Screen and sit at its optical centre (a whole-screen state). */
 interface StateLayout {

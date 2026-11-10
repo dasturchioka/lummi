@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { customerScreens, stockScreens } from './stock-data';
 import {
   forgetPromoList,
   forgetUses,
@@ -1451,6 +1452,8 @@ export const screens: Screen[] = [
   },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
+  ...stockScreens,
+  ...customerScreens,
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];

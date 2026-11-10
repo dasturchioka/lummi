@@ -31,6 +31,15 @@ import {
   onHandItemSchema,
 } from './admin-catalog';
 import {
+  adminCustomerDetailSchema,
+  adminCustomersErrorSchema,
+  adminCustomersPageSchema,
+  adminStockErrorSchema,
+  customersQuerySchema,
+  stockListSchema,
+  stockQuerySchema,
+} from './admin-stock';
+import {
   audienceCountSchema,
   audienceQuerySchema,
   broadcastBodySchema,
@@ -123,6 +132,10 @@ import {
   ordersQuerySchema,
   orderStatusConflictSchema,
   phoneRequiredSchema,
+  repeatOrderResponseSchema,
+  repeatRefusedSchema,
+  savedPointErrorSchema,
+  savedPointSchema,
 } from './orders';
 import {
   adminShopCardSchema,
@@ -232,6 +245,25 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: deliveryCityResponseSchema, 401: deliveryErrorSchema },
       summary: 'Forget the delivery city',
+    },
+    savedPoints: {
+      method: 'GET',
+      path: '/me/points',
+      responses: { 200: z.array(savedPointSchema), 401: savedPointErrorSchema },
+      summary:
+        '«Мои пункты BTS»: the recipient and point pairs of past orders, the last used first; a point BTS hid since is flagged',
+    },
+    removeSavedPoint: {
+      method: 'DELETE',
+      path: '/me/points/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: z.array(savedPointSchema),
+        401: savedPointErrorSchema,
+        404: savedPointErrorSchema,
+      },
+      summary: 'Forget one saved pair (never touches an order); answers with the list left',
     },
   },
   delivery: {
@@ -408,9 +440,9 @@ export const contract = c.router({
       method: 'GET',
       path: '/checkout',
       query: checkoutQuerySchema,
-      responses: { 200: checkoutSchema, 401: orderErrorSchema },
+      responses: { 200: checkoutSchema, 401: orderErrorSchema, 404: orderErrorSchema },
       summary:
-        'The cart quoted with the chosen region tariff, plus what checkout asks (phone, consent, gift limit)',
+        'The cart (or the one «Купить сейчас» item) quoted with the chosen region tariff, plus what checkout asks (phone, consent, gift limit, saved points); 404 when the item is unknown or not sold',
     },
   },
   orders: {
@@ -465,6 +497,20 @@ export const contract = c.router({
       },
       summary:
         'The shopper cancels their own order, only while «Ожидает оплаты» (ADR 0011); the reserve frees at once. 409 with the order when its status is no longer the expected one',
+    },
+    repeat: {
+      method: 'POST',
+      path: '/orders/:number/repeat',
+      pathParams: z.object({ number: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: repeatOrderResponseSchema,
+        401: orderErrorSchema,
+        404: orderErrorSchema,
+        409: repeatRefusedSchema,
+      },
+      summary:
+        '«Повторить заказ» (a delivered or cancelled order; 409 otherwise): the order’s lines go into the cart at today’s prices, each capped at what is available after the cart’s own lines; what was skipped or capped comes back per line with the reason',
     },
   },
 });
@@ -873,18 +919,47 @@ const adminCore = c.router({
       },
     },
   },
-  onHand: {
+  stock: {
     list: {
       method: 'GET',
-      path: '/admin/on-hand',
-      query: z.object({ q: z.string().trim().max(100).optional() }),
+      path: '/admin/stock',
+      query: stockQuerySchema,
       responses: {
-        200: z.array(onHandItemSchema),
-        401: catalogAdminErrorSchema,
-        403: catalogAdminErrorSchema,
+        200: stockListSchema,
+        401: adminStockErrorSchema,
+        403: adminStockErrorSchema,
       },
-      summary: 'Owner and manager: on hand, reserve and available per volume',
+      summary:
+        'Owner and manager: on hand, reserve and available per volume and for the Discovery set, with the low threshold',
     },
+  },
+  customers: {
+    list: {
+      method: 'GET',
+      path: '/admin/customers',
+      query: customersQuerySchema,
+      responses: {
+        200: adminCustomersPageSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
+      },
+      summary:
+        'Owner and manager: customers with orders count and total spent (Fulfilled orders only), searched, sorted, paged',
+    },
+    get: {
+      method: 'GET',
+      path: '/admin/customers/:id',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      responses: {
+        200: adminCustomerDetailSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
+        404: adminCustomersErrorSchema,
+      },
+      summary: 'Owner and manager: one customer with all their orders, newest first',
+    },
+  },
+  onHand: {
     set: {
       method: 'PATCH',
       path: '/admin/volumes/:id/on-hand',
@@ -897,7 +972,8 @@ const adminCore = c.router({
         404: catalogAdminErrorSchema,
         409: catalogAdminErrorSchema,
       },
-      summary: 'Owner and manager: set on hand for one volume (audited)',
+      summary:
+        'Owner and manager: set on hand for one volume (audited); with `expected`, refused with 409 when the count moved',
     },
   },
 });
@@ -927,8 +1003,12 @@ const adminSets = c.router({
       method: 'PATCH',
       path: '/admin/sets/discovery/on-hand',
       body: onHandBodySchema,
-      responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
-      summary: 'Owner and manager: boxes in the warehouse (audited)',
+      responses: {
+        200: adminDiscoverySetSchema,
+        401: adminSetsErrorSchema,
+        409: adminSetsErrorSchema,
+      },
+      summary: 'Owner and manager: boxes in the warehouse (audited); `expected` as for a volume',
     },
   },
 });

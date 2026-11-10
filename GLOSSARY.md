@@ -114,6 +114,10 @@ _Avoid_: Big bottle, flakon
 A BTS branch where the recipient collects the parcel. Chosen from our list, or typed by the customer when missing.
 _Avoid_: Address, filial, pickup point, отделение
 
+**Saved point**:
+A recipient and BTS point pair remembered from the customer's orders («Мои пункты BTS»), offered first at checkout. Forgetting one never touches an order.
+_Avoid_: Saved address, address book, favourite point
+
 **Region**:
 One of Uzbekistan's 14 delivery regions (incl. Tashkent city and Karakalpakstan); decides the delivery fee. Taken from the BTS point.
 _Avoid_: Oblast, area, zone
@@ -123,6 +127,10 @@ _Avoid_: Oblast, area, zone
 **Order**:
 A customer's purchase from creation to its end state. It has exactly one status at a time, from «Ожидает оплаты» to «Доставлен», «Отменён» or «Возвращён».
 _Avoid_: Purchase, transaction, checkout
+
+**Buy now**:
+«Купить сейчас»: ordering one item (a volume or a set, quantity 1) straight from its card, without the cart, which stays as it was.
+_Avoid_: Quick buy, express checkout, one-click order
 
 **Snapshot**:
 What an order froze at creation: its lines with names, volumes, prices and quantities, the discount, the delivery region, BTS point (or typed address) and fee, the threshold base, the total and the amount due. Later price, catalog or point edits never change it; reports read only it.

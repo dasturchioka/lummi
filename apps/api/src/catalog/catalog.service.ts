@@ -159,11 +159,15 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     fromPrice: lowestPrice(e.cards),
     soldOut: soldOut(e.cards),
     photo: e.cards[0]?.photo ?? null,
+    volumes: e.cards,
   };
 }
 
 /** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
 export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
+
+/** On hand under the reserve (ADR 0010): allowed, and reported; the one place that says so. */
+export const belowReserve = (onHand: number, reserved: number) => onHand < reserved;
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {

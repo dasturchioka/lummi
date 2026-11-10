@@ -112,10 +112,32 @@ function StockCard({
   onSaved: () => void;
 }) {
   const s = t.sets;
+  const st = t.stock;
   const [value, setValue] = useState(String(set.onHand));
   const [pending, setPending] = useState(false);
   const [state, setState] = useState<'idle' | 'saved' | 'error'>('idle');
+  /** A save waiting on the editor: below the reserve (ask first) or somebody else changed the count (409). */
+  const [ask, setAsk] = useState<
+    { kind: 'below'; value: number } | { kind: 'changed'; value: number; current: number } | null
+  >(null);
   const valid = /^\d{1,7}$/.test(value);
+
+  /** Always compare-and-set against the count the editor was shown (or the one the 409 returned). */
+  async function save(onHand: number, expected: number) {
+    setPending(true);
+    setState('idle');
+    const res = await browserApi.sets.setOnHand({ body: { onHand, expected } }).catch(() => null);
+    setPending(false);
+    if (res?.status === 200) {
+      setAsk(null);
+      setState('saved');
+      onSaved();
+    } else if (res?.status === 409 && res.body.current !== undefined) {
+      setAsk({ kind: 'changed', value: onHand, current: res.body.current });
+      onSaved();
+    } else setState('error');
+  }
+
   return (
     <Section title={s.stockTitle}>
       {/* what the shop can still sell, beside what open orders hold */}
@@ -136,21 +158,15 @@ function StockCard({
           </dd>
         </div>
       </dl>
+      {set.belowReserve && <Notice title={st.belowNow} />}
       <form
         className="grid gap-4"
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
           if (!valid) return;
-          setPending(true);
-          setState('idle');
-          const res = await browserApi.sets
-            .setOnHand({ body: { onHand: Number(value) } })
-            .catch(() => null);
-          setPending(false);
-          if (res?.status === 200) {
-            setState('saved');
-            onSaved();
-          } else setState('error');
+          const next = Number(value);
+          if (next < set.reserved) setAsk({ kind: 'below', value: next });
+          else void save(next, set.onHand);
         }}
       >
         <Field id="set-on-hand" label={s.onHand} hint={s.onHandHint}>
@@ -165,14 +181,78 @@ function StockCard({
             onChange={(e) => {
               setValue(e.target.value);
               setState('idle');
+              setAsk(null);
             }}
           />
         </Field>
+        {ask?.kind === 'below' && (
+          <Notice
+            title={fill(st.belowTitle, {
+              onHand: String(ask.value),
+              reserved: String(set.reserved),
+            })}
+          >
+            {fill(st.belowText, { onHand: String(ask.value), reserved: String(set.reserved) })}
+          </Notice>
+        )}
+        {ask?.kind === 'changed' && (
+          <Notice title={fill(st.changedTitle, { current: String(ask.current) })}>
+            {st.changedText}
+          </Notice>
+        )}
         {state === 'error' && <Notice title={t.errors.generic} />}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <Button type="submit" loading={pending} disabled={!valid || Number(value) === set.onHand}>
-            {s.saveOnHand}
-          </Button>
+          {ask?.kind === 'below' ? (
+            <>
+              <Button
+                type="button"
+                loading={pending}
+                onClick={() => void save(ask.value, set.onHand)}
+              >
+                {st.belowConfirm}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => setAsk(null)}
+              >
+                {st.back}
+              </Button>
+            </>
+          ) : ask?.kind === 'changed' ? (
+            <>
+              <Button
+                type="button"
+                loading={pending}
+                onClick={() => void save(ask.value, ask.current)}
+              >
+                {fill(st.changedConfirm, {
+                  value: String(ask.value),
+                  current: String(ask.current),
+                })}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setValue(String(ask.current));
+                  setAsk(null);
+                }}
+              >
+                {st.cancel}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="submit"
+              loading={pending}
+              disabled={!valid || Number(value) === set.onHand}
+            >
+              {s.saveOnHand}
+            </Button>
+          )}
           {state === 'saved' && <Saved text={s.saved} />}
         </div>
       </form>

@@ -5,6 +5,8 @@ import type {
   OrderDto,
   OrderInputError,
   OrderStatus,
+  RepeatResultDto,
+  SavedPointDto,
 } from '@lummi/contracts';
 import { ordersMessages } from '@lummi/i18n/orders';
 import {
@@ -24,20 +26,25 @@ export function useOrdersText() {
   return ordersMessages[language];
 }
 
-export const checkoutKey = (regionId: number | undefined) =>
-  ['checkout', regionId ?? null] as const;
+export const checkoutKey = (regionId: number | undefined, item: string | undefined) =>
+  ['checkout', regionId ?? null, item ?? null] as const;
 
 /**
- * The cart as checkout shows it, quoted by the server with the chosen point's region tariff
- * (ADR 0001). Re-read on every open; while another region is being quoted the last numbers stay.
+ * The cart as checkout shows it, or the one «Купить сейчас» `item` instead, quoted by the server
+ * with the chosen point's region tariff (ADR 0001). Re-read on every open; while another region is
+ * being quoted the last numbers stay. `null`: the item is unknown or no longer sold (404).
  */
-export function useCheckout(regionId: number | undefined) {
+export function useCheckout(regionId: number | undefined, item: string | undefined) {
   return useQuery({
-    queryKey: checkoutKey(regionId),
+    queryKey: checkoutKey(regionId, item),
     staleTime: 0,
     refetchOnMount: 'always',
     placeholderData: keepPreviousData,
-    queryFn: async () => unwrap(await api.checkout.get({ query: { regionId } }), 200),
+    queryFn: async () => {
+      const res = await api.checkout.get({ query: { regionId, item } });
+      if (res.status === 404) return null;
+      return unwrap(res, 200);
+    },
   });
 }
 
@@ -50,7 +57,7 @@ export type CreateResult =
   /** No shop card is set: checkout is closed («Оплата временно недоступна», #28). */
   | { kind: 'payment_unavailable' };
 
-/** POST /orders. A created order empties the ordered cart lines, so the cart is re-read. */
+/** POST /orders. A created cart order empties the ordered cart lines, so the cart is re-read; a «Купить сейчас» order leaves it alone. */
 export function useCreateOrder() {
   const qc = useQueryClient();
   return useMutation({
@@ -66,10 +73,10 @@ export function useCreateOrder() {
       if (res.status === 503) return { kind: 'payment_unavailable' };
       throw new Error(`HTTP ${res.status}`);
     },
-    onSuccess: (result) => {
+    onSuccess: (result, body) => {
       if (result.kind !== 'created') return;
       qc.setQueryData(orderKey(result.order.number), result.order);
-      void qc.invalidateQueries({ queryKey: CART_KEY });
+      if (!body.item) void qc.invalidateQueries({ queryKey: CART_KEY });
       void qc.invalidateQueries({ queryKey: ORDERS_KEY });
       void qc.invalidateQueries({ queryKey: ['me'] });
     },
@@ -162,6 +169,60 @@ export function useCancelOrder(number: number) {
       qc.setQueryData(orderKey(number), result.order);
       void qc.invalidateQueries({ queryKey: [...ORDERS_KEY, 'list'] });
       void qc.invalidateQueries({ queryKey: paymentKey(number) });
+    },
+  });
+}
+
+export type RepeatOutcome =
+  | { kind: 'done'; result: RepeatResultDto }
+  /** 409: the order is not delivered or cancelled (any more): the screens re-read it. */
+  | { kind: 'not_repeatable' };
+
+/**
+ * «Повторить заказ» (a delivered or cancelled order): the order's lines go into the cart at
+ * today's prices; the answer says, per line, what went in and why a line came back short. The
+ * cart it returns replaces the cached one (tab-bar count included).
+ */
+export function useRepeatOrder(number: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<RepeatOutcome> => {
+      const res = await api.orders.repeat({ params: { number } });
+      if (res.status === 409) {
+        void qc.invalidateQueries({ queryKey: ORDERS_KEY });
+        return { kind: 'not_repeatable' };
+      }
+      const body = unwrap(res, 200);
+      qc.setQueryData(CART_KEY, body.cart);
+      return { kind: 'done', result: body.result };
+    },
+  });
+}
+
+export const SAVED_POINTS_KEY = ['me', 'points'] as const;
+
+/** «Мои пункты BTS»: the recipient and point pairs of past orders, the last used first. */
+export function useSavedPoints() {
+  return useQuery({
+    queryKey: SAVED_POINTS_KEY,
+    refetchOnMount: 'always',
+    queryFn: async () => unwrap(await api.me.savedPoints(), 200),
+  });
+}
+
+/** Forgets one pair (orders keep their own snapshot); checkout re-reads its list. */
+export function useRemoveSavedPoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number): Promise<SavedPointDto[]> => {
+      const res = await api.me.removeSavedPoint({ params: { id } });
+      // already gone (another device): the list as it is now
+      if (res.status === 404) return unwrap(await api.me.savedPoints(), 200);
+      return unwrap(res, 200);
+    },
+    onSuccess: (list) => {
+      qc.setQueryData(SAVED_POINTS_KEY, list);
+      void qc.invalidateQueries({ queryKey: ['checkout'] });
     },
   });
 }

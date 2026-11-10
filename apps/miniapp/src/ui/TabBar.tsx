@@ -1,7 +1,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
-import { BagIcon, BoxIcon, GridIcon, HomeIcon, UserIcon } from './icons';
+import { BagIcon, BoxIcon, GridIcon, HomeIcon, UserIcon } from './icons-core';
 
 export type TabId = 'home' | 'catalog' | 'cart' | 'orders' | 'profile';
 

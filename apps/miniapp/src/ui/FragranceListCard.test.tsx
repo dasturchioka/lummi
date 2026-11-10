@@ -30,6 +30,7 @@ const item = (over: Partial<FragranceListItem> = {}): FragranceListItem => ({
   fromPrice: 99_000,
   soldOut: false,
   photo: null,
+  volumes: [],
   ...over,
 });
 
