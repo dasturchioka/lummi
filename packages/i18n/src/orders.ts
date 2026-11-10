@@ -501,7 +501,7 @@ export const ordersMessages = defineMessages(
         many: '{n} ta mahsulotdan {added} tasi qoʻshildi',
         other: '{n} ta mahsulotdan {added} tasi qoʻshildi',
       },
-      repeatNoneTitle: 'Hozir buyurtmadagi mahsulotlarning hech biri mavjud emas',
+      repeatNoneTitle: 'Buyurtmadagi mahsulotlar hozir mavjud emas',
       repeatPrices: 'Narxlar bugungi: savat ularni qayta hisobladi.',
       repeatNoneText: 'Keyinroq kiring yoki katalogdan boshqa iforlarni tanlang.',
       repeatReason: {

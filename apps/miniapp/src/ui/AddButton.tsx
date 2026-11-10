@@ -7,7 +7,7 @@ import { CART_KEY, useAddToCart } from '../cart/queries';
 import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
 import { CheckIcon, PlusIcon, Spinner } from './icons';
-import { showShopNote } from './ShopNoteHost';
+import { armShopNote, showShopNote } from './ShopNoteHost';
 
 export { ShopNote } from './ShopNote';
 
@@ -35,6 +35,7 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
   const [sheet, setSheet] = useState<'closed' | 'open' | 'unmounted'>('unmounted');
   const [sheetError, setSheetError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  useEffect(armShopNote, []);
   useEffect(() => {
     if (!done) return;
     const id = setTimeout(() => setDone(false), 1200);
