@@ -7,7 +7,9 @@ import type {
   ReceiptJudge,
   ReceiptJudgeInput,
   ReceiptJudgement,
+  FileDownload,
   SendResult,
+  TelegramFiles,
   TelegramSender,
 } from '../../src/edges';
 
@@ -32,8 +34,17 @@ export class FakeTelegramSender implements TelegramSender {
   readonly failures = new Map<number, Error[]>();
   /** File ids Telegram no longer accepts. */
   readonly rejectedFileIds = new Set<string>();
+  /** Callback queries answered, by id. */
+  readonly answered: string[] = [];
+  async answerCallback(callbackQueryId: string): Promise<void> {
+    this.answered.push(callbackQueryId);
+  }
   async send(message: OutboundMessage): Promise<SendResult> {
-    if (message.photo && 'fileId' in message.photo && this.rejectedFileIds.has(message.photo.fileId)) {
+    if (
+      message.photo &&
+      'fileId' in message.photo &&
+      this.rejectedFileIds.has(message.photo.fileId)
+    ) {
       throw new InvalidFileIdError();
     }
     const failure = this.failures.get(message.chatId)?.shift();
@@ -87,11 +98,25 @@ export class FakeFileStore implements FileStore {
   }
 }
 
+/** Files "on Telegram" by file_id; a download over the cap answers `too_large` like the real one. */
+export class FakeTelegramFiles implements TelegramFiles {
+  readonly files = new Map<string, Uint8Array>();
+  /** Every file_id asked for, in order. */
+  readonly downloads: string[] = [];
+  async download(fileId: string, maxBytes: number): Promise<FileDownload> {
+    this.downloads.push(fileId);
+    const bytes = this.files.get(fileId);
+    if (!bytes) return { kind: 'unavailable' };
+    return bytes.length > maxBytes ? { kind: 'too_large' } : { kind: 'ok', bytes };
+  }
+}
+
 export interface FakeEdges extends Edges {
   clock: FakeClock;
   telegram: FakeTelegramSender;
   receiptJudge: FakeReceiptJudge;
   files: FakeFileStore;
+  telegramFiles: FakeTelegramFiles;
 }
 
 export function createFakeEdges(): FakeEdges {
@@ -100,5 +125,6 @@ export function createFakeEdges(): FakeEdges {
     telegram: new FakeTelegramSender(),
     receiptJudge: new FakeReceiptJudge(),
     files: new FakeFileStore(),
+    telegramFiles: new FakeTelegramFiles(),
   };
 }
