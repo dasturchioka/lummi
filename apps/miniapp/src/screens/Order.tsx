@@ -19,6 +19,7 @@ import { ScreenHeader } from '../ui/ScreenHeader';
 import { Sheet, SheetDescription } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
+import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 
 /**
@@ -31,24 +32,28 @@ function Line({ line }: { line: OrderLineDto }) {
   const o = useOrdersText();
   return (
     <li className="flex gap-3 p-3" data-testid="order-line">
-      <Thumb photo={line.photo} className="w-12" />
+      {/* top-aligned: a set's five names make the row taller than its thumbnail */}
+      <Thumb
+        photo={line.photo}
+        className="w-12 self-start"
+        set={line.kind === 'volume' ? undefined : line.kind}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         {line.brand ? (
           <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
             {attribution(t.card.basedOn, line.brand)}
           </p>
+        ) : line.kind !== 'volume' ? (
+          // a set is labelled as the brand names a set: «НАБОР» over its name
+          <p className="type-label text-muted">{t.home.discoveryLabel}</p>
         ) : null}
         <p className="type-name mt-px text-[18px] text-pretty text-ink [overflow-wrap:anywhere]">
           {line.name[language]}
         </p>
-        {line.setComposition ? (
-          <p className="type-small mt-0.5 text-muted">
-            {line.setComposition.map((f) => f.name).join(' · ')}
-          </p>
-        ) : null}
+        {line.setComposition ? <SetFragranceList items={line.setComposition} /> : null}
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
           <p className="type-small min-w-0 text-muted">
-            {line.kind === 'builder_set'
+            {line.kind !== 'volume'
               ? `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`
               : fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })}
           </p>

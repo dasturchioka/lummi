@@ -75,7 +75,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 ## Bracketed values to confirm (TZ placeholders)
 
-- Discovery set price (expected after 2026-11-09).
+- Discovery set price (expected after 2026-11-09). The seed carries our placeholder 299 000 сум, flagged in the database; the admin «Наборы» page says so until the owner saves a price (the builder set costs the same).
 - Card disclaimer text: «Аромат LUMMI по мотивам, не оригинальный парфюм» (+ UZ version).
 - Birthday coupon: max discount (so'm) and free-delivery threshold base. Our defaults (2026-11-07): threshold computed **after** the coupon, like a promo code; cap 100 000 so'm (placeholder). Both are admin settings; confirm with the customer.
 - Defaults to confirm: top-sales window 30 d, reserve 12 h, review delay 24 h, receipt-unchecked alert 15 min, match window 5 min, AI thresholds (now P ≥ 0.8 for predicates, confidence ≥ 0.6 for the date-time choice, ADR 0013), no-credit wait 2 h (TZ had 10 min to manual review; ADR 0012), Humo-silence alert 30 min, review period 3 working days, returns window 3 days.

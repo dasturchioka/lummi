@@ -3,6 +3,7 @@ import { adminMessages } from './admin';
 import { botMessages } from './bot';
 import { miniappMessages } from './miniapp';
 import { ordersMessages } from './orders';
+import { setsMessages } from './sets';
 import { sharedMessages } from './shared';
 
 /**
@@ -15,6 +16,7 @@ export const dictionaries = {
     ...botMessages.ru,
     ...miniappMessages.ru,
     ...ordersMessages.ru,
+    ...setsMessages.ru,
     ...adminMessages.ru,
   },
   uz: {
@@ -22,6 +24,7 @@ export const dictionaries = {
     ...botMessages.uz,
     ...miniappMessages.uz,
     ...ordersMessages.uz,
+    ...setsMessages.uz,
     ...adminMessages.uz,
   },
 } satisfies Record<Language, object>;

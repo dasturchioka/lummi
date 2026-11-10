@@ -16,6 +16,9 @@ import { openExternal } from '../../lib/share';
 import { Badge, FragranceBadge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
+import { DockNote } from '../../ui/DockNote';
+import { LabelDivider } from '../../ui/LabelDivider';
+import { DISC, EASE_OUT } from '../../ui/photoDisc';
 import {
   ArrowLeftIcon,
   BottleIcon,
@@ -40,13 +43,6 @@ const TIME_ICON = {
 
 /** The gallery is the full column: 488 px at most (520 minus the gutters). */
 const PHOTO_SIZES = '(min-width: 520px) 488px, calc(100vw - 32px)';
-const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
-
-/**
- * The overlay disc on the photo (DESIGN.md Elevation): 92% Milk with a Graphite icon in both
- * themes, because the bottle photo is light in both. 40 px, with a 48 px tap area around it.
- */
-const DISC = `relative grid size-10 place-items-center rounded-pill bg-photo-disc text-photo-disc-ink transition-transform duration-150 ${EASE_OUT} after:absolute after:-inset-1 active:scale-95`;
 
 /**
  * The photo of the chosen volume. Choosing another volume cross-fades: the new photo fades in over
@@ -143,17 +139,6 @@ function Gallery({
           <ShareIcon size={20} />
         </button>
       </div>
-    </div>
-  );
-}
-
-/** Label divider (DESIGN.md Shapes): hairline, 4 px Sage diamond, hairline, 72 px wide. */
-function LabelDivider() {
-  return (
-    <div aria-hidden="true" className="mt-3 flex w-[72px] items-center gap-1.5 text-line-strong">
-      <span className="h-px flex-1 bg-current" />
-      <span className="size-1 rotate-45 bg-sage" />
-      <span className="h-px flex-1 bg-current" />
     </div>
   );
 }
@@ -433,8 +418,6 @@ function Dock({
   const row = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(false);
-  const [shownNote, setShownNote] = useState(note);
-  if (note && note !== shownNote) setShownNote(note);
   const canBuy = volume !== undefined && volume.available > 0;
   useLayoutEffect(() => {
     const r = row.current;
@@ -466,20 +449,7 @@ function Dock({
   );
   return (
     <div className="relative">
-      {/*
-        The note («Осталось 3») rises above the dock as a small status pill and fades away again, so
-        the buttons never move under the customer's thumb. The last text stays while it fades.
-      */}
-      <span role="status" className="sr-only">
-        {note ?? ''}
-      </span>
-      <span
-        aria-hidden="true"
-        data-open={note ? '' : undefined}
-        className="type-caption pointer-events-none absolute bottom-full left-1/2 mb-[22px] -translate-x-1/2 translate-y-1 rounded-pill bg-btn px-3 py-1.5 font-semibold whitespace-nowrap text-btn-ink opacity-0 transition-[opacity,translate] duration-150 ease-out data-[open]:translate-y-0 data-[open]:opacity-100 data-[open]:duration-200"
-      >
-        {shownNote}
-      </span>
+      <DockNote text={note} />
       <div ref={row} className="relative flex gap-2">
         {/* Clipped to the row, so the measuring copy never widens the page. */}
         <div
