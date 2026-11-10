@@ -9,6 +9,7 @@ import { fill, formatPhone } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { promoReasonText } from '../cart/promo';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
@@ -28,6 +29,7 @@ import {
   ChevronIcon,
   GiftIcon,
   PhoneIcon,
+  TagIcon,
   TruckIcon,
 } from '../ui/icons';
 import { Money } from '../ui/Money';
@@ -644,13 +646,14 @@ function ConflictSheet({
   onCart: () => void;
   onClose: () => void;
 }) {
-  const { t } = usePrefs();
+  const { t, language } = usePrefs();
   const o = useOrdersText();
   // keep the last conflict on screen while the sheet slides away
   const [shown, setShown] = useState(conflict);
   if (conflict && conflict !== shown) setShown(conflict);
   const c = conflict ?? shown;
   const gone = c?.code === 'nothing_to_order';
+  const promo = c?.checkout.quote.promoCode;
   return (
     <Sheet
       open={!!conflict}
@@ -672,6 +675,23 @@ function ConflictSheet({
             place={place}
             was={c.was}
           />
+          {promo?.invalid ? (
+            // the code the shopper confirmed with no longer applies: say which and why (#29)
+            <p
+              className="type-small mt-3 flex items-start gap-2 text-pretty text-ink"
+              data-testid="changed-promo"
+            >
+              <span aria-hidden="true" className="flex h-[18px] shrink-0 items-center text-muted">
+                <TagIcon size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="font-semibold tracking-[0.04em] [overflow-wrap:anywhere]">
+                  {promo.code}
+                </span>
+                <span className="block">{promoReasonText(promo.invalid, t, language)}</span>
+              </span>
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-col gap-2">
             <Button block loading={busy} onClick={() => onConfirm(c.checkout.quote.total)}>
               <span className="min-w-0 truncate">{o.checkout.changedConfirm}</span>

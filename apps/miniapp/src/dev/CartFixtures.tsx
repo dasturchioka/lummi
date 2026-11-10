@@ -3,7 +3,7 @@
  * the top swaps the fixture at the data boundary (the server cart), so the screen is tested
  * exactly as the API would feed it. Numbers are written out, as the server would send them.
  */
-import type { CartDto, CartLineDto, QuoteLine } from '@lummi/contracts';
+import type { CartDto, CartLineDto, PromoCodeInvalid, QuoteLine } from '@lummi/contracts';
 import { Link, useSearch } from '@tanstack/react-router';
 import { CartView } from '../screens/Cart';
 
@@ -213,26 +213,62 @@ const unavailable: CartDto = {
   },
 };
 
+/** The entered code BLOGER10 as the quote judged it: applied (10 %), or refused with its reason. */
+const withCode = (invalid: PromoCodeInvalid | null): CartDto => ({
+  ...plain,
+  promoCode: 'BLOGER10',
+  quote: {
+    ...plain.quote,
+    ...(invalid
+      ? {}
+      : {
+          discount: { type: 'promo_code', code: 'BLOGER10', amount: 28_700 },
+          thresholdBase: 'after',
+          thresholdBaseAmount: 258_300,
+          total: 258_300,
+        }),
+    promoCode: { code: 'BLOGER10', invalid },
+  },
+});
+const PROMO_REASONS = [
+  { reason: 'unknown' },
+  { reason: 'inactive' },
+  { reason: 'expired' },
+  { reason: 'exhausted' },
+  { reason: 'already_used' },
+  { reason: 'not_new_customer' },
+  { reason: 'below_minimum', minOrderTotal: 300_000 },
+  { reason: 'no_eligible_items' },
+] as const satisfies PromoCodeInvalid[];
+const promoFixtures = Object.fromEntries(
+  PROMO_REASONS.map((r) => [`promo-${r.reason.replaceAll('_', '-')}`, withCode(r)]),
+) as Record<`promo-${string}`, CartDto>;
+
 export const CART_FIXTURES = {
   discount,
   plain,
   worst,
   'worst-nudge': worstNudge,
   unavailable,
+  'promo-applied': withCode(null),
+  ...promoFixtures,
 } satisfies Record<string, CartDto>;
 export type CartFixtureName = keyof typeof CART_FIXTURES;
 const NAMES = Object.keys(CART_FIXTURES) as CartFixtureName[];
 
 export function CartFixtures() {
   // The dev routes are outside the typed tree in a build, so the search is read loosely.
-  const search: { data?: CartFixtureName } = useSearch({ strict: false });
-  const data = search.data ?? 'discount';
+  const search: { data?: string } = useSearch({ strict: false });
+  const data: CartFixtureName =
+    search.data && Object.hasOwn(CART_FIXTURES, search.data)
+      ? (search.data as CartFixtureName)
+      : 'discount';
   return (
     <>
       <CartView key={data} cart={CART_FIXTURES[data]} />
       <nav
         aria-label="fixture"
-        className="fixed top-[calc(var(--safe-t,0px)+8px)] right-2 z-50 flex gap-0.5 rounded-pill bg-field p-0.5"
+        className="fixed top-[calc(var(--safe-t,0px)+8px)] right-2 z-50 flex max-w-[calc(100vw-16px)] flex-wrap justify-end gap-0.5 rounded-[14px] bg-field p-0.5"
       >
         {NAMES.map((n) => (
           <Link

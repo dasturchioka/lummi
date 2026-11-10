@@ -74,11 +74,9 @@ const devRoutes = import.meta.env.DEV
       }),
       createRoute({
         ...at('/dev/cart'),
+        // the fixture names live in the lazy chunk; an unknown one shows the default fixture
         validateSearch: (s: Record<string, unknown>) => ({
-          data:
-            (['discount', 'plain', 'worst', 'worst-nudge', 'unavailable'] as const).find(
-              (n) => n === s.data,
-            ) ?? 'discount',
+          data: typeof s.data === 'string' ? s.data : 'discount',
         }),
         component: lazyRouteComponent(() => import('../dev/CartFixtures'), 'CartFixtures'),
       }),

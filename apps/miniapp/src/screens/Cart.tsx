@@ -10,7 +10,14 @@ import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
+import {
+  useAddToCart,
+  useApplyPromoCode,
+  useCart,
+  useRemoveLine,
+  useRemovePromoCode,
+  useSetQuantity,
+} from '../cart/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
@@ -24,6 +31,7 @@ import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
+import { PromoField, type PromoNotice } from './cart/PromoField';
 
 type T = ReturnType<typeof usePrefs>['t'];
 
@@ -34,6 +42,8 @@ export interface CartPending {
   kind?: 'qty' | 'remove';
   /** The suggestion being added. */
   slug?: string;
+  /** The promo code being applied or removed. */
+  promo?: 'apply' | 'remove';
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
@@ -509,6 +519,9 @@ export function CartView({
   onQty = () => undefined,
   onRemove = () => undefined,
   onCheckout = () => undefined,
+  promoNotice = null,
+  onApplyPromo = () => undefined,
+  onRemovePromo = () => undefined,
 }: {
   cart: CartDto;
   busy?: boolean;
@@ -517,6 +530,9 @@ export function CartView({
   onQty?: (lineId: number, qty: number) => void;
   onRemove?: (lineId: number) => void;
   onCheckout?: () => void;
+  promoNotice?: PromoNotice;
+  onApplyPromo?: (code: string) => void;
+  onRemovePromo?: () => void;
 }) {
   const rows = useRows(data);
   return (
@@ -550,6 +566,15 @@ export function CartView({
           ),
         )}
       </Card>
+      <PromoField
+        stored={data.promoCode}
+        quote={data.quote}
+        busy={busy}
+        pending={pending.promo}
+        notice={promoNotice}
+        onApply={onApplyPromo}
+        onRemove={onRemovePromo}
+      />
     </Screen>
   );
 }
@@ -564,6 +589,8 @@ export function Cart() {
   const add = useAddToCart();
   const setQty = useSetQuantity();
   const remove = useRemoveLine();
+  const applyPromo = useApplyPromoCode();
+  const removePromo = useRemovePromoCode();
   const busy = useIsMutating() > 0;
 
   if (cart.isError && !cart.data)
@@ -600,7 +627,17 @@ export function Cart() {
       ? { line: remove.variables, kind: 'remove' }
       : add.isPending
         ? { slug: add.variables?.slug }
-        : {};
+        : applyPromo.isPending
+          ? { promo: 'apply' }
+          : removePromo.isPending
+            ? { promo: 'remove' }
+            : {};
+  const sent = applyPromo.variables ?? '';
+  const promoNotice: PromoNotice = applyPromo.isError
+    ? { kind: 'failed', code: sent }
+    : applyPromo.data && 'tooManyFor' in applyPromo.data
+      ? { kind: 'tooMany', code: sent, seconds: applyPromo.data.tooManyFor }
+      : null;
 
   return (
     <CartView
@@ -611,6 +648,9 @@ export function Cart() {
       onQty={(lineId, qty) => setQty.mutate({ lineId, qty })}
       onRemove={(lineId) => remove.mutate(lineId)}
       onCheckout={() => void router.navigate({ to: '/checkout' })}
+      promoNotice={promoNotice}
+      onApplyPromo={(code) => applyPromo.mutate(code)}
+      onRemovePromo={() => removePromo.mutate()}
     />
   );
 }

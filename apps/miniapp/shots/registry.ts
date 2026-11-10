@@ -76,6 +76,27 @@ const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
   for (const slug of CART_SLUGS) await db.restore(slug);
 };
 
+/** BLOGER10, 10 % on items, no limits: the code the promo shots apply (#29). Written straight to
+ * the dev DB, as the owner's admin would. */
+async function shotPromo(db: ShotDb) {
+  await db.query(
+    `insert into promo_codes (code, kind, percent) values ('BLOGER10', 'percent', 10)
+     on conflict (code) do update set kind = 'percent', percent = 10, amount = null,
+       max_discount = null, expires_at = null, min_order_total = null, total_limit = null,
+       per_customer_limit = null, new_customers_only = false, applies_to_marked_down = false,
+       active = true`,
+  );
+}
+/** Takes the code out of the cart and forgets the typed attempts and their settings. */
+async function forgetPromo({ api, db }: { api: ApiClient; db: ShotDb }) {
+  await api.cart.removePromoCode();
+  await db.query(`delete from settings where key in ('promo.attemptLimit')`);
+  await db.query(`update carts set promo_attempts = 0, promo_attempts_since = null`);
+}
+async function typePromo(page: Page, code: string) {
+  await page.getByTestId('promo-input').fill(code);
+}
+
 /** Types a search and submits it, as the keyboard's «Найти» does. */
 async function searchFor(page: Page, text: string) {
   const box = page.getByRole('searchbox');
@@ -1344,6 +1365,87 @@ export const screens: ScreenDef[] = [
     act: hideFixtureToggle,
   },
   { id: 'cart-unavailable', path: '/dev/cart?data=unavailable', act: hideFixtureToggle },
+  // Promo codes (#29): the field typed, a code applied through the real API, the attempt limit,
+  // then every reason the quote can refuse a code with (fixtures: the reasons need orders and dates).
+  {
+    id: 'cart-promo-typed',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => typePromo(page, 'bloger10'),
+    teardown: emptyCart,
+  },
+  {
+    id: 'cart-promo-applied',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'bloger10' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await emptyCart(ctx);
+    },
+  },
+  {
+    // One code a window: the second one typed is refused until the window ends.
+    id: 'cart-promo-wait',
+    path: '/cart',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await shotPromo(db);
+      await forgetPromo({ api, db });
+      await db.query(
+        `insert into settings (key, value) values ('promo.attemptLimit', '1')
+         on conflict (key) do update set value = excluded.value`,
+      );
+      await fillCart(api, [['symphony', 30]]);
+      const res = await api.cart.applyPromoCode({ body: { code: 'LUMMI' } });
+      if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+    },
+    act: async ({ page }) => {
+      await typePromo(page, 'BLOGER10');
+      await page.getByTestId('promo-apply').click();
+      await page.getByTestId('promo-status').waitFor();
+    },
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await emptyCart(ctx);
+    },
+  },
+  ...[
+    'unknown',
+    'inactive',
+    'expired',
+    'exhausted',
+    'already-used',
+    'not-new-customer',
+    'below-minimum',
+    'no-eligible-items',
+  ].map((reason) => ({
+    id: `cart-promo-${reason}`,
+    path: `/dev/cart?data=promo-${reason}`,
+    act: async ({ page }: { page: Page }) => {
+      await hideFixtureToggle({ page });
+      // the field sits under the sticky totals until the page is scrolled to its end
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    },
+  })),
   {
     // The cart request never answers: the cart's own skeleton.
     id: 'cart-loading',
