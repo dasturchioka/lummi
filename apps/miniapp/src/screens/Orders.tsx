@@ -25,11 +25,13 @@ function OrderRow({ order, onOpen }: { order: OrderSummaryDto; onOpen: () => voi
       type="button"
       onClick={onOpen}
       data-testid="order-row"
-      aria-label={`${title}, ${o.orders.status[order.status]}`}
       className="flex w-full flex-col gap-2.5 p-4 text-left transition-colors duration-150 hover:bg-field active:bg-field"
     >
-      <span className="flex w-full items-start justify-between gap-3">
-        <span className="type-row min-w-0 pt-0.5 font-semibold">{title}</span>
+      {/* the number never breaks: on a narrow phone a long status drops under it instead */}
+      <span className="flex w-full flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+        <span className="type-row pt-0.5 font-semibold whitespace-nowrap tabular-nums">
+          {title}
+        </span>
         <StatusPill status={order.status} />
       </span>
       <MetaLine

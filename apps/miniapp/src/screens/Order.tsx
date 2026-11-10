@@ -19,14 +19,18 @@ import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { Thumb } from '../ui/Thumb';
 
-/** A line as bought (DESIGN.md compact row): thumbnail, «по мотивам» and the italic name, volume × qty, the line total. */
+/**
+ * A line as bought (DESIGN.md compact row): thumbnail, «по мотивам» and the italic name over the
+ * full width, then a receipt row: volume × qty, and the line total at its end. With no stepper on
+ * an order, the price waits on that row instead of squeezing the attribution beside it.
+ */
 function Line({ line }: { line: OrderLineDto }) {
   const { t, language } = usePrefs();
   const o = useOrdersText();
   return (
     <li className="flex gap-3 p-3" data-testid="order-line">
       <Thumb photo={line.photo} className="w-12" />
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
         {line.brand ? (
           <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
             {attribution(t.card.basedOn, line.brand)}
@@ -40,15 +44,18 @@ function Line({ line }: { line: OrderLineDto }) {
             {line.setComposition.map((f) => f.name).join(' · ')}
           </p>
         ) : null}
-        <p className="type-small mt-1 text-muted">
-          {line.kind === 'builder_set'
-            ? `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`
-            : fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })}
-        </p>
+        <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
+          <p className="type-small min-w-0 text-muted">
+            {line.kind === 'builder_set'
+              ? `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`
+              : fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })}
+          </p>
+          <Money
+            amount={line.lineTotal}
+            className={`shrink-0 ${line.markedDown ? 'text-sage-ink' : ''}`}
+          />
+        </div>
       </div>
-      <p className="flex shrink-0 flex-col items-end pt-px">
-        <Money amount={line.lineTotal} className={line.markedDown ? 'text-sage-ink' : ''} />
-      </p>
     </li>
   );
 }
@@ -110,16 +117,53 @@ function DeliveryCard({ order }: { order: OrderDto }) {
   );
 }
 
-function Loading() {
+/**
+ * What to transfer while the order waits for payment (mockup 07, «Сумма к переводу»): the
+ * server's Amount due at 28 px, then how long the fragrances stay reserved. The card number,
+ * copy buttons and receipt upload join it with the payment screen (#28).
+ */
+function AmountDue({ order }: { order: OrderDto }) {
+  const { language } = usePrefs();
+  const o = useOrdersText();
+  const [before = '', after = ''] = o.orders.reservedUntil.split('{until}');
+  // the time keeps the word after it (UZ «15:03 gacha») on its line: the Unbroken Date Rule
+  const [, glue = '', rest = ''] = /^(\s?\S*)(.*)$/s.exec(after) ?? [];
+  return (
+    <Card className="mt-3 p-4" data-testid="amount-due">
+      <p className="type-small text-muted">{o.orders.amountDue}</p>
+      <Money amount={order.amountDue} size="amount" className="mt-1 block" />
+      <p
+        className="type-small mt-3.5 flex items-start gap-2 border-t border-line pt-3.5 text-ink"
+        data-testid="reserved-until"
+      >
+        <span className="shrink-0 text-muted">
+          <ClockIcon size={18} />
+        </span>
+        <span className="pt-px text-pretty">
+          {before}
+          <span className="whitespace-nowrap">
+            <b className="font-semibold">{formatDateTime(order.reserveUntil, language)}</b>
+            {glue}
+          </span>
+          {rest}
+        </span>
+      </p>
+    </Card>
+  );
+}
+
+/** The number is known before the order is: the title stands from the first frame, the rest holds its shape. */
+function Loading({ title }: { title: string }) {
   return (
     <Screen>
-      <div className="pt-5 pb-4" aria-busy="true">
-        <Skeleton className="h-6 w-48" />
-      </div>
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-7 w-36" rounded="pill" />
-        <Skeleton className="h-[200px] w-full" rounded="card" />
-        <Skeleton className="h-[140px] w-full" rounded="card" />
+      <ScreenHeader title={title} />
+      <div className="flex flex-col gap-3" aria-busy="true">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-7 w-36" rounded="pill" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <Skeleton className="h-[148px] w-full" rounded="card" />
+        <Skeleton className="h-[236px] w-full" rounded="card" />
       </div>
     </Screen>
   );
@@ -144,7 +188,7 @@ export function Order() {
         <ErrorState fill retrying={query.isFetching} onRetry={() => void query.refetch()} />
       </Screen>
     );
-  if (query.data === undefined) return <Loading />;
+  if (query.data === undefined) return <Loading title={fill(o.orders.number, { number })} />;
   const order = query.data;
   if (order === null)
     return (
@@ -181,19 +225,7 @@ export function OrderView({ order }: { order: OrderDto }) {
         <span className="type-small text-muted">{formatDateTime(order.createdAt, language)}</span>
       </div>
 
-      {order.status === 'awaiting_payment' ? (
-        <p
-          className="type-small mt-3 flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
-          data-testid="reserved-until"
-        >
-          <span className="shrink-0">
-            <ClockIcon size={18} />
-          </span>
-          <span className="pt-px">
-            {fill(o.orders.reservedUntil, { until: formatDateTime(order.reserveUntil, language) })}
-          </span>
-        </p>
-      ) : null}
+      {order.status === 'awaiting_payment' ? <AmountDue order={order} /> : null}
 
       {order.status !== 'cancelled' ? (
         <Card className="mt-3 p-4">
@@ -202,20 +234,20 @@ export function OrderView({ order }: { order: OrderDto }) {
       ) : null}
 
       {order.gift.isGift ? (
-        <Card className="mt-3 flex gap-3 bg-sage-wash p-4" data-testid="gift-mark">
-          <span className="mt-0.5 shrink-0 text-sage-ink">
+        <Card className="mt-3 flex gap-3 p-4" data-testid="gift-mark">
+          <span className="mt-0.5 shrink-0 text-ink">
             <GiftIcon size={20} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="type-row font-semibold text-ink">{o.orders.giftTitle}</p>
-            <p className="type-small mt-0.5 text-ink">{o.orders.giftNote}</p>
+            <p className="type-small mt-0.5 text-muted">{o.orders.giftNote}</p>
             {order.gift.message ? (
-              <>
-                <p className="type-small mt-2 text-muted">{o.orders.greeting}</p>
-                <p className="type-body break-words whitespace-pre-line text-ink">
+              <div className="mt-3 border-t border-line pt-3">
+                <p className="type-small text-muted">{o.orders.greeting}</p>
+                <p className="type-body mt-0.5 break-words whitespace-pre-line text-ink [overflow-wrap:anywhere]">
                   «{order.gift.message}»
                 </p>
-              </>
+              </div>
             ) : null}
           </div>
         </Card>
@@ -256,7 +288,7 @@ export function OrderView({ order }: { order: OrderDto }) {
             type="button"
             onClick={() => openManagerChat(managerUsername)}
             data-testid="write-manager"
-            className="-my-3 rounded-btn px-1 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
+            className="-my-3 rounded-btn px-1 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
           >
             {o.orders.writeManager}
           </button>
