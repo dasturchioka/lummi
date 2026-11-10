@@ -4,6 +4,7 @@ import {
   defineMessages,
   fill,
   formatDateTime,
+  formatDecimal,
   formatDayMonth,
   formatDuration,
   formatMoney,
@@ -25,6 +26,15 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('formatDecimal', () => {
+  it('uses the language’s decimal separator, never a hard-coded one', () => {
+    expect(formatDecimal(1.24, 1, 'ru')).toBe('1,2');
+    expect(formatDecimal(0.97, 2, 'uz')).toBe('0,97');
+    expect(formatDecimal(1250.5, 1, 'ru')).toBe('1\u202f250,5');
+    expect(formatDecimal(74, 0, 'uz')).toBe('74');
   });
 });
 

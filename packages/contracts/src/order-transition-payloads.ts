@@ -13,10 +13,26 @@ export const PAYMENT_LINK_REASON_MIN = 3;
 /** The technical bound of that reason; the setting `payments.linkReasonMaxLength` is at most this. */
 export const PAYMENT_LINK_REASON_MAX = 1000;
 
+/**
+ * Characters as a person counts them (an emoji is one), the one count for every text limit, in
+ * the panel's counters and on the server alike (#33).
+ */
+export const charCount = (s: string) => [...s].length;
+
+/** Trimmed text of `min` to `max` characters (`charCount`). */
+const text = (min: number, max: number) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => charCount(v) >= min && charCount(v) <= max, `${min}-${max} characters`);
+
+/** A row id: a positive integer the API can carry exactly (no JSON 1e20 reaches the database). */
+const rowId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+
 /** A move that needs nothing: no payload, or an empty one. */
 const nothing = z.object({}).strict().optional();
 /** A reason typed by staff (a return), kept as written. */
-const typedReason = z.string().trim().min(1).max(500);
+const typedReason = text(1, 500);
 
 /**
  * What each move must carry (ADR 0011, 0006): the Receipt a submission brought, the tracking
@@ -27,7 +43,7 @@ const typedReason = z.string().trim().min(1).max(500);
  */
 export const transitionPayloadSchemas = {
   /** The Receipt that went in with this move (#28); a receipt never moves an order twice. */
-  submit_receipt: z.object({ receiptId: z.number().int().positive() }).strict(),
+  submit_receipt: z.object({ receiptId: rowId }).strict(),
   /**
    * Money on the card is ground truth (ADR 0012): a payment is confirmed only with the Credit that
    * paid it, plus the Receipt it confirms (null for a credit that came with no receipt), and the
@@ -35,8 +51,8 @@ export const transitionPayloadSchemas = {
    */
   confirm_payment: z
     .object({
-      creditId: z.number().int().positive(),
-      receiptId: z.number().int().positive().nullable(),
+      creditId: rowId,
+      receiptId: rowId.nullable(),
       amountDue: z.number().int().nonnegative(),
       creditAmountTiyin: z.number().int().positive(),
       /** The credit minus the Amount due, in tiyin: above 0 overpaid, below 0 underpaid. */
@@ -45,12 +61,7 @@ export const transitionPayloadSchemas = {
       /** The credit went to a card other than the shop card. */
       offShopCard: z.boolean(),
       /** Why staff linked a credit that differs (another amount or card); required then. */
-      reason: z
-        .string()
-        .trim()
-        .min(PAYMENT_LINK_REASON_MIN)
-        .max(PAYMENT_LINK_REASON_MAX)
-        .optional(),
+      reason: text(PAYMENT_LINK_REASON_MIN, PAYMENT_LINK_REASON_MAX).optional(),
     })
     .strict(),
   /**
@@ -60,9 +71,9 @@ export const transitionPayloadSchemas = {
    */
   reject_receipt: z
     .object({
-      receiptId: z.number().int().positive(),
+      receiptId: rowId,
       reason: z.enum(RECEIPT_REJECT_REASONS),
-      note: z.string().trim().min(1).max(RECEIPT_REJECT_NOTE_HARD_MAX).optional(),
+      note: text(1, RECEIPT_REJECT_NOTE_HARD_MAX).optional(),
     })
     .strict()
     .refine((p) => p.reason !== 'other' || p.note !== undefined, { path: ['note'] }),
@@ -71,7 +82,7 @@ export const transitionPayloadSchemas = {
   start_assembly: nothing,
   hand_to_bts: z
     .object({
-      trackingNumber: z.string().trim().min(TRACKING_NUMBER_MIN).max(TRACKING_NUMBER_MAX),
+      trackingNumber: text(TRACKING_NUMBER_MIN, TRACKING_NUMBER_MAX),
     })
     .strict(),
   deliver: nothing,
@@ -89,7 +100,7 @@ export const transitionPayloadSchemas = {
     .object({
       reason: z.enum(CANCEL_REASONS),
       /** Staff may add a word to their reason; it stays in the order history. */
-      note: z.string().trim().min(1).max(CANCEL_NOTE_MAX).optional(),
+      note: text(1, CANCEL_NOTE_MAX).optional(),
     })
     .strict(),
 } satisfies Record<OrderAction, z.ZodTypeAny>;

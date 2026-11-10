@@ -31,6 +31,7 @@ function moveResponse(out: MoveOutcome) {
               ...(out.min === undefined ? {} : { min: out.min }),
               ...(out.max === undefined ? {} : { max: out.max }),
               ...(out.mismatch === undefined ? {} : { mismatch: out.mismatch }),
+              ...(out.what === undefined ? {} : { what: out.what }),
             },
           };
   }

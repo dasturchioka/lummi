@@ -14,7 +14,8 @@ import {
 } from './receipt-review';
 
 const som = z.number().int().nonnegative();
-const id = z.number().int().positive();
+/** A row id the API carries exactly: a JSON 1e20 is a 400, never a database error. */
+const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const at = z.string().datetime();
 
 /**
@@ -356,5 +357,7 @@ export const adminOrderRefusalSchema = z.object({
   min: z.number().int().positive().optional(),
   max: z.number().int().positive().optional(),
   mismatch: z.array(z.enum(['amount', 'card'])).optional(),
+  /** With `credit_mismatch`: what rules the credit out (one from before the order, for staff). */
+  what: z.enum(['before_order', 'amount', 'card']).optional(),
 });
 export type AdminOrderRefusal = z.infer<typeof adminOrderRefusalSchema>;

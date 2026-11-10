@@ -1256,6 +1256,60 @@ describe('link a credit and confirm the payment (#32 PaymentConfirmation, actor:
     });
   });
 
+  it('counts a reason in characters as a person does: an emoji is one, on both sides', async () => {
+    const o = await unpaidOrder();
+    t.edges.clock.advance(2 * MIN);
+    const more = await recordCredit(t, { som: o.amountDue + 5_000 });
+    const owner = await t.ownerSession();
+    await owner.client.admin.settings.update({
+      params: { key: 'payments.linkReasonMaxLength' },
+      body: { value: 20 },
+    });
+    const confirm = (reason: string) =>
+      fetch(`${t.baseUrl}/admin/orders/${o.number}/confirm-payment`, {
+        method: 'POST',
+        headers: { cookie: owner.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ creditId: more, receiptId: null, reason }),
+      });
+    // two characters (four UTF-16 units) are under the 3-character minimum
+    expect((await confirm('🙂🙂')).status).toBe(400);
+    expect((await orderRow(o.number)).status).toBe('awaiting_payment');
+    // twenty characters (forty units) are within the 20-character setting
+    expect((await confirm('🙂'.repeat(20))).status).toBe(200);
+  });
+
+  it('a reject note is counted the same way', async () => {
+    const o = await unpaidOrder();
+    const receiptId = await sendReceipt(o.number);
+    const owner = await t.ownerSession();
+    await owner.client.admin.settings.update({
+      params: { key: 'receipts.rejectNoteMaxLength' },
+      body: { value: 20 },
+    });
+    const res = await owner.client.admin.orders.rejectReceipt({
+      params: { number: o.number },
+      body: { receiptId, reason: 'other', note: '🙂'.repeat(20) },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('an id past the safe integers is 400, never a database error', async () => {
+    const o = await unpaidOrder();
+    const { cookie } = await t.managerSession();
+    for (const [path, body] of [
+      ['confirm-payment', { creditId: 1e20, receiptId: null }],
+      ['confirm-payment', { creditId: 1, receiptId: 1e20 }],
+      ['reject-receipt', { receiptId: 1e20, reason: 'wrong_card' }],
+    ] as const) {
+      const res = await fetch(`${t.baseUrl}/admin/orders/${o.number}/${path}`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
   it('a credit from before the order never pays it', async () => {
     t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
     const early = await recordCredit(t, { som: 94_000, at: new Date('2026-11-09T09:30:00Z') });
@@ -1266,7 +1320,7 @@ describe('link a credit and confirm the payment (#32 PaymentConfirmation, actor:
       body: { creditId: early, receiptId: null, reason: 'Покупатель перевёл заранее' },
     });
     expect(res.status).toBe(422);
-    expect(res.body).toMatchObject({ code: 'credit_mismatch' });
+    expect(res.body).toEqual({ code: 'credit_mismatch', what: 'before_order' });
   });
 
   it('a stale screen gets 409 with the order as it is now', async () => {

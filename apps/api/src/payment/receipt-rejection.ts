@@ -1,4 +1,5 @@
 import {
+  charCount,
   WAITING_RECEIPT_VERDICTS,
   type ReceiptRejectReason,
   type TransitionRefusal,
@@ -88,7 +89,7 @@ export class ReceiptRejection {
       const max = (await readSettings(tx, ['receipts.rejectNoteMaxLength']))[
         'receipts.rejectNoteMaxLength'
       ];
-      if ([...note].length > max) return { kind: 'note_too_long', max };
+      if (charCount(note) > max) return { kind: 'note_too_long', max };
     }
 
     const [order] = await tx

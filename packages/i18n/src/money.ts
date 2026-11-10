@@ -25,3 +25,28 @@ export function formatTiyin(amountTiyin: number, language: Language): string {
   const cents = String(tiyin).padStart(2, '0');
   return `${grouped},${cents}${NNBSP}${sharedMessages[language].common.currency}`;
 }
+
+const LOCALES: Record<Language, string> = { ru: 'ru-RU', uz: 'uz-Latn-UZ' };
+const separators = new Map<Language, string>();
+
+/** The language's decimal separator, as `Intl` knows it (RU and UZ: a comma). */
+function decimalSeparator(language: Language): string {
+  let sep = separators.get(language);
+  if (sep === undefined) {
+    sep =
+      new Intl.NumberFormat(LOCALES[language]).formatToParts(1.5).find((p) => p.type === 'decimal')
+        ?.value ?? ',';
+    separators.set(language, sep);
+  }
+  return sep;
+}
+
+/**
+ * A plain number with `digits` decimals in the language's notation, thousands grouped with
+ * narrow no-break spaces as `formatMoney` groups them: `1 250,5`, `0,97`. Not for money.
+ */
+export function formatDecimal(value: number, digits: number, language: Language): string {
+  const [whole, fraction] = value.toFixed(digits).split('.') as [string, string | undefined];
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, NNBSP);
+  return fraction === undefined ? grouped : `${grouped}${decimalSeparator(language)}${fraction}`;
+}

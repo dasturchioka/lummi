@@ -88,6 +88,7 @@ export type MoveOutcome =
       min?: number;
       max?: number;
       mismatch?: ('amount' | 'card')[];
+      what?: 'before_order' | 'amount' | 'card';
     }
   | { kind: 'try_again' };
 
@@ -503,7 +504,7 @@ export class AdminOrdersService {
       case 'reason_invalid':
         return { kind: 'refused', code: 'reason_invalid', min: out.min, max: out.max };
       case 'credit_mismatch':
-        return { kind: 'refused', code: 'credit_mismatch' };
+        return { kind: 'refused', code: 'credit_mismatch', what: out.what };
       case 'refused':
         return { kind: 'refused', code: out.code };
       case 'not_found':
