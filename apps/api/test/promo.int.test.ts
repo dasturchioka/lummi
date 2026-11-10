@@ -6,11 +6,13 @@ import type { CreateOrderBody, PromoCodeInput } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { and, auditLog, btsPoints, eq, fragrances, orders, regions, volumes } from '@lummi/db';
 import pg from 'pg';
+import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService } from '../src/order-status/order-status.service';
+import { ReceiptsService } from '../src/receipts/receipts.service';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
@@ -41,6 +43,13 @@ afterEach(() => vi.restoreAllMocks());
 
 const ali: TestUser = { id: 41, first_name: 'Ali', language_code: 'ru' };
 const vali: TestUser = { id: 42, first_name: 'Vali', language_code: 'uz' };
+
+/** A plain receipt photo, as the shopper's upload would bring it (#28). */
+const RECEIPT_IMAGE = sharp({
+  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
+})
+  .png()
+  .toBuffer();
 
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
@@ -719,8 +728,15 @@ describe('the order holds a use; the limits count uses that were not voided', ()
     const [row] = await t.db.select().from(orders).where(eq(orders.number, placed.number));
     const machine = t.app.get(OrderStatusService);
     const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    // the receipt goes in as the shopper sends it (#28): the intake records it and makes the move
+    const sent = await t.app
+      .get(ReceiptsService)
+      .submit(row!.customerId, placed.number, await RECEIPT_IMAGE, {
+        fileName: null,
+        source: 'miniapp',
+      });
+    expect(sent.kind).toBe('submitted');
     const path = [
-      ['awaiting_payment', 'submit_receipt', { type: 'customer', id: row!.customerId }, undefined],
       ['receipt_review', 'confirm_payment', { type: 'ai' }, undefined],
       ['payment_confirmed', 'accept', manager, undefined],
       ['accepted', 'start_assembly', manager, undefined],
