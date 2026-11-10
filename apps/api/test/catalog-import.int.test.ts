@@ -2,7 +2,7 @@ import { IMPORT_ISSUE_CODES, type ImportApplied, type ImportReport } from '@lumm
 import { adminMessages } from '@lummi/i18n/admin';
 import { normalizeUzbek } from '@lummi/i18n';
 import JSZip from 'jszip';
-import { auditLog, eq, fragranceNotes, fragrances, notes, sql, volumes } from '@lummi/db';
+import { auditLog, eq, fragrances, notes, sql, volumes } from '@lummi/db';
 import ExcelJS from 'exceljs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
