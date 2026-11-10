@@ -25,6 +25,8 @@ export const botMessages = defineMessages(
         'Оплата заказа № {number} подтверждена ✅\nСкоро начнём собирать ваш заказ.',
       receiptRejected:
         'Чек к заказу № {number} не принят.\nПричина: {reason}\nПроверьте сумму и карту и загрузите чек ещё раз.',
+      /** The manager's own words under a preset reason (#33). */
+      rejectNote: 'Комментарий менеджера: {note}',
       paymentNotFound:
         'Мы не нашли перевод по заказу № {number}.\nПроверьте сумму ({amount}) и карту и загрузите чек ещё раз.',
       assembling: 'Собираем заказ № {number} 📦\nБережно упакуем ароматы и передадим в BTS.',
@@ -56,6 +58,7 @@ export const botMessages = defineMessages(
         '№ {number} buyurtma toʻlovi tasdiqlandi ✅\nTez orada buyurtmangizni yigʻishni boshlaymiz.',
       receiptRejected:
         '№ {number} buyurtma cheki qabul qilinmadi.\nSabab: {reason}\nSumma va kartani tekshirib, chekni qayta yuklang.',
+      rejectNote: 'Menejer izohi: {note}',
       paymentNotFound:
         '№ {number} buyurtma boʻyicha oʻtkazmani topa olmadik.\nSumma ({amount}) va kartani tekshirib, chekni qayta yuklang.',
       assembling:

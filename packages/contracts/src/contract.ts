@@ -138,6 +138,20 @@ import {
   internalErrorSchema,
 } from './internal';
 
+import {
+  adminCreditsPageSchema,
+  adminCreditsQuerySchema,
+  adminOrderConflictSchema,
+  adminOrderErrorSchema,
+  adminOrderRefusalSchema,
+  adminOrderSchema,
+  adminOrdersPageSchema,
+  adminOrdersQuerySchema,
+  fulfilBodySchema,
+  rejectReceiptBodySchema,
+  staffCancelBodySchema,
+} from './admin-orders';
+
 const c = initContract();
 
 /** Customer-facing routes (Mini App). The Mini App client table must mirror exactly this router. */
@@ -1123,8 +1137,82 @@ const adminPromo = c.router({
   },
 });
 
+const orderNumber = z.object({ number: z.coerce.number().int().positive() });
+/** What every staff move on an order answers (#33): the order page now, or why not. */
+const orderMoveResponses = {
+  200: adminOrderSchema,
+  401: adminOrderErrorSchema,
+  403: adminOrderErrorSchema,
+  404: adminOrderErrorSchema,
+  409: adminOrderConflictSchema,
+  422: adminOrderRefusalSchema,
+} as const;
+
+/**
+ * The orders panel (#33): owner and manager. Every move goes through `transition()` (ADR 0011)
+ * with the staff member as the actor, and answers 409 with the order as it is now when it moved
+ * on meanwhile.
+ */
+const adminOrders = c.router({
+  orders: {
+    list: {
+      method: 'GET',
+      path: '/admin/orders',
+      query: adminOrdersQuerySchema,
+      responses: { 200: adminOrdersPageSchema, 401: adminOrderErrorSchema },
+      summary:
+        'Staff: orders newest first, filtered by status, payment state and Tashkent dates, searched by number or phone',
+    },
+    get: {
+      method: 'GET',
+      path: '/admin/orders/:number',
+      pathParams: orderNumber,
+      responses: { 200: adminOrderSchema, 401: adminOrderErrorSchema, 404: adminOrderErrorSchema },
+      summary:
+        'Staff: the order page: snapshot, customer, receipts with verdicts, credit, history and audit',
+    },
+    fulfil: {
+      method: 'POST',
+      path: '/admin/orders/:number/fulfil',
+      pathParams: orderNumber,
+      body: fulfilBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: one fulfilment step («Принят» → «Собирается» → «Передан в BTS» with the tracking number → «Доставлен»)',
+    },
+    cancel: {
+      method: 'POST',
+      path: '/admin/orders/:number/cancel',
+      pathParams: orderNumber,
+      body: staffCancelBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: cancel with a TZ §6 reason; stock, the discount source and the message follow',
+    },
+    rejectReceipt: {
+      method: 'POST',
+      path: '/admin/orders/:number/reject-receipt',
+      pathParams: orderNumber,
+      body: rejectReceiptBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: reject the receipt under check with a reason; the order goes back to «Ожидает оплаты» and the shopper reads why',
+    },
+  },
+  credits: {
+    list: {
+      method: 'GET',
+      path: '/admin/credits',
+      query: adminCreditsQuerySchema,
+      responses: { 200: adminCreditsPageSchema, 401: adminOrderErrorSchema },
+      summary: 'Staff: Humo credits newest first; `linked=unlinked` is «Не привязано»',
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
+  ...adminOrders,
   ...adminDelivery,
   ...adminSets,
   ...adminBroadcasts,

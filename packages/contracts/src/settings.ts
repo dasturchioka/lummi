@@ -3,6 +3,7 @@ import type { Bilingual } from './catalog';
 import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
+import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
 
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
@@ -231,6 +232,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Самый большой скриншот или PDF чека, который примет приложение.',
       uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
+    },
+  },
+  /** The longest note a manager may add when rejecting a receipt (#33, spec Changes 2026-11-11). */
+  'receipts.rejectNoteMaxLength': {
+    schema: z.number().int().min(20).max(RECEIPT_REJECT_NOTE_HARD_MAX),
+    default: 300,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Длина комментария к отклонённому чеку', uz: 'Rad etilgan chekka izoh uzunligi' },
+    hint: {
+      ru: 'Сколько символов менеджер может написать покупателю, когда не принимает чек.',
+      uz: 'Chek qabul qilinmaganda menejer xaridorga nechta belgi yozishi mumkin.',
     },
   },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
