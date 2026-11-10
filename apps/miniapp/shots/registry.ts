@@ -1184,12 +1184,32 @@ export const screens: ScreenDef[] = [
   {
     id: 'payment-no-card',
     path: '/orders',
+    fullPage: true,
     setup: async (ctx) => {
       await unpaidOrder(ctx);
       await ctx.db.shopCard(null);
     },
-    act: async ({ page }) => openPayment(page, 'pay-order'),
+    // the note where the card was; a shopper who already paid still sends the receipt
+    act: async ({ page }) => openPayment(page, 'no-card'),
     teardown: noCardDone,
+  },
+  {
+    // every PDF render slot busy: the API answers 503 try_again, the chosen file stays
+    id: 'payment-try-again',
+    path: '/orders',
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await chooseReceipt(page);
+      await page.route(/\/orders\/\d+\/receipts$/, (route) =>
+        route.fulfill({ status: 503, json: { code: 'try_again' } }),
+      );
+      await page.getByTestId('pay-action').click();
+      const alert = page.getByTestId('receipt-file').locator('xpath=..').getByRole('alert');
+      await alert.waitFor();
+      await alert.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+    teardown: checkoutDone,
   },
   {
     id: 'checkout-no-card',

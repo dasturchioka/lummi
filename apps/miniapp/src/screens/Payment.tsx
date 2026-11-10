@@ -1,5 +1,9 @@
 import type { OrderDto, PaymentDto, ReceiptSummaryDto } from '@lummi/contracts';
-import { groupCardNumber, type ReceiptUploadError } from '@lummi/contracts/constants';
+import {
+  groupCardNumber,
+  RECEIPT_ACCEPT,
+  type ReceiptUploadError,
+} from '@lummi/contracts/constants';
 import { fill, formatDateTime, formatTime, plural } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
@@ -24,7 +28,6 @@ import { EmptyState, ErrorState } from '../ui/States';
 import { Thumb } from '../ui/Thumb';
 
 const PAID_ON_THE_WAY = new Set(['payment_confirmed', 'accepted', 'assembling']);
-const ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf';
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
 const LINK =
   'rounded-btn font-medium underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60';
@@ -188,6 +191,30 @@ function PayUntil({ until }: { until: string }) {
         {rest}
       </span>
     </p>
+  );
+}
+
+/**
+ * No shop card (the owner took it off) while the order waits: nowhere to transfer now, so this note
+ * stands where the card was. A shopper who paid before still sends the receipt (spec Changes
+ * 2026-11-10, #28 ruling).
+ */
+function NoCard() {
+  const o = useOrdersText();
+  return (
+    <Card className="flex items-start gap-3.5 p-4" data-testid="no-card">
+      <span className="grid size-12 shrink-0 place-items-center rounded-pill bg-block text-ink">
+        <CardIcon size={22} />
+      </span>
+      <span className="min-w-0">
+        <span className="type-row block font-semibold text-pretty text-ink">
+          {o.payment.unavailableTitle}
+        </span>
+        <span className="type-small mt-1 block text-pretty text-muted">
+          {o.payment.unavailableText}
+        </span>
+      </span>
+    </Card>
   );
 }
 
@@ -355,15 +382,15 @@ function ReceiptZone({
 }
 
 /**
- * «Ожидает оплаты» with a card (mockup 07): pay until, the amount and the card with copy buttons,
- * the three steps, the receipt upload, the manager and «Отменить заказ». The dock picks a file,
- * then sends it; the order then moves to «Чек на проверке» and the screen with it.
+ * «Ожидает оплаты» (mockup 07): pay until, the amount and the card with copy buttons, the three
+ * steps, the receipt upload, the manager and «Отменить заказ». Without a card the note stands in
+ * for the first three and the upload stays. The dock picks a file, then sends it; the order then
+ * moves to «Чек на проверке» and the screen with it.
  */
 function PayStep({ payment }: { payment: PaymentDto }) {
   const o = useOrdersText();
   const qc = useQueryClient();
-  const { order } = payment;
-  const card = payment.card!;
+  const { order, card } = payment;
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [upload, setUpload] = useState<Upload>({ phase: 'empty' });
@@ -437,20 +464,31 @@ function PayStep({ payment }: { payment: PaymentDto }) {
   return (
     <Screen tabBar={false} dock={dock}>
       <Head order={order} />
-      <PayUntil until={order.reserveUntil} />
-      <TransferCard
-        order={order}
-        card={card}
-        onCopied={(ok) => {
-          if (ok) hapticSuccess();
-          toast.show(ok ? o.payment.copied : o.payment.copyFailed);
-        }}
-      />
-      <Steps />
+      {card ? (
+        <>
+          <PayUntil until={order.reserveUntil} />
+          <TransferCard
+            order={order}
+            card={card}
+            onCopied={(ok) => {
+              if (ok) hapticSuccess();
+              toast.show(ok ? o.payment.copied : o.payment.copyFailed);
+            }}
+          />
+          <Steps />
+        </>
+      ) : (
+        <>
+          <NoCard />
+          <p className="type-body mt-6 text-pretty text-ink" data-testid="already-paid">
+            {o.payment.alreadyPaid}
+          </p>
+        </>
+      )}
       <input
         ref={input}
         type="file"
-        accept={ACCEPT}
+        accept={RECEIPT_ACCEPT}
         className="sr-only"
         tabIndex={-1}
         aria-hidden="true"
@@ -596,46 +634,6 @@ function Confirmed({ order }: { order: OrderDto }) {
   );
 }
 
-/** No shop card is set: nowhere to transfer, so the screen says so and leads to the manager. */
-function Unavailable({ order }: { order: OrderDto }) {
-  const { customer } = usePrefs();
-  const o = useOrdersText();
-  const router = useRouter();
-  const username = customer?.config.managerUsername;
-  return (
-    <Screen tabBar={false}>
-      <Head order={order} />
-      <EmptyState
-        fill
-        icon={<CardIcon size={28} />}
-        title={o.payment.unavailableTitle}
-        text={o.payment.unavailableText}
-        action={
-          <>
-            {username ? (
-              <Button block onClick={() => openManagerChat(username)}>
-                {o.orders.writeManager}
-              </Button>
-            ) : null}
-            <Button
-              block
-              variant={username ? 'secondary' : 'primary'}
-              onClick={() =>
-                void router.navigate({
-                  to: '/orders/$number',
-                  params: { number: String(order.number) },
-                })
-              }
-            >
-              {o.payment.toOrder}
-            </Button>
-          </>
-        }
-      />
-    </Screen>
-  );
-}
-
 function Loading() {
   const o = useOrdersText();
   return (
@@ -701,8 +699,7 @@ export function Payment() {
 
 export function PaymentView({ payment }: { payment: PaymentDto }): ReactNode {
   const { order } = payment;
-  if (order.status === 'awaiting_payment')
-    return payment.card ? <PayStep payment={payment} /> : <Unavailable order={order} />;
+  if (order.status === 'awaiting_payment') return <PayStep payment={payment} />;
   if (order.status === 'receipt_review') return <UnderReview payment={payment} />;
   if (PAID_ON_THE_WAY.has(order.status)) return <Confirmed order={order} />;
   return <ToOrder number={order.number} />;

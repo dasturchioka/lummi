@@ -97,7 +97,7 @@ export const ordersMessages = defineMessages(
       send: 'Отправить чек',
       pickAnother: 'Выбрать другой файл',
       sendFailed: 'Не удалось отправить чек. Проверьте соединение и попробуйте ещё раз.',
-      tryAgain: 'Сейчас много запросов. Нажмите ещё раз через пару секунд.',
+      tryAgain: 'Сервер сейчас занят. Попробуйте ещё раз через минуту — файл уже выбран.',
       /** Why a file was refused, by the app or the server (`RECEIPT_UPLOAD_ERRORS`). */
       refused: {
         unsupported_type:
@@ -118,7 +118,8 @@ export const ordersMessages = defineMessages(
       unavailableTitle: 'Оплата временно недоступна',
       unavailableText:
         'Мы обновляем реквизиты для оплаты. Не переводите деньги, пока здесь нет карты. Если вопрос срочный, напишите менеджеру.',
-      toOrder: 'К заказу',
+      /** Above the upload while no card is set: a shopper who paid before still sends the receipt. */
+      alreadyPaid: 'Если вы уже оплатили — загрузите чек.',
       /** On the order page while it waits for payment. */
       goToPay: 'Перейти к оплате',
     },
@@ -288,7 +289,7 @@ export const ordersMessages = defineMessages(
       send: 'Chekni yuborish',
       pickAnother: 'Boshqa fayl tanlash',
       sendFailed: 'Chekni yuborib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
-      tryAgain: 'Hozir soʻrovlar koʻp. Bir necha soniyadan keyin yana bosing.',
+      tryAgain: 'Server hozir band. Bir daqiqadan keyin qayta urinib koʻring — fayl tanlangan.',
       refused: {
         unsupported_type:
           'Bu fayl mos emas. Chek skrinshotini (JPG, PNG, WebP) yoki PDF faylini yuklang.',
@@ -308,7 +309,7 @@ export const ordersMessages = defineMessages(
       unavailableTitle: 'Toʻlov vaqtincha mavjud emas',
       unavailableText:
         'Toʻlov rekvizitlarini yangilayapmiz. Bu yerda karta paydo boʻlmaguncha pul oʻtkazmang. Savol shoshilinch boʻlsa, menejerga yozing.',
-      toOrder: 'Buyurtmaga',
+      alreadyPaid: 'Agar toʻlagan boʻlsangiz, chekni yuklang.',
       goToPay: 'Toʻlovga oʻtish',
     },
     orders: {
