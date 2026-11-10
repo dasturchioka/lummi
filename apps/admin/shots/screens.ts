@@ -36,6 +36,21 @@ async function openFragrance(page: Page, which: number | string = 0) {
   await page.locator('form [data-volume]').first().waitFor();
 }
 
+/**
+ * A full-page capture of an order page waits for every receipt image to decode, and scrolls
+ * through once: a phone viewport paints an image below the fold only after it was in view.
+ */
+async function imagesLoaded({ page }: { page: Page }) {
+  await page.waitForFunction(() =>
+    [...document.images].every((i) => i.complete && i.naturalWidth > 0),
+  );
+  const height = await page.evaluate(() => document.body.scrollHeight);
+  for (let y = 0; y < height; y += 600) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await page.waitForTimeout(60);
+  }
+}
+
 /** Presses a button on the order page and waits for the dialog it opens. */
 async function openOrderDialog(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).first().click();
@@ -1364,16 +1379,16 @@ export const screens: Screen[] = [
   { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
   { id: 'orders-search', path: '/orders?q=93+555', as: 'manager' },
   { id: 'orders-empty', path: '/orders?q=7777777', as: 'manager' },
-  { id: 'order-awaiting', path: `/orders/${SHOT_ORDER.awaiting}`, as: 'manager' },
-  { id: 'order-checking', path: `/orders/${SHOT_ORDER.checking}`, as: 'manager' },
-  { id: 'order-review', path: `/orders/${SHOT_ORDER.review}`, as: 'manager' },
-  { id: 'order-paid', path: `/orders/${SHOT_ORDER.paid}`, as: 'manager' },
-  { id: 'order-assembling', path: `/orders/${SHOT_ORDER.assembling}`, as: 'manager' },
-  { id: 'order-shipped', path: `/orders/${SHOT_ORDER.shipped}`, as: 'manager' },
-  { id: 'order-delivered', path: `/orders/${SHOT_ORDER.delivered}`, as: 'manager' },
-  { id: 'order-cancelled', path: `/orders/${SHOT_ORDER.cancelled}`, as: 'owner' },
-  { id: 'order-expired', path: `/orders/${SHOT_ORDER.expired}`, as: 'manager' },
-  { id: 'order-worst', path: `/orders/${SHOT_ORDER.worst}`, as: 'owner' },
+  { id: 'order-awaiting', path: `/orders/${SHOT_ORDER.awaiting}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-checking', path: `/orders/${SHOT_ORDER.checking}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-review', path: `/orders/${SHOT_ORDER.review}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-paid', path: `/orders/${SHOT_ORDER.paid}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-assembling', path: `/orders/${SHOT_ORDER.assembling}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-shipped', path: `/orders/${SHOT_ORDER.shipped}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-delivered', path: `/orders/${SHOT_ORDER.delivered}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-cancelled', path: `/orders/${SHOT_ORDER.cancelled}`, as: 'owner' , act: imagesLoaded },
+  { id: 'order-expired', path: `/orders/${SHOT_ORDER.expired}`, as: 'manager' , act: imagesLoaded },
+  { id: 'order-worst', path: `/orders/${SHOT_ORDER.worst}`, as: 'owner' , act: imagesLoaded },
   {
     id: 'order-reject',
     path: `/orders/${SHOT_ORDER.review}`,
