@@ -11,7 +11,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
-import { regionName, useCities, type Picked } from '../delivery/queries';
+import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
 import { usePrefs } from '../lib/prefs';
@@ -19,7 +19,7 @@ import { useRegistration } from '../lib/registration';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { Checkbox, TextArea, TextField } from '../ui/Field';
+import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
 import { Figure } from '../ui/Figure';
 import {
   AlertIcon,
@@ -81,7 +81,10 @@ function TypedPlace({
   );
 }
 
-/** «Пункт BTS» before one is chosen: a field-like row that opens the picker. */
+/**
+ * «Пункт BTS» before one is chosen: a field-like row (Milk Field, never the chosen point's white
+ * plate) that opens the picker. Left empty on submit it leads with the alert icon and says why.
+ */
 function ChoosePoint({ onOpen, error }: { onOpen: () => void; error: string | null }) {
   const { t } = usePrefs();
   const o = useOrdersText();
@@ -94,19 +97,21 @@ function ChoosePoint({ onOpen, error }: { onOpen: () => void; error: string | nu
         type="button"
         data-testid="choose-point"
         data-invalid={error ? true : undefined}
+        aria-describedby={error ? 'choose-point-error' : undefined}
         onClick={onOpen}
-        className={`type-row flex h-12 w-full items-center justify-between gap-3 rounded-btn bg-field px-3.5 text-left text-ink transition-[background-color,transform] duration-150 active:scale-[0.99] ${error ? 'shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''}`}
+        className={`type-row flex h-12 w-full items-center gap-2.5 rounded-btn bg-field px-3.5 text-left text-ink transition-[background-color,transform] duration-150 active:scale-[0.99] ${error ? 'shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''}`}
       >
-        <span className="min-w-0 truncate">{o.checkout.choosePoint}</span>
+        {error ? (
+          <span aria-hidden="true" className="shrink-0">
+            <AlertIcon size={18} />
+          </span>
+        ) : null}
+        <span className="min-w-0 flex-1 truncate">{o.checkout.choosePoint}</span>
         <span className="shrink-0 text-muted">
           <ChevronIcon size={18} />
         </span>
       </button>
-      {error ? (
-        <p role="alert" className="type-hint mt-1.5 font-medium text-ink">
-          {error}
-        </p>
-      ) : null}
+      {error ? <FieldError id="choose-point-error">{error}</FieldError> : null}
     </div>
   );
 }
@@ -285,10 +290,12 @@ export function Checkout() {
 
   const place =
     dest?.kind === 'point'
-      ? dest.point.city
+      ? deliveryPlace(dest.region, dest.point.city, language)
       : dest?.kind === 'typed'
         ? regionName(dest.region, language)
-        : (data.deliveryCity?.city ?? null);
+        : data.deliveryCity
+          ? deliveryPlace(data.deliveryCity.region, data.deliveryCity.city, language)
+          : null;
   const inCity =
     dest?.kind === 'point'
       ? (cities.data?.find((c) => c.city === dest.point.city)?.pointCount ?? 0)
@@ -296,14 +303,19 @@ export function Checkout() {
 
   const submit = (confirmedTotal: number) => {
     if (!dest || invalid) {
-      // show every field's error and bring the first one into view
+      // show every field's error, then focus the first one and bring it to the middle of the screen
       setAttempted(true);
       setError(o.checkout.fixErrors);
       requestAnimationFrame(() => {
-        const first = document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid]');
-        first?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        if (first instanceof HTMLInputElement || first instanceof HTMLTextAreaElement)
-          first.focus({ preventScroll: true });
+        const first = document.querySelector<HTMLElement>(
+          'main [aria-invalid="true"], main [data-invalid]',
+        );
+        if (!first) return;
+        // focus first, without its own jump: a keyboard that opens then shrinks the viewport, and
+        // the dock lifts the field above itself; the scroll centres it either way
+        first.focus({ preventScroll: true });
+        // the consent box is a visually hidden input: centre its row, not the 1 px input
+        (first.closest('label') ?? first).scrollIntoView({ block: 'center', behavior: 'smooth' });
       });
       return;
     }
@@ -446,7 +458,8 @@ export function Checkout() {
           }}
           maxLength={RECIPIENT_PHONE_INPUT_MAX}
           className="tabular-nums"
-          placeholder={onlyUzbekistan ? '+998 90 123 45 67' : undefined}
+          // a mask, not a demo number that could pass for a real one
+          placeholder={onlyUzbekistan ? '+998 __ ___ __ __' : undefined}
           hint={
             accountPhoneFits
               ? o.checkout.recipientPhoneHint
@@ -553,11 +566,7 @@ export function Checkout() {
           <Checkbox checked={consent} onChange={setConsent} invalid={!!errors.consent}>
             {o.checkout.consent}
           </Checkbox>
-          {errors.consent ? (
-            <p role="alert" className="type-hint mt-1 pl-[34px] font-medium text-ink">
-              {errors.consent}
-            </p>
-          ) : null}
+          {errors.consent ? <FieldError inset>{errors.consent}</FieldError> : null}
         </section>
       ) : null}
       <div className="h-6" />

@@ -11,6 +11,7 @@ import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useCart, useAddToCart, useRemoveLine, useSetQuantity } from '../cart/queries';
+import { deliveryPlace } from '../delivery/queries';
 import { usePrefs } from '../lib/prefs';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
@@ -403,7 +404,7 @@ function discountLabel(d: Discount, t: T): string {
  * free delivery are Dark Sage Ink. When nothing in the cart can be bought, the button says why.
  */
 function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void }) {
-  const { t } = usePrefs();
+  const { t, language } = usePrefs();
   const { quote } = cart;
   const row = 'flex items-baseline justify-between gap-4';
   const canBuy = quote.itemsSubtotal > 0;
@@ -436,7 +437,9 @@ function Totals({ cart, onCheckout }: { cart: CartDto; onCheckout: () => void })
         <div className={row}>
           <dt className="min-w-0 text-pretty text-totals-ink/75">
             {cart.deliveryCity
-              ? fill(t.cart.delivery, { city: cart.deliveryCity.city })
+              ? fill(t.cart.delivery, {
+                  city: deliveryPlace(cart.deliveryCity.region, cart.deliveryCity.city, language),
+                })
               : t.cart.deliveryNoCity}
           </dt>
           <dd className="type-price">

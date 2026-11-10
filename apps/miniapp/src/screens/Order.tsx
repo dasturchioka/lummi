@@ -90,9 +90,10 @@ function DeliveryCard({ order }: { order: OrderDto }) {
                 landmark={point.landmark}
                 hours={point.hours}
               />
+              {/* BTS names the city in Russian only: a UZ reader gets the region in UZ alone */}
               <MetaLine
                 className="type-small mt-0.5 text-muted"
-                parts={[point.city, region[language]]}
+                parts={language === 'uz' ? [region.uz] : [point.city, region.ru]}
               />
             </>
           ) : (
@@ -215,7 +216,11 @@ export function OrderView({ order }: { order: OrderDto }) {
   const { language, customer } = usePrefs();
   const o = useOrdersText();
   const managerUsername = customer?.config.managerUsername;
-  const place = order.delivery.point?.city ?? order.delivery.region[language];
+  // the city as BTS names it (Russian) in RU; the region's own name in UZ and for a typed address
+  const place =
+    order.delivery.point && language === 'ru'
+      ? order.delivery.point.city
+      : order.delivery.region[language];
   const itemCount = order.lines.reduce((sum, l) => sum + l.qty, 0);
   return (
     <Screen>

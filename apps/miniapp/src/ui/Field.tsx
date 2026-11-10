@@ -6,12 +6,13 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
 } from 'react';
-import { CheckIcon } from './icons';
+import { AlertIcon, CheckIcon } from './icons';
 
 /*
  * DESIGN.md Inputs: Milk Field fill, no border, 10 px radius, 48 px, 16 px text (no iOS zoom).
  * The label sits above in 12.5 px Manrope 500, Muted Ink; the hint below in 12 px. Focus is the
- * global 2 px Sage outline. An error replaces the hint in ink with the alert's weight.
+ * global 2 px Sage outline. An error is marked without red (the No Alarm Rule): an ink outline,
+ * the alert icon inside the field, and the error line, led by the same icon, in place of the hint.
  */
 const FIELD =
   'w-full rounded-btn bg-field px-3.5 text-base text-ink placeholder:text-muted disabled:text-muted';
@@ -22,6 +23,49 @@ interface FieldFrame {
   aside?: ReactNode;
   hint?: ReactNode;
   error?: string | null;
+}
+
+/**
+ * The line under a control that says what it needs: the alert icon (the one on the checkout
+ * banner «Проверьте отмеченные поля») then the text in ink, so it never reads as a hint. `inset`
+ * lines the text up with a checkbox's label while the icon sits under the box.
+ */
+export function FieldError({
+  id,
+  inset = false,
+  children,
+}: {
+  id?: string;
+  inset?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <p
+      id={id}
+      role="alert"
+      className={`type-hint mt-1.5 flex items-start font-medium text-ink ${inset ? 'gap-3' : 'gap-1.5'}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`flex h-[17.4px] shrink-0 items-center ${inset ? 'w-[22px] justify-center' : ''}`}
+      >
+        <AlertIcon size={14} />
+      </span>
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
+/** The alert icon inside an errored field, at its right edge. */
+function ErrorMark({ className = '' }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none absolute right-3.5 text-ink ${className}`}
+    >
+      <AlertIcon size={18} />
+    </span>
+  );
 }
 
 function Frame({
@@ -42,9 +86,7 @@ function Frame({
       </div>
       {children}
       {error ? (
-        <p id={`${id}-hint`} role="alert" className="type-hint mt-1.5 font-medium text-ink">
-          {error}
-        </p>
+        <FieldError id={`${id}-hint`}>{error}</FieldError>
       ) : hint ? (
         <p id={`${id}-hint`} className="type-hint mt-1.5 text-muted">
           {hint}
@@ -71,13 +113,15 @@ export function TextField({
           id={id}
           aria-describedby={hint || error ? `${id}-hint` : undefined}
           aria-invalid={error ? true : undefined}
-          className={`${FIELD} h-12 ${trailing ? 'pr-28' : ''} ${error ? 'shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''} ${className}`}
+          className={`${FIELD} h-12 ${trailing ? 'pr-28' : error ? 'pr-11' : ''} ${error ? 'shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''} ${className}`}
           {...input}
         />
         {trailing ? (
           <span className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center">
             {trailing}
           </span>
+        ) : error ? (
+          <ErrorMark className="top-1/2 -translate-y-1/2" />
         ) : null}
       </span>
     </Frame>
@@ -106,14 +150,17 @@ export function TextArea({
   }, [area.value]);
   return (
     <Frame id={id} label={label} aside={aside} hint={hint} error={error}>
-      <textarea
-        ref={ref}
-        id={id}
-        aria-describedby={hint || error ? `${id}-hint` : undefined}
-        aria-invalid={error ? true : undefined}
-        className={`${FIELD} block max-h-[240px] min-h-[88px] resize-none py-3 leading-snug ${className}`}
-        {...area}
-      />
+      <span className="relative block">
+        <textarea
+          ref={ref}
+          id={id}
+          aria-describedby={hint || error ? `${id}-hint` : undefined}
+          aria-invalid={error ? true : undefined}
+          className={`${FIELD} block max-h-[240px] min-h-[88px] resize-none py-3 leading-snug ${error ? 'pr-11 shadow-[inset_0_0_0_1px_var(--c-ink)]' : ''} ${className}`}
+          {...area}
+        />
+        {error ? <ErrorMark className="top-3.5" /> : null}
+      </span>
     </Frame>
   );
 }
@@ -155,7 +202,8 @@ export function Checkbox({
           checked
             ? 'bg-btn text-btn-ink'
             : invalid
-              ? 'bg-transparent shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+              ? // left empty where it is required: filled and ink-ringed, not the quiet hairline box
+                'bg-field shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
               : 'inset-line bg-transparent'
         }`}
       >
