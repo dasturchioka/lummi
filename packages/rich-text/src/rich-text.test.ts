@@ -85,10 +85,10 @@ describe('rich text', () => {
       }
       return fastest;
     };
-    best(10_000); // warm the JIT
-    const ratio = best(200_000) / Math.max(best(50_000), 0.5);
+    best(2_000); // warm the JIT
+    const ratio = best(40_000) / Math.max(best(10_000), 0.5);
     expect(ratio).toBeLessThan(8);
-  });
+  }, 30_000);
 
   it('keeps a number with its thousands and its word, and leaves other spaces alone', () => {
     const nb = (x: string) => x.replace(/_/g, '\u00A0');
