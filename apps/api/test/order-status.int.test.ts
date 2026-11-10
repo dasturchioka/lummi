@@ -15,6 +15,7 @@ import {
   orderLines,
   orders,
   outbox,
+  receipts,
   regions,
   volumes,
 } from '@lummi/db';
@@ -25,6 +26,7 @@ import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
+import { ReceiptRejection } from '../src/payment/receipt-rejection';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { WorkerRuntime } from '../src/worker/runtime';
 import type { TestUser } from './harness/sign-init-data';
@@ -185,6 +187,19 @@ async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_pay
     from = to;
   }
   throw new Error(`no path to ${status}`);
+}
+
+/** A manager rejects the order's receipt under check in their own words (#33's door). */
+async function rejectWaitingReceipt(orderId: number, note: string) {
+  const [waiting] = await t.db
+    .select({ id: receipts.id })
+    .from(receipts)
+    .where(and(eq(receipts.orderId, orderId), eq(receipts.verdict, 'pending')));
+  const manager = await staff();
+  if (manager.type !== 'staff') throw new Error('a manager');
+  return t.app
+    .get(ReceiptRejection)
+    .reject({ orderId, receiptId: waiting!.id, reason: 'other', note, staffId: manager.id });
 }
 
 /**
@@ -447,16 +462,8 @@ describe('the reserve reminder (setting orders.reserveReminderSeconds, 2 h)', ()
     await walkTo(number, 'receipt_review');
     const { id } = await orderRow(number);
     t.edges.clock.set(new Date('2026-11-09T11:00:00Z'));
-    const rejected = await machine().transition(
-      id,
-      'reject_receipt',
-      await staff(),
-      'receipt_review',
-      {
-        reason: 'На чеке другая сумма',
-      },
-    );
-    expect(rejected.kind).toBe('done');
+    const rejected = await rejectWaitingReceipt(id, 'На чеке другая сумма');
+    expect(rejected.kind).toBe('rejected');
 
     t.edges.clock.set(new Date('2026-11-09T20:00:00Z'));
     await tick();
@@ -824,10 +831,8 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
     const number = await placeOrder(client, await firstSlug());
     await walkTo(number, 'receipt_review');
     const { id } = await orderRow(number);
-    const out = await machine().transition(id, 'reject_receipt', await staff(), 'receipt_review', {
-      reason: 'На чеке другая сумма',
-    });
-    expect(out.kind === 'done' && out.order.status).toBe('awaiting_payment');
+    const out = await rejectWaitingReceipt(id, 'На чеке другая сумма');
+    expect(out.kind === 'rejected' && out.order.status).toBe('awaiting_payment');
     const message = (await messages()).at(-1);
     expect(message!.text).toBe(
       `Чек к заказу № ${number} не принят.\nПричина: На чеке другая сумма\nПроверьте сумму и карту и загрузите чек ещё раз.`,

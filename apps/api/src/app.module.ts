@@ -2,6 +2,8 @@ import type { UserFromGetMe } from 'grammy/types';
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
+import { AdminOrdersController } from './admin-orders/admin-orders.controller';
+import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
@@ -25,6 +27,7 @@ import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
 import { ShopCardController } from './payment/shop-card.controller';
 import { ShopCardService } from './payment/shop-card.service';
+import { ReceiptRejection } from './payment/receipt-rejection';
 import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
 import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
@@ -106,6 +109,7 @@ export class AppModule {
         HumoFeedController,
         BroadcastController,
         PromoAdminController,
+        AdminOrdersController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -148,6 +152,8 @@ export class AppModule {
         HumoFeedService,
         BroadcastService,
         PromoAdminService,
+        ReceiptRejection,
+        AdminOrdersService,
       ],
       exports: [
         CreditEvents,

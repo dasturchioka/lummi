@@ -67,10 +67,22 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   reject_receipt: {
     audit: 'order.receipt_rejected',
-    message: (m, lang) => ({
-      text: fill(bot(lang).receiptRejected, { number: number(m), reason: m.payload.reason }),
-      manager: true,
-    }),
+    // the preset reads as a sentence in the shopper's language; `other` is the manager's own words,
+    // and a note under a preset follows it on its own line (#33)
+    message: (m, lang) => {
+      const { reason, note } = m.payload;
+      const why =
+        reason === 'other'
+          ? (note ?? '')
+          : [
+              ordersMessages[lang].orders.receiptRejectReason[reason],
+              ...(note ? [fill(bot(lang).rejectNote, { note })] : []),
+            ].join('\n');
+      return {
+        text: fill(bot(lang).receiptRejected, { number: number(m), reason: why }),
+        manager: true,
+      };
+    },
   },
   payment_not_found: {
     audit: 'order.payment_not_found',
