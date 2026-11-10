@@ -40,7 +40,8 @@ export const sloganResponseSchema = z.object({ slogan: sloganSchema.nullable() }
 
 /**
  * What Home needs from the owner, in one response so the slogan never swaps in after the first
- * paint: the active banner (null: Home shows the Discovery set banner) and the saved slogan.
+ * paint: the active promo banner (null: none, Home shows only the Discovery set banner) and the
+ * saved slogan.
  */
 export const homeContentSchema = z.object({
   banner: promoBannerSchema.nullable(),

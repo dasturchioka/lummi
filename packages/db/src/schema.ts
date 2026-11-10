@@ -690,7 +690,8 @@ export type OrderLineRow = typeof orderLines.$inferSelect;
 
 /**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
- * partial unique index is what enforces it. With none active Home shows the Discovery set banner.
+ * partial unique index is what enforces it. It sits in its own slot under the Discovery set
+ * banner, which it never replaces; with none active Home shows only the Discovery banner.
  * `image_hash` names a rendition set of the photo pipeline (`public/<hash>-<w>.webp`).
  */
 export const promoBanners = pgTable(

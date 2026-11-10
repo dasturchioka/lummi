@@ -98,21 +98,17 @@ function PopularSkeleton() {
 }
 
 /**
- * The banner slot: the active promo banner, else the Discovery set banner. While the answer is on
- * its way the slot keeps its height, so nothing below it jumps; a failed request shows Discovery.
+ * The owner's promo banner, in its own slot under the Discovery set banner (which always stays:
+ * it is the approved variant 2's own card). Nothing is reserved while the answer is on its way or
+ * when no banner is on, so Home without a promo looks exactly as approved.
  */
-function BannerSlot() {
-  const home = useHomeContent();
-  const slot = <Skeleton className="min-h-[140px] w-full" rounded="card" />;
-  if (home.isPending) return slot;
-  const active = home.data?.banner;
+function PromoSlot() {
+  const active = useHomeContent().data?.banner;
   return active ? (
-    <Suspense fallback={slot}>
+    <Suspense fallback={<Skeleton className="min-h-[140px] w-full" rounded="card" />}>
       <PromoBanner banner={active} />
     </Suspense>
-  ) : (
-    <DiscoveryBanner />
-  );
+  ) : null;
 }
 
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
@@ -147,7 +143,8 @@ export function Home() {
         </div>
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
-          <BannerSlot />
+          <DiscoveryBanner />
+          <PromoSlot />
           <Suspense fallback={<PopularSkeleton />}>
             <Popular />
           </Suspense>

@@ -436,7 +436,7 @@ export const adminMessages = defineMessages(
         langUz: 'Узбекский',
         banner: {
           section: 'Баннер на Главной',
-          hint: 'На Главной виден один баннер. Пока ни один не включён, там набор Discovery set.',
+          hint: 'Включённый баннер стоит на Главной под набором Discovery set. Включён может быть только один.',
           empty: 'Баннеров пока нет.',
           add: 'Новый баннер',
           editing: 'Редактирование',
@@ -449,7 +449,7 @@ export const adminMessages = defineMessages(
           remove: 'Удалить',
           removeTitle: 'Удалить баннер?',
           removeText:
-            'Баннер исчезнет навсегда. Если он был включён, на Главной снова будет Discovery set.',
+            'Баннер исчезнет навсегда. Если он был включён, с Главной он тоже пропадёт.',
           cancel: 'Отмена',
           needsPhoto: 'Чтобы включить баннер, загрузите фото.',
           title: 'Заголовок',
@@ -1197,7 +1197,7 @@ export const adminMessages = defineMessages(
         langUz: 'Oʻzbekcha',
         banner: {
           section: 'Bosh sahifadagi banner',
-          hint: 'Bosh sahifada bitta banner koʻrinadi. Birortasi yoqilmaguncha u yerda Discovery set turadi.',
+          hint: 'Yoqilgan banner Bosh sahifada Discovery set toʻplami ostida turadi. Faqat bittasi yoqilishi mumkin.',
           empty: 'Hozircha banner yoʻq.',
           add: 'Yangi banner',
           editing: 'Tahrirlash',
@@ -1210,7 +1210,7 @@ export const adminMessages = defineMessages(
           remove: 'Yoʻq qilish',
           removeTitle: 'Banner yoʻq qilinsinmi?',
           removeText:
-            'Banner butunlay yoʻqoladi. Agar u yoqilgan boʻlsa, Bosh sahifada yana Discovery set chiqadi.',
+            'Banner butunlay yoʻqoladi. Agar u yoqilgan boʻlsa, Bosh sahifadan ham olib tashlanadi.',
           cancel: 'Bekor qilish',
           needsPhoto: 'Bannerni yoqish uchun rasm yuklang.',
           title: 'Sarlavha',

@@ -8,9 +8,10 @@ import { usePrefs } from '../../lib/prefs';
 import { ArrowRightIcon } from '../../ui/icons';
 
 /**
- * The owner's promo banner, in the Discovery banner's layout (approved variant 2): the photo on
- * the left third, the text on the dark block beside it. The whole banner is one button that opens
- * its `startapp` target through the same route table as a deep link.
+ * The owner's promo banner, in its own slot under the Discovery set banner, drawn in the same
+ * Graphite form (approved variant 2): the photo on the left third, the text on the dark block
+ * beside it. The whole banner is one link that opens its `startapp` target through the same route
+ * table as a deep link.
  */
 export default function PromoBanner({ banner }: { banner: Banner }) {
   const { language } = usePrefs();
