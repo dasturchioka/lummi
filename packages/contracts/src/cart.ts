@@ -41,6 +41,11 @@ export const builderLineSchema = z.object({
   ...lineBase,
   kind: z.literal('builder_set'),
   fragrances: setFragrances,
+  /**
+   * The picks whose 10 ml cannot fill this line (empty unless it is sold out). `inCart` marks one
+   * that is short only because an earlier line of this cart already holds it (spec Changes 2026-11-10).
+   */
+  short: z.array(z.object({ slug: z.string(), name: z.string(), inCart: z.boolean() })),
 });
 
 export const cartLineSchema = z.discriminatedUnion('kind', [

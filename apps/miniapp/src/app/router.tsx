@@ -125,6 +125,9 @@ const routeTree = rootRoute.addChildren([
   }),
   createRoute({
     ...at('/sets/builder'),
+    // `?pick=a,b,c`: the cart's «Изменить набор» opens the builder with that line's picks
+    validateSearch: (s: Record<string, unknown>): { pick?: string } =>
+      typeof s.pick === 'string' && s.pick !== '' ? { pick: s.pick.slice(0, 400) } : {},
     component: lazyRouteComponent(setsScreens, 'BuilderScreen'),
   }),
   createRoute({

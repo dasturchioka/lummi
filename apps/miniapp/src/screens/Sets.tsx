@@ -1,7 +1,7 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { fill, plural } from '@lummi/i18n';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   SetUnavailableError,
@@ -514,7 +514,10 @@ export function BuilderScreen() {
   const s = useSetsText();
   const query = useBuilder();
   const add = useAddBuilder();
-  const [picked, setPicked] = useState<string[]>([]);
+  const { pick } = useSearch({ strict: false }) as { pick?: string };
+  const [picked, setPicked] = useState<string[]>(() =>
+    pick ? pick.split(',').slice(0, SET_SIZE) : [],
+  );
   const [note, setNote] = useNote();
   const [failed, setFailed] = useState(false);
   const [gone, setGone] = useState<string[] | undefined>();

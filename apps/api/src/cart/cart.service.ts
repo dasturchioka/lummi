@@ -65,11 +65,18 @@ export class CartService {
               brand: l.brand,
               ml: l.ml as 10 | 30 | 50,
             }
-          : {
-              ...base,
-              kind: l.kind,
-              fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
-            };
+          : l.kind === 'builder_set'
+            ? {
+                ...base,
+                kind: l.kind,
+                fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
+                short: l.short,
+              }
+            : {
+                ...base,
+                kind: l.kind,
+                fragrances: l.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
+              };
       }),
       quote: q,
       count: lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),

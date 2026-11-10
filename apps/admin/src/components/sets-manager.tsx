@@ -342,7 +342,7 @@ function PriceForm({
                     <option value="">{s.choose}</option>
                     {sorted.map((o) => (
                       <option key={o.id} value={o.id}>
-                        {o.hidden ? `${o.name} · ${t.catalog.hidden}` : o.name}
+                        {o.hidden ? `${t.catalog.hidden} · ${o.name}` : o.name}
                       </option>
                     ))}
                   </Select>

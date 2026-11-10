@@ -235,9 +235,30 @@ describe('the builder', () => {
     const out = await client.cart.get();
     expect(out.status === 200 && out.body.lines[0]).toMatchObject({ soldOut: true });
     expect(out.status === 200 && out.body.quote.itemsSubtotal).toBe(0);
+    // the server names the one that is short; the client does no stock arithmetic
+    const line = out.status === 200 ? out.body.lines[0] : undefined;
+    expect(line?.kind === 'builder_set' && line.short).toEqual([
+      { slug: five[4], name: expect.any(String), inCart: false },
+    ]);
     await setTenMl(five[4]!, 4);
     const back = await client.cart.get();
     expect(back.status === 200 && back.body.lines[0]).toMatchObject({ soldOut: false, qty: 1 });
+  });
+
+  it('says a 10 ml is short only because an earlier line of the cart holds it', async () => {
+    const five = await slugs(5);
+    await setTenMl(five[0]!, 1);
+    const { client } = await t.signIn(ali);
+    await client.cart.addLine({ body: { slug: five[0]!, ml: 10, qty: 1 } });
+    const res = await client.cart.addBuilder({ body: { slugs: five, qty: 1 } });
+    const line =
+      res.status === 200 ? res.body.lines.find((l) => l.kind === 'builder_set') : undefined;
+    expect(line).toMatchObject({ soldOut: true });
+    expect(line?.kind === 'builder_set' && line.short).toEqual([
+      { slug: five[0], name: expect.any(String), inCart: true },
+    ]);
+    // checkout is not blocked and the line is out of the quote
+    expect(res.status === 200 && res.body.lines).toHaveLength(2);
   });
 
   it('follows the Discovery set price when the owner changes it', async () => {

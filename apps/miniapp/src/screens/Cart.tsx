@@ -283,6 +283,7 @@ function Line({
 }) {
   const { t } = usePrefs();
   const s = useSetsText();
+  const router = useRouter();
   const out = line.soldOut;
   return (
     <div
@@ -342,6 +343,43 @@ function Line({
         </div>
         {/* the five under the name and price, over the column's full width */}
         {line.kind === 'volume' ? null : <SetFragranceList items={line.fragrances} muted={out} />}
+        {line.kind === 'builder_set' && out && line.short.length > 0 ? (
+          <div className="mt-2 flex flex-col gap-1" data-testid="set-short">
+            {line.short.some((f) => !f.inCart) ? (
+              <p className="type-caption text-pretty text-muted [overflow-wrap:anywhere]">
+                {fill(s.unavailableShort, {
+                  names: line.short
+                    .filter((f) => !f.inCart)
+                    .map((f) => f.name)
+                    .join(', '),
+                })}
+              </p>
+            ) : null}
+            {line.short
+              .filter((f) => f.inCart)
+              .map((f) => (
+                <p
+                  key={f.slug}
+                  className="type-caption text-pretty text-muted [overflow-wrap:anywhere]"
+                >
+                  {fill(s.inCartAbove, { name: f.name })}
+                </p>
+              ))}
+            <button
+              type="button"
+              data-testid="edit-builder"
+              onClick={() =>
+                void router.navigate({
+                  to: '/sets/builder',
+                  search: { pick: line.fragrances.map((f) => f.slug).join(',') },
+                })
+              }
+              className="type-caption self-start font-medium text-ink underline underline-offset-4"
+            >
+              {s.editBuilder}
+            </button>
+          </div>
+        ) : null}
         <div className="mt-auto flex items-center gap-2.5 pt-3">
           {out ? (
             <span className="type-caption inline-flex h-7 items-center rounded-pill bg-field px-2.5 font-medium text-muted">

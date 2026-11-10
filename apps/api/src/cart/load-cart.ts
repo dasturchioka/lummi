@@ -59,6 +59,8 @@ export interface DiscoveryLineView extends LineBase {
 export interface BuilderLineView extends LineBase {
   kind: 'builder_set';
   items: (SetItem & { volumeId: number })[];
+  /** Which picks leave the line sold out; `inCart`: only because an earlier line took the last unit. */
+  short: { slug: string; name: string; inCart: boolean }[];
 }
 
 export type SetLineView = DiscoveryLineView | BuilderLineView;
@@ -212,6 +214,11 @@ export async function loadCartQuote(
         sr.qty,
         five.length === SET_SIZE ? Math.min(...five.map((t) => free.get(t.volumeId) ?? 0)) : 0,
       );
+      const short = view.soldOut
+        ? five
+            .filter((t) => (free.get(t.volumeId) ?? 0) <= 0)
+            .map((t) => ({ slug: t.slug, name: t.name, inCart: t.available > 0 }))
+        : [];
       if (!view.soldOut)
         take(
           five.map((t) => t.volumeId),
@@ -228,6 +235,7 @@ export async function loadCartQuote(
           name: t.name,
           brand: t.brand,
         })),
+        short,
         ...view,
       });
     }
