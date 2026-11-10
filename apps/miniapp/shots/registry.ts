@@ -1079,7 +1079,10 @@ async function openVolumeSheet(page: Page) {
 }
 /** Opens the point picker from «Сменить» and takes the point at `n` of the saved city. */
 async function switchPoint(page: Page, n: number) {
-  await page.getByTestId('choose-point').click();
+  await page
+    .getByTestId('chosen-point')
+    .getByRole('button', { name: /^(Сменить|Oʻzgartirish)$/ })
+    .click();
   await sheet(page).getByTestId('point-row').nth(n).click();
   await sheet(page).waitFor({ state: 'detached' });
   await page.getByTestId('chosen-point').waitFor();
