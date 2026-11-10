@@ -3,12 +3,14 @@ import { NestFactory } from '@nestjs/core';
 import 'reflect-metadata';
 import { AppModule } from './app.module';
 import { GrammySender, LocalFileStore, SystemClock, createReceiptJudge } from './edges';
+import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
 import { WorkerRuntime } from './worker/runtime';
 import { describeError } from './logging/describe-error';
 
 // Separate from HTTP (ADR 0015): a crashed worker never takes down checkout.
 // Same modules as the API, as an application context without an HTTP listener.
+const log = new PinoLogger('worker');
 const env = parseEnv();
 const { db, pool } = createDb(env.DATABASE_URL);
 const app = await NestFactory.createApplicationContext(
@@ -22,15 +24,16 @@ const app = await NestFactory.createApplicationContext(
       files: new LocalFileStore(env.FILES_DIR),
     },
   }),
+  { logger: log },
 );
 app.enableShutdownHooks();
 const worker = app.get(WorkerRuntime);
 worker.start();
 const run = () =>
-  worker.tick().catch((e: unknown) => console.error(`tick failed: ${describeError(e)}`));
+  worker.tick().catch((e: unknown) => log.error(`tick failed: ${describeError(e)}`, 'Worker'));
 await run();
 const timer = setInterval(run, 60_000);
-console.log('worker started');
+log.log('worker started', 'Worker');
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     clearInterval(timer);

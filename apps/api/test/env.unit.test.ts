@@ -9,6 +9,13 @@ const valid = {
 };
 
 describe('parseEnv', () => {
+  it('reads an empty variable as unset (a Compose file passes empty strings for optional keys)', () => {
+    const env = parseEnv({ ...valid, OPENAI_API_KEY: '', WEBHOOK_URL: '', API_PORT: '' });
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.WEBHOOK_URL).toBeUndefined();
+    expect(env.API_PORT).toBe(4000);
+  });
+
   it('requires an https BOT_LINK in production, and defaults to none elsewhere', () => {
     const { BOT_LINK: _omit, ...noLink } = valid;
     const prod = { ...noLink, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' };

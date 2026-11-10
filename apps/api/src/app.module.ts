@@ -28,6 +28,7 @@ import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SearchService } from './search/search.service';
+import { HealthController } from './health/health.controller';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
@@ -66,6 +67,7 @@ export class AppModule {
     return {
       module: AppModule,
       controllers: [
+        HealthController,
         AuthController,
         MeController,
         CatalogController,

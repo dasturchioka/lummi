@@ -1,7 +1,7 @@
 import { openLink, shareURL } from '@telegram-apps/sdk-react';
 
 /** The bot's link, no trailing slash. Dev bot locally via `VITE_BOT_LINK` (ADR 0023). */
-const botLink = (import.meta.env.VITE_BOT_LINK ?? 'https://t.me/Lummiuz_bot').replace(/\/$/, '');
+const botLink = (import.meta.env.VITE_BOT_LINK || 'https://t.me/Lummiuz_bot').replace(/\/$/, '');
 
 /** `p_<slug>` is the Mini App deep link of a fragrance (ADR 0016). */
 export const fragranceLink = (slug: string) => `${botLink}?startapp=p_${slug}`;

@@ -1,0 +1,161 @@
+# The whole stack, for staging and production (ADR 0024). Same file, different `.env`.
+#   docker compose --env-file .env up -d      (see docs/run-guide.md)
+# Staging: Caddy listens on 127.0.0.1 only and the host's nginx terminates TLS (CADDY_SCHEME=http://).
+# Production: Caddy owns 80/443 with automatic HTTPS (CADDY_SCHEME empty, default publish).
+name: ${COMPOSE_PROJECT_NAME:-lummi}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://lummi:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/lummi
+  REDIS_URL: redis://redis:6379
+  BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN}
+  SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+  BOT_MODE: ${BOT_MODE:-webhook}
+  WEBHOOK_URL: https://api.${DOMAIN:?set DOMAIN}/telegram/webhook
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
+  MINIAPP_URL: https://${DOMAIN}/
+  BOT_LINK: ${BOT_LINK:?set BOT_LINK}
+  TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:?set TYPESAFE_API_KEY}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
+  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,172.28.0.0/24
+  FILES_DIR: /data/files
+  API_HOST: 0.0.0.0
+  API_PORT: '4000'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-api: &api
+  image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-api:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  environment: *api-env
+  networks: [lummi]
+  logging: *logging
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  caddy:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_SCHEME: ${CADDY_SCHEME:-}
+    ports:
+      - '${CADDY_HTTP_PUBLISH:-80:80}'
+      - '${CADDY_HTTPS_PUBLISH:-443:443}'
+    volumes:
+      # Only public/ of the files volume (needs Compose >= 2.27); receipts under private/ never enter Caddy.
+      - type: volume
+        source: files
+        target: /srv/public
+        read_only: true
+        volume:
+          subpath: public
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [lummi]
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+      admin: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:2019/config/ || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  api:
+    <<: *api
+    volumes:
+      - files:/data/files
+    healthcheck:
+      test:
+        ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+  worker:
+    <<: *api
+    command: ['node', '--import', 'tsx', 'src/worker.ts']
+    volumes:
+      - files:/data/files
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      disable: true
+
+  admin:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-admin:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:4000
+      BOT_USERNAME: ${ADMIN_BOT_USERNAME:-}
+    networks: [lummi]
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # The Humo userbot (ADR 0014) has no entrypoint in the repo yet (ticket #13 builds the parser and
+  # the internal endpoints, not the mtcute client). Off by default on staging; add the service here
+  # under `profiles: [userbot]` when its image exists. It would join the `lummi` network
+  # (172.28.0.0/24 is already in INTERNAL_ALLOWED_CIDRS) and send x-internal-secret.
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lummi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: lummi
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [lummi]
+    logging: *logging
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lummi -d lummi']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    networks: [lummi]
+    logging: *logging
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  lummi:
+    # Pinned: the staging host already uses 172.17-172.22/16, and INTERNAL_ALLOWED_CIDRS names this subnet.
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  pgdata:
+  redisdata:
+  files:
+  caddy-data:
+  caddy-config:

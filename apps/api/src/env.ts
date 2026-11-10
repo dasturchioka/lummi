@@ -120,7 +120,9 @@ export const PLACEHOLDER_SESSION_SECRET = 'change-me-change-me-change-me-change-
 
 /** Throws with a readable list of problems; main.ts lets that kill the process. */
 export function parseEnv(source: Record<string, string | undefined> = process.env): Env {
-  const result = envSchema.safeParse(source);
+  // An empty variable counts as unset: Compose passes `KEY=` for an optional key left blank in .env.
+  const given = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== ''));
+  const result = envSchema.safeParse(given);
   if (
     result.success &&
     result.data.NODE_ENV === 'production' &&
