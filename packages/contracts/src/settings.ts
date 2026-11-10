@@ -129,6 +129,25 @@ export const settingDefinitions = {
       uz: 'Chek yuklanmaguncha buyurtma mahsulotlarni qancha vaqt band qilib turadi. 43 200 soniya = 12 soat.',
     },
   },
+  /**
+   * The reserve reminder goes this long before `reserve_until`, once, while the order still
+   * waits for a receipt (spec Changes 2026-11-07, customer messages; #24).
+   */
+  'orders.reserveReminderSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(5 * 60)
+      .max(7 * 86_400),
+    default: 2 * 3600,
+    area: 'shop',
+    unit: 'seconds',
+    label: { ru: 'Напоминание до конца брони', uz: 'Bandlik tugashidan oldin eslatma' },
+    hint: {
+      ru: 'За сколько до конца брони бот напомнит об оплате, если чек ещё не загружен. 7 200 секунд = 2 часа.',
+      uz: 'Chek hali yuklanmagan boʻlsa, bot bandlik tugashidan qancha vaqt oldin toʻlov haqida eslatadi. 7 200 soniya = 2 soat.',
+    },
+  },
   /** The longest greeting card text of a gift order («Это подарок», spec Changes 2026-11-07). */
   'orders.giftMessageMaxLength': {
     schema: z.number().int().min(10).max(1000),

@@ -21,6 +21,7 @@ import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
 import { OrderStatusService } from './order-status/order-status.service';
+import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SearchService } from './search/search.service';
@@ -93,6 +94,7 @@ export class AppModule {
         CartService,
         OrdersService,
         OrderStatusService,
+        ReserveSweeps,
         CatalogAdminService,
         SearchService,
         CustomersService,
