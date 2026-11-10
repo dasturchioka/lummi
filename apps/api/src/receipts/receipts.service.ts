@@ -25,6 +25,7 @@ import { cancellationOf } from '../order-status/history';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { PaymentMatching } from '../payment/payment-matching';
 import { readShopCard } from '../payment/shop-card.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
@@ -105,6 +106,7 @@ export class ReceiptsService {
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
+    @Inject(PaymentMatching) private readonly matching: PaymentMatching,
   ) {}
 
   /** The payment screen of one of the shopper's orders; null when it is not theirs. */
@@ -218,6 +220,8 @@ export class ReceiptsService {
         }),
       );
       if (out.kind !== 'submitted') await deleteStoredFiles();
+      // a credit may already be on the card: check the receipt at once (ADR 0012)
+      else await this.matching.queueAfterCommit(out.receipt.id);
       return out;
     } catch (e) {
       await deleteStoredFiles();

@@ -33,6 +33,13 @@ export interface ReceiptJudgement extends Omit<ProviderAnswer, 'provider'> {
   reason?: string;
 }
 
+/**
+ * Whether a provider answered at all. `provider: 'none'` means none could be asked (both errored
+ * or timed out, refused, not configured, or the image was unusable): a failure to retry, not an
+ * answer. An answer, confirmed or not, is final.
+ */
+export const answered = (j: ReceiptJudgement): boolean => j.provider !== 'none';
+
 export interface ReceiptThresholds {
   probability: number;
   confidence: number;
