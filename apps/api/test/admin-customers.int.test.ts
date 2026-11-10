@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import type { OrderStatus } from '@lummi/contracts';
 import { customers, eq, orders } from '@lummi/db';
 import { ReceiptsService } from '../src/receipts/receipts.service';
-import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { isFulfilled } from '../src/orders/fulfilled';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
+import { payWithCredit, uniqueReceiptImage } from './harness/payments';
 import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
@@ -53,13 +53,6 @@ async function place(user: TestUser, phone: string, qty = 1) {
   return res.body.number;
 }
 
-/** A small receipt screenshot for the intake. */
-const RECEIPT_IMAGE = sharp({
-  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
-})
-  .png()
-  .toBuffer();
-
 /** Walks an order forward: the receipt goes in through the intake (#28), the rest are real transitions. */
 async function walkTo(
   number: number,
@@ -68,18 +61,23 @@ async function walkTo(
   const [order] = await t.db.select().from(orders).where(eq(orders.number, number));
   const sent = await t.app
     .get(ReceiptsService)
-    .submit(order!.customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
+    .submit(order!.customerId, number, await uniqueReceiptImage(), {
+      fileName: null,
+      source: 'miniapp',
+    });
   if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
   if (status === 'receipt_review') return;
+  // the money arrives and the receipt AI confirms it (#32): the only way to «Оплата подтверждена»
+  await payWithCredit(t, order!, sent.receipt.id);
+  if (status === 'payment_confirmed') return;
   const mgr: TransitionActor = { type: 'staff', id: manager.staff.id };
   const path = [
-    ['payment_confirmed', 'confirm_payment', { type: 'ai' } as TransitionActor, undefined],
     ['accepted', 'accept', mgr, undefined],
     ['assembling', 'start_assembly', mgr, undefined],
     ['handed_to_bts', 'hand_to_bts', mgr, { trackingNumber: 'BTS 1' }],
     ['delivered', 'deliver', mgr, undefined],
   ] as const;
-  let from: OrderStatus = 'receipt_review';
+  let from: OrderStatus = 'payment_confirmed';
   for (const [to, action, actor, payload] of path) {
     const out = await machine().transition(order!.id, action, actor, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);
