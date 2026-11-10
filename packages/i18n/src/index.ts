@@ -7,4 +7,4 @@ export { plural, type PluralForms } from './plural';
 export { formatPhone } from './phone';
 export { fill } from './fill';
 export { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from './uzbek';
-export { formatDateTime, formatDayMonth, formatTime } from './date';
+export { formatCalendarDate, formatDateTime, formatDayMonth, formatTime } from './date';

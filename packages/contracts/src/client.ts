@@ -36,6 +36,8 @@ export const clientRoutes = {
     clearDeliveryCity: route('DELETE', '/me/delivery-city', [200, 401]),
     savedPoints: route('GET', '/me/points', [200, 401]),
     removeSavedPoint: route('DELETE', '/me/points/:id', [200, 401, 404]),
+    discounts: route('GET', '/me/discounts', [200, 401]),
+    setBirthDate: route('PUT', '/me/birth-date', [200, 401, 403, 409, 422]),
   },
   delivery: {
     regions: route('GET', '/delivery/regions', [200, 401]),

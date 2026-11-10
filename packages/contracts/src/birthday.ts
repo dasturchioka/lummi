@@ -1,22 +1,11 @@
 import { z } from 'zod';
+import { isCalendarDate } from './birth-date';
 
 /**
  * The date of birth and the birthday coupon as the Mini App sees them (TZ §3.8, ticket #30). The
  * coupon itself applies through the cart's quote like any discount; these are Profile's
  * «Мои скидки» and the one-time date entry.
  */
-
-/** The earliest year a date of birth may be in; the latest day is today in Tashkent (the server checks). */
-export const BIRTH_YEAR_MIN = 1900;
-
-/** True for a real calendar day written `YYYY-MM-DD` (no 31 April; 29 February only in a leap year). */
-export function isCalendarDate(text: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  if (!m) return false;
-  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const d = new Date(Date.UTC(year, month - 1, day));
-  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
-}
 
 /** `YYYY-MM-DD`, a real calendar day. */
 export const birthDateSchema = z.string().refine(isCalendarDate, 'a YYYY-MM-DD calendar date');
