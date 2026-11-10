@@ -11,6 +11,7 @@ import {
   eq,
   fragrances,
   orderEvents,
+  orderLines,
   orders,
   outbox,
   regions,
@@ -20,6 +21,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
+import { OrderStatusService } from '../src/order-status/order-status.service';
 import { WorkerRuntime } from '../src/worker/runtime';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
@@ -422,5 +424,231 @@ describe('the reserve expiry (ADR 0012)', () => {
     expect(events).toHaveLength(1);
     expect((await orderRow(number)).status).toBe('cancelled');
     expect((await messages()).filter((m) => m.text.includes('отменён'))).toHaveLength(1);
+  });
+});
+
+describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () => {
+  const machine = () => t.app.get(OrderStatusService);
+
+  async function setOnHand(slug: string, ml: number, onHand: number) {
+    await t.db
+      .update(volumes)
+      .set({ onHand })
+      .where(eq(volumes.id, (await volumeOf(slug, ml)).id));
+  }
+
+  it('walks an order from «Ожидает оплаты» to «Возвращён»: history, messages and on hand', async () => {
+    const slug = await firstSlug();
+    await setOnHand(slug, 10, 5);
+    const client = await shopper();
+    const number = await placeOrder(client, slug, 2);
+    const { id, customerId } = await orderRow(number);
+    const manager = (await t.managerSession()).staff;
+    const staff = { type: 'staff' as const, id: manager.id };
+
+    const steps = [
+      () =>
+        machine().transition(
+          id,
+          'submit_receipt',
+          { type: 'customer', id: customerId },
+          'awaiting_payment',
+          undefined,
+        ),
+      () =>
+        machine().transition(id, 'confirm_payment', { type: 'ai' }, 'receipt_review', undefined),
+      () => machine().transition(id, 'accept', staff, 'payment_confirmed', undefined),
+      () => machine().transition(id, 'start_assembly', staff, 'accepted', undefined),
+    ];
+    for (const step of steps) expect((await step()).kind).toBe('done');
+    // a reserve, not yet on hand: 5 on the shelf, 2 held
+    expect((await volumeOf(slug, 10)).onHand).toBe(5);
+    expect(await available(client, slug, 10)).toBe(3);
+
+    // «Передан в BTS» needs the tracking number; without it nothing moves
+    expect(await machine().transition(id, 'hand_to_bts', staff, 'assembling', {} as never)).toEqual(
+      { kind: 'refused', code: 'invalid_payload' },
+    );
+    expect((await orderRow(number)).status).toBe('assembling');
+    const handed = await machine().transition(id, 'hand_to_bts', staff, 'assembling', {
+      trackingNumber: 'BTS 4471 0098',
+    });
+    expect(handed.kind === 'done' && handed.order.trackingNumber).toBe('BTS 4471 0098');
+    // the bottles left: on hand drops, the reserve with it, available stays
+    expect((await volumeOf(slug, 10)).onHand).toBe(3);
+    expect(await available(client, slug, 10)).toBe(3);
+
+    expect(
+      (await machine().transition(id, 'deliver', staff, 'handed_to_bts', undefined)).kind,
+    ).toBe('done');
+    const returned = await machine().transition(id, 'return', staff, 'delivered', {
+      reason: 'Не подошёл аромат',
+      lines: [{ position: 0, backToStock: true }],
+    });
+    expect(returned.kind).toBe('done');
+    expect((await volumeOf(slug, 10)).onHand).toBe(5);
+
+    const events = await eventsOf(number);
+    expect(events.map((e) => [e.fromStatus, e.toStatus, e.actorType])).toEqual([
+      ['awaiting_payment', 'receipt_review', 'customer'],
+      ['receipt_review', 'payment_confirmed', 'ai'],
+      ['payment_confirmed', 'accepted', 'staff'],
+      ['accepted', 'assembling', 'staff'],
+      ['assembling', 'handed_to_bts', 'staff'],
+      ['handed_to_bts', 'delivered', 'staff'],
+      ['delivered', 'returned', 'staff'],
+    ]);
+    expect(events[4]!.payload).toMatchObject({
+      trackingNumber: 'BTS 4471 0098',
+      stock: [{ onHand: [5, 3] }],
+    });
+    expect(events[6]).toMatchObject({
+      reason: 'Не подошёл аромат',
+      payload: { lines: [{ position: 0, backToStock: true }], stock: [{ onHand: [3, 5] }] },
+    });
+    const audit = await t.db.select().from(auditLog).orderBy(asc(auditLog.id));
+    expect(audit.filter((a) => a.targetType === 'order').map((a) => a.action)).toEqual([
+      'order.created',
+      'order.receipt_submitted',
+      'order.payment_confirmed',
+      'order.accepted',
+      'order.assembling',
+      'order.handed_to_bts',
+      'order.delivered',
+      'order.returned',
+    ]);
+    // a message for each step but «Принят» and the return
+    expect((await messages()).map((m) => m.text.split('\n')[0])).toEqual([
+      `Чек к заказу № ${number} получен 🧾`,
+      `Оплата заказа № ${number} подтверждена ✅`,
+      `Собираем заказ № ${number} 📦`,
+      `Заказ № ${number} передан в BTS 🚚`,
+      `Заказ № ${number} доставлен ✨`,
+    ]);
+    expect((await messages())[3]!.text).toContain('Трек-номер: BTS 4471 0098');
+  });
+
+  it('a stale expected status is a conflict and changes nothing (a second press)', async () => {
+    const client = await shopper();
+    const number = await placeOrder(client, await firstSlug());
+    await t.db.update(orders).set({ status: 'payment_confirmed' }).where(eq(orders.number, number));
+    const { id } = await orderRow(number);
+    const staff = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    expect(
+      (await machine().transition(id, 'accept', staff, 'payment_confirmed', undefined)).kind,
+    ).toBe('done');
+    const second = await machine().transition(id, 'accept', staff, 'payment_confirmed', undefined);
+    expect(second.kind === 'conflict' && second.order.status).toBe('accepted');
+    expect(await eventsOf(number)).toHaveLength(1);
+    // the AI may confirm a payment but never moves fulfilment or cancels
+    expect(
+      await machine().transition(id, 'start_assembly', { type: 'ai' }, 'accepted', undefined),
+    ).toEqual({
+      kind: 'refused',
+      code: 'forbidden',
+    });
+  });
+
+  it('a parcel not collected at BTS goes back on hand when it is cancelled', async () => {
+    const slug = await firstSlug();
+    await setOnHand(slug, 10, 4);
+    const client = await shopper();
+    const number = await placeOrder(client, slug, 3);
+    await t.db.update(orders).set({ status: 'assembling' }).where(eq(orders.number, number));
+    const { id } = await orderRow(number);
+    const staff = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    await machine().transition(id, 'hand_to_bts', staff, 'assembling', { trackingNumber: '77' });
+    expect((await volumeOf(slug, 10)).onHand).toBe(1);
+
+    const cancelled = await machine().transition(id, 'cancel', staff, 'handed_to_bts', {
+      reason: 'not_collected_at_bts',
+      note: 'Посылка вернулась в Термез',
+    });
+    expect(cancelled.kind).toBe('done');
+    expect((await volumeOf(slug, 10)).onHand).toBe(4);
+    expect(await available(client, slug, 10)).toBe(4);
+    const [, event] = await eventsOf(number);
+    expect(event).toMatchObject({
+      reason: 'not_collected_at_bts',
+      payload: { note: 'Посылка вернулась в Термез', stock: [{ onHand: [1, 4] }] },
+    });
+    expect((await messages()).at(-1)!.text).toBe(
+      `Заказ № ${number} отменён.\nЗаказ не забрали в пункте BTS.`,
+    );
+  });
+
+  it('a return puts back only the flagged lines, and its flags must name every line', async () => {
+    const [a, b] = (await t.db.select({ slug: fragrances.slug }).from(fragrances))
+      .map((r) => r.slug)
+      .sort();
+    await setOnHand(a!, 10, 5);
+    await setOnHand(b!, 10, 5);
+    const client = await shopper();
+    await client.cart.addLine({ body: { slug: a!, ml: 10, qty: 1 } });
+    const number = await placeOrder(client, b!, 1);
+    await t.db.update(orders).set({ status: 'assembling' }).where(eq(orders.number, number));
+    const { id } = await orderRow(number);
+    const staff = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    await machine().transition(id, 'hand_to_bts', staff, 'assembling', { trackingNumber: '1' });
+    await machine().transition(id, 'deliver', staff, 'handed_to_bts', undefined);
+
+    for (const lines of [
+      [{ position: 0, backToStock: true }],
+      [
+        { position: 0, backToStock: true },
+        { position: 0, backToStock: false },
+      ],
+      [
+        { position: 0, backToStock: true },
+        { position: 5, backToStock: false },
+      ],
+    ])
+      expect(
+        await machine().transition(id, 'return', staff, 'delivered', { reason: 'Протёк', lines }),
+      ).toEqual({ kind: 'refused', code: 'invalid_payload' });
+    expect((await orderRow(number)).status).toBe('delivered');
+
+    // line 0 leaked: it stays off the shelf
+    const done = await machine().transition(id, 'return', staff, 'delivered', {
+      reason: 'Один флакон протёк',
+      lines: [
+        { position: 0, backToStock: false },
+        { position: 1, backToStock: true },
+      ],
+    });
+    expect(done.kind).toBe('done');
+    const [first, second] = await t.db
+      .select({ position: orderLines.position, volumeId: orderLines.volumeId })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, id))
+      .orderBy(asc(orderLines.position));
+    const onHand = async (volumeId: number) =>
+      (await t.db.select().from(volumes).where(eq(volumes.id, volumeId)))[0]!.onHand;
+    expect(await onHand(first!.volumeId!)).toBe(4);
+    expect(await onHand(second!.volumeId!)).toBe(5);
+  });
+
+  it('a rejected receipt goes back to «Ожидает оплаты» with the manager’s reason and «Написать менеджеру»', async () => {
+    const client = await shopper();
+    const number = await placeOrder(client, await firstSlug());
+    await t.db.update(orders).set({ status: 'receipt_review' }).where(eq(orders.number, number));
+    const { id } = await orderRow(number);
+    const staff = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const out = await machine().transition(id, 'reject_receipt', staff, 'receipt_review', {
+      reason: 'На чеке другая сумма',
+    });
+    expect(out.kind === 'done' && out.order.status).toBe('awaiting_payment');
+    const [message] = await messages();
+    expect(message!.text).toBe(
+      `Чек к заказу № ${number} не принят.\nПричина: На чеке другая сумма\nПроверьте сумму и карту и загрузите чек ещё раз.`,
+    );
+    expect(message!.options).toMatchObject({
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: 'Открыть заказ' }],
+          [{ text: 'Написать менеджеру', url: 'https://t.me/lummi_manager' }],
+        ],
+      },
+    });
   });
 });
