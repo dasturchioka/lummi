@@ -1,4 +1,4 @@
-import { createDb, staff, type Db, type StaffRole, type StaffRow } from '@lummi/db';
+import { createDb, shopCard, staff, type Db, type StaffRole, type StaffRow } from '@lummi/db';
 import type { INestApplication } from '@nestjs/common';
 import { initClient } from '@ts-rest/core';
 import { apiContract } from '@lummi/contracts';
@@ -19,6 +19,14 @@ export const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
 export const TEST_MINIAPP_URL = 'https://miniapp.test.invalid/';
 /** Shared secret of the internal endpoints the userbot calls (ADR 0031). */
 export const TEST_INTERNAL_SECRET = 'test-internal-secret-test-internal-secret';
+
+/** The shop card every test starts with: checkout is closed while none is set (#28). */
+export const TEST_SHOP_CARD = { number: '9860123456781234', holder: 'LUMMI TEST' } as const;
+
+/** Reference data, like the regions: tests about a missing card remove it themselves. */
+async function seedShopCard(db: Db) {
+  await db.insert(shopCard).values(TEST_SHOP_CARD).onConflictDoNothing();
+}
 
 export interface StaffSession {
   staff: StaffRow;
@@ -62,7 +70,7 @@ export interface TestApp {
   ownerSession(): Promise<StaffSession>;
   /** Shortcut for `signInStaff('manager')` with a stable test user. */
   managerSession(): Promise<StaffSession>;
-  /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions. Call in beforeEach. */
+  /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions and the shop card. Call in beforeEach. */
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -114,6 +122,7 @@ export async function createTestApp(
     ...envOverrides,
   });
   const { db, pool } = createDb(env.DATABASE_URL, 3);
+  await seedShopCard(db);
   const edges = createFakeEdges();
   const app: INestApplication = await createApp({
     env,
@@ -207,6 +216,7 @@ export async function createTestApp(
       if (tables) await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
       // reference data, like the migrated schema itself
       await seedRegions(db);
+      await seedShopCard(db);
     },
     async close() {
       await app.close();
