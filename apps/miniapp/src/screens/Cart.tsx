@@ -18,6 +18,7 @@ import { Card } from '../ui/Card';
 import { BagIcon, CheckIcon, MinusIcon, PlusIcon, Spinner, TrashIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
+import { SetPhoto, SetPhotoEmpty } from '../ui/SetPhoto';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { attribution } from '../ui/FragranceListCard';
 import { Skeleton } from '../ui/Skeleton';
@@ -37,14 +38,25 @@ export interface CartPending {
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
 
 /** A 3:4 bottle thumbnail on its Photo Blush slot, which stays when the photo is missing or fails. */
-function Thumb({ photo, className }: { photo: string | null; className: string }) {
+function Thumb({
+  photo,
+  className,
+  set,
+}: {
+  photo: string | null;
+  className: string;
+  /** A set line: the Discovery box photo (or the owner's), or the box icon for a builder set. */
+  set?: 'discovery' | 'builder';
+}) {
   const [failed, setFailed] = useState(false);
   return (
     <div
       aria-hidden="true"
       className={`${className} relative aspect-[3/4] shrink-0 overflow-hidden rounded-thumb bg-photo`}
     >
-      {photo && !failed ? (
+      {set === 'discovery' ? <SetPhoto hash={photo} sizes="64px" /> : null}
+      {set === 'builder' ? <SetPhotoEmpty /> : null}
+      {!set && photo && !failed ? (
         <img
           src={photoUrl(photo, 400)}
           srcSet={photoSrcSet(photo)}
@@ -340,22 +352,43 @@ function Line({
       data-sold-out={out}
     >
       <div className={out ? 'opacity-50' : undefined}>
-        <Thumb photo={line.photo} className="w-16" />
+        <Thumb
+          photo={line.photo}
+          className="w-16"
+          set={line.kind === 'volume' ? undefined : line.kind}
+        />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
-              {attribution(t.card.basedOn, line.brand)}
-            </p>
-            <p
-              className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
-            >
-              {line.name}
-            </p>
-            <p className="type-small mt-1 text-muted">
-              {line.ml}&nbsp;{t.card.ml}
-            </p>
+            {line.kind === 'volume' ? (
+              <>
+                <p className="type-label text-pretty text-muted [overflow-wrap:anywhere]">
+                  {attribution(t.card.basedOn, line.brand)}
+                </p>
+                <p
+                  className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
+                >
+                  {line.name}
+                </p>
+                <p className="type-small mt-1 text-muted">
+                  {line.ml}&nbsp;{t.card.ml}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="type-label text-pretty text-muted">{t.home.discoveryLabel}</p>
+                <p
+                  className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
+                  data-testid="set-name"
+                >
+                  {line.kind === 'discovery' ? t.sets.lineDiscovery : t.sets.lineBuilder}
+                </p>
+                <p className="type-small mt-1 text-pretty text-muted [overflow-wrap:anywhere]">
+                  {line.fragrances.map((f) => f.name).join(' · ')}
+                </p>
+              </>
+            )}
           </div>
           {priced && !out ? (
             <p className="flex shrink-0 flex-col items-end pt-px">

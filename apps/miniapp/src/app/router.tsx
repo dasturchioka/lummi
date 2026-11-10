@@ -26,6 +26,7 @@ function Shell() {
   // The fragrance card (it carries its own dock, also on its fixtures), the search and the checkout are task screens: no tab bar.
   const showTabBar =
     !pathname.startsWith('/p/') &&
+    !pathname.startsWith('/sets/') &&
     pathname !== '/search' &&
     pathname !== '/dev/fragrance' &&
     pathname !== '/checkout';
@@ -114,6 +115,14 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     ...at('/p/$slug'),
     component: lazyRouteComponent(() => import('../screens/Fragrance'), 'Fragrance'),
+  }),
+  createRoute({
+    ...at('/sets/discovery'),
+    component: lazyRouteComponent(() => import('../screens/Sets'), 'DiscoverySetScreen'),
+  }),
+  createRoute({
+    ...at('/sets/builder'),
+    component: lazyRouteComponent(() => import('../screens/Sets'), 'BuilderScreen'),
   }),
   createRoute({
     ...at('/cart'),

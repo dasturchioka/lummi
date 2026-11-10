@@ -1,10 +1,12 @@
 import type { DeliveryCityDto, Quote } from '@lummi/contracts';
 import {
+  and,
   asc,
   cartLines,
   carts,
   eq,
   fragrances,
+  ne,
   volumes,
   type CartRow,
   type DbOrTx,
@@ -13,16 +15,18 @@ import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
+import {
+  builderAvailable,
+  discoveryAvailable,
+  readComposition,
+  readDiscoverySet,
+  reservedDiscovery,
+  tenMlOf,
+} from '../sets/sets';
 
-/** A cart line as the quote sees it: the quantity capped at available, the wish kept apart. */
-export interface CartLineView {
+/** What every cart line carries: the quantity capped at available, the wish kept apart. */
+interface LineBase {
   lineId: number;
-  volumeId: number;
-  fragranceId: number;
-  slug: string;
-  name: string;
-  brand: string;
-  ml: number;
   photo: string | null;
   /** What the quote counts: never above `available` (a sold-out line keeps its own). */
   qty: number;
@@ -31,6 +35,35 @@ export interface CartLineView {
   available: number;
   soldOut: boolean;
   limited: boolean;
+}
+
+export interface VolumeLineView extends LineBase {
+  kind: 'volume';
+  volumeId: number;
+  fragranceId: number;
+  slug: string;
+  name: string;
+  brand: string;
+  ml: number;
+}
+
+/** The Discovery set or a builder set: five fragrances, 10 ml each. */
+export interface SetLineView extends LineBase {
+  kind: 'discovery' | 'builder';
+  fragrances: { slug: string; name: string }[];
+}
+
+export type CartLineView = VolumeLineView | SetLineView;
+
+/** Caps what the customer asked for at what is available; a sold-out line keeps its own. */
+function capped(wanted: number, left: number) {
+  return {
+    wanted,
+    available: left,
+    soldOut: left === 0,
+    qty: left === 0 ? wanted : Math.min(wanted, left),
+    limited: left > 0 && wanted > left,
+  };
 }
 
 export interface LoadedCart {
@@ -71,38 +104,78 @@ export async function loadCartQuote(
     .from(cartLines)
     .innerJoin(volumes, eq(volumes.id, cartLines.volumeId))
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-    .where(eq(cartLines.customerId, customerId))
+    .where(and(eq(cartLines.customerId, customerId), eq(cartLines.kind, 'volume')))
     .orderBy(asc(cartLines.id));
   const reserved = await reservedByVolume(
     tx,
-    rows.map((r) => r.volumeId),
+    rows.map((r) => r.volumeId!),
   );
-  const lines: (CartLineView & {
-    price: number;
-    salePrice: number | null;
-    saleEndsAt: Date | null;
-  })[] = rows.map((r) => {
+  type Priced = { price: number; salePrice: number | null; saleEndsAt: Date | null };
+  const volumeLines: (VolumeLineView & Priced)[] = rows.map((r) => {
     // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-    const left = r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0);
+    const left = r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId!) ?? 0);
     return {
+      kind: 'volume',
       lineId: r.lineId,
-      volumeId: r.volumeId,
+      volumeId: r.volumeId!,
       fragranceId: r.fragranceId,
       slug: r.slug,
       name: r.name,
       brand: r.brand,
       ml: r.ml,
       photo: r.photo,
-      wanted: r.qty,
-      available: left,
-      soldOut: left === 0,
-      qty: left === 0 ? r.qty : Math.min(r.qty, left),
-      limited: left > 0 && r.qty > left,
+      ...capped(r.qty, left),
       price: r.price,
       salePrice: r.salePrice,
       saleEndsAt: r.saleEndsAt,
     };
   });
+
+  // Set lines (ADR 0009): the Discovery set from its own stock, a builder set from each chosen 10 ml.
+  const setRows = await tx
+    .select({
+      lineId: cartLines.id,
+      kind: cartLines.kind,
+      fragranceIds: cartLines.fragranceIds,
+      qty: cartLines.qty,
+    })
+    .from(cartLines)
+    .where(and(eq(cartLines.customerId, customerId), ne(cartLines.kind, 'volume')))
+    .orderBy(asc(cartLines.id));
+  const setLines: SetLineView[] = [];
+  let setPrice = 0;
+  if (setRows.length > 0) {
+    const discovery = await readDiscoverySet(tx);
+    setPrice = discovery.price;
+    const builderIds = [...new Set(setRows.flatMap((r) => r.fragranceIds ?? []))];
+    const [composition, discoveryReserved, tenMl] = await Promise.all([
+      setRows.some((r) => r.kind === 'discovery') ? readComposition(tx) : [],
+      reservedDiscovery(tx),
+      tenMlOf(tx, { ids: builderIds }),
+    ]);
+    const tenMlOfFragrance = new Map(tenMl.map((t) => [t.fragranceId, t]));
+    for (const r of setRows) {
+      if (r.kind === 'discovery') {
+        setLines.push({
+          kind: 'discovery',
+          lineId: r.lineId,
+          photo: discovery.photoHash,
+          fragrances: composition.map((f) => ({ slug: f.slug, name: f.name })),
+          ...capped(r.qty, discoveryAvailable(discovery, discoveryReserved, composition.length)),
+        });
+      } else {
+        const five = (r.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
+        setLines.push({
+          kind: 'builder',
+          lineId: r.lineId,
+          photo: null,
+          fragrances: five.map((t) => ({ slug: t.slug, name: t.name })),
+          ...capped(r.qty, builderAvailable(five)),
+        });
+      }
+    }
+  }
+  const lines: CartLineView[] = [...volumeLines, ...setLines].sort((a, b) => a.lineId - b.lineId);
 
   const [state] = await tx.select().from(carts).where(eq(carts.customerId, customerId));
   const city = await readDeliveryCity(tx, customerId);
@@ -113,16 +186,27 @@ export async function loadCartQuote(
     'pricing.fullSizeVolumesMl',
     'delivery.defaultTariff',
   ]);
-  const quoteLines: QuoteLineInput[] = lines.map((l) => ({
-    key: String(l.lineId),
-    item: { kind: 'volume', fragranceId: l.fragranceId, volumeMl: l.ml },
-    qty: l.qty,
-    price: {
-      regular: l.price,
-      markdown: l.salePrice === null ? null : { price: l.salePrice, endsAt: l.saleEndsAt },
-    },
-    soldOut: l.soldOut,
-  }));
+  const quoteLines: QuoteLineInput[] = [
+    ...volumeLines.map((l): QuoteLineInput => ({
+      key: String(l.lineId),
+      item: { kind: 'volume', fragranceId: l.fragranceId, volumeMl: l.ml },
+      qty: l.qty,
+      price: {
+        regular: l.price,
+        markdown: l.salePrice === null ? null : { price: l.salePrice, endsAt: l.saleEndsAt },
+      },
+      soldOut: l.soldOut,
+    })),
+    // both kinds of set cost the Discovery set's price and are never marked down
+    ...setLines.map((l): QuoteLineInput => ({
+      key: String(l.lineId),
+      item: { kind: 'set' },
+      qty: l.qty,
+      price: { regular: setPrice, markdown: null },
+      soldOut: l.soldOut,
+    })),
+  ];
+  quoteLines.sort((a, b) => Number(a.key) - Number(b.key));
   const q = quote({
     lines: quoteLines,
     entitlements: opts.entitlements ?? [],
@@ -138,7 +222,7 @@ export async function loadCartQuote(
     now,
   });
   return {
-    lines: lines.map(({ price: _p, salePrice: _s, saleEndsAt: _e, ...view }) => view),
+    lines,
     quote: q,
     state,
     city,

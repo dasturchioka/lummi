@@ -65,6 +65,18 @@ import {
   telegramAuthBodySchema,
 } from './auth';
 import {
+  addBuilderBodySchema,
+  addDiscoveryBodySchema,
+  addSetErrorSchema,
+  adminDiscoverySetSchema,
+  adminSetsErrorSchema,
+  builderSchema,
+  discoveryOnHandBodySchema,
+  discoverySetInputSchema,
+  discoverySetSchema,
+  setsErrorSchema,
+} from './sets';
+import {
   humoLastMessageIdSchema,
   humoMessageBodySchema,
   humoMessageResultSchema,
@@ -212,6 +224,20 @@ export const contract = c.router({
       summary: 'Search results as list cards, best match first (ADR 0019)',
     },
   },
+  sets: {
+    discovery: {
+      method: 'GET',
+      path: '/sets/discovery',
+      responses: { 200: discoverySetSchema, 401: setsErrorSchema },
+      summary: 'The Discovery set: price, its own availability, photo and its five fragrances',
+    },
+    builder: {
+      method: 'GET',
+      path: '/sets/builder',
+      responses: { 200: builderSchema, 401: setsErrorSchema },
+      summary: 'The builder: the set price and the fragrances with a 10 ml bottle available',
+    },
+  },
   cart: {
     get: {
       method: 'GET',
@@ -230,6 +256,27 @@ export const contract = c.router({
         409: cartErrorSchema,
       },
       summary: 'Add a volume (quantity capped at available); 409 sold_out when none is available',
+    },
+    addDiscovery: {
+      method: 'POST',
+      path: '/cart/sets/discovery',
+      body: addDiscoveryBodySchema,
+      responses: { 200: cartSchema, 401: addSetErrorSchema, 409: addSetErrorSchema },
+      summary: 'Add the Discovery set (capped at its own stock); 409 sold_out when none is left',
+    },
+    addBuilder: {
+      method: 'POST',
+      path: '/cart/sets/builder',
+      body: addBuilderBodySchema,
+      responses: {
+        200: cartSchema,
+        401: addSetErrorSchema,
+        404: addSetErrorSchema,
+        409: addSetErrorSchema,
+        422: addSetErrorSchema,
+      },
+      summary:
+        'Add a builder set of five different fragrances; 409 unavailable names those without a 10 ml bottle',
     },
     setQuantity: {
       method: 'PATCH',
@@ -536,6 +583,37 @@ const adminCore = c.router({
   },
 });
 
+/** Staff routes for the Discovery set (the builder shares its price). */
+const adminSets = c.router({
+  sets: {
+    get: {
+      method: 'GET',
+      path: '/admin/sets/discovery',
+      responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
+      summary: 'Staff: the Discovery set with its own on hand, reserve and available',
+    },
+    update: {
+      method: 'PUT',
+      path: '/admin/sets/discovery',
+      body: discoverySetInputSchema,
+      responses: {
+        200: adminDiscoverySetSchema,
+        401: adminSetsErrorSchema,
+        403: adminSetsErrorSchema,
+        422: adminSetsErrorSchema,
+      },
+      summary: 'Owner only: the price (builder too) and the five fragrances, in order (audited)',
+    },
+    setOnHand: {
+      method: 'PATCH',
+      path: '/admin/sets/discovery/on-hand',
+      body: discoveryOnHandBodySchema,
+      responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
+      summary: 'Owner and manager: boxes in the warehouse (audited)',
+    },
+  },
+});
+
 /** Staff routes for BTS points and delivery tariffs. */
 const adminDelivery = c.router({
   regions: {
@@ -596,7 +674,7 @@ const adminDelivery = c.router({
 });
 
 /** Staff-facing routes (admin panel). Not part of the Mini App's client table (`./client`). */
-export const adminContract = c.router({ ...adminCore, ...adminDelivery });
+export const adminContract = c.router({ ...adminCore, ...adminDelivery, ...adminSets });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
 export const internalContract = c.router({

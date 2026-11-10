@@ -1,4 +1,6 @@
 import {
+  discoverySet,
+  discoverySetItems,
   families,
   fragranceNotes,
   fragranceSimilar,
@@ -7,6 +9,7 @@ import {
   sql,
   volumes,
   type Db,
+  type DbOrTx,
 } from '@lummi/db';
 import { normalizeUzbek } from '@lummi/i18n';
 import { slugify } from './slug';
@@ -25,6 +28,7 @@ import { storePhoto } from './photo-pipeline';
  */
 export const PLACEHOLDER_PRICES = { 10: 69_000, 30: 149_000, 50: 219_000 } as const;
 export const PLACEHOLDER_ON_HAND = 20;
+export const PLACEHOLDER_DISCOVERY_ON_HAND = 10;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
 
@@ -87,6 +91,23 @@ export interface SeedOptions {
   photos?: FileStore;
   /** Only the first N records (tests). */
   limit?: number;
+}
+
+/**
+ * The Discovery set (ADR 0009) starts as the first five fragrances with 10 boxes in stock, both
+ * ours (the composition is the owner's to choose, the boxes his to count). Only while the owner
+ * has not set a composition, so a re-run never undoes his choice.
+ */
+async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
+  const [has] = await tx.select().from(discoverySetItems).limit(1);
+  if (has || fragranceIds.length < 5) return;
+  await tx
+    .insert(discoverySetItems)
+    .values(fragranceIds.slice(0, 5).map((fragranceId, i) => ({ position: i + 1, fragranceId })));
+  await tx
+    .update(discoverySet)
+    .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
+    .where(sql`id and is_placeholder and on_hand = 0`);
 }
 
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
@@ -223,6 +244,7 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
     }
     // The search documents follow the rows just written (ADR 0019).
     await reindexFragrances(tx, [...idByGuideId.values()]);
+    await seedDiscoverySet(tx, [...idByGuideId.values()]);
   });
   return { fragrances: guide.length };
 }

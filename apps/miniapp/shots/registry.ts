@@ -74,6 +74,15 @@ const emptyCart = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
   for (const slug of CART_SLUGS) await db.restore(slug);
 };
 
+/** Taps the first n fragrances of the builder's list. */
+function pickForBuilder(n: number) {
+  return async ({ page }: { page: Page }) => {
+    const picks = page.getByTestId('pick');
+    await picks.first().waitFor();
+    for (let i = 0; i < n; i++) await picks.nth(i).click();
+  };
+}
+
 /** Types a search and submits it, as the keyboard's «Найти» does. */
 async function searchFor(page: Page, text: string) {
   const box = page.getByRole('searchbox');
@@ -683,6 +692,51 @@ export const screens: ScreenDef[] = [
       await page.setViewportSize({ width: 390, height: 480 });
       await page.evaluate(() => window.scrollBy(0, 160));
     },
+  },
+  // Sets (#22): the «Наборы» page, the Discovery set, the builder and the cart with set lines.
+  { id: 'sets-catalog', path: '/catalog?type=sets' },
+  { id: 'set-discovery', path: '/sets/discovery', fullPage: true },
+  {
+    // Boxes ran out: the dock says so and the set stays on view.
+    id: 'set-discovery-sold-out',
+    path: '/sets/discovery',
+    setup: async ({ db }) => void (await db.query('update discovery_set set on_hand = 0')),
+    teardown: async ({ db }) => void (await db.query('update discovery_set set on_hand = 10')),
+  },
+  { id: 'builder-empty', path: '/sets/builder' },
+  { id: 'builder-3', path: '/sets/builder', act: pickForBuilder(3) },
+  { id: 'builder-5', path: '/sets/builder', act: pickForBuilder(5) },
+  {
+    // A chosen fragrance's 10 ml ran out before the tap: the server answers 409 and the page says so.
+    id: 'builder-unavailable',
+    path: '/sets/builder',
+    act: async ({ page }) => {
+      await pickForBuilder(5)({ page });
+      await page.route('**/cart/sets/builder', (route) =>
+        route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({ code: 'unavailable', slugs: ['tygar'] }),
+        }),
+      );
+      await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
+      await page.locator('[data-open]').waitFor();
+    },
+  },
+  {
+    id: 'cart-sets',
+    path: '/cart',
+    setup: async ({ api }) => {
+      await fillCart(api, [['symphony', 30]]);
+      await api.cart.addDiscovery({ body: { qty: 2 } });
+      const options = await api.sets.builder();
+      if (options.status !== 200) throw new Error(`builder: HTTP ${options.status}`);
+      const slugs = options.body.options.slice(0, 5).map((o) => o.slug);
+      const res = await api.cart.addBuilder({ body: { slugs, qty: 1 } });
+      if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
+    },
+    teardown: emptyCart,
+    fullPage: true,
   },
   // FragranceListCard on dev fixtures: grid (the catalog's), row and compact, worst cases included.
   { id: 'list-cards', path: '/dev/list', fullPage: true },

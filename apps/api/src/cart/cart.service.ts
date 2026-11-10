@@ -1,4 +1,10 @@
-import { CART_MAX_QTY, type CartDto, type CartSuggestionDto } from '@lummi/contracts';
+import {
+  CART_MAX_QTY,
+  SET_SIZE,
+  type CartDto,
+  type CartLineDto,
+  type CartSuggestionDto,
+} from '@lummi/contracts';
 import {
   and,
   cartLines,
@@ -18,9 +24,22 @@ import type { Edges } from '../edges';
 import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
+import {
+  builderAvailable,
+  discoveryAvailable,
+  judgeBuilderPick,
+  readComposition,
+  readDiscoverySet,
+  reservedDiscovery,
+  tenMlOf,
+} from '../sets/sets';
 import { loadCartQuote } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
+export type AddSetOutcome =
+  | { result: 'ok' }
+  | { result: 'sold_out' | 'not_found' | 'invalid' }
+  | { result: 'unavailable'; slugs: string[] };
 
 /** The customer's server-side cart (spec Changes 2026-11-10). Money comes only from `quote()`. */
 @Injectable()
@@ -37,18 +56,26 @@ export class CartService {
     const { lines, quote: q, state, city } = await loadCartQuote(tx, now, customerId);
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
-      lines: lines.map((l) => ({
-        id: l.lineId,
-        slug: l.slug,
-        name: l.name,
-        brand: l.brand,
-        ml: l.ml as 10 | 30 | 50,
-        photo: l.photo,
-        qty: l.qty,
-        available: l.available,
-        soldOut: l.soldOut,
-        limited: l.limited,
-      })),
+      lines: lines.map((l): CartLineDto => {
+        const base = {
+          id: l.lineId,
+          photo: l.photo,
+          qty: l.qty,
+          available: l.available,
+          soldOut: l.soldOut,
+          limited: l.limited,
+        };
+        return l.kind === 'volume'
+          ? {
+              ...base,
+              kind: 'volume',
+              slug: l.slug,
+              name: l.name,
+              brand: l.brand,
+              ml: l.ml as 10 | 30 | 50,
+            }
+          : { ...base, kind: l.kind, fragrances: l.fragrances };
+      }),
       quote: q,
       count: lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
       deliveryCity: city,
@@ -56,7 +83,7 @@ export class CartService {
       suggestions: open
         ? await this.suggestions(
             tx,
-            lines.map((l) => l.volumeId),
+            lines.flatMap((l) => (l.kind === 'volume' ? [l.volumeId] : [])),
             q.amountToFreeDelivery,
             now,
           )
@@ -154,23 +181,73 @@ export class CartService {
     });
   }
 
+  /** Adds the Discovery set; the total on the line never passes the set's own stock. */
+  async addDiscovery(customerId: number, qty: number): Promise<AddSetOutcome> {
+    return this.db.transaction(async (tx) => {
+      const [row, composition, reserved] = await Promise.all([
+        readDiscoverySet(tx),
+        readComposition(tx),
+        reservedDiscovery(tx),
+      ]);
+      const left = discoveryAvailable(row, reserved, composition.length);
+      if (left === 0) return { result: 'sold_out' } as const;
+      await this.touch(tx, customerId);
+      await tx
+        .insert(cartLines)
+        .values({ customerId, kind: 'discovery', qty: Math.min(qty, left, CART_MAX_QTY) })
+        .onConflictDoUpdate({
+          target: [cartLines.customerId],
+          targetWhere: sql`kind = 'discovery'`,
+          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
+        });
+      return { result: 'ok' } as const;
+    });
+  }
+
+  /**
+   * Adds a builder set: exactly five different fragrances, each with a 10 ml available (ADR 0009).
+   * The same five add up on one line; the quantity is capped by the scarcest 10 ml.
+   */
+  async addBuilder(customerId: number, slugs: string[], qty: number): Promise<AddSetOutcome> {
+    return this.db.transaction(async (tx) => {
+      const picked = judgeBuilderPick(slugs, await tenMlOf(tx, { slugs }));
+      if (!picked.ok) {
+        return picked.reason === 'unavailable'
+          ? ({ result: 'unavailable', slugs: picked.slugs } as const)
+          : ({ result: picked.reason } as const);
+      }
+      const left = builderAvailable(picked.tenMl);
+      if (picked.tenMl.length !== SET_SIZE || left === 0) return { result: 'sold_out' } as const;
+      const fragranceIds = picked.tenMl.map((t) => t.fragranceId).sort((a, b) => a - b);
+      await this.touch(tx, customerId);
+      await tx
+        .insert(cartLines)
+        .values({
+          customerId,
+          kind: 'builder',
+          fragranceIds,
+          qty: Math.min(qty, left, CART_MAX_QTY),
+        })
+        .onConflictDoUpdate({
+          target: [cartLines.customerId, cartLines.fragranceIds],
+          targetWhere: sql`kind = 'builder'`,
+          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
+        });
+      return { result: 'ok' } as const;
+    });
+  }
+
   /** Sets a quantity, capped at available; false when the line is not this customer's. */
   async setQuantity(customerId: number, lineId: number, qty: number): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ volumeId: cartLines.volumeId, onHand: volumes.onHand, hidden: fragrances.hidden })
-        .from(cartLines)
-        .innerJoin(volumes, eq(volumes.id, cartLines.volumeId))
-        .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-        .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));
-      if (!row) return false;
-      const reserved = await reservedByVolume(tx, [row.volumeId]);
-      const left = row.hidden ? 0 : available(row.onHand, reserved.get(row.volumeId) ?? 0);
+      const { lines } = await loadCartQuote(tx, this.edges.clock.now(), customerId);
+      const line = lines.find((l) => l.lineId === lineId);
+      if (!line) return false;
       // a sold-out line keeps what the customer asked for; restocking brings it back
-      if (left > 0) {
+      if (line.available > 0) {
         await tx
           .update(cartLines)
-          .set({ qty: Math.min(qty, left, CART_MAX_QTY) })
+          .set({ qty: Math.min(qty, line.available, CART_MAX_QTY) })
           .where(eq(cartLines.id, lineId));
       }
       await this.touch(tx, customerId);

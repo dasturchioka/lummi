@@ -456,7 +456,53 @@ export const carts = pgTable('carts', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-/** One volume x quantity in a cart. Quantity is what the customer asked for; the server caps it at available on read. */
+/**
+ * The Discovery set (ADR 0009): one row, true to its own `id` like the heartbeat. It is a product
+ * with its own price, photo and stock; `on_hand` never touches 10 ml stock. A builder set has no
+ * row of its own and costs `price` too (spec Changes 2026-11-10, sets). The composition is the
+ * five ordered fragrances in `discovery_set_items`.
+ */
+export const discoverySet = pgTable(
+  'discovery_set',
+  {
+    id: boolean('id').primaryKey().default(true),
+    /** Integer so'm. */
+    price: integer('price').notNull(),
+    /** Boxes assembled and in the warehouse; available = on hand - reserve (ADR 0010). */
+    onHand: integer('on_hand').notNull().default(0),
+    /** Content hash of the rendered photo set; null falls back to the box photo shipped with the app. */
+    photoHash: text('photo_hash'),
+    /** Seed price that is ours, not the customer's; none may reach launch. */
+    isPlaceholder: boolean('is_placeholder').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('discovery_set_one_row', sql`${t.id}`),
+    check('discovery_set_money_check', sql`${t.price} >= 0 and ${t.onHand} >= 0`),
+  ],
+);
+
+/** The Discovery set's fragrances in the order the owner picked; exactly five when it is for sale. */
+export const discoverySetItems = pgTable(
+  'discovery_set_items',
+  {
+    position: smallint('position').primaryKey(),
+    fragranceId: bigint('fragrance_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => fragrances.id),
+  },
+  (t) => [check('discovery_set_items_position', sql`${t.position} between 1 and 5`)],
+);
+
+export const cartLineKindEnum = pgEnum('cart_line_kind', ['volume', 'discovery', 'builder']);
+
+/**
+ * One cart line: a volume x quantity, the Discovery set x quantity, or a builder set x quantity.
+ * Quantity is what the customer asked for; the server caps it at available on read. A builder
+ * line keeps the five chosen fragrance ids (sorted, so the same five add up on one line); their
+ * 10 ml volumes are resolved on read.
+ */
 export const cartLines = pgTable(
   'cart_lines',
   {
@@ -464,18 +510,33 @@ export const cartLines = pgTable(
     customerId: bigint('customer_id', { mode: 'number' })
       .notNull()
       .references(() => customers.id, { onDelete: 'cascade' }),
-    volumeId: bigint('volume_id', { mode: 'number' })
-      .notNull()
-      .references(() => volumes.id, { onDelete: 'cascade' }),
+    kind: cartLineKindEnum('kind').notNull().default('volume'),
+    volumeId: bigint('volume_id', { mode: 'number' }).references(() => volumes.id, {
+      onDelete: 'cascade',
+    }),
+    fragranceIds: bigint('fragrance_ids', { mode: 'number' }).array(),
     qty: integer('qty').notNull(),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
+    uniqueIndex('cart_lines_customer_discovery_idx')
+      .on(t.customerId)
+      .where(sql`kind = 'discovery'`),
+    uniqueIndex('cart_lines_customer_builder_idx')
+      .on(t.customerId, t.fragranceIds)
+      .where(sql`kind = 'builder'`),
     index('cart_lines_volume_idx').on(t.volumeId),
     check('cart_lines_qty_check', sql`${t.qty} > 0`),
+    check(
+      'cart_lines_kind_check',
+      sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null)
+        or (kind = 'discovery' and volume_id is null and fragrance_ids is null)
+        or (kind = 'builder' and volume_id is null and cardinality(fragrance_ids) = 5)`,
+    ),
   ],
 );
 
 export type CartRow = typeof carts.$inferSelect;
 export type CartLineRow = typeof cartLines.$inferSelect;
+export type DiscoverySetRow = typeof discoverySet.$inferSelect;

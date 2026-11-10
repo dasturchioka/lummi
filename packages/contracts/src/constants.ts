@@ -29,3 +29,20 @@ export type CatalogSort = (typeof CATALOG_SORTS)[number];
 /** How many cards the catalog list loads at a time, and the most one request may ask for. */
 export const CATALOG_PAGE_SIZE = 24;
 export const CATALOG_PAGE_MAX = 100;
+
+/** Both kinds of set hold exactly this many different fragrances, 10 ml each (ADR 0009). */
+export const SET_SIZE = 5;
+
+/**
+ * `startapp` parameter -> Mini App route, for the plain navigation links (ADR 0022). `p_<slug>`
+ * (a fragrance card) is matched by pattern in the Mini App. An unknown value lands on Home.
+ */
+export const STARTAPP_ROUTES = {
+  home: '/',
+  catalog: '/catalog',
+  cart: '/cart',
+  orders: '/orders',
+  profile: '/profile',
+  set_discovery: '/sets/discovery',
+  builder: '/sets/builder',
+} as const satisfies Record<string, string>;

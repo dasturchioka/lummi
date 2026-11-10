@@ -405,6 +405,21 @@ export const screens: Screen[] = [
       'base64',
     ),
   }),
+  // Sets (#22): the Discovery set's stock, price, composition and photo.
+  { id: 'sets', path: '/sets', as: 'owner' },
+  { id: 'sets-manager', path: '/sets', as: 'manager' },
+  {
+    // The same fragrance picked twice: the second field says so and «Сохранить» stays off.
+    id: 'sets-duplicate',
+    path: '/sets',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      const first = page.locator('#set-pick-0');
+      const value = await first.inputValue();
+      await page.locator('#set-pick-1').selectOption(value);
+      await page.getByText(t.sets.duplicate).waitFor();
+    },
+  },
   { id: 'catalog-dictionaries', path: '/catalog/dictionaries', as: 'owner' },
   {
     id: 'catalog-dictionaries-search',

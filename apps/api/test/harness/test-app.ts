@@ -206,6 +206,10 @@ export async function createTestApp(
       if (tables) await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
       // reference data, like the migrated schema itself
       await seedRegions(db);
+      // the migration inserts the one Discovery set row (ADR 0009); the truncate took it too
+      await pool.query(
+        `INSERT INTO discovery_set (id, price, on_hand, is_placeholder) VALUES (true, 299000, 0, true)`,
+      );
     },
     async close() {
       await app.close();

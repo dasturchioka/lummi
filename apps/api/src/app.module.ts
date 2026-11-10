@@ -20,6 +20,10 @@ import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
+import { SetsAdminController } from './admin/sets-admin.controller';
+import { SetsAdminService } from './admin/sets-admin.service';
+import { SetsController } from './sets/sets.controller';
+import { SetsService } from './sets/sets.service';
 import { SearchService } from './search/search.service';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
@@ -61,6 +65,7 @@ export class AppModule {
         MeController,
         CatalogController,
         CartController,
+        SetsController,
         MediaController,
         WebhookController,
         AdminAuthController,
@@ -69,6 +74,7 @@ export class AppModule {
         AuditController,
         CatalogAdminController,
         OnHandController,
+        SetsAdminController,
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
@@ -87,7 +93,9 @@ export class AppModule {
         SettingsService,
         CatalogService,
         CartService,
+        SetsService,
         CatalogAdminService,
+        SetsAdminService,
         SearchService,
         CustomersService,
         DeliveryService,
