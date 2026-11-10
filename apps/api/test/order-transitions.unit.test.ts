@@ -46,6 +46,8 @@ function validPayload(action: OrderAction, actor: OrderActorType, from: OrderSta
       return { reason: from === 'handed_to_bts' ? 'not_collected_at_bts' : 'out_of_stock' };
     case 'submit_receipt':
       return { receiptId: 7 };
+    case 'confirm_payment':
+      return { creditId: 3, receiptId: from === 'awaiting_payment' ? null : 7 };
     case 'reject_receipt':
       return { reason: 'Сумма на чеке не совпадает с заказом' };
     case 'hand_to_bts':
@@ -111,6 +113,19 @@ describe('required payloads', () => {
     expect(
       planTransition('awaiting_payment', 'submit_receipt', 'customer', { receiptId: 12 }),
     ).toMatchObject({ ok: true, to: 'receipt_review', payload: { receiptId: 12 } });
+  });
+
+  it('a payment is confirmed only with the Credit that paid it (#32)', () => {
+    expect(planTransition('receipt_review', 'confirm_payment', 'ai', undefined)).toEqual(invalid);
+    expect(planTransition('receipt_review', 'confirm_payment', 'ai', { receiptId: 7 })).toEqual(
+      invalid,
+    );
+    expect(
+      planTransition('awaiting_payment', 'confirm_payment', 'staff', { receiptId: null }),
+    ).toEqual(invalid);
+    expect(
+      planTransition('receipt_review', 'confirm_payment', 'ai', { creditId: 3, receiptId: 7 }),
+    ).toMatchObject({ ok: true, to: 'payment_confirmed', payload: { creditId: 3, receiptId: 7 } });
   });
 
   it('a cancel always has a reason, and only one its actor may give', () => {

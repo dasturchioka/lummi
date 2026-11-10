@@ -25,8 +25,10 @@ import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
+import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { WorkerRuntime } from '../src/worker/runtime';
+import { payWithCredit, recordCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
@@ -169,15 +171,17 @@ async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_pay
     .submit(customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
   if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
   if (status === 'receipt_review') return;
+  // the money arrives and the receipt AI confirms it (#32): the only way to «Оплата подтверждена»
+  await payWithCredit(t, await orderRow(number), sent.receipt.id);
+  if (status === 'payment_confirmed') return;
   const manager = await staff();
   const path = [
-    ['payment_confirmed', 'confirm_payment', { type: 'ai' }, undefined],
     ['accepted', 'accept', manager, undefined],
     ['assembling', 'start_assembly', manager, undefined],
     ['handed_to_bts', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
     ['delivered', 'deliver', manager, undefined],
   ] as const;
-  let from: OrderStatus = 'receipt_review';
+  let from: OrderStatus = 'payment_confirmed';
   for (const [to, action, actor, payload] of path) {
     const out = await machine().transition(id, action, actor, from, payload as never);
     if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);
@@ -671,24 +675,25 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
   it('a manager confirms a payment that came with no receipt; the AI may not', async () => {
     const client = await shopper();
     const number = await placeOrder(client, await firstSlug());
-    const { id } = await orderRow(number);
+    const order = await orderRow(number);
+    // money on the card is ground truth: the move names the credit it links (#32)
+    const creditId = await recordCredit(t, { som: order.amountDue });
+    const pay = t.app.get(PaymentConfirmation);
     expect(
-      await machine().transition(
-        id,
-        'confirm_payment',
-        { type: 'ai' },
-        'awaiting_payment',
-        undefined,
-      ),
+      await pay.confirmPayment({
+        orderId: order.id,
+        creditId,
+        receiptId: null,
+        actor: { type: 'ai' },
+      }),
     ).toEqual({ kind: 'refused', code: 'forbidden' });
-    const out = await machine().transition(
-      id,
-      'confirm_payment',
-      await staff(),
-      'awaiting_payment',
-      undefined,
-    );
-    expect(out.kind === 'done' && out.order.status).toBe('payment_confirmed');
+    const out = await pay.confirmPayment({
+      orderId: order.id,
+      creditId,
+      receiptId: null,
+      actor: (await staff()) as { type: 'staff'; id: number },
+    });
+    expect(out.kind === 'confirmed' && out.order.status).toBe('payment_confirmed');
   });
 
   it('a stale expected status is a conflict and changes nothing (a second press)', async () => {

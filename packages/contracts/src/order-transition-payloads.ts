@@ -15,7 +15,17 @@ const typedReason = z.string().trim().min(1).max(500);
 export const transitionPayloadSchemas = {
   /** The Receipt that went in with this move (#28); a receipt never moves an order twice. */
   submit_receipt: z.object({ receiptId: z.number().int().positive() }).strict(),
-  confirm_payment: nothing,
+  /**
+   * Money on the card is ground truth (ADR 0012): a payment is confirmed only with the Credit that
+   * paid it, plus the Receipt it confirms, or null for a credit that came with no receipt. Only
+   * `PaymentConfirmation` makes this move: it checks and links the credit first.
+   */
+  confirm_payment: z
+    .object({
+      creditId: z.number().int().positive(),
+      receiptId: z.number().int().positive().nullable(),
+    })
+    .strict(),
   reject_receipt: z.object({ reason: typedReason }).strict(),
   payment_not_found: nothing,
   accept: nothing,

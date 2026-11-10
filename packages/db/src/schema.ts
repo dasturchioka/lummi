@@ -691,6 +691,11 @@ export const orders = pgTable(
     total: integer('total').notNull(),
     /** What the customer transfers to the shop card; payment matching compares this (ADR 0012). */
     amountDue: integer('amount_due').notNull(),
+    /**
+     * The Credit that paid it, linked when the payment is confirmed (`PaymentConfirmation`, the
+     * one door for the receipt AI and staff). Unique: a credit never pays two orders (ADR 0012).
+     */
+    creditId: bigint('credit_id', { mode: 'number' }).references(() => credits.id),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
     /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
@@ -704,6 +709,7 @@ export const orders = pgTable(
     index('orders_customer_idx').on(t.customerId, t.createdAt),
     uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
     index('orders_status_idx').on(t.status),
+    uniqueIndex('orders_credit_idx').on(t.creditId),
     // the reserve sweeps read unpaid orders by when their reserve ends
     index('orders_awaiting_reserve_idx')
       .on(t.reserveUntil)
@@ -873,6 +879,10 @@ export const receipts = pgTable(
     index('receipts_order_idx').on(t.orderId, t.id),
     index('receipts_sha256_idx').on(t.sha256),
     index('receipts_phash_idx').on(t.phash),
+    // an order may hold several receipts, but at most one is accepted (ADR 0011)
+    uniqueIndex('receipts_one_accepted_idx')
+      .on(t.orderId)
+      .where(sql`${t.verdict} in ('ai_confirmed', 'manager_confirmed')`),
     check('receipts_size', sql`${t.size} > 0`),
     check('receipts_sha256', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check('receipts_phash', sql`${t.phash} ~ '^[0-9a-f]{16}$'`),
@@ -890,6 +900,7 @@ export type { OrderStatus };
 export type OrderLineRow = typeof orderLines.$inferSelect;
 export type ShopCardRow = typeof shopCard.$inferSelect;
 export type ReceiptRow = typeof receipts.$inferSelect;
+export type CreditRow = typeof credits.$inferSelect;
 
 /**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the

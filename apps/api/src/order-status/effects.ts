@@ -63,6 +63,10 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   confirm_payment: {
     audit: 'order.payment_confirmed',
+    // with a receipt the order is «Чек на проверке»; a credit with none confirms «Ожидает оплаты»
+    fits: (m) => (m.payload.receiptId === null) === (m.order.status === 'awaiting_payment'),
+    // the link itself; `orders_credit_idx` keeps a credit to one order whatever wrote the row
+    columns: (m) => ({ creditId: m.payload.creditId }),
     message: (m, lang) => ({ text: fill(bot(lang).paymentConfirmed, { number: number(m) }) }),
   },
   reject_receipt: {
