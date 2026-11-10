@@ -308,7 +308,6 @@ export function CampaignForm({
           {saved && qr ? (
             <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-start">
               {/* the server draws it; an <img> shows it, the download links save it */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={qr}
                 alt={m.sectionQr}
