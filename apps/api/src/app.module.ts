@@ -20,6 +20,7 @@ import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
+import { OrderStatusService } from './order-status/order-status.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SearchService } from './search/search.service';
@@ -91,6 +92,7 @@ export class AppModule {
         CatalogService,
         CartService,
         OrdersService,
+        OrderStatusService,
         CatalogAdminService,
         SearchService,
         CustomersService,
@@ -109,6 +111,7 @@ export class AppModule {
       ],
       exports: [
         CreditEvents,
+        OrderStatusService,
         HumoFeedService,
         SettingsService,
         AuditService,

@@ -109,6 +109,24 @@ export const ordersMessages = defineMessages(
       notFoundText: 'Возможно, ссылка устарела. Все ваши заказы — в разделе «Заказы».',
       toOrders: 'К заказам',
       more: 'Показать ещё',
+      /** Why the order was cancelled, as the shopper reads it (here and in the bot's message). */
+      cancelReason: {
+        customer_cancelled: 'Вы отменили заказ',
+        reserve_expired: 'Время брони истекло, а чек не поступил',
+        out_of_stock: 'Товара не оказалось в наличии',
+        customer_refused: 'Вы отказались от заказа',
+        unreachable: 'Мы не смогли с вами связаться',
+        payment_not_received: 'Оплата не поступила',
+        not_collected_at_bts: 'Заказ не забрали в пункте BTS',
+      },
+      cancelledAt: 'Отменён {at}',
+      cancel: 'Отменить заказ',
+      cancelTitle: 'Отменить заказ № {number}?',
+      cancelText:
+        'Бронь снимется, и ароматы вернутся в продажу. Если вы уже перевели деньги, не отменяйте заказ: напишите менеджеру.',
+      cancelConfirm: 'Отменить заказ',
+      cancelKeep: 'Не отменять',
+      cancelFailed: 'Не удалось отменить заказ. Проверьте соединение и попробуйте ещё раз.',
     },
   },
   {
@@ -221,6 +239,23 @@ export const ordersMessages = defineMessages(
         'Havola eskirgan boʻlishi mumkin. Barcha buyurtmalaringiz «Buyurtmalar» boʻlimida.',
       toOrders: 'Buyurtmalarga',
       more: 'Yana koʻrsatish',
+      cancelReason: {
+        customer_cancelled: 'Buyurtmani siz bekor qildingiz',
+        reserve_expired: 'Band qilish muddati tugadi, chek kelmadi',
+        out_of_stock: 'Mahsulot mavjud boʻlmay qoldi',
+        customer_refused: 'Siz buyurtmadan voz kechdingiz',
+        unreachable: 'Siz bilan bogʻlana olmadik',
+        payment_not_received: 'Toʻlov kelib tushmadi',
+        not_collected_at_bts: 'Buyurtma BTS punktidan olib ketilmadi',
+      },
+      cancelledAt: 'Bekor qilindi: {at}',
+      cancel: 'Buyurtmani bekor qilish',
+      cancelTitle: '№ {number} buyurtma bekor qilinsinmi?',
+      cancelText:
+        'Bandlik olib tashlanadi va atirlar yana sotuvga qaytadi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang: menejerga yozing.',
+      cancelConfirm: 'Bekor qilish',
+      cancelKeep: 'Bekor qilmaslik',
+      cancelFailed: 'Buyurtmani bekor qilib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
     },
   },
 );

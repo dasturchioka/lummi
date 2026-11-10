@@ -53,6 +53,7 @@ export const clientRoutes = {
     create: route('POST', '/orders', [201, 401, 403, 409, 422]),
     list: route('GET', '/orders', [200, 401]),
     get: route('GET', '/orders/:number', [200, 401, 404]),
+    cancel: route('POST', '/orders/:number/cancel', [200, 401, 403, 404, 409]),
   },
   catalog: {
     list: route('GET', '/catalog/fragrances', [200, 401]),

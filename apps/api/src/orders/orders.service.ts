@@ -40,6 +40,7 @@ import { loadCartQuote } from '../cart/load-cart';
 import { toRegionDto } from '../delivery/dto';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
+import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
@@ -389,7 +390,11 @@ export class OrdersService {
       .from(orders)
       .where(and(eq(orders.customerId, customerId), eq(orders.number, number)));
     if (!order) return null;
-    return toOrderDto(order, await linesOf(this.db, order.id));
+    return toOrderDto(
+      order,
+      await linesOf(this.db, order.id),
+      await cancellationOf(this.db, order.id),
+    );
   }
 
   private async destination(
@@ -426,7 +431,7 @@ export class OrdersService {
   }
 }
 
-async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
+export async function linesOf(db: DbOrTx, orderId: number): Promise<OrderLineRow[]> {
   return db
     .select()
     .from(orderLines)
@@ -462,7 +467,12 @@ export function orderUrl(miniAppUrl: string, number: number): string {
   return new URL(`orders/${number}`, base).toString();
 }
 
-function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
+/** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */
+export function toOrderDto(
+  o: OrderRow,
+  lines: OrderLineRow[],
+  cancellation: OrderDto['cancellation'] = null,
+): OrderDto {
   return {
     number: o.number,
     status: o.status,
@@ -484,6 +494,7 @@ function toOrderDto(o: OrderRow, lines: OrderLineRow[]): OrderDto {
     thresholdBaseAmount: o.thresholdBaseAmount,
     total: o.total,
     amountDue: o.amountDue,
+    cancellation,
   };
 }
 

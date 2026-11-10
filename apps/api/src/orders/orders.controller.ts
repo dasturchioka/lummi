@@ -2,6 +2,7 @@ import { contract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
+import { OrderStatusService } from '../order-status/order-status.service';
 import { OrdersService } from './orders.service';
 
 const unauthorized = { status: 401 as const, body: { code: 'unauthorized' as const } };
@@ -10,7 +11,10 @@ const unauthorized = { status: 401 as const, body: { code: 'unauthorized' as con
 @Controller()
 @UseGuards(SessionGuard)
 export class OrdersController {
-  constructor(@Inject(OrdersService) private readonly orders: OrdersService) {}
+  constructor(
+    @Inject(OrdersService) private readonly orders: OrdersService,
+    @Inject(OrderStatusService) private readonly status: OrderStatusService,
+  ) {}
 
   @TsRestHandler(contract.checkout.get)
   checkout(@SessionCustomerId() customerId: number) {
@@ -55,6 +59,38 @@ export class OrdersController {
       return order
         ? { status: 200 as const, body: order }
         : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
+  }
+
+  @TsRestHandler(contract.orders.cancel)
+  cancel(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.orders.cancel, async ({ params, body }) => {
+      const out = await this.status.cancelByCustomer(
+        customerId,
+        params.number,
+        body.expectedStatus,
+      );
+      switch (out.kind) {
+        case 'done':
+          return { status: 200 as const, body: out.order };
+        case 'conflict':
+          return {
+            status: 409 as const,
+            body: { code: 'status_changed' as const, order: out.order },
+          };
+        case 'try_again':
+          return { status: 409 as const, body: { code: 'try_again' as const } };
+        case 'not_found':
+          return { status: 404 as const, body: { code: 'not_found' as const } };
+        case 'refused':
+          // the shopper's own reason is always valid: only the table or the actor refuses it
+          return {
+            status: 403 as const,
+            body: {
+              code: out.code === 'not_allowed' ? ('not_allowed' as const) : ('forbidden' as const),
+            },
+          };
+      }
     });
   }
 }
