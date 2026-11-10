@@ -17,6 +17,8 @@ const ALLOWED: Record<string, { to: OrderStatus; actors: OrderActorType[] }> = {
   // the unpaid end
   'awaiting_payment|submit_receipt': { to: 'receipt_review', actors: ['customer'] },
   'receipt_review|confirm_payment': { to: 'payment_confirmed', actors: ['ai', 'staff'] },
+  // a credit with no receipt, linked to the order by hand (TZ §4: «Поступления без чека … вручную»)
+  'awaiting_payment|confirm_payment': { to: 'payment_confirmed', actors: ['staff'] },
   'receipt_review|reject_receipt': { to: 'awaiting_payment', actors: ['staff'] },
   'receipt_review|payment_not_found': { to: 'awaiting_payment', actors: ['system'] },
   // fulfilment, one step at a time, by a manager
@@ -67,7 +69,7 @@ describe('the transition table (ADR 0011, 0006)', () => {
 
   it('covers every pair: 9 statuses x 10 actions x 4 actors', () => {
     expect(triples).toHaveLength(9 * 10 * 4);
-    expect(allowed).toHaveLength(18);
+    expect(allowed).toHaveLength(19);
   });
 
   it.each(allowed)('allows $action from $from by $actor', ({ from, action, actor }) => {

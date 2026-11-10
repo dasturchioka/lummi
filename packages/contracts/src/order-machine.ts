@@ -53,6 +53,14 @@ export const ORDER_TRANSITIONS: readonly OrderTransition[] = [
     to: 'payment_confirmed',
     actors: ['ai', 'staff'],
   },
+  // a credit that came with no receipt, linked to the order by a manager (TZ §4: «Поступления без
+  // чека … менеджер может привязать их к заказу вручную»): money on the card is what counts
+  {
+    from: 'awaiting_payment',
+    action: 'confirm_payment',
+    to: 'payment_confirmed',
+    actors: ['staff'],
+  },
   { from: 'receipt_review', action: 'reject_receipt', to: 'awaiting_payment', actors: ['staff'] },
   // the wait window ended with no fitting credit: not a rejection (ADR 0012)
   {
@@ -86,6 +94,19 @@ export function findTransition(
 ): OrderTransition | undefined {
   return ORDER_TRANSITIONS.find((t) => t.from === from && t.action === action);
 }
+
+/**
+ * Paid: the payment was confirmed. Money only goes back to a paid order's shopper, as a Refund
+ * (ADR 0006), so cancelling one of these tells them the manager will be in touch.
+ */
+export const PAID_STATUSES: readonly OrderStatus[] = [
+  'payment_confirmed',
+  'accepted',
+  'assembling',
+  'handed_to_bts',
+  'delivered',
+  'returned',
+];
 
 /** The shopper may cancel their own order only while «Ожидает оплаты» (ADR 0011). */
 export function customerMayCancel(status: OrderStatus): boolean {
