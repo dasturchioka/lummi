@@ -35,6 +35,7 @@ import {
   adminCustomerDetailSchema,
   adminCustomersErrorSchema,
   adminCustomersPageSchema,
+  adminSetBirthDateBodySchema,
   adminStockErrorSchema,
   customersQuerySchema,
   stockListSchema,
@@ -963,6 +964,21 @@ const adminCore = c.router({
         404: adminCustomersErrorSchema,
       },
       summary: 'Owner and manager: one customer with all their orders, newest first',
+    },
+    setBirthDate: {
+      method: 'PUT',
+      path: '/admin/customers/:id/birth-date',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: adminSetBirthDateBodySchema,
+      responses: {
+        200: adminCustomerDetailSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
+        404: adminCustomersErrorSchema,
+        422: adminCustomersErrorSchema,
+      },
+      summary:
+        'Owner and manager: correct the date of birth (the customer enters it once), audited with the old and new date',
     },
   },
   onHand: {

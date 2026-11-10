@@ -421,8 +421,8 @@ export const settingDefinitions = {
     area: 'pricing',
     unit: 'none',
     label: {
-      ru: 'Купон ко дню рождения: за сколько дней, дней',
-      uz: 'Tugʻilgan kun kuponi: necha kun oldin, kun',
+      ru: 'Купон ко дню рождения: дней до праздника',
+      uz: 'Tugʻilgan kun kuponi: bayramgacha kunlar',
     },
     hint: {
       ru: 'Купон приходит в 10:00 по Ташкенту за столько дней до дня рождения и сразу действует.',
@@ -436,8 +436,8 @@ export const settingDefinitions = {
     area: 'pricing',
     unit: 'none',
     label: {
-      ru: 'Купон ко дню рождения: сколько дней после, дней',
-      uz: 'Tugʻilgan kun kuponi: keyin necha kun, kun',
+      ru: 'Купон ко дню рождения: дней после праздника',
+      uz: 'Tugʻilgan kun kuponi: bayramdan keyingi kunlar',
     },
     hint: {
       ru: 'Купон действует до конца этого дня после дня рождения. Новое значение действует для следующих купонов.',
@@ -451,8 +451,8 @@ export const settingDefinitions = {
     area: 'pricing',
     unit: 'none',
     label: {
-      ru: 'Первый купон не раньше чем через, дней',
-      uz: 'Birinchi kupon kamida necha kundan keyin, kun',
+      ru: 'Первый купон ко дню рождения не раньше чем через, дней',
+      uz: 'Birinchi tugʻilgan kun kuponi kamida necha kundan keyin, kun',
     },
     hint: {
       ru: 'Защита от злоупотреблений: считается от дня, когда покупатель указал дату рождения.',

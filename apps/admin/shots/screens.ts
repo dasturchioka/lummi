@@ -393,6 +393,18 @@ export const screens: Screen[] = [
     },
   },
   {
+    // #30: the birthday coupon's settings, after the promo-code ones in «Цены и скидки»
+    id: 'settings-birthday',
+    path: '/settings',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, language }) => {
+      await page
+        .getByLabel(settingDefinitions['birthday.percent'].label[language], { exact: true })
+        .evaluate((el) => el.closest('form')?.scrollIntoView({ block: 'start' }));
+    },
+  },
+  {
     id: 'settings-duration',
     path: '/settings',
     as: 'owner',

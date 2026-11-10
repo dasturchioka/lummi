@@ -309,6 +309,26 @@ export const customerScreens: Screen[] = [
     },
   },
   {
+    // #30: the date of birth on the page, and staff correcting it
+    id: 'customer-birth-date',
+    path: '/customers?q=ali_valiyev',
+    as: 'manager',
+    setup: async ({ db }) => {
+      await seedCustomers(db);
+      await db.query(
+        `update customers set birth_date = '1996-03-14', birth_date_set_at = now() where telegram_id = $1`,
+        [FIRST],
+      );
+    },
+    teardown: ({ db }) => clearCustomers(db),
+    act: async ({ page }) => {
+      await page.locator('main a[href^="/customers/"]:visible').first().click();
+      await page.locator('[data-testid="birth-date-edit"]').click();
+      await page.getByRole('dialog').waitFor();
+    },
+    fullPage: false,
+  },
+  {
     id: 'w-customers-500',
     path: '/customers?sort=spent&page=3',
     as: 'owner',
