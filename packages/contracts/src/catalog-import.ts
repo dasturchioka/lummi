@@ -45,6 +45,27 @@ export interface ImportCounts {
   notes: { new: number; changed: number };
 }
 
+/** One value of a change; arrays are lists (notes, key notes, aliases, similar codes). */
+export type ImportValue = string | number | boolean | null | string[];
+export interface ImportChangeField {
+  /** `price`, `salePrice`, `saleEndsOn`, `onHand`, or a fragrance column key (`descriptionRu`, `topNotes` …). */
+  field: string;
+  before: ImportValue;
+  after: ImportValue;
+}
+/** Something «Применить» will write, by name: prices and markdowns first, then stock, then content. */
+export interface ImportChange {
+  kind: 'new' | 'changed';
+  group: 'price' | 'stock' | 'content';
+  /** The Excel row (on «Объёмы» for a volume, on «Ароматы» for a fragrance). */
+  row: number;
+  code: string;
+  name: string;
+  /** Null for a change to the fragrance itself. */
+  ml: number | null;
+  fields: ImportChangeField[];
+}
+
 export interface ImportReport {
   counts: ImportCounts;
   /** Cut at `ISSUE_CAP`; `errorTotal` / `warningTotal` are the real numbers. */
@@ -53,11 +74,15 @@ export interface ImportReport {
   warnings: ImportIssue[];
   warningTotal: number;
   stock: ImportStockRow[];
+  /** Every change by name, before → after; cut at `IMPORT_CHANGE_CAP`, `changeTotal` is the real number. */
+  changes: ImportChange[];
+  changeTotal: number;
   /** Present only when there are no errors; «Применить» sends it back with the same file. */
   token: string | null;
 }
 
 export const IMPORT_ISSUE_CAP = 200;
+export const IMPORT_CHANGE_CAP = 500;
 
 export interface ImportApplied {
   counts: ImportCounts;

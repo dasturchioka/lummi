@@ -142,6 +142,66 @@ describe('dry run', () => {
   });
 });
 
+describe('what the dry run says it will change', () => {
+  it('lists every change by name as before → after: prices and markdowns first, then stock, then content', async () => {
+    const [v1, v2] = await t.db.select().from(volumes).orderBy(volumes.id).limit(2);
+    const file = await edit(await exportBytes(), ({ fragrances: f, volumes: v }) => {
+      v.getRow(2).getCell(colOf(v, 'В наличии, шт.')).value = 9; // stock only
+      v.getRow(3).getCell(colOf(v, 'Цена, сум')).value = 88_000; // a price
+      v.getRow(4).getCell(colOf(v, 'Цена со скидкой, сум')).value = 50_000; // a markdown …
+      v.getRow(4).getCell(colOf(v, 'Скидка до (ГГГГ-ММ-ДД)')).value = '2026-12-31'; // … with an end
+      f.getRow(5).getCell(colOf(f, 'Описание RU')).value = 'Новый текст описания.'; // content
+    });
+    const { report } = await dryRun(file);
+    expect(report.errors).toEqual([]);
+    const kinds = report.changes.map((c) => c.group);
+    expect(kinds).toEqual([...kinds].sort((a, b) => ['price', 'stock', 'content'].indexOf(a) - ['price', 'stock', 'content'].indexOf(b)));
+    const price = report.changes.find((c) => c.fields.some((f) => f.field === 'price'))!;
+    expect(price).toMatchObject({ kind: 'changed', group: 'price', ml: v2!.ml });
+    expect(price.name).toBeTruthy();
+    expect(price.fields).toEqual([{ field: 'price', before: v2!.price, after: 88_000 }]);
+    const sale = report.changes.find((c) => c.fields.some((f) => f.field === 'salePrice'))!;
+    expect(sale.group).toBe('price');
+    expect(sale.fields).toEqual(
+      expect.arrayContaining([
+        { field: 'salePrice', before: null, after: 50_000 },
+        { field: 'saleEndsOn', before: null, after: '2026-12-31' },
+      ]),
+    );
+    const stock = report.changes.find((c) => c.group === 'stock')!;
+    expect(stock.fields).toEqual([{ field: 'onHand', before: v1!.onHand, after: 9 }]);
+    const content = report.changes.find((c) => c.group === 'content')!;
+    expect(content.fields).toEqual([
+      expect.objectContaining({ field: 'descriptionRu', after: 'Новый текст описания.' }),
+    ]);
+    expect(report.changeTotal).toBe(4);
+  });
+
+  it('lists a new fragrance and its volumes as new', async () => {
+    const file = await edit(await exportBytes(), ({ fragrances: f, volumes: v }) => {
+      const row = f.getRow(lastData(f) + 1);
+      f.getRow(2).eachCell((c, n) => (row.getCell(n).value = c.value));
+      row.getCell(colOf(f, 'Внутренний код')).value = '901';
+      row.getCell(colOf(f, 'Название')).value = 'Nuit Neuf';
+      row.getCell(colOf(f, 'Похожие (коды)')).value = '';
+      const vr = v.getRow(lastData(v) + 1);
+      vr.getCell(colOf(v, 'Внутренний код')).value = '901';
+      vr.getCell(colOf(v, 'Объём, мл')).value = 30;
+      vr.getCell(colOf(v, 'Цена, сум')).value = 150_000;
+      vr.getCell(colOf(v, 'В наличии, шт.')).value = 4;
+    });
+    const { report } = await dryRun(file);
+    expect(report.errors).toEqual([]);
+    const news = report.changes.filter((c) => c.kind === 'new');
+    expect(news.map((c) => [c.group, c.name, c.ml])).toEqual(
+      expect.arrayContaining([['price', 'Nuit Neuf', 30], ['content', 'Nuit Neuf', null]]),
+    );
+    expect(news.find((c) => c.ml === 30)!.fields).toEqual(
+      expect.arrayContaining([{ field: 'price', before: null, after: 150_000 }]),
+    );
+  });
+});
+
 describe('round trip', () => {
   it('an export re-imports as zero changes', async () => {
     const { report } = await dryRun(await exportBytes());

@@ -6,6 +6,8 @@ import {
   fragranceInputSchema,
   noteInputSchema,
   volumeInputSchema,
+  type ImportChange,
+  type ImportChangeField,
   type ImportIssue,
   type ImportStockRow,
 } from '@lummi/contracts';
@@ -52,6 +54,7 @@ export interface Plan {
   errors: ImportIssue[];
   warnings: ImportIssue[];
   stock: Omit<ImportStockRow, 'reserved' | 'available' | 'negative'>[];
+  changes: ImportChange[];
   counts: {
     fragrances: { new: number; changed: number; unchanged: number; notInFile: number };
     volumes: { new: number; changed: number; unchanged: number };
@@ -102,6 +105,28 @@ function dateText(text: string): string | null {
 }
 
 /** Zod's wording to ours: the same rules as the admin form, reported on the file's own columns. */
+const GROUP_ORDER = { price: 0, stock: 1, content: 2 } as const;
+/** Prices and markdowns first, then stock, then content; the file's order within each. */
+export const sortChanges = (changes: ImportChange[]) =>
+  [...changes].sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || a.row - b.row);
+
+function volumeFields(old: VolumeDraft | null, now: VolumeDraft): ImportChangeField[] {
+  const out: ImportChangeField[] = [];
+  for (const field of ['price', 'salePrice', 'saleEndsOn', 'onHand'] as const) {
+    const before = old ? old[field] : null;
+    if (!old || before !== now[field]) out.push({ field, before, after: now[field] });
+  }
+  return out;
+}
+
+function draftFields(old: FragranceDraft, now: FragranceDraft): ImportChangeField[] {
+  const a = normDraft(old) as unknown as Record<string, ImportChangeField['before']>;
+  const b = normDraft(now) as unknown as Record<string, ImportChangeField['before']>;
+  return Object.keys(b)
+    .filter((k) => k !== 'code' && JSON.stringify(a[k]) !== JSON.stringify(b[k]))
+    .map((field) => ({ field, before: a[field] ?? null, after: b[field] ?? null }));
+}
+
 function issueCode(i: ZodIssue): { code: string; params?: Record<string, string | number> } {
   if (i.code === 'custom') return { code: i.message };
   if (i.code === 'too_big') return { code: 'too_long', params: { max: Number(i.maximum) } };
@@ -137,6 +162,7 @@ export function planImport(
     errors,
     warnings,
     stock: [],
+    changes: [],
     counts: {
       fragrances: { new: 0, changed: 0, unchanged: 0, notInFile: 0 },
       volumes: { new: 0, changed: 0, unchanged: 0 },
@@ -341,6 +367,19 @@ export function planImport(
         volumeChange = true;
       }
       finals.set(ml, { ...vol, loadedOnHand: old ? old.onHand : null });
+      if (!old || !sameVolume(old, vol)) {
+        const fields = volumeFields(old ?? null, vol);
+        const priceSide = fields.some((f) => f.field !== 'onHand');
+        plan.changes.push({
+          kind: old ? 'changed' : 'new',
+          group: priceSide ? 'price' : 'stock',
+          row: vrow,
+          code,
+          name: draft.name,
+          ml,
+          fields,
+        });
+      }
       if (!old || old.onHand !== vol.onHand) {
         plan.stock.push({
           row: vrow,
@@ -369,6 +408,18 @@ export function planImport(
       if (!existing) plan.counts.fragrances.new++;
       else if (changed) plan.counts.fragrances.changed++;
       else plan.counts.fragrances.unchanged++;
+    }
+    if (inFile && changed) {
+      const fields = existing ? draftFields(existing.draft, draft) : [];
+      plan.changes.push({
+        kind: existing ? 'changed' : 'new',
+        group: 'content',
+        row,
+        code,
+        name: draft.name,
+        ml: null,
+        fields,
+      });
     }
     if (changed || volumeChange) {
       plan.fragrances.push({

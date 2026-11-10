@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
+  IMPORT_CHANGE_CAP,
   IMPORT_ISSUE_CAP,
   utcToTashkent,
   type FragranceInput,
+  type ImportChange,
   type ImportCounts,
   type ImportIssue,
   type ImportReport,
@@ -26,7 +28,7 @@ import { CatalogAdminService, isUniqueViolation, normalise } from '../admin/cata
 import { reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
-import { planImport, type FragranceOp, type Plan } from './plan';
+import { planImport, sortChanges, type FragranceOp, type Plan } from './plan';
 import { fingerprint, readSnapshot, snapshotToData, type Snapshot } from './snapshot';
 import {
   UNPACK_RATIO,
@@ -140,6 +142,7 @@ export class CatalogImportService {
           [...plan.warnings, ...stock.flatMap(this.belowReserve)],
           stock,
           plan.errors.length ? null : tokenOf(sha(bytes), snap),
+          plan.changes,
         );
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
@@ -216,6 +219,7 @@ export class CatalogImportService {
     warnings: ImportIssue[],
     stock: ImportReport['stock'],
     token: string | null,
+    changes: ImportChange[] = [],
   ): ImportReport {
     const order = { file: 0, fragrances: 1, volumes: 2, dictionary: 3 } as const;
     const sorted = [...errors].sort(
@@ -228,6 +232,8 @@ export class CatalogImportService {
       warnings: warnings.slice(0, IMPORT_ISSUE_CAP),
       warningTotal: warnings.length,
       stock,
+      changes: sortChanges(changes).slice(0, IMPORT_CHANGE_CAP),
+      changeTotal: changes.length,
       token,
     };
   }

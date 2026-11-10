@@ -1,10 +1,17 @@
 'use client';
 
-import type { ImportApplied, ImportIssue, ImportReport } from '@lummi/contracts';
+import type {
+  ImportApplied,
+  ImportChange,
+  ImportIssue,
+  ImportReport,
+  ImportValue,
+} from '@lummi/contracts';
 import { CATALOG_IMPORT_MIME } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
-import { ArrowLeft, CircleCheck, Download, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, CircleCheck, Download, FileSpreadsheet, Info } from 'lucide-react';
 import Link from 'next/link';
+import type * as React from 'react';
 import { useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -197,10 +204,10 @@ export function ExcelImport({ language, t }: { language: Language; t: AdminMessa
                 <p className="mt-1 text-[13px] text-muted-foreground">{x.appliedHint}</p>
               </div>
             </div>
-            <Counts counts={state.counts} x={x} />
+            <Counts counts={state.counts} x={x} applied />
             {state.warnings.length > 0 && (
               <div className="grid gap-2" data-testid="excel-applied-warnings">
-                <Notice title={x.warnedTitle}>{x.warnedHint}</Notice>
+                <HeadsUp title={x.warnedTitle}>{x.warnedHint}</HeadsUp>
                 <ul className="list-disc pl-9 text-sm text-pretty">
                   {state.warnings.map((w, i) => (
                     <li key={i}>{issueText(w)}</li>
@@ -237,7 +244,38 @@ export function ExcelImport({ language, t }: { language: Language; t: AdminMessa
   );
 }
 
-function Counts({ counts, x }: { counts: ImportReport['counts']; x: AdminMessages['catalog']['excel'] }) {
+type Excel = AdminMessages['catalog']['excel'];
+
+/** A warning, not an error: Sage on a Sage wash with an info icon, so it never reads as «blocked». */
+function HeadsUp({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      data-testid="excel-heads-up"
+      className="flex gap-3 rounded-button bg-sage-wash px-4 py-3.5 text-foreground"
+    >
+      <Info className="mt-px size-5 shrink-0 text-sage-ink" strokeWidth={1.5} aria-hidden />
+      <div className="min-w-0">
+        <p className="font-semibold leading-snug">{title}</p>
+        {children && <p className="mt-1 text-[13px] text-muted-foreground">{children}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** One line per sheet: «Объёмы: 3 изменится · 202 без изменений». `applied` is the past tense. */
+function Counts({
+  counts,
+  x,
+  applied = false,
+}: {
+  counts: ImportReport['counts'];
+  x: Excel;
+  applied?: boolean;
+}) {
+  const word = applied
+    ? { n: x.aNew, c: x.aChanged, u: x.aUnchanged, f: x.aNotInFile }
+    : { n: x.cNew, c: x.cChanged, u: x.cUnchanged, f: x.cNotInFile };
   const rows: [string, { new: number; changed: number; unchanged?: number; notInFile?: number }][] = [
     [x.rowFragrances, counts.fragrances],
     [x.rowVolumes, counts.volumes],
@@ -245,30 +283,166 @@ function Counts({ counts, x }: { counts: ImportReport['counts']; x: AdminMessage
     [x.rowNotes, counts.notes],
   ];
   return (
-    <Card className="overflow-hidden bg-milk p-0">
-      <Table>
-        <THead>
-          <TR>
-            <TH />
-            <TH className="text-right">{x.cNew}</TH>
-            <TH className="text-right">{x.cChanged}</TH>
-            <TH className="text-right">{x.cUnchanged}</TH>
-            <TH className="text-right">{x.cNotInFile}</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {rows.map(([label, c]) => (
-            <TR key={label}>
-              <TD className="font-medium">{label}</TD>
-              <TD className="text-right">{c.new}</TD>
-              <TD className="text-right">{c.changed}</TD>
-              <TD className="text-right">{c.unchanged ?? '—'}</TD>
-              <TD className="text-right">{c.notInFile ?? '—'}</TD>
+    <ul className="grid gap-1.5 rounded-button bg-milk px-4 py-3 text-sm" data-testid="excel-counts">
+      {rows.map(([sheet, c]) => {
+        const parts = [
+          c.new ? `${c.new} ${word.n}` : null,
+          c.changed ? `${c.changed} ${word.c}` : null,
+          c.unchanged ? `${c.unchanged} ${word.u}` : null,
+          c.notInFile ? `${c.notInFile} ${word.f}` : null,
+        ].filter(Boolean);
+        return (
+          <li key={sheet} className="text-pretty">
+            <span className="font-medium">{sheet}:</span>{' '}
+            {parts.length ? parts.join(' · ') : word.u}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const group = (g: ImportChange['group'], x: Excel) =>
+  g === 'price' ? x.groupPrice : g === 'stock' ? x.groupStock : x.groupContent;
+
+function ChangeList({ report, x }: { report: ImportReport; x: Excel }) {
+  const show = (field: string, v: ImportValue): string => {
+    if (v === null || v === '' || (Array.isArray(v) && v.length === 0)) return x.none;
+    if (typeof v === 'boolean') return v ? x.yes : x.no;
+    if (Array.isArray(v)) return v.join(', ');
+    if (typeof v === 'number') {
+      const n = String(v).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+      return field === 'onHand' ? n : `${n}\u00a0${x.currency}`;
+    }
+    return v.length > 70 ? `${v.slice(0, 70)}…` : v;
+  };
+  const label = (f: string) => x.fieldNames[f as keyof typeof x.fieldNames] ?? f;
+  const groups = (['price', 'stock', 'content'] as const)
+    .map((g) => [g, report.changes.filter((c) => c.group === g)] as const)
+    .filter(([, list]) => list.length > 0);
+  return (
+    <div className="grid gap-4" data-testid="excel-changes">
+      <div>
+        <h3 className="text-[13px] font-medium text-muted-foreground">{x.changesTitle}</h3>
+        <p className="mt-1 text-[13px] text-pretty text-muted-foreground">{x.changesHint}</p>
+      </div>
+      {groups.map(([g, list]) => (
+        <section key={g} className="grid gap-2" data-group={g}>
+          <h4 className="text-sm font-semibold">{group(g, x)}</h4>
+          <ul className="grid gap-2">
+            {list.map((c, i) => (
+              <li key={i} className="rounded-button bg-milk px-4 py-3 text-sm">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                  <span className="min-w-0 break-words">
+                    {c.ml ? fill(x.volumeOf, { name: c.name, ml: String(c.ml) }) : c.name}
+                  </span>
+                  <Badge tone={c.kind === 'new' ? 'sage' : 'neutral'}>
+                    {c.kind === 'new' ? x.tagNew : x.tagChanged}
+                  </Badge>
+                </p>
+                {c.fields.length > 0 ? (
+                  <dl className="mt-1.5 grid gap-1 tabular-nums">
+                    {c.fields.map((f) => (
+                      <div key={f.field} className="flex flex-wrap gap-x-2">
+                        <dt className="text-muted-foreground">{label(f.field)}:</dt>
+                        <dd className="min-w-0 break-words">
+                          {c.kind === 'new' ? (
+                            show(f.field, f.after)
+                          ) : (
+                            <>
+                              {show(f.field, f.before)} <span aria-hidden>→</span>{' '}
+                              <span className="font-semibold">{show(f.field, f.after)}</span>
+                            </>
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="mt-1 text-muted-foreground">{x.newFragrance}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      {report.changeTotal > report.changes.length && (
+        <p className="text-[13px] text-muted-foreground">
+          {fill(x.moreChanges, {
+            shown: String(report.changes.length),
+            total: String(report.changeTotal),
+          })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StockList({ report, x }: { report: ImportReport; x: Excel }) {
+  const line = (s: ImportReport['stock'][number]) =>
+    fill(x.stockLine, {
+      name: s.name,
+      ml: String(s.ml),
+      was: s.onHand === null ? x.newVolume : String(s.onHand),
+      now: String(s.newOnHand),
+      reserved: String(s.reserved),
+      available: `${s.available < 0 ? '\u2212' : ''}${Math.abs(s.available)}`,
+    });
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-[13px] font-medium text-muted-foreground">{x.stockTitle}</h3>
+      {/* phones: one block per volume */}
+      <ul className="grid gap-2 sm:hidden" data-testid="excel-stock-list">
+        {report.stock.map((s) => (
+          <li
+            key={`${s.code}-${s.ml}`}
+            className="rounded-button bg-milk px-4 py-3 text-sm text-pretty"
+            data-negative={s.negative || undefined}
+          >
+            {line(s)}
+            {s.negative && (
+              <Badge tone="sage" className="ml-2 align-middle">
+                {x.belowReserveTag}
+              </Badge>
+            )}
+          </li>
+        ))}
+      </ul>
+      <Card className="hidden max-h-96 overflow-auto bg-milk p-0 sm:block">
+        <Table>
+          <THead>
+            <TR>
+              <TH>{x.colAroma}</TH>
+              <TH>{x.colMl}</TH>
+              <TH className="text-right">{x.colOnHand}</TH>
+              <TH className="text-right">{x.colNew}</TH>
+              <TH className="text-right">{x.colReserve}</TH>
+              <TH className="text-right">{x.colAvailable}</TH>
             </TR>
-          ))}
-        </TBody>
-      </Table>
-    </Card>
+          </THead>
+          <TBody>
+            {report.stock.map((s) => (
+              <TR key={`${s.code}-${s.ml}`} data-negative={s.negative || undefined}>
+                <TD className="min-w-40 font-medium">{s.name}</TD>
+                <TD>{s.ml}</TD>
+                <TD className="text-right">{s.onHand ?? x.newVolume}</TD>
+                <TD className="text-right">{s.newOnHand}</TD>
+                <TD className="text-right">{s.reserved}</TD>
+                <TD className="text-right font-semibold whitespace-nowrap">
+                  {s.available < 0 ? '\u2212' : ''}
+                  {Math.abs(s.available)}
+                  {s.negative && (
+                    <Badge tone="sage" className="ml-2 align-middle">
+                      {x.belowReserveTag}
+                    </Badge>
+                  )}
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      </Card>
+    </div>
   );
 }
 
@@ -281,7 +455,7 @@ function Report({
 }: {
   report: ImportReport;
   language: Language;
-  x: AdminMessages['catalog']['excel'];
+  x: Excel;
   issueText: (i: ImportIssue) => string;
   onApply: () => void;
 }) {
@@ -350,48 +524,20 @@ function Report({
           </>
         )}
 
-        {clean && <Counts counts={report.counts} x={x} />}
-
-        {clean && negatives.length > 0 && (
-          <Notice title={x.warningsTitle}>{x.warningsHint}</Notice>
-        )}
-
-        {clean && report.stock.length > 0 && (
+        {clean && (
           <div className="grid gap-2">
-            <h3 className="text-[13px] font-medium text-muted-foreground">{x.stockTitle}</h3>
-            <Card className="max-h-96 overflow-auto bg-milk p-0">
-              <Table>
-                <THead>
-                  <TR>
-                    <TH>{x.colAroma}</TH>
-                    <TH>{x.colMl}</TH>
-                    <TH className="text-right">{x.colOnHand}</TH>
-                    <TH className="text-right">{x.colNew}</TH>
-                    <TH className="text-right">{x.colReserve}</TH>
-                    <TH className="text-right">{x.colAvailable}</TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {report.stock.map((s) => (
-                    <TR key={`${s.code}-${s.ml}`} data-negative={s.negative || undefined}>
-                      <TD className="min-w-40 font-medium">{s.name}</TD>
-                      <TD>{s.ml}</TD>
-                      <TD className="text-right">{s.onHand ?? x.newVolume}</TD>
-                      <TD className="text-right">{s.newOnHand}</TD>
-                      <TD className="text-right">{s.reserved}</TD>
-                      <TD className="text-right font-semibold">
-                        {s.available}
-                        {s.negative && (
-                          <span aria-hidden className="ml-1.5 inline-block size-1.5 rounded-full bg-foreground" />
-                        )}
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            </Card>
+            <h3 className="text-[13px] font-medium text-muted-foreground">{x.countsTitle}</h3>
+            <Counts counts={report.counts} x={x} />
           </div>
         )}
+
+        {clean && negatives.length > 0 && (
+          <HeadsUp title={x.warnTitle}>{x.warningsHint}</HeadsUp>
+        )}
+
+        {clean && report.changes.length > 0 && <ChangeList report={report} x={x} />}
+
+        {clean && report.stock.length > 0 && <StockList report={report} x={x} />}
 
         {clean && (
           <div>
