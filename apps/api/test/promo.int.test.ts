@@ -359,3 +359,137 @@ describe('the cart: a typed code', () => {
     });
   });
 });
+
+const usesOf = async (code = 'BLOGER10') => {
+  const list = await owner.client.admin.promoCodes.list();
+  if (list.status !== 200) throw new Error(`list ${list.status}`);
+  return list.body.find((p) => p.code === code)!;
+};
+
+describe('the order holds a use; the limits count uses that were not voided', () => {
+  it('the order keeps the code as its discount and holds one use', async () => {
+    const [a, b] = await slugs(2);
+    const s = await shopper();
+    await s.add(a!, 30);
+    await s.add(b!, 30);
+    await createPromo({ totalLimit: 5 });
+    await s.apply('BLOGER10');
+    const order = await placeOrder(s);
+    expect(order).toMatchObject({
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 29_800 },
+      total: 268_200,
+    });
+    expect(await usesOf()).toMatchObject({ uses: 1, everUsed: true, totalLimit: 5 });
+    // the code stays in the cart for the next order
+    expect((await s.client.cart.get()).body).toMatchObject({ promoCode: 'BLOGER10' });
+  });
+
+  it('total limit: the last use goes to one shopper, the next is told it is exhausted; a cancel gives it back', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ totalLimit: 1 });
+    const first = await shopper(ali);
+    await first.add(a!, 30);
+    await first.apply('BLOGER10');
+    const taken = await placeOrder(first);
+    expect(await usesOf()).toMatchObject({ uses: 1, state: 'exhausted' });
+
+    const second = await shopper(vali, '998901112233');
+    await second.add(b!, 30);
+    expect((await second.apply('BLOGER10')).quote).toMatchObject({
+      discount: null,
+      promoCode: { code: 'BLOGER10', invalid: { reason: 'exhausted' } },
+    });
+
+    await cancel(first, taken.number);
+    expect(await usesOf()).toMatchObject({ uses: 0, everUsed: true, state: 'active' });
+    expect(await quoteOf(second)).toMatchObject({
+      discount: { type: 'promo_code', amount: 14_900 },
+      promoCode: { invalid: null },
+    });
+  });
+
+  it('per-customer limit: the shopper’s own use is counted, other shoppers still get it; a cancel frees it', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ perCustomerLimit: 1 });
+    const s = await shopper(ali);
+    await s.add(a!, 30);
+    await s.apply('BLOGER10');
+    const order = await placeOrder(s);
+    await s.add(b!, 30);
+    expect(await quoteOf(s)).toMatchObject({
+      discount: null,
+      promoCode: { invalid: { reason: 'already_used' } },
+    });
+    const other = await shopper(vali, '998901112233');
+    await other.add(b!, 30);
+    expect((await other.apply('BLOGER10')).quote).toMatchObject({ promoCode: { invalid: null } });
+
+    await cancel(s, order.number);
+    expect(await quoteOf(s)).toMatchObject({ promoCode: { invalid: null } });
+  });
+
+  it('new customers only: refused once the shopper has another non-cancelled order, fine again after a cancel', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ newCustomersOnly: true });
+    const s = await shopper();
+    await s.add(a!, 30);
+    // the shopper's first order, without the code
+    const first = await placeOrder(s);
+    await s.add(b!, 30);
+    expect((await s.apply('BLOGER10')).quote).toMatchObject({
+      discount: null,
+      promoCode: { invalid: { reason: 'not_new_customer' } },
+    });
+    await cancel(s, first.number);
+    const order = await placeOrder(s);
+    expect(order.discount).toMatchObject({ type: 'promo_code', code: 'BLOGER10' });
+  });
+
+  it('a code exhausted between the quote and the order: 409 with the new quote, which says why', async () => {
+    const [a, b] = await slugs(2);
+    await createPromo({ totalLimit: 1 });
+    const late = await shopper(vali, '998901112233');
+    await late.add(b!, 30);
+    await late.apply('BLOGER10');
+    const stale = await orderBody(late); // confirmed at 149 000 − 14 900 + 25 000
+    expect(stale.confirmedTotal).toBe(159_100);
+
+    const first = await shopper(ali);
+    await first.add(a!, 30);
+    await first.apply('BLOGER10');
+    await placeOrder(first);
+
+    const res = await late.client.orders.create({ body: stale });
+    expect(res).toMatchObject({
+      status: 409,
+      body: {
+        code: 'total_changed',
+        checkout: {
+          quote: {
+            discount: null,
+            total: 174_000,
+            promoCode: { code: 'BLOGER10', invalid: { reason: 'exhausted' } },
+          },
+        },
+      },
+    });
+    expect(await usesOf()).toMatchObject({ uses: 1 });
+    // never blocked: confirming the new total orders without the code
+    const again = await late.client.orders.create({
+      body: { ...stale, confirmedTotal: 174_000, idempotencyKey: randomUUID() },
+    });
+    expect(again).toMatchObject({ status: 201, body: { discount: null, total: 174_000 } });
+  });
+
+  it('a used code can be switched off but not deleted', async () => {
+    const [a] = await slugs(1);
+    const created = await createPromo();
+    const s = await shopper();
+    await s.add(a!, 30);
+    await s.apply('BLOGER10');
+    const order = await placeOrder(s);
+    await cancel(s, order.number);
+    const res = await owner.client.admin.promoCodes.remove({ params: { id: created.id } });
+    expect(res).toMatchObject({ status: 409, body: { code: 'in_use' } });
+  });
+});
