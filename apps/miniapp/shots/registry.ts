@@ -3,7 +3,7 @@ import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
 import { LIMIT_BANNER, LONG_PAGE, longSlogan, onInfoPage } from './content-data';
-import type { ShotDb } from './db';
+import { SHOT_CARD, type ShotDb } from './db';
 
 /**
  * Every screen the screenshot run captures, in one place. Each UI ticket adds its screens here
@@ -138,10 +138,10 @@ async function sharePhone(api: ApiClient, userId = SHOT_USER.id, phone = '+99890
 /** Removes the shot customers' orders (their lines are the reserve) and, optionally, their consent. */
 async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none' } = {}) {
   const ids = [SHOT_USER.id, NO_PHONE_USER.id, FOREIGN_PHONE_USER.id];
-  await db.query(
-    `delete from orders where customer_id in (select id from customers where telegram_id = any($1))`,
-    [ids],
-  );
+  const theirs = `select id from orders where customer_id in (select id from customers where telegram_id = any($1))`;
+  // a receipt keeps its order (no cascade): it goes first
+  await db.query(`delete from receipts where order_id in (${theirs})`, [ids]);
+  await db.query(`delete from orders where id in (${theirs})`, [ids]);
   if (consent)
     await db.query(`update customers set data_consent_at = $2 where telegram_id = any($1)`, [
       ids,
@@ -223,6 +223,98 @@ async function openFirstOrder(page: Page, shows: 'timeline' | 'cancelled' = 'tim
   await page.getByTestId('order-row').first().click();
   await page.getByTestId(shows).waitFor();
 }
+
+/** An unpaid order of the mockup's two fragrances, ready to pay. */
+async function unpaidOrder({ api, db }: { api: ApiClient; db: ShotDb }) {
+  await sharePhone(api);
+  await clearOrders(db, { consent: 'given' });
+  await placeOrder(api, [
+    ['symphony', 10],
+    ['tygar', 30],
+  ]);
+}
+
+/** From the newest order's page, «Перейти к оплате» (#28); waits for the part `shows`. */
+async function openPayment(page: Page, shows = 'transfer') {
+  await openFirstOrder(page);
+  await page.getByTestId('go-to-pay').click();
+  await page.getByTestId(shows).waitFor();
+}
+
+/**
+ * A bank app's «transfer done» screen as a PNG, drawn on a canvas in the page (no image library
+ * in the shots): what a shopper screenshots and uploads. Generic, no bank's name or logo.
+ */
+async function receiptPng(page: Page): Promise<Buffer> {
+  const base64 = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 720;
+    c.height = 1280;
+    const g = c.getContext('2d') as CanvasRenderingContext2D;
+    g.fillStyle = '#f4f5f7';
+    g.fillRect(0, 0, 720, 1280);
+    g.fillStyle = '#ffffff';
+    g.fillRect(40, 140, 640, 900);
+    g.fillStyle = '#2fa36b';
+    g.beginPath();
+    g.arc(360, 260, 56, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 10;
+    g.beginPath();
+    g.moveTo(332, 262);
+    g.lineTo(352, 284);
+    g.lineTo(390, 240);
+    g.stroke();
+    g.textAlign = 'center';
+    g.fillStyle = '#1d1d1f';
+    g.font = '600 34px sans-serif';
+    g.fillText('Перевод выполнен', 360, 380);
+    g.font = '700 56px sans-serif';
+    g.fillText('243 000 UZS', 360, 470);
+    g.textAlign = 'left';
+    const rows = [
+      ['Получатель', 'JORAMAXAMADOV F.'],
+      ['Карта', '9860 •••• •••• 7364'],
+      ['Дата', '10.11.2026 14:32'],
+      ['Комиссия', '0 UZS'],
+      ['Номер операции', '58210447'],
+    ];
+    rows.forEach(([k, v], i) => {
+      const y = 580 + i * 84;
+      g.fillStyle = '#8a8a8e';
+      g.font = '28px sans-serif';
+      g.fillText(k as string, 80, y);
+      g.fillStyle = '#1d1d1f';
+      g.font = '600 28px sans-serif';
+      g.textAlign = 'right';
+      g.fillText(v as string, 640, y);
+      g.textAlign = 'left';
+    });
+    const blob = await new Promise<Blob>((ok) => c.toBlob((b) => ok(b as Blob), 'image/png'));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let text = '';
+    for (const b of bytes) text += String.fromCharCode(b);
+    return btoa(text);
+  });
+  return Buffer.from(base64, 'base64');
+}
+
+/** Picks the receipt in the screen's file input, as the system picker would. */
+async function chooseReceipt(page: Page) {
+  await page.getByTestId('receipt-input').setInputFiles({
+    name: 'Screenshot_20261110_143214.png',
+    mimeType: 'image/png',
+    buffer: await receiptPng(page),
+  });
+  await page.getByTestId('receipt-file').waitFor();
+}
+
+/** Without a card: the order was placed while there was one, then the owner took it off. */
+const noCardDone = async (ctx: { api: ApiClient; db: ShotDb }) => {
+  await ctx.db.shopCard(SHOT_CARD);
+  await checkoutDone(ctx);
+};
 
 /** The shot customer's newest order, cancelled by the shopper through the real API. */
 async function cancelNewestOrder(api: ApiClient) {
@@ -996,6 +1088,117 @@ export const screens: ScreenDef[] = [
       ]);
     },
     teardown: checkoutDone,
+  },
+  // #28: the payment screen, a receipt chosen, on its way, refused, under review, and no card.
+  {
+    id: 'payment',
+    path: '/orders',
+    fullPage: true,
+    setup: unpaidOrder,
+    act: async ({ page }) => openPayment(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'payment-copied',
+    path: '/orders',
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await page.getByTestId('copy-card').click();
+      await page.getByRole('status').getByText(/./).waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'payment-chosen',
+    path: '/orders',
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await chooseReceipt(page);
+      await page
+        .getByTestId('receipt-file')
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'payment-uploading',
+    path: '/orders',
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await chooseReceipt(page);
+      // the upload reports 46% and never finishes, so the progress holds still for the capture
+      await page.evaluate(() => {
+        XMLHttpRequest.prototype.send = function (this: XMLHttpRequest) {
+          const { upload } = this;
+          const progress = new ProgressEvent('progress', {
+            lengthComputable: true,
+            loaded: 46,
+            total: 100,
+          });
+          setTimeout(() => upload.dispatchEvent(progress), 30);
+        };
+      });
+      await page.getByTestId('pay-action').click();
+      await page.getByTestId('upload-progress').getByText(/46/).waitFor();
+      await page
+        .getByTestId('receipt-file')
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // an iPhone's HEIC photo: the app names the formats it takes
+    id: 'payment-refused',
+    path: '/orders',
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await page.getByTestId('receipt-input').setInputFiles({
+        name: 'IMG_2041.HEIC',
+        mimeType: 'image/heic',
+        buffer: Buffer.from('\0\0\0\x18ftypheic\0\0\0\0mif1heic'),
+      });
+      const refused = page.getByTestId('receipt-refused');
+      await refused.waitFor();
+      await refused.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // a real upload through the API: the order moves to «Чек на проверке» and the screen with it
+    id: 'payment-review',
+    path: '/orders',
+    fullPage: true,
+    setup: unpaidOrder,
+    act: async ({ page }) => {
+      await openPayment(page);
+      await chooseReceipt(page);
+      await page.getByTestId('pay-action').click();
+      await page.getByTestId('under-review').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'payment-no-card',
+    path: '/orders',
+    setup: async (ctx) => {
+      await unpaidOrder(ctx);
+      await ctx.db.shopCard(null);
+    },
+    act: async ({ page }) => openPayment(page, 'pay-order'),
+    teardown: noCardDone,
+  },
+  {
+    id: 'checkout-no-card',
+    path: '/checkout',
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await db.shopCard(null);
+    },
+    teardown: noCardDone,
   },
   // break-ui (#23): the worst case enters through the API, as real data does.
   { id: 'checkout-worst', ...checkoutWorst },

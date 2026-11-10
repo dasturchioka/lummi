@@ -11,8 +11,13 @@ export interface ShotDb {
   /** Clear every markdown and restore stock of a fragrance, so a rerun starts from the seed. */
   restore(slug: string): Promise<void>;
   setOnHand(slug: string, onHand: number): Promise<void>;
+  /** Sets the shop card shoppers transfer to (#28); null takes it off, which closes checkout. */
+  shopCard(card: { number: string; holder: string } | null): Promise<void>;
   end(): Promise<void>;
 }
+
+/** The card the shots pay to: 16 digits that pass the check digit, and a holder as banks show it. */
+export const SHOT_CARD = { number: '9860100245817364', holder: 'JORAMAXAMADOV FAYZALI' } as const;
 
 export function connectShotDb(url: string): ShotDb {
   const pool = new pg.Pool({ connectionString: url, max: 1 });
@@ -36,6 +41,17 @@ export function connectShotDb(url: string): ShotDb {
     },
     async setOnHand(slug, onHand) {
       await query(`update volumes set on_hand = $2 where ${volumeOf}`, [slug, onHand]);
+    },
+    async shopCard(card) {
+      if (!card) {
+        await query('delete from shop_card');
+        return;
+      }
+      await query(
+        `insert into shop_card (number, holder) values ($1, $2)
+         on conflict (id) do update set number = excluded.number, holder = excluded.holder`,
+        [card.number, card.holder],
+      );
     },
     end: () => pool.end(),
   };
