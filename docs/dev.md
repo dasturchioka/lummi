@@ -139,6 +139,7 @@ Payment matching subscribes with `CreditEvents.onCreditRecorded(handler)` in a p
 - Broadcasts (#14) queue one job per customer to `BROADCAST_QUEUE` (default `broadcasts`); the API and the worker must use the same one. The send rate is the setting `broadcast.sendRatePerSecond`, read when the worker starts. `BOT_LINK` (https, the bot's `t.me` link) is the base of a broadcast's `startapp` button: required in production, a dev bot link locally.
 - The `credit-recorded` sweep queues anything missed.
 - The credit is stamped `event_handled_at` once every handler has succeeded. A handler that throws is retried, so handlers must be idempotent.
+- Payment matching (#32) checks receipts on `RECEIPT_CHECKS_QUEUE` (default `receipt-checks`, job id `receipt-<id>`); the API queues a check after an upload, the worker after a credit and from the `receipt-matching` sweep, so both must use the same one. Tests script the judge with `t.edges.receiptJudge.respond`, record credits with `recordCredit` and pay an order with `payWithCredit` (`apps/api/test/harness/payments.ts`).
 
 Real Humo messages go in `apps/api/test/fixtures/humo-messages.ts`, and the parser test runs each one.
 
