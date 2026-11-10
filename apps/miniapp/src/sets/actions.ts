@@ -32,11 +32,21 @@ export function useAddDiscovery() {
   });
 }
 
+/** The builder's 409: these chosen fragrances have no 10 ml left (the server names them by slug). */
+export class SetUnavailableError extends Error {
+  constructor(readonly slugs: string[]) {
+    super('HTTP 409');
+  }
+}
+
 export function useAddBuilder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (slugs: string[]) =>
-      unwrap(await api.cart.addBuilder({ body: { slugs, qty: 1 } }), 200),
+    mutationFn: async (slugs: string[]) => {
+      const res = await api.cart.addBuilder({ body: { slugs, qty: 1 } });
+      if (res.status === 409) throw new SetUnavailableError(res.body.slugs ?? []);
+      return unwrap(res, 200);
+    },
     onSuccess: (cart) => qc.setQueryData(CART_KEY, cart),
     onError: () => void qc.invalidateQueries({ queryKey: BUILDER_KEY }),
   });

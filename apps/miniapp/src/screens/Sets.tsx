@@ -2,8 +2,14 @@ import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts'
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import { useAddBuilder, useAddDiscovery, useBuilder, useSetsText } from '../sets/actions';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  SetUnavailableError,
+  useAddBuilder,
+  useAddDiscovery,
+  useBuilder,
+  useSetsText,
+} from '../sets/actions';
 import { useDiscoverySet } from '../sets/queries';
 import { goBackOrCatalog, useOpenFragrance } from '../lib/navigation';
 import { photoSrcSet, photoUrl } from '../lib/media';
@@ -11,9 +17,10 @@ import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { DockNote } from '../ui/DockNote';
+import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
-import { ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon } from '../ui/icons';
+import { AlertIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon, PlusIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { Screen } from '../ui/Screen';
 import { SetPhoto } from '../ui/SetPhoto';
@@ -31,15 +38,37 @@ function useNote(): [string | undefined, (n: string) => void] {
   return [note, setNote];
 }
 
-function Loading() {
+/** The Discovery set's shape while it loads: the photo slot in Photo Blush, the name block, the list. */
+function DiscoveryLoading() {
   return (
     <Screen tabBar={false} dock={<Skeleton className="h-12 w-full" />}>
       <div className="flex flex-col pt-3 pb-7" aria-busy="true">
         <div aria-hidden="true" className="aspect-[3/4] w-full rounded-card bg-photo" />
-        <Skeleton className="mt-5 h-3 w-24" />
-        <Skeleton className="mt-3 h-7 w-48" />
-        <Skeleton className="mt-4 h-3.5 w-full" />
-        <Skeleton className="mt-8 h-16 w-full" />
+        <Skeleton className="mt-5 h-3 w-16" />
+        <Skeleton className="mt-2.5 h-6 w-40" />
+        <Skeleton className="mt-4 h-3.5 w-56" />
+        <Skeleton className="mt-3 h-4 w-24" />
+        <Skeleton rounded="card" className="mt-8 h-[310px] w-full" />
+      </div>
+    </Screen>
+  );
+}
+
+/** The builder's shape while it loads: the title, the set box, the first rows. */
+function BuilderLoading() {
+  return (
+    <Screen tabBar={false} dock={<Skeleton className="h-12 w-full" />}>
+      <div className="flex flex-col pt-5" aria-busy="true">
+        <div className="flex items-start gap-3">
+          <Skeleton rounded="pill" className="size-10 shrink-0" />
+          <div className="min-w-0 flex-1 pt-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="mt-3 h-3.5 w-full" />
+            <Skeleton className="mt-2 h-3.5 w-3/4" />
+          </div>
+        </div>
+        <Skeleton rounded="card" className="mt-5 h-[224px] w-full" />
+        <Skeleton rounded="card" className="mt-3 h-[288px] w-full" />
       </div>
     </Screen>
   );
@@ -102,28 +131,30 @@ export function DiscoverySetView({
           </div>
         </div>
 
+        {/* The set's name block, as the product page's (bb-08): caps label, italic name, divider. */}
         <header className="mt-5 flex flex-col">
           <p className="type-label text-muted">{t.home.discoveryLabel}</p>
           <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
             {s.discoveryTitle}
           </h1>
-          <p className="type-body mt-2 text-muted">{s.discoveryLead}</p>
-          <p className="mt-3">
-            <Money amount={set.price} size="amount" />
+          <LabelDivider />
+          <p className="type-body mt-3 text-pretty text-muted">{s.discoveryLead}</p>
+          <p className="mt-2 text-ink">
+            <Money amount={set.price} />
           </p>
         </header>
 
         {ready ? (
           <section className="mt-7" aria-labelledby="inside">
-            <h2 id="inside" className="type-label text-muted">
+            <h2 id="inside" className="type-section text-ink">
               {s.inside}
             </h2>
-            <ul className="mt-2 divide-y divide-line overflow-hidden rounded-card bg-card">
+            <ul className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card">
               {set.fragrances.map((f, i) => (
                 <li key={f.slug ?? `hidden-${i}`}>
                   {f.slug === null ? (
                     // hidden from the catalog: the box still holds it, but there is no card to open
-                    <div className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5">
+                    <div className="flex min-h-14 w-full items-center px-4 py-3">
                       <span className="min-w-0 flex-1">
                         <NameLockup brand={f.brand} name={f.name} />
                       </span>
@@ -132,15 +163,17 @@ export function DiscoverySetView({
                     <button
                       type="button"
                       onClick={() => onOpen(f.slug as string)}
-                      className="flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 active:bg-field"
+                      className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 active:bg-field"
                     >
                       <span className="min-w-0 flex-1">
                         <NameLockup brand={f.brand} name={f.name} />
-                        <span className="type-small mt-0.5 block text-muted">
-                          {s.from} · {f.keyNotes[language].slice(0, 3).join(' · ')}
-                        </span>
+                        {f.keyNotes[language].length > 0 ? (
+                          <span className="type-small mt-0.5 block text-pretty text-muted">
+                            {f.keyNotes[language].slice(0, 3).join(' · ')}
+                          </span>
+                        ) : null}
                       </span>
-                      <span className="shrink-0 text-muted" aria-hidden="true">
+                      <span className="-mr-1 shrink-0 text-muted" aria-hidden="true">
                         <ChevronIcon size={16} />
                       </span>
                     </button>
@@ -170,7 +203,7 @@ export function DiscoverySetScreen() {
         <ErrorState fill retrying={query.isFetching} onRetry={() => void query.refetch()} />
       </Screen>
     );
-  if (!query.data) return <Loading />;
+  if (!query.data) return <DiscoveryLoading />;
   return (
     <DiscoverySetView
       set={query.data}
@@ -191,18 +224,92 @@ export function DiscoverySetScreen() {
   );
 }
 
-/** A selectable fragrance row of the builder: the bottle, the lockup, a round check. */
+/**
+ * A chosen fragrance in its compartment: the 10 ml photo cropped to the vial alone (x 38–62 %,
+ * y 15–68 % of the 3:4 label; every bottle photo is shot on the same template), as the box holds it.
+ */
+const VIAL_CROP = 'absolute top-[-28.3%] left-[-158.3%] aspect-[3/4] w-[416.7%] max-w-none';
+
+/**
+ * The set box (DESIGN.md Set box): five vial compartments on the Milk Field tray, filled in the
+ * order they were chosen; the next empty one has the ink outline. Under it the count and the
+ * set's price, then the Sage thread, the one measure of how full the box is.
+ */
+function SetBox({ chosen, price }: { chosen: FragranceListItem[]; price: number }) {
+  const s = useSetsText();
+  const n = chosen.length;
+  return (
+    <section className="rounded-card bg-card px-4 pt-4 pb-3.5">
+      <div aria-hidden="true" className="mx-auto flex w-fit gap-1.5 rounded-btn bg-field p-1.5">
+        {Array.from({ length: SET_SIZE }, (_, i) => {
+          const f = chosen[i];
+          const look = f
+            ? 'bg-photo'
+            : i === n
+              ? 'text-ink shadow-[inset_0_0_0_1.5px_var(--c-ink)]'
+              : 'text-faint shadow-[inset_0_0_0_1px_var(--c-line-strong)]';
+          return (
+            <span
+              key={f?.slug ?? `empty-${i}`}
+              className={`relative grid aspect-[34/100] w-11 place-items-center overflow-hidden rounded-thumb transition-[box-shadow,color] duration-200 ${look}`}
+            >
+              {f ? (
+                f.photo ? (
+                  <img
+                    src={photoUrl(f.photo, 400)}
+                    alt=""
+                    decoding="async"
+                    className={`${VIAL_CROP} transition-[opacity,translate] duration-[250ms] ${EASE_OUT} starting:translate-y-1.5 starting:opacity-0`}
+                  />
+                ) : null
+              ) : (
+                <PlusIcon size={16} />
+              )}
+            </span>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex items-baseline justify-between gap-3">
+        <p className="type-small text-ink tabular-nums" data-testid="chosen">
+          {fill(s.chosen, { n: String(n), size: String(SET_SIZE) })}
+        </p>
+        <Money amount={price} className="text-ink" />
+      </div>
+      <div
+        role="progressbar"
+        aria-label={s.builderTitle}
+        aria-valuemin={0}
+        aria-valuemax={SET_SIZE}
+        aria-valuenow={n}
+        className="mt-2.5 h-0.5 overflow-hidden rounded-[2px] bg-line"
+      >
+        <div
+          className={`h-full origin-left rounded-[2px] bg-sage transition-transform duration-[400ms] ${EASE_OUT}`}
+          style={{ transform: `scaleX(${n / SET_SIZE})` }}
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * A selectable fragrance row of the builder: the bottle, the lockup, then the picker square (the
+ * mockup's): a hairline «+» to add, Sage with a check once in the box.
+ */
 function PickRow({
   item,
   chosen,
   full,
   onToggle,
+  onLocked,
 }: {
   item: FragranceListItem;
   chosen: boolean;
   /** Five are chosen: only the chosen ones can still be toggled. */
   full: boolean;
   onToggle: (slug: string) => void;
+  /** A tap on a row that cannot join a full box. */
+  onLocked: () => void;
 }) {
   const { language } = usePrefs();
   const s = useSetsText();
@@ -216,14 +323,12 @@ function PickRow({
       aria-disabled={locked || undefined}
       data-testid="pick"
       data-chosen={chosen}
-      onClick={() => {
-        if (!locked) onToggle(item.slug);
-      }}
-      className={`flex min-h-[72px] w-full items-center gap-3 px-3 py-2.5 text-left transition-[background-color,opacity] duration-150 active:bg-field ${locked ? 'opacity-50' : ''}`}
+      onClick={() => (locked ? onLocked() : onToggle(item.slug))}
+      className="flex min-h-[72px] w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors duration-150 active:bg-field"
     >
       <span
         aria-hidden="true"
-        className="relative aspect-[3/4] w-11 shrink-0 overflow-hidden rounded-thumb bg-photo"
+        className={`relative aspect-[3/4] w-11 shrink-0 overflow-hidden rounded-thumb bg-photo transition-opacity duration-200 ${locked ? 'opacity-50' : ''}`}
       >
         {item.photo ? (
           <img
@@ -237,21 +342,53 @@ function PickRow({
           />
         ) : null}
       </span>
-      <span className="min-w-0 flex-1">
+      <span
+        className={`min-w-0 flex-1 transition-opacity duration-200 ${locked ? 'opacity-50' : ''}`}
+      >
         <NameLockup brand={item.brand} name={item.name} />
-        <span className="type-small mt-0.5 block text-muted">
-          {item.keyNotes[language].slice(0, 3).join(' · ')}
-        </span>
+        {item.keyNotes[language].length > 0 ? (
+          <span className="type-small mt-0.5 block text-pretty text-muted">
+            {item.keyNotes[language].slice(0, 3).join(' · ')}
+          </span>
+        ) : null}
       </span>
       <span
         aria-hidden="true"
-        className={`grid size-6 shrink-0 place-items-center rounded-pill transition-[background-color,box-shadow,color] duration-150 ${
-          chosen ? 'bg-btn text-btn-ink' : 'shadow-[inset_0_0_0_1px_var(--c-line-strong)]'
+        className={`grid size-7 shrink-0 place-items-center rounded-[8px] transition-[background-color,box-shadow,color,opacity] duration-150 ${
+          chosen
+            ? 'bg-sage text-on-sage'
+            : `text-ink shadow-[inset_0_0_0_1px_var(--c-line-strong)] ${locked ? 'opacity-40' : ''}`
         }`}
       >
-        {chosen ? <CheckIcon size={14} /> : null}
+        {chosen ? (
+          <span
+            key="check"
+            className={`grid transition-[scale,opacity] duration-200 ${EASE_OUT} starting:scale-75 starting:opacity-0`}
+          >
+            <CheckIcon size={16} />
+          </span>
+        ) : (
+          <PlusIcon key="plus" size={16} />
+        )}
       </span>
     </button>
+  );
+}
+
+/** A problem with the last tap, said in the dock over the button (Graphite, never red). */
+function DockAlert({ text, action }: { text: string; action?: ReactNode }) {
+  return (
+    <div
+      role="alert"
+      data-testid="dock-alert"
+      className={`mb-2.5 flex items-center gap-2.5 transition-[opacity,translate] duration-200 ${EASE_OUT} starting:translate-y-1 starting:opacity-0`}
+    >
+      <span className="shrink-0 text-ink" aria-hidden="true">
+        <AlertIcon size={18} />
+      </span>
+      <p className="type-small min-w-0 flex-1 text-pretty text-ink">{text}</p>
+      {action}
+    </div>
   );
 }
 
@@ -262,8 +399,10 @@ export function BuilderView({
   adding = false,
   note,
   failed = false,
+  gone,
   onBack = () => undefined,
   onToggle = () => undefined,
+  onFull = () => undefined,
   onAdd = () => undefined,
 }: {
   builder: Builder;
@@ -272,14 +411,21 @@ export function BuilderView({
   note?: string;
   /** The add did not go through (network or server error): say so and offer «Повторить». */
   failed?: boolean;
+  /** The 409: these chosen fragrances ran out of 10 ml (names; empty when they are not known). */
+  gone?: string[];
   onBack?: () => void;
   onToggle?: (slug: string) => void;
+  /** A tap on a fragrance while five are already chosen. */
+  onFull?: () => void;
   onAdd?: () => void;
 }) {
   const { t, language } = usePrefs();
   const s = useSetsText();
   const left = SET_SIZE - picked.length;
   const full = left === 0;
+  const chosen = picked
+    .map((slug) => builder.options.find((o) => o.slug === slug))
+    .filter((o): o is FragranceListItem => o !== undefined);
   return (
     <Screen
       tabBar={false}
@@ -287,36 +433,23 @@ export function BuilderView({
         <div className="relative">
           <DockNote text={note} />
           {failed ? (
-            <div
-              role="alert"
-              className="mb-2 flex items-center justify-between gap-3"
-              data-testid="add-failed"
-            >
-              <p className="type-small text-pretty text-ink">{s.failed}</p>
-              <Button variant="secondary" size="sm" className="shrink-0" onClick={onAdd}>
-                {t.common.retry}
-              </Button>
-            </div>
+            <DockAlert
+              text={s.failed}
+              action={
+                <Button variant="secondary" size="sm" className="shrink-0" onClick={onAdd}>
+                  {t.common.retry}
+                </Button>
+              }
+            />
+          ) : gone ? (
+            <DockAlert
+              text={
+                gone.length > 0
+                  ? fill(s.unavailableNamed, { names: gone.join(', ') })
+                  : s.unavailable
+              }
+            />
           ) : null}
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="type-small text-ink" data-testid="chosen">
-              {fill(s.chosen, { n: String(picked.length), size: String(SET_SIZE) })}
-            </p>
-            <div
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={SET_SIZE}
-              aria-valuenow={picked.length}
-              className="flex gap-1"
-            >
-              {Array.from({ length: SET_SIZE }, (_, i) => (
-                <span
-                  key={i}
-                  className={`h-0.5 w-6 rounded-[2px] transition-colors duration-200 ${i < picked.length ? 'bg-sage' : 'bg-line'}`}
-                />
-              ))}
-            </div>
-          </div>
           <Button block disabled={!full} loading={adding} onClick={onAdd}>
             {full ? (
               <span className="flex items-center gap-1.5">
@@ -333,7 +466,7 @@ export function BuilderView({
         </div>
       }
     >
-      <header className="flex items-start gap-3 pt-5 pb-4">
+      <header className="flex items-start gap-3 pt-5 pb-5">
         <button
           type="button"
           aria-label={t.card.back}
@@ -342,27 +475,33 @@ export function BuilderView({
         >
           <ArrowLeftIcon size={20} />
         </button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pt-1.5">
           <h1 className="type-title text-ink [overflow-wrap:anywhere]">{s.builderTitle}</h1>
-          <p className="type-body mt-2 text-muted">{s.builderLead}</p>
-          <p className="mt-2">
-            <Money amount={builder.price} />
-          </p>
+          <p className="type-body mt-2 text-pretty text-muted">{s.builderLead}</p>
         </div>
       </header>
       {builder.options.length === 0 ? (
         <EmptyState icon={<BoxIcon size={28} />} title={s.empty} text={s.emptyText} />
       ) : (
-        <ul
-          aria-label={s.builderTitle}
-          className="divide-y divide-line overflow-hidden rounded-card bg-card"
-        >
-          {builder.options.map((o) => (
-            <li key={o.slug}>
-              <PickRow item={o} chosen={picked.includes(o.slug)} full={full} onToggle={onToggle} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <SetBox chosen={chosen} price={builder.price} />
+          <ul
+            aria-label={s.builderTitle}
+            className="mt-3 divide-y divide-line overflow-hidden rounded-card bg-card"
+          >
+            {builder.options.map((o) => (
+              <li key={o.slug}>
+                <PickRow
+                  item={o}
+                  chosen={picked.includes(o.slug)}
+                  full={full}
+                  onToggle={onToggle}
+                  onLocked={onFull}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <div className="h-4" />
     </Screen>
@@ -378,6 +517,7 @@ export function BuilderScreen() {
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useNote();
   const [failed, setFailed] = useState(false);
+  const [gone, setGone] = useState<string[] | undefined>();
 
   // a fragrance that ran out of 10 ml while it was chosen drops from the choice
   const options = query.data?.options;
@@ -393,7 +533,7 @@ export function BuilderScreen() {
         <ErrorState fill retrying={query.isFetching} onRetry={() => void query.refetch()} />
       </Screen>
     );
-  if (!query.data) return <Loading />;
+  if (!query.data) return <BuilderLoading />;
   return (
     <BuilderView
       builder={query.data}
@@ -401,23 +541,32 @@ export function BuilderScreen() {
       adding={add.isPending}
       note={note}
       failed={failed}
+      gone={gone}
       onBack={() => goBackOrCatalog(router)}
-      onToggle={(slug) =>
-        setPicked((p) => (p.includes(slug) ? p.filter((s) => s !== slug) : [...p, slug]))
-      }
+      onToggle={(slug) => {
+        setGone(undefined);
+        setPicked((p) => (p.includes(slug) ? p.filter((s) => s !== slug) : [...p, slug]));
+      }}
+      onFull={() => setNote(s.noMore)}
       onAdd={() => {
         setFailed(false);
+        setGone(undefined);
         add.mutate(picked, {
           onSuccess: () => {
             hapticSuccess();
             setPicked([]);
             setNote(s.added);
           },
-          // 409: a chosen 10 ml ran out (the list re-reads itself); anything else is retryable
-          onError: (e) =>
-            e instanceof Error && e.message === 'HTTP 409'
-              ? setNote(s.unavailable)
-              : setFailed(true),
+          // 409: a chosen 10 ml ran out (the list re-reads itself and drops it); name it, so the
+          // customer knows which one to replace. Anything else is retryable.
+          onError: (e) => {
+            if (!(e instanceof SetUnavailableError)) return setFailed(true);
+            const names = e.slugs.flatMap((slug) => {
+              const o = options?.find((x) => x.slug === slug);
+              return o ? [o.name] : [];
+            });
+            setGone(names);
+          },
         });
       }}
     />

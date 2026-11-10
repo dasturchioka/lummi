@@ -17,6 +17,7 @@ import { Badge, FragranceBadge } from '../../ui/Badge';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { DockNote } from '../../ui/DockNote';
+import { LabelDivider } from '../../ui/LabelDivider';
 import { DISC, EASE_OUT } from '../../ui/photoDisc';
 import {
   ArrowLeftIcon,
@@ -138,17 +139,6 @@ function Gallery({
           <ShareIcon size={20} />
         </button>
       </div>
-    </div>
-  );
-}
-
-/** Label divider (DESIGN.md Shapes): hairline, 4 px Sage diamond, hairline, 72 px wide. */
-function LabelDivider() {
-  return (
-    <div aria-hidden="true" className="mt-3 flex w-[72px] items-center gap-1.5 text-line-strong">
-      <span className="h-px flex-1 bg-current" />
-      <span className="size-1 rotate-45 bg-sage" />
-      <span className="h-px flex-1 bg-current" />
     </div>
   );
 }
