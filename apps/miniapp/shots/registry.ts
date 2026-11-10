@@ -598,6 +598,192 @@ async function promoBanner(db: ShotDb, b: ShotBanner) {
 const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
 const sloganAtLimit = longSlogan();
 
+/*
+ * Purchase shortcuts (#25): the list «+», «Купить сейчас», «Повторить заказ», «Мои пункты BTS».
+ */
+/** Forgets the shot customers' saved recipient + point pairs. */
+async function clearSaved(db: ShotDb) {
+  await db.query(
+    `delete from saved_points where customer_id in (select id from customers where telegram_id = $1)`,
+    [SHOT_USER.id],
+  );
+}
+/** The n-th offered point of Samarkand. */
+async function nthPoint(api: ApiClient, n: number) {
+  const { region } = await firstPoint(api);
+  const points = await api.delivery.points({ query: { regionId: region.id, city: 'Самарканд' } });
+  if (points.status !== 200 || !points.body[n]) throw new Error(`no point ${n} (run bts:import)`);
+  return points.body[n];
+}
+/** A «Купить сейчас» order of one 10 ml to this point and recipient: it saves the pair, the cart stays. */
+async function buyNowTo(api: ApiClient, pointIndex: number, recipientName: string, phone: string) {
+  const point = await nthPoint(api, pointIndex);
+  const item = 'volume:symphony:10';
+  const checkout = await api.checkout.get({ query: { regionId: point.regionId, item } });
+  if (checkout.status !== 200) throw new Error(`checkout: HTTP ${checkout.status}`);
+  const res = await api.orders.create({
+    body: {
+      recipientName,
+      recipientPhone: phone,
+      delivery: { kind: 'point', pointId: point.id },
+      consent: true,
+      confirmedTotal: checkout.body.quote.total,
+      idempotencyKey: randomUUID(),
+      item,
+    },
+  });
+  if (res.status !== 201) throw new Error(`order: HTTP ${res.status}`);
+}
+/**
+ * Three saved pairs, the newest at a point BTS hid since (so the default is the one before it):
+ * Dilnoza at the first point, Ali at the second, then Dilnoza at the third, which is hidden.
+ */
+async function savedPairs(api: ApiClient, db: ShotDb) {
+  await clearSaved(db);
+  await buyNowTo(api, 0, 'Dilnoza Karimova', '+998901234567');
+  await buyNowTo(api, 1, 'Alisher Valiyev Abdumalikovich', '+998937654321');
+  await buyNowTo(api, 2, 'Dilnoza Karimova', '+998901234567');
+  const hidden = await nthPoint(api, 2);
+  await db.query('update bts_points set active = false where id = $1', [hidden.id]);
+  hiddenPoint = hidden.id;
+}
+let hiddenPoint: number | undefined;
+async function savedPairsDone(ctx: { api: ApiClient; db: ShotDb }) {
+  if (hiddenPoint)
+    await ctx.db.query('update bts_points set active = true where id = $1', [hiddenPoint]);
+  hiddenPoint = undefined;
+  await clearSaved(ctx.db);
+  await checkoutDone(ctx);
+}
+/** Opens the newest order and presses «Повторить заказ»; the result sheet rises. */
+async function repeatNewest(page: Page) {
+  await openFirstOrder(page);
+  await page.getByTestId('repeat-order').click();
+  await page.getByTestId('repeat-result').waitFor();
+}
+const shortcutScreens: ScreenDef[] = [
+  // The list cards at 360 px: «+» on the photo, a seven-digit price at full size on its own line.
+  { id: 'list-cards-360', path: '/dev/list', fullPage: true, width: 360 },
+  {
+    // Several volumes available: «+» asks which, on the cheapest
+    id: 'list-add-sheet',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await page.getByTestId('list-add').first().click();
+      await page.getByTestId('volume-sheet').waitFor();
+    },
+  },
+  {
+    // One volume available: «+» adds it at once; the note rises above the tab bar
+    id: 'list-added',
+    path: '/search?q=symphony&s=1',
+    setup: async ({ db }) => {
+      await db.query(
+        `update volumes set on_hand = 0 where ml <> 30 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+    },
+    act: async ({ page }) => {
+      await page.getByTestId('list-add').first().click();
+      await page.locator('[data-testid="shop-note"][data-open]').waitFor();
+    },
+    teardown: emptyCart,
+  },
+  { id: 'catalog-worst-360-plus', path: '/catalog', ...worstData, width: 360 },
+  {
+    id: 'checkout-buy-now',
+    path: '/checkout?item=volume:symphony:50',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await clearSaved(db);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    id: 'checkout-buy-now-set',
+    path: '/checkout?item=discovery_set',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await clearSaved(db);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: checkoutDone,
+  },
+  {
+    // Sold out while the shopper looked: «Купить сейчас» goes back, not to the cart
+    id: 'checkout-buy-now-gone',
+    path: '/checkout?item=volume:tygar:50',
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await db.query(
+        `update volumes set on_hand = 0 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'tygar')`,
+      );
+    },
+    teardown: checkoutDone,
+  },
+  {
+    // «Мои пункты BTS» first; checkout starts on the last used pair BTS still offers
+    id: 'checkout-saved-points',
+    path: '/checkout',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await savedPairs(api, db);
+    },
+    teardown: savedPairsDone,
+  },
+  {
+    id: 'profile-saved-points',
+    path: '/profile',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await savedPairs(api, db);
+    },
+    teardown: savedPairsDone,
+  },
+  {
+    id: 'order-repeat-all',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => repeatNewest(page),
+    teardown: checkoutDone,
+  },
+  {
+    // One line gone, one capped: the sheet names both, as the server reported them
+    id: 'order-repeat-some',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10, 3],
+        ['tygar', 30],
+        ['ink-mark', 50],
+      ]);
+      // ink-mark 50 ml: only the order's own bottle is left; symphony 10 ml: one more than the order holds
+      await db.query(
+        `update volumes set on_hand = 1 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'ink-mark')`,
+      );
+      await db.query(
+        `update volumes set on_hand = 4 where ml = 10 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+      );
+    },
+    act: async ({ page }) => repeatNewest(page),
+    teardown: checkoutDone,
+  },
+];
+
 export const screens: ScreenDef[] = [
   {
     id: 'home',
@@ -1842,4 +2028,5 @@ export const screens: ScreenDef[] = [
   { id: 'ui-sheet', path: '/dev/sheet' },
   // The registration step (contact + write access); its dev trigger is in the gallery.
   ...registrationStates,
+  ...shortcutScreens,
 ];
