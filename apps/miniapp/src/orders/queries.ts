@@ -173,17 +173,28 @@ export function useCancelOrder(number: number) {
   });
 }
 
+export type RepeatOutcome =
+  | { kind: 'done'; result: RepeatResultDto }
+  /** 409: the order is not delivered or cancelled (any more): the screens re-read it. */
+  | { kind: 'not_repeatable' };
+
 /**
- * «Повторить заказ»: the order's lines go into the cart at today's prices; the answer says, per
- * line, what went in. The cart it returns replaces the cached one (tab-bar count included).
+ * «Повторить заказ» (a delivered or cancelled order): the order's lines go into the cart at
+ * today's prices; the answer says, per line, what went in and why a line came back short. The
+ * cart it returns replaces the cached one (tab-bar count included).
  */
 export function useRepeatOrder(number: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (): Promise<RepeatResultDto> => {
-      const res = unwrap(await api.orders.repeat({ params: { number } }), 200);
-      qc.setQueryData(CART_KEY, res.cart);
-      return res.result;
+    mutationFn: async (): Promise<RepeatOutcome> => {
+      const res = await api.orders.repeat({ params: { number } });
+      if (res.status === 409) {
+        void qc.invalidateQueries({ queryKey: ORDERS_KEY });
+        return { kind: 'not_repeatable' };
+      }
+      const body = unwrap(res, 200);
+      qc.setQueryData(CART_KEY, body.cart);
+      return { kind: 'done', result: body.result };
     },
   });
 }

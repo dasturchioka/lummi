@@ -66,7 +66,14 @@ export const ordersMessages = defineMessages(
       buyNowNote: 'Только этот товар. Корзина останется как есть.',
       back: 'Вернуться назад',
       itemGoneTitle: 'Этого сейчас нет в наличии',
-      itemGoneText: 'Его только что купили. Выберите другой вариант или загляните позже.',
+      /** Why the «Купить сейчас» item cannot be ordered now, by what it is. */
+      itemGone: {
+        volume: 'Этот объём закончился. Выберите другой или загляните позже.',
+        discovery_set: 'Discovery set закончился. Загляните позже или соберите свой набор.',
+        builder_set: 'Закончились 10 мл: {names}. Выберите замену в наборе.',
+      },
+      /** 422 `unknown_item`: the fragrance or set was taken off sale while the shopper looked. */
+      itemUnknown: 'Этот товар больше не продаётся. Выберите другой в каталоге.',
       itemNotFoundTitle: 'Это больше не продаётся',
       itemNotFoundText: 'Выберите другой аромат в каталоге.',
       toCatalog: 'В каталог',
@@ -219,6 +226,8 @@ export const ordersMessages = defineMessages(
       /** «Повторить заказ» (#25): the old lines go into the cart at today's prices. */
       repeat: 'Повторить заказ',
       repeatFailed: 'Не удалось повторить заказ. Проверьте соединение и попробуйте ещё раз.',
+      /** 409: the order moved back into progress since the screen showed it. */
+      repeatNotYet: 'Повторить заказ можно, когда он доставлен или отменён.',
       repeatAllTitle: 'Всё добавили в корзину',
       /** `{n}` is the order's line count, `{added}` how many went into the cart. */
       repeatSomeTitle: {
@@ -230,8 +239,14 @@ export const ordersMessages = defineMessages(
       repeatNoneTitle: 'Сейчас ничего из заказа нет в наличии',
       repeatPrices: 'Цены сегодняшние: корзина пересчитала их заново.',
       repeatNoneText: 'Загляните позже или выберите другие ароматы в каталоге.',
-      repeatSkipped: 'Нет в наличии',
-      repeatCapped: 'Добавили {added} из {ordered} шт.',
+      /** Why a line went into the cart short of the order (`REPEAT_SHORT_REASONS`). */
+      repeatReason: {
+        sold_out: 'Нет в наличии',
+        set_incomplete: 'Одного из пяти ароматов нет в 10 мл',
+        capped: 'Добавили {added} из {ordered} шт.: больше нет в наличии',
+        max_qty: 'Добавили {added} из {ordered} шт.: в корзине не больше {max} шт.',
+        max_qty_none: 'В корзине уже {max} шт., больше не добавить',
+      },
       toCart: 'Перейти в корзину',
     },
   },
@@ -295,7 +310,12 @@ export const ordersMessages = defineMessages(
       buyNowNote: 'Faqat shu mahsulot. Savat oʻzgarmaydi.',
       back: 'Ortga qaytish',
       itemGoneTitle: 'Bu hozir mavjud emas',
-      itemGoneText: 'Uni hozirgina sotib olishdi. Boshqasini tanlang yoki keyinroq kiring.',
+      itemGone: {
+        volume: 'Bu hajm tugadi. Boshqasini tanlang yoki keyinroq kiring.',
+        discovery_set: 'Discovery set tugadi. Keyinroq kiring yoki oʻz toʻplamingizni yigʻing.',
+        builder_set: '10 ml tugadi: {names}. Toʻplamda boshqasini tanlang.',
+      },
+      itemUnknown: 'Bu mahsulot endi sotilmaydi. Katalogdan boshqasini tanlang.',
       itemNotFoundTitle: 'Bu endi sotilmaydi',
       itemNotFoundText: 'Katalogdan boshqa ifor tanlang.',
       toCatalog: 'Katalogga',
@@ -442,6 +462,7 @@ export const ordersMessages = defineMessages(
       cancelledRefund: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',
       repeat: 'Buyurtmani takrorlash',
       repeatFailed: 'Buyurtmani takrorlab boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
+      repeatNotYet: 'Buyurtmani u yetkazilgach yoki bekor qilingach takrorlash mumkin.',
       repeatAllTitle: 'Hammasi savatga qoʻshildi',
       repeatSomeTitle: {
         one: '{n} ta mahsulotdan {added} tasi qoʻshildi',
@@ -452,8 +473,13 @@ export const ordersMessages = defineMessages(
       repeatNoneTitle: 'Hozir buyurtmadagi mahsulotlarning hech biri mavjud emas',
       repeatPrices: 'Narxlar bugungi: savat ularni qayta hisobladi.',
       repeatNoneText: 'Keyinroq kiring yoki katalogdan boshqa iforlarni tanlang.',
-      repeatSkipped: 'Mavjud emas',
-      repeatCapped: '{ordered} tadan {added} tasi qoʻshildi',
+      repeatReason: {
+        sold_out: 'Mavjud emas',
+        set_incomplete: 'Beshta ifordan biri 10 ml da qolmagan',
+        capped: '{ordered} tadan {added} tasi qoʻshildi: boshqa qolmagan',
+        max_qty: '{ordered} tadan {added} tasi qoʻshildi: savatda {max} tadan koʻp boʻlmaydi',
+        max_qty_none: 'Savatda allaqachon {max} ta, boshqa qoʻshib boʻlmaydi',
+      },
       toCart: 'Savatga oʻtish',
     },
   },

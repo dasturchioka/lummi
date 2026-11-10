@@ -1,4 +1,10 @@
-import type { BuyNowLineDto, CheckoutDto, CreateOrderBody, SavedPointDto } from '@lummi/contracts';
+import type {
+  BuyNowLineDto,
+  CheckoutDto,
+  CreateOrderBody,
+  QuoteLine,
+  SavedPointDto,
+} from '@lummi/contracts';
 import {
   ORDER_COMMENT_MAX,
   RECIPIENT_NAME_MAX,
@@ -16,6 +22,7 @@ import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/q
 import { CardIcon } from '../orders/icons';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
+import { OrderLine } from '../orders/OrderLine';
 import { SavedPointPicker } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
 import { goBackOrCatalog } from '../lib/navigation';
@@ -25,9 +32,6 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Checkbox, FieldError, TextArea, TextField } from '../ui/Field';
 import { Figure } from '../ui/Figure';
-import { NameLockup } from '../ui/NameLockup';
-import { SetFragranceList } from '../ui/SetFragranceList';
-import { Thumb } from '../ui/Thumb';
 import {
   AlertIcon,
   BagIcon,
@@ -146,47 +150,47 @@ function newAttemptKey(): string {
 }
 
 /**
- * The one item of a «Купить сейчас» checkout, as an order line reads (thumbnail, «по мотивам» and
- * the italic name, or «НАБОР» and the set's name with its five), with the server's line total, and
- * the note that the cart stays as it is.
+ * The one item of a «Купить сейчас» checkout, as an order line reads (`OrderLine`: thumbnail,
+ * «по мотивам» and the italic name, or «НАБОР» and the set's name with its five, the line total in
+ * Sage Ink during a markdown), priced by the server's quote, then the note that the cart stays.
  */
-function BuyNowItem({ line, total }: { line: BuyNowLineDto; total: number | undefined }) {
-  const { t, language } = usePrefs();
+function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }) {
   const o = useOrdersText();
-  const sets = setsMessages[language].sets;
+  const name =
+    line.kind === 'volume'
+      ? { ru: line.name, uz: line.name }
+      : line.kind === 'discovery_set'
+        ? { ru: setsMessages.ru.sets.lineDiscovery, uz: setsMessages.uz.sets.lineDiscovery }
+        : { ru: setsMessages.ru.sets.lineBuilder, uz: setsMessages.uz.sets.lineBuilder };
   return (
     <>
-      <Card className="flex gap-3 p-3" data-testid="buy-now-item">
-        <Thumb
-          photo={line.photo}
-          className="w-12 self-start"
-          set={line.kind === 'volume' ? undefined : line.kind}
+      <Card as="ul" className="overflow-hidden" data-testid="buy-now-item">
+        <OrderLine
+          line={{
+            kind: line.kind,
+            brand: line.kind === 'volume' ? line.brand : null,
+            name,
+            setComposition: line.kind === 'volume' ? null : line.fragrances,
+            photo: line.photo,
+            ml: line.kind === 'volume' ? line.ml : 10,
+            qty: priced.qty,
+            lineTotal: priced.lineTotal,
+            markedDown: priced.markedDown,
+          }}
         />
-        <div className="flex min-w-0 flex-1 flex-col">
-          {line.kind === 'volume' ? (
-            <NameLockup brand={line.brand} name={line.name} />
-          ) : (
-            <>
-              <p className="type-label text-muted">{t.home.discoveryLabel}</p>
-              <p className="type-name mt-px text-[18px] text-ink">
-                {line.kind === 'discovery_set' ? sets.lineDiscovery : sets.lineBuilder}
-              </p>
-              <SetFragranceList items={line.fragrances} />
-            </>
-          )}
-          <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
-            <p className="type-small min-w-0 text-muted">
-              {line.kind === 'volume'
-                ? fill(o.orders.qty, { ml: String(line.ml), qty: String(line.qty) })
-                : `${o.orders.setOf} · ${fill(o.orders.units, { qty: String(line.qty) })}`}
-            </p>
-            {total !== undefined && !line.soldOut ? <Money amount={total} /> : null}
-          </div>
-        </div>
       </Card>
       <p className="type-small mt-2 mb-3 text-muted">{o.checkout.buyNowNote}</p>
     </>
   );
+}
+
+/** Why the «Купить сейчас» item cannot be ordered now: its volume, the Discovery set, or the five's short 10 ml. */
+function itemGoneText(o: ReturnType<typeof useOrdersText>, line: BuyNowLineDto | null): string {
+  if (!line || line.kind === 'volume') return o.checkout.itemGone.volume;
+  if (line.kind === 'discovery_set') return o.checkout.itemGone.discovery_set;
+  return fill(o.checkout.itemGone.builder_set, {
+    names: line.short.map((f) => f.name).join(', '),
+  });
 }
 
 function Loading() {
@@ -376,7 +380,7 @@ export function Checkout() {
           }
           text={
             item
-              ? o.checkout.itemGoneText
+              ? itemGoneText(o, data.item)
               : soldOutMeanwhile
                 ? o.checkout.goneText
                 : o.checkout.emptyText
@@ -503,6 +507,10 @@ export function Checkout() {
             setError(o.checkout.unknownPoint);
           } else if (r.code === 'gift_message_too_long') {
             setError(fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }));
+          } else if (r.code === 'unknown_item') {
+            // taken off sale while the shopper looked: say so; the re-read shows the not-found state
+            setError(o.checkout.itemUnknown);
+            void qc.invalidateQueries({ queryKey: ['checkout'] });
           } else {
             // the allowed countries or the consent changed meanwhile: re-read what checkout asks
             if (r.code === 'invalid_recipient_phone') setPhoneRefused(true);
@@ -704,7 +712,9 @@ export function Checkout() {
 
       <section className="mt-[26px]">
         <SectionTitle>{o.checkout.summary}</SectionTitle>
-        {data.item ? <BuyNowItem line={data.item} total={data.quote.lines[0]?.lineTotal} /> : null}
+        {data.item && data.quote.lines[0] ? (
+          <BuyNowItem line={data.item} priced={data.quote.lines[0]} />
+        ) : null}
         <MoneySummary
           itemCount={data.itemCount}
           itemsSubtotal={data.quote.itemsSubtotal}
@@ -758,7 +768,9 @@ export function Checkout() {
         place={place}
         backLabel={backLabel}
         goneTitle={item ? o.checkout.itemGoneTitle : o.checkout.goneTitle}
-        goneText={item ? o.checkout.itemGoneText : o.checkout.goneText}
+        goneText={
+          item ? itemGoneText(o, conflict?.checkout.item ?? data.item) : o.checkout.goneText
+        }
         onConfirm={(newTotal) => submit(newTotal)}
         onCart={toCart}
         onClose={() => setConflict(null)}

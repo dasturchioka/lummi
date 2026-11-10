@@ -285,51 +285,62 @@ describe('cancelling an order', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('«Повторить заказ» says how many went in and names what did not, as the server reported it', async () => {
+  it('«Повторить заказ» says how many went in and gives the server’s reason for each short line', async () => {
+    const line = (
+      name: string,
+      ml: number,
+      ordered: number,
+      added: number,
+      reason: string | null,
+    ) => ({
+      kind: 'volume',
+      name: { ru: name, uz: name },
+      brand: 'Louis Vuitton',
+      ml,
+      ordered,
+      added,
+      reason,
+    });
     repeatOrder.mockResolvedValue({
       status: 200,
       body: {
         result: {
           lines: [
+            line('Symphony', 30, 3, 1, 'capped'),
+            line('Guidance', 10, 1, 0, 'sold_out'),
+            line('Tygar', 50, 5, 2, 'max_qty'),
+            line('Ink Mark', 10, 1, 0, 'max_qty'),
             {
-              kind: 'volume',
-              name: { ru: 'Symphony', uz: 'Symphony' },
-              brand: 'Louis Vuitton',
-              ml: 30,
-              ordered: 2,
-              added: 1,
-            },
-            {
-              kind: 'volume',
-              name: { ru: 'Guidance', uz: 'Guidance' },
-              brand: 'Amouage',
-              ml: 10,
-              ordered: 1,
-              added: 0,
-            },
-            {
-              kind: 'discovery_set',
-              name: { ru: 'Discovery set', uz: 'Discovery set' },
+              kind: 'builder_set',
+              name: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' },
               brand: null,
               ml: 10,
               ordered: 1,
-              added: 1,
+              added: 0,
+              reason: 'set_incomplete',
             },
+            line('Rain Tea', 10, 1, 1, null),
           ],
-          added: 2,
-          of: 3,
+          added: 3,
+          of: 6,
         },
-        cart: { lines: [], count: 2 },
+        cart: { lines: [], count: 4 },
       },
     });
     renderView(<OrderView order={order({ status: 'delivered' })} />);
     fireEvent.click(screen.getByTestId('repeat-order'));
-    const dialog = await screen.findByRole('dialog', { name: 'Добавили 2 из 3 товаров' });
+    const dialog = await screen.findByRole('dialog', { name: 'Добавили 3 из 6 товаров' });
     expect(repeatOrder).toHaveBeenCalledWith({ params: { number: 1001 } });
-    expect(dialog.textContent).toContain('Guidance, 10 мл');
-    expect(dialog.textContent).toContain('Нет в наличии');
-    expect(dialog.textContent).toContain('Symphony, 30 мл');
-    expect(dialog.textContent).toContain('Добавили 1 из 2 шт.');
+    const reasons = [...dialog.querySelectorAll('li')].map((li) => li.textContent);
+    expect(reasons).toEqual([
+      'Symphony, 30 млДобавили 1 из 3 шт.: больше нет в наличии',
+      'Guidance, 10 млНет в наличии',
+      'Tygar, 50 млДобавили 2 из 5 шт.: в корзине не больше 99 шт.',
+      'Ink Mark, 10 млВ корзине уже 99 шт., больше не добавить',
+      'Свой наборОдного из пяти ароматов нет в 10 мл',
+    ]);
+    // a 99 cap is never «Нет в наличии»
+    expect(dialog.querySelectorAll('[data-reason="max_qty"]')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Перейти в корзину' })).toBeTruthy();
   });
 
@@ -340,12 +351,13 @@ describe('cancelling an order', () => {
         result: {
           lines: [
             {
-              kind: 'builder_set',
-              name: { ru: 'Свой набор', uz: 'Oʻz toʻplamingiz' },
+              kind: 'discovery_set',
+              name: { ru: 'Discovery set', uz: 'Discovery set' },
               brand: null,
               ml: 10,
               ordered: 1,
               added: 0,
+              reason: 'sold_out',
             },
           ],
           added: 0,
@@ -359,7 +371,20 @@ describe('cancelling an order', () => {
     const dialog = await screen.findByRole('dialog', {
       name: 'Сейчас ничего из заказа нет в наличии',
     });
-    expect(dialog.textContent).toContain('Свой набор');
+    expect(dialog.textContent).toContain('Discovery set');
     expect(screen.getByRole('button', { name: 'В каталог' })).toBeTruthy();
+  });
+
+  it('an order still on its way offers no «Повторить заказ»; a stale screen gets the 409 in words', async () => {
+    renderView(<OrderView order={order({ status: 'assembling' })} />);
+    expect(screen.queryByTestId('repeat-order')).toBeNull();
+    cleanup();
+    repeatOrder.mockResolvedValue({ status: 409, body: { code: 'not_repeatable' } });
+    renderView(<OrderView order={order({ status: 'delivered' })} />);
+    fireEvent.click(screen.getByTestId('repeat-order'));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Повторить заказ можно, когда он доставлен или отменён.',
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
