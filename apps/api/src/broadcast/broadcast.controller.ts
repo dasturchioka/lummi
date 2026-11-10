@@ -13,7 +13,7 @@ const invalid = (f: Failure) => ({
 
 /**
  * Broadcasts are the owner's alone (ADR 0017), enforced here and not by hiding the menu entry.
- * Route order matters: `audience` is declared before `:id`.
+ * Route order matters: `audience` and `fragrance` are declared before `:id`.
  */
 @Controller()
 @UseGuards(StaffGuard, OwnerGuard)
@@ -34,6 +34,16 @@ export class BroadcastController {
       status: 200 as const,
       body: await this.broadcasts.audienceCount(query.audience),
     }));
+  }
+
+  @TsRestHandler(adminContract.broadcasts.fragrance)
+  fragrance() {
+    return tsRestHandler(adminContract.broadcasts.fragrance, async ({ query }) => {
+      const found = await this.broadcasts.fragranceBySlug(query.slug);
+      return found
+        ? { status: 200 as const, body: found }
+        : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
   }
 
   @TsRestHandler(adminContract.broadcasts.get)

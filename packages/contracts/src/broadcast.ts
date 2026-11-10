@@ -69,7 +69,16 @@ export const audienceCountSchema = z.object({
   total: z.number().int(),
   /** Those the bot may write to; the rest (refused or blocked) are counted «blocked» at once. */
   reachable: z.number().int(),
+  /** The reachable ones by the language they will get it in (one is 0 for a one-language audience). */
+  reachableByLanguage: z.object({ ru: z.number().int(), uz: z.number().int() }),
 });
+export type AudienceCount = z.infer<typeof audienceCountSchema>;
+
+/** A `p_<slug>` button target as the owner types it: the fragrance's name, if there is one. */
+export const fragranceTargetQuerySchema = z.object({
+  slug: z.string().trim().min(1).max(200),
+});
+export const fragranceTargetSchema = z.object({ name: z.string() });
 
 export const testSendResultSchema = z.object({ sent: z.array(z.enum(['ru', 'uz'])) });
 
@@ -94,16 +103,39 @@ export const broadcastErrorSchema = z.object({
 const DISCLAIMER = /не\s+оригинальн\p{L}*\s+парфюм|asl\s+atir\s+emas|original\s+atir\s+emas/giu;
 const BANNED = /копи[яюией]|реплик|оригинал|oil perfume|масляные духи|nusxa|replika|original/iu;
 const NUMBER = /\bNo\.?\s?\d+|№\s?\d+/iu;
-const CONCENTRATION = /\d\s?%/u;
+/** A percentage as written («20%», «20 %»), so the warning can name it. */
+const CONCENTRATION_WORD = /\d+(?:[.,]\d+)?\s?%/u;
 const EMOJI = /\p{Extended_Pictographic}/gu;
 export const MAX_EMOJI = 2;
 
-export type CopyWarning = 'banned' | 'numbers' | 'emoji';
+export type CopyWarningKind = 'banned' | 'numbers' | 'emoji';
+/** One rule the text breaks, with what broke it as written («Копия», «No.123», «20%», «🎉»). */
+export type CopyWarning = { kind: CopyWarningKind; matches: string[] };
+
+/** Every match of `re` in `text`, widened to its whole word, first spelling of each kept. */
+function found(text: string, re: RegExp, word: boolean): string[] {
+  const out = new Map<string, string>();
+  for (const m of text.matchAll(new RegExp(re.source, `${re.flags.replace('g', '')}g`))) {
+    let start = m.index;
+    let end = start + m[0].length;
+    if (word) {
+      while (start > 0 && /[\p{L}\p{M}]/u.test(text[start - 1] as string)) start--;
+      while (end < text.length && /[\p{L}\p{M}]/u.test(text[end] as string)) end++;
+    }
+    const hit = text.slice(start, end).trim();
+    if (hit && !out.has(hit.toLowerCase())) out.set(hit.toLowerCase(), hit);
+  }
+  return [...out.values()];
+}
+
 export function copyWarnings(text: string): CopyWarning[] {
   const out: CopyWarning[] = [];
   const body = text.replace(DISCLAIMER, ' ');
-  if (BANNED.test(body)) out.push('banned');
-  if (NUMBER.test(body) || CONCENTRATION.test(body)) out.push('numbers');
-  if ((body.match(EMOJI) ?? []).length > MAX_EMOJI) out.push('emoji');
+  const banned = found(body, BANNED, true);
+  if (banned.length) out.push({ kind: 'banned', matches: banned });
+  const numbers = [...found(body, NUMBER, false), ...found(body, CONCENTRATION_WORD, false)];
+  if (numbers.length) out.push({ kind: 'numbers', matches: numbers });
+  const emoji = body.match(EMOJI) ?? [];
+  if (emoji.length > MAX_EMOJI) out.push({ kind: 'emoji', matches: [...new Set(emoji)] });
   return out;
 }

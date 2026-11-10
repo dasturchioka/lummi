@@ -9,6 +9,7 @@ import {
   type CustomerRow,
 } from '@lummi/db';
 import type { Job } from 'bullmq';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BotBlockedError, RateLimitedError } from '../src/edges';
@@ -17,7 +18,10 @@ import { CustomersService } from '../src/auth/customers.service';
 import { moveCustomerData } from '../src/auth/customers.service';
 import { BROADCAST_ATTEMPTS, BroadcastService } from '../src/broadcast/broadcast.service';
 import { SettingsService } from '../src/settings/settings.service';
+import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
+
+const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 
 let t: TestApp;
 let svc: BroadcastService;
@@ -156,10 +160,25 @@ describe('sending', () => {
     await customer({ language: 'ru', writeAccess: 'refused' });
     await customer({ language: 'uz', botBlocked: true });
     await customer({ language: 'uz', writeAccess: null }); // opened the Mini App, never started the bot
+    await customer({ language: 'uz' });
+    await customer({ language: 'uz' });
     const all = await owner.client.admin.broadcasts.audience({ query: { audience: 'all' } });
-    expect(all.body).toEqual({ total: 4, reachable: 1 });
+    // the reachable ones split by the language they will get it in
+    expect(all.body).toEqual({ total: 6, reachable: 3, reachableByLanguage: { ru: 1, uz: 2 } });
     const ru = await owner.client.admin.broadcasts.audience({ query: { audience: 'ru' } });
-    expect(ru.body).toEqual({ total: 2, reachable: 1 });
+    expect(ru.body).toEqual({ total: 2, reachable: 1, reachableByLanguage: { ru: 1, uz: 0 } });
+  });
+
+  it("names a fragrance target's fragrance as the owner types the slug, for the owner only", async () => {
+    await seedCatalog(t.db, { materialsDir });
+    const known = await owner.client.admin.broadcasts.fragrance({ query: { slug: 'tygar' } });
+    expect(known).toMatchObject({ status: 200, body: { name: 'Tygar' } });
+    const unknown = await owner.client.admin.broadcasts.fragrance({
+      query: { slug: 'no-such-fragrance' },
+    });
+    expect(unknown.status).toBe(404);
+    const asManager = await manager.client.admin.broadcasts.fragrance({ query: { slug: 'tygar' } });
+    expect(asManager.status).toBe(403);
   });
 
   it('skips customers who refused write access or blocked the bot, and counts them blocked', async () => {

@@ -2,6 +2,7 @@ import {
   BROADCAST_IMAGE_KEY,
   settingDefinitions,
   MAX_PHOTO_BYTES,
+  type AudienceCount,
   type BroadcastAudience,
   type BroadcastBody,
   type BroadcastCounts,
@@ -126,16 +127,36 @@ export class BroadcastService implements OnApplicationShutdown {
     return { ok: true, value: { key } };
   }
 
-  /** Everyone in the audience and those the bot may write to (the rest are «blocked» at once). */
-  async audienceCount(audience: BroadcastAudience): Promise<{ total: number; reachable: number }> {
+  /**
+   * Everyone in the audience, those the bot may write to (the rest are «blocked» at once), and
+   * those split by the language they will get it in.
+   */
+  async audienceCount(audience: BroadcastAudience): Promise<AudienceCount> {
+    const reachableIn = (language: Language) =>
+      sql<number>`(count(*) filter (where ${broadcastReachableSql} and ${customers.language} = ${language}))::int`;
     const [row] = await this.db
       .select({
         total: sql<number>`count(*)::int`,
         reachable: sql<number>`(count(*) filter (where ${broadcastReachableSql}))::int`,
+        ru: reachableIn('ru'),
+        uz: reachableIn('uz'),
       })
       .from(customers)
       .where(audienceSql(audience));
-    return { total: row?.total ?? 0, reachable: row?.reachable ?? 0 };
+    return {
+      total: row?.total ?? 0,
+      reachable: row?.reachable ?? 0,
+      reachableByLanguage: { ru: row?.ru ?? 0, uz: row?.uz ?? 0 },
+    };
+  }
+
+  /** The fragrance behind a `p_<slug>` target (hidden ones too: the send check is the same). */
+  async fragranceBySlug(slug: string): Promise<{ name: string } | null> {
+    const [f] = await this.db
+      .select({ name: fragrances.name })
+      .from(fragrances)
+      .where(eq(fragrances.slug, slug));
+    return f ?? null;
   }
 
   /** Normalise and check what the schema cannot: the image exists and the fragrance target is real. */
@@ -143,11 +164,7 @@ export class BroadcastService implements OnApplicationShutdown {
     const fields: string[] = [];
     if (body.imageKey && !(await this.edges.files.get(body.imageKey))) fields.push('imageKey');
     if (body.buttonTarget?.startsWith('p_')) {
-      const [f] = await this.db
-        .select({ id: fragrances.id })
-        .from(fragrances)
-        .where(eq(fragrances.slug, body.buttonTarget.slice(2)));
-      if (!f) fields.push('buttonTarget');
+      if (!(await this.fragranceBySlug(body.buttonTarget.slice(2)))) fields.push('buttonTarget');
     }
     if (fields.length) return { ok: false, reason: 'invalid', fields };
     return { ok: true, value: { ...body, textUz: normalizeUzbek(body.textUz) } };

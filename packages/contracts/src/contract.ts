@@ -28,6 +28,8 @@ import {
   broadcastBodySchema,
   broadcastErrorSchema,
   broadcastSchema,
+  fragranceTargetQuerySchema,
+  fragranceTargetSchema,
   testSendResultSchema,
 } from './broadcast';
 import {
@@ -678,7 +680,20 @@ const adminBroadcasts = c.router({
         401: broadcastErrorSchema,
         403: broadcastErrorSchema,
       },
-      summary: 'Live recipient count for an audience (owner only)',
+      summary: 'Live recipient count for an audience, split by language (owner only)',
+    },
+    fragrance: {
+      method: 'GET',
+      path: '/admin/broadcasts/fragrance',
+      query: fragranceTargetQuerySchema,
+      responses: {
+        200: fragranceTargetSchema,
+        401: broadcastErrorSchema,
+        403: broadcastErrorSchema,
+        404: broadcastErrorSchema,
+      },
+      summary:
+        "A `p_<slug>` button target's fragrance name as the owner types the slug (owner only)",
     },
     get: {
       method: 'GET',
