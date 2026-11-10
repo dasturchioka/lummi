@@ -24,15 +24,16 @@ import {
   type DbOrTx,
   type StaffRow,
 } from '@lummi/db';
-import { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from '@lummi/i18n';
+import { normalizeUzbek } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { reindexFragrances } from '../search/search-index';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
+import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
 
 export type Failure = {
@@ -70,7 +71,6 @@ export function isUniqueViolation(e: unknown): boolean {
 
 /** Advisory lock that serialises handing out internal product codes. */
 const PRODUCT_CODE_LOCK = 1701;
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null : s.trim());
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -117,12 +117,11 @@ export class CatalogAdminService {
     const where = [];
     if (query.q) {
       // apostrophes are ignored on both sides: «Devil's» finds «Devil’s Intrigue» and the reverse
-      const like = `%${escapeLike(stripApostrophes(normalizeUzbek(query.q)))}%`;
-      const plain = (col: unknown) => sql`regexp_replace(${col}, ${APOSTROPHE_CLASS}, '', 'g')`;
+      const like = apostropheLike(query.q);
       where.push(
-        sql`(${plain(fragrances.name)} ilike ${like} or ${plain(fragrances.originalBrand)} ilike ${like}
+        sql`(${withoutApostrophes(fragrances.name)} ilike ${like} or ${withoutApostrophes(fragrances.originalBrand)} ilike ${like}
           or ${fragrances.code} ilike ${like}
-          or exists (select 1 from unnest(${fragrances.aliases}) a where ${plain(sql`a`)} ilike ${like}))`,
+          or exists (select 1 from unnest(${fragrances.aliases}) a where ${withoutApostrophes(sql`a`)} ilike ${like}))`,
       );
     }
     if (query.type) where.push(eq(fragrances.type, query.type));
@@ -233,7 +232,7 @@ export class CatalogAdminService {
         saleEndsOn: saleEndDay(v.saleEndsAt),
         onHand: v.onHand,
         reserved: reserved.get(v.id) ?? 0,
-        belowReserve: v.onHand < (reserved.get(v.id) ?? 0),
+        belowReserve: belowReserve(v.onHand, reserved.get(v.id) ?? 0),
         photo: v.photoHash,
         isPlaceholder: v.isPlaceholder,
       })),
@@ -460,7 +459,10 @@ export class CatalogAdminService {
   private async similarBad(tx: DbOrTx, ids: number[], selfId: number | null): Promise<boolean> {
     if (!ids.length) return false;
     if (selfId !== null && ids.includes(selfId)) return true;
-    const found = await tx.select({ id: fragrances.id }).from(fragrances).where(inArray(fragrances.id, ids));
+    const found = await tx
+      .select({ id: fragrances.id })
+      .from(fragrances)
+      .where(inArray(fragrances.id, ids));
     return found.length !== ids.length;
   }
 
@@ -474,12 +476,7 @@ export class CatalogAdminService {
     return true;
   }
 
-  private async insertVolume(
-    tx: DbOrTx,
-    fragranceId: number,
-    v: VolumeInput,
-    placeholder = false,
-  ) {
+  private async insertVolume(tx: DbOrTx, fragranceId: number, v: VolumeInput, placeholder = false) {
     await tx.insert(volumes).values({
       isPlaceholder: placeholder,
       fragranceId,
@@ -609,7 +606,10 @@ export class CatalogAdminService {
       // every fragrance that shows this note or family is searchable by its new name
       const used =
         kind === 'families'
-          ? await tx.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.familyId, id))
+          ? await tx
+              .select({ id: fragrances.id })
+              .from(fragrances)
+              .where(eq(fragrances.familyId, id))
           : await tx
               .select({ id: fragranceNotes.fragranceId })
               .from(fragranceNotes)
@@ -703,7 +703,7 @@ export class CatalogAdminService {
       ...r,
       reserved,
       available: available(r.onHand, reserved),
-      belowReserve: r.onHand < reserved,
+      belowReserve: belowReserve(r.onHand, reserved),
     };
   }
 

@@ -1,12 +1,12 @@
-import type { StockList, StockQuery, StockRow } from '@lummi/contracts';
+import type { StockLevel, StockList, StockQuery, StockRow } from '@lummi/contracts';
 import { asc, eq, fragrances, sql, volumes, type Db } from '@lummi/db';
+import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { loadDiscovery } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
 import { DB } from '../tokens';
-
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+import { containsIgnoringApostrophes } from '../util/apostrophe-match';
 
 /**
  * The stock page's read side (#27): on hand, reserve and available per volume and for the
@@ -14,6 +14,22 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
  * Discovery set's own is `loadDiscovery`, the same code checkout and the shop use. The writes are
  * `CatalogAdminService.setOnHand` and `SetsAdminService.setOnHand`.
  */
+/** What the row is called on the page, in both languages (the panel's «Наборы» / «Toʻplamlar»), so a search by any of them finds it. */
+const DISCOVERY_LABELS = [
+  'Discovery set',
+  'Набор Discovery',
+  'Наборы',
+  'Toʻplam',
+  'Discovery toʻplami',
+];
+const fold = (s: string) => stripApostrophes(normalizeUzbek(s)).toLowerCase();
+const matchesDiscoveryLabel = (q: string) =>
+  fold(q) !== '' && DISCOVERY_LABELS.some((label) => fold(label).includes(fold(q)));
+
+/** The server decides what is "nothing left" and "running low" (the setting), the client only draws it. */
+export const stockLevel = (availableNow: number, lowThreshold: number): StockLevel =>
+  availableNow === 0 ? 'zero' : availableNow <= lowThreshold ? 'low' : 'ok';
+
 @Injectable()
 export class StockAdminService {
   constructor(@Inject(DB) private readonly db: Db) {}
@@ -33,7 +49,7 @@ export class StockAdminService {
       })
       .from(volumes)
       .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(q ? sql`${fragrances.name} ilike ${'%' + escapeLike(q) + '%'}` : undefined)
+      .where(q ? containsIgnoringApostrophes(fragrances.name, q) : undefined)
       .orderBy(asc(sql`lower(${fragrances.name})`), asc(volumes.ml));
     const reserved = await reservedByVolume(
       this.db,
@@ -51,13 +67,14 @@ export class StockAdminService {
         onHand: r.onHand,
         reserved: held,
         available: available(r.onHand, held),
-        belowReserve: r.onHand < held,
+        belowReserve: belowReserve(r.onHand, held),
+        level: stockLevel(available(r.onHand, held), lowThreshold),
       };
     });
 
     // the Discovery set sorts first: it is the one row that is not a fragrance
     const discovery = await loadDiscovery(this.db);
-    if (!q || 'discovery'.includes(q.toLowerCase())) {
+    if (!q || matchesDiscoveryLabel(q)) {
       rows.unshift({
         kind: 'discovery',
         key: 'discovery',
@@ -68,15 +85,16 @@ export class StockAdminService {
         onHand: discovery.row.onHand,
         reserved: discovery.reserved,
         available: discovery.available,
-        belowReserve: discovery.row.onHand < discovery.reserved,
+        belowReserve: belowReserve(discovery.row.onHand, discovery.reserved),
+        level: stockLevel(discovery.available, lowThreshold),
       });
     }
 
     return {
       lowThreshold,
       rows: rows.filter((r) => {
-        if (query.filter === 'zero' && r.available !== 0) return false;
-        if (query.filter === 'low' && r.available > lowThreshold) return false;
+        if (query.filter === 'zero' && r.level !== 'zero') return false;
+        if (query.filter === 'low' && r.level === 'ok') return false;
         if (query.visibility === 'hidden' && !r.hidden) return false;
         if (query.visibility === 'visible' && r.hidden) return false;
         return true;

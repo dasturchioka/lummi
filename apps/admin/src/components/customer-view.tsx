@@ -29,7 +29,7 @@ export function CustomerView({
   const c = t.customers;
   const status = ordersMessages[language].orders.status;
   const facts: [string, React.ReactNode][] = [
-    ['Telegram', <TelegramLink key="tg" c={customer} t={t} />],
+    [c.telegram, <TelegramLink key="tg" c={customer} t={t} />],
     [
       c.phone,
       customer.phone ? (
@@ -74,7 +74,7 @@ export function CustomerView({
           <Table>
             <THead>
               <TR>
-                <TH>№</TH>
+                <TH>{c.orderNo}</TH>
                 <TH>{c.date}</TH>
                 <TH>{c.status}</TH>
                 <TH className="text-right">{c.sum}</TH>

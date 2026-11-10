@@ -4,21 +4,11 @@ import type {
   AdminCustomersPage,
   CustomersQuery,
 } from '@lummi/contracts';
-import {
-  customers,
-  desc,
-  eq,
-  orders,
-  sql,
-  type CustomerRow,
-  type Db,
-  type SQL,
-} from '@lummi/db';
+import { customers, desc, eq, orders, sql, type CustomerRow, type Db, type SQL } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { fulfilledOrder } from '../orders/fulfilled';
+import { fulfilledTotal } from '../orders/fulfilled';
 import { DB } from '../tokens';
-
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+import { containsIgnoringApostrophes } from '../util/apostrophe-match';
 
 /** First and last name as the panel shows them. */
 const nameOf = (c: Pick<CustomerRow, 'firstName' | 'lastName'>) =>
@@ -39,9 +29,7 @@ export class CustomersAdminService {
       .select({
         customerId: orders.customerId,
         ordersCount: sql<number>`count(*)`.mapWith(Number).as('orders_count'),
-        spent: sql<number>`coalesce(sum(${orders.total}) filter (where ${fulfilledOrder}), 0)`
-          .mapWith(Number)
-          .as('spent'),
+        spent: fulfilledTotal.as('spent'),
       })
       .from(orders)
       .groupBy(orders.customerId)
@@ -50,11 +38,14 @@ export class CustomersAdminService {
 
   private search(q: string | undefined): SQL | undefined {
     if (!q) return undefined;
-    const like = `%${escapeLike(q.replace(/^@/, ''))}%`;
+    const name = q.replace(/^@/, '');
     const digits = q.replace(/\D/g, '');
     const parts: SQL[] = [
-      sql`concat_ws(' ', ${customers.firstName}, ${customers.lastName}) ilike ${like}`,
-      sql`${customers.username} ilike ${like}`,
+      containsIgnoringApostrophes(
+        sql`concat_ws(' ', ${customers.firstName}, ${customers.lastName})`,
+        name,
+      ),
+      containsIgnoringApostrophes(customers.username, name),
     ];
     // a phone is searched by its digits, whatever spaces or `+` the staff member typed
     if (digits.length >= 3) parts.push(sql`${customers.phone} like ${`%${digits}%`}`);
@@ -107,12 +98,7 @@ export class CustomersAdminService {
       .where(eq(orders.customerId, id))
       .orderBy(desc(orders.createdAt), desc(orders.id));
     const [stat] = await this.db
-      .select({
-        spent:
-          sql<number>`coalesce(sum(${orders.total}) filter (where ${fulfilledOrder}), 0)`.mapWith(
-            Number,
-          ),
-      })
+      .select({ spent: fulfilledTotal })
       .from(orders)
       .where(eq(orders.customerId, id));
     return {

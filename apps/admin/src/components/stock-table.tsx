@@ -1,6 +1,6 @@
 'use client';
 
-import type { StockRow } from '@lummi/contracts';
+import type { StockLevel, StockRow } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -16,10 +16,6 @@ import { num } from '@/lib/setting-copy';
 import { QUIET_ACTION } from '@/lib/ui-classes';
 import { cn, fill } from '@/lib/utils';
 
-type Level = 'zero' | 'low' | 'ok';
-const levelOf = (available: number, threshold: number): Level =>
-  available === 0 ? 'zero' : available <= threshold ? 'low' : 'ok';
-
 /** What the row's editor is doing. `conflict` carries the count somebody else saved meanwhile. */
 type Edit =
   | { step: 'typing'; value: string; error?: 'invalid' | 'failed' | 'busy' }
@@ -27,7 +23,7 @@ type Edit =
   | { step: 'conflict'; value: number; current: number };
 
 /** Highlight without alarm colours (DESIGN.md): Stone for nothing left, Sage wash for running low. */
-function StateTag({ level, t }: { level: Level; t: AdminMessages }) {
+function StateTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
   if (level === 'ok') return <span className="text-small text-muted-foreground">{t.stock.ok}</span>;
   return (
     <span
@@ -37,6 +33,21 @@ function StateTag({ level, t }: { level: Level; t: AdminMessages }) {
       )}
     >
       {level === 'zero' ? t.stock.zero : t.stock.low}
+    </span>
+  );
+}
+
+/** The short tag beside the name in the phone layout, where the state column is not shown. */
+function ShortTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
+  if (level === 'ok') return null;
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold',
+        level === 'zero' ? 'bg-stone text-graphite' : 'bg-sage-wash text-sage-ink',
+      )}
+    >
+      {level === 'zero' ? t.stock.zeroShort : t.stock.lowShort}
     </span>
   );
 }
@@ -124,117 +135,174 @@ export function StockTable({
     else void save(r, next, r.onHand);
   }
 
+  const editor = (r: StockRow, active: Edit, layout: 'block' | 'table') => (
+    <Editor
+      row={r}
+      layout={layout}
+      edit={active}
+      saving={saving === r.key}
+      t={t}
+      name={label(r)}
+      onChange={(value) => setEditing({ key: r.key, edit: { step: 'typing', value } })}
+      onSubmit={(value) => submit(r, value)}
+      onConfirmBelow={(value) => void save(r, value, r.onHand)}
+      onOverwrite={(value, current) => void save(r, value, current)}
+      onCancel={close}
+      onBack={(value) => setEditing({ key: r.key, edit: { step: 'typing', value: String(value) } })}
+    />
+  );
+  const changeButton = (r: StockRow) => (
+    <button
+      type="button"
+      className={cn('min-h-9 rounded-sm px-1 text-[13px]', QUIET_ACTION)}
+      aria-label={fill(s.changeLabel, { name: label(r) })}
+      onClick={() => open(r)}
+    >
+      {s.change}
+    </button>
+  );
+  const savedMark = (r: StockRow) =>
+    savedKey === r.key && (
+      <span role="status" className="inline-flex items-center gap-1 text-small">
+        <Check className="size-3.5 text-sage-ink" strokeWidth={1.5} aria-hidden />
+        {s.saved}
+      </span>
+    );
+  const sub = (r: StockRow) =>
+    r.kind === 'discovery'
+      ? s.discoverySub
+      : [fill(s.ml, { ml: String(r.ml) }), r.hidden ? s.hiddenTag : null]
+          .filter(Boolean)
+          .join(' · ');
+  const tone = (level: StockLevel) =>
+    level === 'zero' ? 'bg-stone/30' : level === 'low' ? 'bg-sage-wash' : '';
+
   return (
     <Card className="@container">
       <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
         {plural(language, total, s.total)} · {fill(s.lowHint, { n: num(lowThreshold) })}
       </p>
-      <Table>
-        <THead>
-          <TR>
-            <TH>{s.fragrance}</TH>
-            <TH className="text-right">{s.onHand}</TH>
-            <TH className="text-right">{s.reserved}</TH>
-            <TH className="text-right">{s.available}</TH>
-            <TH>{s.state}</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {rows.map((r) => {
-            const level = levelOf(r.available, lowThreshold);
-            const active = editing?.key === r.key ? editing.edit : null;
-            const rowTone =
-              level === 'zero' ? 'bg-stone/30' : level === 'low' ? 'bg-sage-wash' : '';
-            return (
-              <Fragment key={r.key}>
-                <TR data-testid={`stock-row-${r.key}`} data-level={level} className={rowTone}>
-                  <TD className="min-w-[13rem] max-w-[22rem]">
-                    <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
-                      {r.kind === 'discovery' ? s.discovery : r.name}
-                    </span>
-                    <span className="block text-small text-muted-foreground">
-                      {r.kind === 'discovery'
-                        ? s.discoverySub
-                        : [fill(s.ml, { ml: String(r.ml) }), r.hidden ? s.hiddenTag : null]
-                            .filter(Boolean)
-                            .join(' · ')}
-                    </span>
-                  </TD>
-                  <TD className="text-right whitespace-nowrap">
-                    {active ? null : (
-                      <span className="inline-flex items-center justify-end gap-3">
-                        {savedKey === r.key && (
-                          <span role="status" className="inline-flex items-center gap-1 text-small">
-                            <Check
-                              className="size-3.5 text-sage-ink"
-                              strokeWidth={1.5}
-                              aria-hidden
-                            />
-                            {s.saved}
+      {/* phones and narrow cards: one block per row, so reserve and available need no side scroll */}
+      <ul className="divide-y divide-border @3xl:hidden">
+        {rows.map((r) => {
+          const active = editing?.key === r.key ? editing.edit : null;
+          return (
+            <li
+              key={r.key}
+              data-testid={`stock-block-${r.key}`}
+              data-level={r.level}
+              className={cn('grid gap-2 px-4 py-3.5', tone(r.level))}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
+                    {r.kind === 'discovery' ? s.discovery : r.name}
+                  </span>
+                  <span className="block text-small text-muted-foreground">{sub(r)}</span>
+                </div>
+                <ShortTag level={r.level} t={t} />
+              </div>
+              <dl className="grid grid-cols-3 gap-2 text-center">
+                {(
+                  [
+                    [s.onHand, r.onHand, 'on-hand'],
+                    [s.reserved, r.reserved, 'reserved'],
+                    [s.available, r.available, 'available'],
+                  ] as const
+                ).map(([name, value, id]) => (
+                  <div key={id} className="min-w-0">
+                    <dt className="text-small text-muted-foreground">{name}</dt>
+                    <dd className="font-semibold tabular-nums" data-testid={id}>
+                      {num(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {r.belowReserve && <p className="text-small text-muted-foreground">{s.belowNow}</p>}
+              {active ? (
+                editor(r, active, 'block')
+              ) : (
+                <div className="flex items-center justify-between gap-3">
+                  {savedMark(r) || <span />}
+                  {changeButton(r)}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="hidden @3xl:block">
+        <Table>
+          <THead>
+            <TR>
+              <TH>{s.fragrance}</TH>
+              <TH className="text-right">{s.onHand}</TH>
+              <TH className="text-right">{s.reserved}</TH>
+              <TH className="text-right">{s.available}</TH>
+              <TH>{s.state}</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {rows.map((r) => {
+              const active = editing?.key === r.key ? editing.edit : null;
+              return (
+                <Fragment key={r.key}>
+                  <TR
+                    data-testid={`stock-row-${r.key}`}
+                    data-level={r.level}
+                    className={tone(r.level)}
+                  >
+                    <TD className="min-w-[13rem] max-w-[22rem]">
+                      <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
+                        {r.kind === 'discovery' ? s.discovery : r.name}
+                      </span>
+                      <span className="block text-small text-muted-foreground">{sub(r)}</span>
+                    </TD>
+                    <TD className="text-right whitespace-nowrap">
+                      {active ? null : (
+                        <span className="inline-flex items-center justify-end gap-3">
+                          {savedMark(r)}
+                          <span className="font-semibold" data-testid="on-hand">
+                            {num(r.onHand)}
                           </span>
-                        )}
-                        <span className="font-semibold" data-testid="on-hand">
-                          {num(r.onHand)}
+                          {changeButton(r)}
                         </span>
-                        <button
-                          type="button"
-                          className={cn('min-h-9 rounded-sm px-1 text-[13px]', QUIET_ACTION)}
-                          aria-label={fill(s.changeLabel, { name: label(r) })}
-                          onClick={() => open(r)}
-                        >
-                          {s.change}
-                        </button>
-                      </span>
-                    )}
-                  </TD>
-                  <TD className="text-right" data-testid="reserved">
-                    {num(r.reserved)}
-                  </TD>
-                  <TD className="text-right font-semibold" data-testid="available">
-                    {num(r.available)}
-                  </TD>
-                  <TD>
-                    <StateTag level={level} t={t} />
-                    {r.belowReserve && (
-                      <span className="mt-1 block text-small text-muted-foreground">
-                        {s.belowNow}
-                      </span>
-                    )}
-                  </TD>
-                </TR>
-                {active && (
-                  <TR className="bg-milk/60">
-                    <TD colSpan={5} className="h-auto py-4">
-                      <Editor
-                        row={r}
-                        edit={active}
-                        saving={saving === r.key}
-                        t={t}
-                        onChange={(value) =>
-                          setEditing({ key: r.key, edit: { step: 'typing', value } })
-                        }
-                        onSubmit={(value) => submit(r, value)}
-                        onConfirmBelow={(value) => void save(r, value, r.onHand)}
-                        onOverwrite={(value, current) => void save(r, value, current)}
-                        onCancel={close}
-                        onBack={(value) =>
-                          setEditing({ key: r.key, edit: { step: 'typing', value: String(value) } })
-                        }
-                        name={label(r)}
-                      />
+                      )}
+                    </TD>
+                    <TD className="text-right" data-testid="reserved">
+                      {num(r.reserved)}
+                    </TD>
+                    <TD className="text-right font-semibold" data-testid="available">
+                      {num(r.available)}
+                    </TD>
+                    <TD>
+                      <StateTag level={r.level} t={t} />
+                      {r.belowReserve && (
+                        <span className="mt-1 block text-small text-muted-foreground">
+                          {s.belowNow}
+                        </span>
+                      )}
                     </TD>
                   </TR>
-                )}
-              </Fragment>
-            );
-          })}
-        </TBody>
-      </Table>
+                  {active && (
+                    <TR className="bg-milk/60">
+                      <TD colSpan={5} className="h-auto py-4">
+                        {editor(r, active, 'table')}
+                      </TD>
+                    </TR>
+                  )}
+                </Fragment>
+              );
+            })}
+          </TBody>
+        </Table>
+      </div>
     </Card>
   );
 }
 
 function Editor({
+  layout,
   row,
   edit,
   saving,
@@ -247,6 +315,8 @@ function Editor({
   onCancel,
   onBack,
 }: {
+  /** Both layouts exist in the page (one is hidden by CSS), so the input id says which. */
+  layout: 'block' | 'table';
   row: StockRow;
   edit: Edit;
   saving: boolean;
@@ -260,10 +330,10 @@ function Editor({
   onBack: (value: number) => void;
 }) {
   const s = t.stock;
-  const inputId = `on-hand-${row.key}`;
+  const inputId = `on-hand-${layout}-${row.key}`;
   if (edit.step === 'below') {
     return (
-      <div className="sticky left-5 grid w-[min(60ch,calc(100vw-5.5rem))] gap-3">
+      <div className="grid max-w-[60ch] gap-3">
         <Notice
           title={fill(s.belowTitle, { onHand: num(edit.value), reserved: num(row.reserved) })}
         >
@@ -282,7 +352,7 @@ function Editor({
   }
   if (edit.step === 'conflict') {
     return (
-      <div className="sticky left-5 grid w-[min(60ch,calc(100vw-5.5rem))] gap-3">
+      <div className="grid max-w-[60ch] gap-3">
         <Notice title={fill(s.changedTitle, { current: num(edit.current) })}>
           {s.changedText}
         </Notice>
@@ -299,7 +369,7 @@ function Editor({
   }
   return (
     <form
-      className="sticky left-5 grid w-[min(34rem,calc(100vw-5.5rem))] gap-3"
+      className="grid max-w-[34rem] gap-3"
       onSubmit={(e) => {
         e.preventDefault();
         onSubmit(edit.value);

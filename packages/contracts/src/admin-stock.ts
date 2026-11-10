@@ -3,6 +3,9 @@ import { ORDER_STATUSES } from './order-status';
 
 /* ---- stock (#27) ---- */
 
+export const STOCK_LEVELS = ['zero', 'low', 'ok'] as const;
+export type StockLevel = (typeof STOCK_LEVELS)[number];
+
 /** One row of the stock page: a volume of a fragrance, or the Discovery set (its own stock, ADR 0009). */
 export const stockRowSchema = z.object({
   kind: z.enum(['volume', 'discovery']),
@@ -19,6 +22,8 @@ export const stockRowSchema = z.object({
   available: z.number().int(),
   /** On hand is below the reserve (ADR 0010): allowed, and shown as a warning. */
   belowReserve: z.boolean(),
+  /** Decided by the server from the `stock.lowAvailableThreshold` setting: nothing left, running low, or fine. */
+  level: z.enum(STOCK_LEVELS),
 });
 export type StockRow = z.infer<typeof stockRowSchema>;
 
@@ -93,5 +98,9 @@ export const adminCustomerDetailSchema = adminCustomerSchema.extend({
 export type AdminCustomerDetail = z.infer<typeof adminCustomerDetailSchema>;
 
 export const adminStockErrorSchema = z.object({
+  code: z.enum(['unauthorized', 'forbidden', 'not_found']),
+});
+
+export const adminCustomersErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found']),
 });

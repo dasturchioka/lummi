@@ -209,6 +209,17 @@ describe('the list', () => {
     expect((await page({ q: 'ali' })).total).toBe(2);
   });
 
+  it('ignores apostrophe variants in names, whichever way they were typed', async () => {
+    await t.signIn({ id: 81, first_name: 'Oʻktam', last_name: 'Gʻaniyev' });
+    await t.signIn({ id: 82, first_name: 'Dilnoza' });
+    for (const q of ["o'ktam", 'o’ktam', 'oʻktam', 'oktam', "g'aniyev"]) {
+      expect(
+        (await page({ q })).items.map((c) => c.telegramId),
+        q,
+      ).toEqual([81]);
+    }
+  });
+
   it('sorts by total spent, by orders and by newest', async () => {
     const a1 = await place(ali, '998901110001', 1);
     const v1 = await place(vali, '998902220002', 3);

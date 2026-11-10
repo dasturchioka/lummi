@@ -32,6 +32,7 @@ import {
 } from './admin-catalog';
 import {
   adminCustomerDetailSchema,
+  adminCustomersErrorSchema,
   adminCustomersPageSchema,
   adminStockErrorSchema,
   customersQuerySchema,
@@ -886,8 +887,8 @@ const adminCore = c.router({
       query: customersQuerySchema,
       responses: {
         200: adminCustomersPageSchema,
-        401: adminStockErrorSchema,
-        403: adminStockErrorSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
       },
       summary:
         'Owner and manager: customers with orders count and total spent (Fulfilled orders only), searched, sorted, paged',
@@ -898,9 +899,9 @@ const adminCore = c.router({
       pathParams: z.object({ id: z.coerce.number().int().positive() }),
       responses: {
         200: adminCustomerDetailSchema,
-        401: adminStockErrorSchema,
-        403: adminStockErrorSchema,
-        404: adminStockErrorSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
+        404: adminCustomersErrorSchema,
       },
       summary: 'Owner and manager: one customer with all their orders, newest first',
     },

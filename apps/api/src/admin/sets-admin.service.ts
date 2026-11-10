@@ -11,6 +11,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { belowReserve } from '../catalog/catalog.service';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import type { Edges } from '../edges';
 import { loadDiscovery, readComposition, readDiscoverySet } from '../sets/sets';
@@ -34,6 +35,7 @@ export class SetsAdminService {
       reserved,
       // the same not-for-sale rule as the shop: fewer than five fragrances sells nothing
       available,
+      belowReserve: belowReserve(row.onHand, reserved),
       photo: row.photoHash,
       isPlaceholder: row.isPlaceholder,
       composition: composition.map((f) => ({ id: f.id, name: f.name, hidden: f.hidden })),

@@ -159,13 +159,18 @@ async function restoreStock(db: ShotSql) {
 }
 
 const editFirst = async (page: Page) => {
-  await page.locator('tbody tr[data-testid^="stock-row-v"] button').first().click();
-  await page.locator('input[id^="on-hand-"]').waitFor();
+  await page
+    .locator(
+      '[data-testid^="stock-block-v"] button:visible, tr[data-testid^="stock-row-v"] button:visible',
+    )
+    .first()
+    .click();
+  await page.locator('input[id^="on-hand-"]:visible').waitFor();
 };
 /** The state screens are viewport shots of the open row: the full stock table is hundreds of rows tall. */
 const showEditor = (page: Page) =>
   page
-    .locator('input[id^="on-hand-"], [role=alert]')
+    .locator('input[id^="on-hand-"]:visible, [role=alert]:visible')
     .first()
     .evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
@@ -212,7 +217,7 @@ export const stockScreens: Screen[] = [
     teardown: ({ db }) => clearCustomers(db),
     act: async ({ page }) => {
       await editFirst(page);
-      await page.locator('input[id^="on-hand-"]').fill('1');
+      await page.locator('input[id^="on-hand-"]:visible').fill('1');
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]').first().waitFor();
       await showEditor(page);
@@ -225,7 +230,7 @@ export const stockScreens: Screen[] = [
     as: 'manager',
     act: async ({ page }) => {
       await editFirst(page);
-      const input = page.locator('input[id^="on-hand-"]');
+      const input = page.locator('input[id^="on-hand-"]:visible');
       await input.fill('15');
       // somebody else saves meanwhile: the row's own request, with the count the editor does not know
       await page.route('**/api/admin/volumes/*/on-hand', async (route) => {
@@ -238,6 +243,23 @@ export const stockScreens: Screen[] = [
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]').first().waitFor();
       await showEditor(page);
+    },
+  },
+  {
+    id: 'sets-on-hand-conflict',
+    path: '/sets',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      const input = page.locator('#set-on-hand');
+      await input.fill('7');
+      // somebody saved another count while this page was open
+      await page.route('**/api/admin/sets/discovery/on-hand', (route) =>
+        route.fulfill({ status: 409, json: { code: 'on_hand_changed', current: 12 } }),
+      );
+      await page.keyboard.press('Enter');
+      await page.locator('[role=alert]').first().waitFor();
+      await page.locator('#set-on-hand').evaluate((el) => el.scrollIntoView({ block: 'start' }));
     },
   },
   {

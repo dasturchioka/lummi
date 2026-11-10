@@ -252,6 +252,19 @@ describe('filters and search', () => {
     expect(zero.map((r) => r.volumeId)).toEqual([vb.id]);
   });
 
+  it('carries the level the server decided, for volumes and the Discovery set', async () => {
+    const { va, vb } = await arrange();
+    const rows = (await list()).rows;
+    const level = (id: number) => rows.find((r) => r.volumeId === id)?.level;
+    expect([level(va.id), level(vb.id)]).toEqual(['low', 'zero']);
+    expect(rows.find((r) => r.kind === 'discovery')?.level).toBe('ok');
+    await t.db.update(discoverySet).set({ onHand: 0 });
+    expect((await discoveryRow()).level).toBe('zero');
+    // the Discovery page reports the same warning flag as the stock page
+    const set = await manager.client.admin.sets.get();
+    expect(set.status === 200 && set.body.belowReserve).toBe(false);
+  });
+
   it('follows the threshold setting', async () => {
     const { va } = await arrange();
     await t.db.insert(settings).values({ key: 'stock.lowAvailableThreshold', value: 1 });
@@ -286,5 +299,24 @@ describe('filters and search', () => {
       'discovery',
     ]);
     expect((await list(manager, { q: 'zzzzqqq' })).rows).toEqual([]);
+  });
+
+  it('ignores apostrophe variants on both sides', async () => {
+    const [slug] = await slugsOf(t, 1);
+    await t.db
+      .update(fragrances)
+      .set({ name: 'Devil’s Intrigue' })
+      .where(eq(fragrances.slug, slug!));
+    for (const q of ['Devil’s', "Devil's", 'Devils', 'devilʻs int']) {
+      const rows = (await list(manager, { q })).rows.filter((r) => r.kind === 'volume');
+      expect(
+        rows.map((r) => r.name),
+        q,
+      ).toContain('Devil’s Intrigue');
+    }
+    await t.db.update(fragrances).set({ name: "Bal d'Afrique" }).where(eq(fragrances.slug, slug!));
+    expect(
+      (await list(manager, { q: 'Bal d’Afrique' })).rows.some((r) => r.name === "Bal d'Afrique"),
+    ).toBe(true);
   });
 });
