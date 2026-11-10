@@ -10,6 +10,7 @@ export function Field({
   label,
   hint,
   error,
+  aside,
   className,
   children,
 }: {
@@ -18,6 +19,8 @@ export function Field({
   hint?: string;
   /** A validation message; replaces the hint and marks the control. */
   error?: string;
+  /** A short readout at the right end of the label's line (a length counter). */
+  aside?: React.ReactNode;
   className?: string;
   children: React.ReactElement<{
     id?: string;
@@ -26,11 +29,21 @@ export function Field({
   }>;
 }) {
   const hintId = error || hint ? `${id}-hint` : undefined;
+  const labelEl = (
+    <label htmlFor={id} className="text-[12.5px] font-medium text-muted-foreground">
+      {label}
+    </label>
+  );
   return (
     <div className={cn('grid gap-1.5', className)}>
-      <label htmlFor={id} className="text-[12.5px] font-medium text-muted-foreground">
-        {label}
-      </label>
+      {aside ? (
+        <div className="flex items-baseline justify-between gap-3">
+          {labelEl}
+          {aside}
+        </div>
+      ) : (
+        labelEl
+      )}
       {React.cloneElement(children, {
         id,
         'aria-describedby': hintId,

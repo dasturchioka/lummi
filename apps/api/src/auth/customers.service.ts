@@ -1,4 +1,12 @@
-import { customers, eq, sql, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
+import {
+  broadcastDeliveries,
+  customers,
+  eq,
+  sql,
+  type CustomerRow,
+  type Db,
+  type DbOrTx,
+} from '@lummi/db';
 import { languageFromTelegram } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
@@ -206,13 +214,13 @@ export class CustomersService {
     });
   }
 
-  /** /start in the private chat: the customer opened the chat themselves, so the bot may write. */
+  /** /start in the private chat: the customer opened the chat themselves, so the bot may write (recorded as a grant). */
   async markStarted(telegramId: number, tx: DbOrTx = this.db): Promise<void> {
     await tx
       .update(customers)
       .set({
         botBlocked: false,
-        writeAccess: sql`case when ${customers.writeAccess} = 'refused' then 'granted'::write_access else ${customers.writeAccess} end`,
+        writeAccess: 'granted',
       })
       .where(eq(customers.telegramId, telegramId));
   }
@@ -228,6 +236,14 @@ export class CustomersService {
 }
 
 /**
+ * Customers a broadcast may reach: the bot is known to be able to start the conversation (they
+ * pressed /start or granted write access) and has not been blocked. Stricter than `canMessage`,
+ * which lets an order status try a customer whose answer is still unknown; a customer this
+ * accepts is always one `canMessage` accepts (a test keeps the two in step).
+ */
+export const broadcastReachableSql = sql`(${customers.botBlocked} = false and ${customers.writeAccess} = 'granted')`;
+
+/**
  * Everything that hangs on a customer record moves here when a fresh record is merged into the
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
  * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
@@ -241,6 +257,14 @@ export async function moveCustomerData(
   now: Date,
 ): Promise<void> {
   await moveCartData(tx, fromId, toId, now);
+  // A finished broadcast keeps its counts; on a (broadcast, customer) clash the older customer's row wins.
+  await tx.execute(sql`
+    insert into broadcast_deliveries (broadcast_id, customer_id, status, queued_at, sending_at, sent_at, error)
+    select broadcast_id, ${toId}, status, queued_at, sending_at, sent_at, error
+    from broadcast_deliveries where customer_id = ${fromId}
+    on conflict (broadcast_id, customer_id) do nothing
+  `);
+  await tx.delete(broadcastDeliveries).where(eq(broadcastDeliveries.customerId, fromId));
 }
 
 /** A lost race on the phone's unique index, or a deadlock between two relinks: run the transaction again. */

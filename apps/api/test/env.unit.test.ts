@@ -5,9 +5,19 @@ const valid = {
   DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/db',
   BOT_TOKEN: '1:abc',
   SESSION_SECRET: 'x'.repeat(32),
+  BOT_LINK: 'https://t.me/lummi_test_bot',
 };
 
 describe('parseEnv', () => {
+  it('requires an https BOT_LINK in production, and defaults to none elsewhere', () => {
+    const { BOT_LINK: _omit, ...noLink } = valid;
+    const prod = { ...noLink, TYPESAFE_API_KEY: 'k', NODE_ENV: 'production' };
+    expect(() => parseEnv(prod)).toThrow(/BOT_LINK/);
+    expect(() => parseEnv({ ...prod, BOT_LINK: 'http://t.me/x' })).toThrow(/https/);
+    expect(parseEnv({ ...prod, BOT_LINK: 'https://t.me/x' }).BOT_LINK).toBe('https://t.me/x');
+    expect(parseEnv(noLink).BOT_LINK).toBeUndefined();
+  });
+
   it('refuses the .env.example placeholder secret in production only', () => {
     const placeholder = { ...valid, SESSION_SECRET: PLACEHOLDER_SESSION_SECRET };
     expect(() =>

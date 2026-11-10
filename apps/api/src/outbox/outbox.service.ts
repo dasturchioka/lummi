@@ -182,7 +182,9 @@ export class OutboxService implements OnApplicationShutdown {
             .set({ failedAt: this.edges.clock.now(), error: 'blocked (403)' })
             .where(eq(outbox.id, id));
           // A private chat id is the customer's Telegram id; a group 403 is not a customer.
-          if (row.chatId > 0) await this.customers.markBotBlocked(row.chatId, true, tx);
+          if (row.chatId > 0 && !e.cannotInitiate) {
+            await this.customers.markBotBlocked(row.chatId, true, tx);
+          }
         });
         return 'blocked';
       }

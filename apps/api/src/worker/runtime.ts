@@ -43,7 +43,11 @@ export interface Sweep {
 export interface QueueProcessor {
   queue: string;
   concurrency?: number;
-  process(job: Job): Promise<void>;
+  /** Jobs per second for this queue, read once when the worker starts (a setting, so it can change). Unlimited when absent. */
+  ratePerSecond?: () => Promise<number>;
+  /** Used (with one warning in the log) when `ratePerSecond` fails at start, so deliveries never wait on a broken read. */
+  fallbackRatePerSecond?: number;
+  process(job: Job, worker: Worker): Promise<void>;
 }
 
 /** The worker process (built from a Nest application context, like the API). */
@@ -55,6 +59,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
   private readonly extraWorkers: { worker: Worker; connection: Redis }[] = [];
   private readonly failures = new Map<string, number>();
   private ticking = false;
+  private starting?: Promise<void>;
   private worker?: Worker;
   private connection?: Redis;
 
@@ -139,15 +144,31 @@ export class WorkerRuntime implements OnApplicationShutdown {
       limiter: { max: SEND_RATE_PER_SECOND, duration: 1000 },
     });
     this.worker.on('error', (e) => this.log.error(`queue error: ${describeError(e)}`));
-    for (const p of this.processors) {
-      const connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
-      const worker = new Worker(p.queue, (job) => p.process(job), {
-        connection,
-        concurrency: p.concurrency ?? 1,
-      });
-      worker.on('error', (e) => this.log.error(`queue ${p.queue} error: ${describeError(e)}`));
-      this.extraWorkers.push({ worker, connection });
+    // Starting stays synchronous; a queue with a rate reads its setting first, so its worker comes up a moment later.
+    this.starting = Promise.all(this.processors.map((p) => this.startQueue(p))).then(() => {});
+    this.starting.catch((e: unknown) => this.log.error(`worker start failed: ${describeError(e)}`));
+  }
+
+  private async startQueue(p: QueueProcessor): Promise<void> {
+    let rate: number | null = null;
+    if (p.ratePerSecond) {
+      try {
+        rate = await p.ratePerSecond();
+      } catch (e) {
+        rate = p.fallbackRatePerSecond ?? null;
+        this.log.warn(
+          `queue ${p.queue}: could not read its rate (${describeError(e)}); starting at ${rate ?? 'no limit'}/s`,
+        );
+      }
     }
+    const connection = new Redis(this.env.REDIS_URL, { maxRetriesPerRequest: null });
+    const worker: Worker = new Worker(p.queue, (job) => p.process(job, worker), {
+      connection,
+      concurrency: p.concurrency ?? 1,
+      ...(rate ? { limiter: { max: rate, duration: 1000 } } : {}),
+    });
+    worker.on('error', (e) => this.log.error(`queue ${p.queue} error: ${describeError(e)}`));
+    this.extraWorkers.push({ worker, connection });
   }
 
   private async process(job: Job<{ id: number }>): Promise<void> {
@@ -162,6 +183,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown(): Promise<void> {
+    await this.starting?.catch(() => undefined);
     await this.worker?.close();
     this.connection?.disconnect();
     for (const { worker, connection } of this.extraWorkers) {
