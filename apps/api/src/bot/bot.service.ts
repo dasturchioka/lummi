@@ -68,6 +68,8 @@ export class BotService implements OnApplicationShutdown {
     } else {
       await this.bot.api.setWebhook(this.env.WEBHOOK_URL!, {
         secret_token: this.env.WEBHOOK_SECRET!,
+        // A redeploy must never lose updates Telegram is holding.
+        drop_pending_updates: false,
         allowed_updates: [...ALLOWED_UPDATES],
       });
       this.log.log('webhook set');
