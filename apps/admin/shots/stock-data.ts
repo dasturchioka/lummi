@@ -219,7 +219,7 @@ export const stockScreens: Screen[] = [
       await editFirst(page);
       await page.locator('input[id^="on-hand-"]:visible').fill('1');
       await page.keyboard.press('Enter');
-      await page.locator('[role=alert]').first().waitFor();
+      await page.locator('[role=alert]:visible').first().waitFor();
       await showEditor(page);
     },
   },
@@ -241,7 +241,7 @@ export const stockScreens: Screen[] = [
         });
       });
       await page.keyboard.press('Enter');
-      await page.locator('[role=alert]').first().waitFor();
+      await page.locator('[role=alert]:visible').first().waitFor();
       await showEditor(page);
     },
   },
@@ -258,7 +258,7 @@ export const stockScreens: Screen[] = [
         route.fulfill({ status: 409, json: { code: 'on_hand_changed', current: 12 } }),
       );
       await page.keyboard.press('Enter');
-      await page.locator('[role=alert]').first().waitFor();
+      await page.locator('[role=alert]:visible').first().waitFor();
       await page.locator('#set-on-hand').evaluate((el) => el.scrollIntoView({ block: 'start' }));
     },
   },
