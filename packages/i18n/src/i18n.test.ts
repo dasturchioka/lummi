@@ -5,6 +5,7 @@ import {
   fill,
   formatDateTime,
   formatDayMonth,
+  formatDuration,
   formatMoney,
   formatPhone,
   languageFromTelegram,
@@ -23,6 +24,17 @@ describe('formatMoney', () => {
   });
   it('refuses non-integers', () => {
     expect(() => formatMoney(10.5, 'ru')).toThrow();
+  });
+});
+
+describe('formatDuration', () => {
+  it('reads whole hours, else whole minutes rounded down, in both languages', () => {
+    expect(formatDuration(43_200, 'ru')).toBe('12 часов');
+    expect(formatDuration(3600, 'ru')).toBe('1 час');
+    expect(formatDuration(86_400, 'ru')).toBe('24 часа');
+    expect(formatDuration(43_200, 'uz')).toBe('12 soat');
+    expect(formatDuration(5400, 'ru')).toBe('90 минут');
+    expect(formatDuration(5459, 'uz')).toBe('90 daqiqa');
   });
 });
 

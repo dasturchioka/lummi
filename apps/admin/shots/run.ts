@@ -18,6 +18,7 @@ import { chromium, type BrowserContext } from '@playwright/test';
 import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
+import { seedShotContent } from './content-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
@@ -224,6 +225,7 @@ async function main() {
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
   await seedShotBroadcasts(databaseUrl);
+  await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
   mkdirSync(outDir, { recursive: true });
   let count = 0;
   for (const lang of LANGS) {

@@ -50,6 +50,8 @@ import { HumoFeedController } from './humo/humo-feed.controller';
 import { HumoFeedService } from './humo/humo-feed.service';
 import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
+import { ContentAdminController, ContentController } from './content/content.controller';
+import { ContentService } from './content/content.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
 
@@ -84,6 +86,8 @@ export class AppModule {
         AuditController,
         CatalogAdminController,
         OnHandController,
+        ContentController,
+        ContentAdminController,
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
@@ -110,6 +114,7 @@ export class AppModule {
         DiscountSourceHooks,
         ReserveSweeps,
         CatalogAdminService,
+        ContentService,
         SearchService,
         CustomersService,
         DeliveryService,

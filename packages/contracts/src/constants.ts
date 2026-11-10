@@ -34,3 +34,39 @@ export type CatalogSort = (typeof CATALOG_SORTS)[number];
 /** How many cards the catalog list loads at a time, and the most one request may ask for. */
 export const CATALOG_PAGE_SIZE = 24;
 export const CATALOG_PAGE_MAX = 100;
+
+/**
+ * `startapp` parameter -> Mini App route: the one list of targets. The Mini App routes with it,
+ * the admin banner editor validates against it, and later tickets (broadcasts, set links) add
+ * their targets here. An unknown or missing value lands on Home; an unknown fragrance slug lands
+ * on the card's own not-found state, which leads on to the catalog.
+ */
+export const STATIC_START_TARGETS = {
+  home: '/',
+  catalog: '/catalog',
+  cart: '/cart',
+  orders: '/orders',
+  profile: '/profile',
+} as const;
+
+/** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
+export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
+/** The fixed targets in order, for the pickers: the banner editor and the broadcast composer. */
+export type StartTarget = keyof typeof STATIC_START_TARGETS;
+export const START_TARGETS = Object.keys(STATIC_START_TARGETS) as StartTarget[];
+
+/** A value an owner may link to (a banner, a broadcast button): a fixed target or a fragrance. */
+export const isStartTarget = (v: string): boolean =>
+  Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
+
+/** The info pages (ticket #21): fixed slugs in display order. The owner edits them; nobody adds one. */
+export const INFO_PAGE_SLUGS = [
+  'about',
+  'delivery-payment',
+  'returns',
+  'faq',
+  'contacts',
+  'offer',
+] as const;
+export type InfoPageSlug = (typeof INFO_PAGE_SLUGS)[number];
