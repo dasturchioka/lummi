@@ -82,6 +82,8 @@ export const discoverySetInputSchema = z.object({
 export type DiscoverySetInput = z.infer<typeof discoverySetInputSchema>;
 
 export const adminSetsErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid']),
+  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid', 'on_hand_changed']),
   fields: z.array(z.string()).optional(),
+  /** With `on_hand_changed`: the count as it is now. */
+  current: z.number().int().optional(),
 });

@@ -191,6 +191,18 @@ export const settingDefinitions = {
       uz: 'Mamlakat kodlari «+»siz, masalan 998 (Oʻzbekiston). Boshqa mamlakat raqami qabul qilinmaydi.',
     },
   },
+  /** The stock page marks a row «заканчивается» when its available is at or under this (spec Changes 2026-11-11). */
+  'stock.lowAvailableThreshold': {
+    schema: z.number().int().min(0).max(1000),
+    default: 3,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Порог «заканчивается» на складе', uz: 'Omborda «tugayapti» chegarasi' },
+    hint: {
+      ru: 'Строка склада подсвечивается, когда доступно не больше этого числа штук. Нуль подсвечивается всегда.',
+      uz: 'Mavjud miqdor shu sondan oshmasa, ombor qatori ajratib koʻrsatiladi. Nol har doim ajratiladi.',
+    },
+  },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
   'cart.suggestionsLimit': {
     schema: z.number().int().min(0).max(12),

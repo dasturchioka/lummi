@@ -184,7 +184,14 @@ export const fragranceListQuerySchema = z.object({
 });
 
 export const hiddenBodySchema = z.object({ hidden: z.boolean() });
-export const onHandBodySchema = z.object({ onHand: z.number().int().min(0).max(1_000_000) });
+export const onHandBodySchema = z.object({
+  onHand: z.number().int().min(0).max(1_000_000),
+  /**
+   * The on hand the editor was looking at. When it is sent and the stored count has moved, the
+   * write is refused with 409 `on_hand_changed` and the current count (a concurrent edit).
+   */
+  expected: z.number().int().min(0).optional(),
+});
 
 /** Dictionary entries (families and notes): RU/UZ names and aliases. */
 export const dictionaryInputSchema = z.object({
@@ -204,6 +211,8 @@ export const onHandItemSchema = z.object({
   volumeId: z.number().int(),
   fragranceId: z.number().int(),
   name: z.string(),
+  /** The fragrance is hidden from the catalog (its stock is still counted). */
+  hidden: z.boolean(),
   ml: z.number().int(),
   onHand: z.number().int(),
   reserved: z.number().int(),
@@ -228,4 +237,6 @@ export const catalogAdminErrorSchema = z.object({
   ]),
   /** Dotted field paths that failed a rule the schema cannot see (unknown ids, taken names). */
   fields: z.array(z.string()).optional(),
+  /** With `on_hand_changed` from a single-count edit: the count as it is now. */
+  current: z.number().int().optional(),
 });

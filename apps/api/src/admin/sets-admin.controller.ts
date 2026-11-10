@@ -23,10 +23,15 @@ export class SetsAdminController {
 
   @TsRestHandler(adminContract.sets.setOnHand)
   setOnHand(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.sets.setOnHand, async ({ body }) => ({
-      status: 200 as const,
-      body: await this.sets.setOnHand(actor, body.onHand),
-    }));
+    return tsRestHandler(adminContract.sets.setOnHand, async ({ body }) => {
+      const res = await this.sets.setOnHand(actor, body.onHand, body.expected);
+      return res.ok
+        ? { status: 200 as const, body: res.value }
+        : {
+            status: 409 as const,
+            body: { code: 'on_hand_changed' as const, current: res.current },
+          };
+    });
   }
 
   @UseGuards(OwnerGuard)

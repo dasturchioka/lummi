@@ -46,9 +46,9 @@ const whileTableLocked = <T>(table: string, run: () => Promise<T>) => lockedWhil
 async function reservedOf(slug: string) {
   const manager = await t.managerSession();
   const { id } = await tenMl(slug);
-  const res = await manager.client.admin.onHand.list({ query: {} });
+  const res = await manager.client.admin.stock.list({ query: {} });
   if (res.status !== 200) throw new Error(`stock list: ${res.status}`);
-  return res.body.find((r) => r.volumeId === id)?.reserved;
+  return res.body.rows.find((r) => r.volumeId === id)?.reserved;
 }
 
 describe('a Discovery set order (ADR 0009)', () => {

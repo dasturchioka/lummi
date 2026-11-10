@@ -80,9 +80,17 @@ export class SetsAdminService {
     });
   }
 
-  async setOnHand(actor: StaffRow, onHand: number): Promise<AdminDiscoverySet> {
+  /** Same rule as a volume's count (`CatalogAdminService.setOnHand`): `expected` guards a concurrent edit; below the reserve is allowed. */
+  async setOnHand(
+    actor: StaffRow,
+    onHand: number,
+    expected?: number,
+  ): Promise<Outcome<AdminDiscoverySet>> {
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, true);
+      if (expected !== undefined && old.onHand !== expected) {
+        return { ok: false, reason: 'on_hand_changed', current: old.onHand } as const;
+      }
       await tx
         .update(discoverySet)
         .set({ onHand, updatedAt: this.edges.clock.now() })
@@ -94,7 +102,7 @@ export class SetsAdminService {
         targetId: 'discovery',
         payload: { onHand: [old.onHand, onHand] },
       });
-      return this.get(tx);
+      return { ok: true, value: await this.get(tx) } as const;
     });
   }
 

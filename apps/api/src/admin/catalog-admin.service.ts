@@ -39,6 +39,8 @@ export type Failure = {
   ok: false;
   reason: 'not_found' | 'conflict' | 'invalid' | 'on_hand_changed' | 'try_again';
   fields?: string[];
+  /** With `on_hand_changed` from a single-count edit: the count as it is now. */
+  current?: number;
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
 const fail = (reason: Failure['reason'], fields?: string[]): Failure => ({
@@ -571,38 +573,31 @@ export class CatalogAdminService {
 
   // ---- on hand and photos ----
 
-  async onHandList(q?: string): Promise<OnHandItem[]> {
-    const where = q ? sql`${fragrances.name} ilike ${'%' + escapeLike(q) + '%'}` : undefined;
-    const rows = await this.db
-      .select({
-        volumeId: volumes.id,
-        fragranceId: fragrances.id,
-        name: fragrances.name,
-        ml: volumes.ml,
-        onHand: volumes.onHand,
-      })
-      .from(volumes)
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(where)
-      .orderBy(asc(sql`lower(${fragrances.name})`), asc(volumes.ml));
-    const reserved = await reservedByVolume(
-      this.db,
-      rows.map((r) => r.volumeId),
-    );
-    return rows.map((r) => this.onHandItem(r, reserved.get(r.volumeId) ?? 0));
-  }
-
-  async setOnHand(actor: StaffRow, volumeId: number, onHand: number): Promise<Outcome<OnHandItem>> {
+  /**
+   * The one write of a volume's on hand from the panel (the fragrance form's compare-and-set aside,
+   * which it shares the rule with). `expected` is the count the editor was shown: when the row under
+   * the lock holds another, nothing is written and the current count comes back (409). Below the
+   * reserve is allowed (ADR 0010); the item says so.
+   */
+  async setOnHand(
+    actor: StaffRow,
+    volumeId: number,
+    onHand: number,
+    expected?: number,
+  ): Promise<Outcome<OnHandItem>> {
     return transient(() =>
       this.db.transaction(async (tx) => {
         const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');
         if (!old) return fail('not_found');
+        if (expected !== undefined && old.onHand !== expected) {
+          return { ...fail('on_hand_changed'), current: old.onHand };
+        }
         await tx
           .update(volumes)
           .set({ onHand, ...(old.onHand !== onHand ? { isPlaceholder: false } : {}) })
           .where(eq(volumes.id, volumeId));
         const [f] = await tx
-          .select({ id: fragrances.id, name: fragrances.name })
+          .select({ id: fragrances.id, name: fragrances.name, hidden: fragrances.hidden })
           .from(fragrances)
           .where(eq(fragrances.id, old.fragranceId));
         await this.audit.record(tx, {
@@ -616,7 +611,14 @@ export class CatalogAdminService {
         return {
           ok: true,
           value: this.onHandItem(
-            { volumeId, fragranceId: f!.id, name: f!.name, ml: old.ml, onHand },
+            {
+              volumeId,
+              fragranceId: f!.id,
+              name: f!.name,
+              hidden: f!.hidden,
+              ml: old.ml,
+              onHand,
+            },
             reserved,
           ),
         } as const;
@@ -625,7 +627,14 @@ export class CatalogAdminService {
   }
 
   private onHandItem(
-    r: { volumeId: number; fragranceId: number; name: string; ml: number; onHand: number },
+    r: {
+      volumeId: number;
+      fragranceId: number;
+      name: string;
+      hidden: boolean;
+      ml: number;
+      onHand: number;
+    },
     reserved: number,
   ): OnHandItem {
     return {
