@@ -20,6 +20,7 @@ import {
 import {
   catalogAdminErrorSchema,
   dictionaryInputSchema,
+  noteInputSchema,
   dictionaryItemSchema,
   fragranceAdminSchema,
   fragranceInputSchema,
@@ -831,7 +832,7 @@ const adminCore = c.router({
       create: {
         method: 'POST',
         path: '/admin/catalog/notes',
-        body: dictionaryInputSchema,
+        body: noteInputSchema,
         responses: {
           201: dictionaryItemSchema,
           401: catalogAdminErrorSchema,
@@ -844,7 +845,7 @@ const adminCore = c.router({
         method: 'PUT',
         path: '/admin/catalog/notes/:id',
         pathParams: z.object({ id: z.coerce.number().int().positive() }),
-        body: dictionaryInputSchema,
+        body: noteInputSchema,
         responses: {
           200: dictionaryItemSchema,
           401: catalogAdminErrorSchema,

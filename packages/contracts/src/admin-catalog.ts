@@ -19,6 +19,10 @@ const mlSchema = z.union([z.literal(10), z.literal(30), z.literal(50)]);
 
 export const VOLUME_MLS = [10, 30, 50] as const;
 export const MAX_SIMILAR = 12;
+/** The most one volume can hold in stock (admin form and Excel import). */
+export const MAX_ON_HAND = 1_000_000;
+/** Key notes shown under the name: exactly this many, per language. */
+export const KEY_NOTE_COUNT = 3;
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
 
@@ -32,7 +36,7 @@ export const volumeInputSchema = z
     price: som,
     salePrice: som.nullable(),
     saleEndsOn: dateOnly.nullable(),
-    onHand: z.number().int().min(0).max(1_000_000),
+    onHand: z.number().int().min(0).max(MAX_ON_HAND),
     /**
      * The on hand the form was loaded with. On an existing volume the server writes `onHand` only
      * when it differs from this, and only if the stored count still equals it (ADR 0010: a count
@@ -68,8 +72,8 @@ export const fragranceInputSchema = z
     whenToWearRu: text(500),
     whenToWearUz: text(500),
     /** Exactly three, shown under the name and on list cards. */
-    keyNotesRu: z.array(text(60)).length(3),
-    keyNotesUz: z.array(text(60)).length(3),
+    keyNotesRu: z.array(text(60)).length(KEY_NOTE_COUNT),
+    keyNotesUz: z.array(text(60)).length(KEY_NOTE_COUNT),
     internalRemark: optionalText(1000),
     aliases: z.array(text(80)).max(20),
     uzumUrl: optionalText(500).refine((v) => !v || /^https?:\/\/\S+$/i.test(v), 'url'),
@@ -89,9 +93,12 @@ export const fragranceInputSchema = z
     if (new Set(v.similarIds).size !== v.similarIds.length) {
       ctx.addIssue({ code: 'custom', path: ['similarIds'], message: 'duplicate_similar' });
     }
-    const all = NOTE_LEVELS.flatMap((l) => v.notes[l]);
-    if (new Set(all).size !== all.length) {
-      ctx.addIssue({ code: 'custom', path: ['notes'], message: 'duplicate_note' });
+    // The same note may sit on two levels (the customer's guide does: lavender top and heart);
+    // twice inside one level is a mistake.
+    for (const l of NOTE_LEVELS) {
+      if (new Set(v.notes[l]).size !== v.notes[l].length) {
+        ctx.addIssue({ code: 'custom', path: ['notes', l], message: 'duplicate_note' });
+      }
     }
   });
 export type FragranceInput = z.infer<typeof fragranceInputSchema>;
@@ -184,13 +191,22 @@ export const fragranceListQuerySchema = z.object({
 });
 
 export const hiddenBodySchema = z.object({ hidden: z.boolean() });
-export const onHandBodySchema = z.object({ onHand: z.number().int().min(0).max(1_000_000) });
+export const onHandBodySchema = z.object({ onHand: z.number().int().min(0).max(MAX_ON_HAND) });
 
 /** Dictionary entries (families and notes): RU/UZ names and aliases. */
 export const dictionaryInputSchema = z.object({
   nameRu: text(80),
   nameUz: text(80),
   aliases: z.array(text(80)).max(20),
+});
+/**
+ * A note's name is written into comma-separated cells of the Excel file, so it may not contain a
+ * comma (#26): a note «A, B» would read back as two notes.
+ */
+export const noteInputSchema = dictionaryInputSchema.superRefine((v, ctx) => {
+  for (const path of ['nameRu', 'nameUz'] as const) {
+    if (v[path].includes(',')) ctx.addIssue({ code: 'custom', path: [path], message: 'comma_in_note' });
+  }
 });
 export type DictionaryInput = z.infer<typeof dictionaryInputSchema>;
 export const dictionaryItemSchema = dictionaryInputSchema.extend({

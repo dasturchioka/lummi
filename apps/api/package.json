@@ -16,6 +16,7 @@
     "bts:fetch": "node --import tsx src/cli/bts-fetch.ts",
     "bts:import": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/bts-import.ts",
     "seed:catalog": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-catalog.ts",
+    "seed:workbook": "node --import tsx src/cli/build-seed-workbook.ts",
     "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "@ts-rest/core": "~3.52.1",
     "@ts-rest/nest": "~3.52.1",
     "bullmq": "^6.7.2",
+    "exceljs": "^4.4.0",
     "grammy": "^1.46.0",
     "ioredis": "^6.0.0",
     "jose": "^6.2.16",
