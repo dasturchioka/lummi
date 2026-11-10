@@ -221,7 +221,8 @@ async function fillSetsCart(api: ApiClient) {
  * Sets at their worst (break-ui, #22): the five longest names and brands of the guide in the
  * Discovery set, a seven-digit set price (the builder costs the same), 99 of each set in the cart,
  * and a builder set whose five 10 ml bottles all ran out after it was added. `bestSets` puts back
- * whatever the set was before, so a rerun starts from the seed.
+ * the seed's set (the first five fragrances, 299 000, 10 boxes; `seedDiscoverySet`), whatever an
+ * interrupted run left behind.
  */
 const LONG_FIVE = [
   'baccarat-rouge-540',
@@ -239,15 +240,7 @@ const LONG_FIVE_NAMES = [
 ];
 const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
 const tenMlOf = `ml = 10 and fragrance_id in (select id from fragrances where slug = any($1))`;
-let savedSet: { price: number; onHand: number; ids: number[] } | undefined;
 async function worstSets(db: ShotDb) {
-  const [set] = (await db.query('select price, on_hand from discovery_set')).rows;
-  const items = await db.query('select fragrance_id from discovery_set_items order by position');
-  savedSet ??= {
-    price: Number(set?.price),
-    onHand: Number(set?.on_hand),
-    ids: items.rows.map((r) => Number(r.fragrance_id)),
-  };
   await db.query('update discovery_set set price = 1250000, on_hand = 120');
   await db.query('delete from discovery_set_items');
   await db.query(
@@ -259,17 +252,12 @@ async function worstSets(db: ShotDb) {
   await db.query(`update volumes set on_hand = 120 where ${tenMlOf}`, [LONG_FIVE]);
 }
 async function bestSets(db: ShotDb) {
-  if (savedSet) {
-    const { price, onHand, ids } = savedSet;
-    await db.query('update discovery_set set price = $1, on_hand = $2', [price, onHand]);
-    await db.query('delete from discovery_set_items');
-    await db.query(
-      `insert into discovery_set_items (position, fragrance_id)
-       select i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
-      [ids],
-    );
-    savedSet = undefined;
-  }
+  await db.query('update discovery_set set price = 299000, on_hand = 10');
+  await db.query('delete from discovery_set_items');
+  await db.query(
+    `insert into discovery_set_items (position, fragrance_id)
+     select row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
+  );
   for (const slug of [...LONG_FIVE, ...SOLD_FIVE]) await db.restore(slug);
 }
 /** Taps the builder rows of these fragrances, then brings the set box back into view. */
