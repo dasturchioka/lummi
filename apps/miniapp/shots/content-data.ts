@@ -31,7 +31,7 @@ const RU_HEADINGS = [
 
 const UZ_PARAGRAPHS = [
   'Har bir LUMMI ifori kayfiyatdan boshlanadi: shahardagi iliq oqshom, dengiz boʻyidagi tonggi salqinlik, uydagi sokin qish kuni. Biz mashhur atirlar asosida kompozitsiya tanlaymiz va u teride chiroyli ochilib, 24 soatgacha iz qoldirishiga erishamiz. Extrait de Parfum yuqori konsentratsiyasi kamroq surtib, uzoqroq taqib yurish imkonini beradi.',
-  'Buyurtma bir necha qadamda rasmiylashtiriladi: ifor va hajmni tanlang (10, 30 yoki 50 ml), savatga qoʻshing, BTS punkti va qabul qiluvchini koʻrsating. Yetkazib berish odatda {defaultTariff}, {freeDeliveryThreshold} dan boshlab esa bepul. Muddat — buyurtma BTS ga topshirilgandan keyin 48 soatgacha.',
+  'Buyurtma bir necha qadamda rasmiylashtiriladi: ifor va hajmni tanlang (10, 30 yoki 50 ml), savatga qoʻshing, BTS punkti va qabul qiluvchini koʻrsating. Yetkazib berish odatda {defaultTariff}, {freeDeliveryThreshold}dan boshlab esa bepul. Muddat — buyurtma BTSga topshirilgandan keyin 48 soatgacha.',
   'Tanlashda ikkilanayotgan boʻlsangiz, Discovery set toʻplamidan boshlang: bitta qutida 10 ml li beshta ifor. Har birini bir necha kun taqing, taassurotlaringizni yozib qoʻying va oʻzingizga yoqqanining toʻliq hajmi uchun qayting. Menejer {managerUsername} sevimli iforingizga mosini tanlashda yordam beradi.',
 ];
 const UZ_LIST = [

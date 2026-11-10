@@ -2,7 +2,8 @@ import type { BannerInput } from '@lummi/contracts';
 import { auditLog, eq, promoBanners, infoPages, settings } from '@lummi/db';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { PAGE_SEEDS, seedContent } from '../src/content/seed';
+import { normalizeUzbek } from '@lummi/i18n';
+import { PAGE_SEEDS, SLOGAN_SEED, seedContent } from '../src/content/seed';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -119,6 +120,7 @@ describe('customer content endpoints', () => {
       { key: 'pricing.freeDeliveryThreshold', value: 300_000 },
       { key: 'delivery.defaultTariff', value: 30_000 },
       { key: 'shop.managerUsername', value: '@other_manager' },
+      { key: 'orders.reserveTtlSeconds', value: 5400 },
     ]);
     const { client } = await t.signIn();
     const dp = await client.content.page({ params: { slug: 'delivery-payment' } });
@@ -126,11 +128,15 @@ describe('customer content endpoints', () => {
     if (dp.status !== 200 || contacts.status !== 200) throw new Error('read');
     expect(dp.body.bodyRu).toContain('300\u202f000\u202fсум');
     expect(dp.body.bodyRu).toContain('30\u202f000\u202fсум');
-    expect(dp.body.bodyUz).toContain('300\u202f000\u202fsoʻm');
+    // the UZ «from» suffix sits on the amount: «300 000 soʻmdan»
+    expect(dp.body.bodyUz).toContain('300\u202f000\u202fsoʻmdan');
+    // the payment window follows the reserve setting (ADR 0012)
+    expect(dp.body.bodyRu).toContain('есть 90 минут');
+    expect(dp.body.bodyUz).toContain('90 daqiqa vaqtingiz bor');
     expect(dp.body.bodyRu).toContain('до 48 часов');
     expect(contacts.body.bodyRu).toContain('[@other_manager](https://t.me/other_manager)');
     expect(`${dp.body.bodyRu}${dp.body.bodyUz}${contacts.body.bodyUz}`).not.toMatch(
-      /\{(freeDeliveryThreshold|defaultTariff|managerUsername|managerLink)\}/,
+      /\{(freeDeliveryThreshold|defaultTariff|managerUsername|managerLink|reserveTime)\}/,
     );
     // the admin keeps the placeholders, so the owner edits the template
     const admin = await owner.client.admin.content.pages.list();
@@ -138,6 +144,14 @@ describe('customer content endpoints', () => {
     expect(admin.body.find((p) => p.slug === 'delivery-payment')?.bodyRu).toContain(
       '{freeDeliveryThreshold}',
     );
+  });
+
+  it('the seeded UZ texts are written as an admin save stores them (oʻ and gʻ with U+02BB)', () => {
+    const uz = [SLOGAN_SEED.uz, ...PAGE_SEEDS.flatMap((p) => [p.titleUz, p.bodyUz])];
+    for (const text of uz) {
+      expect(text).not.toMatch(/\p{L}[\u2018']\p{L}/u);
+      expect(normalizeUzbek(text)).toBe(text);
+    }
   });
 
   it('the seeded drafts follow the copy rules', () => {

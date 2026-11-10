@@ -85,7 +85,7 @@ const RU_SECTION = `### Как выбрать аромат, который ст�
 Вопросы: [{managerUsername}]({managerLink}), [канал](https://t.me/lummi_uz), [старый сайт](http://lummi.uz).`;
 const UZ_SECTION = `### Hidlab koʻrmasdan oʻzingizga mos iforni qanday tanlash mumkin
 
-Discovery set toʻplamidan boshlang: 10 ml li beshta ifor. Har birini bir necha kun taqing, keyin toʻliq hajm uchun qayting. Yetkazib berish odatda {defaultTariff}, {freeDeliveryThreshold} dan bepul, muddat BTS ga topshirilgandan keyin 48 soatgacha.
+Discovery set toʻplamidan boshlang: 10 ml li beshta ifor. Har birini bir necha kun taqing, keyin toʻliq hajm uchun qayting. Yetkazib berish odatda {defaultTariff}, {freeDeliveryThreshold}dan bepul, muddat BTSga topshirilgandan keyin 48 soatgacha.
 
 - **Iliq, yogʻochli** — oqshom uchun
 - *Yangi* — tong va yoz uchun

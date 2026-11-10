@@ -25,7 +25,7 @@ import {
   type InfoPageRow,
   type StaffRow,
 } from '@lummi/db';
-import { fill, formatMoney, normalizeUzbek, type Language } from '@lummi/i18n';
+import { fill, formatDuration, formatMoney, normalizeUzbek, type Language } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
@@ -53,13 +53,15 @@ const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null 
 function fillBody(
   body: string,
   language: Language,
-  v: { threshold: number; tariff: number; manager: string },
+  v: { threshold: number; tariff: number; manager: string; reserveSeconds: number },
 ): string {
   return fill(body, {
     freeDeliveryThreshold: formatMoney(v.threshold, language),
     defaultTariff: formatMoney(v.tariff, language),
     managerUsername: v.manager,
     managerLink: `https://t.me/${v.manager.replace(/^@/, '')}`,
+    // how long an order waits for its payment (the reserve, ADR 0012): «12 часов» / «12 soat»
+    reserveTime: formatDuration(v.reserveSeconds, language),
   } satisfies Record<(typeof CONTENT_PLACEHOLDERS)[number], string>);
 }
 
@@ -156,11 +158,13 @@ export class ContentService {
       'pricing.freeDeliveryThreshold',
       'delivery.defaultTariff',
       'shop.managerUsername',
+      'orders.reserveTtlSeconds',
     ]);
     const v = {
       threshold: s['pricing.freeDeliveryThreshold'],
       tariff: s['delivery.defaultTariff'],
       manager: s['shop.managerUsername'],
+      reserveSeconds: s['orders.reserveTtlSeconds'],
     };
     const page = toPage(row);
     return {

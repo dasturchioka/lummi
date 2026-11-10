@@ -10,8 +10,9 @@ import { SLOGAN_KEY } from './content.service';
  * first question no longer uses the banned word «оригинал» (it asks about the known brands'
  * fragrances instead), and longevity reads «до 24 часов» / «24 soatgacha» as the customer decided
  * on 2026-11-07, not the draft's «[8–12]». Delivery follows the 2026-11-06 decision (BTS to a
- * pickup point, a tariff per region, free from a threshold, «до 48 часов после передачи в BTS»). Numbers and the manager's handle are
- * `{placeholders}` the API fills from the settings when a customer reads the page
+ * pickup point, a tariff per region, free from a threshold, «до 48 часов после передачи в BTS»).
+ * Numbers, the payment window and the manager's handle are `{placeholders}` the API fills from
+ * the settings when a customer reads the page
  * (`CONTENT_PLACEHOLDERS`), so a text can't drift from the admin. The returns window «[3] дней»
  * keeps its number but is still to be confirmed (open-questions). The public offer is a
  * placeholder: it comes from the customer's lawyer.
@@ -41,12 +42,12 @@ export const PAGE_SEEDS: PageSeed[] = [
 Найдите «свой» аромат и носите каждый день.`,
     bodyUz: `**LUMMI.** — dunyo mashhur iforlari asosidagi atirlar. Biz premium iforlarni hamma uchun qulay qilamiz: sifatli xomashyo, uzoq saqlanish va chiroyli qadoq.
 
-O‘z iforingizni toping va har kuni qo‘llang.`,
+Oʻz iforingizni toping va har kuni qoʻllang.`,
   },
   {
     slug: 'delivery-payment',
     titleRu: 'Доставка и оплата',
-    titleUz: 'Yetkazib berish va to‘lov',
+    titleUz: 'Yetkazib berish va toʻlov',
     bodyRu: `### Доставка
 
 Отправляем почтой BTS в пункт BTS, который вы выбираете при оформлении заказа. Цена зависит от области и показана при оформлении, по умолчанию {defaultTariff}. При заказе от {freeDeliveryThreshold} доставка бесплатная.
@@ -55,16 +56,16 @@ O‘z iforingizni toping va har kuni qo‘llang.`,
 
 ### Оплата
 
-Перевод на карту и загрузка чека. Заказ собираем после подтверждения оплаты. Время на оплату ограничено, оно показано в заказе.`,
+Перевод на карту и загрузка чека. На оплату после оформления есть {reserveTime}: всё это время товар ждёт вас. Заказ собираем после подтверждения оплаты.`,
     bodyUz: `### Yetkazib berish
 
-BTS pochtasi orqali buyurtma rasmiylashtirilganda tanlagan BTS punktingizga yuboramiz. Narx viloyatga bog‘liq va rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}. {freeDeliveryThreshold} dan boshlab buyurtmalar uchun yetkazib berish bepul.
+BTS pochtasi orqali buyurtma rasmiylashtirilganda tanlagan BTS punktingizga yuboramiz. Narx viloyatga bogʻliq va rasmiylashtirishda koʻrinadi, odatda {defaultTariff}. {freeDeliveryThreshold}dan boshlab buyurtmalar uchun yetkazib berish bepul.
 
-Muddat: buyurtma BTS ga topshirilgandan keyin 48 soatgacha. Aniqlashtirish kerak bo‘lsa, menejerga yozing: {managerUsername}.
+Muddat: buyurtma BTSga topshirilgandan keyin 48 soatgacha. Aniqlashtirish kerak boʻlsa, menejerga yozing: {managerUsername}.
 
-### To‘lov
+### Toʻlov
 
-Kartaga o‘tkazma va chekni yuklash. Buyurtma to‘lov tasdiqlangach yig‘iladi. To‘lash uchun vaqt cheklangan, u buyurtmada ko‘rsatiladi.`,
+Kartaga oʻtkazma va chekni yuklash. Rasmiylashtirgandan keyin toʻlash uchun {reserveTime} vaqtingiz bor: shu vaqt davomida mahsulot siz uchun saqlanadi. Buyurtma toʻlov tasdiqlangach yigʻiladi.`,
   },
   {
     slug: 'returns',
@@ -73,7 +74,7 @@ Kartaga o‘tkazma va chekni yuklash. Buyurtma to‘lov tasdiqlangach yig‘ilad
     bodyRu: `Если товар пришёл повреждённым, с протечкой или не тот, что заказан, напишите нам в течение 3 дней после получения, приложив фото. Мы заменим товар или вернём деньги.
 
 Вскрытая парфюмерия надлежащего качества обмену и возврату не подлежит.`,
-    bodyUz: `Agar mahsulot shikastlangan, oqib ketgan yoki buyurtma qilinganidan boshqa bo‘lsa, qabul qilgandan keyin 3 kun ichida rasm bilan bizga yozing. Mahsulotni almashtiramiz yoki pulni qaytaramiz.
+    bodyUz: `Agar mahsulot shikastlangan, oqib ketgan yoki buyurtma qilinganidan boshqa boʻlsa, qabul qilgandan keyin 3 kun ichida rasm bilan bizga yozing. Mahsulotni almashtiramiz yoki pulni qaytaramiz.
 
 Ochilgan sifatli atir-upa mahsulotlari almashtirilmaydi va qaytarilmaydi.`,
   },
@@ -99,34 +100,34 @@ Ochilgan sifatli atir-upa mahsulotlari almashtirilmaydi va qaytarilmaydi.`,
 
 ### Как оплатить?
 
-Переводом на карту: реквизиты и сумма появятся после оформления заказа, затем загрузите чек.
+Переводом на карту: реквизиты и сумма появятся после оформления заказа, затем загрузите чек. На оплату есть {reserveTime}.
 
 ### Сколько стоит доставка?
 
 Зависит от области, цена показана при оформлении, по умолчанию {defaultTariff}. От {freeDeliveryThreshold} доставка бесплатная. Срок: до 48 часов после передачи в BTS.`,
     bodyUz: `### Bu mashhur brendlarning iforlarimi?
 
-Yo‘q. Bu mashhur atirlar asosida yaratilgan LUMMI iforlari, sifatli atir xomashyosidan.
+Yoʻq. Bu mashhur atirlar asosida yaratilgan LUMMI iforlari, sifatli atir xomashyosidan.
 
 ### Ifor qancha saqlanadi?
 
-24 soatgacha, teri, ob-havo va iforga bog‘liq.
+24 soatgacha, teri, ob-havo va iforga bogʻliq.
 
 ### Qanday surtiladi?
 
-Bilak, bo‘yin va quloq orqasiga. Ishqalamang: ifor yaxshiroq ochiladi.
+Bilak, boʻyin va quloq orqasiga. Ishqalamang: ifor yaxshiroq ochiladi.
 
-### Hidlab ko‘rmagan bo‘lsam, iforni qanday tanlayman?
+### Hidlab koʻrmagan boʻlsam, iforni qanday tanlayman?
 
 Discovery set oling: bir nechta 10 ml ifor. Yoki menejerga yozing.
 
-### Qanday to‘layman?
+### Qanday toʻlayman?
 
-Kartaga o‘tkazma orqali: rekvizit va summa buyurtmadan keyin chiqadi, so‘ng chekni yuklang.
+Kartaga oʻtkazma orqali: rekvizit va summa buyurtmadan keyin chiqadi, soʻng chekni yuklang. Toʻlash uchun {reserveTime} vaqtingiz bor.
 
 ### Yetkazib berish qancha turadi?
 
-Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}. {freeDeliveryThreshold} dan boshlab bepul. Muddat: BTS ga topshirilgandan keyin 48 soatgacha.`,
+Viloyatga bogʻliq, narx rasmiylashtirishda koʻrinadi, odatda {defaultTariff}. {freeDeliveryThreshold}dan boshlab bepul. Muddat: BTSga topshirilgandan keyin 48 soatgacha.`,
   },
   {
     slug: 'contacts',
@@ -138,12 +139,12 @@ Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}
 - Telegram-канал: [t.me/lummi_uz](https://t.me/lummi_uz)
 - Instagram: [instagram.com/lummi.uz](https://instagram.com/lummi.uz)
 - Магазин LUMMI на Uzum Market`,
-    bodyUz: `Ifor tanlash va buyurtma bo‘yicha yordam berish uchun aloqadamiz.
+    bodyUz: `Ifor tanlash va buyurtma boʻyicha yordam berish uchun aloqadamiz.
 
 - Menejer: [{managerUsername}]({managerLink})
 - Telegram kanal: [t.me/lummi_uz](https://t.me/lummi_uz)
 - Instagram: [instagram.com/lummi.uz](https://instagram.com/lummi.uz)
-- Uzum Market’dagi LUMMI do‘koni`,
+- Uzum Market’dagi LUMMI doʻkoni`,
   },
   {
     slug: 'offer',
@@ -154,7 +155,7 @@ Viloyatga bog‘liq, narx rasmiylashtirishda ko‘rinadi, odatda {defaultTariff}
 По любым вопросам напишите менеджеру: [{managerUsername}]({managerLink}).`,
     bodyUz: `Ommaviy oferta matni shu yerda e’lon qilinadi.
 
-Savollar bo‘lsa, menejerga yozing: [{managerUsername}]({managerLink}).`,
+Savollar boʻlsa, menejerga yozing: [{managerUsername}]({managerLink}).`,
   },
 ];
 

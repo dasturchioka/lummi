@@ -2,6 +2,7 @@ export { LANGUAGES, DEFAULT_LANGUAGE, type Language, languageFromTelegram } from
 export { sharedMessages, type SharedMessages } from './shared';
 export { defineMessages } from './define';
 export { formatMoney } from './money';
+export { formatDuration } from './duration';
 export { plural, type PluralForms } from './plural';
 export { formatPhone } from './phone';
 export { fill } from './fill';

@@ -51,15 +51,17 @@ export type HomeContent = z.infer<typeof homeContentSchema>;
 
 /**
  * `{name}` placeholders the API fills in a page body when a customer reads it, from the settings
- * (`pricing.freeDeliveryThreshold`, `delivery.defaultTariff`, `shop.managerUsername`), so the
- * text can't drift from the admin. Money reads `100 000 сум` / `100 000 soʻm` per language;
- * `managerLink` is the manager's t.me link. The admin editor lists them.
+ * (`pricing.freeDeliveryThreshold`, `delivery.defaultTariff`, `shop.managerUsername`,
+ * `orders.reserveTtlSeconds`), so the text can't drift from the admin. Money reads `100 000 сум` /
+ * `100 000 soʻm` per language; `managerLink` is the manager's t.me link; `reserveTime` is how long
+ * an order waits for its payment («12 часов» / «12 soat»). The admin editor lists them.
  */
 export const CONTENT_PLACEHOLDERS = [
   'freeDeliveryThreshold',
   'defaultTariff',
   'managerUsername',
   'managerLink',
+  'reserveTime',
 ] as const;
 
 const slugSchema = z.enum(INFO_PAGE_SLUGS);
