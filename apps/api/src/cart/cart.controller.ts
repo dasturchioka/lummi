@@ -37,6 +37,27 @@ export class CartController {
     });
   }
 
+  @TsRestHandler(contract.cart.applyPromoCode)
+  applyPromoCode(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.cart.applyPromoCode, async ({ body }) => {
+      const res = await this.cart.applyPromoCode(customerId, body.code);
+      if (res.kind === 'too_many_attempts')
+        return {
+          status: 429 as const,
+          body: { code: 'too_many_attempts' as const, retryAfterSeconds: res.retryAfterSeconds },
+        };
+      return { status: 200 as const, body: await this.cart.get(customerId) };
+    });
+  }
+
+  @TsRestHandler(contract.cart.removePromoCode)
+  removePromoCode(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.cart.removePromoCode, async () => {
+      await this.cart.setPromoCode(customerId, null);
+      return { status: 200 as const, body: await this.cart.get(customerId) };
+    });
+  }
+
   @TsRestHandler(contract.cart.removeLine)
   removeLine(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.cart.removeLine, async ({ params }) => {

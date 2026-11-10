@@ -21,6 +21,9 @@ import { DB, EDGES } from '../tokens';
 import { loadCartQuote } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
+export type ApplyCodeOutcome =
+  | { kind: 'ok' }
+  | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 
 /** The customer's server-side cart (spec Changes 2026-11-10). Money comes only from `quote()`. */
 @Injectable()
@@ -201,8 +204,45 @@ export class CartService {
       await this.touch(tx, customerId);
       await tx
         .update(carts)
-        .set({ promoCode: code ? code.trim().toUpperCase() : null, discountChoice: null })
+        .set({ promoCode: code ? normalizeCode(code) : null, discountChoice: null })
         .where(eq(carts.customerId, customerId));
+    });
+  }
+
+  /**
+   * A code the customer typed (ticket #29). Codes are guessable, so each customer may type
+   * `promo.attemptLimit` of them per `promo.attemptWindowSeconds` (a fixed window from the first);
+   * past that the stored code stays as it was. Whatever the code, it is stored and the quote says
+   * whether it applies.
+   */
+  async applyPromoCode(customerId: number, code: string): Promise<ApplyCodeOutcome> {
+    return this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
+      const [row] = await tx
+        .select({ attempts: carts.promoAttempts, since: carts.promoAttemptsSince })
+        .from(carts)
+        .where(eq(carts.customerId, customerId))
+        .for('update');
+      const s = await readSettings(tx, ['promo.attemptLimit', 'promo.attemptWindowSeconds']);
+      const now = this.edges.clock.now();
+      const windowMs = s['promo.attemptWindowSeconds'] * 1000;
+      const since = row?.since ?? null;
+      const fresh = since === null || now.getTime() - since.getTime() >= windowMs;
+      const attempts = fresh ? 0 : (row?.attempts ?? 0);
+      if (!fresh && attempts >= s['promo.attemptLimit']) {
+        const left = since.getTime() + windowMs - now.getTime();
+        return { kind: 'too_many_attempts', retryAfterSeconds: Math.max(1, Math.ceil(left / 1000)) };
+      }
+      await tx
+        .update(carts)
+        .set({
+          promoCode: normalizeCode(code),
+          discountChoice: null,
+          promoAttempts: attempts + 1,
+          promoAttemptsSince: fresh ? now : since,
+        })
+        .where(eq(carts.customerId, customerId));
+      return { kind: 'ok' };
     });
   }
 
@@ -214,6 +254,9 @@ export class CartService {
       .onConflictDoUpdate({ target: carts.customerId, set: { updatedAt: this.edges.clock.now() } });
   }
 }
+
+/** Codes are stored trimmed and upper-case, so they match case-insensitively (spec Changes 2026-11-07). */
+const normalizeCode = (code: string) => code.trim().toUpperCase();
 
 /** The Sage thread's fill, whole percent: 100 once reached (or with no threshold), never 100 before. */
 function progress(q: {
