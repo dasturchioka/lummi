@@ -364,6 +364,27 @@ describe('the cart: a typed code', () => {
     });
   });
 
+  it('a set takes the code like any item and the order holds it; a marked-down bottle beside it does not', async () => {
+    const [a] = await slugs(1);
+    const s = await shopper();
+    await markDown(a!, 30, 120_000);
+    await s.add(a!, 30);
+    expect((await s.client.cart.addDiscovery({ body: { qty: 1 } })).status).toBe(200);
+    await createPromo();
+    // the Discovery set at 299 000 and a bottle marked down to 120 000: 10 % of the set only
+    expect((await s.apply('BLOGER10')).quote).toMatchObject({
+      itemsSubtotal: 419_000,
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 29_900 },
+      deliveryFee: 0,
+      total: 389_100,
+    });
+    expect(await placeOrder(s)).toMatchObject({
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 29_900 },
+      total: 389_100,
+    });
+    expect(await usesOf()).toMatchObject({ uses: 1 });
+  });
+
   it('says so when every item is marked down and the code is not flagged for them', async () => {
     const [a] = await slugs(1);
     const s = await shopper();
