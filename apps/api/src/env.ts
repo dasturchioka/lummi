@@ -34,6 +34,9 @@ const botModes = ['polling', 'webhook', 'off'] as const;
 export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
     API_HOST: z.string().min(1).default('127.0.0.1'),
     API_PORT: port.default(4000),
     DATABASE_URL: z.string().url(),
@@ -120,7 +123,11 @@ export const PLACEHOLDER_SESSION_SECRET = 'change-me-change-me-change-me-change-
 
 /** Throws with a readable list of problems; main.ts lets that kill the process. */
 export function parseEnv(source: Record<string, string | undefined> = process.env): Env {
-  const result = envSchema.safeParse(source);
+  // An empty variable counts as unset (NODE_ENV excepted: `NODE_ENV=` must not switch the production checks off): Compose passes `KEY=` for an optional key left blank in .env.
+  const given = Object.fromEntries(
+    Object.entries(source).filter(([k, v]) => v !== '' || k === 'NODE_ENV'),
+  );
+  const result = envSchema.safeParse(given);
   if (
     result.success &&
     result.data.NODE_ENV === 'production' &&

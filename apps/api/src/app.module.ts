@@ -32,6 +32,7 @@ import { SetsAdminService } from './admin/sets-admin.service';
 import { SetsController } from './sets/sets.controller';
 import { SetsService } from './sets/sets.service';
 import { SearchService } from './search/search.service';
+import { HealthController } from './health/health.controller';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './auth/auth.controller';
@@ -70,6 +71,7 @@ export class AppModule {
     return {
       module: AppModule,
       controllers: [
+        HealthController,
         AuthController,
         MeController,
         CatalogController,
