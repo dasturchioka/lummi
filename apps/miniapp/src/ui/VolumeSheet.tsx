@@ -5,26 +5,32 @@ import { Button } from './Button';
 import { Money } from './Money';
 import { NameLockup } from './NameLockup';
 import { Sheet } from './Sheet';
+import { AlertIcon } from './icons';
 import { Thumb } from './Thumb';
-import { VolumeTiles } from './VolumeTiles';
+import { VolumeStatus, VolumeTiles } from './VolumeTiles';
 
 /**
  * The list «+» with several volumes available asks which one (ticket #25): the fragrance as a
- * compact row, the card's own 10 / 30 / 50 ml tiles (mockup 03, price under each, sold-out ones
- * marked), and «В корзину · <price>» for the chosen one. It opens on the cheapest available, the
- * card's «от …». Loaded lazily, on the first press.
+ * compact row, the card's own 10 / 30 / 50 ml tiles (mockup 03, price under each; a sold-out one
+ * marked and not choosable; a markdown struck, with its row under the tiles as on the card), and
+ * «В корзину · <price>» for the chosen one. It opens on the cheapest available, the card's «от …».
+ * An add that fails says so here, above the button, where the shopper is looking (the shell's note
+ * would sit under the dim). Loaded lazily, on the first press.
  */
 export function VolumeSheet({
   item,
   open,
   onOpenChange,
   adding,
+  error,
   onAdd,
 }: {
   item: FragranceListItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   adding: boolean;
+  /** Why the last add failed, until the next one. */
+  error: string | null;
   onAdd: (ml: VolumeCard['ml']) => void;
 }) {
   const { t } = usePrefs();
@@ -52,7 +58,23 @@ export function VolumeSheet({
           </div>
         </div>
         {ml !== undefined ? (
-          <VolumeTiles volumes={item.volumes} selected={ml} onSelect={setMl} />
+          <div className="flex flex-col gap-3">
+            <VolumeTiles
+              volumes={item.volumes}
+              selected={ml}
+              onSelect={setMl}
+              soldOutChoosable={false}
+            />
+            {volume ? <VolumeStatus volume={volume} stock={false} /> : null}
+          </div>
+        ) : null}
+        {error ? (
+          <p role="alert" className="type-small -mb-1 flex items-start gap-2 text-ink">
+            <span className="mt-px shrink-0">
+              <AlertIcon size={16} />
+            </span>
+            {error}
+          </p>
         ) : null}
         <Button
           block

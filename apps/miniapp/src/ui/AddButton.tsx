@@ -1,7 +1,7 @@
 import type { CartDto, FragranceListItem, VolumeCard } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { addNote, lineQty } from '../cart/add-note';
 import { CART_KEY, useAddToCart } from '../cart/queries';
 import { usePrefs } from '../lib/prefs';
@@ -33,6 +33,7 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
   const qc = useQueryClient();
   const add = useAddToCart();
   const [sheet, setSheet] = useState<'closed' | 'open' | 'unmounted'>('unmounted');
+  const [sheetError, setSheetError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   useEffect(() => {
     if (!done) return;
@@ -41,6 +42,7 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
   }, [done]);
 
   const addVolume = (ml: VolumeCard['ml']) => {
+    setSheetError(null);
     const before = lineQty(qc.getQueryData<CartDto>(CART_KEY), item.slug, ml);
     add.mutate(
       { slug: item.slug, ml },
@@ -55,8 +57,11 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
           showShopNote(said.text);
         },
         onError: (e) => {
-          // stock moved under the list: say so and let the cards re-read what is true now
-          showShopNote(e.message === 'HTTP 409' ? t.cart.soldOut : t.cart.addFailed);
+          // stock moved under the list: say so and let the cards re-read what is true now; with
+          // the sheet up, in the sheet (the shell's note would sit under its dim)
+          const text = e.message === 'HTTP 409' ? t.cart.soldOut : t.cart.addFailed;
+          if (sheet === 'open') setSheetError(text);
+          else showShopNote(text);
           void qc.invalidateQueries({ queryKey: ['catalog'] });
           void qc.invalidateQueries({ queryKey: ['search'] });
         },
@@ -64,6 +69,10 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
     );
   };
 
+  const icon = add.isPending && sheet !== 'open' ? 'busy' : done ? 'done' : 'add';
+  // the first «+» of a card just appears with it; only a glyph that takes over grows in
+  const swapped = useRef(false);
+  if (icon !== 'add') swapped.current = true;
   return (
     <>
       <button
@@ -73,16 +82,26 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
         data-testid="list-add"
         disabled={add.isPending}
         onPointerDown={inStock.length > 1 ? () => void loadSheet() : undefined}
-        onClick={() => (inStock.length > 1 ? setSheet('open') : addVolume(inStock[0]!.ml))}
-        className="absolute right-1.5 bottom-1.5 z-10 grid size-8 place-items-center rounded-btn bg-btn text-btn-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] after:absolute after:-inset-1.5 active:scale-95 disabled:opacity-100"
+        onClick={() => {
+          if (inStock.length === 1) return addVolume(inStock[0]!.ml);
+          setSheetError(null);
+          setSheet('open');
+        }}
+        className="absolute right-1.5 bottom-1.5 z-10 grid size-8 place-items-center rounded-btn bg-btn text-btn-ink transition-[scale,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] after:absolute after:-inset-1.5 hover:opacity-90 active:scale-95 disabled:opacity-100"
       >
-        {add.isPending && sheet !== 'open' ? (
-          <Spinner size={16} />
-        ) : done ? (
-          <CheckIcon size={18} />
-        ) : (
-          <PlusIcon size={18} />
-        )}
+        {/* Each glyph (+, the spinner, the check) grows in from a blur as it takes over. */}
+        <span
+          key={icon}
+          className={`grid place-items-center transition-[opacity,scale,filter] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] ${swapped.current ? 'starting:scale-[0.6] starting:opacity-0 starting:blur-[2px]' : ''}`}
+        >
+          {icon === 'busy' ? (
+            <Spinner size={16} />
+          ) : icon === 'done' ? (
+            <CheckIcon size={18} />
+          ) : (
+            <PlusIcon size={18} />
+          )}
+        </span>
       </button>
       {sheet !== 'unmounted' ? (
         <Suspense fallback={null}>
@@ -91,6 +110,7 @@ function Add({ item, inStock }: { item: FragranceListItem; inStock: VolumeCard[]
             open={sheet === 'open'}
             onOpenChange={(open) => setSheet(open ? 'open' : 'closed')}
             adding={add.isPending}
+            error={sheetError}
             onAdd={addVolume}
           />
         </Suspense>

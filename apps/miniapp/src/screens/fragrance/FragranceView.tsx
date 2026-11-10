@@ -1,12 +1,12 @@
 import type { Bilingual, FragranceCard, VolumeCard } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { keepNumberWithWord, saleEndDate } from '../../lib/format';
+import { keepNumberWithWord } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
-import { Badge, FragranceBadge } from '../../ui/Badge';
+import { FragranceBadge } from '../../ui/Badge';
 import { BuyPair } from '../../ui/BuyPair';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
@@ -26,7 +26,7 @@ import {
   WaveIcon,
 } from '../../ui/icons';
 import { Screen } from '../../ui/Screen';
-import { VolumeTiles } from '../../ui/VolumeTiles';
+import { VolumeStatus, VolumeTiles } from '../../ui/VolumeTiles';
 
 const TIME_ICON = {
   day: <SunIcon size={24} />,
@@ -203,43 +203,6 @@ function Traits({ card }: { card: FragranceCard }) {
         value={t.card.time[card.timeOfDay]}
       />
     </ul>
-  );
-}
-
-/**
- * Under the tiles, for the chosen volume that can be bought: «В наличии» with a Sage dot and,
- * during a markdown, a row that names the volume it belongs to («10 мл · −20% · до 15 ноября»;
- * ADR 0008: no timer). A sold-out volume shows nothing here: its tile and the dock already say it.
- */
-function VolumeStatus({ volume }: { volume: VolumeCard }) {
-  const { t, language } = usePrefs();
-  if (volume.available === 0) return null;
-  const until =
-    volume.saleEndsAt !== null
-      ? fill(t.card.saleUntil, { date: saleEndDate(volume.saleEndsAt, language) })
-      : null;
-  return (
-    <div className="type-small flex flex-col gap-1.5 text-muted">
-      <span className="flex items-center gap-2" data-availability="in-stock">
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-pill bg-sage" />
-        {t.card.inStock}
-      </span>
-      {volume.salePrice !== null ? (
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          <span className="text-ink">
-            {volume.ml} {t.card.ml}
-          </span>
-          <span aria-hidden="true">·</span>
-          <Badge tone="discount">−{volume.salePercent}%</Badge>
-          {until ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="whitespace-nowrap">{until}</span>
-            </>
-          ) : null}
-        </p>
-      ) : null}
-    </div>
   );
 }
 
