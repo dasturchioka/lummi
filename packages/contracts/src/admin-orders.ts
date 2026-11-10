@@ -6,7 +6,12 @@ import { ORDER_ACTIONS, ORDER_ACTOR_TYPES } from './order-machine';
 import { transitionPayloadSchemas } from './order-transition-payloads';
 import { orderSchema, orderStatusSchema } from './orders';
 import { RECEIPT_FILE_KINDS } from './receipt-upload';
-import { RECEIPT_REJECT_REASONS, RECEIPT_VERDICTS } from './receipt-review';
+import {
+  RECEIPT_CHECK_OUTCOMES,
+  RECEIPT_REJECT_REASONS,
+  RECEIPT_REVIEW_REASONS,
+  RECEIPT_VERDICTS,
+} from './receipt-review';
 
 const som = z.number().int().nonnegative();
 const id = z.number().int().positive();
@@ -74,6 +79,11 @@ export type AdminOrdersPageDto = z.infer<typeof adminOrdersPageSchema>;
 
 /** A staff member as an entry names them; `name` is null once they were removed. */
 const staffRefSchema = z.object({ id, name: z.string().nullable() });
+/** Who confirmed a payment: the receipt AI, or a staff member (null name once removed). */
+const confirmerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('ai') }),
+  z.object({ type: z.literal('staff'), id, name: z.string().nullable() }),
+]);
 
 /**
  * A Credit as the admin shows it (GLOSSARY): the exact amount in tiyin, the whole so'm matching
@@ -92,6 +102,31 @@ export const adminCreditSchema = z.object({
   order: z.object({ number: z.number().int() }).nullable(),
 });
 export type AdminCreditDto = z.infer<typeof adminCreditSchema>;
+
+/**
+ * A credit the link dialog offers for an order: the credit, and how it differs from the order's
+ * Amount due (in tiyin: 0 fits, above 0 more was sent, below 0 less). Another card shows as
+ * `onShopCard: false`. Staff may link one that differs only with a reason (#32).
+ */
+export const creditOptionSchema = adminCreditSchema.extend({ differenceTiyin: z.number().int() });
+export type CreditOptionDto = z.infer<typeof creditOptionSchema>;
+
+/** At most this many «other» credits come with the options, newest first. */
+export const CREDIT_OTHERS_LIMIT = 50;
+
+/**
+ * `GET /admin/orders/:number/credit-options`: the Candidate credits first (unlinked, the Amount
+ * due to the so'm, on the shop card, no earlier than the order's minute), oldest first; then the
+ * other unlinked credits from the order's minute on («показать другие»), newest first.
+ */
+export const creditOptionsSchema = z.object({
+  amountDue: som,
+  candidates: z.array(creditOptionSchema),
+  others: z.array(creditOptionSchema),
+  /** How many others there are in all, past the limit. */
+  othersTotal: z.number().int().nonnegative(),
+});
+export type CreditOptionsDto = z.infer<typeof creditOptionsSchema>;
 
 export const CREDIT_LINK_FILTERS = ['all', 'unlinked', 'linked'] as const;
 
@@ -116,6 +151,28 @@ export const adminCreditsPageSchema = z.object({
 });
 export type AdminCreditsPageDto = z.infer<typeof adminCreditsPageSchema>;
 
+/** One answer of the receipt AI about a receipt (`receipt_checks`, #32): read-only, for staff. */
+export const receiptCheckSchema = z.object({
+  id,
+  at,
+  /** How many candidate credits it was shown. */
+  candidates: z.number().int().positive(),
+  provider: z.enum(['typesafe', 'openai', 'none']),
+  /** The probabilities in 0..1 (ADR 0013). */
+  isReceipt: z.number(),
+  amountMatches: z.number(),
+  recipientMatches: z.number(),
+  choiceConfidence: z.number(),
+  chosenCreditId: z.number().int().nullable(),
+  /** The judge's own verdict; only this ever confirmed anything. */
+  confirmed: z.boolean(),
+  /** Why it did not confirm, as the judge put it (a failure, a refusal, below threshold). */
+  reason: z.string().nullable(),
+  /** What came of it; null while it waits to be acted on. */
+  outcome: z.enum(RECEIPT_CHECK_OUTCOMES).nullable(),
+});
+export type ReceiptCheckDto = z.infer<typeof receiptCheckSchema>;
+
 /**
  * One Receipt on the order page. The image is served only by the private staff endpoint
  * (`/admin/receipts/:id/file`, ADR 0020); `width` and `height` are the normalised image's.
@@ -130,6 +187,12 @@ export const adminReceiptSchema = z.object({
   size: z.number().int().positive(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
+  /** Why it last went to manual review (#32): a duplicate file, the AI unsure, the AI unreachable. */
+  reviewReason: z.enum(RECEIPT_REVIEW_REASONS).nullable(),
+  /** The receipt AI's answers about it, newest first. */
+  checks: z.array(receiptCheckSchema),
+  /** Who confirmed the payment with it, and when. */
+  confirmation: z.object({ by: confirmerSchema, at }).nullable(),
   /** Who turned it down, when, why (the preset) and in what words (the note). */
   rejection: z
     .object({
@@ -183,13 +246,32 @@ export const adminOrderSchema = z.object({
   }),
   /** Newest first. */
   receipts: z.array(adminReceiptSchema),
-  /** The Credit linked to the order when its payment was confirmed. */
-  credit: adminCreditSchema.nullable(),
+  /**
+   * The Credit linked to the order when its payment was confirmed, with how it was linked: the
+   * difference from the Amount due (tiyin), whether it went to another card, the staff reason for
+   * either, who linked it and when.
+   */
+  credit: adminCreditSchema
+    .extend({
+      link: z.object({
+        differenceTiyin: z.number().int(),
+        offShopCard: z.boolean(),
+        reason: z.string().nullable(),
+        by: confirmerSchema,
+        at,
+      }),
+    })
+    .nullable(),
   events: z.array(adminOrderEventSchema),
   /** The audit entries about this order, newest first. */
   audit: z.array(auditEntrySchema),
   /** What the dialogs check before sending (settings). */
-  limits: z.object({ rejectNoteMax: z.number().int().positive() }),
+  limits: z.object({
+    rejectNoteMax: z.number().int().positive(),
+    /** A staff reason for linking a credit that differs: at least `min`, at most `max` characters. */
+    linkReasonMin: z.number().int().positive(),
+    linkReasonMax: z.number().int().positive(),
+  }),
 });
 export type AdminOrderDto = z.infer<typeof adminOrderSchema>;
 
@@ -225,6 +307,19 @@ export type StaffCancelBody = z.input<typeof staffCancelBodySchema>;
 export const rejectReceiptBodySchema = transitionPayloadSchemas.reject_receipt;
 export type RejectReceiptBody = z.input<typeof rejectReceiptBodySchema>;
 
+/**
+ * `POST /admin/orders/:number/confirm-payment`: link the credit the manager picked and confirm the
+ * payment through #32's `PaymentConfirmation` (actor: that staff member). With the order's waiting
+ * receipt («Чек на проверке») or, for a credit that came with no receipt, `receiptId: null` while
+ * the order is «Ожидает оплаты» (TZ §4). A credit of another amount or card needs `reason`.
+ */
+export const staffConfirmBodySchema = z.object({
+  creditId: id,
+  receiptId: id.nullable(),
+  reason: transitionPayloadSchemas.confirm_payment.shape.reason,
+});
+export type StaffConfirmBody = z.input<typeof staffConfirmBodySchema>;
+
 export const adminOrderErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found']),
 });
@@ -235,17 +330,31 @@ export const adminOrderErrorSchema = z.object({
  * database gave up twice on a deadlock.
  */
 export const adminOrderConflictSchema = z.union([
-  z.object({ code: z.enum(['status_changed', 'receipt_changed']), order: adminOrderSchema }),
+  z.object({
+    code: z.enum(['status_changed', 'receipt_changed', 'credit_taken']),
+    order: adminOrderSchema,
+  }),
   z.object({ code: z.literal('try_again') }),
 ]);
 export type AdminOrderConflict = z.infer<typeof adminOrderConflictSchema>;
 
 /**
  * 422: no such move from the status the manager saw, a payload that does not fit (a reason staff
- * may not give from there), or a note over the setting (`max` comes along).
+ * may not give from there), a note over the setting (`max` comes along); or, linking a credit,
+ * one that differs from the order without a reason (`mismatch` names what differs), a reason out
+ * of bounds (`min`, `max`), or a credit from before the order (`credit_mismatch`).
  */
 export const adminOrderRefusalSchema = z.object({
-  code: z.enum(['not_allowed', 'invalid_payload', 'note_too_long']),
+  code: z.enum([
+    'not_allowed',
+    'invalid_payload',
+    'note_too_long',
+    'reason_required',
+    'reason_invalid',
+    'credit_mismatch',
+  ]),
+  min: z.number().int().positive().optional(),
   max: z.number().int().positive().optional(),
+  mismatch: z.array(z.enum(['amount', 'card'])).optional(),
 });
 export type AdminOrderRefusal = z.infer<typeof adminOrderRefusalSchema>;

@@ -28,6 +28,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
+import { PaymentMatching } from '../src/payment/payment-matching';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper, whileLockedUntil } from './harness/orders';
 import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
@@ -122,11 +123,11 @@ async function orderRow(number: number) {
 const machine = () => t.app.get(OrderStatusService);
 
 /** The shopper sends a receipt through the intake (#28): the order goes «Чек на проверке». */
-async function sendReceipt(number: number) {
+async function sendReceipt(number: number, image?: Buffer) {
   const { customerId } = await orderRow(number);
   const sent = await t.app
     .get(ReceiptsService)
-    .submit(customerId, number, await uniqueReceiptImage(), {
+    .submit(customerId, number, image ?? (await uniqueReceiptImage()), {
       fileName: 'chek.png',
       source: 'miniapp',
     });
@@ -450,7 +451,7 @@ describe('the order page', () => {
       ['order.receipt_submitted', 'Ali'],
       ['order.created', 'Ali'],
     ]);
-    expect(page.limits).toEqual({ rejectNoteMax: 300 });
+    expect(page.limits).toEqual({ rejectNoteMax: 300, linkReasonMin: 3, linkReasonMax: 500 });
   });
 
   it('an unknown number is 404, however long', async () => {
@@ -1075,5 +1076,312 @@ describe('the credits list', () => {
     expect(await amounts({ pageSize: 1, page: 3 })).toEqual([
       [149_000, '2026-11-07T18:30:00.000Z'],
     ]);
+  });
+});
+
+describe('link a credit and confirm the payment (#32 PaymentConfirmation, actor: the manager)', () => {
+  /** A placed order of Ali's; its id and amount due. */
+  async function unpaidOrder(slugIndex = 0) {
+    const client = await shopper(t, ali, '998901112233');
+    const slug = (await firstSlugs(slugIndex + 1))[slugIndex]!;
+    return orderRow(await placeOrder(client, [slug]));
+  }
+  const MIN = 60_000;
+
+  it('offers the Candidate credits first, then other unlinked credits after the order, never one from before it or one taken', async () => {
+    t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
+    const before = await recordCredit(t, { som: 94_000, at: new Date('2026-11-09T09:58:00Z') });
+    const o = await unpaidOrder();
+    t.edges.clock.advance(5 * MIN);
+    const exact = await recordCredit(t, { som: o.amountDue });
+    const otherCard = await recordCredit(t, { som: o.amountDue, last4: '9876' });
+    const more = await recordCredit(t, { som: o.amountDue + 5_000 });
+    const tiyin = await recordCredit(t, { som: o.amountDue, tiyin: 50 });
+    // a credit that already paid another order
+    const other = await unpaidOrder(1);
+    const otherReceipt = await sendReceipt(other.number);
+    await payWithCredit(t, other, otherReceipt);
+    const { client } = await t.managerSession();
+    const res = await client.admin.orders.creditOptions({ params: { number: o.number } });
+    expect(res.status).toBe(200);
+    if (res.status !== 200) return;
+    expect(res.body.amountDue).toBe(o.amountDue);
+    expect(res.body.candidates.map((c) => [c.id, c.differenceTiyin, c.onShopCard])).toEqual([
+      [exact, 0, true],
+    ]);
+    expect(res.body.others.map((c) => [c.id, c.differenceTiyin, c.onShopCard])).toEqual([
+      [tiyin, 50, true],
+      [more, 500_000, true],
+      [otherCard, 0, false],
+    ]);
+    expect(res.body.othersTotal).toBe(3);
+    expect([...res.body.candidates, ...res.body.others].map((c) => c.id)).not.toContain(before);
+  });
+
+  it('confirms an unpaid order with a credit that came with no receipt, audited with the manager', async () => {
+    const o = await unpaidOrder();
+    t.edges.clock.advance(3 * MIN);
+    const creditId = await recordCredit(t, { som: o.amountDue });
+    const manager = await t.managerSession();
+    const res = await manager.client.admin.orders.confirmPayment({
+      params: { number: o.number },
+      body: { creditId, receiptId: null },
+    });
+    expect(res.status).toBe(200);
+    if (res.status !== 200) return;
+    expect(res.body.order.status).toBe('payment_confirmed');
+    expect(res.body.payment).toBe('paid');
+    expect(res.body.credit).toMatchObject({
+      id: creditId,
+      amountTiyin: o.amountDue * 100,
+      onShopCard: true,
+      order: { number: o.number },
+      link: {
+        differenceTiyin: 0,
+        offShopCard: false,
+        reason: null,
+        by: { type: 'staff', id: manager.staff.id, name: 'Manager' },
+      },
+    });
+    const [audit] = await auditOf(o.number, 'order.payment_confirmed');
+    expect(audit).toMatchObject({
+      actorType: 'staff',
+      actorId: manager.staff.id,
+      payload: { creditId, receiptId: null },
+    });
+    expect((await messages()).map((m) => m.text.split('\n')[0])).toEqual([
+      `Оплата заказа № ${o.number} подтверждена ✅`,
+    ]);
+    // the credits list shows the link
+    const linked = await manager.client.admin.credits.list({ query: { linked: 'linked' } });
+    expect(linked.status === 200 && linked.body.items.map((c) => [c.id, c.order])).toEqual([
+      [creditId, { number: o.number }],
+    ]);
+    const unlinked = await manager.client.admin.credits.list({ query: { linked: 'unlinked' } });
+    expect(unlinked.status === 200 && unlinked.body.total).toBe(0);
+  });
+
+  it('confirms a receipt held for manual review with the credit the manager picks; the page shows the AI answer', async () => {
+    const o = await unpaidOrder();
+    const receiptId = await sendReceipt(o.number);
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: o.amountDue });
+    // the AI looks and is not sure: the receipt waits for a person (#32)
+    t.edges.receiptJudge.verdicts = [
+      {
+        isReceipt: 0.97,
+        amountMatches: 0.55,
+        recipientMatches: 0.91,
+        chosenCreditId: creditId,
+        choiceConfidence: 0.42,
+        confirmed: false,
+        provider: 'typesafe',
+        reason: 'below threshold',
+      },
+    ];
+    await t.app.get(PaymentMatching).check(receiptId);
+    const manager = await t.managerSession();
+    const held = await manager.client.admin.orders.get({ params: { number: o.number } });
+    expect(held.status === 200 && held.body.payment).toBe('manual_review');
+    expect(held.status === 200 && held.body.receipts[0]).toMatchObject({
+      id: receiptId,
+      verdict: 'manual_review',
+      reviewReason: 'not_confirmed',
+      confirmation: null,
+      checks: [
+        {
+          candidates: 1,
+          provider: 'typesafe',
+          isReceipt: 0.97,
+          amountMatches: 0.55,
+          recipientMatches: 0.91,
+          choiceConfidence: 0.42,
+          chosenCreditId: creditId,
+          confirmed: false,
+          reason: 'below threshold',
+          outcome: 'manual_review',
+        },
+      ],
+    });
+    expect(held.status === 200 && held.body.credit).toBeNull();
+
+    const res = await manager.client.admin.orders.confirmPayment({
+      params: { number: o.number },
+      body: { creditId, receiptId },
+    });
+    expect(res.status).toBe(200);
+    expect(res.status === 200 && res.body.order.status).toBe('payment_confirmed');
+    expect(res.status === 200 && res.body.receipts[0]).toMatchObject({
+      verdict: 'manager_confirmed',
+      confirmation: { by: { type: 'staff', id: manager.staff.id, name: 'Manager' } },
+    });
+    const [audit] = await auditOf(o.number, 'order.payment_confirmed');
+    expect(audit).toMatchObject({ actorType: 'staff', actorId: manager.staff.id });
+  });
+
+  it('a credit of another amount or card needs the manager’s reason; then it links, the difference kept', async () => {
+    const o = await unpaidOrder();
+    const receiptId = await sendReceipt(o.number);
+    t.edges.clock.advance(2 * MIN);
+    const more = await recordCredit(t, { som: o.amountDue + 5_000, last4: '9876' });
+    const { client, staff: manager } = await t.managerSession();
+    const confirm = (reason?: string) =>
+      client.admin.orders.confirmPayment({
+        params: { number: o.number },
+        body: { creditId: more, receiptId, ...(reason === undefined ? {} : { reason }) },
+      });
+    const first = await confirm();
+    expect(first.status).toBe(422);
+    expect(first.body).toEqual({ code: 'reason_required', mismatch: ['amount', 'card'] });
+    // the body's own bound (3 characters) refuses a slip; the setting caps the length (500)
+    const { cookie } = await t.managerSession();
+    const short = await fetch(`${t.baseUrl}/admin/orders/${o.number}/confirm-payment`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ creditId: more, receiptId, reason: 'ok' }),
+    });
+    expect(short.status).toBe(400);
+    const long = await confirm('я'.repeat(501));
+    expect(long.status).toBe(422);
+    expect(long.body).toEqual({ code: 'reason_invalid', min: 3, max: 500 });
+    expect((await orderRow(o.number)).status).toBe('receipt_review');
+
+    const res = await confirm('Перевели с запасом на старую карту, разницу вернём');
+    expect(res.status).toBe(200);
+    expect(res.status === 200 && res.body.credit?.link).toMatchObject({
+      differenceTiyin: 500_000,
+      offShopCard: true,
+      reason: 'Перевели с запасом на старую карту, разницу вернём',
+      by: { type: 'staff', id: manager.id },
+    });
+  });
+
+  it('a credit from before the order never pays it', async () => {
+    t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
+    const early = await recordCredit(t, { som: 94_000, at: new Date('2026-11-09T09:30:00Z') });
+    const o = await unpaidOrder();
+    const { client } = await t.managerSession();
+    const res = await client.admin.orders.confirmPayment({
+      params: { number: o.number },
+      body: { creditId: early, receiptId: null, reason: 'Покупатель перевёл заранее' },
+    });
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ code: 'credit_mismatch' });
+  });
+
+  it('a stale screen gets 409 with the order as it is now', async () => {
+    const o = await unpaidOrder();
+    const receiptId = await sendReceipt(o.number);
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: o.amountDue });
+    const { client } = await t.managerSession();
+    // the screen still showed «Ожидает оплаты», but a receipt came in
+    const noReceipt = await client.admin.orders.confirmPayment({
+      params: { number: o.number },
+      body: { creditId, receiptId: null },
+    });
+    expect(noReceipt.status).toBe(409);
+    expect(noReceipt.status === 409 && 'order' in noReceipt.body && noReceipt.body).toMatchObject({
+      code: 'status_changed',
+      order: { order: { status: 'receipt_review' } },
+    });
+    expect(
+      (
+        await client.admin.orders.confirmPayment({
+          params: { number: o.number },
+          body: { creditId, receiptId },
+        })
+      ).status,
+    ).toBe(200);
+    // and a second press
+    const again = await client.admin.orders.confirmPayment({
+      params: { number: o.number },
+      body: { creditId, receiptId },
+    });
+    expect(again.status).toBe(409);
+    expect(again.status === 409 && 'order' in again.body && again.body.order.order.status).toBe(
+      'payment_confirmed',
+    );
+  });
+
+  it('two managers link one credit to two orders at once: one pays, the other hears credit_taken', async () => {
+    const a = await unpaidOrder(0);
+    const client = await shopper(t, vali, '998935556677');
+    const bNumber = await placeOrder(client, [(await firstSlugs(1))[0]!]);
+    const b = await orderRow(bNumber);
+    expect(b.amountDue).toBe(a.amountDue);
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: a.amountDue });
+    const one = await t.managerSession();
+    const two = await t.signInStaff('manager', SECOND_MANAGER);
+    const results = await whileLockedUntil(t, 'order_events', 2, () =>
+      Promise.all([
+        one.client.admin.orders.confirmPayment({
+          params: { number: a.number },
+          body: { creditId, receiptId: null },
+        }),
+        two.client.admin.orders.confirmPayment({
+          params: { number: b.number },
+          body: { creditId, receiptId: null },
+        }),
+      ]),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.status === 409 && 'order' in loser.body && loser.body).toMatchObject({
+      code: 'credit_taken',
+      order: { order: { status: 'awaiting_payment' } },
+    });
+    const paid = await t.db.select().from(orders).where(eq(orders.creditId, creditId));
+    expect(paid).toHaveLength(1);
+  });
+
+  it('a duplicate receipt, which the AI never confirms, is confirmed by a manager', async () => {
+    const image = await uniqueReceiptImage();
+    const a = await unpaidOrder(0);
+    const b = await unpaidOrder(1);
+    await sendReceipt(a.number, image);
+    const duplicate = await sendReceipt(b.number, image);
+    const [held] = await t.db.select().from(receipts).where(eq(receipts.id, duplicate));
+    expect([held!.verdict, held!.reviewReason]).toEqual(['manual_review', 'duplicate']);
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: b.amountDue });
+    const { client } = await t.managerSession();
+    const page = await client.admin.orders.get({ params: { number: b.number } });
+    expect(page.status === 200 && page.body.receipts[0]!.reviewReason).toBe('duplicate');
+    const res = await client.admin.orders.confirmPayment({
+      params: { number: b.number },
+      body: { creditId, receiptId: duplicate },
+    });
+    expect(res.status).toBe(200);
+    expect(res.status === 200 && res.body.receipts[0]!.verdict).toBe('manager_confirmed');
+  });
+
+  it('an unpaid order has no credit; the limits come with the page', async () => {
+    const o = await unpaidOrder();
+    const { client } = await t.managerSession();
+    const page = await client.admin.orders.get({ params: { number: o.number } });
+    expect(page.status === 200 && page.body.credit).toBeNull();
+    expect(page.status === 200 && page.body.limits).toEqual({
+      rejectNoteMax: 300,
+      linkReasonMin: 3,
+      linkReasonMax: 500,
+    });
+  });
+
+  it('a shopper session is refused', async () => {
+    const o = await unpaidOrder();
+    const { token } = await t.signIn(ali);
+    for (const [method, path] of [
+      ['GET', `/admin/orders/${o.number}/credit-options`],
+      ['POST', `/admin/orders/${o.number}/confirm-payment`],
+    ]) {
+      const res = await fetch(`${t.baseUrl}${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: method === 'POST' ? JSON.stringify({ creditId: 1, receiptId: null }) : undefined,
+      });
+      expect(res.status, path).toBe(401);
+    }
   });
 });

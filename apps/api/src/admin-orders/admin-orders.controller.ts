@@ -7,7 +7,10 @@ import { AdminOrdersService, type MoveOutcome } from './admin-orders.service';
 
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 
-/** A staff move's outcome as HTTP: the page now (200), or 404 / 409 / 422 / 403. */
+/**
+ * Every staff move's outcome as HTTP, in one place (fulfil, cancel, reject, confirm): the page now
+ * (200), 404, 409 with the page as it is now, 422 with what to fix, or 403.
+ */
 function moveResponse(out: MoveOutcome) {
   switch (out.kind) {
     case 'done':
@@ -23,7 +26,12 @@ function moveResponse(out: MoveOutcome) {
         ? { status: 403 as const, body: { code: 'forbidden' as const } }
         : {
             status: 422 as const,
-            body: { code: out.code, ...(out.max === undefined ? {} : { max: out.max }) },
+            body: {
+              code: out.code,
+              ...(out.min === undefined ? {} : { min: out.min }),
+              ...(out.max === undefined ? {} : { max: out.max }),
+              ...(out.mismatch === undefined ? {} : { mismatch: out.mismatch }),
+            },
           };
   }
 }
@@ -64,6 +72,21 @@ export class AdminOrdersController {
   cancel(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.orders.cancel, async ({ params, body }) =>
       moveResponse(await this.orders.cancel(actor.id, params.number, body)),
+    );
+  }
+
+  @TsRestHandler(adminContract.orders.creditOptions)
+  creditOptions() {
+    return tsRestHandler(adminContract.orders.creditOptions, async ({ params }) => {
+      const options = await this.orders.creditOptions(params.number);
+      return options ? { status: 200 as const, body: options } : notFound;
+    });
+  }
+
+  @TsRestHandler(adminContract.orders.confirmPayment)
+  confirmPayment(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.orders.confirmPayment, async ({ params, body }) =>
+      moveResponse(await this.orders.confirmPayment(actor.id, params.number, body)),
     );
   }
 

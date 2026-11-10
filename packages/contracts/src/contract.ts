@@ -147,7 +147,9 @@ import {
   adminOrderSchema,
   adminOrdersPageSchema,
   adminOrdersQuerySchema,
+  creditOptionsSchema,
   fulfilBodySchema,
+  staffConfirmBodySchema,
   rejectReceiptBodySchema,
   staffCancelBodySchema,
 } from './admin-orders';
@@ -1188,6 +1190,27 @@ const adminOrders = c.router({
       responses: orderMoveResponses,
       summary:
         'Staff: cancel with a TZ §6 reason; stock, the discount source and the message follow',
+    },
+    creditOptions: {
+      method: 'GET',
+      path: '/admin/orders/:number/credit-options',
+      pathParams: orderNumber,
+      responses: {
+        200: creditOptionsSchema,
+        401: adminOrderErrorSchema,
+        404: adminOrderErrorSchema,
+      },
+      summary:
+        'Staff: the credits to link to the order: its Candidate credits, then other unlinked credits after it',
+    },
+    confirmPayment: {
+      method: 'POST',
+      path: '/admin/orders/:number/confirm-payment',
+      pathParams: orderNumber,
+      body: staffConfirmBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: link a credit and confirm the payment through PaymentConfirmation (#32), with the waiting receipt or none; another amount or card needs a reason',
     },
     rejectReceipt: {
       method: 'POST',

@@ -18,6 +18,26 @@ export const RECEIPT_VERDICTS = [
 ] as const;
 export type ReceiptVerdict = (typeof RECEIPT_VERDICTS)[number];
 
+/**
+ * Why a receipt last went to manual review (#32): the same file as another receipt
+ * (`duplicate`), the AI's answer did not confirm it (`not_confirmed`), or the AI could not be
+ * asked, attempt after attempt (`judge_failed`). The `receipt_review_reason` enum has these values.
+ */
+export const RECEIPT_REVIEW_REASONS = ['duplicate', 'not_confirmed', 'judge_failed'] as const;
+export type ReceiptReviewReason = (typeof RECEIPT_REVIEW_REASONS)[number];
+
+/**
+ * What became of one answer of the receipt AI (#32): it paid the order, sent the receipt to a
+ * person, found its credit taken, or came after the receipt was decided (`receipt_check_outcome`).
+ */
+export const RECEIPT_CHECK_OUTCOMES = [
+  'confirmed',
+  'manual_review',
+  'credit_taken',
+  'stale',
+] as const;
+export type ReceiptCheckOutcome = (typeof RECEIPT_CHECK_OUTCOMES)[number];
+
 /** Verdicts still open: the receipt may yet be confirmed or rejected. */
 export const WAITING_RECEIPT_VERDICTS: readonly ReceiptVerdict[] = ['pending', 'manual_review'];
 
