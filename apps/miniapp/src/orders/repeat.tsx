@@ -37,6 +37,34 @@ function useReasonText() {
 }
 
 /**
+ * A line that came back short: the name in the italic of every fragrance and set name, its volume
+ * beside it, then the server's reason in calm words under them. A line that went in at all keeps
+ * its ink; one that did not steps back.
+ */
+function ShortLine({ line: l }: { line: ResultLine }) {
+  const { t, language } = usePrefs();
+  const reason = useReasonText();
+  return (
+    <li data-reason={l.reason} className="flex flex-col gap-1 px-4 py-3">
+      <span className="flex flex-wrap items-baseline gap-x-2">
+        <span
+          className={`type-name text-[18px] text-pretty [overflow-wrap:anywhere] ${l.added === 0 ? 'text-muted' : 'text-ink'}`}
+        >
+          {l.name[language]}
+        </span>
+        {l.kind === 'volume' ? (
+          <span className="type-small whitespace-nowrap text-muted">
+            <span className="sr-only">, </span>
+            {l.ml} {t.card.ml}
+          </span>
+        ) : null}
+      </span>
+      <span className="type-small text-pretty text-muted">{reason(l)}</span>
+    </li>
+  );
+}
+
+/**
  * The answer to «Повторить заказ»: how many lines went in («Добавили 2 из 3 товаров», «Всё
  * добавили в корзину», or nothing), each line that came back short with the server's reason, and
  * the way on: the cart when something went in, else the catalog.
@@ -53,7 +81,6 @@ function RepeatSheet({
   const { t, language } = usePrefs();
   const o = useOrdersText();
   const router = useRouter();
-  const reason = useReasonText();
   const r = result;
   const title = !r
     ? ''
@@ -63,8 +90,6 @@ function RepeatSheet({
         ? o.orders.repeatAllTitle
         : fill(plural(language, r.of, o.orders.repeatSomeTitle), { added: String(r.added) });
   const short = r?.lines.filter((l) => l.reason !== null) ?? [];
-  const lineName = (l: ResultLine) =>
-    l.kind === 'volume' ? `${l.name[language]}, ${l.ml} ${t.card.ml}` : l.name[language];
   return (
     <Sheet
       open={open}
@@ -77,14 +102,7 @@ function RepeatSheet({
         {short.length > 0 ? (
           <Card as="ul" className="divide-y divide-line overflow-hidden">
             {short.map((l, i) => (
-              <li key={i} data-reason={l.reason} className="flex flex-col gap-0.5 px-4 py-3">
-                <span
-                  className={`type-body [overflow-wrap:anywhere] ${l.added === 0 ? 'text-muted' : 'text-ink'}`}
-                >
-                  {lineName(l)}
-                </span>
-                <span className="type-small text-pretty text-muted">{reason(l)}</span>
-              </li>
+              <ShortLine key={i} line={l} />
             ))}
           </Card>
         ) : null}
@@ -178,7 +196,7 @@ export function RepeatLink({ number, status }: { number: number; status: OrderSt
         onClick={flow.run}
         disabled={flow.pending}
         data-testid="repeat-link"
-        className="type-small -my-2 -ml-1 inline-flex items-center gap-1.5 rounded-btn px-1 py-2 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60 disabled:no-underline"
+        className="type-small -my-3 -ml-1 inline-flex items-center gap-1.5 rounded-btn px-1 py-3 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60 disabled:no-underline"
       >
         {o.orders.repeat}
         {flow.pending ? <Spinner size={14} /> : null}

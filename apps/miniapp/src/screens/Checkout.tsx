@@ -1,5 +1,6 @@
 import type {
   BuyNowLineDto,
+  CartDto,
   CheckoutDto,
   CreateOrderBody,
   QuoteLine,
@@ -18,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { promoReasonText } from '../cart/promo';
+import { CART_KEY } from '../cart/queries';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
@@ -157,9 +159,13 @@ function newAttemptKey(): string {
  * The one item of a «Купить сейчас» checkout, as an order line reads (`OrderLine`: thumbnail,
  * «по мотивам» and the italic name, or «НАБОР» and the set's name with its five, the line total in
  * Sage Ink during a markdown), priced by the server's quote, then the note that the cart stays.
+ * When the cart holds a promo code (as the shell last read it; no request of its own), the note
+ * names it: it waits in the cart and does not apply here, so a missing discount reads as meant.
  */
 function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }) {
   const o = useOrdersText();
+  const code = useQueryClient().getQueryData<CartDto>(CART_KEY)?.promoCode;
+  const [before = '', after = ''] = o.checkout.buyNowNotePromo.split('{code}');
   const name =
     line.kind === 'volume'
       ? { ru: line.name, uz: line.name }
@@ -183,7 +189,19 @@ function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }
           }}
         />
       </Card>
-      <p className="type-small mt-2 mb-3 text-muted">{o.checkout.buyNowNote}</p>
+      <p className="type-small mt-2 mb-3 text-pretty text-muted" data-testid="buy-now-note">
+        {code ? (
+          <>
+            {before}
+            <span className="font-medium text-ink">
+              <CodeText code={code} />
+            </span>
+            {after}
+          </>
+        ) : (
+          o.checkout.buyNowNote
+        )}
+      </p>
     </>
   );
 }

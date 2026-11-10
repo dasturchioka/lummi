@@ -69,6 +69,8 @@ export const ordersMessages = defineMessages(
       giftTooLong: 'Текст открытки длиннее {max} символов.',
       /** «Купить сейчас» (#25): one item, the cart left as it is. */
       buyNowNote: 'Только этот товар. Корзина останется как есть.',
+      /** The same, when the cart holds a promo code: it stays there and does not apply here. */
+      buyNowNotePromo: 'Только этот товар. Промокод {code} ждёт в корзине, здесь он не действует.',
       back: 'Вернуться назад',
       itemGoneTitle: 'Этого сейчас нет в наличии',
       /** Why the «Купить сейчас» item cannot be ordered now, by what it is. */
@@ -97,6 +99,15 @@ export const ordersMessages = defineMessages(
       hidden: 'Пункт больше не принимает заказы',
       remove: 'Удалить: {name}',
       removeFailed: 'Не удалось удалить. Попробуйте ещё раз.',
+      /** The bin asks first: the pair goes, the orders stay as they were. */
+      removeTitle: 'Удалить пункт?',
+      removeText: 'Заказы не изменятся. Если снова закажете сюда, пункт сохранится опять.',
+      removeConfirm: 'Удалить',
+      removeKeep: 'Оставить',
+      /** Nothing saved yet: what will appear here and why. */
+      empty:
+        'После первого заказа здесь появятся его пункт BTS и получатель, и следующий заказ вы оформите в одно касание.',
+      loadFailed: 'Не удалось загрузить пункты.',
     },
     /** The payment screen (#28; mockups 07, 12, 13). */
     payment: {
@@ -318,6 +329,8 @@ export const ordersMessages = defineMessages(
       unknownPoint: 'Bu BTS punkti endi mavjud emas. Boshqasini tanlang.',
       giftTooLong: 'Otkritka matni {max} belgidan uzun.',
       buyNowNote: 'Faqat shu mahsulot. Savat oʻzgarmaydi.',
+      buyNowNotePromo:
+        'Faqat shu mahsulot. {code} promokodi savatda qoladi, bu yerda amal qilmaydi.',
       back: 'Ortga qaytish',
       itemGoneTitle: 'Bu hozir mavjud emas',
       itemGone: {
@@ -341,6 +354,14 @@ export const ordersMessages = defineMessages(
       hidden: 'Punkt endi buyurtma qabul qilmaydi',
       remove: 'Oʻchirish: {name}',
       removeFailed: 'Oʻchirib boʻlmadi. Qaytadan urinib koʻring.',
+      removeTitle: 'Punkt oʻchirilsinmi?',
+      removeText:
+        'Buyurtmalar oʻzgarmaydi. Bu yerga yana buyurtma bersangiz, punkt qayta saqlanadi.',
+      removeConfirm: 'Oʻchirish',
+      removeKeep: 'Qoldirish',
+      empty:
+        'Birinchi buyurtmadan keyin bu yerda uning BTS punkti va qabul qiluvchisi paydo boʻladi, keyingi buyurtmani esa bir bosishda rasmiylashtirasiz.',
+      loadFailed: 'Punktlarni yuklab boʻlmadi.',
     },
     payment: {
       title: 'Toʻlov',
