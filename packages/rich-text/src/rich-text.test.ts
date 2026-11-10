@@ -73,9 +73,21 @@ describe('rich text', () => {
   });
 
   it('parses a long run of unclosed brackets in linear time', () => {
-    const started = performance.now();
-    parseRichText('['.repeat(200_000));
-    expect(performance.now() - started).toBeLessThan(1000);
+    // Compare growth, not wall-clock time: CI runners are slow and busy, so an absolute limit
+    // flakes there. Four times the input must cost far less than the 16× a quadratic parser takes.
+    const best = (n: number) => {
+      const input = '['.repeat(n);
+      let fastest = Infinity;
+      for (let run = 0; run < 3; run++) {
+        const started = performance.now();
+        parseRichText(input);
+        fastest = Math.min(fastest, performance.now() - started);
+      }
+      return fastest;
+    };
+    best(10_000); // warm the JIT
+    const ratio = best(200_000) / Math.max(best(50_000), 0.5);
+    expect(ratio).toBeLessThan(8);
   });
 
   it('keeps a number with its thousands and its word, and leaves other spaces alone', () => {
