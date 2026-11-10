@@ -86,6 +86,24 @@ import {
   setsErrorSchema,
 } from './sets';
 import {
+  adminBannerSchema,
+  adminInfoPageSchema,
+  bannerActiveBodySchema,
+  bannerInputSchema,
+  contentErrorSchema,
+  homeContentSchema,
+  infoPageErrorSchema,
+  infoPageInputSchema,
+  infoPageListItemSchema,
+  infoPageSchema,
+  infoPageSlugParamsSchema,
+  sloganInputSchema,
+  sloganResponseSchema,
+  sloganSchema,
+} from './content';
+import {
+  cancelOrderBodySchema,
+  cancelRefusedSchema,
   checkoutConflictSchema,
   checkoutQuerySchema,
   checkoutSchema,
@@ -95,6 +113,7 @@ import {
   orderSchema,
   ordersPageSchema,
   ordersQuerySchema,
+  orderStatusConflictSchema,
   phoneRequiredSchema,
 } from './orders';
 import {
@@ -204,6 +223,28 @@ export const contract = c.router({
       query: pointsQuerySchema,
       responses: { 200: z.array(btsPointSchema), 401: deliveryErrorSchema },
       summary: 'Offered BTS points of a city (regionId + city), or a search across all regions (q)',
+    },
+  },
+  content: {
+    home: {
+      method: 'GET',
+      path: '/content/home',
+      responses: { 200: homeContentSchema, 401: authErrorSchema },
+      summary:
+        'Home content in one answer: the active promo banner (null: Home shows the Discovery set banner) and the saved slogan in RU and UZ (null: the built-in one)',
+    },
+    pages: {
+      method: 'GET',
+      path: '/content/pages',
+      responses: { 200: z.array(infoPageListItemSchema), 401: authErrorSchema },
+      summary: 'The info pages in display order (drafts included, flagged)',
+    },
+    page: {
+      method: 'GET',
+      path: '/content/pages/:slug',
+      pathParams: infoPageSlugParamsSchema,
+      responses: { 200: infoPageSchema, 401: authErrorSchema, 404: infoPageErrorSchema },
+      summary: 'One info page, RU and UZ',
     },
   },
   catalog: {
@@ -355,6 +396,21 @@ export const contract = c.router({
       responses: { 200: orderSchema, 401: orderErrorSchema, 404: orderErrorSchema },
       summary: "One of the customer's orders by its number, as its snapshot froze it",
     },
+    cancel: {
+      method: 'POST',
+      path: '/orders/:number/cancel',
+      pathParams: z.object({ number: z.coerce.number().int().positive() }),
+      body: cancelOrderBodySchema,
+      responses: {
+        200: orderSchema,
+        401: orderErrorSchema,
+        403: cancelRefusedSchema,
+        404: orderErrorSchema,
+        409: orderStatusConflictSchema,
+      },
+      summary:
+        'The shopper cancels their own order, only while «Ожидает оплаты» (ADR 0011); the reserve frees at once. 409 with the order when its status is no longer the expected one',
+    },
   },
 });
 
@@ -470,6 +526,124 @@ const adminCore = c.router({
       path: '/admin/audit/filters',
       responses: { 200: auditFiltersSchema, 401: adminErrorSchema, 403: adminErrorSchema },
       summary: 'Owner only: the actors and action types the audit filters offer',
+    },
+  },
+  content: {
+    banners: {
+      list: {
+        method: 'GET',
+        path: '/admin/content/banners',
+        responses: {
+          200: z.array(adminBannerSchema),
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+        },
+        summary: 'Owner only: every promo banner, the active one first',
+      },
+      create: {
+        method: 'POST',
+        path: '/admin/content/banners',
+        body: bannerInputSchema,
+        responses: {
+          201: adminBannerSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary: 'Owner only: add a promo banner (inactive until activated)',
+      },
+      update: {
+        method: 'PUT',
+        path: '/admin/content/banners/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: bannerInputSchema,
+        responses: {
+          200: adminBannerSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          404: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary: 'Owner only: edit a promo banner',
+      },
+      setActive: {
+        method: 'PUT',
+        path: '/admin/content/banners/:id/active',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: bannerActiveBodySchema,
+        responses: {
+          200: adminBannerSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          404: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary:
+          'Owner only: make a banner the active one (the previous one is switched off) or switch it off',
+      },
+      remove: {
+        method: 'DELETE',
+        path: '/admin/content/banners/:id',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: c.noBody(),
+        responses: {
+          200: z.object({ ok: z.literal(true) }),
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          404: contentErrorSchema,
+        },
+        summary: 'Owner only: delete a promo banner',
+      },
+    },
+    slogan: {
+      get: {
+        method: 'GET',
+        path: '/admin/content/slogan',
+        responses: {
+          200: sloganResponseSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+        },
+        summary: 'Owner only: the saved Home slogan',
+      },
+      set: {
+        method: 'PUT',
+        path: '/admin/content/slogan',
+        body: sloganInputSchema,
+        responses: {
+          200: sloganSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary: 'Owner only: save the Home slogan, RU and UZ',
+      },
+    },
+    pages: {
+      list: {
+        method: 'GET',
+        path: '/admin/content/pages',
+        responses: {
+          200: z.array(adminInfoPageSchema),
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+        },
+        summary: 'Owner only: the info pages with their bodies and draft flags',
+      },
+      update: {
+        method: 'PUT',
+        path: '/admin/content/pages/:slug',
+        pathParams: infoPageSlugParamsSchema,
+        body: infoPageInputSchema,
+        responses: {
+          200: adminInfoPageSchema,
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          404: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary: 'Owner only: edit an info page and its draft / approved flag',
+      },
     },
   },
   catalog: {

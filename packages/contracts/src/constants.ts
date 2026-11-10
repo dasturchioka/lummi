@@ -4,6 +4,7 @@
  * bundle (ADR 0030). The DB schema reads the order statuses from here too.
  */
 export * from './order-status';
+export * from './order-machine';
 export * from './recipient';
 export const POINT_SEARCH_MIN = 2;
 export const POINT_SEARCH_LIMIT = 50;
@@ -48,12 +49,12 @@ export type SetLineKind = Exclude<LineKind, 'volume'>;
 export const SET_SIZE = 5;
 
 /**
- * The one list of plain `startapp` targets (ADR 0022) and the route each opens in the Mini App; the
- * bot and the admin's broadcast button picker offer exactly these. `p_<slug>` (a fragrance card) and
- * `o_<number>` (an order) are matched by pattern in the Mini App. An unknown value lands on Home.
- * Zod-free, so every package may import it.
+ * `startapp` parameter -> Mini App route: the one list of targets. The Mini App routes with it,
+ * the admin banner editor validates against it, and later tickets (broadcasts, set links) add
+ * their targets here. An unknown or missing value lands on Home; an unknown fragrance slug lands
+ * on the card's own not-found state, which leads on to the catalog.
  */
-export const STARTAPP_ROUTES = {
+export const STATIC_START_TARGETS = {
   home: '/',
   catalog: '/catalog',
   cart: '/cart',
@@ -61,21 +62,26 @@ export const STARTAPP_ROUTES = {
   profile: '/profile',
   set_discovery: '/sets/discovery',
   builder: '/sets/builder',
-} as const satisfies Record<string, string>;
-export type StartappTarget = keyof typeof STARTAPP_ROUTES;
-export const STARTAPP_TARGETS = Object.keys(STARTAPP_ROUTES) as StartappTarget[];
+} as const;
 
-/**
- * The picker's RU/UZ name of each target, keyed by the list above: a target added there without a
- * name here fails typecheck. Apart from the routes, so the Mini App's first screen does not carry
- * the admin's labels (ADR 0030 budget).
- */
-export const STARTAPP_LABELS = {
-  home: { ru: 'Главная', uz: 'Bosh sahifa' },
-  catalog: { ru: 'Каталог', uz: 'Katalog' },
-  cart: { ru: 'Корзина', uz: 'Savat' },
-  orders: { ru: 'Заказы', uz: 'Buyurtmalar' },
-  profile: { ru: 'Профиль', uz: 'Profil' },
-  set_discovery: { ru: 'Discovery set', uz: 'Discovery set' },
-  builder: { ru: 'Свой набор', uz: 'Oʻz toʻplamim' },
-} as const satisfies Record<StartappTarget, { ru: string; uz: string }>;
+/** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
+export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
+
+/** The fixed targets in order, for the pickers: the banner editor and the broadcast composer. */
+export type StartTarget = keyof typeof STATIC_START_TARGETS;
+export const START_TARGETS = Object.keys(STATIC_START_TARGETS) as StartTarget[];
+
+/** A value an owner may link to (a banner, a broadcast button): a fixed target or a fragrance. */
+export const isStartTarget = (v: string): boolean =>
+  Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
+
+/** The info pages (ticket #21): fixed slugs in display order. The owner edits them; nobody adds one. */
+export const INFO_PAGE_SLUGS = [
+  'about',
+  'delivery-payment',
+  'returns',
+  'faq',
+  'contacts',
+  'offer',
+] as const;
+export type InfoPageSlug = (typeof INFO_PAGE_SLUGS)[number];

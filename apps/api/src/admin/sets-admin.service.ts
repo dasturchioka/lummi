@@ -100,8 +100,9 @@ export class SetsAdminService {
 
   /** Same WebP pipeline as the bottle photos (the original bytes are kept). */
   async setPhoto(actor: StaffRow, bytes: Uint8Array): Promise<Outcome<string>> {
-    const hash = await storeUploadedPhoto(this.edges.files, bytes);
-    if (!hash) return { ok: false, reason: 'invalid' };
+    const stored = await storeUploadedPhoto(this.edges.files, bytes);
+    if (!stored) return { ok: false, reason: 'invalid' };
+    const hash = stored.hash;
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, true);
       await tx

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { STARTAPP_TARGETS } from '@lummi/contracts/constants';
+import { START_TARGETS } from '@lummi/contracts/constants';
 import { routeForStartParam } from './startapp';
 
 it('maps known parameters and sends everything else home', () => {
@@ -24,7 +24,7 @@ it('opens the two sets', () => {
 });
 
 it('opens every target the admin offers on a broadcast button', () => {
-  for (const target of STARTAPP_TARGETS) {
+  for (const target of START_TARGETS) {
     const route = routeForStartParam(target);
     expect(target === 'home' ? route === '/' : route !== '/').toBe(true);
   }

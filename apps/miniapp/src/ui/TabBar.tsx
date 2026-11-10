@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { BagIcon, BoxIcon, GridIcon, HomeIcon, UserIcon } from './icons';
@@ -16,6 +16,9 @@ export const TABS: {
   { id: 'orders', to: '/orders', icon: <BoxIcon size={22} /> },
   { id: 'profile', to: '/profile', icon: <UserIcon size={22} /> },
 ];
+
+/** Screens under a tab whose path does not start with the tab's own: the info pages are Profile's. */
+const SECTION_OF: { prefix: string; tab: TabId }[] = [{ prefix: '/info/', tab: 'profile' }];
 
 /**
  * The approved floating bar: a solid Graphite pill in both themes, flat (a 1 px line-colour inset
@@ -35,6 +38,8 @@ export function TabBar({
   floating?: boolean;
 }) {
   const { t } = usePrefs();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const section = SECTION_OF.find((x) => pathname.startsWith(x.prefix))?.tab;
   return (
     <nav
       aria-label="LUMMI"
@@ -58,6 +63,8 @@ export function TabBar({
             key={tab.id}
             to={tab.to}
             activeOptions={{ exact: tab.to === '/' }}
+            // the Link marks its own path active; a section's other screens are marked here
+            {...(section === tab.id ? { 'data-status': 'active', 'aria-current': 'page' } : {})}
             className="group flex h-full min-w-0 flex-1 basis-0 flex-col items-center justify-center text-bar-ink outline-offset-[-4px] transition-colors duration-150 hover:text-bar-active data-[status=active]:text-bar-active"
           >
             <span className="relative grid size-[38px] shrink-0 place-items-center rounded-pill transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-active:scale-90 group-data-[status=active]:bg-bar-active group-data-[status=active]:text-bar-active-ink">

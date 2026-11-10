@@ -88,9 +88,11 @@ export function SetsManager({
           <Section title={s.photoTitle}>
             <p className="-mt-2 text-small text-pretty text-muted-foreground">{s.photoHint}</p>
             <PhotoUpload
-              uploadUrl="/api/admin/sets/discovery/photo"
+              slot="discovery"
+              label={t.catalog.photo}
+              url="/api/admin/sets/discovery/photo"
               hash={initial.photo}
-              t={t}
+              messages={t.catalog}
               onUploaded={() => router.refresh()}
             />
           </Section>

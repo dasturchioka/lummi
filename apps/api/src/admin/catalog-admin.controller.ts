@@ -1,18 +1,9 @@
 import { adminContract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
-import {
-  Controller,
-  HttpException,
-  Inject,
-  Param,
-  ParseIntPipe,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Inject, Param, ParseIntPipe, Put, Req, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
-import { photoBytes } from './photo-body';
+import { photoFailure, readPhotoBody } from '../catalog/photo-upload';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { CatalogAdminService, type Failure } from './catalog-admin.service';
 
@@ -129,22 +120,16 @@ export class CatalogAdminController {
     });
   }
 
-  /**
-   * Raw image bytes (`image/jpeg`, `image/png` or `image/webp`) in the request body: the type is
-   * judged by magic bytes, not by the header or any file name (ADR 0020), and capped at 10 MB.
-   * Outside the ts-rest contract because the contract has no raw bodies.
-   */
+  /** Raw image bytes, see `readPhotoBody`. */
   @Put('admin/volumes/:id/photo')
   async photo(
     @Param('id', ParseIntPipe) id: number,
     @CurrentStaff() actor: StaffRow,
     @Req() req: Request,
   ) {
-    const bytes = photoBytes(req.body);
-    const res = await this.catalog.setPhoto(actor, id, bytes);
+    const res = await this.catalog.setPhoto(actor, id, readPhotoBody(req.body));
     if (res.ok) return { photo: res.value };
-    if (res.reason === 'not_found') throw new HttpException({ code: 'not_found' }, 404);
-    throw new HttpException({ code: 'invalid', fields: ['photo'] }, 422);
+    throw photoFailure(res.reason);
   }
 }
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { deliveryCitySchema, regionSchema } from './delivery';
 import { LINE_KINDS } from './constants';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
+import { CANCEL_REASONS } from './order-machine';
 import {
   CHECKOUT_CONFLICTS,
   ORDER_INPUT_ERRORS,
@@ -146,6 +147,15 @@ export const orderSchema = z.object({
   total: som,
   /** What the customer transfers to the shop card; equals the total in stage 1 (ADR 0012). */
   amountDue: som,
+  /** Why and when the order was cancelled; null unless it is «Отменён». */
+  cancellation: z
+    .object({
+      reason: z.enum(CANCEL_REASONS),
+      at: z.string().datetime(),
+      /** It had been paid: the money goes back as a Refund, the manager gets in touch (ADR 0006). */
+      afterPayment: z.boolean(),
+    })
+    .nullable(),
 });
 export type OrderDto = z.infer<typeof orderSchema>;
 
@@ -186,3 +196,16 @@ export const checkoutConflictSchema = z.union([
 ]);
 export type CheckoutConflict = z.infer<typeof checkoutConflictSchema>;
 export const orderInputErrorSchema = z.object({ code: z.enum(ORDER_INPUT_ERRORS) });
+
+/** «Отменить заказ»: the status the shopper saw, so a second press (or a stale screen) is caught. */
+export const cancelOrderBodySchema = z.object({ expectedStatus: orderStatusSchema });
+/**
+ * 409: the order is no longer in the status the shopper saw (cancelled already, a receipt went in,
+ * the reserve expired); the order as it is now comes along. Or the database gave up twice.
+ */
+export const orderStatusConflictSchema = z.union([
+  z.object({ code: z.literal('status_changed'), order: orderSchema }),
+  z.object({ code: z.literal('try_again') }),
+]);
+/** 403: this order cannot be cancelled by the shopper from that status (ADR 0011). */
+export const cancelRefusedSchema = z.object({ code: z.enum(['not_allowed', 'forbidden']) });

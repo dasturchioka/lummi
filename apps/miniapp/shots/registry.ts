@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
+import { LIMIT_BANNER, LONG_PAGE, longSlogan, onInfoPage } from './content-data';
 import type { ShotDb } from './db';
 
 /**
@@ -310,11 +311,59 @@ async function pickFirstPoint(page: Page) {
   await page.getByTestId('chosen-point').waitFor();
 }
 
-/** Opens the newest order from the «Заказы» list. */
-async function openFirstOrder(page: Page) {
+/** Opens the newest order from the «Заказы» list (a cancelled one shows its reason instead of the timeline). */
+async function openFirstOrder(page: Page, shows: 'timeline' | 'cancelled' = 'timeline') {
   await page.getByTestId('order-row').first().click();
-  await page.getByTestId('timeline').waitFor();
+  await page.getByTestId(shows).waitFor();
 }
+
+/** The shot customer's newest order, cancelled by the shopper through the real API. */
+async function cancelNewestOrder(api: ApiClient) {
+  const list = await api.orders.list({ query: {} });
+  const number = list.status === 200 ? list.body.orders[0]?.number : undefined;
+  if (!number) throw new Error('no order to cancel');
+  const res = await api.orders.cancel({
+    params: { number },
+    body: { expectedStatus: 'awaiting_payment' },
+  });
+  if (res.status !== 200) throw new Error(`cancel: HTTP ${res.status}`);
+}
+
+/**
+ * Moves the shot customer's newest order as `transition()` would, straight in the database (the
+ * staff and system callers have no route the shots can drive yet): its status and its history row.
+ */
+async function moveNewestOrder(
+  db: ShotDb,
+  move: {
+    from: string;
+    to: string;
+    action: string;
+    actor: 'staff' | 'system' | 'customer';
+    reason?: string;
+  },
+) {
+  await db.query(
+    `with o as (
+       update orders set status = $3::order_status, updated_at = now()
+       where id = (select o.id from orders o join customers c on c.id = o.customer_id
+                   where c.telegram_id = $1 order by o.number desc limit 1)
+       returning id)
+     insert into order_events (order_id, from_status, to_status, action, actor_type, reason)
+     select id, $2::order_status, $3::order_status, $4::order_action, $5::actor_type, $6 from o`,
+    [SHOT_USER.id, move.from, move.to, move.action, move.actor, move.reason ?? null],
+  );
+}
+
+/** The newest order cancelled by the expiry sweep, as the worker would (it does not run here). */
+const expireNewestOrder = (db: ShotDb) =>
+  moveNewestOrder(db, {
+    from: 'awaiting_payment',
+    to: 'cancelled',
+    action: 'cancel',
+    actor: 'system',
+    reason: 'reserve_expired',
+  });
 
 /*
  * The realistic worst case for checkout and orders (break-ui): a 60-character name (a full UZ
@@ -528,6 +577,26 @@ const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
     await db.restore('blue-sapphire');
   },
 };
+
+interface ShotBanner {
+  titleRu: string;
+  titleUz: string;
+  subtitleRu: string;
+  subtitleUz: string;
+  priceLineRu: string;
+  priceLineUz: string;
+}
+/** An active promo banner whose photo is a seeded bottle photo (the photo set already exists). */
+async function promoBanner(db: ShotDb, b: ShotBanner) {
+  await clearBanners(db);
+  await db.query(
+    `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
+     values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
+    [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
+  );
+}
+const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
+const sloganAtLimit = longSlogan();
 
 export const screens: ScreenDef[] = [
   {
@@ -916,6 +985,111 @@ export const screens: ScreenDef[] = [
     act: async ({ page }) => openFirstOrder(page),
     teardown: checkoutDone,
   },
+  // #24: «Отменить заказ» while unpaid, its confirmation, and a cancelled order (detail and list).
+  {
+    id: 'order-cancel',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'order-cancelled',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await expireNewestOrder(db);
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // a paid order the shop could not fulfil: the reason, and the manager will be in touch
+    id: 'order-cancelled-paid',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]]);
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'payment_confirmed',
+        action: 'confirm_payment',
+        actor: 'system',
+      });
+      await moveNewestOrder(db, {
+        from: 'payment_confirmed',
+        to: 'cancelled',
+        action: 'cancel',
+        actor: 'staff',
+        reason: 'out_of_stock',
+      });
+    },
+    act: async ({ page }) => openFirstOrder(page, 'cancelled'),
+    teardown: checkoutDone,
+  },
+  {
+    // the receipt went in while the sheet was open: the press answers 409 and says so
+    id: 'order-cancel-changed',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page, db }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('cancel-order').click();
+      await sheet(page).getByTestId('cancel-sheet').waitFor();
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'receipt_review',
+        action: 'submit_receipt',
+        actor: 'customer',
+      });
+      await sheet(page)
+        .getByRole('button', { name: /^(Отменить заказ|Buyurtmani bekor qilish)$/ })
+        .click();
+      await sheet(page).getByTestId('cancel-changed').waitFor();
+    },
+    teardown: checkoutDone,
+  },
+  {
+    id: 'orders-cancelled',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['baccarat-rouge-540', 50]], { gift: true });
+      await cancelNewestOrder(api);
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+    },
+    teardown: checkoutDone,
+  },
   // Sets (#22) through checkout: the cart with set lines, then the order as bought.
   {
     id: 'checkout-sets',
@@ -1117,6 +1291,103 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
+  // Content (#21): the owner's promo banner on Home (the plain `home` shot is the Discovery fallback).
+  {
+    id: 'home-promo',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Осенняя подборка',
+        titleUz: 'Kuzgi tanlov',
+        subtitleRu: 'Тёплые, древесные ароматы на вечер',
+        subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
+        priceLineRu: 'от 69 000 сум',
+        priceLineUz: '69 000 soʻmdan',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  {
+    // Worst case: long unbroken words, a long price line.
+    id: 'home-promo-worst',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanner(db, {
+        titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
+        titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
+        subtitleRu:
+          'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
+        subtitleUz:
+          'Bir necha qatorga cho‘ziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
+        priceLineRu: 'от 1 234 567 сум за набор',
+        priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
+      });
+    },
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  // Info pages (#21): the long RU/UZ texts, a short one, and an unknown slug.
+  { id: 'info-faq', path: '/info/faq', fullPage: true },
+  { id: 'info-about', path: '/info/about' },
+  { id: 'info-contacts', path: '/info/contacts' },
+  { id: 'info-not-found', path: '/info/nope' },
+  // While the body loads (a fresh app: Profile's list is not cached, so the title is a bar too),
+  // and a failed read.
+  {
+    id: 'info-loading',
+    path: '/info/faq',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/content\/pages\/faq$/),
+  },
+  {
+    id: 'info-error',
+    path: '/info/faq',
+    act: ({ page }) => failRead(page, /\/content\/pages\/faq$/),
+  },
+  // Worst cases (break-ui): a ~2 000-word page with every block, the 80-character UZ title with ʻ,
+  // placeholders and refused link targets; a page the owner left empty; the long title in
+  // Profile's list; a promo banner at every field's limit.
+  { id: 'info-long', path: '/info/about', fullPage: true, ...onInfoPage('about', LONG_PAGE) },
+  { id: 'info-empty', path: '/info/offer', ...onInfoPage('offer', { bodyRu: '', bodyUz: '' }) },
+  {
+    id: 'profile-long-title',
+    path: '/profile',
+    fullPage: true,
+    ...onInfoPage('about', { titleRu: LONG_PAGE.titleRu, titleUz: LONG_PAGE.titleUz }),
+  },
+  {
+    id: 'home-promo-limit',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+    },
+    teardown: ({ db }) => clearBanners(db),
+  },
+  // the narrowest phone, with the banner and the slogan at their limits (one slogan line)
+  {
+    id: 'home-content-limit-360',
+    path: '/',
+    width: 360,
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+      await sloganAtLimit.setup({ db });
+    },
+    teardown: async ({ db }) => {
+      await clearBanners(db);
+      await sloganAtLimit.teardown({ db });
+    },
+  },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {
     id: 'cart-lines',

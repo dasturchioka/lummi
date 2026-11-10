@@ -19,6 +19,7 @@ import pg from 'pg';
 import { adminMessages } from '@lummi/i18n/admin';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
+import { seedShotContent } from './content-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
@@ -227,6 +228,7 @@ async function main() {
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
   await seedShotBroadcasts(databaseUrl);
+  await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
   mkdirSync(outDir, { recursive: true });
   // a screen's own database state (setup / teardown), on one connection for the run
   client = new pg.Client({ connectionString: databaseUrl });

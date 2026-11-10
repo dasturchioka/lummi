@@ -1,14 +1,9 @@
 import { z } from 'zod';
-import { STARTAPP_TARGETS } from './constants';
+import { isStartTarget } from './constants';
 
 /** Telegram's limits for one message: a caption (with an image) and plain text. */
 export const CAPTION_MAX = 1024;
 export const TEXT_MAX = 4096;
-
-/** `p_<slug>` opens a fragrance card; the slug is ASCII kebab case (ADR 0016). */
-const FRAGRANCE_TARGET = /^p_[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const isStartappTarget = (v: string) =>
-  (STARTAPP_TARGETS as readonly string[]).includes(v) || FRAGRANCE_TARGET.test(v);
 
 export const BROADCAST_AUDIENCES = ['all', 'ru', 'uz'] as const;
 export const broadcastAudienceSchema = z.enum(BROADCAST_AUDIENCES);
@@ -23,7 +18,8 @@ export const broadcastBodySchema = z
     textRu: z.string().trim().min(1, 'required').max(TEXT_MAX, 'too_long'),
     textUz: z.string().trim().min(1, 'required').max(TEXT_MAX, 'too_long'),
     imageKey: z.string().regex(BROADCAST_IMAGE_KEY).nullable(),
-    buttonTarget: z.string().refine(isStartappTarget, 'target').nullable(),
+    // the one `startapp` target list (`@lummi/contracts/constants`), shared with the promo banner
+    buttonTarget: z.string().refine(isStartTarget, 'target').nullable(),
     audience: broadcastAudienceSchema,
   })
   .superRefine((v, ctx) => {

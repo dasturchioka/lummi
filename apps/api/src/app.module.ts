@@ -22,6 +22,9 @@ import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
 import { OrdersController } from './orders/orders.controller';
 import { OrdersService } from './orders/orders.service';
+import { DiscountSourceHooks } from './order-status/discount-sources';
+import { OrderStatusService } from './order-status/order-status.service';
+import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
@@ -47,6 +50,8 @@ import { HumoFeedController } from './humo/humo-feed.controller';
 import { HumoFeedService } from './humo/humo-feed.service';
 import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
+import { ContentAdminController, ContentController } from './content/content.controller';
+import { ContentService } from './content/content.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
 
@@ -80,6 +85,8 @@ export class AppModule {
         CatalogAdminController,
         OnHandController,
         SetsAdminController,
+        ContentController,
+        ContentAdminController,
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
@@ -101,8 +108,12 @@ export class AppModule {
         CartService,
         SetsService,
         OrdersService,
+        OrderStatusService,
+        DiscountSourceHooks,
+        ReserveSweeps,
         CatalogAdminService,
         SetsAdminService,
+        ContentService,
         SearchService,
         CustomersService,
         DeliveryService,
@@ -121,6 +132,7 @@ export class AppModule {
       ],
       exports: [
         CreditEvents,
+        OrderStatusService,
         HumoFeedService,
         SettingsService,
         AuditService,

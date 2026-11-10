@@ -1,9 +1,9 @@
 import { adminContract } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
-import { Controller, HttpException, Inject, Put, Req, UseGuards } from '@nestjs/common';
+import { Controller, Inject, Put, Req, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
-import { photoBytes } from './photo-body';
+import { photoFailure, readPhotoBody } from '../catalog/photo-upload';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { SetsAdminService } from './sets-admin.service';
 
@@ -44,9 +44,8 @@ export class SetsAdminController {
   @UseGuards(OwnerGuard)
   @Put('admin/sets/discovery/photo')
   async photo(@CurrentStaff() actor: StaffRow, @Req() req: Request) {
-    const bytes = photoBytes(req.body);
-    const res = await this.sets.setPhoto(actor, bytes);
+    const res = await this.sets.setPhoto(actor, readPhotoBody(req.body));
     if (res.ok) return { photo: res.value };
-    throw new HttpException({ code: 'invalid', fields: ['photo'] }, 422);
+    throw photoFailure(res.reason);
   }
 }

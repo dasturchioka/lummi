@@ -1,5 +1,5 @@
 {
-  "id": "6816775c-14d5-4c41-adc3-6569b6826b9d",
+  "id": "2ac6dc8e-ed32-427d-a552-14375b51bb33",
   "prevId": "f3a20b3a-35cc-43f4-98e9-8d39f27d5ddf",
   "version": "7",
   "dialect": "postgresql",
@@ -495,25 +495,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "kind": {
-          "name": "kind",
-          "type": "cart_line_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'volume'"
-        },
         "volume_id": {
           "name": "volume_id",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": false
-        },
-        "fragrance_ids": {
-          "name": "fragrance_ids",
-          "type": "bigint[]",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "qty": {
           "name": "qty",
@@ -547,44 +533,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cart_lines_customer_discovery_idx": {
-          "name": "cart_lines_customer_discovery_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'discovery_set'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "cart_lines_customer_builder_idx": {
-          "name": "cart_lines_customer_builder_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fragrance_ids",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'builder_set'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -640,14 +588,6 @@
         "cart_lines_qty_check": {
           "name": "cart_lines_qty_check",
           "value": "\"cart_lines\".\"qty\" > 0"
-        },
-        "cart_lines_fragrance_ids_check": {
-          "name": "cart_lines_fragrance_ids_check",
-          "value": "\"cart_lines\".\"fragrance_ids\" is null or (cardinality(\"cart_lines\".\"fragrance_ids\") = 5 and array_position(\"cart_lines\".\"fragrance_ids\", null) is null)"
-        },
-        "cart_lines_kind_check": {
-          "name": "cart_lines_kind_check",
-          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null)\n        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)\n        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)"
         }
       },
       "isRLSEnabled": false
@@ -994,120 +934,6 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.discovery_set": {
-      "name": "discovery_set",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "boolean",
-          "primaryKey": true,
-          "notNull": true,
-          "default": true
-        },
-        "price": {
-          "name": "price",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "on_hand": {
-          "name": "on_hand",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "photo_hash": {
-          "name": "photo_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_placeholder": {
-          "name": "is_placeholder",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "discovery_set_one_row": {
-          "name": "discovery_set_one_row",
-          "value": "\"discovery_set\".\"id\""
-        },
-        "discovery_set_money_check": {
-          "name": "discovery_set_money_check",
-          "value": "\"discovery_set\".\"price\" >= 0 and \"discovery_set\".\"on_hand\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.discovery_set_items": {
-      "name": "discovery_set_items",
-      "schema": "",
-      "columns": {
-        "position": {
-          "name": "position",
-          "type": "smallint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "discovery_set_items_fragrance_id_fragrances_id_fk": {
-          "name": "discovery_set_items_fragrance_id_fragrances_id_fk",
-          "tableFrom": "discovery_set_items",
-          "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "discovery_set_items_fragrance_id_unique": {
-          "name": "discovery_set_items_fragrance_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "fragrance_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "discovery_set_items_position": {
-          "name": "discovery_set_items_position",
-          "value": "\"discovery_set_items\".\"position\" between 1 and 5"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.families": {
@@ -1743,6 +1569,132 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.order_events": {
+      "name": "order_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "order_events_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_status": {
+          "name": "from_status",
+          "type": "order_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_status": {
+          "name": "to_status",
+          "type": "order_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "order_action",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_type": {
+          "name": "actor_type",
+          "type": "actor_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "order_events_order_idx": {
+          "name": "order_events_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "order_events_order_id_orders_id_fk": {
+          "name": "order_events_order_id_orders_id_fk",
+          "tableFrom": "order_events",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.order_lines": {
       "name": "order_lines",
       "schema": "",
@@ -1965,7 +1917,7 @@
         },
         "order_lines_kind_check": {
           "name": "order_lines_kind_check",
-          "value": "(\"order_lines\".\"kind\"::text = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\"::text = 'builder_set' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5 and jsonb_array_length(\"order_lines\".\"set_composition\") = 5) or (\"order_lines\".\"kind\"::text = 'discovery_set' and \"order_lines\".\"volume_id\" is null and \"order_lines\".\"set_volume_ids\" is null and jsonb_array_length(\"order_lines\".\"set_composition\") = 5)"
+          "value": "(\"order_lines\".\"kind\" = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\" = 'builder_set' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5)"
         },
         "order_lines_money_check": {
           "name": "order_lines_money_check",
@@ -2185,6 +2137,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "tracking_number": {
+          "name": "tracking_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reserve_reminder_sent_at": {
+          "name": "reserve_reminder_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2254,6 +2218,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "orders_awaiting_reserve_idx": {
+          "name": "orders_awaiting_reserve_idx",
+          "columns": [
+            {
+              "expression": "reserve_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"orders\".\"status\" = 'awaiting_payment'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2956,15 +2936,6 @@
         "failed"
       ]
     },
-    "public.cart_line_kind": {
-      "name": "cart_line_kind",
-      "schema": "public",
-      "values": [
-        "volume",
-        "builder_set",
-        "discovery_set"
-      ]
-    },
     "public.fragrance_type": {
       "name": "fragrance_type",
       "schema": "public",
@@ -2991,13 +2962,28 @@
         "base"
       ]
     },
+    "public.order_action": {
+      "name": "order_action",
+      "schema": "public",
+      "values": [
+        "submit_receipt",
+        "confirm_payment",
+        "reject_receipt",
+        "payment_not_found",
+        "accept",
+        "start_assembly",
+        "hand_to_bts",
+        "deliver",
+        "return",
+        "cancel"
+      ]
+    },
     "public.order_line_kind": {
       "name": "order_line_kind",
       "schema": "public",
       "values": [
         "volume",
-        "builder_set",
-        "discovery_set"
+        "builder_set"
       ]
     },
     "public.order_status": {

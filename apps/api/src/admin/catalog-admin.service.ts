@@ -643,8 +643,10 @@ export class CatalogAdminService {
       .from(volumes)
       .where(eq(volumes.id, volumeId));
     if (!exists) return fail('not_found');
-    const hash = await storeUploadedPhoto(this.edges.files, bytes);
-    if (!hash) return fail('invalid', ['photo']);
+    // magic bytes and the minimum size (the 400 px rendition must not be an upscale) live in one place
+    const stored = await storeUploadedPhoto(this.edges.files, bytes);
+    if (!stored) return fail('invalid', ['photo']);
+    const hash = stored.hash;
     return this.db.transaction(async (tx) => {
       // read the previous photo under the lock, so the audit pair is never stale
       const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');

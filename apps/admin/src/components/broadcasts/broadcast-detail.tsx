@@ -1,6 +1,6 @@
 'use client';
 
-import { STARTAPP_LABELS, type BroadcastDto, type StartappTarget } from '@lummi/contracts';
+import type { BroadcastDto } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { ArrowLeft, ImageIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -20,13 +20,11 @@ import { TelegramPreview } from './telegram-preview';
 const POLL_MS = 2000;
 
 /** «Каталог», or «Аромат Tygar» for a `p_<slug>` target (the slug when the fragrance is gone). */
-function targetLabel(b: BroadcastDto, m: AdminMessages['broadcasts'], language: Language): string {
+function targetLabel(b: BroadcastDto, m: AdminMessages['broadcasts']): string {
   const target = b.buttonTarget ?? '';
   if (target.startsWith('p_'))
     return fill(m.targetFragrance, { name: b.buttonFragrance ?? target.slice(2) });
-  return Object.hasOwn(STARTAPP_LABELS, target)
-    ? STARTAPP_LABELS[target as StartappTarget][language]
-    : target;
+  return (m.targets as Record<string, string>)[target] ?? target;
 }
 
 /**
@@ -76,7 +74,7 @@ export function BroadcastDetail({
             parts={[
               m.audiences[b.audience],
               countOf(language, b.counts.total, m.customers),
-              b.buttonTarget && fill(m.buttonTo, { target: targetLabel(b, m, language) }),
+              b.buttonTarget && fill(m.buttonTo, { target: targetLabel(b, m) }),
               b.hasImage && (
                 <span className="inline-flex items-center gap-1">
                   <ImageIcon className="size-3.5" strokeWidth={1.5} aria-hidden />

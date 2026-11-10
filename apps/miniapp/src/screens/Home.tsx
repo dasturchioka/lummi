@@ -9,11 +9,13 @@ import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
 import { GridSkeleton } from '../ui/GridSkeleton';
 import { Skeleton } from '../ui/Skeleton';
+import { useHomeContent } from '../content/home';
 import { DiscoveryBanner } from './home/DiscoveryBanner';
 
 /** Below the fold: its own chunk, so the first screen carries less code. */
 const Popular = lazy(() => import('./home/Popular'));
 const Novelties = lazy(() => import('./home/Novelties'));
+const PromoBanner = lazy(() => import('./home/PromoBanner'));
 
 /**
  * The fabric photos of the top block (approved variant 2), one per theme. To ship them, put the
@@ -43,7 +45,8 @@ function CoverArcs() {
 }
 
 function TopBlock() {
-  const { t, theme } = usePrefs();
+  const { t, theme, language } = usePrefs();
+  const slogan = useHomeContent().data?.slogan;
   const photo = FABRIC[theme];
   return (
     <section
@@ -65,7 +68,7 @@ function TopBlock() {
       {/* The slot's own proportion, so a photo never shifts the layout when it arrives. */}
       <div className="flex aspect-[3/2] flex-col items-center px-5 pt-8 text-center">
         <Logo height={24} />
-        <p className="type-slogan mt-3 text-balance">{t.home.slogan}</p>
+        <p className="type-slogan mt-3 text-balance">{slogan?.[language] ?? t.home.slogan}</p>
       </div>
     </section>
   );
@@ -92,6 +95,20 @@ function PopularSkeleton() {
       </div>
     </div>
   );
+}
+
+/**
+ * The owner's promo banner, in its own slot under the Discovery set banner (which always stays:
+ * it is the approved variant 2's own card). Nothing is reserved while the answer is on its way or
+ * when no banner is on, so Home without a promo looks exactly as approved.
+ */
+function PromoSlot() {
+  const active = useHomeContent().data?.banner;
+  return active ? (
+    <Suspense fallback={<Skeleton className="min-h-[140px] w-full" rounded="card" />}>
+      <PromoBanner banner={active} />
+    </Suspense>
+  ) : null;
 }
 
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
@@ -127,6 +144,7 @@ export function Home() {
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
           <DiscoveryBanner />
+          <PromoSlot />
           <Suspense fallback={<PopularSkeleton />}>
             <Popular />
           </Suspense>
