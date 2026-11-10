@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
+import { normalizePromoCode, PROMO_CODE_PATTERN } from './promo-code';
+
+export { normalizePromoCode, PROMO_CODE_PATTERN } from './promo-code';
 
 /**
  * Promo codes (ticket #29; ADR 0002, 0005, 0007, 0008; spec Changes 2026-11-07 promo counting).
@@ -11,15 +14,12 @@ const som = (min: number) => z.number().int().min(min).max(100_000_000);
 export const PROMO_KINDS = ['percent', 'fixed'] as const;
 export type PromoKind = (typeof PROMO_KINDS)[number];
 
-/** Latin letters, digits, `-` and `_`: what a shopper can type on any keyboard layout without lookalikes. */
-export const PROMO_CODE_PATTERN = /^[A-Z0-9_-]{3,32}$/;
-
-/** A code as stored: trimmed and upper-case, so it is matched case-insensitively. */
+/** A code as stored: `normalizePromoCode`'s form, then Latin letters, digits, `-` and `_` only. */
 export const promoCodeTextSchema = z
   .string()
-  .trim()
-  .toUpperCase()
-  .regex(PROMO_CODE_PATTERN, 'code_format');
+  .max(64)
+  .transform(normalizePromoCode)
+  .pipe(z.string().regex(PROMO_CODE_PATTERN, 'code_format'));
 
 /**
  * What the owner saves. A percent code has a whole percent (1-100) and an optional cap; a fixed

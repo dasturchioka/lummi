@@ -1,4 +1,5 @@
 import type { Quote } from '@lummi/contracts';
+import { normalizePromoCode } from '@lummi/contracts/constants';
 import { useState } from 'react';
 import { promoReasonText, promoWaitText } from '../../cart/promo';
 import { usePrefs } from '../../lib/prefs';
@@ -11,8 +12,9 @@ export type PromoNotice =
   { kind: 'tooMany'; code: string; seconds: number } | { kind: 'failed'; code: string } | null;
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
+/** The field shows the stored code when it reads as that code (the server's own normalisation). */
 const same = (typed: string, stored: string | null) =>
-  stored !== null && typed.trim().toUpperCase() === stored;
+  stored !== null && normalizePromoCode(typed) === stored;
 
 /**
  * The promo code field (approved variant 2: a white row with the tag, the code and a dark
@@ -57,7 +59,7 @@ export function PromoField({
   const applied = showsStored && quote.discount?.type === 'promo_code';
   let status: { tone: 'ok' | 'alert' | 'muted'; text: string } | null = null;
   // a refused or failed request speaks while the field still holds the code it sent
-  if (notice && typed.toUpperCase() === notice.code.trim().toUpperCase())
+  if (notice && normalizePromoCode(draft) === normalizePromoCode(notice.code))
     status = {
       tone: 'alert',
       text: notice.kind === 'tooMany' ? promoWaitText(notice.seconds, t, language) : p.failed,

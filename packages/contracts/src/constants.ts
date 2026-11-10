@@ -1,11 +1,12 @@
 /**
- * Constants the Mini App needs at runtime. This file and the two modules it re-exports have no
+ * Constants the Mini App needs at runtime. This file and the modules it re-exports have no
  * other imports, so importing it does not pull zod or the rest of the contracts into the Mini App
  * bundle (ADR 0030). The DB schema reads the order statuses from here too.
  */
 export * from './order-status';
 export * from './order-machine';
 export * from './recipient';
+export * from './promo-code';
 export const POINT_SEARCH_MIN = 2;
 export const POINT_SEARCH_LIMIT = 50;
 

@@ -112,6 +112,14 @@ describe('admin: promo codes are the owner’s', () => {
     expect(list.status === 200 && list.body.map((p) => p.code)).toEqual(['BLOGER10']);
   });
 
+  it('saves a code typed with Cyrillic look-alikes and spaces in Latin, so it matches the post it comes from', async () => {
+    // «В», «О», «Е» from a Russian layout, and a space inside
+    const res = await owner.client.admin.promoCodes.create({ body: promo({ code: 'Вlogеr 1О' }) });
+    expect(res).toMatchObject({ status: 201, body: { code: 'BLOGER1O' } });
+    const dup = await owner.client.admin.promoCodes.create({ body: promo({ code: 'bloger1o' }) });
+    expect(dup).toMatchObject({ status: 409, body: { code: 'code_taken' } });
+  });
+
   it('refuses a code that exists in another case (409) and one that breaks the rules (400)', async () => {
     await createPromo({ code: 'LUMMI10' });
     const dup = await owner.client.admin.promoCodes.create({ body: promo({ code: 'lummi10' }) });
@@ -295,6 +303,19 @@ describe('the cart: a typed code', () => {
     expect(removed.status === 200 && removed.body).toMatchObject({
       promoCode: null,
       quote: { discount: null, total: 298_000, promoCode: null },
+    });
+  });
+
+  it('reads a typed code as the admin saved it: Cyrillic look-alikes and spaces fold away', async () => {
+    const [a] = await slugs(1);
+    const s = await shopper();
+    await s.add(a!, 30);
+    await createPromo();
+    const cart = await s.apply('вlogеr 10');
+    expect(cart.promoCode).toBe('BLOGER10');
+    expect(cart.quote).toMatchObject({
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 14_900 },
+      promoCode: { code: 'BLOGER10', invalid: null },
     });
   });
 

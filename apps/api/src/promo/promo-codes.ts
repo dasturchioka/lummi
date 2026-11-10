@@ -1,3 +1,4 @@
+import { normalizePromoCode } from '@lummi/contracts/constants';
 import type { PromoCodeState } from '@lummi/contracts';
 import {
   and,
@@ -75,7 +76,7 @@ export async function judgePromoCode(
   customerId: number,
   now: Date,
 ): Promise<JudgedPromoCode> {
-  const code = entered.trim().toUpperCase();
+  const code = normalizePromoCode(entered);
   const refused = (reason: RefusedPromoCode['refused']): JudgedPromoCode => ({
     promoCode: { code, refused: reason },
     promoCodeId: null,
