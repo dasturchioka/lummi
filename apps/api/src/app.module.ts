@@ -56,6 +56,7 @@ import type { Env } from './env';
 import { AlertService } from './outbox/alert.service';
 import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
+import { BotReceipts } from './bot/bot-receipts.service';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
 import { CreditEvents } from './humo/credit-events';
@@ -129,6 +130,7 @@ export class AppModule {
         OutboxService,
         AlertService,
         BotService,
+        BotReceipts,
         WorkerRuntime,
         SettingsService,
         CatalogService,

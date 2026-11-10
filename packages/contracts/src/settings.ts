@@ -5,6 +5,9 @@ import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 
+/** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
+export const BOT_CHOICE_MAX_SECONDS = 86_400;
+
 /** Page sections of the settings screen, in display order. Their labels live in the admin messages. */
 export const SETTING_AREAS = [
   'shop',
@@ -257,6 +260,24 @@ export const settingDefinitions = {
     hint: {
       ru: 'Самый большой скриншот или PDF чека, который примет приложение.',
       uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
+    },
+  },
+  /**
+   * How long the bot keeps a receipt the shopper sent while several orders waited for payment,
+   * until they choose the order with a button (#31). Later, the bot asks them to send it again.
+   */
+  'receipts.botChoiceSeconds': {
+    schema: z.number().int().min(60).max(BOT_CHOICE_MAX_SECONDS),
+    default: 3600,
+    area: 'shop',
+    unit: 'seconds',
+    label: {
+      ru: 'Сколько ждём выбор заказа для чека в боте',
+      uz: 'Botda chek uchun buyurtma tanlovini kutish vaqti',
+    },
+    hint: {
+      ru: 'Если у покупателя несколько заказов, бот спрашивает, к какому относится чек. Выбор после этого срока бот не примет и попросит отправить чек заново. 3 600 секунд = 1 час.',
+      uz: 'Xaridorning bir nechta buyurtmasi boʻlsa, bot chek qaysi buyurtmaga tegishli ekanini soʻraydi. Bu muddatdan keyingi tanlovni bot qabul qilmaydi va chekni qayta yuborishni soʻraydi. 3 600 soniya = 1 soat.',
     },
   },
   /**

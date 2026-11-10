@@ -1,5 +1,5 @@
 {
-  "id": "e6b6674c-a815-45f1-a497-02792a76bb01",
+  "id": "996f5fb5-3e87-4abe-9259-eec14926854c",
   "prevId": "1a71c023-2068-47e4-a625-00153b559f5a",
   "version": "7",
   "dialect": "postgresql",
@@ -110,6 +110,97 @@
         }
       },
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.bot_pending_receipts": {
+      "name": "bot_pending_receipts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "bot_pending_receipts_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_id": {
+          "name": "file_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "order_number": {
+          "name": "order_number",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "bot_pending_receipts_created_idx": {
+          "name": "bot_pending_receipts_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "bot_pending_receipts_customer_id_customers_id_fk": {
+          "name": "bot_pending_receipts_customer_id_customers_id_fk",
+          "tableFrom": "bot_pending_receipts",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -464,250 +555,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.campaign_links": {
-      "name": "campaign_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "campaign_links_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target": {
-          "name": "target",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "promo_code_id": {
-          "name": "promo_code_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "campaign_source",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_label": {
-          "name": "source_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "campaign_links_code_idx": {
-          "name": "campaign_links_code_idx",
-          "columns": [
-            {
-              "expression": "lower(\"code\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaign_links_promo_idx": {
-          "name": "campaign_links_promo_idx",
-          "columns": [
-            {
-              "expression": "promo_code_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "campaign_links_promo_code_id_promo_codes_id_fk": {
-          "name": "campaign_links_promo_code_id_promo_codes_id_fk",
-          "tableFrom": "campaign_links",
-          "tableTo": "promo_codes",
-          "columnsFrom": [
-            "promo_code_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "campaign_links_code_check": {
-          "name": "campaign_links_code_check",
-          "value": "\"campaign_links\".\"code\" ~ '^[A-Za-z0-9_-]{3,40}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.campaign_opens": {
-      "name": "campaign_opens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "campaign_opens_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "link_id": {
-          "name": "link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "campaign_opens_customer_idx": {
-          "name": "campaign_opens_customer_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "opened_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaign_opens_link_idx": {
-          "name": "campaign_opens_link_idx",
-          "columns": [
-            {
-              "expression": "link_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "campaign_opens_link_id_campaign_links_id_fk": {
-          "name": "campaign_opens_link_id_campaign_links_id_fk",
-          "tableFrom": "campaign_opens",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "link_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "campaign_opens_customer_id_customers_id_fk": {
-          "name": "campaign_opens_customer_id_customers_id_fk",
-          "tableFrom": "campaign_opens",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1239,12 +1086,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "acquisition_link_id": {
-          "name": "acquisition_link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1268,19 +1109,6 @@
           "tableTo": "regions",
           "columnsFrom": [
             "delivery_region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "customers_acquisition_link_id_campaign_links_id_fk": {
-          "name": "customers_acquisition_link_id_campaign_links_id_fk",
-          "tableFrom": "customers",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "acquisition_link_id"
           ],
           "columnsTo": [
             "id"
@@ -2719,12 +2547,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "campaign_link_id": {
-          "name": "campaign_link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "tracking_number": {
           "name": "tracking_number",
           "type": "text",
@@ -2888,19 +2710,6 @@
           "tableTo": "credits",
           "columnsFrom": [
             "credit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "orders_campaign_link_id_campaign_links_id_fk": {
-          "name": "orders_campaign_link_id_campaign_links_id_fk",
-          "tableFrom": "orders",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "campaign_link_id"
           ],
           "columnsTo": [
             "id"
@@ -3426,13 +3235,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "campaign_link_made": {
-          "name": "campaign_link_made",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -4498,17 +4300,6 @@
         "sent",
         "blocked",
         "failed"
-      ]
-    },
-    "public.campaign_source": {
-      "name": "campaign_source",
-      "schema": "public",
-      "values": [
-        "instagram",
-        "telegram_channel",
-        "store_qr",
-        "blogger",
-        "other"
       ]
     },
     "public.cart_line_kind": {
