@@ -1,3 +1,5 @@
+import type { Discount } from '@lummi/contracts';
+import { ORDER_STATUSES, type OrderStatus } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
 import {
@@ -14,6 +16,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core';
 
 /** Internal keys are `bigint identity` (ADR 0016); money columns elsewhere are `integer` so'm. */
@@ -54,6 +57,8 @@ export const customers = pgTable('customers', {
   /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
   deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
   deliveryCity: text('delivery_city'),
+  /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
+  dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -540,3 +545,145 @@ export const broadcastDeliveries = pgTable(
       .where(sql`status = 'pending'`),
   ],
 );
+
+/*
+ * Orders (ADR 0001, 0010, 0011, 0012). An order is an immutable snapshot of what was bought, at
+ * which prices, delivered where: later price, catalog or BTS point edits never change it. Its
+ * status is the one linear status of ADR 0011; the status machine (#24) moves it after checkout.
+ */
+/** The one status list lives in the contracts (`ORDER_STATUSES`); the enum is built from it. */
+export const orderStatusEnum = pgEnum('order_status', ORDER_STATUSES);
+/**
+ * The statuses whose lines hold a Reserve (ADR 0010): not yet handed to BTS (on hand drops then)
+ * and not cancelled. Delivered and returned orders hold none either.
+ */
+export const RESERVING_STATUSES = [
+  'awaiting_payment',
+  'receipt_review',
+  'payment_confirmed',
+  'accepted',
+  'assembling',
+] as const satisfies readonly OrderStatus[];
+export const thresholdBaseEnum = pgEnum('threshold_base', ['before', 'after']);
+/** A single volume, or a builder set (five 10 ml volumes, ADR 0009). The Discovery set comes with #22. */
+export const orderLineKindEnum = pgEnum('order_line_kind', ['volume', 'builder_set']);
+
+export const orders = pgTable(
+  'orders',
+  {
+    id: id(),
+    /** The customer-facing number (ADR 0016): its own sequence, starting at 1001. */
+    number: integer('number').notNull().unique().generatedAlwaysAsIdentity({ startWith: 1001 }),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    status: orderStatusEnum('status').notNull().default('awaiting_payment'),
+    /** Without a receipt the reserve ends here (setting `orders.reserveTtlSeconds`, ADR 0012). */
+    reserveUntil: timestamp('reserve_until', { withTimezone: true }).notNull(),
+    /** The Recipient: who collects at the BTS point; the phone is E.164 and grants nothing (ADR 0004). */
+    recipientName: text('recipient_name').notNull(),
+    recipientPhone: text('recipient_phone').notNull(),
+    /** The delivery region decides the fee; from the point, or chosen with a typed address. */
+    regionId: bigint('region_id', { mode: 'number' })
+      .notNull()
+      .references(() => regions.id),
+    regionNameRu: text('region_name_ru').notNull(),
+    regionNameUz: text('region_name_uz').notNull(),
+    /** The chosen BTS point and its text as it was then; all null when the address was typed. */
+    btsPointId: bigint('bts_point_id', { mode: 'number' }).references(() => btsPoints.id),
+    pointCode: text('point_code'),
+    pointName: text('point_name'),
+    pointCity: text('point_city'),
+    pointAddress: text('point_address'),
+    pointLandmark: text('point_landmark'),
+    pointHours: text('point_hours'),
+    /** «Не нашёл свой пункт»: the customer's own text; a manager picks the point (spec 2026-11-07). */
+    typedAddress: text('typed_address'),
+    comment: text('comment'),
+    /** «Это подарок»: gift packaging, a greeting card, no receipt in the parcel; free of charge. */
+    isGift: boolean('is_gift').notNull().default(false),
+    giftMessage: text('gift_message'),
+    itemsSubtotal: integer('items_subtotal').notNull(),
+    /** The quote's one Discount (type, source, amount); its line key is the order line position. */
+    discount: jsonb('discount').$type<Discount>(),
+    discountAmount: integer('discount_amount').notNull().default(0),
+    deliveryFee: integer('delivery_fee').notNull(),
+    thresholdBase: thresholdBaseEnum('threshold_base').notNull(),
+    thresholdBaseAmount: integer('threshold_base_amount').notNull(),
+    total: integer('total').notNull(),
+    /** What the customer transfers to the shop card; payment matching compares this (ADR 0012). */
+    amountDue: integer('amount_due').notNull(),
+    /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
+    idempotencyKey: uuid('idempotency_key').notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('orders_customer_idx').on(t.customerId, t.createdAt),
+    uniqueIndex('orders_customer_idempotency_idx').on(t.customerId, t.idempotencyKey),
+    index('orders_status_idx').on(t.status),
+    // A chosen point is all there (code, name, city, address), or the address was typed instead.
+    check(
+      'orders_point_or_typed',
+      sql`(${t.typedAddress} is null and ${t.pointCode} is not null and ${t.pointName} is not null and ${t.pointCity} is not null and ${t.pointAddress} is not null) or (${t.typedAddress} is not null and ${t.btsPointId} is null and ${t.pointCode} is null and ${t.pointName} is null and ${t.pointCity} is null and ${t.pointAddress} is null and ${t.pointLandmark} is null and ${t.pointHours} is null)`,
+    ),
+    check('orders_gift_message', sql`${t.isGift} or ${t.giftMessage} is null`),
+    check(
+      'orders_money',
+      sql`${t.itemsSubtotal} >= 0 and ${t.discountAmount} >= 0 and ${t.deliveryFee} >= 0 and ${t.thresholdBaseAmount} >= 0 and ${t.total} >= 0 and ${t.amountDue} >= 0 and ${t.amountDue} <= ${t.total}`,
+    ),
+    // «Итого» = items − the one discount + delivery (ADR 0001), whatever wrote the row.
+    check(
+      'orders_total_adds_up',
+      sql`${t.total} = ${t.itemsSubtotal} - ${t.discountAmount} + ${t.deliveryFee}`,
+    ),
+  ],
+);
+
+export const orderLines = pgTable(
+  'order_lines',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    /** 0-based place in the order; the discount's line key. */
+    position: smallint('position').notNull(),
+    kind: orderLineKindEnum('kind').notNull().default('volume'),
+    volumeId: bigint('volume_id', { mode: 'number' }).references(() => volumes.id),
+    fragranceId: bigint('fragrance_id', { mode: 'number' }).references(() => fragrances.id),
+    slug: text('slug'),
+    nameRu: text('name_ru').notNull(),
+    nameUz: text('name_uz').notNull(),
+    brand: text('brand'),
+    ml: smallint('ml').notNull(),
+    photo: text('photo'),
+    unitPrice: integer('unit_price').notNull(),
+    regularUnitPrice: integer('regular_unit_price').notNull(),
+    markedDown: boolean('marked_down').notNull().default(false),
+    qty: integer('qty').notNull(),
+    lineTotal: integer('line_total').notNull(),
+    /** A builder set's five 10 ml volumes: the reserve takes one of each per set unit. */
+    setVolumeIds: bigint('set_volume_ids', { mode: 'number' }).array(),
+    /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
+    setComposition:
+      jsonb('set_composition').$type<{ fragranceId: number; name: string; brand: string }[]>(),
+  },
+  (t) => [
+    uniqueIndex('order_lines_order_position_idx').on(t.orderId, t.position),
+    index('order_lines_volume_idx').on(t.volumeId),
+    check('order_lines_qty_check', sql`${t.qty} > 0`),
+    check(
+      'order_lines_kind_check',
+      sql`(${t.kind} = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind} = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5)`,
+    ),
+    check(
+      'order_lines_money_check',
+      sql`${t.unitPrice} >= 0 and ${t.regularUnitPrice} >= 0 and ${t.lineTotal} >= 0`,
+    ),
+  ],
+);
+
+export type OrderRow = typeof orders.$inferSelect;
+export type { OrderStatus };
+export type OrderLineRow = typeof orderLines.$inferSelect;

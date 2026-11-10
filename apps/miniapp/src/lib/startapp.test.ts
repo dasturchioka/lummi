@@ -24,3 +24,10 @@ it('opens every target the admin offers on a broadcast button', () => {
     expect(target === 'home' ? route === '/' : route !== '/').toBe(true);
   }
 });
+
+it('opens an order from o_<number> and rejects malformed ones', () => {
+  expect(routeForStartParam('o_1001')).toBe('/orders/1001');
+  expect(routeForStartParam('o_0')).toBe('/');
+  expect(routeForStartParam('o_12a')).toBe('/');
+  expect(routeForStartParam('o_')).toBe('/');
+});

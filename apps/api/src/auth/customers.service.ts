@@ -247,6 +247,8 @@ export const broadcastReachableSql = sql`(${customers.botBlocked} = false and ${
  * Everything that hangs on a customer record moves here when a fresh record is merged into the
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
  * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
+ * Orders and data consent never move: only a record without a phone is merged away, and an order
+ * needs the account phone (#23), so such a record has neither.
  */
 export async function moveCustomerData(
   tx: DbOrTx,

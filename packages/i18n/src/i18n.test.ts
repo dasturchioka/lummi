@@ -3,6 +3,8 @@ import { dictionaries } from './all';
 import {
   defineMessages,
   fill,
+  formatDateTime,
+  formatDayMonth,
   formatMoney,
   formatPhone,
   languageFromTelegram,
@@ -104,5 +106,14 @@ describe('stripApostrophes', () => {
   it('makes every apostrophe variant compare equal', () => {
     expect(stripApostrophes("Devil's Intrigue")).toBe(stripApostrophes('Devil’s Intrigue'));
     expect(stripApostrophes("Bal d'Afrique")).toBe('Bal dAfrique');
+  });
+});
+
+describe('dates on the Tashkent wall clock', () => {
+  it('reads an instant in Tashkent (UTC+5), RU and UZ', () => {
+    expect(formatDateTime('2026-11-09T22:00:00Z', 'ru')).toBe('10 ноября, 03:00');
+    expect(formatDateTime(new Date('2026-11-09T22:00:00Z'), 'uz')).toBe('10-noyabr, 03:00');
+    expect(formatDayMonth('2026-12-31T19:00:00Z', 'ru')).toBe('1 января');
+    expect(formatDayMonth('2026-12-31T18:59:59Z', 'uz')).toBe('31-dekabr');
   });
 });
