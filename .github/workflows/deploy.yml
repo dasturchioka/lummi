@@ -89,7 +89,7 @@ jobs:
         env:
           TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
         run: |
-          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes docker-compose.yml "$TARGET:/opt/lummi-staging/docker-compose.yml"
+          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes docker-compose.yml deploy/remote-deploy.sh "$TARGET:/opt/lummi-staging/"
       - name: Pull, migrate, seed, start
         env:
           TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
@@ -97,10 +97,12 @@ jobs:
           GHCR_ACTOR: ${{ github.actor }}
           SHA: ${{ github.sha }}
         run: |
-          # The token is the first stdin line, read by the remote shell: never in argv, never in `ps`.
-          { printf '%s\n' "$GHCR_TOKEN"; cat deploy/remote-deploy.sh; } |
+          # The token is the only stdin line, read by the remote shell: never in argv, never in `ps`.
+          # The script runs from the copied file, not from stdin: `docker compose run` reads stdin and
+          # would swallow the rest of a piped script (the first deploy stopped after migrating, exit 0).
+          printf '%s\n' "$GHCR_TOKEN" |
             ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$TARGET" \
-              "read -r GHCR_TOKEN; export GHCR_TOKEN; bash -s -- '$SHA' '$OWNER' '$GHCR_ACTOR'"
+              "read -r GHCR_TOKEN; export GHCR_TOKEN; bash /opt/lummi-staging/remote-deploy.sh '$SHA' '$OWNER' '$GHCR_ACTOR' </dev/null"
       - name: Smoke test
         env:
           DOMAIN: ${{ vars.STAGING_DOMAIN }}
