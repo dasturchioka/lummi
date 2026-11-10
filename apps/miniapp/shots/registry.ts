@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
+import { LIMIT_BANNER, LONG_PAGE, onInfoPage } from './content-data';
 import type { ShotDb } from './db';
 
 /**
@@ -1063,6 +1064,39 @@ export const screens: ScreenDef[] = [
   { id: 'info-about', path: '/info/about' },
   { id: 'info-contacts', path: '/info/contacts' },
   { id: 'info-not-found', path: '/info/nope' },
+  // While the body loads (a fresh app: Profile's list is not cached, so the title is a bar too),
+  // and a failed read.
+  {
+    id: 'info-loading',
+    path: '/info/faq',
+    loading: true,
+    act: ({ page }) => holdRead(page, /\/content\/pages\/faq$/),
+  },
+  {
+    id: 'info-error',
+    path: '/info/faq',
+    act: ({ page }) => failRead(page, /\/content\/pages\/faq$/),
+  },
+  // Worst cases (break-ui): a ~2 000-word page with every block, the 80-character UZ title with ʻ,
+  // placeholders and refused link targets; a page the owner left empty; the long title in
+  // Profile's list; a promo banner at every field's limit.
+  { id: 'info-long', path: '/info/about', fullPage: true, ...onInfoPage('about', LONG_PAGE) },
+  { id: 'info-empty', path: '/info/offer', ...onInfoPage('offer', { bodyRu: '', bodyUz: '' }) },
+  {
+    id: 'profile-long-title',
+    path: '/profile',
+    fullPage: true,
+    ...onInfoPage('about', { titleRu: LONG_PAGE.titleRu, titleUz: LONG_PAGE.titleUz }),
+  },
+  {
+    id: 'home-promo-limit',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+    },
+    teardown: ({ db }) => clearBanners(db),
+  },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {
     id: 'cart-lines',
