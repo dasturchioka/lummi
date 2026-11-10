@@ -5,6 +5,7 @@ import {
 } from '@lummi/contracts';
 import {
   and,
+  desc,
   eq,
   orders,
   receipts,
@@ -44,19 +45,26 @@ export type RejectReceiptOutcome =
   | { kind: 'try_again' };
 
 /**
- * The one door that rejects a Receipt (ADR 0011, 0013): only staff, always with a reason. Under
- * the order's lock, then the receipt's (the order `PaymentConfirmation` takes them in), it checks
- * that the order is still «Чек на проверке» and that this receipt is the one waiting, moves the
+ * The one door that rejects a Receipt (ADR 0011, 0013): only staff, always with a reason; the
+ * admin panel and the orders group (#37) both come here, and `transition()` refuses the move from
+ * anyone else. Under the order's lock, then the receipt's (the order `PaymentConfirmation` takes
+ * them in), it checks that the order is still «Чек на проверке» and that this receipt is the
+ * order's latest and still waiting, moves the
  * order back to «Ожидает оплаты» through `transitionIn()` (its history, the audit entry naming
  * the manager, the shopper's message with the reason in their language) and marks the receipt
  * rejected, in one transaction. The shopper may then send another receipt.
  */
 @Injectable()
 export class ReceiptRejection {
+  /** The capability for `reject_receipt`: this class is the only holder. */
+  private readonly door: symbol;
+
   constructor(
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-  ) {}
+  ) {
+    this.door = status.issueDoor('reject_receipt');
+  }
 
   /** In its own transaction, retried once on a deadlock; the message is queued after the commit. */
   async reject(input: RejectReceiptInput): Promise<RejectReceiptOutcome> {
@@ -97,7 +105,14 @@ export class ReceiptRejection {
       .where(and(eq(receipts.id, input.receiptId), eq(receipts.orderId, order.id)))
       .for('update');
     if (!receipt) return { kind: 'not_found', what: 'receipt' };
-    if (!WAITING_RECEIPT_VERDICTS.includes(receipt.verdict))
+    // the receipt under check is the order's latest: an older one is never it, whatever its verdict
+    const [latest] = await tx
+      .select({ id: receipts.id })
+      .from(receipts)
+      .where(eq(receipts.orderId, order.id))
+      .orderBy(desc(receipts.id))
+      .limit(1);
+    if (!WAITING_RECEIPT_VERDICTS.includes(receipt.verdict) || latest?.id !== receipt.id)
       return { kind: 'receipt_changed', order, verdict: receipt.verdict };
 
     const moved = await this.status.transitionIn(
@@ -107,6 +122,7 @@ export class ReceiptRejection {
       { type: 'staff', id: input.staffId },
       'receipt_review',
       payload,
+      this.door,
     );
     // the order is locked in «Чек на проверке» and the payload fits: any refusal is a bug
     if (moved.kind !== 'done')

@@ -32,6 +32,12 @@ import { planTransition } from './machine';
 import { orderMessage } from './messages';
 import { changeOnHand, type OnHandChange } from './on-hand';
 
+/** The moves only their one door makes, holding the capability `issueDoor()` gave it. */
+export const GUARDED_ACTIONS = ['confirm_payment', 'reject_receipt'] as const;
+export type GuardedAction = (typeof GUARDED_ACTIONS)[number];
+const isGuarded = (a: OrderAction): a is GuardedAction =>
+  (GUARDED_ACTIONS as readonly OrderAction[]).includes(a);
+
 /** Who makes the move: the shopper or a staff member by id, the receipt AI, or a sweep. */
 export type TransitionActor =
   | { type: 'customer'; id: number }
@@ -59,9 +65,15 @@ export type TransitionOutcome =
  */
 @Injectable()
 export class OrderStatusService {
-  /** The capability `confirm_payment` needs (ADR 0012): issued once, to `PaymentConfirmation`. */
-  private readonly paymentDoor = Symbol('confirm_payment');
-  private paymentDoorIssued = false;
+  /**
+   * The capabilities the guarded moves need, each issued once: `confirm_payment` to
+   * `PaymentConfirmation` (ADR 0012), `reject_receipt` to `ReceiptRejection` (ADR 0013, #33).
+   */
+  private readonly doors: Record<GuardedAction, symbol> = {
+    confirm_payment: Symbol('confirm_payment'),
+    reject_receipt: Symbol('reject_receipt'),
+  };
+  private readonly issued = new Set<GuardedAction>();
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -74,14 +86,14 @@ export class OrderStatusService {
 
   /**
    * Money on the card is ground truth: only `PaymentConfirmation`, which checks and links the
-   * credit, may make the `confirm_payment` move. It takes this capability when the app starts; a
-   * second taker throws, so the app fails loudly instead of growing a second door.
+   * credit, may make the `confirm_payment` move; only `ReceiptRejection`, which checks the receipt
+   * and gives it its verdict, may make `reject_receipt`. Each takes its capability when the app
+   * starts; a second taker throws, so the app fails loudly instead of growing a second door.
    */
-  issuePaymentDoor(): symbol {
-    if (this.paymentDoorIssued)
-      throw new Error('the confirm_payment capability was already issued');
-    this.paymentDoorIssued = true;
-    return this.paymentDoor;
+  issueDoor(action: GuardedAction): symbol {
+    if (this.issued.has(action)) throw new Error(`the ${action} capability was already issued`);
+    this.issued.add(action);
+    return this.doors[action];
   }
 
   /**
@@ -110,7 +122,8 @@ export class OrderStatusService {
   /**
    * Inside the caller's transaction (a receipt intake writing its receipt, a sweep), so the move
    * commits or rolls back with the caller's own rows. A refusal or a conflict writes nothing.
-   * `confirm_payment` is refused as `forbidden` without the capability `issuePaymentDoor()` gave.
+   * `confirm_payment` and `reject_receipt` are refused as `forbidden` without the capability
+   * `issueDoor()` gave their one door.
    */
   async transitionIn<A extends OrderAction>(
     tx: DbOrTx,
@@ -121,7 +134,7 @@ export class OrderStatusService {
     payload: TransitionPayloadInput<A>,
     door?: symbol,
   ): Promise<Exclude<TransitionOutcome, { kind: 'try_again' }>> {
-    if (action === 'confirm_payment' && door !== this.paymentDoor)
+    if (isGuarded(action) && door !== this.doors[action])
       return { kind: 'refused', code: 'forbidden' };
     const plan = planTransition(expectedStatus, action, actor.type, payload);
     if (!plan.ok) return { kind: 'refused', code: plan.code };

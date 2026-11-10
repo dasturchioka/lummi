@@ -149,7 +149,7 @@ export class PaymentConfirmation {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(DB) private readonly db: Db,
   ) {
-    this.door = status.issuePaymentDoor();
+    this.door = status.issueDoor('confirm_payment');
   }
 
   /** In its own transaction, retried once on a deadlock; the message is queued after the commit. */

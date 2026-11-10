@@ -453,9 +453,32 @@ describe('the order page', () => {
     expect(page.limits).toEqual({ rejectNoteMax: 300 });
   });
 
-  it('an unknown number is 404', async () => {
-    const { client } = await t.managerSession();
+  it('an unknown number is 404, however long', async () => {
+    const { client, cookie } = await t.managerSession();
     expect((await client.admin.orders.get({ params: { number: 999 } })).status).toBe(404);
+    for (const [method, path] of [
+      ['GET', '/admin/orders/99999999999'],
+      ['GET', '/admin/orders/1e30'],
+      ['POST', '/admin/orders/99999999999/fulfil'],
+      ['POST', '/admin/orders/99999999999/cancel'],
+      ['POST', '/admin/orders/99999999999/reject-receipt'],
+    ] as const) {
+      const res = await fetch(`${t.baseUrl}${path}`, {
+        method,
+        headers: { cookie, 'content-type': 'application/json' },
+        body:
+          method === 'POST'
+            ? JSON.stringify(
+                path.endsWith('fulfil')
+                  ? { action: 'accept', expectedStatus: 'payment_confirmed' }
+                  : path.endsWith('cancel')
+                    ? { expectedStatus: 'awaiting_payment', reason: 'unreachable' }
+                    : { receiptId: 1, reason: 'wrong_card' },
+              )
+            : undefined,
+      });
+      expect(res.status, `${method} ${path}`).toBe(404);
+    }
   });
 
   it('each receipt image opens only through the private staff endpoint', async () => {
@@ -680,6 +703,45 @@ describe('reject a receipt', () => {
     expect((await orderRow(one)).status).toBe('receipt_review');
   });
 
+  it('has one door: transition() refuses reject_receipt from anyone but ReceiptRejection', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const number = await placeOrder(client, await firstSlugs(1));
+    const receiptId = await sendReceipt(number);
+    const { id } = await orderRow(number);
+    const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
+    const out = await machine().transition(id, 'reject_receipt', manager, 'receipt_review', {
+      receiptId,
+      reason: 'wrong_card',
+    });
+    expect(out).toEqual({ kind: 'refused', code: 'forbidden' });
+    expect((await orderRow(number)).status).toBe('receipt_review');
+    expect(await messages()).toEqual([]);
+  });
+
+  it('an older receipt is never rejected while a newer one is under check, whatever its verdict', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const number = await placeOrder(client, await firstSlugs(1));
+    const older = await sendReceipt(number);
+    const manager = await t.managerSession();
+    await manager.client.admin.orders.rejectReceipt({
+      params: { number },
+      body: { receiptId: older, reason: 'unreadable' },
+    });
+    t.edges.clock.advance(HOUR);
+    const newer = await sendReceipt(number);
+    // a verdict left open by mistake must not let a stale screen reject the wrong receipt
+    await t.db.update(receipts).set({ verdict: 'pending' }).where(eq(receipts.id, older));
+    const res = await manager.client.admin.orders.rejectReceipt({
+      params: { number },
+      body: { receiptId: older, reason: 'wrong_card' },
+    });
+    expect(res.status).toBe(409);
+    expect(res.status === 409 && 'order' in res.body && res.body.code).toBe('receipt_changed');
+    const [latest] = await t.db.select().from(receipts).where(eq(receipts.id, newer));
+    expect(latest!.verdict).toBe('pending');
+    expect((await orderRow(number)).status).toBe('receipt_review');
+  });
+
   it('two managers pressing at once: one rejects, the other gets 409', async () => {
     const client = await shopper(t, ali, '998901112233');
     const number = await placeOrder(client, await firstSlugs(1));
@@ -697,6 +759,8 @@ describe('reject a receipt', () => {
       ),
     );
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    const loser = results.find((r) => r.status === 409)!;
+    expect(loser.status === 409 && 'order' in loser.body && loser.body.code).toBe('status_changed');
     expect((await eventsOf(number)).filter((e) => e.action === 'reject_receipt')).toHaveLength(1);
     expect((await messages()).filter((m) => /не принят/.test(m.text))).toHaveLength(1);
   });

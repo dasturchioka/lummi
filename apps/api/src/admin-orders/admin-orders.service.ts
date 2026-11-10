@@ -1,4 +1,5 @@
 import {
+  ORDER_NUMBER_MAX,
   RECEIPT_REJECT_REASONS,
   type AdminCreditDto,
   type AdminCreditsPageDto,
@@ -76,6 +77,9 @@ end`;
 const digitsOf = (column: unknown) =>
   sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g')`;
 
+/** A number the column can hold: anything longer is no order, so 404 rather than a DB error. */
+const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
+
 const customerName = (c: { firstName: string; lastName: string | null }) =>
   c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName;
 
@@ -103,7 +107,7 @@ export class AdminOrdersService {
     if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
     const digits = q.q?.replace(/\D/g, '') ?? null;
     // an order number fits in nine digits; a phone is searched by four digits or more
-    const byNumber = digits && digits.length <= 9 ? Number(digits) : null;
+    const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;
     if (digits !== null) {
       const matches = [];
       if (byNumber !== null) matches.push(eq(orders.number, byNumber));
@@ -170,6 +174,7 @@ export class AdminOrdersService {
 
   /** The order page by its number; null when there is no such order. */
   async page(number: number): Promise<AdminOrderDto | null> {
+    if (!knownNumber(number)) return null;
     const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
     return o ? this.pageOf(o) : null;
   }
@@ -371,6 +376,7 @@ export class AdminOrdersService {
   }
 
   private async idOf(number: number): Promise<number | null> {
+    if (!knownNumber(number)) return null;
     const [row] = await this.db
       .select({ id: orders.id })
       .from(orders)

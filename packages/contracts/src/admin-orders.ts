@@ -33,6 +33,8 @@ export type PaymentState = (typeof PAYMENT_STATES)[number];
 export const paymentStateSchema = z.enum(PAYMENT_STATES);
 
 export const ADMIN_ORDERS_PAGE_SIZE = 25;
+/** The largest order number the panel looks up (nine digits, like the search): beyond it, 404. */
+export const ORDER_NUMBER_MAX = 999_999_999;
 
 /** `GET /admin/orders`: newest first; every filter optional, dates are Tashkent days. */
 export const adminOrdersQuerySchema = z.object({
