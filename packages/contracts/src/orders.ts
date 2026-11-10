@@ -46,6 +46,8 @@ export const checkoutSchema = z.object({
   giftMessageMax: z.number().int().positive(),
   /** Countries a Recipient phone may be from, digits without `+` (setting `orders.recipientPhoneCountryCodes`). */
   recipientPhoneCountryCodes: z.array(z.string()),
+  /** A shop card is set; without one checkout is closed: «Оплата временно недоступна» (#28). */
+  paymentAvailable: z.boolean(),
 });
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 

@@ -61,9 +61,10 @@ export const clientRoutes = {
     get: route('GET', '/checkout', [200, 401]),
   },
   orders: {
-    create: route('POST', '/orders', [201, 401, 403, 409, 422]),
+    create: route('POST', '/orders', [201, 401, 403, 409, 422, 503]),
     list: route('GET', '/orders', [200, 401]),
     get: route('GET', '/orders/:number', [200, 401, 404]),
+    payment: route('GET', '/orders/:number/payment', [200, 401, 404]),
     cancel: route('POST', '/orders/:number/cancel', [200, 401, 403, 404, 409]),
   },
   catalog: {

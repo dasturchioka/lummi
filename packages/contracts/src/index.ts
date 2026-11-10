@@ -16,4 +16,5 @@ export * from './sets';
 export * from './content';
 export * from './broadcast';
 export * from './orders';
+export * from './payment';
 export * from './order-transition-payloads';
