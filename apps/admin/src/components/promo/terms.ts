@@ -27,14 +27,14 @@ export function discountOf(p: Terms, t: AdminMessages, language: Language): stri
     : `${off}, ${fill(m.capped, { amount: formatMoney(p.maxDiscount, language) })}`;
 }
 
-/** `2026-11-30` as the panel writes days: `30.11.2026` (a Tashkent calendar day, no time zone). */
-export const dayOf = (iso: string) => iso.split('-').reverse().join('.');
+/** A `YYYY-MM-DD` day as the panel writes days: `2026-11-30` → `30.11.2026` (no time zone involved). */
+export const formatDottedDay = (ymd: string) => ymd.split('-').reverse().join('.');
 
 /** The conditions after the discount, each a short part of a meta line. */
 export function conditionsOf(p: Terms, t: AdminMessages, language: Language): string[] {
   const m = t.promo;
   return [
-    p.expiresOn ? fill(m.until, { date: dayOf(p.expiresOn) }) : null,
+    p.expiresOn ? fill(m.until, { date: formatDottedDay(p.expiresOn) }) : null,
     p.minOrderTotal ? fill(m.minimum, { amount: formatMoney(p.minOrderTotal, language) }) : null,
     p.perCustomerLimit ? fill(m.perCustomer, { n: num(p.perCustomerLimit) }) : null,
     p.newCustomersOnly ? m.newOnly : null,
