@@ -40,7 +40,7 @@ async function sayCodeWaits(): Promise<void> {
   note.dataset.testid = 'campaign-note';
   note.textContent = fill(miniappMessages[lang].cart.promo.inCart, { code: code.code });
   note.style.cssText =
-    'position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);z-index:50;' +
+    'position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top,0px) + 12px);z-index:50;' +
     'margin:0 auto;max-width:358px;padding:10px 14px;border-radius:10px;text-align:center;' +
     'font:500 14px/1.35 Manrope,system-ui,sans-serif;color:var(--c-sage-ink);' +
     'background:var(--c-card);border:1px solid var(--c-sage);transition:opacity 300ms ease-out;';
