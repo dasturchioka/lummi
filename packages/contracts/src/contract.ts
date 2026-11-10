@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { birthDateErrorSchema, myDiscountsSchema, setBirthDateBodySchema } from './birthday';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
   adminPromoCodeSchema,
@@ -248,6 +249,27 @@ export const contract = c.router({
         404: savedPointErrorSchema,
       },
       summary: 'Forget one saved pair (never touches an order); answers with the list left',
+    },
+    discounts: {
+      method: 'GET',
+      path: '/me/discounts',
+      responses: { 200: myDiscountsSchema, 401: birthDateErrorSchema },
+      summary:
+        '«Мои скидки»: the date of birth, active birthday coupons with days left, and when the next one opens',
+    },
+    setBirthDate: {
+      method: 'PUT',
+      path: '/me/birth-date',
+      body: setBirthDateBodySchema,
+      responses: {
+        200: myDiscountsSchema,
+        401: birthDateErrorSchema,
+        403: birthDateErrorSchema,
+        409: birthDateErrorSchema,
+        422: birthDateErrorSchema,
+      },
+      summary:
+        'Enter the date of birth once (TZ §3.8); afterwards only staff correct it. Needs the account phone',
     },
   },
   delivery: {

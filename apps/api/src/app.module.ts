@@ -31,6 +31,8 @@ import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts
 import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
+import { BirthdayService } from './birthday/birthday.service';
+import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
@@ -114,6 +116,7 @@ export class AppModule {
         HumoFeedController,
         BroadcastController,
         PromoAdminController,
+        DiscountsController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -160,6 +163,7 @@ export class AppModule {
         HumoFeedService,
         BroadcastService,
         PromoAdminService,
+        BirthdayService,
       ],
       exports: [
         CreditEvents,
