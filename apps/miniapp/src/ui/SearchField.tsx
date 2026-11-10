@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { usePrefs } from '../lib/prefs';
-import { SearchIcon } from './icons';
+import { SearchIcon } from './icons-core';
 
 /**
  * The «Название или нота» field on Home and the catalog: it looks like the real field (the customer

@@ -1,5 +1,5 @@
 {
-  "id": "547000a9-4cba-44b2-bc8e-0d9031f96948",
+  "id": "1a71c023-2068-47e4-a625-00153b559f5a",
   "prevId": "8945a665-3994-47ac-935a-7f2890aa972a",
   "version": "7",
   "dialect": "postgresql",
@@ -464,250 +464,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.campaign_links": {
-      "name": "campaign_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "campaign_links_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target": {
-          "name": "target",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "promo_code_id": {
-          "name": "promo_code_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "campaign_source",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_label": {
-          "name": "source_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "campaign_links_code_idx": {
-          "name": "campaign_links_code_idx",
-          "columns": [
-            {
-              "expression": "lower(\"code\")",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaign_links_promo_idx": {
-          "name": "campaign_links_promo_idx",
-          "columns": [
-            {
-              "expression": "promo_code_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "campaign_links_promo_code_id_promo_codes_id_fk": {
-          "name": "campaign_links_promo_code_id_promo_codes_id_fk",
-          "tableFrom": "campaign_links",
-          "tableTo": "promo_codes",
-          "columnsFrom": [
-            "promo_code_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "campaign_links_code_check": {
-          "name": "campaign_links_code_check",
-          "value": "\"campaign_links\".\"code\" ~ '^[A-Za-z0-9_-]{3,40}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.campaign_opens": {
-      "name": "campaign_opens",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "campaign_opens_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "link_id": {
-          "name": "link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "opened_at": {
-          "name": "opened_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "campaign_opens_customer_idx": {
-          "name": "campaign_opens_customer_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "opened_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaign_opens_link_idx": {
-          "name": "campaign_opens_link_idx",
-          "columns": [
-            {
-              "expression": "link_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "campaign_opens_link_id_campaign_links_id_fk": {
-          "name": "campaign_opens_link_id_campaign_links_id_fk",
-          "tableFrom": "campaign_opens",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "link_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "campaign_opens_customer_id_customers_id_fk": {
-          "name": "campaign_opens_customer_id_customers_id_fk",
-          "tableFrom": "campaign_opens",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1239,12 +995,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "acquisition_link_id": {
-          "name": "acquisition_link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1268,19 +1018,6 @@
           "tableTo": "regions",
           "columnsFrom": [
             "delivery_region_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "customers_acquisition_link_id_campaign_links_id_fk": {
-          "name": "customers_acquisition_link_id_campaign_links_id_fk",
-          "tableFrom": "customers",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "acquisition_link_id"
           ],
           "columnsTo": [
             "id"
@@ -2719,12 +2456,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "campaign_link_id": {
-          "name": "campaign_link_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "tracking_number": {
           "name": "tracking_number",
           "type": "text",
@@ -2888,19 +2619,6 @@
           "tableTo": "credits",
           "columnsFrom": [
             "credit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "orders_campaign_link_id_campaign_links_id_fk": {
-          "name": "orders_campaign_link_id_campaign_links_id_fk",
-          "tableFrom": "orders",
-          "tableTo": "campaign_links",
-          "columnsFrom": [
-            "campaign_link_id"
           ],
           "columnsTo": [
             "id"
@@ -3906,6 +3624,149 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.saved_points": {
+      "name": "saved_points",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "saved_points_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_phone": {
+          "name": "recipient_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bts_point_id": {
+          "name": "bts_point_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "saved_points_customer_pair_idx": {
+          "name": "saved_points_customer_pair_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recipient_phone",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bts_point_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "saved_points_customer_used_idx": {
+          "name": "saved_points_customer_used_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_used_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "saved_points_customer_id_customers_id_fk": {
+          "name": "saved_points_customer_id_customers_id_fk",
+          "tableFrom": "saved_points",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "saved_points_bts_point_id_bts_points_id_fk": {
+          "name": "saved_points_bts_point_id_bts_points_id_fk",
+          "tableFrom": "saved_points",
+          "tableTo": "bts_points",
+          "columnsFrom": [
+            "bts_point_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.settings": {
       "name": "settings",
       "schema": "",
@@ -4348,17 +4209,6 @@
         "sent",
         "blocked",
         "failed"
-      ]
-    },
-    "public.campaign_source": {
-      "name": "campaign_source",
-      "schema": "public",
-      "values": [
-        "instagram",
-        "telegram_channel",
-        "store_qr",
-        "blogger",
-        "other"
       ]
     },
     "public.cart_line_kind": {

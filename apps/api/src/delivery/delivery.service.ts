@@ -1,8 +1,15 @@
-import type { BtsPointDto, CityDto, DeliveryCityDto, RegionDto } from '@lummi/contracts';
+import type {
+  BtsPointDto,
+  CityDto,
+  DeliveryCityDto,
+  RegionDto,
+  SavedPointDto,
+} from '@lummi/contracts';
 import { POINT_SEARCH_LIMIT } from '@lummi/contracts';
 import { and, asc, btsPoints, customers, eq, regions, sql, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { toPointDto, toRegionDto } from './dto';
+import { listSavedPoints, removeSavedPoint } from './saved-points';
 import { AuditService } from '../audit/audit.service';
 import { likeContains } from '../bts/search-text';
 import { seedRegions } from '../bts/seed-regions';
@@ -130,6 +137,15 @@ export class DeliveryService implements OnApplicationBootstrap {
       .update(customers)
       .set({ deliveryRegionId: null, deliveryCity: null, updatedAt: this.edges.clock.now() })
       .where(eq(customers.id, customerId));
+  }
+  /** «Мои пункты BTS»: the customer's recipient and point pairs, the last used first. */
+  savedPoints(customerId: number): Promise<SavedPointDto[]> {
+    return listSavedPoints(this.db, customerId);
+  }
+
+  /** Forgets one pair; false when it is not the customer's. Orders keep their own snapshot. */
+  removeSavedPoint(customerId: number, id: number): Promise<boolean> {
+    return removeSavedPoint(this.db, customerId, id);
   }
 }
 

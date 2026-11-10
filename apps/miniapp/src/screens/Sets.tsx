@@ -1,5 +1,6 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
+import { buyNowParam } from '@lummi/contracts/buy-now';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -16,6 +17,7 @@ import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
+import { BuyPair } from '../ui/BuyPair';
 import { DockNote } from '../ui/DockNote';
 import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
@@ -81,6 +83,7 @@ export function DiscoverySetView({
   note,
   onBack = () => undefined,
   onAdd = () => undefined,
+  onBuyNow = () => undefined,
   onOpen = () => undefined,
 }: {
   set: DiscoverySet;
@@ -88,6 +91,8 @@ export function DiscoverySetView({
   note?: string;
   onBack?: () => void;
   onAdd?: () => void;
+  /** «Купить сейчас»: a checkout of this one set, the cart left as it is (#25). */
+  onBuyNow?: () => void;
   onOpen?: (slug: string) => void;
 }) {
   const { t, language } = usePrefs();
@@ -108,15 +113,13 @@ export function DiscoverySetView({
               {s.soldOut}
             </Button>
           ) : (
-            <Button block loading={adding} onClick={onAdd}>
-              <span className="flex items-center gap-1.5">
-                {s.toCart}
-                <span aria-hidden="true" className="opacity-60">
-                  ·
-                </span>
-                <Money amount={set.price} />
-              </span>
-            </Button>
+            <BuyPair
+              toCart={s.toCart}
+              price={set.price}
+              adding={adding}
+              onAdd={onAdd}
+              onBuyNow={onBuyNow}
+            />
           )}
         </div>
       }
@@ -211,6 +214,12 @@ export function DiscoverySetScreen() {
       note={note}
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
+      onBuyNow={() =>
+        void router.navigate({
+          to: '/checkout',
+          search: { item: buyNowParam({ kind: 'discovery_set' }) },
+        })
+      }
       onAdd={() =>
         add.mutate(undefined, {
           onSuccess: () => {
@@ -404,6 +413,7 @@ export function BuilderView({
   onToggle = () => undefined,
   onFull = () => undefined,
   onAdd = () => undefined,
+  onBuyNow = () => undefined,
 }: {
   builder: Builder;
   picked: string[];
@@ -418,6 +428,8 @@ export function BuilderView({
   /** A tap on a fragrance while five are already chosen. */
   onFull?: () => void;
   onAdd?: () => void;
+  /** «Купить сейчас» with the five chosen: a checkout of this one set, the cart left as it is (#25). */
+  onBuyNow?: () => void;
 }) {
   const { t, language } = usePrefs();
   const s = useSetsText();
@@ -450,19 +462,19 @@ export function BuilderView({
               }
             />
           ) : null}
-          <Button block disabled={!full} loading={adding} onClick={onAdd}>
-            {full ? (
-              <span className="flex items-center gap-1.5">
-                {s.toCart}
-                <span aria-hidden="true" className="opacity-60">
-                  ·
-                </span>
-                <Money amount={builder.price} />
-              </span>
-            ) : (
-              plural(language, left, s.pickMore)
-            )}
-          </Button>
+          {full ? (
+            <BuyPair
+              toCart={s.toCart}
+              price={builder.price}
+              adding={adding}
+              onAdd={onAdd}
+              onBuyNow={onBuyNow}
+            />
+          ) : (
+            <Button block disabled>
+              {plural(language, left, s.pickMore)}
+            </Button>
+          )}
         </div>
       }
     >
@@ -551,6 +563,12 @@ export function BuilderScreen() {
         setPicked((p) => (p.includes(slug) ? p.filter((s) => s !== slug) : [...p, slug]));
       }}
       onFull={() => setNote(s.noMore)}
+      onBuyNow={() =>
+        void router.navigate({
+          to: '/checkout',
+          search: { item: buyNowParam({ kind: 'builder_set', slugs: picked }) },
+        })
+      }
       onAdd={() => {
         setFailed(false);
         setGone(undefined);

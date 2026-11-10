@@ -215,7 +215,18 @@ export async function createTestApp(
         `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE '\\_\\_%'`,
       );
       const tables = rows.map((r) => `"${r.tablename}"`).join(', ');
-      if (tables) await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+      // Background work the previous test started (a credit's matching job, an outbox send) can
+      // still hold row locks; Postgres then aborts one side of the deadlock. Retry the truncate:
+      // the other side finishes, and whatever it wrote is truncated with the rest.
+      for (let attempt = 1; tables; attempt++) {
+        try {
+          await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+          break;
+        } catch (err) {
+          if ((err as { code?: string }).code !== '40P01' || attempt >= 5) throw err;
+          await new Promise((r) => setTimeout(r, 50 * attempt));
+        }
+      }
       // reference data, like the migrated schema itself
       await seedRegions(db);
       await seedShopCard(db);

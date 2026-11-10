@@ -65,4 +65,20 @@ export class DeliveryController {
       return { status: 200 as const, body: { deliveryCity: null } };
     });
   }
+
+  @TsRestHandler(contract.me.savedPoints)
+  savedPoints(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.me.savedPoints, async () => ({
+      status: 200 as const,
+      body: await this.delivery.savedPoints(customerId),
+    }));
+  }
+
+  @TsRestHandler(contract.me.removeSavedPoint)
+  removeSavedPoint(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.me.removeSavedPoint, async ({ params }) => {
+      if (!(await this.delivery.removeSavedPoint(customerId, params.id))) return notFound;
+      return { status: 200 as const, body: await this.delivery.savedPoints(customerId) };
+    });
+  }
 }

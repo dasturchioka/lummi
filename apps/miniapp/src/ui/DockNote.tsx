@@ -5,7 +5,7 @@ import { useState } from 'react';
  * fades away again, so the buttons never move under the customer's thumb. The last text stays
  * while it fades. Place it inside the dock's `relative` wrapper.
  */
-export function DockNote({ text }: { text: string | undefined }) {
+export function DockNote({ text, testId }: { text: string | undefined; testId?: string }) {
   const [shown, setShown] = useState(text);
   if (text && text !== shown) setShown(text);
   return (
@@ -15,6 +15,7 @@ export function DockNote({ text }: { text: string | undefined }) {
       </span>
       <span
         aria-hidden="true"
+        data-testid={testId}
         data-open={text ? '' : undefined}
         className="type-caption pointer-events-none absolute bottom-full left-1/2 mb-[22px] -translate-x-1/2 translate-y-1 rounded-pill bg-btn px-3 py-1.5 font-semibold whitespace-nowrap text-btn-ink opacity-0 transition-[opacity,translate] duration-150 ease-out data-[open]:translate-y-0 data-[open]:opacity-100 data-[open]:duration-200"
       >

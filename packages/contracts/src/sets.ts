@@ -64,6 +64,8 @@ export const adminDiscoverySetSchema = z.object({
   onHand: z.number().int().nonnegative(),
   reserved: z.number().int().nonnegative(),
   available: z.number().int().nonnegative(),
+  /** On hand is under the reserve (ADR 0010): allowed, and shown as a warning. */
+  belowReserve: z.boolean(),
   photo: z.string().nullable(),
   isPlaceholder: z.boolean(),
   /** Ordered; its length is below five until the owner completes it. `hidden`: the catalog hides it (the box still sells). */
@@ -82,6 +84,8 @@ export const discoverySetInputSchema = z.object({
 export type DiscoverySetInput = z.infer<typeof discoverySetInputSchema>;
 
 export const adminSetsErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid']),
+  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid', 'on_hand_changed']),
   fields: z.array(z.string()).optional(),
+  /** With `on_hand_changed`: the count as it is now. */
+  current: z.number().int().optional(),
 });

@@ -81,6 +81,11 @@ export const fragranceListItemSchema = z.object({
   soldOut: z.boolean(),
   /** Content hash of the smallest volume's photo set (`<media>/<hash>-<width>.webp`). */
   photo: z.string().nullable(),
+  /**
+   * Every volume in 10 / 30 / 50 order, as the card's tiles show them: the list card's «+» adds
+   * the one that is available, or asks which when several are (spec Changes 2026-11-11).
+   */
+  volumes: z.array(volumeCardSchema),
 });
 export type FragranceListItem = z.infer<typeof fragranceListItemSchema>;
 
