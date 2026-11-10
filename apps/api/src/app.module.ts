@@ -6,6 +6,8 @@ import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
+import { BroadcastController } from './broadcast/broadcast.controller';
+import { BroadcastService } from './broadcast/broadcast.service';
 import { SettingsController } from './admin/settings.controller';
 import { StaffController } from './admin/staff.controller';
 import { AuditQueryService } from './audit/audit-query.service';
@@ -79,6 +81,7 @@ export class AppModule {
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
+        BroadcastController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -111,6 +114,7 @@ export class AppModule {
         InternalGuard,
         CreditEvents,
         HumoFeedService,
+        BroadcastService,
       ],
       exports: [
         CreditEvents,

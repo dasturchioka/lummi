@@ -2,7 +2,7 @@
 
 import {
   FRAGRANCE_START_PARAM,
-  STATIC_START_TARGETS,
+  START_TARGETS,
   bannerInputSchema,
   type AdminBanner,
 } from '@lummi/contracts';
@@ -32,8 +32,8 @@ import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
 import { BannerPreview } from './banner-preview';
 
-/** The target list is `STATIC_START_TARGETS` plus the fragrance link; a new target there shows up here with no edit. */
-const STATIC_KINDS = Object.keys(STATIC_START_TARGETS) as (keyof typeof STATIC_START_TARGETS)[];
+/** The target list is `START_TARGETS` plus the fragrance link; a new target there shows up here with no edit. */
+const STATIC_KINDS = START_TARGETS;
 type Kind = string;
 const FRAGRANCE = 'fragrance';
 

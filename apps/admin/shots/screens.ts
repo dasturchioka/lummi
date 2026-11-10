@@ -1,7 +1,8 @@
 import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
+import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
-import { WORST_NAME } from './catalog-data';
+import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
 
 /**
@@ -46,6 +47,106 @@ function photoError(
       await slot.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     },
   };
+}
+
+/** A real bottle photo for the composer's image slot (kept in the repo under materials/). */
+const BROADCAST_IMAGE = resolve(
+  import.meta.dirname,
+  '../../../materials/flakons/absolu-aventus_30ml.webp',
+);
+
+/** Fills both texts, picks the image and the «Каталог» button, as an owner about to send. */
+async function fillComposer(page: Page, t: AdminMessages) {
+  await page
+    .locator('#bc-ru')
+    .fill('Новый аромат уже в LUMMI. Откройте каталог и выберите свой вечер.');
+  await page
+    .locator('#bc-uz')
+    .fill("LUMMI'da yangi atir bor. Katalogni oching va oʻz oqshomingizni tanlang.");
+  await page.locator('[data-image] input[type=file]').setInputFiles(BROADCAST_IMAGE);
+  await page.getByRole('button', { name: t.broadcasts.imageReplace }).waitFor();
+  await page.locator('#bc-target').selectOption('catalog');
+}
+
+/** Opens a broadcast from the history: the nth row (newest first; the shot data makes the order stable). */
+async function openBroadcast(page: Page, nth: number) {
+  await page
+    .locator('main a[href^="/broadcasts/"]:not([href="/broadcasts/new"]):visible')
+    .nth(nth)
+    .click();
+  await page.locator('[data-count="sent"]').waitFor();
+}
+
+/*
+ * Broadcast worst cases. Long copy is real copy repeated up to Telegram's limit; the big audience
+ * enters through the API boundary (the panel's own `/api/admin/broadcasts…` calls are answered
+ * with the real body and 50 420-sized counts), since the shot database holds 24 customers.
+ */
+const RU_SENTENCE =
+  'Осень — время тёплых, древесных ароматов. В LUMMI появились новинки по мотивам Maison Francis Kurkdjian Baccarat Rouge 540 и Tom Ford Tobacco Vanille: густой шлейф, который остаётся с вами до вечера. ';
+const RU_4096 = RU_SENTENCE.repeat(30).slice(0, 4096);
+const UZ_LONG =
+  'Kuz — iliq, yogʻochli iforlar fasli 🍂 LUMMIʼda Maison Francis Kurkdjian Baccarat Rouge 540 va Tom Ford Tobacco Vanille asosidagi yangiliklar paydo boʻldi: kechgacha siz bilan qoladigan quyuq iz. Oʻzingizga yoqqanini tanlang va doʻstlaringizga ulashing ✨ Toʻplamni sinab koʻring, sovgʻa uchun ham mos 🎁 '.repeat(
+    5,
+  );
+/** Per audience, as the API answers it: everyone, the reachable ones, and those by language. */
+const BIG_AUDIENCE = {
+  all: { total: 51_977, reachable: 50_420, reachableByLanguage: { ru: 31_012, uz: 19_408 } },
+  ru: { total: 32_101, reachable: 31_012, reachableByLanguage: { ru: 31_012, uz: 0 } },
+  uz: { total: 19_876, reachable: 19_408, reachableByLanguage: { ru: 0, uz: 19_408 } },
+};
+const BIG_COUNTS = { total: 50_420, sent: 31_207, blocked: 1_913, failed: 12, pending: 17_288 };
+const LONG_SLUG = 'velours-fume-extraordinaire-intense-rare';
+
+/** Picks an audience in the composer and waits until its count is shown. */
+async function pickAudience(page: Page, audience: 'all' | 'ru' | 'uz') {
+  const counted = page.waitForResponse((r) => r.url().includes('/api/admin/broadcasts/audience'));
+  await page.locator(`input[type=radio][value=${audience}]`).check();
+  await counted;
+  await page.locator('[data-audience-size] [aria-busy]').waitFor({ state: 'detached' });
+}
+
+/** Answers the composer's audience counts with 50 420 reachable customers for «all». */
+async function showBigAudience(page: Page) {
+  await page.route('**/api/admin/broadcasts/audience?**', (route) => {
+    const audience = new URL(route.request().url()).searchParams.get('audience');
+    const json = BIG_AUDIENCE[audience as keyof typeof BIG_AUDIENCE] ?? BIG_AUDIENCE.all;
+    return route.fulfill({ status: 200, json });
+  });
+  // the page renders «all» counted by the server: count it again through the stub
+  await pickAudience(page, 'ru');
+  await pickAudience(page, 'all');
+}
+
+/** Types a fragrance slug as the button target and waits for its name to be looked up. */
+async function typeFragranceTarget(page: Page, slug: string) {
+  await page.locator('#bc-target').selectOption('fragrance');
+  const looked = page.waitForResponse((r) => r.url().includes('/api/admin/broadcasts/fragrance'));
+  await page.locator('#bc-slug').fill(slug);
+  await looked;
+  await page.locator('#bc-slug').blur();
+  await page.waitForTimeout(100);
+}
+
+/**
+ * Rewrites the running broadcast in the panel's polls (the detail every 2 s, the history every
+ * 3 s): the real body with `patch` laid over it. Returns once the next poll has landed.
+ */
+async function patchRunningBroadcast(
+  page: Page,
+  scope: 'detail' | 'list',
+  patch: Record<string, unknown>,
+) {
+  const url = scope === 'detail' ? /\/api\/admin\/broadcasts\/\d+$/ : /\/api\/admin\/broadcasts$/;
+  await page.route(url, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const res = await route.fetch();
+    const body = (await res.json()) as { status: string } | { status: string }[];
+    const over = (b: { status: string }) => (b.status === 'sending' ? { ...b, ...patch } : b);
+    await route.fulfill({ response: res, json: Array.isArray(body) ? body.map(over) : over(body) });
+  });
+  await page.waitForResponse(url, { timeout: 10_000 });
+  await page.waitForTimeout(150);
 }
 
 /** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
@@ -561,6 +662,228 @@ export const screens: Screen[] = [
     act: async ({ page, t }) => {
       await page.getByRole('button', { name: t.tariffs.edit, exact: true }).first().click();
       await page.getByRole('dialog').waitFor();
+    },
+  },
+  // Broadcasts (ticket #14). The shot data is written to the database (broadcast-data.ts); nothing is sent to Telegram.
+  { id: 'broadcasts', path: '/broadcasts', as: 'owner' },
+  { id: 'broadcast-new', path: '/broadcasts/new', as: 'owner' },
+  {
+    id: 'broadcast-new-filled',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+    },
+  },
+  {
+    id: 'broadcast-new-errors',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByText(t.broadcasts.fixErrors).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-new-caption',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page.locator('#bc-ru').fill('Тёплый вечер. '.repeat(90));
+      await page.locator('#bc-uz').fill('Iliq oqshom. '.repeat(90));
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByText(t.broadcasts.errors.captionTooLong).first().waitFor();
+    },
+  },
+  {
+    id: 'broadcast-new-warnings',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#bc-ru').fill('Копия известного аромата 🎉🎉🎉 за копейки.');
+      await page.getByText(t.broadcasts.warnings.title).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-test-sent',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      // the shot owner has no real Telegram chat: the answer is stubbed, so nothing reaches Telegram
+      await page.route('**/api/admin/broadcasts/test', (route) =>
+        route.fulfill({ status: 200, json: { sent: ['ru', 'uz'] } }),
+      );
+      await fillComposer(page, t);
+      await page.getByRole('button', { name: t.broadcasts.sendTest }).click();
+      await page.getByText(t.broadcasts.testSent).waitFor();
+    },
+  },
+  {
+    id: 'broadcast-send-confirm',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    id: 'broadcast-running',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+    },
+  },
+  {
+    id: 'broadcast-done',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 1);
+    },
+  },
+  {
+    id: 'broadcast-new-target',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page
+        .locator('#bc-ru')
+        .fill('Absolu Aventus снова в наличии. Свежий, дымный, уверенный: аромат для важного дня.');
+      await page
+        .locator('#bc-uz')
+        .fill('Absolu Aventus yana sotuvda. Yangi, tutunli, ishonchli: muhim kun uchun ifor.');
+      await typeFragranceTarget(page, 'absolu-aventus');
+    },
+  },
+  {
+    id: 'broadcast-new-target-missing',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await typeFragranceTarget(page, 'absolu-aventus-intense');
+    },
+  },
+  {
+    // a UZ-only audience locks the preview to UZ, even right after the RU text was edited
+    id: 'broadcast-new-locked',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await pickAudience(page, 'uz');
+      await page.locator('#bc-ru').focus();
+    },
+  },
+  {
+    // a warning still open at confirm time is repeated in the sheet (it warns, never blocks)
+    id: 'broadcast-send-confirm-warnings',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page
+        .locator('#bc-ru')
+        .fill('Не копия, а аромат по мотивам Creed Aventus 🎉🎉🎉 для вашего вечера.');
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  ...(['ru', 'uz'] as const).map((audience): Screen => ({
+    id: `broadcast-send-confirm-${audience}`,
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await pickAudience(page, audience);
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  })),
+  // Broadcast worst cases (captured into shots/14/worst-case/).
+  {
+    id: 'w-text-4096',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.locator('#bc-ru').fill(RU_4096);
+      await page.locator('#bc-uz').fill('Qisqa matn.');
+      await page.locator('#bc-ru').focus();
+    },
+  },
+  {
+    id: 'w-uz-long',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#bc-ru').fill('Короткий текст.');
+      await page.locator('#bc-uz').fill(UZ_LONG);
+      await page.getByText(t.broadcasts.warnings.title).waitFor();
+    },
+  },
+  {
+    id: 'w-recipients-50420-composer',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await showBigAudience(page);
+    },
+  },
+  {
+    id: 'w-recipients-50420-confirm',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await showBigAudience(page);
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    id: 'w-recipients-50420-detail',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+      await patchRunningBroadcast(page, 'detail', { counts: BIG_COUNTS });
+    },
+  },
+  {
+    id: 'w-recipients-50420-list',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await patchRunningBroadcast(page, 'list', { counts: BIG_COUNTS });
+    },
+  },
+  {
+    id: 'w-target-long-composer',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await typeFragranceTarget(page, LONG_SLUG);
+    },
+  },
+  {
+    id: 'w-target-long-detail',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+      await patchRunningBroadcast(page, 'detail', {
+        buttonTarget: `p_${LONG_SLUG}`,
+        buttonFragrance: HYPHEN_NAME,
+      });
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

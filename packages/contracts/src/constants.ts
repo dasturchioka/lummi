@@ -50,6 +50,14 @@ export const STATIC_START_TARGETS = {
 /** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
 export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
 
+/** The fixed targets in order, for the pickers: the banner editor and the broadcast composer. */
+export type StartTarget = keyof typeof STATIC_START_TARGETS;
+export const START_TARGETS = Object.keys(STATIC_START_TARGETS) as StartTarget[];
+
+/** A value an owner may link to (a banner, a broadcast button): a fixed target or a fragrance. */
+export const isStartTarget = (v: string): boolean =>
+  Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
+
 /** The info pages (ticket #21): fixed slugs in display order. The owner edits them; nobody adds one. */
 export const INFO_PAGE_SLUGS = [
   'about',

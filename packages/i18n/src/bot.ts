@@ -7,6 +7,8 @@ export const botMessages = defineMessages(
       greeting:
         'Добро пожаловать в LUMMI.\nExtrait de Parfum по мотивам известных ароматов. Откройте магазин и выберите свой.',
       openShop: 'Открыть магазин',
+      /** The link button under a broadcast. */
+      broadcastOpen: 'Открыть',
       alertPrefix: 'Системное сообщение',
       /** The "order created" message (spec Changes 2026-11-07, customer messages): 1-2 emoji. */
       orderCreated:
@@ -19,6 +21,7 @@ export const botMessages = defineMessages(
       greeting:
         'LUMMI ga xush kelibsiz.\nMashhur atirlar asosidagi Extrait de Parfum. Doʻkonni oching va oʻzingizni tanlang.',
       openShop: 'Doʻkonni ochish',
+      broadcastOpen: 'Ochish',
       alertPrefix: 'Tizim xabari',
       orderCreated:
         '№ {number} buyurtma rasmiylashtirildi ✨\nToʻlov summasi: {amount}\nAtirlar {until} gacha band qilindi. Buyurtma holati doim «Buyurtmalar» boʻlimida koʻrinadi.',

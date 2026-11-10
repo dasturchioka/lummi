@@ -1,13 +1,11 @@
 import { z } from 'zod';
-import { FRAGRANCE_START_PARAM, INFO_PAGE_SLUGS, STATIC_START_TARGETS } from './constants';
+import { INFO_PAGE_SLUGS, isStartTarget } from './constants';
 
 /**
  * Content (ticket #21): the Home promo banner, the Home slogan and the info pages, RU/UZ.
  * Customer reads return RU/UZ pairs and the Mini App picks by language. The API normalises Uzbek
  * apostrophes on save. Page bodies are rich text (`@lummi/rich-text`), never HTML.
  */
-const isStartParam = (v: string) =>
-  Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullable();
 
@@ -94,7 +92,7 @@ export const bannerInputSchema = z.object({
     .string()
     .trim()
     .max(64)
-    .refine((v) => isStartParam(v), 'start_target'),
+    .refine((v) => isStartTarget(v), 'start_target'),
 });
 export type BannerInput = z.infer<typeof bannerInputSchema>;
 

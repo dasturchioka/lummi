@@ -13,4 +13,5 @@ export * from './telegram-username';
 export * from './constants';
 export * from './cart';
 export * from './content';
+export * from './broadcast';
 export * from './orders';

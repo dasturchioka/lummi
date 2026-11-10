@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { adminMessages } from '@lummi/i18n/admin';
+import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
 import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotStaff } from './screens';
@@ -223,6 +224,7 @@ async function main() {
   // staff after the slow seeds, so the owner's API connection is fresh for the shot rows
   const ownerCall = await seedStaff();
   await seedShotCatalog(ownerCall);
+  await seedShotBroadcasts(databaseUrl);
   await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
   mkdirSync(outDir, { recursive: true });
   let count = 0;
@@ -270,7 +272,11 @@ async function main() {
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);
-          await page.screenshot({ path: file, fullPage: screen.fullPage ?? true });
+          const fullPage = screen.fullPage ?? true;
+          // a full-page capture paints sticky bars (the phone's top bar) where the page was
+          // scrolled to, over the content: take it from the top
+          if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
+          await page.screenshot({ path: file, fullPage });
           await context.close();
           count++;
           console.log(`  ${screen.id}-${width}-${lang}.png`);

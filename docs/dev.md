@@ -134,6 +134,7 @@ curl -s localhost:4113/internal/humo/messages -H "x-internal-secret: $INTERNAL_A
 Payment matching subscribes with `CreditEvents.onCreditRecorded(handler)` in a provider's constructor. The handler runs in the worker, not the API, and the event is durable (ADR 0021):
 
 - The credit row is the event, and the API queues it to `EVENTS_QUEUE` right after the commit. The API and the worker must use the same `EVENTS_QUEUE`.
+- Broadcasts (#14) queue one job per customer to `BROADCAST_QUEUE` (default `broadcasts`); the API and the worker must use the same one. The send rate is the setting `broadcast.sendRatePerSecond`, read when the worker starts. `BOT_LINK` (https, the bot's `t.me` link) is the base of a broadcast's `startapp` button: required in production, a dev bot link locally.
 - The `credit-recorded` sweep queues anything missed.
 - The credit is stamped `event_handled_at` once every handler has succeeded. A handler that throws is retried, so handlers must be idempotent.
 
