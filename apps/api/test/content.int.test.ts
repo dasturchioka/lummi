@@ -373,11 +373,16 @@ describe('slogan and pages', () => {
     const ru32 = 'Ароматы для важных моментов дня';
     const uz38 = 'Lahzalaringizni yorituvchi iforlar uz';
     expect([ru32.length, uz38.length]).toEqual([31, 37]);
+    // the contract's body schema refuses it before the handler, as for a banner target (400)
     const set = (ru: string, uz: string) =>
-      owner.client.admin.content.slogan.set({ body: { ru, uz } });
+      fetch(`${t.baseUrl}/admin/content/slogan`, {
+        method: 'PUT',
+        headers: { cookie: owner.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ ru, uz }),
+      });
     expect((await set(`${ru32}!`, `${uz38}!`)).status).toBe(200);
-    expect((await set(`${ru32}!!`, uz38)).status).toBe(422);
-    expect((await set(ru32, `${uz38}!!`)).status).toBe(422);
+    expect((await set(`${ru32}!!`, uz38)).status).toBe(400);
+    expect((await set(ru32, `${uz38}!!`)).status).toBe(400);
   });
 
   it('edits a page, flips its draft flag, normalises the UZ body and audits the flag', async () => {
