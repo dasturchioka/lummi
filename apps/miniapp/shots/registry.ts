@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
-import { LIMIT_BANNER, LONG_PAGE, onInfoPage } from './content-data';
+import { LIMIT_BANNER, LONG_PAGE, longSlogan, onInfoPage } from './content-data';
 import type { ShotDb } from './db';
 
 /**
@@ -455,6 +455,7 @@ async function promoBanner(db: ShotDb, b: ShotBanner) {
   );
 }
 const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
+const sloganAtLimit = longSlogan();
 
 export const screens: ScreenDef[] = [
   {
@@ -1096,6 +1097,21 @@ export const screens: ScreenDef[] = [
       await promoBanner(db, LIMIT_BANNER);
     },
     teardown: ({ db }) => clearBanners(db),
+  },
+  // the narrowest phone, with the banner at its limits and the slogan at its 80 characters
+  {
+    id: 'home-content-limit-360',
+    path: '/',
+    width: 360,
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanner(db, LIMIT_BANNER);
+      await sloganAtLimit.setup({ db });
+    },
+    teardown: async ({ db }) => {
+      await clearBanners(db);
+      await sloganAtLimit.teardown({ db });
+    },
   },
   // Cart (#18): lines with a stepper and a bin, the Sage thread, the dark totals block.
   {

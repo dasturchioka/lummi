@@ -34,7 +34,7 @@ export function PagesList({
               className="-mx-2 flex min-h-14 items-center gap-3 rounded-button px-2 py-2 transition-colors duration-150 hover:bg-field"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold">
+                <p className="line-clamp-2 text-[15px] font-semibold [overflow-wrap:anywhere]">
                   {language === 'uz' ? x.titleUz : x.titleRu}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">

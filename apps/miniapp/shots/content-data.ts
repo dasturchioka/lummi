@@ -125,3 +125,31 @@ export const LIMIT_BANNER = {
   priceLineRu: 'от 1 299 000 сум за набор из пяти штук',
   priceLineUz: 'Beshtalik toʻplam 1 299 000 soʻmdan',
 };
+
+/** The Home slogan at its 80-character limit (`SLOGAN_MAX`); the teardown puts the saved one back. */
+export function longSlogan() {
+  let saved: unknown[] | null = null;
+  return {
+    setup: async ({ db }: { db: ShotDb }) => {
+      const { rows } = await db.query(`select ru, uz from content_texts where key = 'home.slogan'`);
+      const row = rows[0] as Record<string, unknown> | undefined;
+      saved ??= row ? [row.ru, row.uz] : [];
+      await db.query(
+        `insert into content_texts (key, ru, uz) values ('home.slogan', $1, $2)
+         on conflict (key) do update set ru = excluded.ru, uz = excluded.uz`,
+        [
+          'Ароматы, которые освещают ваши вечера, утренние встречи и самые важные моменты',
+          'Lahzalaringizni yorituvchi iforlar: oqshom, uchrashuv va muhim kunlaringiz uchun',
+        ],
+      );
+    },
+    teardown: async ({ db }: { db: ShotDb }) => {
+      if (saved?.length) {
+        await db.query(
+          `update content_texts set ru = $1, uz = $2 where key = 'home.slogan'`,
+          saved,
+        );
+      }
+    },
+  };
+}
