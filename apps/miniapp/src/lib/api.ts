@@ -31,15 +31,23 @@ export const session = new SessionManager({
   now: () => Date.now(),
 });
 
-/** Attaches the session to every request; a 401 means the session is gone, so sign in once more. */
-const authedSend: Sender = async (req) => {
-  const send = (token: string) =>
-    fetch(req.url, { ...req, headers: { ...req.headers, authorization: `Bearer ${token}` } });
+/**
+ * Sends with the session's token; a 401 means the session is gone, so it signs in once more and
+ * sends again. Every authenticated call goes through it, the receipt upload's XHR included.
+ */
+export async function withSession<R extends { status: number }>(
+  send: (token: string) => Promise<R>,
+): Promise<R> {
   const token = await session.getToken();
   const res = await send(token);
   if (res.status !== 401) return res;
   return send(await session.recover(token));
-};
+}
+
+const authedSend: Sender = (req) =>
+  withSession((token) =>
+    fetch(req.url, { ...req, headers: { ...req.headers, authorization: `Bearer ${token}` } }),
+  );
 
 export const api = createClient(baseUrl, authedSend);
 

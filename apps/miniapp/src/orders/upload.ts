@@ -1,6 +1,11 @@
-import { RECEIPT_FILE_NAME_HEADER, type ReceiptUploadError } from '@lummi/contracts/constants';
+import {
+  RECEIPT_FILE_NAME_HEADER,
+  RECEIPT_FILE_TYPES,
+  receiptUploadCode,
+  type ReceiptUploadError,
+} from '@lummi/contracts/constants';
 import type { OrderDto, ReceiptUploadedDto } from '@lummi/contracts';
-import { API_BASE, session } from '../lib/api';
+import { API_BASE, withSession } from '../lib/api';
 
 export type UploadResult =
   | { kind: 'uploaded'; body: ReceiptUploadedDto }
@@ -15,11 +20,11 @@ export type UploadResult =
 export class UploadNetworkError extends Error {}
 
 /** What the app can tell before sending: the kind by type or extension, and the size. */
-const KINDS = /^(image\/(jpeg|png|webp)|application\/pdf)$/;
-const EXTENSIONS = /\.(jpe?g|png|webp|pdf)$/i;
+const TYPES = Object.values(RECEIPT_FILE_TYPES);
 export function precheckReceipt(file: File, maxBytes: number): ReceiptUploadError | null {
-  if (file.size === 0 || !(KINDS.test(file.type) || EXTENSIONS.test(file.name)))
-    return 'unsupported_type';
+  const extension = /\.([^.]+)$/.exec(file.name)?.[1]?.toLowerCase() ?? '';
+  const known = TYPES.some((t) => t.mime === file.type || t.extensions.includes(extension));
+  if (file.size === 0 || !known) return 'unsupported_type';
   if (file.size > maxBytes) return 'too_large';
   return null;
 }
@@ -57,28 +62,30 @@ function send(
 
 /**
  * `POST /orders/:number/receipts` with upload progress (XMLHttpRequest: `fetch` reports none), the
- * session token attached and, like every other call, one fresh sign-in after a 401.
+ * session token attached and, like every other call, one fresh sign-in after a 401. The answer's
+ * code comes from its status (`RECEIPT_UPLOAD_STATUS`).
  */
 export async function uploadReceipt(
   number: number,
   file: File,
   onProgress: (fraction: number) => void,
 ): Promise<UploadResult> {
-  const token = await session.getToken();
-  let res = await send(token, number, file, onProgress);
-  if (res.status === 401) {
-    onProgress(0);
-    res = await send(await session.recover(token), number, file, onProgress);
-  }
-  const body = res.body as { code?: string; order?: OrderDto } | null;
+  const res = await withSession((token) => send(token, number, file, onProgress));
   if (res.status === 201) return { kind: 'uploaded', body: res.body as ReceiptUploadedDto };
-  if (res.status === 413) return { kind: 'refused', code: 'too_large' };
-  if (res.status === 415) return { kind: 'refused', code: 'unsupported_type' };
-  if (res.status === 422) return { kind: 'refused', code: 'unreadable' };
-  if (res.status === 404) return { kind: 'not_found' };
-  if (res.status === 409)
-    return body?.code === 'status_changed' && body.order
-      ? { kind: 'changed', order: body.order }
-      : { kind: 'try_again' };
-  throw new UploadNetworkError(`HTTP ${res.status}`);
+  const body = res.body as { order?: OrderDto } | null;
+  const code = receiptUploadCode(res.status);
+  switch (code) {
+    case 'too_large':
+    case 'unsupported_type':
+    case 'unreadable':
+      return { kind: 'refused', code };
+    case 'not_found':
+      return { kind: 'not_found' };
+    case 'status_changed':
+      return body?.order ? { kind: 'changed', order: body.order } : { kind: 'try_again' };
+    case 'try_again':
+      return { kind: 'try_again' };
+    default:
+      throw new UploadNetworkError(`HTTP ${res.status}`);
+  }
 }
