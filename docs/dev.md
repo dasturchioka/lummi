@@ -1,5 +1,7 @@
 # Developing LUMMI locally
 
+Running it on a server (staging, production): `run-guide.md`.
+
 Node 24+ and Docker are required. Several agents or branches may run on one machine, so **every port is an env variable**; never rely on a default being free.
 
 | What | Env var | Default | Ticket-N convention |

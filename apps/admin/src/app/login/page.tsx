@@ -17,7 +17,7 @@ export default async function LoginPage() {
         <Logo className="mx-auto h-5" />
         <LoginForm
           t={t}
-          botUsername={process.env.NEXT_PUBLIC_BOT_USERNAME ?? ''}
+          botUsername={process.env.BOT_USERNAME || process.env.NEXT_PUBLIC_BOT_USERNAME || ''}
           devLogin={process.env.NEXT_PUBLIC_ADMIN_DEV_LOGIN === 'true'}
         />
       </div>

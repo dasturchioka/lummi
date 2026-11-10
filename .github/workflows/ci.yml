@@ -1,7 +1,10 @@
 name: CI
 on:
   push:
+    # stage-1 and main run these checks through deploy.yml (a reusable call), not twice
+    branches-ignore: [stage-1, main]
   pull_request:
+  workflow_call:
 
 jobs:
   check:
