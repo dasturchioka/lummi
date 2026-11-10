@@ -270,7 +270,11 @@ async function main() {
           await page.evaluate(() => document.fonts.ready);
           await page.waitForTimeout(350); // let dialog and sheet transitions settle
           const file = resolve(outDir, `${screen.id}-${width}-${lang}.png`);
-          await page.screenshot({ path: file, fullPage: screen.fullPage ?? true });
+          const fullPage = screen.fullPage ?? true;
+          // a full-page capture paints sticky bars (the phone's top bar) where the page was
+          // scrolled to, over the content: take it from the top
+          if (fullPage) await page.evaluate(() => window.scrollTo(0, 0));
+          await page.screenshot({ path: file, fullPage });
           await context.close();
           count++;
           console.log(`  ${screen.id}-${width}-${lang}.png`);

@@ -2,7 +2,7 @@ import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Page } from '@playwright/test';
-import { WORST_NAME } from './catalog-data';
+import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -74,6 +74,58 @@ async function openBroadcast(page: Page, nth: number) {
     .nth(nth)
     .click();
   await page.locator('[data-count="sent"]').waitFor();
+}
+
+/*
+ * Broadcast worst cases. Long copy is real copy repeated up to Telegram's limit; the big audience
+ * enters through the API boundary (the panel's own `/api/admin/broadcasts…` calls are answered
+ * with the real body and 50 420-sized counts), since the shot database holds 24 customers.
+ */
+const RU_SENTENCE =
+  'Осень — время тёплых, древесных ароматов. В LUMMI появились новинки по мотивам Maison Francis Kurkdjian Baccarat Rouge 540 и Tom Ford Tobacco Vanille: густой шлейф, который остаётся с вами до вечера. ';
+const RU_4096 = RU_SENTENCE.repeat(30).slice(0, 4096);
+const UZ_LONG =
+  'Kuz — iliq, yogʻochli iforlar fasli 🍂 LUMMIʼda Maison Francis Kurkdjian Baccarat Rouge 540 va Tom Ford Tobacco Vanille asosidagi yangiliklar paydo boʻldi: kechgacha siz bilan qoladigan quyuq iz. Oʻzingizga yoqqanini tanlang va doʻstlaringizga ulashing ✨ Toʻplamni sinab koʻring, sovgʻa uchun ham mos 🎁 '.repeat(
+    5,
+  );
+const BIG_AUDIENCE = { total: 51_977, reachable: 50_420 };
+const BIG_COUNTS = { total: 50_420, sent: 31_207, blocked: 1_913, failed: 12, pending: 17_288 };
+const LONG_SLUG = 'velours-fume-extraordinaire-intense-rare';
+
+/** Picks an audience in the composer and waits until its count is shown. */
+async function pickAudience(page: Page, audience: 'all' | 'ru' | 'uz') {
+  const counted = page.waitForResponse((r) => r.url().includes('/api/admin/broadcasts/audience'));
+  await page.locator(`input[type=radio][value=${audience}]`).check();
+  await counted;
+  await page.locator('[data-audience-size] [aria-busy]').waitFor({ state: 'detached' });
+}
+
+/** Answers the composer's audience count with 50 420 reachable customers. */
+async function stubBigAudience(page: Page) {
+  await page.route('**/api/admin/broadcasts/audience?**', (route) =>
+    route.fulfill({ status: 200, json: BIG_AUDIENCE }),
+  );
+}
+
+/**
+ * Rewrites the running broadcast in the panel's polls (the detail every 2 s, the history every
+ * 3 s): the real body with `patch` laid over it. Returns once the next poll has landed.
+ */
+async function patchRunningBroadcast(
+  page: Page,
+  scope: 'detail' | 'list',
+  patch: Record<string, unknown>,
+) {
+  const url = scope === 'detail' ? /\/api\/admin\/broadcasts\/\d+$/ : /\/api\/admin\/broadcasts$/;
+  await page.route(url, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const res = await route.fetch();
+    const body = (await res.json()) as { status: string } | { status: string }[];
+    const over = (b: { status: string }) => (b.status === 'sending' ? { ...b, ...patch } : b);
+    await route.fulfill({ response: res, json: Array.isArray(body) ? body.map(over) : over(body) });
+  });
+  await page.waitForResponse(url, { timeout: 10_000 });
+  await page.waitForTimeout(150);
 }
 
 /** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
@@ -584,8 +636,6 @@ export const screens: Screen[] = [
       await fillComposer(page, t);
       await page.getByRole('button', { name: t.broadcasts.sendTest }).click();
       await page.getByText(t.broadcasts.testSent).waitFor();
-      // back to the top, so the phone's sticky header is not caught mid-page in the full-page shot
-      await page.evaluate(() => window.scrollTo(0, 0));
     },
   },
   {
@@ -613,6 +663,117 @@ export const screens: Screen[] = [
     as: 'owner',
     act: async ({ page }) => {
       await openBroadcast(page, 1);
+    },
+  },
+  {
+    id: 'broadcast-new-target',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page
+        .locator('#bc-ru')
+        .fill('Absolu Aventus снова в наличии. Свежий, дымный, уверенный: аромат для важного дня.');
+      await page
+        .locator('#bc-uz')
+        .fill('Absolu Aventus yana sotuvda. Yangi, tutunli, ishonchli: muhim kun uchun ifor.');
+      await page.locator('#bc-target').selectOption('fragrance');
+      await page.locator('#bc-slug').fill('absolu-aventus');
+      await page.locator('#bc-slug').blur();
+    },
+  },
+  ...(['ru', 'uz'] as const).map((audience): Screen => ({
+    id: `broadcast-send-confirm-${audience}`,
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await pickAudience(page, audience);
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  })),
+  // Broadcast worst cases (captured into shots/14/worst-case/).
+  {
+    id: 'w-text-4096',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.locator('#bc-ru').fill(RU_4096);
+      await page.locator('#bc-uz').fill('Qisqa matn.');
+      await page.locator('#bc-ru').focus();
+    },
+  },
+  {
+    id: 'w-uz-long',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.locator('#bc-ru').fill('Короткий текст.');
+      await page.locator('#bc-uz').fill(UZ_LONG);
+      await page.getByText(t.broadcasts.warnings.title).waitFor();
+    },
+  },
+  {
+    id: 'w-recipients-50420-composer',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page }) => {
+      await stubBigAudience(page);
+      await pickAudience(page, 'ru');
+    },
+  },
+  {
+    id: 'w-recipients-50420-confirm',
+    path: '/broadcasts/new',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await stubBigAudience(page);
+      await fillComposer(page, t);
+      await pickAudience(page, 'ru');
+      await page.getByRole('button', { name: t.broadcasts.send, exact: true }).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    id: 'w-recipients-50420-detail',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+      await patchRunningBroadcast(page, 'detail', { counts: BIG_COUNTS });
+    },
+  },
+  {
+    id: 'w-recipients-50420-list',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await patchRunningBroadcast(page, 'list', { counts: BIG_COUNTS });
+    },
+  },
+  {
+    id: 'w-target-long-composer',
+    path: '/broadcasts/new',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await fillComposer(page, t);
+      await page.locator('#bc-target').selectOption('fragrance');
+      await page.locator('#bc-slug').fill(LONG_SLUG);
+      await page.locator('#bc-slug').blur();
+    },
+  },
+  {
+    id: 'w-target-long-detail',
+    path: '/broadcasts',
+    as: 'owner',
+    act: async ({ page }) => {
+      await openBroadcast(page, 0);
+      await patchRunningBroadcast(page, 'detail', {
+        buttonTarget: `p_${LONG_SLUG}`,
+        buttonFragrance: HYPHEN_NAME,
+      });
     },
   },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

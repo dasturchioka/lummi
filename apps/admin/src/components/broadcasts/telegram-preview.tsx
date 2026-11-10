@@ -35,7 +35,11 @@ export function TelegramPreview({
   return (
     <div
       lang={language}
-      className={cn('overflow-y-auto overscroll-contain rounded-button bg-stone p-3', className)}
+      className={cn(
+        // the panel's Stone scrollbar would vanish on the Stone ground: Faint Ink here
+        'overflow-y-auto overscroll-contain rounded-button bg-stone p-3 [scrollbar-color:var(--ink-faint)_transparent] [scrollbar-width:thin]',
+        className,
+      )}
     >
       {/* a photo makes the bubble as wide as the photo, so the caption wraps under it */}
       <div className={cn('grid max-w-[min(100%,20rem)] gap-1', image ? 'w-full' : 'w-fit')}>
