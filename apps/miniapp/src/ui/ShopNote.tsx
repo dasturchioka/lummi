@@ -19,8 +19,6 @@ export function ShopNote({ tabBar }: { tabBar: boolean }) {
   return (
     // A zero-size anchor: the pill rises 22 px above it, centred, as above a dock.
     <div
-      data-testid="shop-note"
-      data-open={open ? '' : undefined}
       className="pointer-events-none fixed left-1/2 z-30"
       style={{
         bottom: tabBar
@@ -28,7 +26,7 @@ export function ShopNote({ tabBar }: { tabBar: boolean }) {
           : 'calc(max(12px, var(--safe-b, 0px)) + 54px)',
       }}
     >
-      <DockNote text={open ? note?.text : undefined} />
+      <DockNote text={open ? note?.text : undefined} testId="shop-note" />
     </div>
   );
 }
