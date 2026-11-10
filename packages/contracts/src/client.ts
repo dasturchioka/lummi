@@ -68,7 +68,7 @@ export const clientRoutes = {
     get: route('GET', '/orders/:number', [200, 401, 404]),
     payment: route('GET', '/orders/:number/payment', [200, 401, 404]),
     cancel: route('POST', '/orders/:number/cancel', [200, 401, 403, 404, 409]),
-    repeat: route('POST', '/orders/:number/repeat', [200, 401, 404]),
+    repeat: route('POST', '/orders/:number/repeat', [200, 401, 404, 409]),
   },
   catalog: {
     list: route('GET', '/catalog/fragrances', [200, 401]),

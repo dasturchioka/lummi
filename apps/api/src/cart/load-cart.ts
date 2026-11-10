@@ -78,11 +78,11 @@ function capped(wanted: number, left: number) {
   };
 }
 
-export interface LoadedCart {
+export interface LoadedQuote {
   lines: CartLineView[];
   quote: Quote;
   /** The cart row (discount choice, promo code); undefined for lines quoted on their own. */
-  state: CartRow | undefined;
+  cartState: CartRow | undefined;
   city: DeliveryCityDto | null;
 }
 
@@ -124,7 +124,7 @@ export function loadCartQuote(
   now: Date,
   customerId: number,
   opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
-): Promise<LoadedCart> {
+): Promise<LoadedQuote> {
   return loadQuote(tx, now, customerId, { kind: 'cart' }, opts);
 }
 
@@ -141,7 +141,7 @@ export async function loadQuote(
   customerId: number,
   source: LineSource,
   opts: { entitlements?: Entitlement[]; deliveryTariff?: number } = {},
-): Promise<LoadedCart> {
+): Promise<LoadedQuote> {
   const stored =
     source.kind === 'cart'
       ? await readCartLines(tx, customerId)
@@ -292,7 +292,7 @@ export async function loadQuote(
   }
   const lines: CartLineView[] = [...volumeLines, ...setLines].sort((a, b) => a.lineId - b.lineId);
 
-  const [state] =
+  const [cartState] =
     source.kind === 'cart'
       ? await tx.select().from(carts).where(eq(carts.customerId, customerId))
       : [];
@@ -329,7 +329,7 @@ export async function loadQuote(
     lines: quoteLines,
     entitlements: opts.entitlements ?? [],
     promoCode: null,
-    choice: state?.discountChoice ?? null,
+    choice: cartState?.discountChoice ?? null,
     deliveryTariff:
       opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
     settings: {
@@ -343,7 +343,7 @@ export async function loadQuote(
   return {
     lines,
     quote: q,
-    state,
+    cartState,
     city,
   };
 }

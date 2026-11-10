@@ -41,7 +41,7 @@ import { AuditService } from '../audit/audit.service';
 import {
   loadQuote,
   readCartLines,
-  toLineDto as toCheckoutLineDto,
+  toLineDto,
   type LineSource,
   type StoredLine,
 } from '../cart/load-cart';
@@ -57,6 +57,12 @@ import { readShopCard } from '../payment/shop-card.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
+
+export type CheckoutOutcome =
+  | { kind: 'ok'; checkout: CheckoutDto }
+  /** «Купить сейчас» named a fragrance or set that is unknown or no longer sold. */
+  | { kind: 'unknown_item' }
+  | { kind: 'unauthorized' };
 
 export type CreateOutcome =
   | { kind: 'created'; order: OrderDto }
@@ -89,22 +95,21 @@ export class OrdersService {
   /**
    * The cart as checkout shows it, or the one «Купить сейчас» `item` instead (the cart is not
    * read): quoted with the tariff of `regionId` (the chosen point's region), else the saved
-   * delivery city's, else the default. An unknown region is ignored; an unknown item is
-   * `unknown_item`.
+   * delivery city's, else the default. An unknown region is ignored.
    */
   async checkout(
     customerId: number,
     regionId?: number,
     item?: BuyNowItem,
     tx: DbOrTx = this.db,
-  ): Promise<CheckoutDto | 'unknown_item' | null> {
+  ): Promise<CheckoutOutcome> {
     const [c] = await tx.select().from(customers).where(eq(customers.id, customerId));
-    if (!c) return null;
+    if (!c) return { kind: 'unauthorized' };
     const source = await this.sourceOf(tx, item);
-    if (!source) return 'unknown_item';
+    if (!source) return { kind: 'unknown_item' };
     const [region] =
       regionId === undefined ? [] : await tx.select().from(regions).where(eq(regions.id, regionId));
-    return this.checkoutOf(tx, c, region ?? null, source);
+    return { kind: 'ok', checkout: await this.checkoutOf(tx, c, region ?? null, source) };
   }
 
   /** The cart, or the one line of a «Купить сейчас» item; null when the item is not sold. */
@@ -143,7 +148,7 @@ export class OrdersService {
       needsConsent: c.dataConsentAt === null,
       giftMessageMax: settings['orders.giftMessageMaxLength'],
       recipientPhoneCountryCodes: settings['orders.recipientPhoneCountryCodes'],
-      item: item ? toCheckoutLineDto(item) : null,
+      item: item ? toLineDto(item) : null,
       savedPoints: saved,
       defaultSavedPointId: defaultSavedPoint(saved)?.id ?? null,
       paymentAvailable: (await readShopCard(tx)) !== null,
@@ -579,7 +584,7 @@ export function toOrderDto(
     },
     comment: o.comment,
     gift: { isGift: o.isGift, message: o.giftMessage },
-    lines: [...lines].sort((a, b) => a.position - b.position).map(toLineDto),
+    lines: [...lines].sort((a, b) => a.position - b.position).map(toOrderLineDto),
     itemsSubtotal: o.itemsSubtotal,
     discount: o.discount,
     deliveryFee: o.deliveryFee,
@@ -591,7 +596,7 @@ export function toOrderDto(
   };
 }
 
-function toLineDto(l: OrderLineRow): OrderLineDto {
+function toOrderLineDto(l: OrderLineRow): OrderLineDto {
   return {
     kind: l.kind,
     slug: l.slug,

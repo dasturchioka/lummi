@@ -1,5 +1,6 @@
 import {
   CART_MAX_QTY,
+  orderRepeatable,
   type CartDto,
   type CartLineDto,
   type CartSuggestionDto,
@@ -31,6 +32,8 @@ import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../s
 import { loadCartQuote, loadQuote, readCartLines, toLineDto, type StoredLine } from './load-cart';
 
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
+export type RepeatOutcome =
+  { kind: 'done'; result: RepeatResultDto } | { kind: 'not_found' } | { kind: 'not_repeatable' };
 export type AddSetOutcome =
   | { result: 'ok' }
   | { result: 'sold_out' | 'not_found' | 'invalid' }
@@ -48,7 +51,7 @@ export class CartService {
   /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
     const now = this.edges.clock.now();
-    const { lines, quote: q, state, city } = await loadCartQuote(tx, now, customerId);
+    const { lines, quote: q, cartState, city } = await loadCartQuote(tx, now, customerId);
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
       lines: lines.map((l): CartLineDto => ({ id: l.lineId, ...toLineDto(l) })),
@@ -64,7 +67,7 @@ export class CartService {
             now,
           )
         : [],
-      promoCode: state?.promoCode ?? null,
+      promoCode: cartState?.promoCode ?? null,
     };
   }
 
@@ -146,13 +149,7 @@ export class CartService {
       const left = available(v.onHand, reserved.get(v.id) ?? 0);
       if (left === 0) return 'sold_out' as const;
       await this.touch(tx, customerId);
-      await tx
-        .insert(cartLines)
-        .values({ customerId, volumeId: v.id, qty: Math.min(qty, left, CART_MAX_QTY) })
-        .onConflictDoUpdate({
-          target: [cartLines.customerId, cartLines.volumeId],
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
-        });
+      await this.grow(tx, customerId, { kind: 'volume', volumeId: v.id }, qty, left);
       return 'ok' as const;
     });
   }
@@ -163,14 +160,7 @@ export class CartService {
       const { available: left } = await loadDiscovery(tx);
       if (left === 0) return { result: 'sold_out' } as const;
       await this.touch(tx, customerId);
-      await tx
-        .insert(cartLines)
-        .values({ customerId, kind: 'discovery_set', qty: Math.min(qty, left, CART_MAX_QTY) })
-        .onConflictDoUpdate({
-          target: [cartLines.customerId],
-          targetWhere: sql`kind = 'discovery_set'`,
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
-        });
+      await this.grow(tx, customerId, { kind: 'discovery_set' }, qty, left);
       return { result: 'ok' } as const;
     });
   }
@@ -191,46 +181,34 @@ export class CartService {
       if (left === 0) return { result: 'sold_out' } as const;
       const fragranceIds = picked.tenMl.map((t) => t.fragranceId).sort((a, b) => a - b);
       await this.touch(tx, customerId);
-      await tx
-        .insert(cartLines)
-        .values({
-          customerId,
-          kind: 'builder_set',
-          fragranceIds,
-          qty: Math.min(qty, left, CART_MAX_QTY),
-        })
-        .onConflictDoUpdate({
-          target: [cartLines.customerId, cartLines.fragranceIds],
-          targetWhere: sql`kind = 'builder_set'`,
-          set: { qty: sql`least(${cartLines.qty} + ${qty}, ${left}, ${CART_MAX_QTY})` },
-        });
+      await this.grow(tx, customerId, { kind: 'builder_set', fragranceIds }, qty, left);
       return { result: 'ok' } as const;
     });
   }
 
   /**
-   * «Повторить заказ» (spec Changes 2026-11-07 cart, 2026-11-11): the order's lines go into the
-   * cart at today's prices (the cart re-quotes them). Each old line is weighed after the cart's own
-   * lines, through the same quote that judges the cart, so it takes only what they leave: capped at
-   * available and at the per-line ceiling, skipped when nothing is left (a builder set needs all
-   * five 10 ml). A line already in the cart (the same volume, the Discovery set, the same five)
-   * grows by what was added. Null when the order is not this customer's.
+   * «Повторить заказ» (spec Changes 2026-11-07 cart, 2026-11-11): a delivered or cancelled order's
+   * lines go into the cart at today's prices (the cart re-quotes them). Each old line is weighed
+   * after the cart's own lines, through the same quote that judges the cart, so it takes only what
+   * they leave: capped at available and at the per-line ceiling, skipped when nothing is left (a
+   * builder set needs all five 10 ml). A line already in the cart (the same volume, the Discovery
+   * set, the same five) grows by what was added. Each line short of what was ordered says why.
    */
-  async repeat(customerId: number, number: number): Promise<RepeatResultDto | null> {
+  async repeat(customerId: number, number: number): Promise<RepeatOutcome> {
     return this.db.transaction(async (tx) => {
       const [order] = await tx
-        .select({ id: orders.id })
+        .select({ id: orders.id, status: orders.status })
         .from(orders)
         .where(and(eq(orders.customerId, customerId), eq(orders.number, number)));
-      if (!order) return null;
+      if (!order) return { kind: 'not_found' } as const;
+      if (!orderRepeatable(order.status)) return { kind: 'not_repeatable' } as const;
       const old = await tx
         .select()
         .from(orderLines)
         .where(eq(orderLines.orderId, order.id))
         .orderBy(asc(orderLines.position));
-      // the cart row first: a concurrent add or repeat of this customer waits for this one
+      // the cart row first, like every cart write: a concurrent add or change waits for this one
       await this.touch(tx, customerId);
-      await tx.select().from(carts).where(eq(carts.customerId, customerId)).for('update');
       const cart = await readCartLines(tx, customerId);
 
       // The old lines after every cart line (ids above the cart's), as the cart would hold them.
@@ -252,11 +230,11 @@ export class CartService {
       for (const [i, l] of old.entries()) {
         const w = wanted[i]!;
         const v = viewOf.get(w.lineId);
-        const same = cart.find((c) => sameLine(c, w));
-        // never past the per-line ceiling on the line it joins
-        const added =
-          !v || v.soldOut ? 0 : Math.max(0, Math.min(v.qty, CART_MAX_QTY - (same?.qty ?? 0)));
-        if (added > 0) await this.addLine(tx, customerId, w, added);
+        // what stock leaves for it, and what the line it joins may still take (99 at most)
+        const byStock = !v || v.soldOut ? 0 : Math.min(l.qty, v.available);
+        const room = CART_MAX_QTY - (cart.find((c) => sameLine(c, w))?.qty ?? 0);
+        const added = Math.max(0, Math.min(byStock, room));
+        if (added > 0) await this.grow(tx, customerId, w, added);
         result.push({
           kind: l.kind,
           name: { ru: l.nameRu, uz: l.nameUz },
@@ -264,43 +242,77 @@ export class CartService {
           ml: l.ml,
           ordered: l.qty,
           added,
+          reason:
+            added === l.qty
+              ? null
+              : room < byStock
+                ? 'max_qty'
+                : added > 0
+                  ? 'capped'
+                  : l.kind === 'builder_set'
+                    ? 'set_incomplete'
+                    : 'sold_out',
         });
       }
-      return { lines: result, added: result.filter((r) => r.added > 0).length, of: result.length };
+      return {
+        kind: 'done',
+        result: {
+          lines: result,
+          added: result.filter((r) => r.added > 0).length,
+          of: result.length,
+        },
+      } as const;
     });
   }
 
-  /** Adds `qty` to the cart line holding this volume, the Discovery set or these five. */
-  private async addLine(tx: DbOrTx, customerId: number, w: StoredLine, qty: number) {
-    const grow = { qty: sql`${cartLines.qty} + ${qty}` };
-    if (w.kind === 'volume')
+  /**
+   * The one way a line grows: adds `qty` to the cart line holding this volume, the Discovery set or
+   * these five (or makes it), never past `left` (what is available, when the caller judged it) nor
+   * the per-line ceiling. The caller has touched the cart row first.
+   */
+  private async grow(
+    tx: DbOrTx,
+    customerId: number,
+    line:
+      | { kind: 'volume'; volumeId: number | null }
+      | { kind: 'discovery_set' }
+      | { kind: 'builder_set'; fragranceIds: number[] | null },
+    qty: number,
+    left: number = CART_MAX_QTY,
+  ) {
+    const cap = Math.min(left, CART_MAX_QTY);
+    const values = { customerId, qty: Math.min(qty, cap) };
+    const set = { qty: sql`least(${cartLines.qty} + ${qty}, ${cap})` };
+    if (line.kind === 'volume')
       await tx
         .insert(cartLines)
-        .values({ customerId, volumeId: w.volumeId, qty })
-        .onConflictDoUpdate({ target: [cartLines.customerId, cartLines.volumeId], set: grow });
-    else if (w.kind === 'discovery_set')
+        .values({ ...values, volumeId: line.volumeId })
+        .onConflictDoUpdate({ target: [cartLines.customerId, cartLines.volumeId], set });
+    else if (line.kind === 'discovery_set')
       await tx
         .insert(cartLines)
-        .values({ customerId, kind: 'discovery_set', qty })
+        .values({ ...values, kind: 'discovery_set' })
         .onConflictDoUpdate({
           target: [cartLines.customerId],
           targetWhere: sql`kind = 'discovery_set'`,
-          set: grow,
+          set,
         });
     else
       await tx
         .insert(cartLines)
-        .values({ customerId, kind: 'builder_set', fragranceIds: w.fragranceIds, qty })
+        .values({ ...values, kind: 'builder_set', fragranceIds: line.fragranceIds })
         .onConflictDoUpdate({
           target: [cartLines.customerId, cartLines.fragranceIds],
           targetWhere: sql`kind = 'builder_set'`,
-          set: grow,
+          set,
         });
   }
 
   /** Sets a quantity, capped at available; false when the line is not this customer's. */
   async setQuantity(customerId: number, lineId: number, qty: number): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      // the cart row before the line, as every cart write takes them, so none deadlocks another
+      await this.touch(tx, customerId);
       const { lines } = await loadCartQuote(tx, this.edges.clock.now(), customerId);
       const line = lines.find((l) => l.lineId === lineId);
       if (!line) return false;
@@ -311,7 +323,6 @@ export class CartService {
           .set({ qty: Math.min(qty, line.available, CART_MAX_QTY) })
           .where(eq(cartLines.id, lineId));
       }
-      await this.touch(tx, customerId);
       return true;
     });
   }

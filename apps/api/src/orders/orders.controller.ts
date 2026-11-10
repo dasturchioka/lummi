@@ -21,10 +21,15 @@ export class OrdersController {
   @TsRestHandler(contract.checkout.get)
   checkout(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.checkout.get, async ({ query }) => {
-      const dto = await this.orders.checkout(customerId, query.regionId, query.item);
-      if (dto === 'unknown_item')
-        return { status: 404 as const, body: { code: 'not_found' as const } };
-      return dto ? { status: 200 as const, body: dto } : unauthorized;
+      const out = await this.orders.checkout(customerId, query.regionId, query.item);
+      switch (out.kind) {
+        case 'ok':
+          return { status: 200 as const, body: out.checkout };
+        case 'unknown_item':
+          return { status: 404 as const, body: { code: 'not_found' as const } };
+        case 'unauthorized':
+          return unauthorized;
+      }
     });
   }
 
@@ -103,9 +108,15 @@ export class OrdersController {
   @TsRestHandler(contract.orders.repeat)
   repeat(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.orders.repeat, async ({ params }) => {
-      const result = await this.cart.repeat(customerId, params.number);
-      if (!result) return { status: 404 as const, body: { code: 'not_found' as const } };
-      return { status: 200 as const, body: { result, cart: await this.cart.get(customerId) } };
+      const out = await this.cart.repeat(customerId, params.number);
+      if (out.kind === 'not_found')
+        return { status: 404 as const, body: { code: 'not_found' as const } };
+      if (out.kind === 'not_repeatable')
+        return { status: 409 as const, body: { code: 'not_repeatable' as const } };
+      return {
+        status: 200 as const,
+        body: { result: out.result, cart: await this.cart.get(customerId) },
+      };
     });
   }
 }

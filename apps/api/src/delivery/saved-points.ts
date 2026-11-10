@@ -47,15 +47,20 @@ export async function rememberPoint(
   );
 }
 
-/** The customer's saved pairs, the last used first; a point BTS hid since is flagged. */
+/**
+ * The customer's saved pairs, the last used first, at most `delivery.savedPointsMax` (read here
+ * too, so lowering the setting hides the extra pairs at once); a point BTS hid since is flagged.
+ */
 export async function listSavedPoints(db: DbOrTx, customerId: number): Promise<SavedPointDto[]> {
+  const { 'delivery.savedPointsMax': max } = await readSettings(db, ['delivery.savedPointsMax']);
   const rows = await db
     .select({ saved: savedPoints, point: btsPoints, region: regions })
     .from(savedPoints)
     .innerJoin(btsPoints, eq(btsPoints.id, savedPoints.btsPointId))
     .innerJoin(regions, eq(regions.id, btsPoints.regionId))
     .where(eq(savedPoints.customerId, customerId))
-    .orderBy(desc(savedPoints.lastUsedAt), desc(savedPoints.id));
+    .orderBy(desc(savedPoints.lastUsedAt), desc(savedPoints.id))
+    .limit(max);
   return rows.map(({ saved, point, region }) => ({
     id: saved.id,
     recipientName: saved.recipientName,

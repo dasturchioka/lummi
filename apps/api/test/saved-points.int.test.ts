@@ -195,4 +195,25 @@ describe('«Мои пункты BTS» (spec Changes 2026-11-07, BTS point select
     expect((await saved(client)).map((s) => s.point.id)).toEqual([r!.id, q!.id]);
     expect((await t.db.select().from(regions)).length).toBe(14);
   });
+
+  it('lowering `delivery.savedPointsMax` hides the pairs over it at once', async () => {
+    const client = await shopper(t, ali, '998901234567');
+    const p = await samarkandPoint(t);
+    const [q, r] = await otherPoints(2);
+    await buy(client, p.id);
+    later(1);
+    await buy(client, q!.id);
+    later(1);
+    await buy(client, r!.id);
+    expect(await saved(client)).toHaveLength(3);
+    await t.db
+      .insert(settings)
+      .values({ key: 'delivery.savedPointsMax', value: 1 })
+      .onConflictDoUpdate({ target: settings.key, set: { value: 1 } });
+    expect((await saved(client)).map((s) => s.point.id)).toEqual([r!.id]);
+    const checkout = await client.checkout.get({ query: {} });
+    expect(checkout.status === 200 && checkout.body.savedPoints.map((s) => s.point.id)).toEqual([
+      r!.id,
+    ]);
+  });
 });

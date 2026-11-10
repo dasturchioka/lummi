@@ -29,6 +29,23 @@ export const ORDER_INPUT_ERRORS = [
 ] as const;
 export type OrderInputError = (typeof ORDER_INPUT_ERRORS)[number];
 
+/**
+ * The orders «Повторить заказ» is offered on (#25 ruling): one that reached «Доставлен», or ended
+ * «Отменён» (the shopper's own cancel, staff's or the reserve expiry). Never one still on its way
+ * or awaiting payment; the server refuses those with 409 `not_repeatable`.
+ */
+export const REPEATABLE_STATUSES = ['delivered', 'cancelled'] as const satisfies readonly OrderStatus[];
+export const orderRepeatable = (status: OrderStatus): boolean =>
+  (REPEATABLE_STATUSES as readonly OrderStatus[]).includes(status);
+
+/**
+ * Why «Повторить заказ» put fewer units of a line in the cart than the order had: none available
+ * (`sold_out`), a builder set one of whose five 10 ml is short (`set_incomplete`), fewer available
+ * than ordered (`capped`), or the cart line reached its 99 ceiling (`max_qty`).
+ */
+export const REPEAT_SHORT_REASONS = ['sold_out', 'set_incomplete', 'capped', 'max_qty'] as const;
+export type RepeatShortReason = (typeof REPEAT_SHORT_REASONS)[number];
+
 /** Why checkout answered 409: the shopper's view is stale, or the database asks to try again. */
 export const CHECKOUT_CONFLICTS = ['total_changed', 'nothing_to_order'] as const;
 export type CheckoutConflictCode = (typeof CHECKOUT_CONFLICTS)[number];

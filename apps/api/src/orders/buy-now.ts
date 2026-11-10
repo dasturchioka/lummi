@@ -1,8 +1,7 @@
 import type { BuyNowItem } from '@lummi/contracts';
-import { SET_SIZE } from '@lummi/contracts/constants';
 import { and, eq, fragrances, volumes, type DbOrTx } from '@lummi/db';
 import type { StoredLine } from '../cart/load-cart';
-import { tenMlOf } from '../sets/sets';
+import { judgeBuilderPick, tenMlOf } from '../sets/sets';
 
 /** The id «Купить сейчас» gives its one line: it is no cart line, but the quote keys lines by id. */
 const BUY_NOW_LINE_ID = 1;
@@ -33,9 +32,12 @@ export async function buyNowLine(tx: DbOrTx, item: BuyNowItem): Promise<StoredLi
     case 'discovery_set':
       return { ...line, kind: 'discovery_set', volumeId: null, fragranceIds: null };
     case 'builder_set': {
-      // a hidden fragrance answers like an unknown one, as the builder does (spec Changes 2026-11-10)
-      const five = (await tenMlOf(tx, { slugs: item.slugs })).filter((t) => !t.hidden);
-      if (five.length !== SET_SIZE) return null;
+      // the builder's own judge: five different visible fragrances with a 10 ml (a hidden one
+      // answers like an unknown one); a 10 ml that is short is the quote's to flag, not a 404
+      const found = await tenMlOf(tx, { slugs: item.slugs });
+      const picked = judgeBuilderPick(item.slugs, found);
+      if (!picked.ok && picked.reason !== 'unavailable') return null;
+      const five = found.filter((t) => !t.hidden && item.slugs.includes(t.slug));
       return {
         ...line,
         kind: 'builder_set',

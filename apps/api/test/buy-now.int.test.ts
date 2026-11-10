@@ -235,6 +235,22 @@ describe('«Купить сейчас» reserves like a cart order (ADR 0010)', 
     expect(res.status === 409 && res.body.code).toBe('nothing_to_order');
   });
 
+  it('a builder set with one 10 ml short is quoted sold out, naming it (not unknown)', async () => {
+    const client = await shopper(t, ali, '998901234567');
+    const five = await slugs(5);
+    const v = await volumeOf(five[3]!, 10);
+    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, v.id));
+    const checkout = await client.checkout.get({
+      query: { item: `builder_set:${five.join(',')}` },
+    });
+    expect(checkout.status).toBe(200);
+    if (checkout.status !== 200) return;
+    expect(checkout.body.itemCount).toBe(0);
+    expect(
+      checkout.body.item?.kind === 'builder_set' && checkout.body.item.short.map((f) => f.slug),
+    ).toEqual([five[3]]);
+  });
+
   it('the last unit: a buy-now and a cart checkout cannot both win', async () => {
     const p = await point();
     const [s] = await slugs(1);

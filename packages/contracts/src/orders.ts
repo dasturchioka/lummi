@@ -8,6 +8,7 @@ import { CANCEL_REASONS } from './order-machine';
 import {
   CHECKOUT_CONFLICTS,
   ORDER_INPUT_ERRORS,
+  REPEAT_SHORT_REASONS,
   ORDER_STATUSES,
   ORDERS_PAGE_DEFAULT,
   ORDERS_PAGE_MAX,
@@ -250,8 +251,8 @@ export const orderErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_fo
 
 /**
  * «Повторить заказ»: what became of each of the order's lines, in its order. `added` is what went
- * into the cart now (0: skipped, not available or no longer sold; below `ordered`: capped at what
- * is available or at the per-line ceiling). Prices are today's: the cart re-quotes them.
+ * into the cart now; when it is below `ordered`, `reason` says why (`REPEAT_SHORT_REASONS`), else
+ * it is null. Prices are today's: the cart re-quotes them.
  */
 export const repeatResultSchema = z.object({
   lines: z.array(
@@ -263,6 +264,7 @@ export const repeatResultSchema = z.object({
       ml: z.number().int(),
       ordered: z.number().int().positive(),
       added: z.number().int().nonnegative(),
+      reason: z.enum(REPEAT_SHORT_REASONS).nullable(),
     }),
   ),
   /** Lines that went into the cart, at least one unit each: «2 из 3 товаров добавлены». */
@@ -271,6 +273,8 @@ export const repeatResultSchema = z.object({
   of: z.number().int().positive(),
 });
 export type RepeatResultDto = z.infer<typeof repeatResultSchema>;
+/** 409: only a delivered or cancelled order can be repeated (`REPEATABLE_STATUSES`). */
+export const repeatRefusedSchema = z.object({ code: z.literal('not_repeatable') });
 export const repeatOrderResponseSchema = z.object({
   result: repeatResultSchema,
   /** The cart after, freshly quoted. */

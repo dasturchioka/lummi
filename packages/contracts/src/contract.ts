@@ -116,6 +116,7 @@ import {
   orderStatusConflictSchema,
   phoneRequiredSchema,
   repeatOrderResponseSchema,
+  repeatRefusedSchema,
   savedPointErrorSchema,
   savedPointSchema,
 } from './orders';
@@ -458,9 +459,10 @@ export const contract = c.router({
         200: repeatOrderResponseSchema,
         401: orderErrorSchema,
         404: orderErrorSchema,
+        409: repeatRefusedSchema,
       },
       summary:
-        '«Повторить заказ»: the order’s lines go into the cart at today’s prices, each capped at what is available after the cart’s own lines; what was skipped or capped comes back per line',
+        '«Повторить заказ» (a delivered or cancelled order; 409 otherwise): the order’s lines go into the cart at today’s prices, each capped at what is available after the cart’s own lines; what was skipped or capped comes back per line with the reason',
     },
   },
 });
