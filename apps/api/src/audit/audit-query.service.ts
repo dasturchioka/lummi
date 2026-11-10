@@ -1,21 +1,11 @@
-import { tashkentToUtc, type AuditEntryDto, type AuditQuery } from '@lummi/contracts';
+import {
+  tashkentDayStart as dayStart,
+  type AuditEntryDto,
+  type AuditQuery,
+} from '@lummi/contracts';
 import { alias, and, auditLog, customers, desc, eq, sql, staff, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { DB } from '../tokens';
-
-/** The start of a Tashkent day as a UTC instant; the caller has already checked it is a real day. */
-export function dayStart(day: string, plusDays = 0): Date {
-  const [year, month, d] = day.split('-').map(Number) as [number, number, number];
-  // roll the calendar forward in UTC arithmetic, then read it back as a Tashkent wall-clock date
-  const rolled = new Date(Date.UTC(year, month - 1, d + plusDays));
-  return tashkentToUtc({
-    year: rolled.getUTCFullYear(),
-    month: rolled.getUTCMonth() + 1,
-    day: rolled.getUTCDate(),
-    hour: 0,
-    minute: 0,
-  }) as Date;
-}
 
 type Parsed = { page: number; pageSize: number } & Omit<AuditQuery, 'page' | 'pageSize'>;
 

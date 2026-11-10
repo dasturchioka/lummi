@@ -2,20 +2,11 @@ import { z } from 'zod';
 import { auditEntrySchema, tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
 import { bilingualSchema } from './catalog';
-import {
-  CANCEL_REASONS,
-  ORDER_ACTIONS,
-  ORDER_ACTOR_TYPES,
-  TRACKING_NUMBER_MAX,
-  TRACKING_NUMBER_MIN,
-} from './order-machine';
+import { ORDER_ACTIONS, ORDER_ACTOR_TYPES } from './order-machine';
+import { transitionPayloadSchemas } from './order-transition-payloads';
 import { orderSchema, orderStatusSchema } from './orders';
 import { RECEIPT_FILE_KINDS } from './receipt-upload';
-import {
-  RECEIPT_REJECT_NOTE_HARD_MAX,
-  RECEIPT_REJECT_REASONS,
-  RECEIPT_VERDICTS,
-} from './receipt-review';
+import { RECEIPT_REJECT_REASONS, RECEIPT_VERDICTS } from './receipt-review';
 
 const som = z.number().int().nonnegative();
 const id = z.number().int().positive();
@@ -216,31 +207,22 @@ export const fulfilBodySchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('hand_to_bts'),
     expectedStatus,
-    trackingNumber: z.string().trim().min(TRACKING_NUMBER_MIN).max(TRACKING_NUMBER_MAX),
+    trackingNumber: transitionPayloadSchemas.hand_to_bts.shape.trackingNumber,
   }),
   z.object({ action: z.literal('deliver'), expectedStatus }),
 ]);
 export type FulfilBody = z.input<typeof fulfilBodySchema>;
 
 /** `POST /admin/orders/:number/cancel`: a staff reason (TZ §6) and an optional note. */
-export const staffCancelBodySchema = z.object({
-  expectedStatus,
-  reason: z.enum(CANCEL_REASONS),
-  note: z.string().trim().min(1).max(500).optional(),
-});
+export const staffCancelBodySchema = transitionPayloadSchemas.cancel.extend({ expectedStatus });
 export type StaffCancelBody = z.input<typeof staffCancelBodySchema>;
 
 /**
- * `POST /admin/orders/:number/reject-receipt`: the receipt the manager looked at, a preset reason
- * and a note (required for `other`; its limit is the setting `receipts.rejectNoteMaxLength`).
+ * `POST /admin/orders/:number/reject-receipt`: the `reject_receipt` payload itself, the receipt the
+ * manager looked at, a preset reason and a note (required for `other`; its working limit is the
+ * setting `receipts.rejectNoteMaxLength`).
  */
-export const rejectReceiptBodySchema = z
-  .object({
-    receiptId: id,
-    reason: z.enum(RECEIPT_REJECT_REASONS),
-    note: z.string().trim().min(1).max(RECEIPT_REJECT_NOTE_HARD_MAX).optional(),
-  })
-  .refine((b) => b.reason !== 'other' || b.note !== undefined, { path: ['note'] });
+export const rejectReceiptBodySchema = transitionPayloadSchemas.reject_receipt;
 export type RejectReceiptBody = z.input<typeof rejectReceiptBodySchema>;
 
 export const adminOrderErrorSchema = z.object({

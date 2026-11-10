@@ -1,5 +1,6 @@
 import {
   ORDER_NUMBER_MAX,
+  tashkentDayStart as dayStart,
   RECEIPT_REJECT_REASONS,
   type AdminCreditDto,
   type AdminCreditsPageDto,
@@ -11,7 +12,10 @@ import {
   type AdminOrdersQuery,
   type AdminReceiptDto,
   type FulfilBody,
+  type OrderAction,
+  type OrderStatus,
   type PaymentState,
+  type ReceiptVerdict,
   type ReceiptRejectReason,
   type RejectReceiptBody,
   type StaffCancelBody,
@@ -35,7 +39,7 @@ import {
   type OrderRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { AuditQueryService, dayStart } from '../audit/audit-query.service';
+import { AuditQueryService } from '../audit/audit-query.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
 import { linesOf, toOrderDto } from '../orders/orders.service';
@@ -60,17 +64,28 @@ export type MoveOutcome =
   | { kind: 'refused'; code: TransitionRefusal | 'note_too_long'; max?: number }
   | { kind: 'try_again' };
 
+/** The words of the one payment-state rule, typed against their enums. */
+const PAID_BY: OrderAction = 'confirm_payment';
+const UNDER_CHECK: OrderStatus = 'receipt_review';
+const HELD: ReceiptVerdict = 'manual_review';
+const STATE = {
+  paid: 'paid',
+  manual_review: 'manual_review',
+  checking: 'checking',
+  unpaid: 'unpaid',
+} as const satisfies Record<PaymentState, PaymentState>;
+
 /**
- * Where an order's money stands (contracts `PAYMENT_STATES`): paid once a payment was confirmed,
- * whatever came after; otherwise what its receipt under check waits for. The columns are named
- * with their table: in a one-table select Drizzle leaves the table out, and a bare `id` inside
- * the subqueries would be theirs.
+ * Where an order's money stands (contracts `PAYMENT_STATES`, the one definition): paid once a
+ * payment was confirmed, whatever came after; otherwise what its receipt under check waits for.
+ * The columns are named with their table: in a one-table select Drizzle leaves the table out, and
+ * a bare `id` inside the subqueries would be theirs.
  */
 const paymentState = sql<PaymentState>`case
-  when exists (select 1 from order_events pe where pe.order_id = "orders"."id" and pe.action = 'confirm_payment') then 'paid'
-  when "orders"."status" = 'receipt_review' and exists (select 1 from receipts pr where pr.order_id = "orders"."id" and pr.verdict = 'manual_review') then 'manual_review'
-  when "orders"."status" = 'receipt_review' then 'checking'
-  else 'unpaid'
+  when exists (select 1 from order_events pe where pe.order_id = "orders"."id" and pe.action = ${PAID_BY}) then ${STATE.paid}
+  when "orders"."status" = ${UNDER_CHECK} and exists (select 1 from receipts pr where pr.order_id = "orders"."id" and pr.verdict = ${HELD}) then ${STATE.manual_review}
+  when "orders"."status" = ${UNDER_CHECK} then ${STATE.checking}
+  else ${STATE.unpaid}
 end`;
 
 /** The digits of a phone as stored (E.164 with `+`), for a search by part of the number. */

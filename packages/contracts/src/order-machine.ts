@@ -147,6 +147,9 @@ export const CANCEL_REASON_ONLY_FROM: Partial<Record<CancelReason, OrderStatus>>
   not_collected_at_bts: 'handed_to_bts',
 };
 
+/** The longest note staff add to a cancel (kept in the history only); the dialog reads it too. */
+export const CANCEL_NOTE_MAX = 500;
+
 /**
  * BTS's tracking number for «Передан в BTS», checked loosely (spec Changes 2026-11-11): its format
  * is BTS's, so only surrounding space is trimmed and a minimum length catches a slip of the finger.

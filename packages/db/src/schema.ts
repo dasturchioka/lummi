@@ -782,8 +782,9 @@ export const orderActionEnum = pgEnum('order_action', ORDER_ACTIONS);
 /**
  * The order's history (ADR 0011): one row per status change, written by `transition()` in the
  * same transaction as the change, its audit entry and its customer message. `reason` is the
- * cancel reason code, or the text staff typed for a rejected receipt or a return; `payload` keeps
- * the rest (a tracking number, per-line back-to-stock flags, the on-hand changes).
+ * cancel reason code, a rejected receipt's preset code (`RECEIPT_REJECT_REASONS`), a staff link's
+ * typed reason, or the text staff typed for a return; `payload` keeps the rest (a receipt id, a
+ * staff note, a tracking number, per-line back-to-stock flags, the on-hand changes).
  */
 export const orderEvents = pgTable(
   'order_events',

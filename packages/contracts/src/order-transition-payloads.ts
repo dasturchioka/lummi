@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  CANCEL_NOTE_MAX,
   CANCEL_REASONS,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
@@ -88,7 +89,7 @@ export const transitionPayloadSchemas = {
     .object({
       reason: z.enum(CANCEL_REASONS),
       /** Staff may add a word to their reason; it stays in the order history. */
-      note: z.string().trim().min(1).max(500).optional(),
+      note: z.string().trim().min(1).max(CANCEL_NOTE_MAX).optional(),
     })
     .strict(),
 } satisfies Record<OrderAction, z.ZodTypeAny>;
