@@ -28,6 +28,8 @@ export interface ScreenDef {
   initDataAgeSeconds?: number;
   /** Capture the whole scrolling page instead of the 390x844 viewport. */
   fullPage?: boolean;
+  /** The `startapp` value the app is launched with (`l_<code>`, `p_<slug>`); the path is then `/`. */
+  startParam?: string;
   /** Viewport width in CSS px (default 390): 360 for the narrow Android check. */
   width?: number;
   /** Take this screen as another customer (default `SHOT_USER`), e.g. one who never shared a phone. */
@@ -97,6 +99,27 @@ async function forgetPromo({ api, db }: { api: ApiClient; db: ShotDb }) {
 }
 async function typePromo(page: Page, code: string) {
   await page.getByTestId('promo-input').fill(code);
+}
+
+
+/** A campaign link for BLOGER10 (#35), written as the owner's admin would; `active` shapes the code. */
+async function shotCampaign(db: ShotDb, opts: { promoActive: boolean }) {
+  await shotPromo(db);
+  await db.query(`update promo_codes set active = $1 where code = 'BLOGER10'`, [opts.promoActive]);
+  await db.query(
+    `insert into campaign_links (code, target, promo_code_id, source, source_label)
+     values ('malika-nov', 'p_symphony', (select id from promo_codes where code = 'BLOGER10'), 'blogger', 'Malika')
+     on conflict do nothing`,
+  );
+}
+async function forgetCampaign({ api, db }: { api: ApiClient; db: ShotDb }) {
+  await db.query(`update customers set acquisition_link_id = null`);
+  await db.query(`delete from campaign_opens`);
+  await db.query(`update orders set campaign_link_id = null`);
+  await db.query(`delete from campaign_links where code = 'malika-nov'`);
+  await db.query(`update promo_codes set active = true where code = 'BLOGER10'`);
+  await forgetPromo({ api, db });
+  await emptyCart({ api, db });
 }
 
 /** Taps the first n fragrances of the builder's list. */
@@ -2008,6 +2031,75 @@ export const screens: ScreenDef[] = [
   { id: 'cart-unavailable', path: '/dev/cart?data=unavailable', act: hideFixtureToggle },
   // Promo codes (#29): the field typed, a code applied through the real API, the attempt limit,
   // then every reason the quote can refuse a code with (fixtures: the reasons need orders and dates).
+  {
+    // #35: `l_<code>` lands on the fragrance the link points at
+    id: 'campaign-landing',
+    path: '/',
+    startParam: 'l_malika-nov',
+    setup: async ({ api, db }) => {
+      await forgetCampaign({ api, db });
+      await shotCampaign(db, { promoActive: true });
+      await chooseCity(api);
+      await fillCart(api, [['tygar', 30]]);
+    },
+    act: async ({ page }) => {
+      await page.waitForURL('**/p/symphony');
+      await page.getByRole('heading').first().waitFor();
+    },
+    teardown: forgetCampaign,
+  },
+  {
+    // #35: ... and the link's promo code is already in the cart
+    id: 'campaign-cart-prefilled',
+    path: '/',
+    startParam: 'l_malika-nov',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await forgetCampaign({ api, db });
+      await shotCampaign(db, { promoActive: true });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await page.waitForURL('**/p/symphony');
+      // the card has no tab bar: a client-side move to the cart, as a back-and-forth would be
+      await page.evaluate(() => {
+        history.pushState({}, '', '/cart');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.getByTestId('promo-input').waitFor();
+    },
+    teardown: forgetCampaign,
+  },
+  {
+    // #35: a prefilled code that does not apply says why; the source is still kept
+    id: 'campaign-cart-invalid',
+    path: '/',
+    startParam: 'l_malika-nov',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await forgetCampaign({ api, db });
+      await shotCampaign(db, { promoActive: false });
+      await chooseCity(api);
+      await fillCart(api, [
+        ['symphony', 30],
+        ['tygar', 30],
+      ]);
+    },
+    act: async ({ page }) => {
+      await page.waitForURL('**/p/symphony');
+      // the card has no tab bar: a client-side move to the cart, as a back-and-forth would be
+      await page.evaluate(() => {
+        history.pushState({}, '', '/cart');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await page.getByTestId('promo-input').waitFor();
+    },
+    teardown: forgetCampaign,
+  },
   {
     id: 'cart-promo-typed',
     path: '/cart',

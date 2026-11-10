@@ -292,7 +292,12 @@ export class CartService {
    * past that the stored code stays as it was. Whatever the code, it is stored and the quote says
    * whether it applies.
    */
-  async applyPromoCode(customerId: number, code: string): Promise<ApplyCodeOutcome> {
+  async applyPromoCode(
+    customerId: number,
+    code: string,
+    opts: { countAttempt?: boolean } = {},
+  ): Promise<ApplyCodeOutcome> {
+    const count = opts.countAttempt ?? true;
     return this.db.transaction(async (tx) => {
       await this.touch(tx, customerId);
       const [row] = await tx
@@ -306,7 +311,7 @@ export class CartService {
       const since = row?.since ?? null;
       const fresh = since === null || now.getTime() - since.getTime() >= windowMs;
       const attempts = fresh ? 0 : (row?.attempts ?? 0);
-      if (!fresh && attempts >= s['promo.attemptLimit']) {
+      if (count && !fresh && attempts >= s['promo.attemptLimit']) {
         const left = since.getTime() + windowMs - now.getTime();
         return {
           kind: 'too_many_attempts',
@@ -318,8 +323,8 @@ export class CartService {
         .set({
           promoCode: normalizePromoCode(code),
           discountChoice: null,
-          promoAttempts: attempts + 1,
-          promoAttemptsSince: fresh ? now : since,
+          // a code a campaign link supplied is not a guess: it neither counts nor starts the window
+          ...(count ? { promoAttempts: attempts + 1, promoAttemptsSince: fresh ? now : since } : {}),
         })
         .where(eq(carts.customerId, customerId));
       return { kind: 'ok' };

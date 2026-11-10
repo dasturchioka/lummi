@@ -61,6 +61,8 @@ import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { ContentAdminController, ContentController } from './content/content.controller';
 import { ContentService } from './content/content.service';
+import { CampaignsAdminController, CampaignsController } from './campaigns/campaigns.controller';
+import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
 import { SettingsService } from './settings/settings.service';
@@ -108,6 +110,8 @@ export class AppModule {
         HumoFeedController,
         BroadcastController,
         PromoAdminController,
+        CampaignsController,
+        CampaignsAdminController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -152,6 +156,7 @@ export class AppModule {
         HumoFeedService,
         BroadcastService,
         PromoAdminService,
+        CampaignsService,
       ],
       exports: [
         CreditEvents,

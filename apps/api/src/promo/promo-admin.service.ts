@@ -18,6 +18,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { CampaignsService } from '../campaigns/campaigns.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { promoState } from './promo-codes';
@@ -75,6 +76,7 @@ export class PromoAdminService {
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
   ) {}
 
   async list(): Promise<AdminPromoCode[]> {
@@ -102,6 +104,8 @@ export class PromoAdminService {
           targetId: row!.id,
           payload: fieldsOf(row!),
         });
+        // every promo code has a campaign link (ticket #35)
+        await this.campaigns.ensurePromoLink(tx, row!, { type: 'staff', id: actor.id });
         return { ok: true, value: (await this.get(row!.id, tx))! } as const;
       });
     } catch (e) {
@@ -155,6 +159,7 @@ export class PromoAdminService {
         .where(eq(promoCodeUses.promoCodeId, id))
         .limit(1);
       if (used) return fail('in_use');
+      await this.campaigns.releasePromoCode(tx, id);
       await tx.delete(promoCodes).where(eq(promoCodes.id, id));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },

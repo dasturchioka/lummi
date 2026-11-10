@@ -211,6 +211,7 @@ async function main() {
             tgWebAppVersion: '8.0',
             tgWebAppPlatform: 'android',
             tgWebAppThemeParams: '{}',
+            ...(screen.startParam ? { tgWebAppStartParam: screen.startParam } : {}),
           });
           await page.goto(`${appUrl}${screen.path}#${hash}`);
           await page.waitForSelector('html[data-ready="1"]', {

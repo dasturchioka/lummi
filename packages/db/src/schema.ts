@@ -1,5 +1,6 @@
 import type { Discount } from '@lummi/contracts';
 import {
+  CAMPAIGN_SOURCES,
   LINE_KINDS,
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
@@ -67,6 +68,10 @@ export const customers = pgTable('customers', {
   deliveryCity: text('delivery_city'),
   /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
   dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
+  /** The first campaign link they ever opened: the acquisition source, never overwritten (ADR 0022). */
+  acquisitionLinkId: bigint('acquisition_link_id', { mode: 'number' }).references(
+    () => campaignLinks.id,
+  ),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -698,6 +703,10 @@ export const orders = pgTable(
     creditId: bigint('credit_id', { mode: 'number' }).references(() => credits.id),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
+    /** The last campaign link the customer opened within `campaigns.attributionWindowDays` before ordering (ADR 0022). */
+    campaignLinkId: bigint('campaign_link_id', { mode: 'number' }).references(
+      () => campaignLinks.id,
+    ),
     /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
     trackingNumber: text('tracking_number'),
     /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
@@ -1104,3 +1113,51 @@ export const promoCodeUses = pgTable(
 
 export type PromoCodeRow = typeof promoCodes.$inferSelect;
 export type PromoCodeUseRow = typeof promoCodeUses.$inferSelect;
+
+export const campaignSourceEnum = pgEnum('campaign_source', CAMPAIGN_SOURCES);
+
+/**
+ * A Campaign link (ticket #35, ADR 0022): `startapp=l_<code>` opens `target` (a start target from
+ * `@lummi/contracts/constants`) and prefills `promo_code_id`'s code in the cart. The code's case is
+ * kept (Telegram keeps it) but two links never differ only by case. Every promo code gets one.
+ */
+export const campaignLinks = pgTable(
+  'campaign_links',
+  {
+    id: id(),
+    code: text('code').notNull(),
+    target: text('target').notNull(),
+    promoCodeId: bigint('promo_code_id', { mode: 'number' }).references(() => promoCodes.id),
+    source: campaignSourceEnum('source').notNull(),
+    sourceLabel: text('source_label'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('campaign_links_code_idx').on(sql`lower(${t.code})`),
+    index('campaign_links_promo_idx').on(t.promoCodeId),
+    check('campaign_links_code_check', sql`${t.code} ~ '^[A-Za-z0-9_-]{3,40}$'`),
+  ],
+);
+
+/** One row per open: customer, link, time. "Opens" in reports count distinct customers (ADR 0022). */
+export const campaignOpens = pgTable(
+  'campaign_opens',
+  {
+    id: id(),
+    linkId: bigint('link_id', { mode: 'number' })
+      .notNull()
+      .references(() => campaignLinks.id),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('campaign_opens_customer_idx').on(t.customerId, t.openedAt),
+    index('campaign_opens_link_idx').on(t.linkId, t.customerId),
+  ],
+);
+
+export type CampaignLinkRow = typeof campaignLinks.$inferSelect;
+export type CampaignOpenRow = typeof campaignOpens.$inferSelect;

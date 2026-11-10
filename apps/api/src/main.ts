@@ -5,6 +5,7 @@ import { BotService } from './bot/bot.service';
 import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
 import { seedContent } from './content/seed';
+import { CampaignsService } from './campaigns/campaigns.service';
 import { syncSearchIndex } from './search/search-index';
 
 const log = new PinoLogger('api');
@@ -26,6 +27,9 @@ app.enableShutdownHooks();
 const rebuilt = await syncSearchIndex(db);
 if (rebuilt > 0) log.log(`search index: rebuilt ${rebuilt} document(s)`, 'Main');
 await seedContent(db);
+// promo codes that predate campaign links get theirs (ticket #35); a second boot changes nothing
+const linked = await app.get(CampaignsService).backfillPromoLinks();
+if (linked > 0) log.log(`campaign links: made ${linked} for existing promo codes`, 'Main');
 await app.get(BotService).start();
 await app.listen(env.API_PORT, env.API_HOST);
 log.log(`API listening on http://${env.API_HOST}:${env.API_PORT}`, 'Main');

@@ -127,6 +127,13 @@
       "when": 1794347119968,
       "tag": "0017_payment_matching",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794348992881,
+      "tag": "0018_campaign_links",
+      "breakpoints": true
     }
   ]
 }
