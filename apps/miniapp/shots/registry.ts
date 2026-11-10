@@ -1069,6 +1069,351 @@ const shortcutScreens: ScreenDef[] = [
   },
 ];
 
+/*
+ * #25 design polish: the states the first round left out, and the worst cases (break-ui).
+ */
+/** Opens the list «+» sheet on the first card that asks which volume. */
+async function openVolumeSheet(page: Page) {
+  await page.getByTestId('list-add').first().click();
+  await page.getByTestId('volume-sheet').waitFor();
+}
+/** Opens the point picker from «Сменить» and takes the point at `n` of the saved city. */
+async function switchPoint(page: Page, n: number) {
+  await page.getByTestId('choose-point').click();
+  await sheet(page).getByTestId('point-row').nth(n).click();
+  await sheet(page).waitFor({ state: 'detached' });
+  await page.getByTestId('chosen-point').waitFor();
+}
+/** Opens the remove sheet of the profile's n-th saved pair. */
+async function askRemove(page: Page, n = 0) {
+  await page.getByTestId('saved-point-remove').nth(n).click();
+  await page.getByTestId('saved-point-remove-sheet').waitFor();
+}
+const polishScreens: ScreenDef[] = [
+  // The list cards at the comp's width, beside the 360 px set.
+  { id: 'list-cards', path: '/dev/list', fullPage: true },
+  {
+    id: 'list-add-sheet-360',
+    path: '/catalog',
+    width: 360,
+    act: async ({ page }) => openVolumeSheet(page),
+  },
+  {
+    // A markdown on the 30 ml and the 50 ml sold out: struck price, the sale row, a locked tile
+    id: 'list-add-sheet-sale',
+    path: '/search?q=rain%20tea&s=1',
+    setup: async ({ db }) => {
+      await db.markdown('rain-tea', 30, 119_000, 4);
+      await db.query(
+        `update volumes set on_hand = 0 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'rain-tea')`,
+      );
+    },
+    act: async ({ page }) => {
+      await openVolumeSheet(page);
+      await sheet(page).getByRole('radio', { name: /30/ }).click();
+    },
+    teardown: async ({ db }) => db.restore('rain-tea'),
+  },
+  {
+    // The volume ran out while the sheet was up: it says so in the sheet, above the button
+    id: 'list-add-sheet-error',
+    path: '/catalog',
+    act: async ({ page }) => {
+      await openVolumeSheet(page);
+      await page.route('**/cart/lines', (route) =>
+        route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: '{"code":"sold_out"}',
+        }),
+      );
+      await sheet(page)
+        .getByRole('button', { name: /(В корзину|Savatga)/ })
+        .click();
+      await sheet(page).getByRole('alert').waitFor();
+    },
+  },
+  {
+    // One volume available on the catalog's first card: «+» adds it, the note rises over the tab bar
+    id: 'list-added-catalog',
+    path: '/catalog',
+    setup: async ({ db }) => {
+      await db.query(
+        `update volumes set on_hand = 0 where ml <> 10 and fragrance_id = (select id from fragrances where slug = 'rain-tea')`,
+      );
+    },
+    act: async ({ page }) => {
+      await page.getByTestId('list-add').first().click();
+      await page.locator('[data-testid="shop-note"][data-open]').waitFor();
+    },
+    teardown: async (ctx) => {
+      await emptyCart(ctx);
+      await ctx.db.restore('rain-tea');
+    },
+  },
+  {
+    // The cart holds a promo code: the buy-now note says it waits there and does not apply here
+    id: 'checkout-buy-now-promo',
+    path: '/checkout?item=volume:symphony:30',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await clearSaved(db);
+      await shotPromo(db);
+      const res = await api.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
+      if (res.status !== 200) throw new Error(`promo: HTTP ${res.status}`);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await checkoutDone(ctx);
+    },
+  },
+  {
+    // «Купить сейчас» from the builder: the set with its five
+    id: 'checkout-buy-now-builder',
+    path: `/checkout?item=builder_set:${REPEAT_FIVE.join(',')}`,
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await clearSaved(db);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: restoreRepeat,
+  },
+  {
+    // Nothing of the order is in stock now: the calm none-title and the way to the catalog
+    id: 'order-repeat-none',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [['ink-mark', 50]]);
+      await setStatuses(db, ['delivered']);
+      await db.setOnHand('ink-mark', 0);
+    },
+    act: async ({ page }) => repeatNewest(page),
+    teardown: async (ctx) => {
+      await checkoutDone(ctx);
+      await ctx.db.restore('ink-mark');
+    },
+  },
+  {
+    // Nothing saved yet: the section says what will appear there
+    id: 'profile-saved-points-empty',
+    path: '/profile',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearSaved(db);
+    },
+  },
+  {
+    // The bin asks first, naming the pair
+    id: 'profile-saved-remove',
+    path: '/profile',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await savedPairs(api, db);
+    },
+    act: async ({ page }) => askRemove(page, 0),
+    teardown: savedPairsDone,
+  },
+  {
+    // Checkout started on the saved pair, then the shopper chose another point: no pair is ticked
+    id: 'checkout-saved-switch',
+    path: '/checkout',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await savedPairs(api, db);
+    },
+    act: async ({ page }) => switchPoint(page, 5),
+    teardown: savedPairsDone,
+  },
+];
+
+/*
+ * Worst cases for #25 (break-ui): a 60-character fragrance name with seven-digit prices at 360 px,
+ * a repeat of twelve lines with every reason, five saved pairs with long UZ addresses and long
+ * recipient names (one point hidden by BTS), and a buy-now with the longest promo code in the cart.
+ */
+const NAME_60 = 'Elysium Pour Homme Parfum Extraordinaire Cologne Royale Noir';
+let elysiumName: string | undefined;
+async function longElysium(db: ShotDb) {
+  await worstData.setup!({ db } as { api: ApiClient; db: ShotDb });
+  const { rows } = await db.query(
+    `select name from fragrances where slug = 'elysium-pour-homme-parfum'`,
+  );
+  elysiumName ??= String(rows[0]!.name);
+  await db.query(`update fragrances set name = $1 where slug = 'elysium-pour-homme-parfum'`, [
+    NAME_60,
+  ]);
+}
+async function shortElysium(ctx: { api: ApiClient; db: ShotDb }) {
+  await worstData.teardown!(ctx);
+  if (elysiumName)
+    await ctx.db.query(`update fragrances set name = $1 where slug = 'elysium-pour-homme-parfum'`, [
+      elysiumName,
+    ]);
+  await ctx.db.restore('elysium-pour-homme-parfum');
+}
+const LONG_RECIPIENTS = [
+  LONG_NAME,
+  'Gulchehraxon Rahmonberdiyeva-Toʻxtasinova Abdumalik qizi',
+  'Alisher Valiyev Abdumalikovich',
+  'Shahnozabegim Xudoyberdiyeva-Qoʻchqorova Ravshan qizi',
+  'Oʻtkirbek Gʻayratjon oʻgʻli Nurmuhammedov-Saidaxmedov',
+];
+const LONG_ADDRESSES = [
+  'Samarqand viloyati, Pastdargʻom tumani, Juma shahri, Amir Temur koʻchasi 112-uy, «Oʻzbekiston pochtasi» binosining ikkinchi qavati',
+  'Samarqand shahri, Bogʻishamol mahallasi, Gʻijduvoniy koʻchasi 7A-uy, «Korzinka» supermarketi roʻparasidagi doʻkonlar qatori',
+  'Samarqand shahri, Siyob bozori yonidagi Toshkent yoʻli 45-uy, birinchi qavat, kirish hovli tomondan',
+  'Samarqand shahri, Universitet xiyoboni 15, Samarqand davlat universiteti talabalar turar joyi qarshisida',
+  'Samarqand shahri, Mirzo Ulugʻbek koʻchasi 77-uy, «Afrosiyob» savdo markazi, yer osti qavati, 12-doʻkon',
+];
+let savedAddresses: { id: number; address: string }[] = [];
+let hiddenWorst: number | undefined;
+async function worstSaved(api: ApiClient, db: ShotDb) {
+  await clearSaved(db);
+  for (const [i, name] of LONG_RECIPIENTS.entries()) {
+    const point = await nthPoint(api, i);
+    const { rows } = await db.query('select address from bts_points where id = $1', [point.id]);
+    savedAddresses.push({ id: point.id, address: String(rows[0]!.address) });
+    await db.query('update bts_points set address = $2 where id = $1', [
+      point.id,
+      LONG_ADDRESSES[i],
+    ]);
+    await buyNowTo(api, i, name, `+99890${String(1234560 + i)}`);
+  }
+  hiddenWorst = (await nthPoint(api, 3)).id;
+  await db.query('update bts_points set active = false where id = $1', [hiddenWorst]);
+}
+async function worstSavedDone(ctx: { api: ApiClient; db: ShotDb }) {
+  if (hiddenWorst)
+    await ctx.db.query('update bts_points set active = true where id = $1', [hiddenWorst]);
+  hiddenWorst = undefined;
+  for (const { id, address } of savedAddresses)
+    await ctx.db.query('update bts_points set address = $2 where id = $1', [id, address]);
+  savedAddresses = [];
+  await clearSaved(ctx.db);
+  await checkoutDone(ctx);
+}
+const worstShortcutScreens: ScreenDef[] = [
+  {
+    id: 'worst-25-list-360',
+    path: '/catalog',
+    width: 360,
+    setup: ({ db }) => longElysium(db),
+    teardown: shortElysium,
+  },
+  {
+    // the 60-character name and seven-digit prices in the sheet, the 30 ml marked down
+    id: 'worst-25-sheet-360',
+    path: '/catalog',
+    width: 360,
+    setup: async ({ db }) => {
+      await longElysium(db);
+      await db.markdown('elysium-pour-homme-parfum', 30, 1_990_000, 3);
+    },
+    act: async ({ page }) => {
+      await openVolumeSheet(page);
+      await sheet(page).getByRole('radio', { name: /30/ }).click();
+    },
+    teardown: shortElysium,
+  },
+  {
+    // twelve lines: gone, capped by stock, at the 99 ceiling (some and none), and the rest added
+    id: 'worst-25-repeat-12',
+    path: '/orders',
+    setup: async ({ api, db }) => {
+      await longElysium(db);
+      await db.restore('blue-sapphire');
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, TWELVE_LINES);
+      await setStatuses(db, ['delivered']);
+      const vol = (slug: string, ml: number, onHand: number) =>
+        db.query(
+          `update volumes set on_hand = $3 where ml = $2 and fragrance_id = (select id from fragrances where slug = $1)`,
+          [slug, ml, onHand],
+        );
+      await vol('elysium-pour-homme-parfum', 50, 0);
+      await vol('blue-sapphire', 30, 0);
+      await vol('hibiscus-mahajad', 10, 0);
+      await vol('symphony', 10, 1);
+      await vol('le-male-le-parfum', 10, 200);
+      await vol('montabaco-intensivo', 10, 200);
+      await api.cart.addLine({ body: { slug: 'le-male-le-parfum', ml: 10, qty: 99 } });
+      await api.cart.addLine({ body: { slug: 'montabaco-intensivo', ml: 10, qty: 99 } });
+    },
+    act: async ({ page }) => repeatNewest(page),
+    teardown: async (ctx) => {
+      await checkoutDone(ctx);
+      for (const [slug] of TWELVE_LINES) await ctx.db.restore(slug);
+      await shortElysium(ctx);
+    },
+  },
+  {
+    id: 'worst-25-saved-profile',
+    path: '/profile',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await worstSaved(api, db);
+    },
+    teardown: worstSavedDone,
+  },
+  {
+    id: 'worst-25-saved-remove',
+    path: '/profile',
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await worstSaved(api, db);
+    },
+    act: async ({ page }) => askRemove(page, 0),
+    teardown: worstSavedDone,
+  },
+  {
+    id: 'worst-25-saved-checkout',
+    path: '/checkout',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await worstSaved(api, db);
+    },
+    teardown: worstSavedDone,
+  },
+  {
+    // the 60-character name at a seven-digit price, the longest promo code waiting in the cart
+    id: 'worst-25-buy-now-360',
+    path: '/checkout?item=volume:elysium-pour-homme-parfum:50',
+    width: 360,
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await checkoutReady(api, db, 'given');
+      await clearSaved(db);
+      await longElysium(db);
+      await db.query(
+        `insert into promo_codes (code, kind, percent) values ($1, 'percent', 10)
+         on conflict (code) do update set active = true`,
+        [SHOT_LONG_CODE],
+      );
+      const res = await api.cart.applyPromoCode({ body: { code: SHOT_LONG_CODE } });
+      if (res.status !== 200) throw new Error(`promo: HTTP ${res.status}`);
+    },
+    act: async ({ page }) => pickFirstPoint(page),
+    teardown: async (ctx) => {
+      await forgetPromo(ctx);
+      await ctx.db.query(`delete from promo_codes where code = $1`, [SHOT_LONG_CODE]);
+      await checkoutDone(ctx);
+      await shortElysium(ctx);
+    },
+  },
+];
+
 export const screens: ScreenDef[] = [
   {
     id: 'home',
@@ -2809,4 +3154,6 @@ export const screens: ScreenDef[] = [
   // The registration step (contact + write access); its dev trigger is in the gallery.
   ...registrationStates,
   ...shortcutScreens,
+  ...polishScreens,
+  ...worstShortcutScreens,
 ];
