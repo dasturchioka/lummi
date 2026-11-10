@@ -1,7 +1,7 @@
 import type { OrderLineDto } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
 import { usePrefs } from '../lib/prefs';
-import { attribution } from '../ui/FragranceListCard';
+import { attribution } from '../ui/attribution';
 import { Money } from '../ui/Money';
 import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
 import { AddButton } from './AddButton';
+import { attribution } from './attribution';
 import { FragranceBadge } from './Badge';
 
 /**
@@ -32,18 +33,6 @@ export interface FragranceListCardProps {
 }
 
 const NBSP = ' ';
-
-/**
- * «по мотивам <brand>» / «<brand> asosida» with the template's own words held together, so a long
- * brand wraps between its own words and «по мотивам» never splits across lines. A hyphenated
- * brand keeps its hyphen (a non-breaking one): «MARC-ANTOINE», never «MARC- / ANTOINE».
- */
-export function attribution(template: string, brand: string): string {
-  return template
-    .split('{brand}')
-    .map((part) => part.replace(/(\S) (?=\S)/g, `$1${NBSP}`))
-    .join(brand.replace(/-/g, '\u2011'));
-}
 
 /** Text that wraps only between its words: «Цветочно-фруктовый» never breaks after its hyphen. */
 function Unhyphenated({ text }: { text: string }) {
