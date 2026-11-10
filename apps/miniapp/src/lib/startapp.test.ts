@@ -18,6 +18,11 @@ it('opens a fragrance card from p_<slug> and rejects malformed ones', () => {
   expect(routeForStartParam('p_Tygar')).toBe('/');
 });
 
+it('opens the two sets', () => {
+  expect(routeForStartParam('set_discovery')).toBe('/sets/discovery');
+  expect(routeForStartParam('builder')).toBe('/sets/builder');
+});
+
 it('opens every target the admin offers on a broadcast button', () => {
   for (const target of START_TARGETS) {
     const route = routeForStartParam(target);

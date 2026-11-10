@@ -27,6 +27,10 @@ import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
+import { SetsAdminController } from './admin/sets-admin.controller';
+import { SetsAdminService } from './admin/sets-admin.service';
+import { SetsController } from './sets/sets.controller';
+import { SetsService } from './sets/sets.service';
 import { SearchService } from './search/search.service';
 import { MediaController } from './catalog/media.controller';
 import { AuditService } from './audit/audit.service';
@@ -72,6 +76,7 @@ export class AppModule {
         MeController,
         CatalogController,
         CartController,
+        SetsController,
         OrdersController,
         MediaController,
         WebhookController,
@@ -81,6 +86,7 @@ export class AppModule {
         AuditController,
         CatalogAdminController,
         OnHandController,
+        SetsAdminController,
         ContentController,
         ContentAdminController,
         DeliveryController,
@@ -103,11 +109,13 @@ export class AppModule {
         SettingsService,
         CatalogService,
         CartService,
+        SetsService,
         OrdersService,
         OrderStatusService,
         DiscountSourceHooks,
         ReserveSweeps,
         CatalogAdminService,
+        SetsAdminService,
         ContentService,
         SearchService,
         CustomersService,

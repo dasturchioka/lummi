@@ -26,6 +26,7 @@ function Shell() {
   // The fragrance card (it carries its own dock, also on its fixtures), the search and the checkout are task screens: no tab bar.
   const showTabBar =
     !pathname.startsWith('/p/') &&
+    !pathname.startsWith('/sets/') &&
     pathname !== '/search' &&
     pathname !== '/dev/fragrance' &&
     pathname !== '/checkout';
@@ -94,6 +95,9 @@ const devRoutes = import.meta.env.DEV
     ]
   : [];
 
+/** Both set screens live in one chunk: one loader, so the entry carries its preload list once. */
+const setsScreens = () => import('../screens/Sets');
+
 const routeTree = rootRoute.addChildren([
   createRoute({ ...at('/'), component: Home }),
   createRoute({
@@ -112,6 +116,17 @@ const routeTree = rootRoute.addChildren([
   createRoute({
     ...at('/p/$slug'),
     component: lazyRouteComponent(() => import('../screens/Fragrance'), 'Fragrance'),
+  }),
+  createRoute({
+    ...at('/sets/discovery'),
+    component: lazyRouteComponent(setsScreens, 'DiscoverySetScreen'),
+  }),
+  createRoute({
+    ...at('/sets/builder'),
+    // `?pick=a,b,c`: the cart's «Изменить набор» opens the builder with that line's picks
+    validateSearch: (s: Record<string, unknown>): { pick?: string } =>
+      typeof s.pick === 'string' && s.pick !== '' ? { pick: s.pick.slice(0, 400) } : {},
+    component: lazyRouteComponent(setsScreens, 'BuilderScreen'),
   }),
   createRoute({
     ...at('/cart'),

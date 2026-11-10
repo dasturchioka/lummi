@@ -12,6 +12,7 @@ export { adminContract, apiContract, contract, internalContract } from './contra
 export * from './telegram-username';
 export * from './constants';
 export * from './cart';
+export * from './sets';
 export * from './content';
 export * from './broadcast';
 export * from './orders';

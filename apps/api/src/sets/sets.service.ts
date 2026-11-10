@@ -1,0 +1,47 @@
+import type { Builder, DiscoverySet } from '@lummi/contracts';
+import { SET_SIZE } from '@lummi/contracts/constants';
+import type { Db } from '@lummi/db';
+import { Inject, Injectable } from '@nestjs/common';
+import { CatalogService } from '../catalog/catalog.service';
+import { DB } from '../tokens';
+import { loadDiscovery, readDiscoverySet, tenMlOf } from './sets';
+
+/** The two kinds of set the customer sees (ADR 0009). Both cost the Discovery set's price. */
+@Injectable()
+export class SetsService {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(CatalogService) private readonly catalog: CatalogService,
+  ) {}
+
+  async discovery(): Promise<DiscoverySet> {
+    const { row, composition, available } = await loadDiscovery(this.db);
+    return {
+      price: row.price,
+      available,
+      soldOut: available === 0,
+      photo: row.photoHash,
+      // The box stays on sale on its own stock, but a fragrance hidden from the catalog shows as
+      // its name and attribution only: no card to open, no notes to read.
+      fragrances: composition.map((f) => ({
+        slug: f.hidden ? null : f.slug,
+        name: f.name,
+        brand: f.brand,
+        keyNotes: f.hidden ? { ru: [], uz: [] } : { ru: f.keyNotesRu, uz: f.keyNotesUz },
+      })),
+    };
+  }
+
+  /** The fragrances the builder offers: a visible one with a 10 ml bottle available, best sellers first. */
+  async builder(): Promise<Builder> {
+    const [row, rank, tenMl] = await Promise.all([
+      readDiscoverySet(this.db),
+      this.catalog.topSellersOrder(),
+      tenMlOf(this.db, { all: true }),
+    ]);
+    const offered = new Set(tenMl.filter((t) => t.available > 0).map((t) => t.fragranceId));
+    // `rank` holds every visible fragrance in top-sellers order
+    const ids = rank.filter((id) => offered.has(id));
+    return { price: row.price, size: SET_SIZE, options: await this.catalog.listItems(ids) };
+  }
+}

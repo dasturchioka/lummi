@@ -3,7 +3,13 @@
  * the top swaps the fixture at the data boundary (the server cart), so the screen is tested
  * exactly as the API would feed it. Numbers are written out, as the server would send them.
  */
-import type { CartDto, CartLineDto, PromoCodeInvalid, QuoteLine } from '@lummi/contracts';
+import type {
+  CartDto,
+  CartLineDto,
+  PromoCodeInvalid,
+  QuoteLine,
+  VolumeLineDto,
+} from '@lummi/contracts';
 import { Link, useSearch } from '@tanstack/react-router';
 import { CartView } from '../screens/Cart';
 
@@ -15,8 +21,9 @@ const line = (
   name: string,
   ml: 10 | 30 | 50,
   qty: number,
-  more: Partial<CartLineDto> = {},
+  more: Partial<VolumeLineDto> = {},
 ): CartLineDto => ({
+  kind: 'volume',
   id,
   slug: `fixture-${id}`,
   name,

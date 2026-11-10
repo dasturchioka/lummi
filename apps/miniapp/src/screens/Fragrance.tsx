@@ -55,7 +55,7 @@ function Loading() {
 
 /** Units of a volume in the cart (0 when none). */
 const lineQty = (cart: CartDto | undefined, slug: string, ml: number) =>
-  cart?.lines.find((l) => l.slug === slug && l.ml === ml)?.qty ?? 0;
+  cart?.lines.find((l) => l.kind === 'volume' && l.slug === slug && l.ml === ml)?.qty ?? 0;
 
 /** `/p/<slug>`, also the target of the `p_<slug>` deep link. */
 export function Fragrance() {
@@ -121,7 +121,9 @@ export function Fragrance() {
           { slug: card.slug, ml },
           {
             onSuccess: (next) => {
-              const after = next.lines.find((l) => l.slug === card.slug && l.ml === ml);
+              const after = next.lines.find(
+                (l) => l.kind === 'volume' && l.slug === card.slug && l.ml === ml,
+              );
               if (after && after.qty <= before) {
                 // The server capped it: the 99 limit while stock is above it, else what is left.
                 setNote(

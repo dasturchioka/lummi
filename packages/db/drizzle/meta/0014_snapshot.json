@@ -1,5 +1,5 @@
 {
-  "id": "0c2c812c-59ee-4300-a87a-1a5d216dea52",
+  "id": "9bc92fc4-2e87-4040-8d29-b1cf918d7b1b",
   "prevId": "222afe18-aed2-47cb-8804-b980c8827aa8",
   "version": "7",
   "dialect": "postgresql",
@@ -495,11 +495,25 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "cart_line_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'volume'"
+        },
         "volume_id": {
           "name": "volume_id",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "fragrance_ids": {
+          "name": "fragrance_ids",
+          "type": "bigint[]",
+          "primaryKey": false,
+          "notNull": false
         },
         "qty": {
           "name": "qty",
@@ -533,6 +547,44 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cart_lines_customer_discovery_idx": {
+          "name": "cart_lines_customer_discovery_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'discovery_set'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cart_lines_customer_builder_idx": {
+          "name": "cart_lines_customer_builder_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fragrance_ids",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'builder_set'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -588,6 +640,14 @@
         "cart_lines_qty_check": {
           "name": "cart_lines_qty_check",
           "value": "\"cart_lines\".\"qty\" > 0"
+        },
+        "cart_lines_fragrance_ids_check": {
+          "name": "cart_lines_fragrance_ids_check",
+          "value": "\"cart_lines\".\"fragrance_ids\" is null or (cardinality(\"cart_lines\".\"fragrance_ids\") = 5 and array_position(\"cart_lines\".\"fragrance_ids\", null) is null)"
+        },
+        "cart_lines_kind_check": {
+          "name": "cart_lines_kind_check",
+          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null)\n        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)\n        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)"
         }
       },
       "isRLSEnabled": false
@@ -611,19 +671,6 @@
         "promo_code": {
           "name": "promo_code",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "promo_attempts": {
-          "name": "promo_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "promo_attempts_since": {
-          "name": "promo_attempts_since",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -985,6 +1032,120 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.discovery_set": {
+      "name": "discovery_set",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "price": {
+          "name": "price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "on_hand": {
+          "name": "on_hand",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "photo_hash": {
+          "name": "photo_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_placeholder": {
+          "name": "is_placeholder",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "discovery_set_one_row": {
+          "name": "discovery_set_one_row",
+          "value": "\"discovery_set\".\"id\""
+        },
+        "discovery_set_money_check": {
+          "name": "discovery_set_money_check",
+          "value": "\"discovery_set\".\"price\" >= 0 and \"discovery_set\".\"on_hand\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.discovery_set_items": {
+      "name": "discovery_set_items",
+      "schema": "",
+      "columns": {
+        "position": {
+          "name": "position",
+          "type": "smallint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fragrance_id": {
+          "name": "fragrance_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "discovery_set_items_fragrance_id_fragrances_id_fk": {
+          "name": "discovery_set_items_fragrance_id_fragrances_id_fk",
+          "tableFrom": "discovery_set_items",
+          "tableTo": "fragrances",
+          "columnsFrom": [
+            "fragrance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "discovery_set_items_fragrance_id_unique": {
+          "name": "discovery_set_items_fragrance_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "fragrance_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "discovery_set_items_position": {
+          "name": "discovery_set_items_position",
+          "value": "\"discovery_set_items\".\"position\" between 1 and 5"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.families": {
@@ -2056,7 +2217,7 @@
         },
         "order_lines_kind_check": {
           "name": "order_lines_kind_check",
-          "value": "(\"order_lines\".\"kind\" = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\" = 'builder_set' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5)"
+          "value": "(\"order_lines\".\"kind\"::text = 'volume' and \"order_lines\".\"volume_id\" is not null and \"order_lines\".\"set_volume_ids\" is null) or (\"order_lines\".\"kind\"::text = 'builder_set' and \"order_lines\".\"volume_id\" is null and cardinality(\"order_lines\".\"set_volume_ids\") = 5 and jsonb_array_length(\"order_lines\".\"set_composition\") = 5) or (\"order_lines\".\"kind\"::text = 'discovery_set' and \"order_lines\".\"volume_id\" is null and \"order_lines\".\"set_volume_ids\" is null and jsonb_array_length(\"order_lines\".\"set_composition\") = 5)"
         },
         "order_lines_money_check": {
           "name": "order_lines_money_check",
@@ -2708,279 +2869,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.promo_code_uses": {
-      "name": "promo_code_uses",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "promo_code_uses_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "promo_code_id": {
-          "name": "promo_code_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "voided_at": {
-          "name": "voided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "promo_code_uses_counted_idx": {
-          "name": "promo_code_uses_counted_idx",
-          "columns": [
-            {
-              "expression": "promo_code_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"promo_code_uses\".\"voided_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "promo_code_uses_promo_code_id_promo_codes_id_fk": {
-          "name": "promo_code_uses_promo_code_id_promo_codes_id_fk",
-          "tableFrom": "promo_code_uses",
-          "tableTo": "promo_codes",
-          "columnsFrom": [
-            "promo_code_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "promo_code_uses_order_id_orders_id_fk": {
-          "name": "promo_code_uses_order_id_orders_id_fk",
-          "tableFrom": "promo_code_uses",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "promo_code_uses_customer_id_customers_id_fk": {
-          "name": "promo_code_uses_customer_id_customers_id_fk",
-          "tableFrom": "promo_code_uses",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "promo_code_uses_order_id_unique": {
-          "name": "promo_code_uses_order_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "order_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.promo_codes": {
-      "name": "promo_codes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "promo_codes_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "promo_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "percent": {
-          "name": "percent",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "max_discount": {
-          "name": "max_discount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "min_order_total": {
-          "name": "min_order_total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_limit": {
-          "name": "total_limit",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "per_customer_limit": {
-          "name": "per_customer_limit",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "new_customers_only": {
-          "name": "new_customers_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "applies_to_marked_down": {
-          "name": "applies_to_marked_down",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "active": {
-          "name": "active",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "promo_codes_code_unique": {
-          "name": "promo_codes_code_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "promo_codes_code_check": {
-          "name": "promo_codes_code_check",
-          "value": "\"promo_codes\".\"code\" = upper(btrim(\"promo_codes\".\"code\")) and \"promo_codes\".\"code\" <> ''"
-        },
-        "promo_codes_terms_check": {
-          "name": "promo_codes_terms_check",
-          "value": "(\"promo_codes\".\"kind\" = 'percent' and \"promo_codes\".\"percent\" between 1 and 100 and \"promo_codes\".\"amount\" is null) or (\"promo_codes\".\"kind\" = 'fixed' and \"promo_codes\".\"amount\" > 0 and \"promo_codes\".\"percent\" is null and \"promo_codes\".\"max_discount\" is null)"
-        },
-        "promo_codes_limits_check": {
-          "name": "promo_codes_limits_check",
-          "value": "coalesce(\"promo_codes\".\"max_discount\", 1) > 0 and coalesce(\"promo_codes\".\"min_order_total\", 0) >= 0 and coalesce(\"promo_codes\".\"total_limit\", 1) > 0 and coalesce(\"promo_codes\".\"per_customer_limit\", 1) > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.regions": {
       "name": "regions",
       "schema": "",
@@ -3465,6 +3353,15 @@
         "failed"
       ]
     },
+    "public.cart_line_kind": {
+      "name": "cart_line_kind",
+      "schema": "public",
+      "values": [
+        "volume",
+        "builder_set",
+        "discovery_set"
+      ]
+    },
     "public.fragrance_type": {
       "name": "fragrance_type",
       "schema": "public",
@@ -3512,7 +3409,8 @@
       "schema": "public",
       "values": [
         "volume",
-        "builder_set"
+        "builder_set",
+        "discovery_set"
       ]
     },
     "public.order_status": {
@@ -3528,14 +3426,6 @@
         "delivered",
         "returned",
         "cancelled"
-      ]
-    },
-    "public.promo_kind": {
-      "name": "promo_kind",
-      "schema": "public",
-      "values": [
-        "percent",
-        "fixed"
       ]
     },
     "public.season": {
