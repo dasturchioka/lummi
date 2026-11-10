@@ -253,8 +253,8 @@ export const ordersMessages = defineMessages(
       cancelTitle: '№ {number} buyurtma bekor qilinsinmi?',
       cancelText:
         'Bandlik olib tashlanadi va atirlar yana sotuvga qaytadi. Pulni allaqachon oʻtkazgan boʻlsangiz, buyurtmani bekor qilmang: menejerga yozing.',
-      cancelConfirm: 'Bekor qilish',
-      cancelKeep: 'Bekor qilmaslik',
+      cancelConfirm: 'Ha, bekor qilish',
+      cancelKeep: 'Buyurtmani qoldirish',
       cancelFailed: 'Buyurtmani bekor qilib boʻlmadi. Internetni tekshirib, qayta urinib koʻring.',
     },
   },
