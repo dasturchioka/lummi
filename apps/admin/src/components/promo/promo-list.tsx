@@ -15,6 +15,7 @@ import { MetaLine } from '@/components/ui/meta-line';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { CodeText } from './code-text';
 import { conditionsOf, discountOf, usesOf } from './terms';
 
 /**
@@ -41,7 +42,7 @@ export function PromoList({
       onClick={(e) => e.stopPropagation()}
       className="rounded-sm text-[15px] leading-snug font-semibold tracking-[0.04em] [overflow-wrap:anywhere] underline-offset-[3px] hover:underline"
     >
-      {p.code}
+      <CodeText code={p.code} />
     </Link>
   );
   const terms = (p: AdminPromoCode) => (

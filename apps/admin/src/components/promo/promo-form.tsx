@@ -31,6 +31,7 @@ import { Select } from '@/components/ui/select';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
+import { CodeText } from './code-text';
 import { discountOf } from './terms';
 
 /** The form as typed: numbers stay text until the save, so a half-typed one is never rewritten. */
@@ -181,12 +182,17 @@ export function PromoForm({
       router.refresh();
       return;
     }
-    setBanner({ kind: 'error', text: res?.status === 409 ? m.inUse : m.failed });
+    if (res?.status === 409) {
+      // an order took the code while the editor was open: it now reads as a used code
+      setSaved({ ...saved, everUsed: true });
+      setBanner({ kind: 'error', text: m.inUse });
+    } else setBanner({ kind: 'error', text: m.failed });
   };
 
   const numberField = (field: NumberField, label: string, hint: string, money = false) => (
     <Field
       id={`p-${field}`}
+      className="content-start"
       label={label}
       hint={(money ? moneyEcho(draft[field], language) : undefined) ?? hint}
       error={errors[field]}
@@ -215,7 +221,7 @@ export function PromoForm({
       className="[&_:is(input,select)]:scroll-mt-24 [&_:is(input,select)]:scroll-mb-28"
     >
       <PageHeader
-        title={saved ? saved.code : m.newTitle}
+        title={saved ? <CodeText code={saved.code} /> : m.newTitle}
         description={
           saved
             ? saved.totalLimit === null
@@ -243,7 +249,13 @@ export function PromoForm({
       <div className="grid gap-4">
         <Section title={m.sectionCode}>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field id="p-code" label={m.code} hint={m.codeHint} error={errors.code}>
+            <Field
+              id="p-code"
+              className="content-start"
+              label={m.code}
+              hint={m.codeHint}
+              error={errors.code}
+            >
               <Input
                 value={draft.code}
                 maxLength={32}
@@ -254,7 +266,7 @@ export function PromoForm({
                 onChange={(e) => set('code', e.target.value)}
               />
             </Field>
-            <Field id="p-kind" label={m.kind}>
+            <Field id="p-kind" className="content-start" label={m.kind}>
               <Select value={draft.kind} onChange={(e) => set('kind', e.target.value as PromoKind)}>
                 {PROMO_KINDS.map((k) => (
                   <option key={k} value={k}>
@@ -272,10 +284,14 @@ export function PromoForm({
               numberField('amount', m.amount, m.amountHint, true)
             )}
           </div>
-          {/* the discount as the list will read it, once it is a valid one */}
+          {/* what the shopper gets, as the list will read it, once the discount is a valid one */}
           {promoCodeInputSchema.safeParse(preview).success && (
-            <p className="text-sm text-muted-foreground" data-promo-preview>
-              <span className="font-semibold text-foreground">
+            <p
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-border pt-4 text-sm text-muted-foreground"
+              data-promo-preview
+            >
+              {m.preview}
+              <span className="font-semibold text-foreground tabular-nums">
                 {discountOf(preview, t, language)}
               </span>
             </p>
@@ -286,6 +302,7 @@ export function PromoForm({
           <div className="grid gap-4 md:grid-cols-2">
             <Field
               id="p-expires"
+              className="content-start"
               label={m.expiresOn}
               hint={m.expiresOnHint}
               error={errors.expiresOn}
