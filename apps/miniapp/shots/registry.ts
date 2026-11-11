@@ -101,7 +101,6 @@ async function typePromo(page: Page, code: string) {
   await page.getByTestId('promo-input').fill(code);
 }
 
-
 /** A campaign link for BLOGER10 (#35), written as the owner's admin would; `active` shapes the code. */
 async function shotCampaign(db: ShotDb, opts: { promoActive: boolean }) {
   await shotPromo(db);
@@ -3256,6 +3255,7 @@ export const screens: ScreenDef[] = [
   ...polishScreens,
   ...worstShortcutScreens,
   ...birthdayScreens(),
+  ...favouriteScreens(),
 ];
 
 /**
@@ -3413,6 +3413,67 @@ function birthdayScreens(): ScreenDef[] {
       },
       act: async ({ page }) => pickFirstPoint(page),
       teardown: done,
+    },
+  ];
+}
+
+/**
+ * Favourites (#45): the heart on Home's, the catalog's and the fragrance card's photos, on the
+ * Discovery set, and Profile → «Избранное». The hearts are saved through the real API as the
+ * screenshot customer and taken away again.
+ */
+function favouriteScreens(): ScreenDef[] {
+  const kept = ['baccarat-rouge-540', 'tygar', 'blue-sapphire', 'le-male-le-parfum'];
+  const heart =
+    (slugs: string[], set = false) =>
+    async ({ api }: { api: ApiClient }) => {
+      for (const slug of slugs) await api.favourites.add({ params: { target: slug } });
+      if (set) await api.favourites.add({ params: { target: 'discovery-set' } });
+    };
+  const forget = async ({ api }: { api: ApiClient }) => {
+    const ids = await api.favourites.ids();
+    if (ids.status !== 200) return;
+    for (const slug of ids.body.slugs) await api.favourites.remove({ params: { target: slug } });
+    await api.favourites.remove({ params: { target: 'discovery-set' } });
+  };
+  return [
+    { id: 'fav-home', path: '/', setup: heart(kept), teardown: forget },
+    { id: 'fav-catalog', path: '/catalog', fullPage: true, setup: heart(kept), teardown: forget },
+    { id: 'fav-fragrance', path: '/p/tygar', setup: heart(['tygar']), teardown: forget },
+    {
+      id: 'fav-discovery-card',
+      path: '/catalog?type=sets',
+      setup: heart([], true),
+      teardown: forget,
+    },
+    {
+      id: 'fav-discovery-screen',
+      path: '/sets/discovery',
+      setup: heart([], true),
+      teardown: forget,
+    },
+    {
+      id: 'favourites',
+      path: '/favourites',
+      fullPage: true,
+      setup: heart(kept, true),
+      teardown: forget,
+    },
+    { id: 'favourites-empty', path: '/favourites' },
+    {
+      // two hearts, a seven-digit price and a sold-out one, on the narrow phone
+      id: 'favourites-360',
+      path: '/favourites',
+      width: 360,
+      fullPage: true,
+      setup: async (ctx) => {
+        await worstData.setup!(ctx);
+        await heart(['elysium-pour-homme-parfum', 'blue-sapphire', 'tygar'])(ctx);
+      },
+      teardown: async (ctx) => {
+        await forget(ctx);
+        await worstData.teardown!(ctx);
+      },
     },
   ];
 }
