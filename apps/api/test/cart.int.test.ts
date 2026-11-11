@@ -500,7 +500,8 @@ describe('relink', () => {
     await fresh.add(s2!, 30);
     await t.db
       .update(carts)
-      // «Не применять» (#39): a choice no quote finds stale, so reading the cart keeps it
+      // «Не применять» (#39). With nothing to decline here, a cart read would drop it, so the moved
+      // row is checked before the cart is read.
       .set({ promoCode: 'FRESH', discountChoice: { type: 'none' } })
       .where(
         eq(
@@ -512,6 +513,10 @@ describe('relink', () => {
     const res = await fresh.client.me.shareContact({ body: { proof: contact(vali.id) } });
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
+    // the merged-away customer leaves no cart row behind; the choice moved with the lines
+    expect(await t.db.select().from(carts)).toEqual([
+      expect.objectContaining({ customerId: oldRow!.id, discountChoice: { type: 'none' } }),
+    ]);
     const client = initClient(apiContract, {
       baseUrl: t.baseUrl,
       baseHeaders: { authorization: `Bearer ${res.body.session!.token}` },
@@ -524,14 +529,9 @@ describe('relink', () => {
     );
     expect(byMl).toEqual({ [`${s1}:10`]: 3, [`${s2}:30`]: 1 });
     expect(cart.body.promoCode).toBe('FRESH');
-    // the merged-away customer leaves no lines or cart row behind
+    // the merged-away customer leaves no lines behind
     const lines = await t.db.select().from(cartLines);
     expect(lines.every((l) => l.customerId === oldRow!.id)).toBe(true);
-    expect(await t.db.select().from(carts)).toHaveLength(1);
-    expect((await t.db.select().from(carts))[0]).toMatchObject({
-      customerId: oldRow!.id,
-      discountChoice: { type: 'none' },
-    });
   });
 
   it('keeps the older cart code and choice when it has its own', async () => {
