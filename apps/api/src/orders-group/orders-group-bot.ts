@@ -13,6 +13,7 @@ import {
   outbox,
   staff,
   type DbOrTx,
+  type OrderCardPanel,
   type StaffRow,
 } from '@lummi/db';
 import { fill } from '@lummi/i18n';
@@ -117,7 +118,6 @@ export class OrdersGroupBot {
   async onReply(tx: DbOrTx, m: GroupReply): Promise<boolean> {
     const [prompt] = await tx
       .select({
-        id: orderCardPrompts.id,
         orderId: orderCardPrompts.orderId,
         staffId: orderCardPrompts.staffId,
         expectedStatus: orderCardPrompts.expectedStatus,
@@ -150,9 +150,7 @@ export class OrdersGroupBot {
       return true;
     }
     if (member.id !== prompt.staffId) {
-      await say(fill(g.trackingNotYours, { number, name: escapeHtml(prompt.askedName) }), {
-        parse_mode: 'HTML',
-      });
+      await say(fill(g.trackingNotYours, { number, name: prompt.askedName }));
       return true;
     }
     if (prompt.closedAt) {
@@ -243,7 +241,7 @@ export class OrdersGroupBot {
   private async panel(
     tx: DbOrTx,
     press: CardPress,
-    panel: Parameters<OrderCards['touch']>[2],
+    panel: OrderCardPanel,
   ): Promise<string | undefined> {
     // the order's lock, shared: a move made meanwhile commits first, and this one sees it
     const [order] = await tx

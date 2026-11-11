@@ -33,6 +33,9 @@ import { renderCard, type CardData, type CardView } from './card-view';
 /** Staff read the group in Russian, like the owner alerts (spec Changes 2026-11-09). */
 const GROUP_LANGUAGE = 'ru';
 
+/** HTML, and no preview for a link someone typed into a comment. */
+const CARD_FORMAT = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } } as const;
+
 /** Another delivery is bringing the same card up to date; this one is retried after it. */
 export class CardBusyError extends Error {
   constructor(orderId: number) {
@@ -176,7 +179,10 @@ export class OrderCards {
           chatId,
           messageId,
           text: view.text,
-          options: { parse_mode: 'HTML', reply_markup: { inline_keyboard: view.keyboard ?? [] } },
+          options: {
+            ...CARD_FORMAT,
+            reply_markup: { inline_keyboard: view.keyboard ?? [] },
+          },
         });
       } catch (e) {
         if (!(e instanceof MessageGoneError)) throw e;
@@ -199,7 +205,7 @@ export class OrderCards {
         threadId,
         text: view.text,
         options: {
-          parse_mode: 'HTML',
+          ...CARD_FORMAT,
           ...(view.keyboard ? { reply_markup: { inline_keyboard: view.keyboard } } : {}),
         },
       });

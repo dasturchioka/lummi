@@ -673,10 +673,14 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
     await card(order.number);
     await t.app.get(WorkerRuntime).tick();
-    await vi.waitFor(async () => {
-      const pending = await t.db.select().from(outbox).where(eq(outbox.kind, 'order_card'));
-      expect(pending.every((r) => r.sentAt !== null)).toBe(true);
-    });
+    // a delivery that found the card busy is retried by the queue (backoff from 5 s)
+    await vi.waitFor(
+      async () => {
+        const rows = await t.db.select().from(outbox).where(eq(outbox.kind, 'order_card'));
+        expect(rows.every((r) => r.sentAt !== null)).toBe(true);
+      },
+      { timeout: 25_000, interval: 250 },
+    );
     expect(groupMessages().filter((m) => !m.photo)).toHaveLength(1);
     expect(groupMessages().filter((m) => m.photo)).toHaveLength(1);
     // a touch that changes nothing on screen edits nothing
