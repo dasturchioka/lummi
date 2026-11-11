@@ -1,4 +1,3 @@
-import { BIRTH_YEAR_MIN, type MyDiscountsDto, type SetBirthDateBody } from '@lummi/contracts';
 import { birthdayCoupons, customers, eq, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
@@ -7,7 +6,15 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { myUpgradeRights } from '../upgrade-rights/upgrade-rights';
 import { activeBirthdayCoupons, readBirthdayRules, toCouponDto } from './birthday-coupons';
-import { formatLocalDate, nextWindow, parseLocalDate, tashkentDay } from './birthday-dates';
+import {
+  BIRTH_YEAR_MIN,
+  formatLocalDate,
+  parseLocalDate,
+  tashkentDay,
+  type MyDiscountsDto,
+  type SetBirthDateBody,
+} from '@lummi/contracts';
+import { nextWindow } from './birthday-dates';
 
 export type SetBirthDateOutcome =
   | { kind: 'ok'; discounts: MyDiscountsDto }

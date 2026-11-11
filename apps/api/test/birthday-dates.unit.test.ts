@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { daysLeft, lastDayOf } from '@lummi/contracts';
 import {
   birthDaysOpenOn,
   celebratedOn,
   couponWindow,
-  daysLeft,
-  lastDayOf,
   nextWindow,
   openWindow,
   type BirthdayRules,

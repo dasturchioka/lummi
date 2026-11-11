@@ -68,6 +68,11 @@ export function PromoField({
   const { t, language } = usePrefs();
   const p = t.cart.promo;
   const d = useDiscountsText();
+  // what waits behind the code, in one place: its sentence, its button, its test id
+  const waits =
+    waiting?.type === 'upgrade_right'
+      ? { id: 'right', text: d.rightWaits[waiting.source], use: d.useRight }
+      : { id: 'coupon', text: d.couponWaits, use: d.useCoupon };
   const [draft, setDraft] = useState(stored ?? '');
   // The server's code wins whenever it changes (applied here, removed, taken by an order).
   const [seen, setSeen] = useState(stored);
@@ -228,25 +233,22 @@ export function PromoField({
           // out lets the server pick it (#39 builds the full switch)
           <p
             className="type-small mt-1.5 px-1 text-pretty text-muted"
-            data-testid={waiting.type === 'birthday_coupon' ? 'coupon-waiting' : 'right-waiting'}
+            data-testid={`${waits.id}-waiting`}
           >
-            {fill(
-              waiting.type === 'birthday_coupon' ? d.couponWaits : d.rightWaits[waiting.source],
-              {
-                percent: String(waiting.percent),
-                date: formatCalendarDate(waiting.lastDay, language),
-              },
-            )}{' '}
+            {fill(waits.text, {
+              percent: String(waiting.percent),
+              date: formatCalendarDate(waiting.lastDay, language),
+            })}{' '}
             <button
               type="button"
               aria-disabled={busy || undefined}
-              data-testid={waiting.type === 'birthday_coupon' ? 'coupon-use' : 'right-use'}
+              data-testid={`${waits.id}-use`}
               onClick={() => {
                 if (!busy) onRemove();
               }}
               className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
             >
-              {waiting.type === 'birthday_coupon' ? d.useCoupon : d.useRight}
+              {waits.use}
             </button>
           </p>
         ) : null}

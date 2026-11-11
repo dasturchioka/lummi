@@ -8,6 +8,7 @@ import {
   type CustomerRow,
   type Db,
 } from '@lummi/db';
+import { formatLocalDate, lastDayOf, parseLocalDate, tashkentDay } from '@lummi/contracts';
 import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
 import { botMessages } from '@lummi/i18n/bot';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -20,16 +21,7 @@ import { describeError } from '../logging/describe-error';
 import { DB, EDGES, ENV } from '../tokens';
 import { WorkerRuntime } from '../worker/runtime';
 import { readBirthdayRules } from './birthday-coupons';
-import {
-  birthDaysOpenOn,
-  formatLocalDate,
-  lastDayOf,
-  openWindow,
-  parseLocalDate,
-  passesGuard,
-  tashkentDay,
-  type CouponWindow,
-} from './birthday-dates';
+import { birthDaysOpenOn, openWindow, passesGuard, type CouponWindow } from './birthday-dates';
 
 /** The repeatable job's id: one per queue, upserted on every worker start. */
 const SCHEDULE_ID = 'birthday-coupons';

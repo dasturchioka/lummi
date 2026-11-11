@@ -2,7 +2,8 @@ import type { BirthdayCouponDto } from '@lummi/contracts';
 import { and, asc, birthdayCoupons, eq, gt, isNull, type DbOrTx } from '@lummi/db';
 import type { Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import { daysLeft, formatLocalDate, lastDayOf, type BirthdayRules } from './birthday-dates';
+import { daysLeft, formatLocalDate, lastDayOf } from '@lummi/contracts';
+import type { BirthdayRules } from './birthday-dates';
 
 /**
  * Birthday coupons as orders and the cart see them (ticket #30, ADR 0005): the customer's active
