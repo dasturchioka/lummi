@@ -1,6 +1,6 @@
-import type { CartDto, Quote } from '@lummi/contracts';
+import type { Quote } from '@lummi/contracts';
 import { normalizePromoCode } from '@lummi/contracts/constants';
-import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
+import { fill, formatMoney } from '@lummi/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { promoNextText, promoReasonText, promoWaitText } from '../../cart/promo';
 import { useDiscountsText } from '../../discounts/queries';
@@ -49,7 +49,6 @@ export function PromoField({
   busy,
   pending,
   notice,
-  waiting = null,
   onApply,
   onRemove,
 }: {
@@ -60,19 +59,12 @@ export function PromoField({
   busy: boolean;
   pending?: 'apply' | 'remove';
   notice: PromoNotice;
-  /** The entitlement the applied code keeps out (a birthday coupon, an upgrade right), as the server judged it. */
-  waiting?: CartDto['entitlementWaiting'];
   onApply: (code: string) => void;
   onRemove: () => void;
 }) {
   const { t, language } = usePrefs();
   const p = t.cart.promo;
   const d = useDiscountsText();
-  // what waits behind the code, in one place: its sentence, its button, its test id
-  const waits =
-    waiting?.type === 'upgrade_right'
-      ? { id: 'right', text: d.rightWaits[waiting.source], use: d.useRight }
-      : { id: 'coupon', text: d.couponWaits, use: d.useCoupon };
   const [draft, setDraft] = useState(stored ?? '');
   // The server's code wins whenever it changes (applied here, removed, taken by an order).
   const [seen, setSeen] = useState(stored);
@@ -116,7 +108,9 @@ export function PromoField({
       text: promoReasonText(entered.invalid, t, language),
       next: promoNextText(entered.invalid, t),
     };
-  else if (showsStored && entered) status = { tone: 'muted', text: p.notChosen };
+  // the shopper switched away from a valid code (#39): to another discount, or to none
+  else if (showsStored && entered)
+    status = { tone: 'muted', text: quote.discount ? p.notChosen : d.choice.codeOff };
 
   const submit = () => {
     if (busy || !canApply) return;
@@ -226,30 +220,6 @@ export function PromoField({
                 <span className="block font-normal text-muted">{status.next}</span>
               ) : null}
             </span>
-          </p>
-        ) : null}
-        {applied && waiting ? (
-          // ADR 0002: the entered code wins; the coupon or the right waits, and taking the code
-          // out lets the server pick it (#39 builds the full switch)
-          <p
-            className="type-small mt-1.5 px-1 text-pretty text-muted"
-            data-testid={`${waits.id}-waiting`}
-          >
-            {fill(waits.text, {
-              percent: String(waiting.percent),
-              date: formatCalendarDate(waiting.lastDay, language),
-            })}{' '}
-            <button
-              type="button"
-              aria-disabled={busy || undefined}
-              data-testid={`${waits.id}-use`}
-              onClick={() => {
-                if (!busy) onRemove();
-              }}
-              className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
-            >
-              {waits.use}
-            </button>
           </p>
         ) : null}
       </div>

@@ -3,6 +3,7 @@ import type {
   CartLineDto,
   CartSuggestionDto,
   Discount,
+  DiscountChoiceDto,
   QuoteLine,
 } from '@lummi/contracts';
 import { CART_MAX_QTY } from '@lummi/contracts/constants';
@@ -18,6 +19,7 @@ import {
   useRemovePromoCode,
   useSetQuantity,
 } from '../cart/queries';
+import { useChooseDiscount } from '../cart/choose';
 import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
@@ -35,6 +37,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
+import { choiceKey, DiscountChoice } from './cart/DiscountChoice';
 import { PromoField, type PromoNotice } from './cart/PromoField';
 
 /** What is in flight, so only the control that was tapped shows it. */
@@ -46,6 +49,8 @@ export interface CartPending {
   slug?: string;
   /** The promo code being applied or removed. */
   promo?: 'apply' | 'remove';
+  /** The discount being switched to (`choiceKey`). */
+  choice?: string;
 }
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
@@ -591,6 +596,8 @@ export function CartView({
   promoNotice = null,
   onApplyPromo = () => undefined,
   onRemovePromo = () => undefined,
+  onChoose = () => undefined,
+  staleChoice = data.quote.staleChoice,
 }: {
   cart: CartDto;
   busy?: boolean;
@@ -602,6 +609,9 @@ export function CartView({
   promoNotice?: PromoNotice;
   onApplyPromo?: (code: string) => void;
   onRemovePromo?: () => void;
+  onChoose?: (choice: DiscountChoiceDto) => void;
+  /** The chosen discount went stale: the server says so once, the screen keeps saying it (#39). */
+  staleChoice?: boolean;
 }) {
   const rows = useRows(data);
   return (
@@ -642,9 +652,15 @@ export function CartView({
         busy={busy}
         pending={pending.promo}
         notice={promoNotice}
-        waiting={data.entitlementWaiting}
         onApply={onApplyPromo}
         onRemove={onRemovePromo}
+      />
+      <DiscountChoice
+        cart={data}
+        stale={staleChoice}
+        busy={busy}
+        pending={pending.choice}
+        onChoose={onChoose}
       />
     </Screen>
   );
@@ -662,7 +678,12 @@ export function Cart() {
   const remove = useRemoveLine();
   const applyPromo = useApplyPromoCode();
   const removePromo = useRemovePromoCode();
+  const choose = useChooseDiscount();
   const busy = useIsMutating() > 0;
+  // The server reports a stale choice once (and then picks by itself): keep the notice on screen
+  // until the shopper picks a discount themselves.
+  const [stale, setStale] = useState(false);
+  if (cart.data?.quote.staleChoice && !stale) setStale(true);
 
   if (cart.isError && !cart.data)
     return (
@@ -702,7 +723,9 @@ export function Cart() {
           ? { promo: 'apply' }
           : removePromo.isPending
             ? { promo: 'remove' }
-            : {};
+            : choose.isPending && choose.variables
+              ? { choice: choiceKey(choose.variables) }
+              : {};
   const sent = applyPromo.variables ?? '';
   const promoNotice: PromoNotice = applyPromo.isError
     ? { kind: 'failed', code: sent }
@@ -722,6 +745,11 @@ export function Cart() {
       promoNotice={promoNotice}
       onApplyPromo={(code) => applyPromo.mutate(code)}
       onRemovePromo={() => removePromo.mutate()}
+      staleChoice={stale}
+      onChoose={(choice) => {
+        setStale(false);
+        choose.mutate(choice);
+      }}
     />
   );
 }
