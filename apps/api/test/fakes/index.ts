@@ -1,6 +1,7 @@
-import { BotBlockedError, InvalidFileIdError } from '../../src/edges';
+import { BotBlockedError, InvalidFileIdError, MessageGoneError } from '../../src/edges';
 import type {
   Clock,
+  EditedMessage,
   Edges,
   FileStore,
   OutboundMessage,
@@ -26,8 +27,32 @@ export class FakeClock implements Clock {
   }
 }
 
+/** A message as Telegram holds it now: as sent, then as last edited. */
+export interface SentMessage extends OutboundMessage {
+  messageId: number;
+  /** The text as a person reads it: HTML tags dropped and entities decoded when parse_mode is HTML. */
+  plain: string;
+  /** How many times it was edited. */
+  edits: number;
+}
+
+/** Text as Telegram shows an HTML message: tags dropped, the four entities decoded. */
+export function plainText(text: string, options?: Record<string, unknown>): string {
+  if (options?.parse_mode !== 'HTML') return text;
+  return text
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+}
+
 export class FakeTelegramSender implements TelegramSender {
   readonly sent: OutboundMessage[] = [];
+  /** Every message sent, by its message id, as Telegram shows it now (edits applied). */
+  readonly messages = new Map<number, SentMessage>();
+  /** Every edit, in order. */
+  readonly edited: EditedMessage[] = [];
   /** Chats that answer 403, like a user who blocked the bot. */
   readonly blockedChats = new Set<number>();
   /** One-shot errors per chat, thrown by the next sends to it (a 429, a 400, ...). */
@@ -36,8 +61,11 @@ export class FakeTelegramSender implements TelegramSender {
   readonly rejectedFileIds = new Set<string>();
   /** Callback queries answered, by id. */
   readonly answered: string[] = [];
-  async answerCallback(callbackQueryId: string): Promise<void> {
+  /** Callback answers with their toast text, in order. */
+  readonly answers: { id: string; text?: string }[] = [];
+  async answerCallback(callbackQueryId: string, text?: string): Promise<void> {
     this.answered.push(callbackQueryId);
+    this.answers.push({ id: callbackQueryId, ...(text === undefined ? {} : { text }) });
   }
   async send(message: OutboundMessage): Promise<SendResult> {
     if (
@@ -51,13 +79,45 @@ export class FakeTelegramSender implements TelegramSender {
     if (failure) throw failure;
     if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
     this.sent.push(message);
+    const messageId = this.sent.length;
+    this.messages.set(messageId, {
+      ...message,
+      messageId,
+      plain: plainText(message.text, message.options),
+      edits: 0,
+    });
     // an upload yields a file_id, like Telegram; a send by id yields none
     return {
-      messageId: this.sent.length,
-      ...(message.photo && 'bytes' in message.photo
-        ? { photoFileId: `file-${this.sent.length}` }
-        : {}),
+      messageId,
+      ...(message.photo && 'bytes' in message.photo ? { photoFileId: `file-${messageId}` } : {}),
     };
+  }
+  /** Like Telegram: an edit that changes nothing is "not modified", which the real sender swallows. */
+  async edit(message: EditedMessage): Promise<void> {
+    const failure = this.failures.get(message.chatId)?.shift();
+    if (failure) throw failure;
+    if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
+    const current = this.messages.get(message.messageId);
+    if (!current || current.chatId !== message.chatId) throw new MessageGoneError();
+    this.edited.push(message);
+    const options = { ...current.options, ...message.options };
+    this.messages.set(message.messageId, {
+      ...current,
+      text: message.text,
+      options,
+      plain: plainText(message.text, options),
+      edits: current.edits + 1,
+    });
+  }
+  /** Forget everything sent (between tests). */
+  reset(): void {
+    this.sent.length = 0;
+    this.messages.clear();
+    this.edited.length = 0;
+    this.answered.length = 0;
+    this.answers.length = 0;
+    this.failures.clear();
+    this.blockedChats.clear();
   }
 }
 

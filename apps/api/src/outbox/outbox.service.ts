@@ -8,6 +8,7 @@ import {
   outbox,
   type Db,
   type DbOrTx,
+  type OutboxKind,
   type OutboxRow,
 } from '@lummi/db';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
@@ -29,6 +30,13 @@ export interface OutboxMessage {
   options?: Record<string, unknown>;
 }
 
+/**
+ * Delivers one row of a kind other than `message` (its `ref` says what about). Throwing leaves the
+ * row pending for the queue's next attempt; `BotBlockedError` fails it for good.
+ */
+export type OutboxHandler = (row: OutboxRow) => Promise<void>;
+type TaskKind = Exclude<OutboxKind, 'message'>;
+
 /** Give up waiting for Redis after this long; the minute tick is the safety net. */
 export const DISPATCH_TIMEOUT_MS = 3000;
 
@@ -48,6 +56,7 @@ export const DISPATCH_TIMEOUT_MS = 3000;
 export class OutboxService implements OnApplicationShutdown {
   private readonly log = new Logger('Outbox');
   private readonly uncommitted = new WeakMap<object, number[]>();
+  private readonly handlers = new Map<TaskKind, OutboxHandler>();
   private connection?: Redis;
   private queue?: Queue;
 
@@ -75,6 +84,26 @@ export class OutboxService implements OnApplicationShutdown {
       }
     }
     return result;
+  }
+
+  /** Who delivers rows of `kind`; one handler per kind, registered in a provider's constructor. */
+  handle(kind: TaskKind, handler: OutboxHandler): void {
+    if (this.handlers.has(kind)) throw new Error(`outbox kind ${kind} already has a handler`);
+    this.handlers.set(kind, handler);
+  }
+
+  /**
+   * Queue work of `kind` about `ref` in the caller's transaction, delivered like a message
+   * (after the commit, retried, rate-limited by the sender) by the kind's handler. `chatId` is
+   * the chat the work writes to.
+   */
+  async enqueueTask(tx: DbOrTx, kind: TaskKind, ref: number, chatId: number): Promise<number> {
+    const [row] = await tx
+      .insert(outbox)
+      .values({ kind, ref, chatId, text: '' })
+      .returning({ id: outbox.id });
+    this.uncommitted.set(tx, [...(this.uncommitted.get(tx) ?? []), row!.id]);
+    return row!.id;
   }
 
   async enqueue(tx: DbOrTx, messages: OutboxMessage | OutboxMessage[]): Promise<number[]> {
@@ -163,12 +192,23 @@ export class OutboxService implements OnApplicationShutdown {
     if (!row) return 'skipped';
     // Refused write access or a blocked bot: statuses stay in the app only. A private chat id is
     // the customer's Telegram id; group chats (negative ids) are never suppressed.
-    if (row.chatId > 0 && !(await this.customers.canMessage(row.chatId))) {
+    if (
+      row.kind === 'message' &&
+      row.chatId > 0 &&
+      !(await this.customers.canMessage(row.chatId))
+    ) {
       await this.markFailed(id, 'suppressed: customer refused write access or blocked the bot');
       return 'blocked';
     }
     try {
-      const { messageId } = await this.edges.telegram.send(toMessage(row));
+      let messageId: number | null = null;
+      if (row.kind === 'message') {
+        messageId = (await this.edges.telegram.send(toMessage(row))).messageId;
+      } else {
+        const handler = this.handlers.get(row.kind);
+        if (!handler) throw new Error(`no handler for outbox kind ${row.kind}`);
+        await handler(row);
+      }
       await this.db
         .update(outbox)
         .set({ sentAt: this.edges.clock.now(), telegramMessageId: messageId })

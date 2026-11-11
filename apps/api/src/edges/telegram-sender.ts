@@ -23,8 +23,22 @@ export interface SendResult {
   photoFileId?: string;
 }
 
+/** A new text (and keyboard) for a message the bot sent (editMessageText). */
+export interface EditedMessage {
+  chatId: number;
+  messageId: number;
+  text: string;
+  /** Extra editMessageText parameters as the Bot API names them (reply_markup, parse_mode). */
+  options?: Record<string, unknown>;
+}
+
 export interface TelegramSender {
   send(message: OutboundMessage): Promise<SendResult>;
+  /**
+   * Edit a message the bot sent. An edit that changes nothing ("message is not modified") is a
+   * success; a message that is no longer there throws `MessageGoneError`.
+   */
+  edit(message: EditedMessage): Promise<void>;
   /** Answer a tapped inline button (answerCallbackQuery), once per query: stops the spinner, with an optional toast. Best effort, never throws. */
   answerCallback(callbackQueryId: string, text?: string): Promise<void>;
 }
@@ -60,8 +74,19 @@ export class InvalidFileIdError extends Error {
   }
 }
 
+/** The message to edit is gone (deleted, or the chat moved): post it again instead. */
+export class MessageGoneError extends Error {
+  constructor() {
+    super('Telegram has no such message to edit');
+    this.name = 'MessageGoneError';
+  }
+}
+
 export class UnconfiguredTelegramSender implements TelegramSender {
   send(): Promise<SendResult> {
+    return Promise.reject(new Error('TelegramSender is not configured yet'));
+  }
+  edit(): Promise<void> {
     return Promise.reject(new Error('TelegramSender is not configured yet'));
   }
   answerCallback(): Promise<void> {
@@ -82,6 +107,16 @@ export class GrammySender implements TelegramSender {
     await this.api
       .answerCallbackQuery(callbackQueryId, text ? { text } : {})
       .catch(() => undefined);
+  }
+
+  async edit(m: EditedMessage): Promise<void> {
+    try {
+      await this.api.editMessageText(m.chatId, m.messageId, m.text, m.options);
+    } catch (e) {
+      const mapped = editError(e);
+      if (mapped === 'not_modified') return;
+      throw mapped;
+    }
   }
 
   async send(m: OutboundMessage): Promise<SendResult> {
@@ -112,4 +147,21 @@ export class GrammySender implements TelegramSender {
       throw e;
     }
   }
+}
+
+/**
+ * What an editMessageText failure means: an edit that changes nothing is fine; a message that is
+ * gone is `MessageGoneError`; 403 and 429 map as for a send; anything else is thrown as it is.
+ */
+export function editError(e: unknown): 'not_modified' | Error {
+  if (!(e instanceof GrammyError)) return e instanceof Error ? e : new Error(String(e));
+  if (e.error_code === 400 && /message is not modified/i.test(e.description)) return 'not_modified';
+  if (
+    e.error_code === 400 &&
+    /message to edit not found|message can't be edited/i.test(e.description)
+  )
+    return new MessageGoneError();
+  if (e.error_code === 403) return new BotBlockedError(Number(e.payload.chat_id ?? 0));
+  if (e.error_code === 429) return new RateLimitedError(e.parameters.retry_after ?? 5);
+  return e;
 }
