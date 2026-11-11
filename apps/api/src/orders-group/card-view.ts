@@ -163,11 +163,14 @@ const SQUEEZE = [
  */
 export function renderCard(d: CardData, language: Language = 'ru'): CardView {
   const keyboard = cardKeyboard(d, language);
+  // the tightest squeeze is bounded well under the limit (three lines, three history lines,
+  // typed texts at 60 characters), so it is the answer when nothing looser fits
+  let text = '';
   for (const squeeze of SQUEEZE) {
-    const text = cardText(d, language, squeeze);
-    if (visibleLength(text) <= MESSAGE_MAX) return { text, keyboard };
+    text = cardText(d, language, squeeze);
+    if (visibleLength(text) <= MESSAGE_MAX) break;
   }
-  return { text: cardText(d, language, SQUEEZE.at(-1)!).slice(0, MESSAGE_MAX), keyboard };
+  return { text, keyboard };
 }
 
 function cardText(
