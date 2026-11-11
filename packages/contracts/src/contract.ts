@@ -157,6 +157,7 @@ import {
 } from './payment';
 import {
   humoLastMessageIdSchema,
+  backupReportBodySchema,
   humoMessageBodySchema,
   humoMessageResultSchema,
   internalErrorSchema,
@@ -479,7 +480,8 @@ export const contract = c.router({
       method: 'GET',
       path: '/favourites/list',
       responses: { 200: favouriteListSchema, 401: favouriteErrorSchema },
-      summary: 'The favourites as list cards with today price and availability (hidden ones left out)',
+      summary:
+        'The favourites as list cards with today price and availability (hidden ones left out)',
     },
     add: {
       method: 'PUT',
@@ -1522,6 +1524,18 @@ export const internalContract = c.router({
       403: internalErrorSchema,
     },
     summary: 'The userbot is alive (every minute); feeds the Humo-silence guard (ADR 0012)',
+  },
+  backupReport: {
+    method: 'POST',
+    path: '/internal/backup/report',
+    body: backupReportBodySchema,
+    responses: {
+      200: z.object({ ok: z.literal(true) }),
+      401: internalErrorSchema,
+      403: internalErrorSchema,
+    },
+    summary:
+      'The backup script finished a run (ADR 0036); the API alerts when none comes for too long',
   },
   userbotForwardTarget: {
     method: 'GET',

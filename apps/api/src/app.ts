@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { CATALOG_IMPORT_MIME, MAX_PHOTO_BYTES } from '@lummi/contracts';
 import { AppModule, type AppDeps } from './app.module';
 import { PinoLogger } from './logging/pino-logger';
+import { ErrorTracker } from './ops/error-tracker.service';
 import { SafeExceptionFilter } from './logging/safe-exception.filter';
 
 export type { AppDeps };
@@ -24,7 +25,7 @@ export async function createApp(deps: AppDeps): Promise<INestApplication> {
   // Receipt uploads (#28) have no parser here: their handler reads the bytes itself, after the
   // session guard and only up to the setting `receipts.maxUploadMb` (`receipts/read-body.ts`).
   // Query parameters (personal data) never reach the log, whatever the endpoint.
-  app.useGlobalFilters(new SafeExceptionFilter(app.getHttpAdapter()));
+  app.useGlobalFilters(new SafeExceptionFilter(app.getHttpAdapter(), app.get(ErrorTracker)));
   await app.init();
   return app;
 }

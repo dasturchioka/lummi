@@ -11,6 +11,7 @@ import {
 } from './edges';
 import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
+import { ErrorTracker } from './ops/error-tracker.service';
 import { WorkerRuntime } from './worker/runtime';
 import { describeError } from './logging/describe-error';
 
@@ -36,8 +37,12 @@ const app = await NestFactory.createApplicationContext(
 app.enableShutdownHooks();
 const worker = app.get(WorkerRuntime);
 worker.start();
+const errors = app.get(ErrorTracker);
 const run = () =>
-  worker.tick().catch((e: unknown) => log.error(`tick failed: ${describeError(e)}`, 'Worker'));
+  worker.tick().catch((e: unknown) => {
+    log.error(`tick failed: ${describeError(e)}`, 'Worker');
+    void errors.record(e, 'worker:tick');
+  });
 await run();
 const timer = setInterval(run, 60_000);
 log.log('worker started', 'Worker');
