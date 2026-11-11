@@ -731,6 +731,31 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     expect(groupMessages().filter((m) => !m.photo && m.plain.startsWith('Заказ'))).toHaveLength(1);
   });
 
+  it('a Refund is not a move: the card shows it and keeps the panel a manager has open (#40)', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    await press(dilnoza, 'Отменить', await card(order.number));
+    await cardWith(order.number, '‹ Назад');
+    const admin = await t.signInStaff('manager', bekzod);
+    const refund = await admin.client.admin.orders.refund({
+      params: { number: order.number },
+      body: { amount: 10_000, date: '2026-11-09', reason: 'Переплата', expectedRefunded: 0 },
+    });
+    expect(refund.status).toBe(200);
+    const c = await card(order.number, (text) =>
+      text.includes(`💸 Возвращено покупателю: ${formatMoney(10_000, 'ru')}.`),
+    );
+    // the reasons Dilnoza is choosing from are still there
+    expect(buttons(c).map((b) => b.text)).toEqual([
+      'Нет в наличии',
+      'Покупатель отказался',
+      'Не дозвонились',
+      'Оплата не поступила',
+      '‹ Назад',
+    ]);
+    expect(c.plain).toContain('Отмена заказа: выберите причину.');
+  });
+
   it('exactly one card per order, however often the confirmation or the card job is delivered', async () => {
     const client = await shopper();
     const order = await placeOrder(client);

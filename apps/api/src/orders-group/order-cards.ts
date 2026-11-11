@@ -109,9 +109,26 @@ export class OrderCards {
     orderId: number,
     panel: OrderCardPanel = { kind: 'steps' },
   ): Promise<boolean> {
+    return this.bump(tx, orderId, { panel });
+  }
+
+  /**
+   * Something the card shows changed without a move (a Refund, #40, ADR 0006): show it, in the
+   * caller's transaction, under the same buttons, so a manager halfway through choosing a cancel
+   * reason keeps the panel. False when the order has no card.
+   */
+  async redraw(tx: DbOrTx, orderId: number): Promise<boolean> {
+    return this.bump(tx, orderId, {});
+  }
+
+  private async bump(
+    tx: DbOrTx,
+    orderId: number,
+    set: { panel?: OrderCardPanel },
+  ): Promise<boolean> {
     const [card] = await tx
       .update(orderCards)
-      .set({ version: sql`${orderCards.version} + 1`, panel })
+      .set({ version: sql`${orderCards.version} + 1`, ...set })
       .where(eq(orderCards.orderId, orderId))
       .returning({ chatId: orderCards.chatId });
     if (!card) return false;

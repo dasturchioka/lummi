@@ -30,6 +30,14 @@ export type RecordRefundOutcome =
  * money record only: it never moves the status (no `transition()`, no history row, no shopper
  * message) and never touches a discount source. The order's row lock serialises refunds, so their
  * sum never passes what paid the order, however many staff press at once.
+ *
+ * Locks, in one transaction, in the order every status move takes them (`transition()`), so the
+ * two never wait on each other crosswise:
+ * 1. the order row (`FOR UPDATE`): a concurrent refund or move of this order waits here, then
+ *    reads the refunds and the status this one leaves; the refunds sum and the credit are read
+ *    under it, so the cap is checked against what is committed;
+ * 2. the order's card row in `order_cards` (`OrderCards.redraw`, its update), when there is one;
+ * 3. the `outbox` row that redraws the card (an insert, no wait).
  */
 @Injectable()
 export class Refunds {
@@ -88,8 +96,8 @@ export class Refunds {
         refundedBefore: money.refunded,
       },
     });
-    // the orders group's card says what went back (#37)
-    await this.cards.touch(tx, order.id);
+    // the orders group's card says what went back (#37); not a move, so its buttons stay
+    await this.cards.redraw(tx, order.id);
     return { kind: 'recorded', order };
   }
 }
