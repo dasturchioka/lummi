@@ -14,7 +14,7 @@ import { formatTashkent, num } from '@/lib/setting-copy';
 import { TEXT_LINK } from '@/lib/ui-classes';
 import { listHref } from '@/lib/list-page';
 import { fill } from '@/lib/utils';
-import { PaymentBadge, paymentWorthShowing, StatusBadge } from './badges';
+import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
 import { OrdersFiltersForm, type OrderFilters } from './orders-filters';
 
 export type { OrderFilters };
@@ -147,6 +147,9 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
                   {paymentWorthShowing(it.status, it.payment) && (
                     <PaymentBadge payment={it.payment} t={t} />
                   )}
+                  {it.refunded > 0 && (
+                    <RefundBadge amount={it.refunded} t={t} language={language} />
+                  )}
                 </div>
               </li>
             ))}
@@ -182,6 +185,9 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
                         <StatusBadge status={it.status} language={language} />
                         {paymentWorthShowing(it.status, it.payment) && (
                           <PaymentBadge payment={it.payment} t={t} />
+                        )}
+                        {it.refunded > 0 && (
+                          <RefundBadge amount={it.refunded} t={t} language={language} />
                         )}
                       </div>
                     </TD>

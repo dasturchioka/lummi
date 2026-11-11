@@ -5,15 +5,18 @@ import {
   charCount,
   cancelReasonsFor,
   RECEIPT_REJECT_REASONS,
+  formatLocalDate,
+  tashkentDay,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
+  TYPED_REASON_MAX,
   type AdminOrderDto,
   type CancelReason,
   type CreditOptionDto,
   type CreditOptionsDto,
   type ReceiptRejectReason,
 } from '@lummi/contracts';
-import { formatMoney, formatTiyin, type Language } from '@lummi/i18n';
+import { formatCalendarDate, formatMoney, formatTiyin, type Language } from '@lummi/i18n';
 import { orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
 import { CircleAlert } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
@@ -723,6 +726,363 @@ export function ConfirmPaymentDialog({
           tried={tried}
           t={t}
         />
+      )}
+    </Frame>
+  );
+}
+
+/** A typed reason (a refund, a return): counted as the server counts it, 1 to `TYPED_REASON_MAX`. */
+function TypedReasonField({
+  id,
+  label,
+  hint,
+  value,
+  onChange,
+  tried,
+  required,
+  long,
+  t,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  tried: boolean;
+  required: string;
+  long: string;
+  t: AdminMessages;
+}) {
+  const n = length(value.trim());
+  const error =
+    n > TYPED_REASON_MAX
+      ? fill(long, { max: String(TYPED_REASON_MAX) })
+      : tried && n === 0
+        ? required
+        : undefined;
+  return (
+    <Field
+      id={id}
+      label={label}
+      hint={hint}
+      error={error}
+      aside={
+        <span
+          className={cn(
+            'text-xs text-muted-foreground tabular-nums',
+            n > TYPED_REASON_MAX && 'font-medium text-foreground',
+          )}
+        >
+          {fill(t.orders.noteCount, { n: String(n), max: String(TYPED_REASON_MAX) })}
+        </span>
+      }
+    >
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={2}
+        className="min-h-16"
+      />
+    </Field>
+  );
+}
+
+const reasonOk = (reason: string) => {
+  const n = length(reason.trim());
+  return n >= 1 && n <= TYPED_REASON_MAX;
+};
+
+/**
+ * «Возврат денег» (ADR 0006, #40): the transfer staff already sent back, recorded: the amount in
+ * whole so'm (at most what is left of the payment), the Tashkent day it went and why. The status
+ * and the discounts stay, and the shopper gets no message. An order that ended paid starts with
+ * what is still owed; the line above the buttons says what the record leaves.
+ */
+export function RefundDialog({
+  open,
+  onOpenChange,
+  page,
+  t,
+  language,
+  onSubmit,
+}: Common & {
+  language: Language;
+  onSubmit: Submit<{ amount: number; date: string; reason: string }>;
+}) {
+  const r = t.orders.refund;
+  const m = page.money;
+  const money = (n: number) => formatMoney(n, language);
+  const today = formatLocalDate(tashkentDay(new Date()));
+  const from = m.paidOn ?? today;
+  const max = m.refundable;
+  const [amount, setAmount] = useState(m.owed > 0 ? String(m.owed) : '');
+  const [date, setDate] = useState(today);
+  const [reason, setReason] = useState('');
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const digits = amount.replace(/\D/g, '');
+  const value = digits === '' ? 0 : Number(digits);
+  const amountError =
+    value > max
+      ? fill(r.amountTooLarge, { max: money(max) })
+      : tried && value === 0
+        ? r.amountRequired
+        : undefined;
+  const dateOk = date !== '' && date >= from && date <= today;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setTried(true);
+    setError(null);
+    if (value === 0 || value > max || !dateOk || !reasonOk(reason)) return;
+    setBusy(true);
+    const failed = await onSubmit({ amount: value, date, reason: reason.trim() });
+    setBusy(false);
+    if (failed) setError(failed.text);
+  };
+
+  const fits = value > 0 && value <= max;
+  const summary = !fits
+    ? null
+    : value === max
+      ? fill(r.summaryAll, { amount: money(value) })
+      : m.owed > 0
+        ? fill(r.summaryOwed, { amount: money(value), rest: money(max - value) })
+        : fill(r.summary, { amount: money(value), paid: money(m.paid ?? 0) });
+
+  return (
+    <Frame
+      open={open}
+      onOpenChange={onOpenChange}
+      title={fill(r.title, { number: String(page.order.number) })}
+      description={r.text}
+      onSubmit={submit}
+      error={error}
+      busy={busy}
+      submit={r.submit}
+      cancel={t.actions.cancel}
+      summary={
+        summary ? <p className="text-[13px] font-semibold tabular-nums">{summary}</p> : undefined
+      }
+    >
+      <p
+        className="-mt-1 rounded-button bg-field px-3.5 py-2.5 text-[14px] font-semibold tabular-nums [overflow-wrap:anywhere]"
+        data-reference
+      >
+        {m.refunded > 0
+          ? fill(r.referenceRefunded, {
+              paid: money(m.paid ?? 0),
+              refunded: money(m.refunded),
+              max: money(max),
+            })
+          : fill(r.reference, { paid: money(m.paid ?? 0), max: money(max) })}
+      </p>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field
+          id="refund-amount"
+          label={r.amount}
+          error={amountError}
+          hint={value > 0 ? money(value) : undefined}
+        >
+          <Input
+            inputMode="numeric"
+            autoComplete="off"
+            enterKeyHint="next"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="tabular-nums"
+          />
+        </Field>
+        <Field
+          id="refund-date"
+          label={r.date}
+          hint={fill(r.dateHint, { from: formatCalendarDate(from, language) })}
+          error={tried && !dateOk ? r.dateInvalid : undefined}
+        >
+          <Input
+            type="date"
+            min={from}
+            max={today}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </Field>
+      </div>
+      <TypedReasonField
+        id="refund-reason"
+        label={r.reason}
+        hint={r.reasonHint}
+        value={reason}
+        onChange={setReason}
+        tried={tried}
+        required={r.reasonRequired}
+        long={r.reasonLong}
+        t={t}
+      />
+    </Frame>
+  );
+}
+
+/** What a return does to the discount source the order holds (ADR 0005), in a sentence. */
+function discountEffect(
+  discount: NonNullable<AdminOrderDto['returnPreview']>['discount'],
+  t: AdminMessages,
+  language: Language,
+): string | null {
+  const r = t.orders.ret;
+  if (!discount) return null;
+  if (discount.type === 'promo_code') return fill(r.promo, { code: discount.code });
+  const day = formatCalendarDate(discount.lastDay, language);
+  if (discount.type === 'birthday_coupon')
+    return fill(discount.comesBack ? r.couponBack : r.couponLost, { day });
+  return fill(discount.comesBack ? r.rightBack : r.rightLost, { day });
+}
+
+/**
+ * «Оформить возврат товара» (ADR 0006, #40): the whole delivered order came back. A flag per line
+ * for what goes back on hand (none by default: a leaking or opened bottle is never sold again),
+ * the reason, and what the move will do, read from the page's preview: the discount source, the
+ * upgrade rights the order opened, and the money still to send back as a Refund.
+ */
+export function ReturnDialog({
+  open,
+  onOpenChange,
+  page,
+  t,
+  language,
+  onSubmit,
+}: Common & {
+  language: Language;
+  onSubmit: Submit<{ reason: string; lines: { position: number; backToStock: boolean }[] }>;
+}) {
+  const o = t.orders;
+  const r = o.ret;
+  const d = o.detail;
+  const preview = page.returnPreview;
+  const positions = preview?.lines ?? [];
+  const [flags, setFlags] = useState<boolean[]>(() => positions.map(() => false));
+  const [reason, setReason] = useState('');
+  const [tried, setTried] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setTried(true);
+    setError(null);
+    if (!reasonOk(reason)) return;
+    setBusy(true);
+    const failed = await onSubmit({
+      reason: reason.trim(),
+      lines: positions.map((l, i) => ({ position: l.position, backToStock: flags[i] ?? false })),
+    });
+    setBusy(false);
+    if (failed) setError(failed.text);
+  };
+
+  const flagged = flags.filter(Boolean).length;
+  const stock =
+    flagged === 0
+      ? r.stockNone
+      : fill(r.stock, { n: String(flagged), total: String(positions.length) });
+  const effects = [
+    preview && discountEffect(preview.discount, t, language),
+    ...(preview?.rights ?? [])
+      .filter((x) => x.usedBy !== null || !x.ended)
+      .map((x) => {
+        const values = {
+          percent: String(x.percent),
+          day: formatCalendarDate(x.lastDay, language),
+        };
+        return x.usedBy
+          ? fill(r.rightSpent, { ...values, number: String(x.usedBy.number) })
+          : fill(r.rightClose, values);
+      }),
+    page.money.refundable > 0 &&
+      fill(r.money, { amount: formatMoney(page.money.refundable, language) }),
+  ].filter((x): x is string => Boolean(x));
+
+  return (
+    <Frame
+      open={open}
+      onOpenChange={onOpenChange}
+      title={fill(r.title, { number: String(page.order.number) })}
+      description={r.text}
+      onSubmit={submit}
+      error={error}
+      busy={busy}
+      submit={r.submit}
+      cancel={r.keep}
+      wide
+      summary={
+        <p className="text-[13px] font-semibold tabular-nums" data-stock-summary>
+          {stock}
+        </p>
+      }
+    >
+      <fieldset className="grid gap-1.5" data-return-lines>
+        <legend className="mb-1 text-[12.5px] font-medium text-muted-foreground">{r.lines}</legend>
+        <p className="mb-1 text-xs leading-snug text-pretty text-muted-foreground">{r.linesHint}</p>
+        <div className="-mx-2.5 grid gap-0.5">
+          {positions.map((l, i) => {
+            const line = page.order.lines[i];
+            if (!line) return null;
+            return (
+              <label
+                key={l.position}
+                className="flex cursor-pointer touch-manipulation items-start gap-3 rounded-button px-2.5 py-2 transition-colors duration-150 select-none hover:bg-milk active:bg-field"
+                data-return-line={l.position}
+              >
+                <input
+                  type="checkbox"
+                  checked={flags[i] ?? false}
+                  onChange={(e) =>
+                    setFlags((f) => f.map((v, j) => (j === i ? e.target.checked : v)))
+                  }
+                  className="mt-0.5 size-[18px] shrink-0 accent-graphite"
+                />
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="font-medium break-words">{line.name[language]}</span>
+                  <MetaLine
+                    className="text-small text-muted-foreground"
+                    parts={[
+                      line.kind === 'volume' &&
+                        fill(d.qty, { ml: String(line.ml), qty: String(line.qty) }),
+                      line.kind !== 'volume' && d.setOf,
+                      line.kind !== 'volume' && fill(d.units, { qty: String(line.qty) }),
+                    ]}
+                  />
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <TypedReasonField
+        id="return-reason"
+        label={r.reason}
+        hint={r.reasonHint}
+        value={reason}
+        onChange={setReason}
+        tried={tried}
+        required={r.reasonRequired}
+        long={r.reasonLong}
+        t={t}
+      />
+      {effects.length > 0 && (
+        <div className="grid gap-1.5">
+          <p className="text-[12.5px] font-medium text-muted-foreground">{r.effects}</p>
+          <ul
+            className="grid gap-1.5 rounded-button bg-field px-3.5 py-3 text-[13.5px] leading-snug text-pretty [overflow-wrap:anywhere]"
+            data-return-effects
+          >
+            {effects.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </div>
       )}
     </Frame>
   );
