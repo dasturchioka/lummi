@@ -912,6 +912,59 @@ describe('a Return releases the order’s discount source and closes the rights 
     expect(page.status === 200 && page.body.order.discount).toEqual(usedBefore.discount);
   });
 
+  it('a returned 10 ml order (switched on) closes the rights it opened; the order that spent one keeps its discount', async () => {
+    const owner = await t.ownerSession();
+    for (const [key, value] of [
+      ['upgradeRights.single10ml.enabled', true],
+      ['upgradeRights.single10ml.percent', 10],
+    ] as const)
+      expect(
+        (await owner.client.admin.settings.update({ params: { key }, body: { value } })).status,
+      ).toBe(200);
+    const client = await shopper(t, ali, '998901112233');
+    const [a, b] = await slugs(t, 2);
+    // delivered 9 November: a right on each fragrance, through 9 December (30 days, the default)
+    const source = await orderBottles(client, [a!, b!]);
+    await fulfilTo(source, 'delivered');
+    await client.cart.addLine({ body: { slug: a!, ml: 30, qty: 1 } });
+    const used = await placeOrder(client);
+    expect((await orderRow(used)).discount).toMatchObject({ type: 'upgrade_right' });
+    await fulfilTo(used, 'payment_confirmed');
+    const usedBefore = await orderRow(used);
+    const { client: staff } = await t.managerSession();
+    expect((await preview(staff, source))?.rights).toEqual([
+      { percent: 10, lastDay: '2026-12-09', usedBy: { number: used }, ended: false },
+      { percent: 10, lastDay: '2026-12-09', usedBy: null, ended: false },
+    ]);
+
+    const res = await staff.admin.orders.return({
+      params: { number: source },
+      body: {
+        expectedStatus: 'delivered',
+        reason: 'Вернули оба флакона',
+        lines: [
+          { position: 0, backToStock: false },
+          { position: 1, backToStock: false },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    // both closed: the open one is gone from the customer, the spent one stays with its order
+    const opened = await t.db
+      .select()
+      .from(upgradeRights)
+      .where(eq(upgradeRights.sourceOrderId, (await orderRow(source)).id));
+    expect(opened.map((r) => r.closedAt !== null)).toEqual([true, true]);
+    const mine = await client.me.discounts();
+    expect(mine.status === 200 && mine.body.upgradeRights).toEqual([]);
+    const usedAfter = await orderRow(used);
+    expect([usedAfter.discount, usedAfter.total, usedAfter.status]).toEqual([
+      usedBefore.discount,
+      usedBefore.total,
+      'payment_confirmed',
+    ]);
+  });
+
   it('a returned order no longer counts in the customer’s total spent (Fulfilled orders only)', async () => {
     const client = await shopper(t, ali, '998901112233');
     const [a, b] = await slugs(t, 2);
