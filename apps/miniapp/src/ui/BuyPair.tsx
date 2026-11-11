@@ -22,7 +22,10 @@ export function BuyPair({
   /** «В корзину», in the caller's own words. */
   toCart: string;
   price: number;
-  /** A higher price struck before it (the fragrance card with an upgrade right, #38). */
+  /**
+   * A higher price struck before it (the fragrance card with an upgrade right, #38). Stacked, it
+   * shares the price's line while that fits, else it is left to the tile above.
+   */
   was?: number;
   adding?: boolean;
   onAdd: () => void;
@@ -31,16 +34,23 @@ export function BuyPair({
   const { t } = usePrefs();
   const row = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
+  const stackProbe = useRef<HTMLDivElement>(null);
   const [stacked, setStacked] = useState(false);
+  const [wasFits, setWasFits] = useState(true);
   useLayoutEffect(() => {
     const r = row.current;
     const p = probe.current;
-    if (!r || !p || typeof ResizeObserver === 'undefined') return;
-    const check = () => setStacked(p.scrollWidth > r.clientWidth);
+    const sp = stackProbe.current;
+    if (!r || !p || !sp || typeof ResizeObserver === 'undefined') return;
+    const check = () => {
+      setStacked(p.scrollWidth > r.clientWidth);
+      setWasFits(sp.scrollWidth <= r.clientWidth);
+    };
     check();
     const observer = new ResizeObserver(check);
     observer.observe(r);
     observer.observe(p); // the fonts arriving change what the line needs
+    observer.observe(sp);
     return () => observer.disconnect();
   }, []);
 
@@ -58,6 +68,16 @@ export function BuyPair({
       <Money amount={price} />
     </span>
   );
+  const stackedPrice = (
+    <span className="flex items-baseline gap-1.5">
+      {was !== undefined && wasFits ? (
+        <s className="opacity-60">
+          <Money amount={was} size="small" />
+        </s>
+      ) : null}
+      <Money amount={price} size="small" className="opacity-80" />
+    </span>
+  );
   return (
     <div ref={row} className="relative flex gap-2">
       {/* Clipped to the row, so the measuring copy never widens the page. */}
@@ -69,20 +89,22 @@ export function BuyPair({
           <span className="px-3.5">{oneLine}</span>
           <span className="px-3.5">{t.card.buyNow}</span>
         </div>
+        {/* the stacked price line with the struck price, beside «Купить сейчас» */}
+        <div ref={stackProbe} className="type-button flex w-max gap-2">
+          <span className="flex items-baseline gap-1.5 px-3.5">
+            {was !== undefined ? <Money amount={was} size="small" /> : null}
+            <Money amount={price} size="small" />
+          </span>
+          <span className="px-3.5">{t.card.buyNow}</span>
+        </div>
       </div>
       <Button size="pair" className="min-w-0 flex-1" loading={adding} onClick={onAdd}>
         {stacked ? (
+          // stacked (a narrow phone), the button keeps to two lines: the struck price shares the
+          // price's line while it fits, else it stays on the tile above
           <span className="flex flex-col items-center gap-1">
             {toCart}
-            {/* the struck price steps above the price rather than past the button's edge */}
-            <span className="flex flex-wrap items-baseline justify-center gap-x-1.5">
-              {was !== undefined ? (
-                <s className="opacity-60">
-                  <Money amount={was} size="small" />
-                </s>
-              ) : null}
-              <Money amount={price} size="small" className="opacity-80" />
-            </span>
+            {stackedPrice}
           </span>
         ) : (
           oneLine
