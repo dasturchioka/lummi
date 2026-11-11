@@ -11,11 +11,11 @@ import {
   type DbOrTx,
   type UpgradeRightRow,
 } from '@lummi/db';
+import { formatLocalDate, lastDayOf } from '@lummi/contracts';
 import { fill, formatCalendarDate } from '@lummi/i18n';
 import { botMessages } from '@lummi/i18n/bot';
 import { Inject, Injectable } from '@nestjs/common';
 import { CustomersService } from '../auth/customers.service';
-import { formatLocalDate, lastDayOf } from '../birthday/birthday-dates';
 import type { Env } from '../env';
 import type { OutboxMessage } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
@@ -115,7 +115,9 @@ export class UpgradeRightReminders {
       text: fill(t.upgradeRightReminder[right.source], {
         percent: String(right.percent),
         until: formatCalendarDate(formatLocalDate(lastDayOf(right.expiresAt)), c.language),
-        names: right.fragrances.map((f) => f.name).join(', '),
+        names: right.fragrances
+          .map((f) => fill(t.fragranceNamed, { name: f.name, brand: f.brand }))
+          .join(', '),
       }),
       options: url
         ? { reply_markup: { inline_keyboard: [[{ text: t.openShop, web_app: { url } }]] } }

@@ -37,7 +37,8 @@ export type VolumeCard = z.infer<typeof volumeCardSchema>;
 
 /** One full-size volume as the customer's upgrade right prices it (ADR 0003, 0007). */
 export const upgradeRightPriceSchema = z.object({
-  ml: z.union([z.literal(30), z.literal(50)]),
+  /** A volume `pricing.fullSizeVolumesMl` calls full size. */
+  ml: volumeCardSchema.shape.ml,
   /** The price to pay for one bottle with the right: the volume's price less the right's discount. */
   price: z.number().int().nonnegative(),
   source: upgradeRightSourceSchema,

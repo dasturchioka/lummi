@@ -30,6 +30,17 @@ export const botMessages = defineMessages(
         single_10ml:
           'Напоминаем: скидка −{percent}% за флакон 10 мл действует до {until} включительно ⏳\nОна на один полный флакон аромата {names}.',
       },
+      /** A fragrance in a bot message, always with its original (CLAUDE.md brand rule). */
+      fragranceNamed: '{name} (по мотивам {brand})',
+      /**
+       * The line «Доставлен» adds when the order opened an upgrade right (#38): no emoji, the
+       * message has one. `{until}` is its last day.
+       */
+      upgradeRightOpened: {
+        set: 'Вам открыта скидка −{percent}% на полный флакон одного из ароматов набора — до {until} включительно. Она уже в «Мои скидки» в профиле.',
+        single_10ml:
+          'Вам открыта скидка −{percent}% на полный флакон аромата из вашего флакона 10 мл — до {until} включительно. Она уже в «Мои скидки» в профиле.',
+      },
       /** One message per status change (spec Changes 2026-11-07, customer messages); none for «Принят» or a return. */
       receiptReceived:
         'Чек к заказу № {number} получен 🧾\nПроверяем оплату и напишем, как только она подтвердится.',
@@ -98,6 +109,12 @@ export const botMessages = defineMessages(
         set: 'Eslatma: toʻplam uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU toʻplamdagi istalgan iforning bitta toʻliq flakoniga: {names}.',
         single_10ml:
           'Eslatma: 10 ml flakon uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU {names} iforining bitta toʻliq flakoniga.',
+      },
+      fragranceNamed: '{name} ({brand} asosida)',
+      upgradeRightOpened: {
+        set: 'Sizga toʻplamdagi iforlardan birining toʻliq flakoniga −{percent}% chegirma ochildi — {until} kuni oxirigacha. U profildagi «Mening chegirmalarim» boʻlimida.',
+        single_10ml:
+          'Sizga 10 ml flakoningizdagi iforning toʻliq flakoniga −{percent}% chegirma ochildi — {until} kuni oxirigacha. U profildagi «Mening chegirmalarim» boʻlimida.',
       },
       receiptReceived:
         '№ {number} buyurtma cheki qabul qilindi 🧾\nToʻlovni tekshiryapmiz, tasdiqlanishi bilan xabar beramiz.',

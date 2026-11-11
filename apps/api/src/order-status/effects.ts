@@ -1,6 +1,12 @@
-import { PAID_STATUSES, type OrderAction, type TransitionPayload } from '@lummi/contracts';
-import type { OrderLineRow, OrderRow, orders } from '@lummi/db';
-import { fill, formatDateTime, formatMoney, type Language } from '@lummi/i18n';
+import {
+  formatLocalDate,
+  lastDayOf,
+  PAID_STATUSES,
+  type OrderAction,
+  type TransitionPayload,
+} from '@lummi/contracts';
+import type { OrderLineRow, OrderRow, orders, UpgradeRightRow } from '@lummi/db';
+import { fill, formatCalendarDate, formatDateTime, formatMoney, type Language } from '@lummi/i18n';
 import { botMessages, orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
 import type { OnHandMove } from './on-hand';
 
@@ -10,6 +16,8 @@ export interface Move<A extends OrderAction> {
   order: OrderRow;
   lines: readonly OrderLineRow[];
   payload: TransitionPayload<A>;
+  /** The upgrade rights this move opened (only «Доставлен» opens any, #38); empty otherwise. */
+  openedRights: readonly Pick<UpgradeRightRow, 'source' | 'percent' | 'expiresAt'>[];
 }
 
 /** The shopper's message text, and whether it carries «Написать менеджеру». */
@@ -34,8 +42,9 @@ export interface Effects<A extends OrderAction> {
    */
   onHand?: (m: Move<A>) => OnHandMove;
   /**
-   * Discount sources (ADR 0003, 0005): release the one the order held; a return also closes the
-   * upgrade rights it opened; delivery opens them.
+   * What the move does to discount sources (`DiscountSourceHooks`, ADR 0003, 0005): a cancel
+   * releases the one the order held; a return releases it and closes the upgrade rights the order
+   * opened; delivery opens them.
    */
   discountSource?: 'release' | 'release_and_close_rights' | 'open_rights';
   /** Columns the move sets on the order besides its status. */
@@ -58,6 +67,16 @@ export function extendReserve(reserveUntil: Date, pausedSeconds: number): Date {
 }
 const extendedReserve = (m: Move<'payment_not_found' | 'reject_receipt'>) =>
   extendReserve(m.order.reserveUntil, m.payload.pausedSeconds);
+
+/** «Вам открыта скидка …»: the first right the move opened, a set's before a 10 ml bottle's. */
+function rightOpened(m: Move<OrderAction>, lang: Language): string | null {
+  const r = m.openedRights.find((x) => x.source === 'set') ?? m.openedRights[0];
+  if (!r) return null;
+  return fill(bot(lang).upgradeRightOpened[r.source], {
+    percent: String(r.percent),
+    until: formatCalendarDate(formatLocalDate(lastDayOf(r.expiresAt)), lang),
+  });
+}
 
 /** A return's flags name every line of the order exactly once (ADR 0006). */
 function flagsNameEveryLine(m: Move<'return'>): boolean {
@@ -143,7 +162,12 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
     audit: 'order.delivered',
     // a delivered set (or single 10 ml bottle, once switched on) opens its upgrade rights (#38)
     discountSource: 'open_rights',
-    message: (m, lang) => ({ text: fill(bot(lang).delivered, { number: number(m) }) }),
+    // and says so in one more line, so the shopper hears of it before the first reminder
+    message: (m, lang) => ({
+      text: [fill(bot(lang).delivered, { number: number(m) }), rightOpened(m, lang)]
+        .filter((line) => line !== null)
+        .join('\n'),
+    }),
   },
   return: {
     audit: 'order.returned',

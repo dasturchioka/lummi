@@ -1,5 +1,10 @@
 import {
+  addDays,
+  daysLeft,
+  formatLocalDate,
+  lastDayOf,
   SINGLE_RIGHT_ML,
+  tashkentDay,
   tashkentDayStart,
   type MyUpgradeRightDto,
   type UpgradeRightPrice,
@@ -20,15 +25,8 @@ import {
   type VolumeRow,
 } from '@lummi/db';
 import { readPricingSettings } from '../pricing/pricing-settings';
-import { quote, type Entitlement } from '../pricing/quote';
+import { quote, volumePrice, type Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import {
-  addDays,
-  daysLeft,
-  formatLocalDate,
-  lastDayOf,
-  tashkentDay,
-} from '../birthday/birthday-dates';
 
 /**
  * Upgrade rights (TZ §3.4, ADR 0003, ticket #38): opened by a delivered set or single 10 ml
@@ -105,6 +103,7 @@ export async function openUpgradeRights(
         ),
         sourcePosition: line.position,
         sourceUnit: 0,
+        // a fragrance has one name; the line keeps it in both language columns (#23)
         fragrances: [{ fragranceId: line.fragranceId, name: line.nameRu, brand: line.brand ?? '' }],
       });
     }
@@ -235,18 +234,15 @@ export async function upgradeRightPrices(
   if (covering.length === 0) return [];
   const settings = await readPricingSettings(tx);
   const out: UpgradeRightPrice[] = [];
+  // every volume goes to `quote()`, which discounts only what `pricing.fullSizeVolumesMl` calls full size
   for (const v of volumes) {
-    if (v.ml !== 30 && v.ml !== 50) continue;
     const q = quote({
       lines: [
         {
           key: String(v.id),
           item: { kind: 'volume', fragranceId, volumeMl: v.ml },
           qty: 1,
-          price: {
-            regular: v.price,
-            markdown: v.salePrice === null ? null : { price: v.salePrice, endsAt: v.saleEndsAt },
-          },
+          price: volumePrice(v),
           soldOut: false,
         },
       ],
@@ -261,7 +257,7 @@ export async function upgradeRightPrices(
     if (applied?.type !== 'upgrade_right') continue;
     const right = covering.find((r) => r.id === applied.id)!;
     out.push({
-      ml: v.ml,
+      ml: v.ml as UpgradeRightPrice['ml'],
       price: q.total,
       source: right.source,
       percent: right.percent,

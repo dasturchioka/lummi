@@ -11,6 +11,7 @@ import {
   eq,
   fragrances,
   inArray,
+  orderLines,
   orders,
   outbox,
   regions,
@@ -21,8 +22,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { seedCatalog } from '../src/catalog/seed';
+import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
+import { holdUpgradeRight } from '../src/upgrade-rights/upgrade-rights';
 import { WorkerRuntime } from '../src/worker/runtime';
 import { shopper, whileLockedUntil } from './harness/orders';
 import { payWithCredit, uniqueReceiptImage } from './harness/payments';
@@ -395,11 +398,13 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
     await fulfilTo(await placeOrder(client), 'delivered');
     const box = await client.sets.discovery();
     if (box.status !== 200) throw new Error(`discovery ${box.status}`);
-    return { client, inBox, names: box.body.fragrances.map((f) => f.name) };
+    return { client, inBox, five: box.body.fragrances };
   }
 
-  it('sends each once, at 10:00 Tashkent, in the customer language, naming the five fragrances', async () => {
-    const { names } = await deliveredSet(vali, '998907654321');
+  it('sends each once, at 10:00 Tashkent, in the customer language, naming the five with their originals', async () => {
+    const { five } = await deliveredSet(vali, '998907654321');
+    // CLAUDE.md: a fragrance is never named without «по мотивам <brand>» / «<brand> asosida»
+    const named = five.map((f) => `${f.name} (${f.brand} asosida)`).join(', ');
     const at = async (instant: Date) => {
       t.edges.clock.set(instant);
       await tick();
@@ -413,7 +418,7 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
     expect(first).toHaveLength(1);
     expect(first[0]).toMatchObject({
       chatId: vali.id,
-      text: `Eslatma: toʻplam uchun −20% chegirma 9-dekabr kuni oxirigacha amal qiladi ⏳\nU toʻplamdagi istalgan iforning bitta toʻliq flakoniga: ${names.join(', ')}.`,
+      text: `Eslatma: toʻplam uchun −20% chegirma 9-dekabr kuni oxirigacha amal qiladi ⏳\nU toʻplamdagi istalgan iforning bitta toʻliq flakoniga: ${named}.`,
       options: {
         reply_markup: {
           inline_keyboard: [
@@ -434,13 +439,14 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
   });
 
   it('a worker that was down past the last reminder sends only the last one', async () => {
-    await deliveredSet(ali, '998901112233');
+    const { five } = await deliveredSet(ali, '998901112233');
     t.edges.clock.set(new Date(LAST.getTime() + 2 * 3600_000));
     await tick();
     const sent = await reminders();
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.text).toMatch(
-      /^Напоминаем: скидка за набор −20% действует до 9 декабря включительно ⏳\n/,
+    const named = five.map((f) => `${f.name} (по мотивам ${f.brand})`).join(', ');
+    expect(sent[0]!.text).toBe(
+      `Напоминаем: скидка за набор −20% действует до 9 декабря включительно ⏳\nОна на один полный флакон любого аромата из набора: ${named}.`,
     );
   });
 
@@ -794,5 +800,129 @@ describe('«Мои скидки» lists open rights with their fragrances and da
     expect(lastDay.status === 200 && lastDay.body.upgradeRights).toMatchObject([
       { lastDay: '2026-12-09', daysLeft: 0 },
     ]);
+  });
+});
+
+describe('the «Доставлен» message says a right opened (when one did)', () => {
+  async function deliveredText(number: number) {
+    const rows = await t.db.select().from(outbox).orderBy(asc(outbox.id));
+    return rows.filter(
+      (r) => r.text.includes(`№ ${number}`) && /доставлен|yetkazildi/.test(r.text),
+    );
+  }
+
+  it('one line with the percent, what it covers and the last day, in the customer language', async () => {
+    const ru = await shopper(t, ali, '998901112233');
+    await ru.cart.addDiscovery({ body: { qty: 2 } });
+    const first = await placeOrder(ru);
+    await fulfilTo(first, 'delivered');
+    expect((await deliveredText(first)).map((r) => r.text)).toEqual([
+      `Заказ № ${first} доставлен ✨\nСпасибо, что выбрали LUMMI.\nВам открыта скидка −20% на полный флакон одного из ароматов набора — до 9 декабря включительно. Она уже в «Мои скидки» в профиле.`,
+    ]);
+
+    const uz = await shopper(t, vali, '998907654321');
+    await setSetting('upgradeRights.single10ml.enabled', true);
+    const [slug] = await allSlugs();
+    await uz.cart.addLine({ body: { slug: slug!, ml: 10, qty: 1 } });
+    const second = await placeOrder(uz);
+    await fulfilTo(second, 'delivered');
+    expect((await deliveredText(second)).map((r) => r.text)).toEqual([
+      `№ ${second} buyurtma yetkazildi ✨\nLUMMIni tanlaganingiz uchun rahmat.\nSizga 10 ml flakoningizdagi iforning toʻliq flakoniga −20% chegirma ochildi — 9-dekabr kuni oxirigacha. U profildagi «Mening chegirmalarim» boʻlimida.`,
+    ]);
+  });
+
+  it('no line when the order opened none', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const [slug] = await allSlugs();
+    await client.cart.addLine({ body: { slug: slug!, ml: 30, qty: 1 } });
+    const number = await placeOrder(client);
+    await fulfilTo(number, 'delivered');
+    expect((await deliveredText(number)).map((r) => r.text)).toEqual([
+      `Заказ № ${number} доставлен ✨\nСпасибо, что выбрали LUMMI.`,
+    ]);
+  });
+
+  it('two managers pressing «Доставлен» at once: one move, one set of rights', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    await client.cart.addDiscovery({ body: { qty: 1 } });
+    const number = await placeOrder(client);
+    await fulfilTo(number, 'handed_to_bts');
+    const [a, b] = [await t.managerSession(), await t.ownerSession()];
+    const body = { action: 'deliver', expectedStatus: 'handed_to_bts' } as const;
+    const results = await Promise.all([
+      a.client.admin.orders.fulfil({ params: { number }, body }),
+      b.client.admin.orders.fulfil({ params: { number }, body }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await rightsOf(number)).toHaveLength(1);
+    expect(await deliveredText(number)).toHaveLength(1);
+    // the opening itself is idempotent on the source line and unit
+    const order = await orderRow(number);
+    await t.app
+      .get(DiscountSourceHooks)
+      .openRights(
+        t.db,
+        order,
+        await t.db.select().from(orderLines).where(eq(orderLines.orderId, order.id)),
+      );
+    expect(await rightsOf(number)).toHaveLength(1);
+  });
+});
+
+describe('the hold (ADR 0005): a conditional update', () => {
+  it('takes only a right of this customer that no order holds, not closed and not ended', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    await client.cart.addDiscovery({ body: { qty: 1 } });
+    const source = await placeOrder(client);
+    await fulfilTo(source, 'delivered');
+    const [right] = await rightsOf(source);
+    // any two orders to hold it with: the source and another
+    await client.cart.addLine({ body: { slug: (await allSlugs())[40]!, ml: 10, qty: 1 } });
+    const other = await orderRow(await placeOrder(client));
+    const now = t.edges.clock.now();
+    const hold = (orderId: number, at = now, customerId = right!.customerId) =>
+      holdUpgradeRight(t.db, { id: right!.id, customerId, orderId, now: at });
+    const reset = (set: Partial<typeof upgradeRights.$inferInsert>) =>
+      t.db.update(upgradeRights).set(set).where(eq(upgradeRights.id, right!.id));
+
+    expect(await hold(other.id, now, right!.customerId + 1)).toBe(false); // another customer's
+    expect(await hold(other.id, right!.expiresAt)).toBe(false); // ended
+    await reset({ closedAt: now });
+    expect(await hold(other.id)).toBe(false); // closed
+    await reset({ closedAt: null, usedByOrderId: (await orderRow(source)).id });
+    expect(await hold(other.id)).toBe(false); // held by another order
+    await reset({ usedByOrderId: null });
+    expect(await hold(other.id)).toBe(true);
+    expect((await rightsOf(source))[0]).toMatchObject({ usedByOrderId: other.id });
+  });
+});
+
+describe('full size is a setting (pricing.fullSizeVolumesMl)', () => {
+  it('the card prices only the volumes the setting calls full size', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const inBox = await discoverySlugs(client);
+    await client.cart.addDiscovery({ body: { qty: 1 } });
+    await fulfilTo(await placeOrder(client), 'delivered');
+    await setSetting('pricing.fullSizeVolumesMl', [50]);
+    expect(await rightPrices(client, inBox[0]!)).toEqual([SET_PRICES[1]]);
+  });
+});
+
+describe('the reminder days are checked together on save', () => {
+  it('the first reminder must come before the last: a save that breaks it is refused', async () => {
+    const owner = await t.ownerSession();
+    const save = (key: SettingKey, value: number) =>
+      owner.client.admin.settings.update({ params: { key }, body: { value } });
+    // defaults: first 7, last 1
+    expect(await save('upgradeRights.lastReminderDays', 7)).toMatchObject({
+      status: 400,
+      body: { code: 'invalid_value', issues: [{ code: 'reminder_last_not_after_first', max: 6 }] },
+    });
+    expect(await save('upgradeRights.firstReminderDays', 1)).toMatchObject({
+      status: 400,
+      body: { code: 'invalid_value', issues: [{ code: 'reminder_first_not_before_last', min: 2 }] },
+    });
+    expect((await save('upgradeRights.lastReminderDays', 6)).status).toBe(200);
+    expect((await save('upgradeRights.firstReminderDays', 10)).status).toBe(200);
   });
 });

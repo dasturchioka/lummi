@@ -1,6 +1,7 @@
 import type { MyUpgradeRightDto } from '@lummi/contracts';
 import { fill, formatCalendarDate, plural } from '@lummi/i18n';
 import { usePrefs } from '../lib/prefs';
+import { attribution } from '../ui/attribution';
 import { Badge } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { BottleIcon } from '../ui/icons';
@@ -8,8 +9,8 @@ import { useDiscountsText } from './queries';
 
 /**
  * An open upgrade right in «Мои скидки» (TZ §3.4; mockup 08's set card): what it is, «−20%» as the
- * discount badge, the fragrances it covers in the Name role (each opens its card while on sale)
- * and how long it lasts. It applies in the cart by itself, so the card has no button.
+ * discount badge, the fragrances it covers in the Name role, each with «по мотивам <brand>» (CLAUDE.md)
+ * and opening its card while on sale, and how long it lasts. It applies in the cart by itself, so the card has no button.
  */
 export function RightCard({
   right,
@@ -18,7 +19,7 @@ export function RightCard({
   right: MyUpgradeRightDto;
   onOpen: (slug: string) => void;
 }) {
-  const { language } = usePrefs();
+  const { t, language } = usePrefs();
   const d = useDiscountsText();
   const until = fill(d.until, { date: formatCalendarDate(right.lastDay, language) });
   return (
@@ -32,20 +33,25 @@ export function RightCard({
           <Badge tone="discount">−{right.percent}%</Badge>
         </p>
         <p className="type-small mt-0.5 text-pretty text-muted">{d.rightTerms[right.source]}</p>
-        <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+        <ul className="mt-2 flex flex-col gap-1">
           {right.fragrances.map((f) => (
-            <li key={f.name} className="type-name min-w-0 text-[18px] [overflow-wrap:anywhere]">
+            // a hanging indent: a name that wraps stays one item; the original always follows it
+            <li
+              key={f.name}
+              className="type-small pl-2.5 -indent-2.5 text-pretty text-muted [overflow-wrap:anywhere]"
+            >
               {f.slug ? (
                 <button
                   type="button"
                   onClick={() => onOpen(f.slug as string)}
-                  className="text-left text-ink underline decoration-line-strong decoration-1 underline-offset-[3px] transition-opacity duration-150 active:opacity-60"
+                  className="type-name text-left text-[18px] text-ink underline decoration-line-strong decoration-1 underline-offset-[3px] transition-opacity duration-150 active:opacity-60"
                 >
                   {f.name}
                 </button>
               ) : (
-                <span className="text-muted">{f.name}</span>
-              )}
+                <span className="type-name text-[18px] text-muted">{f.name}</span>
+              )}{' '}
+              {attribution(t.card.basedOn, f.brand)}
             </li>
           ))}
         </ul>

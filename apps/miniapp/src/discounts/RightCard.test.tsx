@@ -37,12 +37,21 @@ const right = (over: Partial<MyUpgradeRightDto> = {}): MyUpgradeRightDto => ({
 });
 
 describe('RightCard («Мои скидки», TZ §3.4)', () => {
-  it('names the discount, its five fragrances and how long it lasts', () => {
+  it('names the discount, its five fragrances with their originals, and how long it lasts', () => {
     render(<RightCard right={right()} onOpen={vi.fn()} />);
     expect(screen.getByText('Скидка за набор')).toBeTruthy();
     expect(screen.getByText('−20%')).toBeTruthy();
-    for (const name of ['Symphony', 'Megamare', 'Tygar', 'Guidance', 'Blue Sapphire'])
-      expect(screen.getByText(name)).toBeTruthy();
+    // CLAUDE.md: never a fragrance name without «по мотивам <brand>»
+    const items = screen
+      .getAllByRole('listitem')
+      .map((li) => li.textContent?.replace(/\u00a0/g, ' '));
+    expect(items).toEqual([
+      'Symphony по мотивам Louis Vuitton',
+      'Megamare по мотивам Orto Parisi',
+      'Tygar по мотивам Bvlgari',
+      'Guidance по мотивам Amouage',
+      'Blue Sapphire по мотивам Boadicea',
+    ]);
     expect(screen.getByText('Осталось 25 дней · до 9 декабря')).toBeTruthy();
   });
 
@@ -67,6 +76,9 @@ describe('RightCard («Мои скидки», TZ §3.4)', () => {
       />,
     );
     expect(screen.getByText('10 ml flakon chegirmasi')).toBeTruthy();
+    expect(screen.getByRole('listitem').textContent?.replace(/\u00a0/g, ' ')).toBe(
+      'Symphony Louis Vuitton asosida',
+    );
     expect(screen.getByText('Oxirgi kun · 9-dekabrgacha')).toBeTruthy();
   });
 });

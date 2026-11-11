@@ -148,7 +148,12 @@ export class OrderStatusService {
     if (order.status !== expectedStatus) return { kind: 'conflict', order };
 
     const fx = EFFECTS[action] as Effects<A>;
-    const move: Move<A> = { order, lines: await linesOf(tx, order.id), payload: plan.payload };
+    const move: Move<A> = {
+      order,
+      lines: await linesOf(tx, order.id),
+      payload: plan.payload,
+      openedRights: [],
+    };
     if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 
     const now = this.edges.clock.now();
@@ -164,7 +169,7 @@ export class OrderStatusService {
         await this.discountSources.closeRightsOpenedBy(tx, order);
         break;
       case 'open_rights':
-        await this.discountSources.openRights(tx, order, move.lines);
+        move.openedRights = await this.discountSources.openRights(tx, order, move.lines);
         break;
     }
 
