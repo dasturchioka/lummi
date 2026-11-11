@@ -176,8 +176,10 @@ import {
   creditOptionsSchema,
   fulfilBodySchema,
   staffConfirmBodySchema,
+  refundBodySchema,
   rejectReceiptBodySchema,
   staffCancelBodySchema,
+  staffReturnBodySchema,
 } from './admin-orders';
 
 const c = initContract();
@@ -1395,6 +1397,24 @@ const adminOrders = c.router({
       responses: orderMoveResponses,
       summary:
         'Staff: reject the receipt under check with a reason; the order goes back to «Ожидает оплаты» and the shopper reads why',
+    },
+    return: {
+      method: 'POST',
+      path: '/admin/orders/:number/return',
+      pathParams: orderNumber,
+      body: staffReturnBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: the delivered order came back whole («Возвращён») with a reason and a back-to-stock flag per line; on hand, the discount source and the rights it opened follow',
+    },
+    refund: {
+      method: 'POST',
+      path: '/admin/orders/:number/refund',
+      pathParams: orderNumber,
+      body: refundBodySchema,
+      responses: orderMoveResponses,
+      summary:
+        'Staff: record a Refund on a paid order (amount up to what is left, the day it was sent, a reason); the status and discounts stay',
     },
   },
   credits: {

@@ -67,6 +67,8 @@ export const adminOrderListItemSchema = z.object({
   recipient: z.object({ name: z.string(), phone: z.string() }),
   region: bilingualSchema,
   isGift: z.boolean(),
+  /** What its Refunds sent back, whole so'm: 0 when none («Возврат N сум» beside the status). */
+  refunded: som,
 });
 export type AdminOrderListItemDto = z.infer<typeof adminOrderListItemSchema>;
 
@@ -229,6 +231,24 @@ export const adminOrderEventSchema = z.object({
 });
 export type AdminOrderEventDto = z.infer<typeof adminOrderEventSchema>;
 
+/** One line of a Return: its position and whether its bottles went back on hand (ADR 0010). */
+const returnLineSchema = transitionPayloadSchemas.return.shape.lines.element;
+
+/**
+ * A Refund (ADR 0006): money sent back to the shopper's card for a paid order, as staff recorded
+ * it: whole so'm, the Tashkent day it was sent, the reason and who recorded it.
+ */
+export const adminRefundSchema = z.object({
+  id,
+  amount: z.number().int().positive(),
+  /** The Tashkent day the money was sent. */
+  date: tashkentDaySchema,
+  reason: z.string(),
+  by: staffRefSchema,
+  at,
+});
+export type AdminRefundDto = z.infer<typeof adminRefundSchema>;
+
 /**
  * The order page: the snapshot as the shopper sees it, then what staff need around it: the
  * customer, every receipt with its verdict, the credit that paid it, the history and the audit.
@@ -264,6 +284,69 @@ export const adminOrderSchema = z.object({
         by: confirmerSchema,
         at,
       }),
+    })
+    .nullable(),
+  /**
+   * Where the money stands against its Refunds: `paid` is the Credit that paid the order, whole
+   * so'm (null while unpaid), `paidOn` the Tashkent day it arrived (no refund dates before it),
+   * `refunded` what the refunds sent back, `refundable` what a new refund may be at most, and
+   * `owed` what is still to go back because the paid order ended (cancelled or returned).
+   */
+  money: z.object({
+    paid: som.nullable(),
+    paidOn: tashkentDaySchema.nullable(),
+    refunded: som,
+    refundable: som,
+    owed: som,
+  }),
+  /** The order's Refunds, oldest first. */
+  refunds: z.array(adminRefundSchema),
+  /**
+   * The Return (ADR 0006): why, when and by whom the delivered order came back, and each line's
+   * back-to-stock flag in the order of `order.lines`; null unless «Возвращён».
+   */
+  returned: z
+    .object({
+      reason: z.string(),
+      at,
+      by: staffRefSchema,
+      lines: z.array(returnLineSchema),
+    })
+    .nullable(),
+  /**
+   * What «Оформить возврат товара» would do now, for its dialog; null unless «Доставлен». `lines`
+   * names each line's position in the order of `order.lines`, for its back-to-stock flag.
+   */
+  returnPreview: z
+    .object({
+      lines: z.array(z.object({ position: z.number().int().nonnegative() })),
+      /**
+       * The discount source the order holds (ADR 0005): a promo-code use is voided; a birthday
+       * coupon or an upgrade right comes back to the customer while within its term (`comesBack`),
+       * past it, it is lost. Null when the order had no discount.
+       */
+      discount: z
+        .discriminatedUnion('type', [
+          z.object({ type: z.literal('promo_code'), code: z.string() }),
+          z.object({
+            type: z.enum(['birthday_coupon', 'upgrade_right']),
+            comesBack: z.boolean(),
+            lastDay: tashkentDaySchema,
+          }),
+        ])
+        .nullable(),
+      /**
+       * The upgrade rights the order opened (a set, #38): a return closes each. One another order
+       * spent (`usedBy`) stays with it, discount and all; an `ended` one changes nothing.
+       */
+      rights: z.array(
+        z.object({
+          percent: z.number().int().positive(),
+          lastDay: tashkentDaySchema,
+          usedBy: z.object({ number: z.number().int() }).nullable(),
+          ended: z.boolean(),
+        }),
+      ),
     })
     .nullable(),
   events: z.array(adminOrderEventSchema),
@@ -324,6 +407,31 @@ export const staffConfirmBodySchema = z.object({
 });
 export type StaffConfirmBody = z.input<typeof staffConfirmBodySchema>;
 
+/**
+ * `POST /admin/orders/:number/return`: the whole delivered order came back (ADR 0006). A reason
+ * and a back-to-stock flag for every line; flagged lines go back on hand (ADR 0010), the order's
+ * discount source comes back while within validity and the rights it opened close (ADR 0005).
+ */
+export const staffReturnBodySchema = transitionPayloadSchemas.return.extend({ expectedStatus });
+export type StaffReturnBody = z.input<typeof staffReturnBodySchema>;
+
+/**
+ * `POST /admin/orders/:number/refund`: record a Refund (ADR 0006) on a paid order. It never
+ * changes the status or a discount source. The amount is at most what paid the order minus its
+ * earlier refunds; the date is a Tashkent day from the day the money arrived to today.
+ * `expectedRefunded` is what the manager saw refunded: another refund recorded meanwhile (a
+ * colleague, a second press) is a conflict, so one transfer is never recorded twice.
+ */
+export const refundBodySchema = z
+  .object({
+    amount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    date: tashkentDaySchema,
+    reason: transitionPayloadSchemas.return.shape.reason,
+    expectedRefunded: som.max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+export type RefundBody = z.input<typeof refundBodySchema>;
+
 export const adminOrderErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found']),
 });
@@ -335,7 +443,7 @@ export const adminOrderErrorSchema = z.object({
  */
 export const adminOrderConflictSchema = z.union([
   z.object({
-    code: z.enum(['status_changed', 'receipt_changed', 'credit_taken']),
+    code: z.enum(['status_changed', 'receipt_changed', 'credit_taken', 'refunds_changed']),
     order: adminOrderSchema,
   }),
   z.object({ code: z.literal('try_again') }),
@@ -346,7 +454,9 @@ export type AdminOrderConflict = z.infer<typeof adminOrderConflictSchema>;
  * 422: no such move from the status the manager saw, a payload that does not fit (a reason staff
  * may not give from there), a note over the setting (`max` comes along); or, linking a credit,
  * one that differs from the order without a reason (`mismatch` names what differs), a reason out
- * of bounds (`min`, `max`), or a credit from before the order (`credit_mismatch`).
+ * of bounds (`min`, `max`), or a credit from before the order (`credit_mismatch`). A Refund on an
+ * order never paid is `not_paid`; one larger than what is left to refund is `refund_too_large`
+ * (`max` is what is left, 0 included); a date before the money arrived or after today, `invalid_date`.
  */
 export const adminOrderRefusalSchema = z.object({
   code: z.enum([
@@ -356,9 +466,12 @@ export const adminOrderRefusalSchema = z.object({
     'reason_required',
     'reason_invalid',
     'credit_mismatch',
+    'not_paid',
+    'refund_too_large',
+    'invalid_date',
   ]),
   min: z.number().int().positive().optional(),
-  max: z.number().int().positive().optional(),
+  max: z.number().int().nonnegative().optional(),
   mismatch: z.array(z.enum(['amount', 'card'])).optional(),
   /** With `credit_mismatch`: what rules the credit out (one from before the order, for staff). */
   what: z.enum(['before_order', 'amount', 'card']).optional(),
