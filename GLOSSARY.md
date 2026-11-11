@@ -177,11 +177,11 @@ How long a receipt waits for a candidate credit before it becomes payment not fo
 _Avoid_: Timeout, check deadline
 
 **Payment pause**:
-A stretch of time when the Humo feed is down while receipts wait: the userbot's heartbeat is stale, or no credit has arrived for too long. Every receipt timer stops, and the owner is alerted once when it starts and once when it ends.
+A stretch of time when the Humo feed is down while receipts wait: the userbot's heartbeat is stale, or no credit has arrived for too long while a receipt waits for its money. Every receipt timer stops; it ends only when a heartbeat or a credit proves the feed alive. The owner is told once it has lasted a few minutes, and again when it ends.
 _Avoid_: Outage (in code), freeze
 
 **Repeat receipt**:
-A receipt that is the same as one already accepted, or as one sent earlier for another order: the same file, or (when the owner enables it) a look-alike image. Both copies are duplicates and never reach the AI; the repeat becomes payment not found at once, tagged «Повторный чек», while the first copy waits for a person.
+A receipt that is the same as one already accepted, or as one sent earlier for another order: the same file, or (when the owner enables it) a look-alike image. The first and the later receipt are both duplicates and never reach the AI; the later one, the repeat receipt, becomes payment not found at once, marked «Повторный чек», while the first waits for a person.
 _Avoid_: Fake receipt, copy
 
 **Manual review**:
