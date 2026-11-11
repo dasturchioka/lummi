@@ -61,8 +61,9 @@ describe('CartView: the discount switch (#39)', () => {
         checked: true,
       },
       {
+        // the bigger discount, yet a higher total: counted after it, delivery comes back
         label: 'Купон ко дню рождения −15%',
-        detail: '−43 050 сум · до 21 ноября',
+        detail: '−43 050 сум · + доставка 25 000 сум · до 21 ноября',
         total: '268 950 сум',
         checked: false,
       },
@@ -73,6 +74,27 @@ describe('CartView: the discount switch (#39)', () => {
         checked: false,
       },
     ]);
+  });
+
+  it('a row says it brings delivery back, the applied one too; none does when all pay it alike', () => {
+    const applied = CART_FIXTURES['choice-coupon'];
+    render(<CartView cart={applied} />);
+    expect(rowsOf().map((r) => [r.detail, r.checked])).toEqual([
+      ['−29 800 сум · Tygar 30 мл · до 1 декабря', false],
+      ['−43 050 сум · + доставка 25 000 сум · до 21 ноября', true],
+      ['Скидка сохранится на следующий заказ', false],
+    ]);
+    cleanup();
+
+    const auto = CART_FIXTURES['choice-auto'];
+    const allPay = auto.discountOptions.map((o) => ({ ...o, deliveryFee: 25_000 }));
+    render(<CartView cart={{ ...auto, discountOptions: allPay }} />);
+    expect(rowsOf().some((r) => r.detail.includes('доставка'))).toBe(false);
+    cleanup();
+
+    language = 'uz';
+    render(<CartView cart={auto} />);
+    expect(rowsOf()[1]!.detail).toBe('−43 050 soʻm · + 25 000 soʻm yetkazish · 21-noyabrgacha');
   });
 
   it('one tap switches: an entitlement, «Не применять», the entered code; the applied one does nothing', () => {

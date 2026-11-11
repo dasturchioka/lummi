@@ -66,9 +66,10 @@ function Joined({ parts }: { parts: ReactNode[] }) {
  * chrome): «СКИДКА» and the one-discount rule; with an entered code and a cheaper entitlement, the
  * Sage note «Скидка за набор выгоднее на … сум» with «Переключить»; then every choice as a radio
  * row with its total, in the server's order (cheapest first, «Не применять» last), so a row stays
- * put when tapped. Everything shown is the server's: the Mini App adds and compares nothing. A
- * chosen discount that lapsed (or a tap the server refused) says which and what applies now, at
- * the top, alone when nothing is left to choose.
+ * put when tapped. Every amount shown is the server's: the Mini App adds nothing up. Where the
+ * choices differ in delivery, a row that pays it says «+ доставка …» (its own quote's fee), so a
+ * bigger discount with a higher total reads right. A chosen discount that lapsed (or a tap the
+ * server refused) says which and what applies now, at the top, alone when nothing is left to choose.
  */
 export function DiscountChoice({
   cart,
@@ -110,6 +111,8 @@ export function DiscountChoice({
   if (options.length === 0) return notice ? <div className="mt-3">{notice}</div> : null;
 
   const keeps = options.some((o) => o.terms !== null);
+  // the choices differ in delivery: the ones that pay it say so
+  const someFree = options.some((o) => o.deliveryFee === 0);
   const label = (o: DiscountOptionDto): ReactNode => {
     const x = o.discount;
     if (x === null) return c.none;
@@ -127,12 +130,19 @@ export function DiscountChoice({
     return fill(c.option[sourceOf(x)], { percent });
   };
   const detail = (o: DiscountOptionDto): ReactNode[] => {
-    if (o.discount === null) return keeps ? [c.noneKeeps] : [];
+    const delivery =
+      someFree && o.deliveryFee > 0 ? (
+        <span key="delivery" className="whitespace-nowrap tabular-nums">
+          {fill(c.plusDelivery, { amount: formatMoney(o.deliveryFee, language) })}
+        </span>
+      ) : null;
+    if (o.discount === null) return [delivery, keeps ? c.noneKeeps : null].filter((p) => p);
     const bottle = bottleOf(o.discount, cart.lines, c.bottle);
     return [
       <span key="amount" className="whitespace-nowrap text-sage-ink tabular-nums">
         −{formatMoney(o.discount.amount, language)}
       </span>,
+      delivery,
       bottle,
       o.terms ? <span className="whitespace-nowrap">{until(o.terms.lastDay)}</span> : null,
     ].filter((p) => p);
