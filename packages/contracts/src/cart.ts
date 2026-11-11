@@ -106,6 +106,16 @@ export const cartSchema = z.object({
    */
   discountOptions: z.array(discountOptionSchema),
   /**
+   * The chosen discount `quote.staleChoice` reports as lapsed (#39), by its source, so the cart can
+   * name it: «Купон ко дню рождения больше не действует — …». Null otherwise.
+   */
+  lapsedDiscount: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('birthday_coupon') }),
+      z.object({ type: z.literal('upgrade_right'), source: upgradeRightSourceSchema }),
+    ])
+    .nullable(),
+  /**
    * An entered promo code is applied while one of the customer's Entitlements (a birthday coupon,
    * #30; an upgrade right, #38) would also discount this cart (ADR 0002: the code wins): the one the
    * server would pick without the code, as it judged it, and how much lower its total is

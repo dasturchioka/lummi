@@ -27,7 +27,11 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
-import { discountOptionsOf, entitlementWaitingBehindCode } from '../entitlements/entitlements';
+import {
+  discountOptionsOf,
+  entitlementWaitingBehindCode,
+  lapsedDiscountOf,
+} from '../entitlements/entitlements';
 import {
   activeMarkdown,
   volumePrice,
@@ -111,6 +115,8 @@ export class CartService {
         : [],
       promoCode: cartState?.promoCode ?? null,
       discountOptions: discountOptionsOf(q, entitlements),
+      lapsedDiscount:
+        q.staleChoice && choice ? await lapsedDiscountOf(tx, customerId, choice) : null,
       entitlementWaiting: entitlementWaitingBehindCode(q, entitlements),
     };
   }

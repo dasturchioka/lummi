@@ -603,16 +603,36 @@ describe('a chosen entitlement that went stale', () => {
     await c.cart.chooseDiscount({ body: { type: 'birthday_coupon', id: b.id } });
     // its last day passes: the right, 287 000 − 29 800, delivery free
     await endNow(b.id);
-    expect((await cartOf(c)).quote).toMatchObject({
+    const once = await cartOf(c);
+    expect(once.quote).toMatchObject({
       discount: { type: 'upgrade_right', id: r.id, amount: 29_800 },
       deliveryFee: 0,
       total: 257_200,
       staleChoice: true,
     });
-    expect((await cartOf(c)).quote).toMatchObject({
+    // named, so the cart can say which one lapsed
+    expect(once.lapsedDiscount).toEqual({ type: 'birthday_coupon' });
+    const after = await cartOf(c);
+    expect(after.quote).toMatchObject({
       discount: { type: 'upgrade_right', id: r.id },
       total: 257_200,
       staleChoice: false,
+    });
+    expect(after.lapsedDiscount).toBeNull();
+  });
+
+  it('a chosen right that was closed is named by where it came from', async () => {
+    const { c, right: r, coupon: b } = await aliWithTwoEntitlements();
+    await c.cart.chooseDiscount({ body: { type: 'upgrade_right', id: r.id } });
+    // its source order was returned: the coupon, 287 000 − 43 050 + 25 000
+    await t.db.update(upgradeRights).set({ closedAt: t.edges.clock.now() });
+    expect(await cartOf(c)).toMatchObject({
+      quote: {
+        discount: { type: 'birthday_coupon', id: b.id, amount: 43_050 },
+        total: 268_950,
+        staleChoice: true,
+      },
+      lapsedDiscount: { type: 'upgrade_right', source: 'set' },
     });
   });
 

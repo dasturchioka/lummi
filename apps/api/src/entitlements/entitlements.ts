@@ -12,11 +12,12 @@ import {
   holdBirthdayCoupon,
   releaseBirthdayCoupon,
 } from '../birthday/birthday-coupons';
-import type { Entitlement } from '../pricing/quote';
+import type { DiscountChoice, Entitlement } from '../pricing/quote';
 import {
   holdUpgradeRight,
   releaseUpgradeRight,
   upgradeRightEntitlements,
+  readUpgradeRightSource,
 } from '../upgrade-rights/upgrade-rights';
 
 /**
@@ -128,6 +129,21 @@ export function entitlementWaitingBehindCode(
       : { type: e.type, id: e.id, ...terms };
   }
   return null;
+}
+
+/**
+ * The chosen entitlement a quote found stale, by its source, so the cart can name it (#39):
+ * «Купон ко дню рождения больше не действует — …». Null for any other choice.
+ */
+export async function lapsedDiscountOf(
+  tx: DbOrTx,
+  customerId: number,
+  choice: DiscountChoice,
+): Promise<CartDto['lapsedDiscount']> {
+  if (choice.type === 'birthday_coupon') return { type: 'birthday_coupon' };
+  if (choice.type !== 'upgrade_right') return null;
+  const source = await readUpgradeRightSource(tx, customerId, choice.id);
+  return source ? { type: 'upgrade_right', source } : null;
 }
 
 /** An entitlement's percent and last day (Tashkent), as «Мои скидки» and the cart name it. */

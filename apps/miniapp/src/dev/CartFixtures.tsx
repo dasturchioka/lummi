@@ -58,7 +58,7 @@ const priced = (
 
 const noQuoteExtras = { alternatives: [], promoCode: null, staleChoice: false };
 /** The cart's own extras when there is nothing to choose between (#39). */
-const noChoice = { discountOptions: [], entitlementWaiting: null };
+const noChoice = { discountOptions: [], entitlementWaiting: null, lapsedDiscount: null };
 
 /** An applied discount (a set's upgrade right) and a line capped at what is left. */
 const discount: CartDto = {
@@ -383,6 +383,7 @@ const choosing = (
     suggestions: [],
     promoCode: more.promoCode ?? null,
     discountOptions,
+    lapsedDiscount: null,
     entitlementWaiting: more.waiting ?? null,
     freeDeliveryProgress: 100,
     quote: {
