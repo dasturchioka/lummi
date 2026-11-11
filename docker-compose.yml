@@ -126,10 +126,34 @@ services:
       retries: 6
       start_period: 20s
 
-  # The Humo userbot (ADR 0014) has no entrypoint in the repo yet (ticket #13 builds the parser and
-  # the internal endpoints, not the mtcute client). Off by default on staging; add the service here
-  # under `profiles: [userbot]` when its image exists. It would join the `lummi` network
-  # (172.28.0.0/24 is already in INTERNAL_ALLOWED_CIDRS) and send x-internal-secret.
+  # The Humo userbot (ADR 0014, ADR 0035): a personal Telegram account, so it is off until someone has
+  # logged in on this server. Enable it with COMPOSE_PROFILES=userbot in .env (docs/run-guide.md →
+  # Userbot). It reaches the API on the `lummi` network (172.28.0.0/24 is in INTERNAL_ALLOWED_CIDRS)
+  # with x-internal-secret, and nothing else of ours: no database, no files volume.
+  # The USERBOT_* values are checked by the userbot itself at start (`:?` here would break every
+  # stack that does not run it).
+  userbot:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-userbot:${IMAGE_TAG:-latest}
+    profiles: [userbot]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
+      USERBOT_API_ID: ${USERBOT_API_ID:-}
+      USERBOT_API_HASH: ${USERBOT_API_HASH:-}
+      USERBOT_SESSION_KEY: ${USERBOT_SESSION_KEY:-}
+      USERBOT_LISTEN_CHAT_ID: ${USERBOT_LISTEN_CHAT_ID:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - userbot-data:/data/userbot
+    networks: [lummi]
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    # No Docker healthcheck on purpose: a parked userbot (no session yet, or the session was ended)
+    # would fail every `up -d --wait` deploy. Its health is its heartbeat: the API pauses receipt
+    # timers and alerts the owner when it goes stale (#36, ADR 0025).
 
   postgres:
     image: postgres:17-alpine
@@ -175,3 +199,5 @@ volumes:
   files:
   caddy-data:
   caddy-config:
+  # The userbot's sealed session (ADR 0014). Back it up with the encrypted .env (ADR 0025).
+  userbot-data:
