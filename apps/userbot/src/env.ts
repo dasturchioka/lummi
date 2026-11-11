@@ -43,6 +43,15 @@ export const envSchema = loginEnvSchema.extend({
    * could change it could pipe any private chat of this personal account into our database.
    */
   USERBOT_LISTEN_CHAT_ID: z.coerce.number().int().positive(),
+  /**
+   * Production: `true`, so the listened bot must carry Telegram's verified tick (the official Humo
+   * bot does; check with whois.ts). Off for the test bot. Not tied to NODE_ENV, since staging runs
+   * as production too.
+   */
+  USERBOT_REQUIRE_VERIFIED: z
+    .enum(['true', 'false'], { message: 'must be true or false' })
+    .default('false')
+    .transform((v) => v === 'true'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 export type Env = z.infer<typeof envSchema>;

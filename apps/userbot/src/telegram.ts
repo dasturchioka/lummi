@@ -1,4 +1,4 @@
-import { MtPeerNotFoundError, tl } from '@mtcute/node';
+import { getMarkedPeerId, MtPeerNotFoundError, tl } from '@mtcute/node';
 
 /**
  * The userbot's view of Telegram (ADR 0014). `MtcuteClient` is the part of mtcute's
@@ -8,14 +8,23 @@ import { MtPeerNotFoundError, tl } from '@mtcute/node';
 
 export type ConnectionState = 'offline' | 'connecting' | 'updating' | 'connected';
 
-/** The fields of an mtcute `Message` the userbot reads. */
+/**
+ * The raw TL message under an mtcute `Message`, as far as the userbot reads it. Reading the raw
+ * fields, not `Message.chat` / `.sender`, never needs mtcute's peer cache, and lets the chat id be
+ * checked before anything else of a message is touched.
+ */
+export interface MtRawMessage {
+  readonly _: 'message' | 'messageService';
+  readonly peerId: tl.TypePeer;
+  readonly fromId?: tl.TypePeer;
+  readonly out?: boolean;
+  readonly message?: string;
+}
+
+/** An mtcute `Message`, as far as the userbot reads it. */
 export interface MtMessage {
   readonly id: number;
-  readonly text: string;
-  readonly isOutgoing: boolean;
-  readonly isService: boolean;
-  readonly chat: { readonly id: number };
-  readonly sender: { readonly id: number };
+  readonly raw: MtRawMessage;
 }
 
 interface Subscribable<T> {
@@ -45,6 +54,7 @@ export interface MtcuteClient {
   }): AsyncIterable<{ readonly peer: { readonly id: number } }>;
   /** One cheap call that needs a valid session (users.getUsers of self). */
   getMe(): Promise<{ readonly id: number }>;
+  getUser(userId: number): Promise<{ readonly isBot: boolean; readonly isVerified: boolean }>;
   readonly onNewMessage: Subscribable<MtMessage>;
   readonly onConnectionState: Subscribable<ConnectionState>;
   /** Errors mtcute meets in the background (updates loop, reconnects). */
@@ -76,9 +86,12 @@ export interface TelegramPort {
   newestMessageId(chatId: number): Promise<number | null>;
   /** Forward one message as is (staff see the original sender and text). */
   forward(fromChatId: number, messageId: number, to: ForwardTarget): Promise<void>;
+  /** Whether the chat is a bot, and verified by Telegram (the listened chat's identity check). */
+  chatIdentity(chatId: number): Promise<{ isBot: boolean; isVerified: boolean }>;
   /** Throws unless Telegram answers a request that needs the session (dead session, no link). */
   probe(): Promise<void>;
-  onMessage(listener: (message: ChatMessage) => void): void;
+  /** New messages of one chat; any other chat's are dropped on their chat id, unread. */
+  onMessage(chatId: number, listener: (message: ChatMessage) => void): void;
   onConnectionState(listener: (state: ConnectionState) => void): void;
   onError(listener: (error: Error) => void): void;
 }
@@ -91,14 +104,19 @@ export class PeerUnknownError extends Error {
   }
 }
 
-function toChatMessage(m: MtMessage): ChatMessage {
+const chatIdOf = (m: MtMessage): number => getMarkedPeerId(m.raw.peerId);
+
+/** Only for a message already known to be from `chatId`. */
+function toChatMessage(m: MtMessage, chatId: number): ChatMessage {
+  const { raw } = m;
   return {
     id: m.id,
-    chatId: m.chat.id,
-    senderId: m.sender.id,
-    outgoing: m.isOutgoing,
-    service: m.isService,
-    text: m.text,
+    chatId,
+    // In a private chat an incoming message may carry no sender: the chat is the sender.
+    senderId: raw.fromId ? getMarkedPeerId(raw.fromId) : chatId,
+    outgoing: raw.out === true,
+    service: raw._ === 'messageService',
+    text: raw._ === 'message' ? (raw.message ?? '') : '',
   };
 }
 
@@ -135,7 +153,9 @@ export class MtcuteTelegram implements TelegramPort {
     );
     while (!next.done) {
       // `minId` already bounds the read; this keeps the contract even if a server returns more.
-      if (next.value.id > afterId) yield toChatMessage(next.value);
+      if (next.value.id > afterId && chatIdOf(next.value) === chatId) {
+        yield toChatMessage(next.value, chatId);
+      }
       next = await iterator.next();
     }
   }
@@ -156,12 +176,21 @@ export class MtcuteTelegram implements TelegramPort {
     await this.withPeer([fromChatId, to.chatId], send);
   }
 
+  async chatIdentity(chatId: number): Promise<{ isBot: boolean; isVerified: boolean }> {
+    const user = await this.withPeer(chatId, () => this.client.getUser(chatId));
+    return { isBot: user.isBot, isVerified: user.isVerified };
+  }
+
   async probe(): Promise<void> {
     await this.client.getMe();
   }
 
-  onMessage(listener: (message: ChatMessage) => void): void {
-    this.client.onNewMessage.add((m) => listener(toChatMessage(m)));
+  onMessage(chatId: number, listener: (message: ChatMessage) => void): void {
+    this.client.onNewMessage.add((m) => {
+      // The account's other chats are none of our business: nothing past the chat id is read.
+      if (chatIdOf(m) !== chatId) return;
+      listener(toChatMessage(m, chatId));
+    });
   }
 
   onError(listener: (error: Error) => void): void {
@@ -231,19 +260,19 @@ export function floodWaitSeconds(e: unknown): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** The session is dead (logged out elsewhere, revoked, account gone): only a new login helps. */
+/** Named dead-session errors that are not a 401 (every 401 is one: the request was not authorized). */
 const TERMINAL_AUTH = new Set([
-  'AUTH_KEY_UNREGISTERED',
+  'AUTH_KEY_DUPLICATED', // 406: the same key used from two places; Telegram dropped it
   'AUTH_KEY_INVALID',
-  'AUTH_KEY_PERM_EMPTY',
-  'SESSION_REVOKED',
   'SESSION_EXPIRED',
-  'USER_DEACTIVATED',
-  'USER_DEACTIVATED_BAN',
 ]);
 
+/**
+ * The session is dead (ended under Devices, logged out elsewhere, key duplicated, account gone):
+ * only a new login helps, and retrying would only keep calling Telegram with a dead key.
+ */
 export function isSessionDead(e: unknown): boolean {
-  return tl.RpcError.is(e) && TERMINAL_AUTH.has(e.text);
+  return tl.RpcError.is(e) && (e.code === 401 || TERMINAL_AUTH.has(e.text));
 }
 
 /** A short, safe description of an error for the log: never a message body or a secret. */

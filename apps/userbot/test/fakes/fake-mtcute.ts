@@ -1,9 +1,10 @@
-import { MtPeerNotFoundError, tl } from '@mtcute/node';
+import { MtPeerNotFoundError, parseMarkedPeerId, tl } from '@mtcute/node';
 import type {
   ConnectionState,
   HistoryAfterParams,
   MtcuteClient,
   MtMessage,
+  MtRawMessage,
 } from '../../src/telegram';
 
 /** mtcute's `Emitter`, as far as the userbot uses it. */
@@ -21,17 +22,37 @@ export class FakeEmitter<T> {
 export const rpcError = (code: number, text: string): Error =>
   tl.RpcError.fromTl({ errorCode: code, errorMessage: text });
 
+/** A marked chat id (Bot API style) as the raw TL peer mtcute puts in `message.raw.peerId`. */
+export function rawPeer(markedId: number): tl.TypePeer {
+  const [type, bare] = parseMarkedPeerId(markedId);
+  if (type === 'user') return { _: 'peerUser', userId: bare };
+  if (type === 'channel') return { _: 'peerChannel', channelId: bare };
+  return { _: 'peerChat', chatId: bare };
+}
+
 export interface FakeMessageOptions {
+  id?: number;
   senderId?: number;
   outgoing?: boolean;
   service?: boolean;
+  /**
+   * Reading the sender or the text throws, like an mtcute message whose peer is not cached: proves
+   * the userbot drops it on its chat id alone.
+   */
+  untouchable?: boolean;
+}
+
+export interface FakeUser {
+  isBot: boolean;
+  isVerified: boolean;
 }
 
 /**
  * A fake mtcute client for one personal account: chats with history, a peer cache that starts
- * empty like a fresh in-memory session, dialogs, forwards and update emitters. Message ids are one
- * sequence across the account's private chats, as in a real user account. `events` is shared with
- * the fake API, so tests can assert the order of posts, forwards and heartbeats.
+ * empty like a fresh in-memory session, dialogs, users, forwards and update emitters. Messages have
+ * mtcute's raw shape. Message ids are one sequence across the account's private chats, as in a real
+ * user account. `events` is shared with the fake API, so tests can assert the order of posts,
+ * forwards and heartbeats.
  */
 export class FakeMtcute implements MtcuteClient {
   readonly onNewMessage = new FakeEmitter<MtMessage>();
@@ -41,6 +62,8 @@ export class FakeMtcute implements MtcuteClient {
   readonly cached = new Set<number>();
   /** The account's dialogs, newest first. */
   dialogs: number[] = [];
+  /** What `getUser` answers; an id not here is a person. */
+  readonly users = new Map<number, FakeUser>();
   readonly forwards: {
     fromChatId: number;
     messages: number[];
@@ -48,10 +71,9 @@ export class FakeMtcute implements MtcuteClient {
     toThreadId?: number;
   }[] = [];
   readonly historyReads: { chatId: number; afterId: number }[] = [];
-  /** Thrown, in order, by the next forwards / history reads. */
+  /** Thrown, in order, by the next forwards / history reads / `getMe` probes. */
   readonly forwardErrors: unknown[] = [];
   readonly historyErrors: unknown[] = [];
-  /** Thrown, in order, by the next `getMe` probes. */
   readonly probeErrors: unknown[] = [];
   dialogScans = 0;
   probes = 0;
@@ -61,21 +83,23 @@ export class FakeMtcute implements MtcuteClient {
   constructor(private readonly events: string[] = []) {}
 
   /** A message lands in a chat without its update being delivered (missed while offline). */
-  addHistory(
-    chatId: number,
-    text: string,
-    o: FakeMessageOptions & { id?: number } = {},
-  ): MtMessage {
+  addHistory(chatId: number, text: string, o: FakeMessageOptions = {}): MtMessage {
     const id = o.id ?? ++this.nextId;
     this.nextId = Math.max(this.nextId, id);
-    const m: MtMessage = {
-      id,
-      text,
-      isOutgoing: o.outgoing ?? false,
-      isService: o.service ?? false,
-      chat: { id: chatId },
-      sender: { id: o.senderId ?? (o.outgoing ? 1 : chatId) },
-    };
+    const raw: MtRawMessage = o.untouchable
+      ? Object.defineProperties({ _: 'message', peerId: rawPeer(chatId) } as MtRawMessage, {
+          message: { get: () => fail('text') },
+          fromId: { get: () => fail('sender') },
+          out: { get: () => fail('direction') },
+        })
+      : {
+          _: o.service ? 'messageService' : 'message',
+          peerId: rawPeer(chatId),
+          ...(o.outgoing || o.senderId !== undefined ? { fromId: rawPeer(o.senderId ?? 1) } : {}),
+          out: o.outgoing ?? false,
+          ...(o.service ? {} : { message: text }),
+        };
+    const m: MtMessage = { id, raw };
     const chat = this.chats.get(chatId) ?? [];
     chat.push(m);
     chat.sort((a, b) => a.id - b.id);
@@ -84,7 +108,7 @@ export class FakeMtcute implements MtcuteClient {
   }
 
   /** A message arrives and mtcute delivers it as a new-message update. */
-  receive(chatId: number, text: string, o: FakeMessageOptions & { id?: number } = {}): MtMessage {
+  receive(chatId: number, text: string, o: FakeMessageOptions = {}): MtMessage {
     const m = this.addHistory(chatId, text, o);
     this.cached.add(chatId); // an update carries its chat
     this.onNewMessage.emit(m);
@@ -113,6 +137,11 @@ export class FakeMtcute implements MtcuteClient {
   async getHistory(chatId: number, params: { limit: number }): Promise<MtMessage[]> {
     this.require(chatId);
     return (this.chats.get(chatId) ?? []).slice(-params.limit).reverse();
+  }
+
+  async getUser(userId: number): Promise<FakeUser> {
+    this.require(userId);
+    return this.users.get(userId) ?? { isBot: false, isVerified: false };
   }
 
   async forwardMessagesById(params: {
@@ -144,4 +173,8 @@ export class FakeMtcute implements MtcuteClient {
       yield { peer: { id } };
     }
   }
+}
+
+function fail(what: string): never {
+  throw new Error(`fake: the ${what} of a message from another chat was read`);
 }

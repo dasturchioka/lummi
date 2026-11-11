@@ -28,4 +28,15 @@ export function createTelegramClient(o: { apiId: number; apiHash: string }): Tel
 /** Compile-time checks that the real client is what the relay, the start and the login expect. */
 export const asMtcuteClient = (client: TelegramClient): MtcuteClient => client;
 export const asBootClient = (client: TelegramClient): BootClient => client;
-export const asLoginClient = (client: TelegramClient): LoginClient => client;
+
+/** The login's view of a real client. */
+export function loginClient(client: TelegramClient): LoginClient {
+  return {
+    start: (params) => client.start(params),
+    exportSession: () => client.exportSession(),
+    hasTwoStepPassword: async () =>
+      (await client.call({ _: 'account.getPassword' })).hasPassword === true,
+    logOut: () => client.logOut(),
+    destroy: () => client.destroy(),
+  };
+}

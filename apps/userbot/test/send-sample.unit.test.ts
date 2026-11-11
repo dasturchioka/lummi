@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isCreditNotification } from '../src/humo-text';
+import { reportsCredit } from '../src/humo-text';
 import { botIdFromToken, parseSampleArgs, sampleText, sendSample } from '../src/send-sample';
 
 /**
@@ -23,7 +23,7 @@ describe('parseSampleArgs and sampleText', () => {
         '💰 1.234.567,89 UZS',
       ].join('\n'),
     );
-    expect(isCreditNotification(sampleText(args))).toBe(true);
+    expect(reportsCredit(sampleText(args))).toBe(true);
   });
 
   it('builds a ➖ debit, an amount with tiyin, and a message that is no operation', () => {

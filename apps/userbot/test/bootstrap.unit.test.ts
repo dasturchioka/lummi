@@ -22,6 +22,7 @@ class FakeBootClient extends FakeMtcute implements BootClient {
   loggedIn = false;
   updatesLoop = false;
   destroyed = false;
+  destroyError: unknown = null;
   async importSession(session: string) {
     this.imported.push(session);
   }
@@ -38,6 +39,7 @@ class FakeBootClient extends FakeMtcute implements BootClient {
   }
   async destroy() {
     this.destroyed = true;
+    if (this.destroyError) throw this.destroyError;
   }
 }
 
@@ -60,6 +62,7 @@ beforeEach(async () => {
     USERBOT_SESSION_KEY: key.toString('base64'),
     USERBOT_SESSION_FILE: join(dir, 'session.enc'),
     USERBOT_LISTEN_CHAT_ID: HUMO,
+    USERBOT_REQUIRE_VERIFIED: false,
     LOG_LEVEL: 'info',
   };
   log = recordingLogger();
@@ -67,6 +70,7 @@ beforeEach(async () => {
   api.stored.set(100, 'earlier');
   client = new FakeBootClient();
   client.cached.add(HUMO);
+  client.users.set(HUMO, { isBot: true, isVerified: false });
   started = undefined;
   parkedReasons.length = 0;
 });
@@ -126,6 +130,37 @@ describe('startUserbot', () => {
     expect(api.heartbeats).toBe(0);
   });
 
+  it.each([
+    ['any 401', () => rpcError(401, 'SOME_NEW_AUTH_ERROR')],
+    ['AUTH_KEY_DUPLICATED (406)', () => rpcError(406, 'AUTH_KEY_DUPLICATED')],
+  ])('%s at start parks too, even when closing the client fails', async (_name, dead) => {
+    await writeSessionFile(env.USERBOT_SESSION_FILE, sealSession(FAKE_SESSION, key));
+    client.meError = dead();
+    client.destroyError = new Error('socket already closed');
+    const s = await start();
+    expect(s.kind).toBe('parked');
+    expect(parkedReasons).toHaveLength(1);
+    expect(client.updatesLoop).toBe(false);
+  });
+
+  it('a relay that parks later lets go of the client even if closing it fails', async () => {
+    await writeSessionFile(env.USERBOT_SESSION_FILE, sealSession(FAKE_SESSION, key));
+    client.historyErrors.push(rpcError(401, 'SESSION_REVOKED'));
+    client.destroyError = new Error('socket already closed');
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: unknown) => unhandled.push(e);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const s = await start();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(s).toMatchObject({ kind: 'parked', reason: expect.stringMatching(/log in again/) });
+      expect(client.destroyed).toBe(true);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('logs neither the session nor the key on any of these paths', async () => {
     await start(); // no file
     await writeSessionFile(env.USERBOT_SESSION_FILE, sealSession(FAKE_SESSION, randomBytes(32)));
@@ -135,6 +170,7 @@ describe('startUserbot', () => {
     await start(); // dead session
     client = new FakeBootClient();
     client.cached.add(HUMO);
+    client.users.set(HUMO, { isBot: true, isVerified: false });
     await start(); // running
     const text = log.text();
     for (const secret of [FAKE_SESSION, key.toString('base64'), env.INTERNAL_API_SECRET]) {

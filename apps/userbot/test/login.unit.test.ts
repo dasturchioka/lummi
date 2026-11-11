@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +17,13 @@ class FakeLoginClient implements LoginClient {
   destroyed = false;
   loggedOut = false;
   constructor(
-    private readonly o: { needs2fa?: boolean; firstCodeWrong?: boolean; isBot?: boolean } = {},
+    private readonly o: {
+      needs2fa?: boolean;
+      firstCodeWrong?: boolean;
+      isBot?: boolean;
+      /** The account has a two-step verification password (default: yes). */
+      hasPassword?: boolean;
+    } = {},
   ) {}
 
   async start(p: LoginStartParams) {
@@ -34,6 +40,9 @@ class FakeLoginClient implements LoginClient {
   }
   async exportSession() {
     return FAKE_SESSION;
+  }
+  async hasTwoStepPassword() {
+    return this.o.hasPassword ?? true;
   }
   async logOut() {
     this.loggedOut = true;
@@ -163,6 +172,28 @@ describe('login', () => {
     });
     await login({ client: new FakeLoginClient(), prompt, sessionFile: file, key, force: true });
     expect(said.join('\n')).toMatch(/Devices/);
+  });
+
+  it('refuses an account without a two-step password: stores nothing and ends the new session', async () => {
+    const { prompt } = scriptedPrompt({ phone: ['+998901234567'], code: ['1'] });
+    const client = new FakeLoginClient({ hasPassword: false });
+    await expect(login({ client, prompt, sessionFile: file, key, force: false })).rejects.toThrow(
+      /Two-Step Verification/,
+    );
+    await expect(stat(file)).rejects.toThrow();
+    expect(client.loggedOut).toBe(true);
+    expect(client.destroyed).toBe(true);
+  });
+
+  it('ends the new session when the session file cannot be written', async () => {
+    const blocker = join(dir, 'not-a-dir');
+    await writeFile(blocker, '');
+    const { prompt } = scriptedPrompt({ phone: ['+998901234567'], code: ['1'], password: ['p'] });
+    const client = new FakeLoginClient({ needs2fa: true });
+    await expect(
+      login({ client, prompt, sessionFile: join(blocker, 'session.enc'), key, force: false }),
+    ).rejects.toThrow();
+    expect(client.loggedOut).toBe(true);
   });
 
   it('refuses a bot account and stores nothing', async () => {

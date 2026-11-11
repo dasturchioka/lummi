@@ -2,7 +2,7 @@ import type { tl } from '@mtcute/node';
 import type { Env } from './env';
 import type { FeedApi } from './feed-api';
 import type { Logger } from './logger';
-import { HumoRelay } from './relay';
+import { HumoRelay, logParked } from './relay';
 import { openSession, parseSessionKey, readSessionFile, SessionFileError } from './session-crypto';
 import { describeError, isSessionDead, MtcuteTelegram, type MtcuteClient } from './telegram';
 
@@ -33,7 +33,7 @@ export async function startUserbot(o: {
 }): Promise<Started> {
   const { env, log } = o;
   const park = (reason: string): Started => {
-    log.error({ reason }, 'userbot stopped: it needs a person; no heartbeats until then');
+    logParked(log, reason);
     o.onParked?.(reason);
     return { kind: 'parked', reason };
   };
@@ -53,7 +53,8 @@ export async function startUserbot(o: {
     const me = await client.getMe();
     await client.notifyLoggedIn(me.raw);
   } catch (e) {
-    await client.destroy();
+    // Never let closing a dead client turn a park into a crash (and a Compose restart loop).
+    await client.destroy().catch(() => undefined);
     if (isSessionDead(e)) {
       return park(
         `Telegram no longer accepts this session (${describeError(e)}): log in again (docs/run-guide.md → Userbot)`,
@@ -68,15 +69,16 @@ export async function startUserbot(o: {
     api: o.api,
     log,
     listenChatId: env.USERBOT_LISTEN_CHAT_ID,
+    requireVerifiedBot: env.USERBOT_REQUIRE_VERIFIED,
     // Parked: stop talking to Telegram at all until a person logs in again.
     onParked: (reason) => {
-      void client.destroy();
+      void client.destroy().catch(() => undefined);
       o.onParked?.(reason);
     },
   });
   log.info({ listenChatId: env.USERBOT_LISTEN_CHAT_ID }, 'userbot connected; catching up');
   await relay.start();
   return relay.status === 'parked'
-    ? { kind: 'parked', reason: 'see the error above' }
+    ? { kind: 'parked', reason: relay.parkReason ?? 'parked' }
     : { kind: 'running', relay, client };
 }

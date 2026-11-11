@@ -40,12 +40,16 @@ function makeRelay(o: Partial<RelayOptions> = {}): HumoRelay {
 
 /** Let promises and due timers run. */
 const settle = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
+/** The posts, in order (forwards run on their own queue, so they interleave). */
+const posts = () => events.filter((e) => e.startsWith('post'));
+const forwarded = () => tg.forwards.map((f) => f.messages[0]);
 
 beforeEach(() => {
   vi.useFakeTimers({ now: new Date('2026-11-11T09:00:00Z') });
   events = [];
   tg = new FakeMtcute(events);
   tg.cached.add(HUMO).add(GROUP).add(OTHER);
+  tg.users.set(HUMO, { isBot: true, isVerified: false }); // our test bot: a bot, not verified
   api = new FakeFeedApi(events);
   log = recordingLogger();
   parked = [];
@@ -65,8 +69,10 @@ describe('what it reads and where it goes', () => {
     tg.addHistory(OTHER, credit(5_000), { id: 104 });
 
     await makeRelay().start();
+    await settle();
 
-    expect(events).toEqual(['post 101', 'forward 101', 'post 102', 'post 103', 'beat']);
+    expect(posts()).toEqual(['post 101', 'post 102', 'post 103']);
+    expect(events.indexOf('beat')).toBeGreaterThan(events.indexOf('post 103'));
     expect(tg.forwards).toEqual([
       { fromChatId: HUMO, messages: [101], toChatId: GROUP, toThreadId: 3 },
     ]);
@@ -79,6 +85,7 @@ describe('what it reads and where it goes', () => {
     events.length = 0;
 
     tg.receive(OTHER, credit(1_000));
+    tg.receive(OTHER, credit(1_500), { untouchable: true });
     tg.receive(HUMO, '/start', { outgoing: true });
     tg.receive(HUMO, credit(2_000), { outgoing: true });
     tg.receive(HUMO, '', { service: true });
@@ -87,6 +94,31 @@ describe('what it reads and where it goes', () => {
 
     expect(events).toEqual([`post ${real.id}`, `forward ${real.id}`]);
     expect(api.attempts).toEqual([real.id]);
+  });
+
+  it('drops a message of another chat on its chat id alone: its sender and text are never read', async () => {
+    api.stored.set(100, 'earlier');
+    await makeRelay().start();
+    tg.receive(OTHER, credit(1_000), { untouchable: true }); // throws if its sender or text is read
+    tg.receive(GROUP, 'hello', { untouchable: true });
+    const real = tg.receive(HUMO, credit(3_000));
+    await settle();
+    expect(api.attempts).toEqual([real.id]);
+    expect(relay.status).toBe('live');
+  });
+
+  it('forwards a ➕ only the first time: not when the API says it already had that message', async () => {
+    api.stored.set(101, credit(1_000)); // posted, and forwarded, by an earlier run
+    api.stored.set(105, 'later');
+    const old = tg.addHistory(HUMO, credit(1_000), { id: 101 });
+    await makeRelay().start();
+    tg.onNewMessage.emit(old); // a late update for it
+    await settle();
+    expect(api.attempts).toEqual([101]);
+    expect(tg.forwards).toEqual([]);
+    expect(log.lines.some((l) => l.fields.messageId === 101 && l.fields.duplicate === true)).toBe(
+      true,
+    );
   });
 
   it('forwards to the general chat when the topic is not set, and not at all without a group', async () => {
@@ -124,7 +156,8 @@ describe('posting: retried until accepted, in order', () => {
     await settle(4000); // 4th (capped)
     expect(api.attempts).toEqual([first.id, first.id, first.id, first.id]);
     await settle(4000); // 5th: accepted
-    expect(events).toEqual([`post ${first.id}`, `forward ${first.id}`, `post ${second.id}`]);
+    expect(posts()).toEqual([`post ${first.id}`, `post ${second.id}`]);
+    expect(forwarded()).toEqual([first.id]);
     expect(api.attempts.filter((id) => id === second.id)).toHaveLength(1);
   });
 
@@ -203,14 +236,13 @@ describe('catch-up', () => {
     tg.setConnection('connected');
     await settle();
     expect(tg.historyReads.at(-1)).toEqual({ chatId: HUMO, afterId: before.id });
-    expect(events).toEqual([
+    expect(posts()).toEqual([
       `post ${missed1.id}`,
-      `forward ${missed1.id}`,
       `post ${missed2.id}`,
       `post ${viaDifference.id}`,
-      `forward ${viaDifference.id}`,
-      'beat',
     ]);
+    expect(forwarded().slice(-2)).toEqual([missed1.id, viaDifference.id]);
+    expect(events.at(-1)).toBe('beat');
   });
 });
 
@@ -228,7 +260,9 @@ describe('heartbeat: every minute, and only when caught up (#36)', () => {
     expect(events).toEqual([]); // two minutes of failing posts: no heartbeat
     await settle(1000);
     await started;
-    expect(events).toEqual(['post 101', 'forward 101', 'beat']);
+    await settle();
+    expect(posts()).toEqual(['post 101']);
+    expect(events.indexOf('beat')).toBeGreaterThan(events.indexOf('post 101'));
 
     await settle(MINUTE);
     await settle(MINUTE);
@@ -248,7 +282,36 @@ describe('heartbeat: every minute, and only when caught up (#36)', () => {
     await settle(149_000);
     expect(events).toEqual([]);
     await settle(1000);
-    expect(events).toEqual([`post ${m.id}`, `forward ${m.id}`, 'beat']);
+    expect(posts()).toEqual([`post ${m.id}`]);
+    expect(events.at(-1)).toBe('beat');
+  });
+
+  it('a flood wait on a forward delays neither the heartbeat nor the next post', async () => {
+    api.stored.set(100, 'earlier');
+    await makeRelay({ heartbeatIntervalMs: MINUTE }).start();
+    expect(api.heartbeats).toBe(1);
+
+    tg.forwardErrors.push(rpcError(420, 'FLOOD_WAIT_50'));
+    const a = tg.receive(HUMO, credit(1_000));
+    const b = tg.receive(HUMO, debit(2_000));
+    await settle();
+    expect(posts().slice(-2)).toEqual([`post ${a.id}`, `post ${b.id}`]); // b did not wait
+    expect(tg.forwards).toEqual([]);
+
+    await settle(MINUTE);
+    expect(api.heartbeats).toBe(2); // the tick inside the 51 s wait went through
+    expect(forwarded()).toEqual([a.id]);
+  });
+
+  it('sleeps a long flood wait in pieces shorter than half the smallest stale-heartbeat setting', async () => {
+    api.stored.set(100, 'earlier');
+    tg.addHistory(HUMO, credit(1_000), { id: 101 });
+    tg.historyErrors.push(rpcError(420, 'FLOOD_WAIT_3600'));
+    const started = makeRelay().start();
+    await settle(59_000); // payments.heartbeatStaleSeconds is at least 120: one sleep is at most 59 s
+    expect(tg.historyReads).toHaveLength(2);
+    await started;
+    expect(posts()).toEqual(['post 101']);
   });
 
   it('asks Telegram first, so a session revoked while idle stops the heartbeat within a tick', async () => {
@@ -273,8 +336,9 @@ describe('heartbeat: every minute, and only when caught up (#36)', () => {
     api.stored.set(100, 'earlier');
     await makeRelay({ heartbeatIntervalMs: MINUTE }).start();
     tg.onError.emit(new Error('some transient thing'));
+    tg.onError.emit(rpcError(400, 'MESSAGE_ID_INVALID'));
     expect(relay.status).toBe('live');
-    tg.onError.emit(rpcError(401, 'AUTH_KEY_UNREGISTERED'));
+    tg.onError.emit(rpcError(406, 'AUTH_KEY_DUPLICATED'));
     expect(relay.status).toBe('parked');
     await settle(5 * MINUTE);
     expect(api.heartbeats).toBe(1);
@@ -296,7 +360,7 @@ describe('heartbeat: every minute, and only when caught up (#36)', () => {
 describe('Telegram limits and failures', () => {
   it('waits out a short flood wait on a forward, skips a long one, and never holds the posts back', async () => {
     api.stored.set(100, 'earlier');
-    await makeRelay({ forwardFloodCapSeconds: 120 }).start();
+    await makeRelay().start();
     events.length = 0;
 
     tg.forwardErrors.push(rpcError(420, 'FLOOD_WAIT_30'));
@@ -304,13 +368,14 @@ describe('Telegram limits and failures', () => {
     await settle(30_000);
     expect(tg.forwards).toHaveLength(0);
     await settle(1_000);
-    expect(tg.forwards.map((f) => f.messages[0])).toEqual([a.id]);
+    expect(forwarded()).toEqual([a.id]);
 
     tg.forwardErrors.push(rpcError(420, 'FLOOD_WAIT_3600'));
     const b = tg.receive(HUMO, credit(2_000));
     const c = tg.receive(HUMO, debit(3_000));
     await settle();
-    expect(events).toEqual([`post ${a.id}`, `forward ${a.id}`, `post ${b.id}`, `post ${c.id}`]);
+    expect(posts()).toEqual([`post ${a.id}`, `post ${b.id}`, `post ${c.id}`]);
+    expect(forwarded()).toEqual([a.id]);
     expect(log.text()).toMatch(/FLOOD_WAIT_3600|3600/);
   });
 
@@ -322,20 +387,22 @@ describe('Telegram limits and failures', () => {
     const b = tg.receive(HUMO, credit(2_000));
     await settle();
     expect(api.stored.has(a.id) && api.stored.has(b.id)).toBe(true);
-    expect(tg.forwards.map((f) => f.messages[0])).toEqual([b.id]);
+    expect(forwarded()).toEqual([b.id]);
     expect(log.text()).toMatch(/CHAT_WRITE_FORBIDDEN/);
   });
 
   it('waits out a flood wait on the history read, then catches up', async () => {
     api.stored.set(100, 'earlier');
     tg.addHistory(HUMO, credit(1_000), { id: 101 });
-    tg.historyErrors.push(rpcError(420, 'FLOOD_WAIT_300'));
+    tg.historyErrors.push(rpcError(420, 'FLOOD_WAIT_30'));
     const started = makeRelay().start();
-    await settle(300_000);
+    await settle(30_000);
     expect(events).toEqual([]);
     await settle(1_000);
     await started;
-    expect(events).toEqual(['post 101', 'forward 101', 'beat']);
+    await settle();
+    expect(posts()).toEqual(['post 101']);
+    expect(forwarded()).toEqual([101]);
   });
 
   it('finds the chats among the dialogs when the in-memory session has not cached them yet', async () => {
@@ -345,7 +412,9 @@ describe('Telegram limits and failures', () => {
     tg.addHistory(HUMO, credit(1_000), { id: 101 });
 
     await makeRelay().start();
-    expect(events).toEqual(['post 101', 'forward 101', 'beat']);
+    await settle();
+    expect(posts()).toEqual(['post 101']);
+    expect(forwarded()).toEqual([101]);
     expect(tg.dialogScans).toBe(1);
   });
 
@@ -368,7 +437,7 @@ describe('Telegram limits and failures', () => {
     const later = tg.receive(HUMO, credit(3_000));
     await settle();
     expect(tg.dialogScans).toBe(2);
-    expect(tg.forwards.map((f) => f.messages[0])).toEqual([later.id]);
+    expect(forwarded()).toEqual([later.id]);
     expect(relay.status).toBe('live');
   });
 });
@@ -403,8 +472,9 @@ describe('a userbot that cannot work stops and says so, without a crash loop', (
     tg.addHistory(HUMO, credit(2_000), { id: 102 });
     tg.forwardErrors.push(rpcError(401, 'SESSION_REVOKED'));
     await makeRelay().start();
+    await settle(MINUTE);
     expect(relay.status).toBe('parked');
-    expect(events).toEqual(['post 101']);
+    expect(api.heartbeats).toBe(0);
     expect(tg.historyReads).toHaveLength(1);
     expect(log.lines.filter((l) => l.level === 'warn')).toEqual([]);
   });
@@ -417,7 +487,79 @@ describe('a userbot that cannot work stops and says so, without a crash loop', (
     tg.receive(HUMO, credit(2_000));
     await settle(5 * MINUTE);
     expect(relay.status).toBe('parked');
-    expect(events.filter((e) => e.startsWith('post'))).toHaveLength(1);
     expect(events.filter((e) => e === 'beat')).toHaveLength(1); // only the one before
+  });
+
+  describe.each([
+    ['any 401 (here one mtcute does not name)', () => rpcError(401, 'SOME_NEW_AUTH_ERROR')],
+    ['AUTH_KEY_DUPLICATED (406)', () => rpcError(406, 'AUTH_KEY_DUPLICATED')],
+  ])('%s is a dead session on every path', (_name, dead) => {
+    it('reading the history at start', async () => {
+      api.stored.set(100, 'earlier');
+      tg.historyErrors.push(dead());
+      await makeRelay().start();
+      expect(relay.status).toBe('parked');
+    });
+    it('checking the session before a heartbeat', async () => {
+      api.stored.set(100, 'earlier');
+      await makeRelay({ heartbeatIntervalMs: MINUTE }).start();
+      tg.probeErrors.push(dead());
+      await settle(MINUTE);
+      expect(relay.status).toBe('parked');
+      expect(api.heartbeats).toBe(1);
+    });
+    it('forwarding', async () => {
+      api.stored.set(100, 'earlier');
+      await makeRelay().start();
+      tg.forwardErrors.push(dead());
+      tg.receive(HUMO, credit(1_000));
+      await settle();
+      expect(relay.status).toBe('parked');
+    });
+    it('reported by mtcute in the background', async () => {
+      api.stored.set(100, 'earlier');
+      await makeRelay().start();
+      tg.onError.emit(dead());
+      expect(relay.status).toBe('parked');
+    });
+  });
+});
+
+describe('the listened chat is checked at start', () => {
+  it('parks when it is not a bot (a person’s chat), before reading anything from it', async () => {
+    tg.users.set(HUMO, { isBot: false, isVerified: false });
+    api.stored.set(100, 'earlier');
+    tg.addHistory(HUMO, credit(1_000), { id: 101 });
+    await makeRelay().start();
+    expect(relay.status).toBe('parked');
+    expect(parked[0]).toMatch(/not a bot/);
+    expect(tg.historyReads).toEqual([]);
+    expect(api.attempts).toEqual([]);
+  });
+
+  it('with USERBOT_REQUIRE_VERIFIED, parks on a bot without Telegram’s tick', async () => {
+    api.stored.set(100, 'earlier');
+    await makeRelay({ requireVerifiedBot: true }).start();
+    expect(relay.status).toBe('parked');
+    expect(parked[0]).toMatch(/verified/);
+    expect(api.heartbeats).toBe(0);
+  });
+
+  it('with USERBOT_REQUIRE_VERIFIED, runs with a verified bot (the official Humo bot)', async () => {
+    tg.users.set(HUMO, { isBot: true, isVerified: true });
+    api.stored.set(100, 'earlier');
+    await makeRelay({ requireVerifiedBot: true }).start();
+    expect(relay.status).toBe('live');
+    expect(api.heartbeats).toBe(1);
+  });
+
+  it('checks once per start, not on every reconnect', async () => {
+    api.stored.set(100, 'earlier');
+    const lookups = vi.spyOn(tg, 'getUser');
+    await makeRelay().start();
+    tg.setConnection('connecting');
+    tg.setConnection('connected');
+    await settle();
+    expect(lookups).toHaveBeenCalledTimes(1);
   });
 });
