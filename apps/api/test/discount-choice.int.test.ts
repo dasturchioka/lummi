@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
-import { birthdayCoupons, eq, fragrances, orders, upgradeRights } from '@lummi/db';
+import {
+  and,
+  birthdayCoupons,
+  eq,
+  fragrances,
+  orders,
+  upgradeRights,
+  volumes,
+} from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -484,6 +492,74 @@ describe('«Не применять»', () => {
     expect(await c.cart.chooseDiscount({ body: { type: 'none' } })).toMatchObject({ status: 200 });
     const b = await coupon(id, 20);
     expect((await cartOf(c)).quote.discount).toMatchObject({ type: 'birthday_coupon', id: b.id });
+  });
+
+  it('ends without a notice once the declined coupon has ended: a right that comes later applies by itself', async () => {
+    const { c, id, coupon: b, slugs } = await aliWithCoupon();
+    await c.cart.chooseDiscount({ body: { type: 'none' } });
+    await endNow(b.id);
+    // nothing is left to decline: no discount either way, and nothing stale to report
+    const cart = await cartOf(c);
+    expect(cart.quote).toMatchObject({ discount: null, total: 244_000, staleChoice: false });
+    expect(cart.discountOptions).toEqual([]);
+
+    // 20 % of 219 000 = 43 800, counted before it: 175 200 + 25 000
+    const r = await right(c, id, slugs[0]!);
+    expect((await cartOf(c)).quote).toMatchObject({
+      discount: { type: 'upgrade_right', id: r.id, amount: 43_800 },
+      total: 200_200,
+      staleChoice: false,
+    });
+  });
+
+  it('made against the entered code alone, it ends with the code: a coupon that comes later applies by itself', async () => {
+    const c = await shopper(t, ali, '998901112233');
+    const id = await customerIdOf(c);
+    const [x] = await slugsOf(t, 1);
+    await promo('BLOGER5', 5);
+    await add(c, x!, 50);
+    await c.cart.applyPromoCode({ body: { code: 'BLOGER5' } });
+    expect(await c.cart.chooseDiscount({ body: { type: 'none' } })).toMatchObject({
+      status: 200,
+      body: { quote: { discount: null, total: 244_000 } },
+    });
+    expect(await c.cart.removePromoCode()).toMatchObject({
+      status: 200,
+      body: {
+        promoCode: null,
+        quote: { discount: null, total: 244_000, staleChoice: false },
+        discountOptions: [],
+      },
+    });
+
+    const b = await coupon(id, 20);
+    expect((await cartOf(c)).quote).toMatchObject({
+      discount: { type: 'birthday_coupon', id: b.id, amount: 43_800 },
+      total: 200_200,
+      staleChoice: false,
+    });
+  });
+
+  it('stays while the declined coupon is still held, though for a moment it discounts nothing', async () => {
+    const { c, coupon: b, slugs } = await aliWithCoupon();
+    await c.cart.chooseDiscount({ body: { type: 'none' } });
+    // the 50 ml sells out: the coupon has nothing to discount, but it is still Ali's
+    const [v] = await t.db
+      .select({ id: volumes.id, onHand: volumes.onHand })
+      .from(volumes)
+      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+      .where(and(eq(fragrances.slug, slugs[0]!), eq(volumes.ml, 50)));
+    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, v!.id));
+    expect((await cartOf(c)).quote).toMatchObject({ discount: null, alternatives: [] });
+
+    // restocked: «Не применять» still holds, the coupon still waits
+    await t.db.update(volumes).set({ onHand: v!.onHand }).where(eq(volumes.id, v!.id));
+    expect((await cartOf(c)).quote).toMatchObject({
+      discount: null,
+      total: 244_000,
+      alternatives: [{ discount: { type: 'birthday_coupon', id: b.id }, total: 200_200 }],
+      staleChoice: false,
+    });
   });
 });
 

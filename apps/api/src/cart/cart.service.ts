@@ -28,7 +28,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
 import { discountOptionsOf, entitlementWaitingBehindCode } from '../entitlements/entitlements';
-import { activeMarkdown, volumePrice, type DiscountChoice } from '../pricing/quote';
+import {
+  activeMarkdown,
+  volumePrice,
+  type DiscountChoice,
+  type Entitlement,
+} from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
@@ -65,6 +70,7 @@ export class CartService {
    * The cart as it is now: lines capped at available, a fresh quote, suggestions. A stored discount
    * choice the quote found stale (used, ended, no longer discounting the cart) is dropped here once
    * the quote has said so (#39): the cart reports the fallback once, then simply picks by itself.
+   * A «Не применять» with nothing left to decline is dropped here too, without a word.
    */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
     const now = this.edges.clock.now();
@@ -74,8 +80,10 @@ export class CartService {
       cartState,
       city,
       entitlements,
+      promoCodeId,
     } = await loadCartQuote(tx, now, customerId);
-    if (q.staleChoice && cartState?.discountChoice)
+    const choice = cartState?.discountChoice ?? null;
+    if (choice && (q.staleChoice || declinesNothing(choice, entitlements, promoCodeId)))
       // only the choice this quote judged: a switch made meanwhile stays
       await tx
         .update(carts)
@@ -83,7 +91,7 @@ export class CartService {
         .where(
           and(
             eq(carts.customerId, customerId),
-            sql`${carts.discountChoice} = ${JSON.stringify(cartState.discountChoice)}::jsonb`,
+            sql`${carts.discountChoice} = ${JSON.stringify(choice)}::jsonb`,
           ),
         );
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
@@ -521,6 +529,20 @@ export class CartService {
       .values({ customerId })
       .onConflictDoUpdate({ target: carts.customerId, set: { updatedAt: this.edges.clock.now() } });
   }
+}
+
+/**
+ * «Не применять» with nothing left to decline is moot (#39): the customer holds no entitlement
+ * (unexpired, unused, not closed) and no entered code the shop accepts, so a right or coupon that
+ * comes later should apply by itself. Judged by what they hold, not by what discounts these lines:
+ * a line sold out for a moment does not end the shopper's choice.
+ */
+function declinesNothing(
+  choice: DiscountChoice,
+  held: readonly Entitlement[],
+  acceptedCodeId: number | null,
+): boolean {
+  return choice.type === 'none' && held.length === 0 && acceptedCodeId === null;
 }
 
 /** The Sage thread's fill, whole percent: 100 once reached (or with no threshold), never 100 before. */
