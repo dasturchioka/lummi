@@ -2,25 +2,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
-import {
-  and,
-  birthdayCoupons,
-  eq,
-  fragrances,
-  orders,
-  upgradeRights,
-  volumes,
-} from '@lummi/db';
+import { and, birthdayCoupons, eq, fragrances, orders, upgradeRights, volumes } from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
-import {
-  samarkandPoint,
-  shopper,
-  slugs as slugsOf,
-  untilWaitingOnLocks,
-} from './harness/orders';
+import { samarkandPoint, shopper, slugs as slugsOf, untilWaitingOnLocks } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
 
@@ -311,7 +298,7 @@ describe('an entered promo code', () => {
 
 describe('the switch', () => {
   it('one tap moves from the entered code to the entitlement and back; the code is remembered', async () => {
-    const { c, right: r } = await aliWithTwoEntitlements();
+    const { c, right: r, coupon: b } = await aliWithTwoEntitlements();
     await promo('BLOGER5', 5);
     await c.cart.applyPromoCode({ body: { code: 'BLOGER5' } });
 
@@ -334,14 +321,28 @@ describe('the switch', () => {
     expect(
       toRight.body.discountOptions.find((o) => o.discount?.type === 'promo_code'),
     ).toMatchObject({ total: 272_650, applied: false });
-    // every later quote keeps it
+    // every later quote keeps it: 356 000 − 29 800, delivery free
     await add(c, (await slugsOf(t, 4))[3]!, 10);
-    expect((await cartOf(c)).quote.discount).toMatchObject({ type: 'upgrade_right', id: r.id });
+    expect((await cartOf(c)).quote).toMatchObject({
+      discount: { type: 'upgrade_right', id: r.id, amount: 29_800 },
+      total: 326_200,
+    });
 
+    // back to the code: 5 % of 356 000 = 17 800, delivery free. The coupon now keeps delivery free
+    // too (356 000 − 53 400 = 302 600), so it is the one that waits, 35 600 cheaper
     const back = await c.cart.chooseDiscount({ body: { type: 'promo_code' } });
     expect(back).toMatchObject({
       status: 200,
-      body: { quote: { discount: { type: 'promo_code', code: 'BLOGER5' } } },
+      body: {
+        promoCode: 'BLOGER5',
+        quote: {
+          discount: { type: 'promo_code', code: 'BLOGER5', amount: 17_800 },
+          deliveryFee: 0,
+          total: 338_200,
+          staleChoice: false,
+        },
+        entitlementWaiting: { type: 'birthday_coupon', id: b.id, cheaperBy: 35_600 },
+      },
     });
   });
 
@@ -360,20 +361,53 @@ describe('the switch', () => {
 
   it('refuses what the cart does not offer, and answers with the cart as it is', async () => {
     const { c, right: r } = await aliWithTwoEntitlements();
-    const notHeld = await c.cart.chooseDiscount({ body: { type: 'birthday_coupon', id: 9999 } });
-    expect(notHeld).toMatchObject({
-      status: 409,
-      body: {
-        code: 'discount_unavailable',
-        cart: { quote: { discount: { type: 'upgrade_right', id: r.id } } },
-      },
-    });
+    // another customer's real coupon: refused exactly like one that never existed
+    const bob = await shopper(
+      t,
+      { id: 92, first_name: 'Bob', language_code: 'ru' },
+      '998901112244',
+    );
+    const bobs = await coupon(await customerIdOf(bob), 20);
+    for (const id of [bobs.id, 9999]) {
+      const notHeld = await c.cart.chooseDiscount({ body: { type: 'birthday_coupon', id } });
+      expect(notHeld).toMatchObject({
+        status: 409,
+        body: {
+          code: 'discount_unavailable',
+          cart: { quote: { discount: { type: 'upgrade_right', id: r.id }, total: 257_200 } },
+        },
+      });
+    }
     // no code entered: there is no code to switch to
     const noCode = await c.cart.chooseDiscount({ body: { type: 'promo_code' } });
     expect(noCode).toMatchObject({ status: 409, body: { code: 'discount_unavailable' } });
     expect((await cartOf(c)).quote).toMatchObject({
       discount: { type: 'upgrade_right', id: r.id },
+      total: 257_200,
       staleChoice: false,
+    });
+    // Bob's coupon is untouched, still his alone
+    const [row] = await t.db.select().from(birthdayCoupons).where(eq(birthdayCoupons.id, bobs.id));
+    expect(row).toMatchObject({ customerId: bobs.customerId, usedByOrderId: null });
+  });
+
+  it('removing the entered code keeps an entitlement chosen over it', async () => {
+    const { c, coupon: b } = await aliWithTwoEntitlements();
+    await promo('BLOGER5', 5);
+    await c.cart.applyPromoCode({ body: { code: 'BLOGER5' } });
+    // the costlier coupon over the code and over the right the server would pick
+    await c.cart.chooseDiscount({ body: { type: 'birthday_coupon', id: b.id } });
+    expect(await c.cart.removePromoCode()).toMatchObject({
+      status: 200,
+      body: {
+        promoCode: null,
+        quote: {
+          discount: { type: 'birthday_coupon', id: b.id, amount: 43_050 },
+          deliveryFee: 25_000,
+          total: 268_950,
+          staleChoice: false,
+        },
+      },
     });
   });
 
@@ -567,14 +601,17 @@ describe('a chosen entitlement that went stale', () => {
   it('expired: the cart falls back to the automatic choice and says so once', async () => {
     const { c, right: r, coupon: b } = await aliWithTwoEntitlements();
     await c.cart.chooseDiscount({ body: { type: 'birthday_coupon', id: b.id } });
-    // its last day passes
+    // its last day passes: the right, 287 000 − 29 800, delivery free
     await endNow(b.id);
     expect((await cartOf(c)).quote).toMatchObject({
-      discount: { type: 'upgrade_right', id: r.id },
+      discount: { type: 'upgrade_right', id: r.id, amount: 29_800 },
+      deliveryFee: 0,
+      total: 257_200,
       staleChoice: true,
     });
     expect((await cartOf(c)).quote).toMatchObject({
       discount: { type: 'upgrade_right', id: r.id },
+      total: 257_200,
       staleChoice: false,
     });
   });
@@ -591,11 +628,18 @@ describe('a chosen entitlement that went stale', () => {
       status: 201,
       body: { discount: { type: 'birthday_coupon', id: b.id } },
     });
-    // the next cart answer (here, a quantity change) says so
+    // the next cart answer (here, a quantity change) says so: the right, 287 000 − 29 800
     const res = await c.cart.setQuantity({ params: { lineId }, body: { qty: 1 } });
     expect(res).toMatchObject({
       status: 200,
-      body: { quote: { discount: { type: 'upgrade_right', id: r.id }, staleChoice: true } },
+      body: {
+        quote: {
+          discount: { type: 'upgrade_right', id: r.id, amount: 29_800 },
+          deliveryFee: 0,
+          total: 257_200,
+          staleChoice: true,
+        },
+      },
     });
   });
 });
