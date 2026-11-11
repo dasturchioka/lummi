@@ -27,6 +27,7 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
+import { couponWaitingBehindCode } from '../birthday/birthday-coupons';
 import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
@@ -62,7 +63,13 @@ export class CartService {
   /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
     const now = this.edges.clock.now();
-    const { lines, quote: q, cartState, city } = await loadCartQuote(tx, now, customerId);
+    const {
+      lines,
+      quote: q,
+      cartState,
+      city,
+      entitlements,
+    } = await loadCartQuote(tx, now, customerId);
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
       lines: lines.map((l): CartLineDto => ({ id: l.lineId, ...toLineDto(l) })),
@@ -79,6 +86,7 @@ export class CartService {
           )
         : [],
       promoCode: cartState?.promoCode ?? null,
+      birthdayCouponWaiting: couponWaitingBehindCode(q, entitlements),
     };
   }
 

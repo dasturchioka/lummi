@@ -13,6 +13,7 @@ export {
   asc,
   lt,
   isNull,
+  isNotNull,
   inArray,
   gt,
   gte,

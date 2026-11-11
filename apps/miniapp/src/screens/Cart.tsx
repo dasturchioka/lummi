@@ -614,6 +614,7 @@ export function CartView({
         busy={busy}
         pending={pending.promo}
         notice={promoNotice}
+        couponWaiting={data.birthdayCouponWaiting}
         onApply={onApplyPromo}
         onRemove={onRemovePromo}
       />

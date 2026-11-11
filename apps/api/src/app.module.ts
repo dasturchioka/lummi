@@ -34,6 +34,9 @@ import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts
 import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
+import { BirthdayService } from './birthday/birthday.service';
+import { BirthdayCouponJob } from './birthday/birthday-job';
+import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
 import { CatalogController } from './catalog/catalog.controller';
@@ -123,6 +126,7 @@ export class AppModule {
         AdminOrdersController,
         CampaignsController,
         CampaignsAdminController,
+        DiscountsController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -173,6 +177,8 @@ export class AppModule {
         ReceiptRejection,
         AdminOrdersService,
         CampaignsService,
+        BirthdayService,
+        BirthdayCouponJob,
       ],
       exports: [
         CreditEvents,

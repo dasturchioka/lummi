@@ -3,6 +3,7 @@ import { formatMoney, formatPhone, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
+import { CustomerBirthDate } from '@/components/customer-birth-date';
 import { BlockedBadge, TelegramLink } from '@/components/customers-view';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -21,10 +22,13 @@ export function CustomerView({
   t,
   language,
   customer,
+  isOwner,
 }: {
   t: AdminMessages;
   language: Language;
   customer: AdminCustomerDetail;
+  /** The date of birth's «Исправить» is the owner's (TZ §3.8). */
+  isOwner: boolean;
 }) {
   const c = t.customers;
   const status = ordersMessages[language].orders.status;
@@ -39,6 +43,17 @@ export function CustomerView({
       ),
     ],
     [c.language, customer.language.toUpperCase()],
+    [
+      c.birthDate,
+      <CustomerBirthDate
+        key="birth"
+        id={customer.id}
+        birthDate={customer.birthDate}
+        canEdit={isOwner && customer.phone !== null}
+        language={language}
+        t={t}
+      />,
+    ],
     [c.orders, num(customer.ordersCount)],
     [c.spent, formatMoney(customer.totalSpent, language)],
   ];
@@ -53,7 +68,7 @@ export function CustomerView({
         actions={customer.botBlocked ? <BlockedBadge t={t} /> : undefined}
       />
       <Card className="mb-6 p-4 sm:p-6">
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-5">
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
             <div key={label} className="min-w-0">
               <dt className="text-small text-muted-foreground">{label}</dt>
