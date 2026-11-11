@@ -1,5 +1,6 @@
 import {
   broadcastDeliveries,
+  favourites,
   customers,
   eq,
   sql,
@@ -249,7 +250,8 @@ export const broadcastReachableSql = sql`(${customers.botBlocked} = false and ${
 /**
  * Everything that hangs on a customer record moves here when a fresh record is merged into the
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
- * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
+ * (the cart, #18, moves its lines, discount choice and promo code; favourites, #45, join the older
+ * record's; preferences stay with the older record).
  * Orders and data consent never move: only a record without a phone is merged away, and an order
  * needs the account phone (#23), so such a record has neither. Nor a date of birth or a birthday
  * coupon (#30): entering the date needs the account phone, and the job issues only to such records.
@@ -261,6 +263,13 @@ export async function moveCustomerData(
   now: Date,
 ): Promise<void> {
   await moveCartData(tx, fromId, toId, now);
+  // Favourites (#45): the older record keeps its own; the rest join it, a repeat counts once.
+  await tx.execute(sql`
+    insert into favourites (customer_id, kind, fragrance_id, created_at)
+    select ${toId}, kind, fragrance_id, created_at from favourites where customer_id = ${fromId}
+    on conflict do nothing
+  `);
+  await tx.delete(favourites).where(eq(favourites.customerId, fromId));
   // A finished broadcast keeps its counts; on a (broadcast, customer) clash the older customer's row wins.
   await tx.execute(sql`
     insert into broadcast_deliveries (broadcast_id, customer_id, status, queued_at, sending_at, sent_at, error)

@@ -9,6 +9,7 @@
     "./orders": "./src/orders.ts",
     "./sets": "./src/sets.ts",
     "./discounts": "./src/discounts.ts",
+    "./favourites": "./src/favourites.ts",
     "./bot": "./src/bot.ts",
     "./admin": "./src/admin.ts",
     "./all": "./src/all.ts"

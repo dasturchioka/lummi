@@ -18,7 +18,10 @@ export const TABS: {
 ];
 
 /** Screens under a tab whose path does not start with the tab's own: the info pages are Profile's. */
-const SECTION_OF: { prefix: string; tab: TabId }[] = [{ prefix: '/info/', tab: 'profile' }];
+const SECTION_OF: { prefix: string; tab: TabId }[] = [
+  { prefix: '/info/', tab: 'profile' },
+  { prefix: '/favourites', tab: 'profile' },
+];
 
 /**
  * The approved floating bar: a solid Graphite pill in both themes, flat (a 1 px line-colour inset

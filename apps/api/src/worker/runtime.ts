@@ -210,6 +210,23 @@ export class WorkerRuntime implements OnApplicationShutdown {
     }
   }
 
+  /**
+   * Stop taking jobs and wait for the running ones to finish; `resume()` takes jobs again. The test
+   * harness brackets its reset with them, so no job outlives the test that queued it.
+   */
+  async pause(): Promise<void> {
+    await this.starting?.catch(() => undefined);
+    await Promise.all(this.workers().map((w) => w.pause()));
+  }
+
+  async resume(): Promise<void> {
+    await Promise.all(this.workers().map((w) => w.resume()));
+  }
+
+  private workers(): Worker[] {
+    return [...(this.worker ? [this.worker] : []), ...this.extraWorkers.map((w) => w.worker)];
+  }
+
   private async process(job: Job<{ id: number }>): Promise<void> {
     try {
       await this.outbox.deliver(job.data.id);
