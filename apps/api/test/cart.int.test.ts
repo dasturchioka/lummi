@@ -474,12 +474,11 @@ describe('the stored discount choice and prefilled code', () => {
     expect(row).toMatchObject({ discountChoice: null, promoCode: null });
     const { CartService } = await import('../src/cart/cart.service');
     const svc = t.app.get(CartService);
-    await svc.setDiscountChoice(row!.customerId, { type: 'birthday_coupon', id: 7 });
+    await t.db.update(carts).set({ discountChoice: { type: 'birthday_coupon', id: 7 } });
     // the one way a code gets in: the typed path, which counts the attempt
     await svc.applyPromoCode(row!.customerId, 'summer');
     const [after] = await t.db.select().from(carts);
     expect(after).toMatchObject({ discountChoice: null, promoCode: 'SUMMER' });
-    await svc.setDiscountChoice(row!.customerId, { type: 'promo_code' });
     expect((await get()).promoCode).toBe('SUMMER');
   });
 });
@@ -501,7 +500,9 @@ describe('relink', () => {
     await fresh.add(s2!, 30);
     await t.db
       .update(carts)
-      .set({ promoCode: 'FRESH', discountChoice: { type: 'promo_code' } })
+      // «Не применять» (#39). With nothing to decline here, a cart read would drop it, so the moved
+      // row is checked before the cart is read.
+      .set({ promoCode: 'FRESH', discountChoice: { type: 'none' } })
       .where(
         eq(
           carts.customerId,
@@ -512,6 +513,10 @@ describe('relink', () => {
     const res = await fresh.client.me.shareContact({ body: { proof: contact(vali.id) } });
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
+    // the merged-away customer leaves no cart row behind; the choice moved with the lines
+    expect(await t.db.select().from(carts)).toEqual([
+      expect.objectContaining({ customerId: oldRow!.id, discountChoice: { type: 'none' } }),
+    ]);
     const client = initClient(apiContract, {
       baseUrl: t.baseUrl,
       baseHeaders: { authorization: `Bearer ${res.body.session!.token}` },
@@ -524,14 +529,9 @@ describe('relink', () => {
     );
     expect(byMl).toEqual({ [`${s1}:10`]: 3, [`${s2}:30`]: 1 });
     expect(cart.body.promoCode).toBe('FRESH');
-    // the merged-away customer leaves no lines or cart row behind
+    // the merged-away customer leaves no lines behind
     const lines = await t.db.select().from(cartLines);
     expect(lines.every((l) => l.customerId === oldRow!.id)).toBe(true);
-    expect(await t.db.select().from(carts)).toHaveLength(1);
-    expect((await t.db.select().from(carts))[0]).toMatchObject({
-      customerId: oldRow!.id,
-      discountChoice: { type: 'promo_code' },
-    });
   });
 
   it('keeps the older cart code and choice when it has its own', async () => {

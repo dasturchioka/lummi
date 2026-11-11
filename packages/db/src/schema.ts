@@ -538,15 +538,20 @@ export type ActorType = (typeof actorTypeEnum.enumValues)[number];
  * the discount the customer switched to and the link-prefilled promo code for the discount tickets
  * (ADR 0002); the lines are in `cart_lines`. The cart never expires.
  */
-/** The discount the customer switched to (ADR 0002); the pricing module's `DiscountChoice` has this same shape. */
+/**
+ * The discount the customer switched to (ADR 0002), or `none` («Не применять», #39); the pricing
+ * module's `DiscountChoice` has this same shape.
+ */
 export type StoredDiscountChoice =
-  { type: 'upgrade_right' | 'birthday_coupon'; id: number } | { type: 'promo_code' };
+  | { type: 'upgrade_right' | 'birthday_coupon'; id: number }
+  | { type: 'promo_code' }
+  | { type: 'none' };
 
 export const carts = pgTable('carts', {
   customerId: bigint('customer_id', { mode: 'number' })
     .primaryKey()
     .references(() => customers.id, { onDelete: 'cascade' }),
-  /** `{ type: 'upgrade_right' | 'birthday_coupon', id } | { type: 'promo_code' }`; cleared when a code is typed. */
+  /** `{ type: 'upgrade_right' | 'birthday_coupon', id } | { type: 'promo_code' } | { type: 'none' }`; cleared when a code is typed (#39: see `CartService.chooseDiscount`). */
   discountChoice: jsonb('discount_choice').$type<StoredDiscountChoice>(),
   /** An entered or link-prefilled promo code, upper-case; judged by the quote, never blocks the order. */
   promoCode: text('promo_code'),

@@ -53,17 +53,56 @@ export const discountsMessages = defineMessages(
       checkoutHint: 'Пришлём купон −{percent}% ко дню рождения. Дату можно указать один раз.',
       /** A valid date read back in words before it is stored for good. `{date}`: «14 марта 1996». */
       confirmDate: '{date} — изменить потом нельзя, проверьте',
-      /** The cart: an entered promo code keeps the coupon out (ADR 0002). `{date}`: its last day. */
-      couponWaits:
-        'Купон ко дню рождения −{percent}% не суммируется с промокодом и ждёт вас до {date}.',
-      useCoupon: 'Применить купон',
-      /** The cart: an entered promo code keeps the upgrade right out (ADR 0002). `{date}`: its last day. */
-      rightWaits: {
-        set: 'Скидка за набор −{percent}% не суммируется с промокодом и ждёт вас до {date}.',
-        single_10ml:
-          'Скидка −{percent}% за флакон 10 мл не суммируется с промокодом и ждёт вас до {date}.',
+      /** The cart's discount switch (#39, ADR 0002; mockup 10-cart-discount). */
+      choice: {
+        title: 'Скидка',
+        hint: 'Одна скидка на заказ. Без промокода мы сами выбираем самую выгодную.',
+        /** Over the right-hand column of the rows. */
+        total: 'Итого',
+        /** A row, by its source: an upgrade right by where it came from. */
+        option: {
+          set: 'Скидка за набор −{percent}%',
+          single_10ml: 'Скидка за 10 мл −{percent}%',
+          birthday_coupon: 'Купон ко дню рождения −{percent}%',
+        },
+        none: 'Не применять',
+        /** Under «Не применять» while an entitlement is among the choices. */
+        noneKeeps: 'Скидка сохранится на следующий заказ',
+        /** What an upgrade right discounts: «Tygar 30 мл». */
+        bottle: '{name} {ml}\u00a0мл',
+        /** A row whose total carries the delivery another choice leaves free: `{amount}` is money. */
+        plusDelivery: '+ доставка {amount}',
+        /** An entered code is cheaper than none of the entitlements: `{amount}` is money. */
+        better: {
+          set: 'Скидка за набор выгоднее на {amount}',
+          single_10ml: 'Скидка за 10 мл выгоднее на {amount}',
+          birthday_coupon: 'Купон ко дню рождения выгоднее на {amount}',
+        },
+        switchTo: 'Переключить',
+        /**
+         * The chosen discount was used, ended or stopped covering the cart, or a tapped one was no
+         * longer offered: which one, and what the cart applies now.
+         */
+        lapsed: {
+          text: '{what} больше не действует — {now}.',
+          what: {
+            set: 'Скидка за набор',
+            single_10ml: 'Скидка за 10 мл',
+            birthday_coupon: 'Купон ко дню рождения',
+            promo_code: 'Промокод {code}',
+            unknown: 'Выбранная скидка',
+          },
+          now: {
+            set: 'применили скидку за набор',
+            single_10ml: 'применили скидку за 10 мл',
+            birthday_coupon: 'применили купон ко дню рождения',
+            promo_code: 'применили промокод {code}',
+            none: 'сейчас скидки нет',
+          },
+        },
+        /** Under the stored code while «Не применять» is chosen. */
+        codeOff: 'Сейчас скидка не применяется',
       },
-      useRight: 'Применить скидку',
       /** The fragrance card: the customer's right on the chosen full-size volume (TZ §3.4). */
       cardDeal: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
       /** Under it, what it covers. `{volumes}`: «30 или 50» from the setting. */
@@ -128,15 +167,44 @@ export const discountsMessages = defineMessages(
       checkoutHint:
         'Tugʻilgan kuningizga −{percent}% kupon yuboramiz. Sanani faqat bir marta kiritish mumkin.',
       confirmDate: '{date} — keyin oʻzgartirib boʻlmaydi, tekshirib oling',
-      couponWaits:
-        'Tugʻilgan kun kuponi −{percent}% promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
-      useCoupon: 'Kuponni qoʻllash',
-      rightWaits: {
-        set: 'Toʻplam uchun −{percent}% chegirma promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
-        single_10ml:
-          '10 ml flakon uchun −{percent}% chegirma promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
+      choice: {
+        title: 'Chegirma',
+        hint: 'Bitta buyurtmaga bitta chegirma. Promokodsiz eng foydalisini oʻzimiz tanlaymiz.',
+        total: 'Jami',
+        option: {
+          set: 'Toʻplam chegirmasi −{percent}%',
+          single_10ml: '10 ml uchun chegirma −{percent}%',
+          birthday_coupon: 'Tugʻilgan kun kuponi −{percent}%',
+        },
+        none: 'Qoʻllamaslik',
+        noneKeeps: 'Chegirma keyingi buyurtmaga saqlanadi',
+        bottle: '{name} {ml}\u00a0ml',
+        plusDelivery: '+ {amount} yetkazish',
+        better: {
+          set: 'Toʻplam chegirmasi {amount} foydaliroq',
+          single_10ml: '10 ml uchun chegirma {amount} foydaliroq',
+          birthday_coupon: 'Tugʻilgan kun kuponi {amount} foydaliroq',
+        },
+        switchTo: 'Almashtirish',
+        lapsed: {
+          text: '{what} endi amal qilmaydi — {now}.',
+          what: {
+            set: 'Toʻplam chegirmasi',
+            single_10ml: '10 ml uchun chegirma',
+            birthday_coupon: 'Tugʻilgan kun kuponi',
+            promo_code: '{code} promokodi',
+            unknown: 'Tanlangan chegirma',
+          },
+          now: {
+            set: 'toʻplam chegirmasi qoʻllandi',
+            single_10ml: '10 ml uchun chegirma qoʻllandi',
+            birthday_coupon: 'tugʻilgan kun kuponi qoʻllandi',
+            promo_code: '{code} promokodi qoʻllandi',
+            none: 'hozir chegirma yoʻq',
+          },
+        },
+        codeOff: 'Hozir chegirma qoʻllanmayapti',
       },
-      useRight: 'Chegirmani qoʻllash',
       cardDeal: {
         set: 'Toʻplam chegirmasi −{percent}%',
         single_10ml: '10 ml uchun chegirma −{percent}%',

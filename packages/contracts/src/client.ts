@@ -53,6 +53,7 @@ export const clientRoutes = {
     removeLine: route('DELETE', '/cart/lines/:lineId', [200, 401]),
     applyPromoCode: route('PUT', '/cart/promo-code', [200, 401, 429]),
     removePromoCode: route('DELETE', '/cart/promo-code', [200, 401]),
+    chooseDiscount: route('PUT', '/cart/discount-choice', [200, 401, 409]),
   },
   sets: {
     discovery: route('GET', '/sets/discovery', [200, 401]),

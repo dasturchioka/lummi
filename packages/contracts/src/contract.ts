@@ -11,7 +11,14 @@ import {
   setReviewPublishedBodySchema,
 } from './reviews';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
-import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
+import {
+  addCartLineBodySchema,
+  cartErrorSchema,
+  cartSchema,
+  discountChoiceSchema,
+  discountUnavailableSchema,
+  setCartLineBodySchema,
+} from './cart';
 import {
   adminCampaignLinkSchema,
   campaignErrorSchema,
@@ -476,6 +483,14 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: cartSchema, 401: cartErrorSchema },
       summary: 'Remove the entered promo code',
+    },
+    chooseDiscount: {
+      method: 'PUT',
+      path: '/cart/discount-choice',
+      body: discountChoiceSchema,
+      responses: { 200: cartSchema, 401: cartErrorSchema, 409: discountUnavailableSchema },
+      summary:
+        'Switch the discount (ADR 0002): an entitlement, the entered code (kept in the cart), or none; 409 when the cart does not offer it',
     },
   },
   favourites: {

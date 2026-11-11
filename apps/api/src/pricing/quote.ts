@@ -66,9 +66,14 @@ export interface RefusedPromoCode {
   refused: PromoCodeRefusal;
 }
 
-/** The discount the customer switched to in the cart (ADR 0002). */
+/**
+ * The discount the customer switched to in the cart (ADR 0002): an entitlement, the entered code,
+ * or `none` («Не применять», #39), which applies no discount so the entitlements keep for later.
+ */
 export type DiscountChoice =
-  { type: 'upgrade_right' | 'birthday_coupon'; id: number } | { type: 'promo_code' };
+  | { type: 'upgrade_right' | 'birthday_coupon'; id: number }
+  | { type: 'promo_code' }
+  | { type: 'none' };
 
 export interface PricingSettings {
   freeDeliveryThreshold: SettingValue<'pricing.freeDeliveryThreshold'>;
@@ -144,13 +149,17 @@ export function quote(input: QuoteInput): Quote {
       : promoOutcome(entered, billable, itemsSubtotal, settings);
   const options = promo?.option ? [...fromEntitlements, promo.option] : fromEntitlements;
 
-  // ADR 0002: the customer's switch while it still applies; else an entered valid code; else the
-  // entitlement giving the lowest total.
+  // ADR 0002: the customer's switch while it still applies («Не применять» always does); else an
+  // entered valid code; else the entitlement giving the lowest total.
   const { choice } = input;
-  const chosen = choice ? (options.find((o) => matchesChoice(o, choice)) ?? null) : null;
-  const applied =
-    chosen ?? promo?.option ?? automaticChoice(fromEntitlements, itemsSubtotal, delivery);
+  const declined = choice?.type === 'none';
+  const chosen =
+    choice && !declined ? (options.find((o) => matchesChoice(o, choice)) ?? null) : null;
+  const applied = declined
+    ? null
+    : (chosen ?? promo?.option ?? automaticChoice(fromEntitlements, itemsSubtotal, delivery));
   const totals = totalsWith(itemsSubtotal, applied, delivery);
+  const bare = totalsWith(itemsSubtotal, null, delivery);
 
   const alternatives = options
     .filter((o) => o !== applied)
@@ -177,14 +186,18 @@ export function quote(input: QuoteInput): Quote {
     deliveryFee: totals.deliveryFee,
     total: totals.total,
     alternatives: alternatives.map(({ option: _option, ...alternative }) => alternative),
+    withoutDiscount: { deliveryFee: bare.deliveryFee, total: bare.total },
     promoCode: input.promoCode
       ? { code: input.promoCode.code, invalid: promo?.invalid ?? null }
       : null,
-    staleChoice: choice !== null && chosen === null,
+    staleChoice: choice !== null && !declined && chosen === null,
   };
 }
 
-function matchesChoice(o: DiscountOption, choice: DiscountChoice): boolean {
+function matchesChoice(
+  o: DiscountOption,
+  choice: Exclude<DiscountChoice, { type: 'none' }>,
+): boolean {
   const d = o.discount;
   if (choice.type === 'promo_code') return d.type === 'promo_code';
   return d.type === choice.type && d.id === choice.id;

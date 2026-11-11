@@ -89,6 +89,19 @@ export class CartController {
     });
   }
 
+  @TsRestHandler(contract.cart.chooseDiscount)
+  chooseDiscount(@SessionCustomerId() customerId: number) {
+    return tsRestHandler(contract.cart.chooseDiscount, async ({ body }) => {
+      const res = await this.cart.chooseDiscount(customerId, body);
+      if (res === 'unavailable')
+        return {
+          status: 409 as const,
+          body: { code: 'discount_unavailable' as const, cart: await this.cart.get(customerId) },
+        };
+      return { status: 200 as const, body: await this.cart.get(customerId) };
+    });
+  }
+
   @TsRestHandler(contract.cart.removeLine)
   removeLine(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.cart.removeLine, async ({ params }) => {

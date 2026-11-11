@@ -1,6 +1,6 @@
-import type { CartDto, Quote } from '@lummi/contracts';
+import type { Quote } from '@lummi/contracts';
 import { normalizePromoCode } from '@lummi/contracts/constants';
-import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
+import { fill, formatMoney } from '@lummi/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { promoNextText, promoReasonText, promoWaitText } from '../../cart/promo';
 import { useDiscountsText } from '../../discounts/queries';
@@ -49,7 +49,6 @@ export function PromoField({
   busy,
   pending,
   notice,
-  waiting = null,
   onApply,
   onRemove,
 }: {
@@ -60,19 +59,12 @@ export function PromoField({
   busy: boolean;
   pending?: 'apply' | 'remove';
   notice: PromoNotice;
-  /** The entitlement the applied code keeps out (a birthday coupon, an upgrade right), as the server judged it. */
-  waiting?: CartDto['entitlementWaiting'];
   onApply: (code: string) => void;
   onRemove: () => void;
 }) {
   const { t, language } = usePrefs();
   const p = t.cart.promo;
   const d = useDiscountsText();
-  // what waits behind the code, in one place: its sentence, its button, its test id
-  const waits =
-    waiting?.type === 'upgrade_right'
-      ? { id: 'right', text: d.rightWaits[waiting.source], use: d.useRight }
-      : { id: 'coupon', text: d.couponWaits, use: d.useCoupon };
   const [draft, setDraft] = useState(stored ?? '');
   // The server's code wins whenever it changes (applied here, removed, taken by an order).
   const [seen, setSeen] = useState(stored);
@@ -116,7 +108,11 @@ export function PromoField({
       text: promoReasonText(entered.invalid, t, language),
       next: promoNextText(entered.invalid, t),
     };
-  else if (showsStored && entered) status = { tone: 'muted', text: p.notChosen };
+  // the shopper switched away from a valid code (#39): to another discount, or to none. The code
+  // stays in its field, muted, one tap away in the switch.
+  const off = showsStored && entered !== null && !entered.invalid && discount === null;
+  if (off && !status)
+    status = { tone: 'muted', text: quote.discount ? p.notChosen : d.choice.codeOff };
 
   const submit = () => {
     if (busy || !canApply) return;
@@ -166,9 +162,10 @@ export function PromoField({
             enterKeyHint="go"
             aria-describedby={status ? 'promo-status' : undefined}
             data-testid="promo-input"
+            data-state={off ? 'off' : undefined}
             // 16 px: iOS zooms into anything smaller. The code reads upper-case, the placeholder
             // not; a code longer than the row ends in an ellipsis until the field is focused.
-            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ellipsis text-ink uppercase outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case"
+            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ellipsis text-ink uppercase transition-colors duration-150 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case data-[state=off]:text-muted data-[state=off]:focus:text-ink"
           />
           {showsStored ? (
             <button
@@ -226,30 +223,6 @@ export function PromoField({
                 <span className="block font-normal text-muted">{status.next}</span>
               ) : null}
             </span>
-          </p>
-        ) : null}
-        {applied && waiting ? (
-          // ADR 0002: the entered code wins; the coupon or the right waits, and taking the code
-          // out lets the server pick it (#39 builds the full switch)
-          <p
-            className="type-small mt-1.5 px-1 text-pretty text-muted"
-            data-testid={`${waits.id}-waiting`}
-          >
-            {fill(waits.text, {
-              percent: String(waiting.percent),
-              date: formatCalendarDate(waiting.lastDay, language),
-            })}{' '}
-            <button
-              type="button"
-              aria-disabled={busy || undefined}
-              data-testid={`${waits.id}-use`}
-              onClick={() => {
-                if (!busy) onRemove();
-              }}
-              className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
-            >
-              {waits.use}
-            </button>
           </p>
         ) : null}
       </div>

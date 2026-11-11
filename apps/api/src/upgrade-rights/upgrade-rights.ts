@@ -8,6 +8,7 @@ import {
   tashkentDayStart,
   type MyUpgradeRightDto,
   type UpgradeRightPrice,
+  type UpgradeRightSource,
 } from '@lummi/contracts';
 import {
   and,
@@ -163,6 +164,19 @@ export function toEntitlement(r: UpgradeRightRow): Extract<Entitlement, { type: 
     fragranceIds: r.fragrances.map((f) => f.fragranceId),
     expiresAt: r.expiresAt,
   };
+}
+
+/** Where one of the customer's rights came from, active or not: the cart names a lapsed choice (#39). */
+export async function readUpgradeRightSource(
+  tx: DbOrTx,
+  customerId: number,
+  id: number,
+): Promise<UpgradeRightSource | null> {
+  const [row] = await tx
+    .select({ source: upgradeRights.source })
+    .from(upgradeRights)
+    .where(and(eq(upgradeRights.id, id), eq(upgradeRights.customerId, customerId)));
+  return row?.source ?? null;
 }
 
 /** The active rights as `quote()` takes them (the `EntitlementSource`'s `active`). */

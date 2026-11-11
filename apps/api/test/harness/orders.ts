@@ -102,19 +102,24 @@ export async function whileLockedUntil<T>(
     await locker.query('begin');
     await locker.query(`lock table ${table} in exclusive mode`);
     const pending = run();
-    for (const deadline = Date.now() + 10_000; ;) {
-      const { rows } = await locker.query<{ n: number }>(
-        `select count(*)::int as n from pg_stat_activity
-         where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()`,
-      );
-      if (rows[0]!.n >= waiters) break;
-      if (Date.now() > deadline)
-        throw new Error(`only ${rows[0]!.n} of ${waiters} sessions reached a lock`);
-      await new Promise((r) => setTimeout(r, 20));
-    }
+    await untilWaitingOnLocks(locker, waiters);
     await locker.query('commit');
     return await pending;
   } finally {
     await locker.end();
+  }
+}
+
+/** Returns once `waiters` other sessions of this database are blocked on a lock (10 s at most). */
+export async function untilWaitingOnLocks(client: pg.Client, waiters: number): Promise<void> {
+  for (const deadline = Date.now() + 10_000; ;) {
+    const { rows } = await client.query<{ n: number }>(
+      `select count(*)::int as n from pg_stat_activity
+       where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()`,
+    );
+    if (rows[0]!.n >= waiters) return;
+    if (Date.now() > deadline)
+      throw new Error(`only ${rows[0]!.n} of ${waiters} sessions reached a lock`);
+    await new Promise((r) => setTimeout(r, 20));
   }
 }

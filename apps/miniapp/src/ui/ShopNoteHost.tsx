@@ -35,12 +35,15 @@ export function armShopNote(): void {
 // shared vendor chunk the first screen loads (rolldown groups modules by who reaches them).
 const ShopNote = lazy(async () => ({ default: (await import('./AddButton')).ShopNote }));
 
-/** In the shell: nothing until a «+» shows up, then the pill above the tab bar or the bottom edge. */
-export function ShopNoteHost({ tabBar }: { tabBar: boolean }) {
+/**
+ * In the shell: nothing until a «+» shows up, then the pill above the tab bar or the bottom edge,
+ * for the screen on show (`screen`, its path).
+ */
+export function ShopNoteHost({ tabBar, screen }: { tabBar: boolean; screen: string }) {
   const any = useSyncExternalStore(subscribeShopNote, () => armed || current !== null);
   return any ? (
     <Suspense fallback={null}>
-      <ShopNote tabBar={tabBar} />
+      <ShopNote tabBar={tabBar} screen={screen} />
     </Suspense>
   ) : null;
 }

@@ -5,11 +5,18 @@ import { shopNote, subscribeShopNote } from './ShopNoteHost';
 /**
  * The card dock's `DockNote` for screens without a dock (the list «+»): the same small pill,
  * fixed above the tab bar (or the bottom edge without one), fading after 2.5 s, so nothing under
- * the thumb moves. Loaded by `ShopNoteHost` with the first note.
+ * the thumb moves. A note belongs to the screen it was left on: another screen opens without it
+ * (the cart's totals and order button sit right where it would be). Loaded by `ShopNoteHost` with
+ * the first note.
  */
-export function ShopNote({ tabBar }: { tabBar: boolean }) {
+export function ShopNote({ tabBar, screen }: { tabBar: boolean; screen?: string }) {
   const note = useSyncExternalStore(subscribeShopNote, shopNote);
   const [open, setOpen] = useState(false);
+  const [on, setOn] = useState(screen);
+  if (screen !== on) {
+    setOn(screen);
+    setOpen(false);
+  }
   useEffect(() => {
     if (!note) return;
     setOpen(true);

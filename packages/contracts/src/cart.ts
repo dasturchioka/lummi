@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { deliveryCitySchema } from './delivery';
 import { CART_MAX_QTY } from './constants';
-import { quoteSchema, upgradeRightSourceSchema } from './quote';
+import { discountSchema, quoteSchema, upgradeRightSourceSchema } from './quote';
 
 /**
  * The server-side cart (spec Changes 2026-11-10, cart). Every response carries a fresh Quote; the
@@ -69,6 +69,23 @@ export const cartSuggestionSchema = z.object({
 });
 export type CartSuggestionDto = z.infer<typeof cartSuggestionSchema>;
 
+const som = z.number().int().nonnegative();
+
+/**
+ * One row of the cart's discount switch (#39, ADR 0002): a discount the shopper can pick, or none
+ * («Не применять», `discount` null), with the delivery and total it gives, as the server priced it.
+ */
+export const discountOptionSchema = z.object({
+  discount: discountSchema.nullable(),
+  deliveryFee: som,
+  total: som,
+  /** The one the quote applied. */
+  applied: z.boolean(),
+  /** An Entitlement's own terms: its percent and last day (Tashkent `YYYY-MM-DD`). */
+  terms: z.object({ percent: z.number().int(), lastDay: z.string() }).nullable(),
+});
+export type DiscountOptionDto = z.infer<typeof discountOptionSchema>;
+
 export const cartSchema = z.object({
   lines: z.array(cartLineSchema),
   quote: quoteSchema,
@@ -83,10 +100,26 @@ export const cartSchema = z.object({
   /** The link-prefilled or entered promo code (the promo ticket reads and clears it). */
   promoCode: z.string().nullable(),
   /**
+   * The discount switch (#39): every choice, cheapest total first and «Не применять» last, in an
+   * order that does not move when the shopper switches. Empty when there is nothing to choose
+   * between (no discount at all, or only an applied code, which its own field removes).
+   */
+  discountOptions: z.array(discountOptionSchema),
+  /**
+   * The chosen discount `quote.staleChoice` reports as lapsed (#39), by its source, so the cart can
+   * name it: «Купон ко дню рождения больше не действует — …». Null otherwise.
+   */
+  lapsedDiscount: z
+    .discriminatedUnion('type', [
+      z.object({ type: z.literal('birthday_coupon') }),
+      z.object({ type: z.literal('upgrade_right'), source: upgradeRightSourceSchema }),
+    ])
+    .nullable(),
+  /**
    * An entered promo code is applied while one of the customer's Entitlements (a birthday coupon,
    * #30; an upgrade right, #38) would also discount this cart (ADR 0002: the code wins): the one the
-   * server would pick without the code, as it judged it. Null otherwise. Taking the code out lets
-   * the server pick it (#39 builds the switch).
+   * server would pick without the code, as it judged it, and how much lower its total is
+   * («Скидка за набор выгоднее на … сум», #39; 0 when it is not). Null otherwise.
    */
   entitlementWaiting: z
     .discriminatedUnion('type', [
@@ -96,6 +129,7 @@ export const cartSchema = z.object({
         percent: z.number().int(),
         /** Its last day, Tashkent `YYYY-MM-DD`. */
         lastDay: z.string(),
+        cheaperBy: som,
       }),
       z.object({
         type: z.literal('upgrade_right'),
@@ -103,6 +137,7 @@ export const cartSchema = z.object({
         source: upgradeRightSourceSchema,
         percent: z.number().int(),
         lastDay: z.string(),
+        cheaperBy: som,
       }),
     ])
     .nullable(),
@@ -116,6 +151,23 @@ export const addCartLineBodySchema = z.object({
   qty: z.number().int().min(1).max(CART_MAX_QTY).default(1),
 });
 export const setCartLineBodySchema = z.object({ qty: z.number().int().min(1).max(CART_MAX_QTY) });
+
+/**
+ * The shopper's tap on the discount switch (#39, ADR 0002): an entitlement, the entered code, or
+ * `none` («Не применять»: no discount, the entitlements keep for a later order).
+ */
+export const discountChoiceSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.enum(['upgrade_right', 'birthday_coupon']), id: z.number().int().positive() }),
+  z.object({ type: z.literal('promo_code') }),
+  z.object({ type: z.literal('none') }),
+]);
+export type DiscountChoiceDto = z.infer<typeof discountChoiceSchema>;
+
+/** The choice is not one the cart offers now (taken meanwhile, never held): here is the cart as it is. */
+export const discountUnavailableSchema = z.object({
+  code: z.literal('discount_unavailable'),
+  cart: cartSchema,
+});
 
 export const cartErrorSchema = z.object({
   code: z.enum(['unauthorized', 'not_found', 'sold_out']),

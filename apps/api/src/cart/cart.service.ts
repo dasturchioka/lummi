@@ -27,8 +27,17 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
-import { entitlementWaitingBehindCode } from '../entitlements/entitlements';
-import { activeMarkdown, volumePrice, type DiscountChoice } from '../pricing/quote';
+import {
+  discountOptionsOf,
+  entitlementWaitingBehindCode,
+  lapsedDiscountOf,
+} from '../entitlements/entitlements';
+import {
+  activeMarkdown,
+  volumePrice,
+  type DiscountChoice,
+  type Entitlement,
+} from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
@@ -44,6 +53,7 @@ import {
 export type AddOutcome = 'ok' | 'not_found' | 'sold_out';
 export type RepeatOutcome =
   { kind: 'done'; result: RepeatResultDto } | { kind: 'not_found' } | { kind: 'not_repeatable' };
+export type ChooseOutcome = 'ok' | 'unavailable';
 export type ApplyCodeOutcome =
   { kind: 'ok' } | { kind: 'too_many_attempts'; retryAfterSeconds: number };
 export type AddSetOutcome =
@@ -60,7 +70,12 @@ export class CartService {
     @Inject(CatalogService) private readonly catalog: CatalogService,
   ) {}
 
-  /** The cart as it is now: lines capped at available, a fresh quote, suggestions. */
+  /**
+   * The cart as it is now: lines capped at available, a fresh quote, suggestions. A stored discount
+   * choice the quote found stale (used, ended, no longer discounting the cart) is dropped here once
+   * the quote has said so (#39): the cart reports the fallback once, then simply picks by itself.
+   * A «Не применять» with nothing left to decline is dropped here too, without a word.
+   */
   async get(customerId: number, tx: DbOrTx = this.db): Promise<CartDto> {
     const now = this.edges.clock.now();
     const {
@@ -69,7 +84,20 @@ export class CartService {
       cartState,
       city,
       entitlements,
+      promoCodeId,
     } = await loadCartQuote(tx, now, customerId);
+    const choice = cartState?.discountChoice ?? null;
+    if (choice && (q.staleChoice || declinesNothing(choice, entitlements, promoCodeId)))
+      // only the choice this quote judged: a switch made meanwhile stays
+      await tx
+        .update(carts)
+        .set({ discountChoice: null })
+        .where(
+          and(
+            eq(carts.customerId, customerId),
+            sql`${carts.discountChoice} = ${JSON.stringify(choice)}::jsonb`,
+          ),
+        );
     const open = q.itemsSubtotal > 0 && q.amountToFreeDelivery > 0;
     return {
       lines: lines.map((l): CartLineDto => ({ id: l.lineId, ...toLineDto(l) })),
@@ -86,6 +114,9 @@ export class CartService {
           )
         : [],
       promoCode: cartState?.promoCode ?? null,
+      discountOptions: discountOptionsOf(q, entitlements),
+      lapsedDiscount:
+        q.staleChoice && choice ? await lapsedDiscountOf(tx, customerId, choice) : null,
       entitlementWaiting: entitlementWaitingBehindCode(q, entitlements),
     };
   }
@@ -343,25 +374,64 @@ export class CartService {
     });
   }
 
+  /**
+   * Removes a line. The discount choice belongs to the lines: once the last one is gone it is moot
+   * (#39), and the next cart picks by itself again. The cart row is taken first, as every cart
+   * write and `createOrder` take it (the row, then its lines): the other way round, a checkout of
+   * this cart and this delete would wait on each other.
+   */
   async remove(customerId: number, lineId: number): Promise<void> {
-    await this.db
-      .delete(cartLines)
-      .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));
-  }
-
-  /** The customer's switch to another discount (ADR 0002); the discount tickets call this. */
-  async setDiscountChoice(customerId: number, choice: DiscountChoice | null): Promise<void> {
     await this.db.transaction(async (tx) => {
       await this.touch(tx, customerId);
       await tx
+        .delete(cartLines)
+        .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));
+      await tx
         .update(carts)
-        .set({ discountChoice: choice })
-        .where(eq(carts.customerId, customerId));
+        .set({ discountChoice: null })
+        .where(
+          and(
+            eq(carts.customerId, customerId),
+            sql`not exists (select 1 from ${cartLines} where ${cartLines.customerId} = ${customerId})`,
+          ),
+        );
     });
   }
 
   /**
-   * Takes the entered code out of the cart, and the choice made against it (ADR 0002). Setting a
+   * The shopper's tap on the discount switch (#39, ADR 0002), judged by the cart's own quote with
+   * the cart row locked: only what the cart offers now is stored, and every later quote re-judges
+   * it. Choosing the entered code stores no choice, since a typed code is applied by itself (a code
+   * that then stops applying says why in its own field, not as a stale choice). «Не применять» is
+   * stored while there is something to keep for later; with nothing to decline it is moot and
+   * nothing is stored, so a coupon that arrives later still applies by itself.
+   */
+  async chooseDiscount(customerId: number, choice: DiscountChoice): Promise<ChooseOutcome> {
+    return this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
+      const { quote: q } = await loadCartQuote(tx, this.edges.clock.now(), customerId);
+      const offered = [q.discount, ...q.alternatives.map((a) => a.discount)];
+      let stored: DiscountChoice | null;
+      if (choice.type === 'none') stored = offered.some((d) => d !== null) ? choice : null;
+      else if (choice.type === 'promo_code') {
+        if (!offered.some((d) => d?.type === 'promo_code')) return 'unavailable';
+        stored = null;
+      } else {
+        const held = offered.some((d) => d?.type === choice.type && d.id === choice.id);
+        if (!held) return 'unavailable';
+        stored = { type: choice.type, id: choice.id };
+      }
+      await tx
+        .update(carts)
+        .set({ discountChoice: stored })
+        .where(eq(carts.customerId, customerId));
+      return 'ok';
+    });
+  }
+
+  /**
+   * Takes the entered code out of the cart, and a choice of that code (ADR 0002). A choice of an
+   * entitlement or «Не применять» stays (#39): it was made against the code, not for it. Setting a
    * code goes only through `applyPromoCode`, which counts the attempt.
    */
   async clearPromoCode(customerId: number): Promise<void> {
@@ -369,7 +439,10 @@ export class CartService {
       await this.touch(tx, customerId);
       await tx
         .update(carts)
-        .set({ promoCode: null, discountChoice: null })
+        .set({
+          promoCode: null,
+          discountChoice: sql`case when ${carts.discountChoice}->>'type' = 'promo_code' then null else ${carts.discountChoice} end`,
+        })
         .where(eq(carts.customerId, customerId));
     });
   }
@@ -462,6 +535,20 @@ export class CartService {
       .values({ customerId })
       .onConflictDoUpdate({ target: carts.customerId, set: { updatedAt: this.edges.clock.now() } });
   }
+}
+
+/**
+ * «Не применять» with nothing left to decline is moot (#39): the customer holds no entitlement
+ * (unexpired, unused, not closed) and no entered code the shop accepts, so a right or coupon that
+ * comes later should apply by itself. Judged by what they hold, not by what discounts these lines:
+ * a line sold out for a moment does not end the shopper's choice.
+ */
+function declinesNothing(
+  choice: DiscountChoice,
+  held: readonly Entitlement[],
+  acceptedCodeId: number | null,
+): boolean {
+  return choice.type === 'none' && held.length === 0 && acceptedCodeId === null;
 }
 
 /** The Sage thread's fill, whole percent: 100 once reached (or with no threshold), never 100 before. */
