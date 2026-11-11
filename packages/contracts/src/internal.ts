@@ -29,6 +29,11 @@ export type HumoMessageResult = z.infer<typeof humoMessageResultSchema>;
 /** The highest stored message_id: the userbot reads the Humo chat after it on restart. Null before the first. */
 export const humoLastMessageIdSchema = z.object({ messageId: z.number().int().nullable() });
 
+/** The backup script reports a finished run; `skipped` names steps it could not do (the second copy, the userbot session). */
+export const backupReportBodySchema = z.object({
+  skipped: z.array(z.string().min(1).max(40)).max(10),
+});
+
 /**
  * Where the userbot forwards each ➕ notification (#19): the orders group (`bot.groupChatId`) and
  * its «Поступления» topic (`bot.topics.payments`). Null chat: the group is not set up, nothing is

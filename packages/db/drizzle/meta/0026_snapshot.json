@@ -1,5 +1,5 @@
 {
-  "id": "cfdca5e6-9640-46bd-b7c0-f907c63c6fff",
+  "id": "171774ec-085f-4f7d-8e6b-b72e01b598da",
   "prevId": "24a98302-35ee-447e-9eca-9468b657140d",
   "version": "7",
   "dialect": "postgresql",
@@ -114,6 +114,49 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.backup_status": {
+      "name": "backup_status",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "last_success_at": {
+          "name": "last_success_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stale_alerted_at": {
+          "name": "stale_alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skip_alerted_at": {
+          "name": "skip_alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "backup_status_one_row": {
+          "name": "backup_status_one_row",
+          "value": "\"backup_status\".\"id\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.birthday_coupons": {
@@ -1691,6 +1734,95 @@
           "value": "\"discovery_set_items\".\"position\" between 1 and 5"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.error_events": {
+      "name": "error_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "error_events_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "error_class": {
+          "name": "error_class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "frames": {
+          "name": "frames",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "count": {
+          "name": "count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "error_events_fingerprint_key": {
+          "name": "error_events_fingerprint_key",
+          "columns": [
+            {
+              "expression": "fingerprint",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.families": {
@@ -3373,18 +3505,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "review_requested_at": {
-          "name": "review_requested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "review_request": {
-          "name": "review_request",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3485,22 +3605,6 @@
           ],
           "isUnique": false,
           "where": "\"orders\".\"status\" = 'awaiting_payment'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "orders_review_due_idx": {
-          "name": "orders_review_due_idx",
-          "columns": [
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"orders\".\"status\" = 'delivered' and \"orders\".\"review_requested_at\" is null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -4698,304 +4802,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.review_photos": {
-      "name": "review_photos",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "review_photos_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "review_id": {
-          "name": "review_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_id": {
-          "name": "file_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_key": {
-          "name": "file_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "public_key": {
-          "name": "public_key",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "posted_at": {
-          "name": "posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "review_photos_review_idx": {
-          "name": "review_photos_review_idx",
-          "columns": [
-            {
-              "expression": "review_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "review_photos_public_key_idx": {
-          "name": "review_photos_public_key_idx",
-          "columns": [
-            {
-              "expression": "public_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "review_photos_review_id_reviews_id_fk": {
-          "name": "review_photos_review_id_reviews_id_fk",
-          "tableFrom": "review_photos",
-          "tableTo": "reviews",
-          "columnsFrom": [
-            "review_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.reviews": {
-      "name": "reviews",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "reviews_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "rating": {
-          "name": "rating",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "comment": {
-          "name": "comment",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "step": {
-          "name": "step",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'comment'"
-        },
-        "step_at": {
-          "name": "step_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "post_queued_at": {
-          "name": "post_queued_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "topic_posted_at": {
-          "name": "topic_posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "published": {
-          "name": "published",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "published_at": {
-          "name": "published_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "reviews_order_idx": {
-          "name": "reviews_order_idx",
-          "columns": [
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reviews_created_idx": {
-          "name": "reviews_created_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "reviews_published_idx": {
-          "name": "reviews_published_idx",
-          "columns": [
-            {
-              "expression": "published_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"reviews\".\"published\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "reviews_order_id_orders_id_fk": {
-          "name": "reviews_order_id_orders_id_fk",
-          "tableFrom": "reviews",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "reviews_customer_id_customers_id_fk": {
-          "name": "reviews_customer_id_customers_id_fk",
-          "tableFrom": "reviews",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "reviews_rating_check": {
-          "name": "reviews_rating_check",
-          "value": "\"reviews\".\"rating\" between 1 and 5"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.saved_points": {
       "name": "saved_points",
       "schema": "",
@@ -5777,6 +5583,43 @@
         }
       },
       "isRLSEnabled": false
+    },
+    "public.worker_heartbeat": {
+      "name": "worker_heartbeat",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "boolean",
+          "primaryKey": true,
+          "notNull": true,
+          "default": true
+        },
+        "seen_at": {
+          "name": "seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outage_alerted_at": {
+          "name": "outage_alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "worker_heartbeat_one_row": {
+          "name": "worker_heartbeat_one_row",
+          "value": "\"worker_heartbeat\".\"id\""
+        }
+      },
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -5901,8 +5744,7 @@
       "schema": "public",
       "values": [
         "message",
-        "order_card",
-        "review_post"
+        "order_card"
       ]
     },
     "public.payment_pause_cause": {

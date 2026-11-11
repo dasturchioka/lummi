@@ -1,0 +1,14 @@
+[Unit]
+Description=LUMMI daily backup (encrypted dump, second copy)
+After=docker.service
+Wants=docker.service
+# Any failure, including a timeout or a kill, starts the alert.
+OnFailure=lummi-backup-failure.service
+
+[Service]
+Type=oneshot
+# Installed to /opt/lummi/backup/ by hand (docs/run-guide.md, "Backups"). Staging: set BACKUP_ENV_FILE=/opt/lummi-staging/.env.
+Environment=BACKUP_ENV_FILE=/opt/lummi/.env
+ExecStart=/opt/lummi/backup/backup.sh
+# A hung ssh or rsync must end in a failure, not in silence.
+TimeoutStartSec=2h

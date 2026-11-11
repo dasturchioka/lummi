@@ -1,5 +1,7 @@
 import { Catch, HttpException, HttpStatus, Logger, type ArgumentsHost } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
+import type { ErrorTracker } from '../ops/error-tracker.service';
+import { normaliseRoute } from '../ops/fingerprint';
 import { describeError } from './describe-error';
 
 /**
@@ -12,9 +14,25 @@ import { describeError } from './describe-error';
 export class SafeExceptionFilter extends BaseExceptionFilter {
   private readonly log = new Logger('ExceptionsHandler');
 
+  constructor(
+    applicationRef?: ConstructorParameters<typeof BaseExceptionFilter>[0],
+    private readonly tracker?: ErrorTracker,
+  ) {
+    super(applicationRef);
+  }
+
   override catch(exception: unknown, host: ArgumentsHost): void {
     if (exception instanceof HttpException) return super.catch(exception, host);
     this.log.error(describeError(exception));
+    // Filed by class, route pattern and frames (ADR 0036); the query string and the ids never leave here.
+    const req = host.switchToHttp().getRequest<{
+      method?: string;
+      route?: { path?: string };
+      originalUrl?: string;
+      url?: string;
+    }>();
+    const path = req?.route?.path ?? req?.originalUrl ?? req?.url ?? '';
+    void this.tracker?.record(exception, normaliseRoute(req?.method ?? 'GET', path));
     const adapter = this.applicationRef ?? this.httpAdapterHost?.httpAdapter;
     const response: unknown = host.getArgByIndex(1);
     if (!adapter || adapter.isHeadersSent(response)) return;

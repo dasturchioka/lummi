@@ -1561,3 +1561,56 @@ export const reviewPhotos = pgTable(
   ],
 );
 export type ReviewPhotoRow = typeof reviewPhotos.$inferSelect;
+
+/**
+ * One row per distinct error (ADR 0036). The fingerprint hashes the error class, the route and the
+ * top stack frames, so a repeat only raises `count` and `last_seen_at`. No message, no query string,
+ * no parameter: nothing in this table can hold personal data.
+ */
+export const errorEvents = pgTable(
+  'error_events',
+  {
+    id: id(),
+    fingerprint: text('fingerprint').notNull(),
+    errorClass: text('error_class').notNull(),
+    /** `GET /orders/:id`, or `worker:<sweep>`: ids and query strings are already stripped. */
+    route: text('route').notNull(),
+    /** The first application frames, file and function only (no line numbers, no node_modules). */
+    frames: text('frames').notNull(),
+    count: integer('count').notNull().default(1),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex('error_events_fingerprint_key').on(t.fingerprint)],
+);
+
+/** What the backup script last reported, one row (ADR 0036): the API alerts when `last_success_at` gets too old. */
+export const backupStatus = pgTable(
+  'backup_status',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    /** Set when the "no backup" alert went out, cleared by the next report: one alert per gap. */
+    staleAlertedAt: timestamp('stale_alerted_at', { withTimezone: true }),
+    /** When skipped steps were last alerted: at most once a day. */
+    skipAlertedAt: timestamp('skip_alerted_at', { withTimezone: true }),
+  },
+  (t) => [check('backup_status_one_row', sql`${t.id}`)],
+);
+
+/**
+ * The worker's last tick, one row, written by the worker and read by the API's watch (ADR 0036).
+ * `outage_alerted_at` is set when the "worker is silent" alert went out and cleared on recovery,
+ * so an outage alerts once and its end once.
+ */
+export const workerHeartbeat = pgTable(
+  'worker_heartbeat',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
+    outageAlertedAt: timestamp('outage_alerted_at', { withTimezone: true }),
+  },
+  (t) => [check('worker_heartbeat_one_row', sql`${t.id}`)],
+);
