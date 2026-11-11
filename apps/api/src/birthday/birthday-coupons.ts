@@ -1,8 +1,9 @@
-import type { BirthdayCouponDto, CartDto, Quote } from '@lummi/contracts';
+import type { BirthdayCouponDto } from '@lummi/contracts';
 import { and, asc, birthdayCoupons, eq, gt, isNull, type DbOrTx } from '@lummi/db';
 import type { Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import { daysLeft, formatLocalDate, lastDayOf, type BirthdayRules } from './birthday-dates';
+import { daysLeft, formatLocalDate, lastDayOf } from '@lummi/contracts';
+import type { BirthdayRules } from './birthday-dates';
 
 /**
  * Birthday coupons as orders and the cart see them (ticket #30, ADR 0005): the customer's active
@@ -56,29 +57,6 @@ export async function birthdayEntitlements(
     maxAmount: c.maxAmount,
     expiresAt: c.expiresAt,
   }));
-}
-
-/**
- * The birthday coupon an applied promo code keeps out (ADR 0002: an entered code wins), when the
- * quote lists it as an alternative that would discount this cart; null otherwise.
- */
-export function couponWaitingBehindCode(
-  q: Quote,
-  entitlements: readonly Entitlement[],
-): CartDto['birthdayCouponWaiting'] {
-  if (q.discount?.type !== 'promo_code') return null;
-  for (const alt of q.alternatives) {
-    if (alt.discount.type !== 'birthday_coupon') continue;
-    const id = alt.discount.id;
-    const coupon = entitlements.find((e) => e.type === 'birthday_coupon' && e.id === id);
-    if (coupon)
-      return {
-        id,
-        percent: coupon.percent,
-        lastDay: formatLocalDate(lastDayOf(coupon.expiresAt)),
-      };
-  }
-  return null;
 }
 
 /** An active coupon as Profile shows it. */

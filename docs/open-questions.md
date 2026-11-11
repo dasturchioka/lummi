@@ -68,7 +68,9 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 ## Our proposals awaiting customer approval
 
-- **Upgrade right from a single 10 ml bottle** (2026-11-07, ADR 0003). A delivered 10 ml bottle gives a one-time discount on a 30/50 ml bottle of the same fragrance, like the set discount. Outside the TZ, so it ships switched off. Ask the customer: on or off, percentage (set source is 20%), validity (set source is 30 days). Free-delivery threshold for it defaults to "before discount", like the set source.
+- **Upgrade right from a single 10 ml bottle** (2026-11-07, ADR 0003). A delivered 10 ml bottle gives a one-time discount on a 30/50 ml bottle of the same fragrance, like the set discount. Outside the TZ, so it ships switched off. Ask the customer: on or off, percentage (set source is 20%), validity (set source is 30 days). Free-delivery threshold for it defaults to "before discount", like the set source. Built in #38 behind `upgradeRights.single10ml.enabled` (off), with placeholders 20% and 30 days in `upgradeRights.single10ml.percent` / `.validityDays`.
+
+- **«Мои наборы» as a history of sets** (2026-11-11, ticket #38). The TZ puts the set's fragrances in Profile → «Мои наборы»; we show them inside each open discount in «Мои скидки». Показывать ли историю наборов (ароматы из прошлых наборов) отдельно от действующих скидок?
 
 - **Tell the customer about our TZ deviations** (2026-11-07, via Nurmuhammad). The internal decisions in `docs/spec.md` → Changes alter visible behaviour: status «Возвращён» and refunds; customer can cancel an unpaid order; orders reach the group only once paid; group topics; fully automatic payment matching and "payment not found" instead of manual review; account phone only via Telegram contact; BTS point list instead of street address. None needs approval to build, but acceptance runs against the TZ.
 
