@@ -17,6 +17,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { FragranceView } from './fragrance/FragranceView';
 import { Similar } from './fragrance/Similar';
+import { ReviewsBlock } from './reviews/ReviewsBlock';
 
 /** The card's own shape while it loads (photo, lockup, text, icon row, tiles, dock), so nothing jumps. */
 function Loading() {
@@ -108,6 +109,7 @@ export function Fragrance() {
       card={card}
       onBack={() => goBackOrCatalog(router)}
       onShare={() => void shareFragrance(card.slug, card.name)}
+      reviews={<ReviewsBlock target={card.slug} />}
       footer={<Similar slug={card.slug} />}
       adding={add.isPending}
       note={note}

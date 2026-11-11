@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { keepNumberWithWord, saleEndDate } from './format';
+import { formatAverage, keepNumberWithWord, saleEndDate } from './format';
 
 it('names the end day as the customer reads it in Tashkent', () => {
   // 23:59:59 Tashkent on 12 November is still the 12th (UTC+5), the 12th in UTC too.
@@ -13,4 +13,9 @@ it('keeps a number on the line of the word it counts', () => {
   expect(keepNumberWithWord('24 soatgacha')).toBe('24\u00a0soatgacha');
   expect(keepNumberWithWord('до 24 часов')).toBe('до 24\u00a0часов');
   expect(keepNumberWithWord('Сильный')).toBe('Сильный');
+});
+
+it('shows a review average with a comma, whatever the language', () => {
+  expect(formatAverage(4.7)).toBe('4,7');
+  expect(formatAverage(5)).toBe('5,0');
 });
