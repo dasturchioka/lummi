@@ -112,3 +112,9 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Share mark.** ADR 0022 says plain navigation links are "not tracked beyond a share mark". We log nothing for them (the `p_<slug>` shape is the mark). If the owner wants shares counted, we need a separate event, since «Поделиться» opens by someone else are indistinguishable from direct launches.
 - **Prefill replaces the cart's code.** A link's promo code overwrites a code the shopper already entered. Confirm, or keep the shopper's own code.
 - **Automatic links for promo codes** lead to the catalog with source «Другое»; the owner edits them (target, source, label) per campaign.
+
+## Payment not found and alerts (ticket #36)
+- **Look-alike receipts.** TZ and the 2026-11-07 decision treat a receipt whose image looks like another order's as a repeat. The 64-bit perceptual hash (#28) cannot tell two receipts of one bank app apart: in our test, different receipts of one layout were 0–8 bits apart and the same receipt re-saved was 4–7 bits apart. So the look-alike rule is built but **off** (setting `receipts.duplicateImageDistance` empty), and only the same file counts as a repeat. To revisit with 20–30 real receipts from the customer (the AI eval set), or with a finer image comparison.
+- **Humo silence in quiet hours.** Receipt timers pause when no credit has arrived for 30 min while receipts wait. In a quiet period a receipt with no money behind it therefore waits until some credit arrives, and the owner gets one «Таймеры чеков на паузе» alert. Confirm this trade-off (an outage must never cancel a paid order), or give working hours outside which the pause and the alerts stay quiet.
+- **Alerts at night.** The unchecked-receipt alert (15 min) and the pause alerts go out at any hour; TZ says «в рабочее время», which is not defined (see "Working hours" above).
+
