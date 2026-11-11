@@ -45,6 +45,15 @@ export type TransitionActor =
   | { type: 'ai' }
   | { type: 'system' };
 
+/** A move just made, inside its transaction: what `afterMove` listeners are told. */
+export interface MadeMove {
+  action: OrderAction;
+  /** The order as it is now. */
+  order: OrderRow;
+  event: OrderEventRow;
+}
+export type MoveListener = (tx: DbOrTx, move: MadeMove) => Promise<void>;
+
 export type TransitionOutcome =
   | { kind: 'done'; order: OrderRow; event: OrderEventRow }
   /** No such order, or (for a shopper) not theirs. */
@@ -76,6 +85,7 @@ export class OrderStatusService {
     payment_not_found: Symbol('payment_not_found'),
   };
   private readonly issued = new Set<GuardedAction>();
+  private readonly listeners: MoveListener[] = [];
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -97,6 +107,15 @@ export class OrderStatusService {
     if (this.issued.has(action)) throw new Error(`the ${action} capability was already issued`);
     this.issued.add(action);
     return this.doors[action];
+  }
+
+  /**
+   * Run `listener` after every move, inside the move's transaction (the orders group's card, #37):
+   * whatever made the move (the bot, the admin panel, the receipt AI, a sweep), the listener's
+   * writes commit or roll back with it. Register in a provider's constructor.
+   */
+  afterMove(listener: MoveListener): void {
+    this.listeners.push(listener);
   }
 
   /**
@@ -232,6 +251,8 @@ export class OrderStatusService {
         }),
       );
     }
+    for (const listener of this.listeners)
+      await listener(tx, { action, order: updated, event: event! });
     return { kind: 'done', order: updated, event: event! };
   }
 
