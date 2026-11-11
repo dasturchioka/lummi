@@ -29,6 +29,7 @@ import { MessageGoneError } from '../edges';
 import { linesOf } from '../orders/orders.service';
 import { OrderStatusService, type MadeMove } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { orderMoney } from '../refunds/order-money';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { renderCard, type CardData, type CardView } from './card-view';
@@ -386,6 +387,7 @@ export class OrderCards {
       customer: customer!,
       events,
       panel: card.panel,
+      money: await orderMoney(this.db, order),
     };
   }
 }
