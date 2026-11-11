@@ -1,4 +1,5 @@
-import { DISCOVERY_FAVOURITE, type FavouriteIds, type FavouriteList } from '@lummi/contracts';
+import type { FavouriteIds, FavouriteList } from '@lummi/contracts';
+import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
 import { and, desc, eq, favourites, fragrances, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { CatalogService } from '../catalog/catalog.service';

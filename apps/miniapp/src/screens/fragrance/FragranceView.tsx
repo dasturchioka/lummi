@@ -11,6 +11,7 @@ import { BuyPair } from '../../ui/BuyPair';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { DockNote } from '../../ui/DockNote';
+import { HeartButton } from '../../ui/HeartButton';
 import { LabelDivider } from '../../ui/LabelDivider';
 import { DISC } from '../../ui/photoDisc';
 import {
@@ -128,10 +129,12 @@ function Gallery({
         <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
           <ArrowLeftIcon size={20} />
         </button>
-        {/* The favourites ticket (#45) puts the heart left of share. */}
-        <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
-          <ShareIcon size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <HeartButton target={card.slug} name={card.name} disc />
+          <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
+            <ShareIcon size={20} />
+          </button>
+        </div>
       </div>
     </div>
   );

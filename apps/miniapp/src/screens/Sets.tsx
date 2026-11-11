@@ -1,5 +1,5 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_FAVOURITE, SET_SIZE } from '@lummi/contracts/constants';
 import { buyNowParam } from '@lummi/contracts/buy-now';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter, useSearch } from '@tanstack/react-router';
@@ -19,6 +19,7 @@ import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { BuyPair } from '../ui/BuyPair';
 import { DockNote } from '../ui/DockNote';
+import { HeartButton } from '../ui/HeartButton';
 import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
@@ -131,6 +132,7 @@ export function DiscoverySetView({
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
+            <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} disc />
           </div>
         </div>
 

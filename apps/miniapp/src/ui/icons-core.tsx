@@ -95,3 +95,11 @@ export function Spinner({ size = 18 }: { size?: number }) {
     </svg>
   );
 }
+
+/** A heart: the favourite on a card (#45); `fill="currentColor"` when kept. */
+export const HeartIcon = (p: P) => (
+  <Icon
+    d="M12 20.5s-8-4.7-8-10.7A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.8c0 6-8 10.7-8 10.7z"
+    {...p}
+  />
+);

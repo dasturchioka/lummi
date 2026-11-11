@@ -13,6 +13,11 @@ vi.mock('../lib/prefs', () => ({
   }),
 }));
 
+vi.mock('../favourites/queries', () => ({
+  useFavouriteIds: () => ({ data: undefined }),
+  useToggleFavourite: () => ({ mutate: vi.fn() }),
+}));
+
 import { BuilderView, DiscoverySetView } from './Sets';
 
 afterEach(() => {

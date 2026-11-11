@@ -180,6 +180,10 @@ const routeTree = rootRoute.addChildren([
     component: lazyRouteComponent(() => import('../screens/Profile'), 'Profile'),
   }),
   createRoute({
+    ...at('/favourites'),
+    component: lazyRouteComponent(() => import('../screens/Favourites'), 'Favourites'),
+  }),
+  createRoute({
     ...at('/info/$slug'),
     component: lazyRouteComponent(() => import('../screens/InfoPage'), 'InfoPage'),
   }),

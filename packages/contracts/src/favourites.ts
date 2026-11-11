@@ -6,7 +6,6 @@ import { fragranceListItemSchema } from './catalog';
  * the server, so a phone and Telegram Desktop agree. The target of PUT/DELETE is a fragrance slug
  * or `discovery-set`.
  */
-export const DISCOVERY_FAVOURITE = 'discovery-set';
 
 /** The ids the hearts read: small, so every card can ask once and share the answer. */
 export const favouriteIdsSchema = z.object({

@@ -1,7 +1,9 @@
+import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
 import { useNavigate } from '@tanstack/react-router';
 import { usePrefs } from '../../lib/prefs';
 import { useSetsText } from '../../sets/actions';
 import { useDiscoverySet } from '../../sets/queries';
+import { HeartButton } from '../../ui/HeartButton';
 import { ChevronIcon } from '../../ui/icons';
 import { Money } from '../../ui/Money';
 import { SetPhoto } from '../../ui/SetPhoto';
@@ -20,7 +22,7 @@ export function SetCards() {
     'flex w-full items-center gap-3 rounded-card bg-card p-3 text-left transition-[background-color,scale] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98] active:bg-field';
   return (
     <ul aria-label={s.setsLabel} className="flex flex-col gap-2">
-      <li>
+      <li className="relative">
         <button
           type="button"
           data-testid="discovery-card"
@@ -48,6 +50,10 @@ export function SetCards() {
             <ChevronIcon size={16} />
           </span>
         </button>
+        {/* the heart sits over the photo's top-left, a sibling of the card button */}
+        <div className="absolute top-3 left-3">
+          <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} />
+        </div>
       </li>
       <li>
         <button
