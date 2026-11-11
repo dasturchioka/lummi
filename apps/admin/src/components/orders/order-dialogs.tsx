@@ -862,7 +862,7 @@ export function RefundDialog({
       error={error}
       busy={busy}
       submit={r.submit}
-      cancel={t.actions.cancel}
+      cancel={r.keep}
       summary={
         summary ? <p className="text-[13px] font-semibold tabular-nums">{summary}</p> : undefined
       }
@@ -898,7 +898,11 @@ export function RefundDialog({
         <Field
           id="refund-date"
           label={r.date}
-          hint={fill(r.dateHint, { from: formatCalendarDate(from, language) })}
+          // the date spelled out, so the browser's «11/11/2026» cannot be misread
+          hint={fill(dateOk ? r.dateHintPicked : r.dateHint, {
+            date: dateOk ? formatCalendarDate(date, language, true) : '',
+            from: formatCalendarDate(from, language),
+          })}
           error={tried && !dateOk ? r.dateInvalid : undefined}
         >
           <Input
@@ -936,15 +940,17 @@ function discountEffect(
   if (discount.type === 'promo_code') return fill(r.promo, { code: discount.code });
   const day = formatCalendarDate(discount.lastDay, language);
   if (discount.type === 'birthday_coupon')
-    return fill(discount.comesBack ? r.couponBack : r.couponLost, { day });
-  return fill(discount.comesBack ? r.rightBack : r.rightLost, { day });
+    return fill(discount.lost === null ? r.couponBack : r.couponLost, { day });
+  if (discount.lost === 'closed') return r.rightClosed;
+  return fill(discount.lost === null ? r.rightBack : r.rightLost, { day });
 }
 
 /**
- * «Оформить возврат товара» (ADR 0006, #40): the whole delivered order came back. A flag per line
- * for what goes back on hand (none by default: a leaking or opened bottle is never sold again),
- * the reason, and what the move will do, read from the page's preview: the discount source, the
- * upgrade rights the order opened, and the money still to send back as a Refund.
+ * «Оформить возврат товара» (ADR 0006, #40): the whole delivered order came back. What the move
+ * will do comes first, read from the page's preview (the discount source, the upgrade rights the
+ * order opened), then a flag per line for what goes back on hand (none by default: a leaking or
+ * opened bottle is never sold again) and the reason. The money still to send back as a Refund
+ * stays in the footer beside the button, so nobody confirms without seeing it.
  */
 export function ReturnDialog({
   open,
@@ -987,6 +993,10 @@ export function ReturnDialog({
     flagged === 0
       ? r.stockNone
       : fill(r.stock, { n: String(flagged), total: String(positions.length) });
+  const owed =
+    page.money.refundable > 0
+      ? fill(r.money, { amount: formatMoney(page.money.refundable, language) })
+      : null;
   const effects = [
     preview && discountEffect(preview.discount, t, language),
     ...(preview?.rights ?? [])
@@ -1000,8 +1010,6 @@ export function ReturnDialog({
           ? fill(r.rightSpent, { ...values, number: String(x.usedBy.number) })
           : fill(r.rightClose, values);
       }),
-    page.money.refundable > 0 &&
-      fill(r.money, { amount: formatMoney(page.money.refundable, language) }),
   ].filter((x): x is string => Boolean(x));
 
   return (
@@ -1017,11 +1025,31 @@ export function ReturnDialog({
       cancel={r.keep}
       wide
       summary={
-        <p className="text-[13px] font-semibold tabular-nums" data-stock-summary>
-          {stock}
-        </p>
+        <div className="grid gap-1 text-[13px] tabular-nums">
+          {owed && (
+            <p className="leading-snug text-pretty [overflow-wrap:anywhere]" data-money-owed>
+              {owed}
+            </p>
+          )}
+          <p className="font-semibold" data-stock-summary>
+            {stock}
+          </p>
+        </div>
       }
     >
+      {effects.length > 0 && (
+        <div className="grid gap-1.5">
+          <p className="text-[12.5px] font-medium text-muted-foreground">{r.effects}</p>
+          <ul
+            className="grid gap-1.5 rounded-button bg-field px-3.5 py-3 text-[13.5px] leading-snug text-pretty [overflow-wrap:anywhere]"
+            data-return-effects
+          >
+            {effects.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <fieldset className="grid gap-1.5" data-return-lines>
         <legend className="mb-1 text-[12.5px] font-medium text-muted-foreground">{r.lines}</legend>
         <p className="mb-1 text-xs leading-snug text-pretty text-muted-foreground">{r.linesHint}</p>
@@ -1071,19 +1099,6 @@ export function ReturnDialog({
         long={r.reasonLong}
         t={t}
       />
-      {effects.length > 0 && (
-        <div className="grid gap-1.5">
-          <p className="text-[12.5px] font-medium text-muted-foreground">{r.effects}</p>
-          <ul
-            className="grid gap-1.5 rounded-button bg-field px-3.5 py-3 text-[13.5px] leading-snug text-pretty [overflow-wrap:anywhere]"
-            data-return-effects
-          >
-            {effects.map((x) => (
-              <li key={x}>{x}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </Frame>
   );
 }
