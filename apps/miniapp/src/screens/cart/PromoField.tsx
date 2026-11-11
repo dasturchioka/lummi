@@ -108,8 +108,10 @@ export function PromoField({
       text: promoReasonText(entered.invalid, t, language),
       next: promoNextText(entered.invalid, t),
     };
-  // the shopper switched away from a valid code (#39): to another discount, or to none
-  else if (showsStored && entered)
+  // the shopper switched away from a valid code (#39): to another discount, or to none. The code
+  // stays in its field, muted, one tap away in the switch.
+  const off = showsStored && entered !== null && !entered.invalid && discount === null;
+  if (off && !status)
     status = { tone: 'muted', text: quote.discount ? p.notChosen : d.choice.codeOff };
 
   const submit = () => {
@@ -160,9 +162,10 @@ export function PromoField({
             enterKeyHint="go"
             aria-describedby={status ? 'promo-status' : undefined}
             data-testid="promo-input"
+            data-state={off ? 'off' : undefined}
             // 16 px: iOS zooms into anything smaller. The code reads upper-case, the placeholder
             // not; a code longer than the row ends in an ellipsis until the field is focused.
-            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ellipsis text-ink uppercase outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case"
+            className="h-11 min-w-0 flex-1 bg-transparent text-base font-semibold tracking-[0.04em] text-ellipsis text-ink uppercase transition-colors duration-150 outline-none placeholder:font-normal placeholder:tracking-normal placeholder:text-muted placeholder:normal-case data-[state=off]:text-muted data-[state=off]:focus:text-ink"
           />
           {showsStored ? (
             <button

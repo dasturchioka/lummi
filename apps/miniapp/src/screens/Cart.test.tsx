@@ -111,8 +111,14 @@ describe('CartView: the discount switch (#39)', () => {
       [{ type: 'none' }],
     ]);
     expect(read(within(code!).getByTestId('option-label'))).toBe('Промокод BLOGER5');
-    // the code stays in its field, not applied
+    // the code stays in its field, muted: not applied
     expect(read(screen.getByTestId('promo-status'))).toBe('Сейчас выбрана другая скидка');
+    expect(screen.getByTestId('promo-input').getAttribute('data-state')).toBe('off');
+  });
+
+  it('an applied code reads as applied in its field', () => {
+    render(<CartView cart={CART_FIXTURES['choice-promo']} />);
+    expect(screen.getByTestId('promo-input').hasAttribute('data-state')).toBe(false);
   });
 
   it('with an entered code, a cheaper entitlement says by how much, and «Переключить» picks it', () => {
