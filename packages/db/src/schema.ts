@@ -1345,3 +1345,41 @@ export const birthdayCoupons = pgTable(
 );
 
 export type BirthdayCouponRow = typeof birthdayCoupons.$inferSelect;
+
+/**
+ * One row per distinct error (ADR 0034). The fingerprint hashes the error class, the route and the
+ * top stack frames, so a repeat only raises `count` and `last_seen_at`. No message, no query string,
+ * no parameter: nothing in this table can hold personal data.
+ */
+export const errorEvents = pgTable(
+  'error_events',
+  {
+    id: id(),
+    fingerprint: text('fingerprint').notNull(),
+    errorClass: text('error_class').notNull(),
+    /** `GET /orders/:id`, or `worker:<sweep>`: ids and query strings are already stripped. */
+    route: text('route').notNull(),
+    /** The first application frames, file and function only (no line numbers, no node_modules). */
+    frames: text('frames').notNull(),
+    count: integer('count').notNull().default(1),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex('error_events_fingerprint_key').on(t.fingerprint)],
+);
+
+/**
+ * The worker's last tick, one row, written by the worker and read by the API's watch (ADR 0034).
+ * `outage_alerted_at` is set when the "worker is silent" alert went out and cleared on recovery,
+ * so an outage alerts once and its end once.
+ */
+export const workerHeartbeat = pgTable(
+  'worker_heartbeat',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull(),
+    outageAlertedAt: timestamp('outage_alerted_at', { withTimezone: true }),
+  },
+  (t) => [check('worker_heartbeat_one_row', sql`${t.id}`)],
+);

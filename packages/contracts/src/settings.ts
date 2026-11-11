@@ -879,6 +879,37 @@ export const settingDefinitions = {
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
     },
   },
+  /** Minutes without a worker tick before the API alerts (ADR 0034). */
+  'ops.workerSilentMinutes': {
+    schema: z.number().int().min(2).max(60),
+    default: 3,
+    area: 'worker',
+    unit: 'count',
+    label: {
+      ru: 'Минут тишины фонового сервиса до тревоги',
+      uz: 'Fon xizmati jim turganda ogohlantirish (daqiqa)',
+    },
+    hint: {
+      ru: 'Фоновый сервис отмечается каждую минуту. Если его нет дольше этого срока, владелец и разработчик получают сообщение один раз, и ещё одно, когда сервис вернётся.',
+      uz: 'Fon xizmati har daqiqada belgi qoldiradi. Bundan uzoq jim tursa, egasi va dasturchi bir marta xabar oladi, xizmat qaytganda yana bir marta.',
+    },
+  },
+  /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0034). Null = nobody. */
+  'ops.developerChatId': {
+    schema: z
+      .number()
+      .int()
+      .refine((n) => n !== 0)
+      .nullable(),
+    default: null,
+    area: 'system',
+    label: { ru: 'Telegram ID разработчика', uz: 'Dasturchining Telegram ID raqami' },
+    hint: {
+      ru: 'Сюда приходит сообщение о каждой новой ошибке сервера (без персональных данных) и тревога, если фоновый сервис замолчал. Пусто, пока не задан.',
+      uz: 'Serverning har bir yangi xatosi (shaxsiy maʼlumotlarsiz) va fon xizmati jim qolgani haqidagi ogohlantirish shu yerga keladi. Belgilanmaguncha boʻsh.',
+    },
+    hideBounds: true,
+  },
   // ---- Messaging
   /** Broadcast sends per second. Telegram allows about 30 per second to different chats, so 25 is the ceiling (ADR 0021). Read when the worker starts. */
   'broadcast.sendRatePerSecond': {

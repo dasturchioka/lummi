@@ -1,0 +1,10 @@
+[Unit]
+Description=LUMMI daily backup (encrypted dump, second copy)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+# Installed to /opt/lummi/backup/ by hand (docs/run-guide.md, "Backups"). Staging: set BACKUP_ENV_FILE=/opt/lummi-staging/.env.
+Environment=BACKUP_ENV_FILE=/opt/lummi/.env
+ExecStart=/opt/lummi/backup/backup.sh

@@ -91,6 +91,9 @@ export interface AppDeps {
   botInfo?: UserFromGetMe;
 }
 
+import { ErrorTracker } from './ops/error-tracker.service';
+import { WorkerWatch } from './ops/worker-watch.service';
+
 @Module({})
 export class AppModule {
   /** Dependencies are injected, so tests build the same app with a test db and fake edges. */
@@ -187,6 +190,8 @@ export class AppModule {
         CampaignsService,
         BirthdayService,
         BirthdayCouponJob,
+        ErrorTracker,
+        WorkerWatch,
       ],
       exports: [
         CreditEvents,
@@ -203,6 +208,8 @@ export class AppModule {
         WorkerRuntime,
         StaffService,
         DeliveryService,
+        ErrorTracker,
+        WorkerWatch,
       ],
     };
   }

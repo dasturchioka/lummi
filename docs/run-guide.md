@@ -134,6 +134,59 @@ dpkg-reconfigure -f noninteractive unattended-upgrades
 
 Data stays in Uzbekistan (ADR 0020): backups of `pgdata` and `files` go to storage on the same server or elsewhere in the country, never abroad.
 
+## Backups and restore
+
+Decision: a **host systemd timer**, not a Compose service (ADR 0034). The restore test must start a throwaway Postgres container, and `rsync` has to read the `files` volume and ssh to the second location. Doing that from a container would mean handing it the Docker socket, which is root on the host. A timer on the host needs only `age`, `rsync` and Docker, and `OnCalendar=... Asia/Tashkent` fixes the time whatever the host's timezone.
+
+What runs every day at 03:00 Asia/Tashkent (`deploy/backup/backup.sh`):
+
+1. `pg_dump -Fc` (compressed) piped straight into `age`, so no plaintext dump touches the disk: `/var/backups/lummi/daily/lummi-<date>.dump.age`. Sunday's dump is copied to `weekly/`. The VPS keeps 14 daily and 8 weekly (`BACKUP_KEEP_DAILY`, `BACKUP_KEEP_WEEKLY`).
+2. The `.env` and the userbot session file, each `age`-encrypted into `secrets/` (both are full access: the session is the customer's own Telegram account).
+3. The second copy with `rsync` over ssh to `BACKUP_RSYNC_TARGET`: `dumps/`, `secrets/` and `media/` (the whole files volume, receipts included). Dumps and secrets mirror the VPS (rotation carries over); `media/` is never deleted from the copy, so a purge of a customer's receipts must be repeated there by hand. The target must be inside Uzbekistan (ADR 0025). Until the customer names it, leave it empty: the script warns and skips this step.
+4. On any failure the script sends a fixed text to `BACKUP_ALERT_CHAT_ID` through the bot, and exits non-zero (`systemctl status lummi-backup`). A good run writes `/var/backups/lummi/last-success`.
+
+Receipts in `media/` are not encrypted by `age`: they are protected by the ssh channel and the target's own access control, as the live volume is by the host's. The target is the customer's, inside the country.
+
+### Install (once, as root, on the host)
+
+```sh
+apt-get install -y age rsync
+install -d -m 700 /opt/lummi/backup && cp deploy/backup/{backup.sh,restore.sh,lib.sh} /opt/lummi/backup/
+cp deploy/backup/lummi-backup.{service,timer} /etc/systemd/system/
+# put the BACKUP_* keys (deploy/staging.env.example) into the stack's .env; the service reads /opt/lummi/.env
+systemctl daemon-reload && systemctl enable --now lummi-backup.timer
+systemctl start lummi-backup.service && journalctl -u lummi-backup -n 20     # first run by hand
+/opt/lummi/backup/backup.sh --dry-run                                         # what the second copy would send
+```
+
+Second-copy ssh: create a key for root on the host (`ssh-keygen -t ed25519 -f /root/.ssh/lummi_backup -N ''`), put the public half in the target's `authorized_keys` (ideally restricted to `rsync` in `~/backup`), pin its host key once with `ssh-keyscan -H <host> >> /root/.ssh/known_hosts`, and set `BACKUP_SSH_KEY`.
+
+### The decryption key
+
+The owner generates the key pair on **their own computer**, not on the server: `age-keygen -o lummi-backup-key.txt`. The line `Public key: age1...` goes into `BACKUP_AGE_RECIPIENT`. The file `lummi-backup-key.txt` is the private key: the owner keeps two copies offline (a password manager and a printed or USB copy in a safe place) and it never goes onto the VPS or the second location. **Without it every backup is unreadable and nobody can recover it.** Check it works the day it is made: encrypt a line with the public key, decrypt it with the file.
+
+### Restore, and the monthly restore test
+
+`restore.sh` decrypts a dump into a **throwaway** `postgres:17-alpine` container (no published port, random password), runs `pg_restore`, prints row counts of the key tables and the number of recorded migrations, and deletes the container. It never touches the running stack, so it is also the dry run of a real disaster.
+
+```sh
+# the owner gives the key for the test; copy it to a temp file, remove it after
+install -m 600 /dev/stdin /root/age-test-key.txt < lummi-backup-key.txt
+/opt/lummi/backup/restore.sh --identity /root/age-test-key.txt            # newest daily dump
+/opt/lummi/backup/restore.sh --identity /root/age-test-key.txt --dump /var/backups/lummi/weekly/lummi-<date>.dump.age
+shred -u /root/age-test-key.txt
+```
+
+Monthly (first Monday): run it on production, check the counts look like the shop (orders and customers are not 0 and are close to the admin's numbers), and once a quarter run it against a dump fetched from the **second location**. Note the date and result in the handover log. The container name is printed with `--keep` if you want to look inside; remove it with `docker rm -fv`.
+
+A real disaster, in short: new host from this guide, `docker compose up -d postgres`, create an empty database, `age -d -i key dump.age | docker exec -i <postgres> pg_restore -U lummi -d lummi --no-owner`, restore `media/` into the `files` volume, decrypt `secrets/env.age` to `.env`, then `up -d`.
+
+## Monitoring
+
+- **Error pings.** Every unexpected API 500 and every failed worker sweep is filed in the `error_events` table by a fingerprint (error class, route pattern, top stack frames; no message, no query string, no ids). The first time a fingerprint appears the developer gets one Telegram message; repeats only raise `count` and `last_seen_at`. Set the developer's Telegram id in the admin settings (`ops.developerChatId`); until set, the first occurrence only reaches the log. Read the table with `docker compose exec postgres psql -U lummi -c 'select route, error_class, count, last_seen_at from error_events order by last_seen_at desc'`.
+- **Worker watch.** The worker stamps `worker_heartbeat` every minute. The API checks it every minute; after `ops.workerSilentMinutes` (default 3) of silence the owner (DMs, «Системные» topic) and the developer get one alert, and one more when it returns. The alert is sent straight to Telegram, since the outbox is delivered by the worker that is down.
+- **Uptime monitor (external, every minute).** Use a free pinger such as UptimeRobot (Free: 5-minute interval; the 1-minute interval needs a paid plan) or Better Stack, or a second small VPS in Uzbekistan running a cron `curl`. Two HTTP monitors, 1-minute interval, alert on 2 consecutive failures, notify by Telegram (the monitor's own bot) and e-mail: `https://api.<DOMAIN>/health` (expects 200 `{"status":"ok"}`; 503 means the database is down) and `https://<DOMAIN>/` (the Mini App, expects 200). Create the monitor account in the customer's or the developer's name and write it down in the handover log. It covers the case the API watch cannot: the whole host being down.
+
 ## Local check of the production stack
 
 `docker compose --env-file <env> config` validates it. To try it on a laptop, build the three images (`docker build --target api|admin|web .`, one at a time), tag them `ghcr.io/<owner>/lummi-<name>:<IMAGE_TAG>`, set `DOMAIN=lummi.localhost`, and `curl --resolve` or send `Host:` headers to the Caddy port.

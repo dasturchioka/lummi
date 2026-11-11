@@ -9,6 +9,8 @@ import { OutboxService, SEND_ATTEMPTS } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
+import { ErrorTracker } from '../ops/error-tracker.service';
+import { WorkerWatch } from '../ops/worker-watch.service';
 
 /** Telegram sends per second for the whole queue (ADR 0021: broadcasts at <= 25 msg/s). */
 const SEND_RATE_PER_SECOND = 25;
@@ -85,6 +87,8 @@ export class WorkerRuntime implements OnApplicationShutdown {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AlertService) private readonly alerts: AlertService,
     @Inject(SettingsService) private readonly settings: SettingsService,
+    @Inject(ErrorTracker) private readonly errors: ErrorTracker,
+    @Inject(WorkerWatch) private readonly watch: WorkerWatch,
   ) {
     this.register({
       name: 'prune-processed-updates',
@@ -112,6 +116,10 @@ export class WorkerRuntime implements OnApplicationShutdown {
     if (this.ticking) return;
     this.ticking = true;
     try {
+      // At the start of the tick: a tick that hangs stops the beats, and the API's watch alerts (ADR 0034).
+      await this.watch
+        .beat()
+        .catch((e: unknown) => this.log.error(`heartbeat failed: ${describeError(e)}`));
       const ctx: SweepContext = {
         now: this.edges.clock.now(),
         db: this.db,
@@ -134,6 +142,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
       const count = (this.failures.get(sweep.name) ?? 0) + 1;
       this.failures.set(sweep.name, count);
       this.log.error(`sweep ${sweep.name} failed (${count} in a row): ${describeError(e)}`);
+      void this.errors.record(e, `worker:${sweep.name}`);
       const limit = await this.settings.get('worker.sweepFailureAlertAfter');
       if (count === limit) {
         await ctx

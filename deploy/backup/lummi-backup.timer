@@ -1,0 +1,11 @@
+[Unit]
+Description=LUMMI daily backup at 03:00 Asia/Tashkent
+
+[Timer]
+# systemd reads the zone in the expression, so the host's own timezone does not matter.
+OnCalendar=*-*-* 03:00:00 Asia/Tashkent
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target
