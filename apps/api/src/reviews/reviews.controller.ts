@@ -73,6 +73,8 @@ export class ReviewsAdminController {
   setPublished(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.reviews.setPublished, async ({ params, body }) => {
       const dto = await this.reviews.setPublished(actor.id, params.id, body.published);
+      if (dto === 'not_finished')
+        return { status: 409 as const, body: { code: 'not_finished' as const } };
       return dto
         ? { status: 200 as const, body: dto }
         : { status: 404 as const, body: { code: 'not_found' as const } };

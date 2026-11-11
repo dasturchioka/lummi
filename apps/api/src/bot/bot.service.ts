@@ -186,8 +186,12 @@ export class BotService implements OnApplicationShutdown {
           }
         : null;
     if (!file) return;
-    // a review waiting for photos (#41) takes the file first; otherwise it is a receipt
-    const photo = await this.reviewsBot.onFile(ctx.tx, ctx.from.id, file);
+    // A receipt always wins (ADR 0020, 0033): with an order waiting for payment every file goes to
+    // the receipt intake. Otherwise a review waiting for photos (#41) takes the images it can, and
+    // whatever it cannot (a PDF) falls through to the receipt intake too.
+    const photo = (await this.botReceipts.hasOrderWaiting(ctx.tx, ctx.from.id))
+      ? null
+      : await this.reviewsBot.onFile(ctx.tx, ctx.from.id, file);
     if (photo) {
       if (photo.after) ctx.afterCommit.push(photo.after);
       return;

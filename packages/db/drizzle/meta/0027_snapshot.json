@@ -1,5 +1,5 @@
 {
-  "id": "6c12308d-1df7-4c6f-b095-ee9638db8968",
+  "id": "13507a9b-88f5-4548-935c-cc1670267c9a",
   "prevId": "171774ec-085f-4f7d-8e6b-b72e01b598da",
   "version": "7",
   "dialect": "postgresql",
@@ -5014,8 +5014,38 @@
           "primaryKey": false,
           "notNull": false
         },
+        "topic_queued_at": {
+          "name": "topic_queued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "topic_posted_at": {
           "name": "topic_posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "topic_message_id": {
+          "name": "topic_message_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "follow_up_posted_at": {
+          "name": "follow_up_posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_lease_at": {
+          "name": "post_lease_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_limit_notice_at": {
+          "name": "photo_limit_notice_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

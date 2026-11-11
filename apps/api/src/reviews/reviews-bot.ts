@@ -9,6 +9,7 @@ import {
   isNull,
   lt,
   lte,
+  or,
   orders,
   reviewPhotos,
   reviews,
@@ -42,9 +43,12 @@ import { WorkerRuntime, type SweepContext } from '../worker/runtime';
 
 /** The namespace of this feature's callback data; other features use their own. */
 export const REVIEW_CALLBACK = /^rev:/;
-const RATE = /^rev:r:(\d+):([1-5])$/;
-const SKIP = /^rev:s:(\d+)$/;
-const DONE = /^rev:d:(\d+)$/;
+/** Ids are bounded like the orders group's (`ord:` in #37): a longer one never reaches the database. */
+const RATE = /^rev:r:(\d{1,16}):([1-5])$/;
+const SKIP = /^rev:s:(\d{1,16})$/;
+const DONE = /^rev:d:(\d{1,16})$/;
+/** A card whose queue entry is older than this and still not posted is queued again by the sweep. */
+const CARD_REQUEUE_MS = 10 * 60 * 1000;
 
 const JOB = 'bot.review-photo';
 /** Tries to fetch and store a photo before the shopper is asked to send it again. */
@@ -67,6 +71,11 @@ export const REVIEW_PHOTO_PREFIX = 'private/reviews/';
 /** The longest side of a stored photo, px. A technical bound (storage and bandwidth), not a shop rule. */
 const PHOTO_MAX_SIDE = 1600;
 const PHOTO_MAX_PIXELS = 100_000_000;
+
+/** Whether a rating is low enough to go to «Отзывы»: the one place that reads `reviews.lowRatingMax`. */
+export function isLowRating(rating: number, settings: { 'reviews.lowRatingMax': number }): boolean {
+  return rating <= settings['reviews.lowRatingMax'];
+}
 
 type BotTexts = (typeof dictionaries)['ru']['bot'];
 
@@ -263,6 +272,8 @@ export class ReviewsBot implements OnApplicationShutdown {
       .onConflictDoNothing()
       .returning();
     if (!review) return this.say(tx, customer, t.reviewAlready);
+    // a low rating reaches the managers at once; the comment and photos follow as a reply
+    await this.queueCard(tx, review.id);
     return this.say(tx, customer, fill(t.reviewAskComment, { rating: String(rating) }), {
       reply_markup: {
         inline_keyboard: [[{ text: t.reviewSkip, callback_data: `rev:s:${review.id}` }]],
@@ -306,20 +317,23 @@ export class ReviewsBot implements OnApplicationShutdown {
   ): Promise<{ after: AfterCommit | null } | null> {
     const customer = await this.customer(tx, telegramId);
     if (!customer) return null;
+    // the review row is locked while the photos are counted, so an album's updates arriving
+    // together cannot all see room for one more
     const [review] = await tx
       .select()
       .from(reviews)
       .where(and(eq(reviews.customerId, customer.id), eq(reviews.step, 'photos')))
       .orderBy(desc(reviews.stepAt), desc(reviews.id))
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!review) return null;
     const t = dictionaries[customer.language].bot;
-    const maxBytes = await this.receipts.maxUploadBytes();
+    // read on the update's own connection: a pool shared with a lock waiter must not be asked for another
+    const maxBytes =
+      (await readSettings(tx, ['receipts.maxUploadMb']))['receipts.maxUploadMb'] * 1024 * 1024;
     const picked = pickIncomingFile(file, maxBytes, IMAGE_MIMES);
-    if (picked === 'unsupported') {
-      await this.say(tx, customer, t.reviewPhotoUnsupported);
-      return { after: null };
-    }
+    // not an image (a PDF, another type): not ours, the receipt intake answers it
+    if (picked === 'unsupported') return null;
     if (picked === 'too_large') {
       await this.say(tx, customer, this.tooLarge(customer, maxBytes));
       return { after: null };
@@ -329,7 +343,16 @@ export class ReviewsBot implements OnApplicationShutdown {
       .select({ taken: sql<number>`count(*)`.mapWith(Number) })
       .from(reviewPhotos)
       .where(eq(reviewPhotos.reviewId, review.id));
-    if (taken >= max) return { after: null }; // the last one is being taken in: nothing more is kept
+    if (taken >= max) {
+      // the limit is said once, however many more arrive
+      const [first] = await tx
+        .update(reviews)
+        .set({ photoLimitNoticeAt: this.edges.clock.now() })
+        .where(and(eq(reviews.id, review.id), isNull(reviews.photoLimitNoticeAt)))
+        .returning({ id: reviews.id });
+      if (first) await this.say(tx, customer, fill(t.reviewPhotosFull, { max: String(max) }));
+      return { after: null };
+    }
     const [row] = await tx
       .insert(reviewPhotos)
       .values({ reviewId: review.id, fileId: picked.fileId, createdAt: this.edges.clock.now() })
@@ -366,8 +389,8 @@ export class ReviewsBot implements OnApplicationShutdown {
       .returning();
     if (!closed) return;
     const t = dictionaries[customer.language].bot;
-    const { 'reviews.lowRatingMax': low } = await readSettings(tx, ['reviews.lowRatingMax']);
-    await this.say(tx, customer, closed.rating <= low ? t.reviewThanksLow : t.reviewThanks);
+    const low = isLowRating(closed.rating, await readSettings(tx, ['reviews.lowRatingMax']));
+    await this.say(tx, customer, low ? t.reviewThanksLow : t.reviewThanks);
     await this.release(tx, closed.id);
   }
 
@@ -396,12 +419,22 @@ export class ReviewsBot implements OnApplicationShutdown {
         .limit(BATCH);
       for (const id of new Set([...stale.map((r) => r.id), ...waiting.map((r) => r.id)]))
         await this.release(tx, id);
+      // low ratings whose card never went out (no group then, or the queue entry was lost)
+      const { 'reviews.lowRatingMax': lowMax } = await readSettings(tx, ['reviews.lowRatingMax']);
+      const cards = await tx
+        .select({ id: reviews.id })
+        .from(reviews)
+        .where(and(isNull(reviews.topicPostedAt), lte(reviews.rating, lowMax)))
+        .orderBy(asc(reviews.id))
+        .limit(BATCH);
+      for (const { id } of cards) await this.queueCard(tx, id, now);
     });
   }
 
   /**
-   * Claim a finished review once it has no photo in flight. A low rating queues its «Отзывы» post
-   * with the claim; with no group set it stays unclaimed, and the sweep tries again.
+   * Claim a finished review once it has no photo in flight. A low rating queues its follow-up (the
+   * comment and photos, as a reply to the card) with the claim; with no group set it stays
+   * unclaimed, and the sweep tries again.
    */
   async release(tx: DbOrTx, reviewId: number): Promise<void> {
     const [review] = await tx.select().from(reviews).where(eq(reviews.id, reviewId));
@@ -411,9 +444,9 @@ export class ReviewsBot implements OnApplicationShutdown {
       .from(reviewPhotos)
       .where(and(eq(reviewPhotos.reviewId, reviewId), isNull(reviewPhotos.fileKey)));
     if (fetching > 0) return;
-    const { 'reviews.lowRatingMax': low } = await readSettings(tx, ['reviews.lowRatingMax']);
-    const group = review.rating <= low ? await this.settings.get('bot.groupChatId', tx) : null;
-    if (review.rating <= low && group === null) {
+    const low = isLowRating(review.rating, await readSettings(tx, ['reviews.lowRatingMax']));
+    const group = low ? await this.settings.get('bot.groupChatId', tx) : null;
+    if (low && group === null) {
       this.log.warn(`review ${reviewId} is low but no orders group is set: it waits`);
       return;
     }
@@ -424,6 +457,36 @@ export class ReviewsBot implements OnApplicationShutdown {
       .returning({ id: reviews.id });
     if (claimed && group !== null)
       await this.outbox.enqueueTask(tx, 'review_post', reviewId, group);
+  }
+
+  /**
+   * Queue a low rating's card for «Отзывы», once (`topic_queued_at`; again only when an earlier
+   * entry is older than ten minutes and the card is still not out). Nothing without a group.
+   */
+  private async queueCard(
+    tx: DbOrTx,
+    reviewId: number,
+    now = this.edges.clock.now(),
+  ): Promise<void> {
+    const settings = await readSettings(tx, ['reviews.lowRatingMax']);
+    const group = await this.settings.get('bot.groupChatId', tx);
+    if (group === null) return;
+    const [claimed] = await tx
+      .update(reviews)
+      .set({ topicQueuedAt: now })
+      .where(
+        and(
+          eq(reviews.id, reviewId),
+          isNull(reviews.topicPostedAt),
+          lte(reviews.rating, settings['reviews.lowRatingMax']),
+          or(
+            isNull(reviews.topicQueuedAt),
+            lt(reviews.topicQueuedAt, new Date(now.getTime() - CARD_REQUEUE_MS)),
+          ),
+        ),
+      )
+      .returning({ id: reviews.id });
+    if (claimed) await this.outbox.enqueueTask(tx, 'review_post', reviewId, group);
   }
 
   // ---- The photo job

@@ -16,6 +16,9 @@ import {
   fragrances,
   inArray,
   isNotNull,
+  isNull,
+  lt,
+  or,
   orderLines,
   orders,
   reviewPhotos,
@@ -37,9 +40,25 @@ import { readSettings, SettingsService } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 
 /** Staff read the group in Russian, like the owner alerts (spec Changes 2026-11-09). */
-const g = dictionaries.ru.bot.group;
+const group = dictionaries.ru.bot.group;
 /** The most rows the Excel export writes: a guard against a runaway file, far above any real list. */
 const EXPORT_MAX_ROWS = 20_000;
+/** A delivery that dies holding the review's post lease frees it after this long. */
+const LEASE_MS = 2 * 60 * 1000;
+/** The customer columns a review's display needs: the name and the phone (the account's, else the Recipient's). */
+const WHO = {
+  first: customers.firstName,
+  last: customers.lastName,
+  phone: customers.phone,
+  recipientPhone: orders.recipientPhone,
+};
+const whoOf = (r: {
+  first: string;
+  last: string | null;
+  phone: string | null;
+  recipientPhone: string;
+}) => ({ name: [r.first, r.last].filter(Boolean).join(' '), phone: r.phone ?? r.recipientPhone });
+
 const FORMAT = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } } as const;
 
 type Target = { kind: 'fragrance'; id: number } | { kind: 'discovery' } | { kind: 'builder' };
@@ -163,6 +182,8 @@ export class ReviewsService {
     const parsed = adminReviewsQuerySchema.parse(q);
     const where: SQL[] = [];
     if (parsed.rating) where.push(eq(reviews.rating, parsed.rating));
+    if (parsed.order)
+      where.push(sql`${reviews.orderId} in (select id from orders where number = ${parsed.order})`);
     if (parsed.state) where.push(eq(reviews.published, parsed.state === 'published'));
     if (parsed.from)
       where.push(sql`${reviews.createdAt} >= ${tashkentDayStart(parsed.from).toISOString()}`);
@@ -201,14 +222,7 @@ export class ReviewsService {
     page?: { limit: number; offset: number },
   ): Promise<AdminReviewDto[]> {
     const base = this.db
-      .select({
-        review: reviews,
-        number: orders.number,
-        first: customers.firstName,
-        last: customers.lastName,
-        phone: customers.phone,
-        recipientPhone: orders.recipientPhone,
-      })
+      .select({ review: reviews, number: orders.number, ...WHO })
       .from(reviews)
       .innerJoin(orders, eq(orders.id, reviews.orderId))
       .innerJoin(customers, eq(customers.id, reviews.customerId))
@@ -225,43 +239,66 @@ export class ReviewsService {
       .where(inArray(orderLines.orderId, orderIds))
       .orderBy(asc(orderLines.orderId), asc(orderLines.position));
     const photos = await this.db
-      .select({ reviewId: reviewPhotos.reviewId, id: reviewPhotos.id })
+      .select({
+        reviewId: reviewPhotos.reviewId,
+        id: reviewPhotos.id,
+        stored: isNotNull(reviewPhotos.fileKey),
+      })
       .from(reviewPhotos)
       .where(
-        and(
-          inArray(
-            reviewPhotos.reviewId,
-            found.map((r) => r.review.id),
-          ),
-          isNotNull(reviewPhotos.fileKey),
+        inArray(
+          reviewPhotos.reviewId,
+          found.map((r) => r.review.id),
         ),
       )
       .orderBy(asc(reviewPhotos.id));
-    return found.map(({ review, number, first, last, phone, recipientPhone }) => ({
-      id: review.id,
-      orderNumber: number,
-      customerName: [first, last].filter(Boolean).join(' '),
-      phone: phone ?? recipientPhone,
-      rating: review.rating,
-      comment: review.comment,
-      items: [...new Set(lines.filter((l) => l.orderId === review.orderId).map((l) => l.name))],
-      photoIds: photos.filter((p) => p.reviewId === review.id).map((p) => p.id),
-      published: review.published,
-      createdAt: review.createdAt.toISOString(),
-      publishedAt: review.publishedAt?.toISOString() ?? null,
-    }));
+    return found.map((row) => {
+      const { review } = row;
+      const mine = photos.filter((p) => p.reviewId === review.id);
+      const who = whoOf(row);
+      return {
+        id: review.id,
+        orderNumber: row.number,
+        customerName: who.name,
+        phone: who.phone,
+        rating: review.rating,
+        comment: review.comment,
+        items: [...new Set(lines.filter((l) => l.orderId === review.orderId).map((l) => l.name))],
+        photoIds: mine.filter((p) => p.stored).map((p) => p.id),
+        finished: review.step === 'done' && mine.every((p) => p.stored),
+        published: review.published,
+        createdAt: review.createdAt.toISOString(),
+        publishedAt: review.publishedAt?.toISOString() ?? null,
+      };
+    });
   }
 
-  /** `null`: no such review. Setting the state it already has changes and audits nothing. */
+  /** The review of one order for the admin order page; null when it has none. */
+  async ofOrder(orderId: number): Promise<AdminReviewDto | null> {
+    const [dto] = await this.rows(eq(reviews.orderId, orderId));
+    return dto ?? null;
+  }
+
+  /**
+   * `null`: no such review; `not_finished`: it is still being written in the bot, so it cannot be
+   * published (hiding is always possible). Setting the state it already has changes nothing.
+   */
   async setPublished(
     actorId: number,
     id: number,
     published: boolean,
-  ): Promise<AdminReviewDto | null> {
+  ): Promise<AdminReviewDto | 'not_finished' | null> {
     const changed = await this.db.transaction(async (tx) => {
       const [current] = await tx.select().from(reviews).where(eq(reviews.id, id)).for('update');
       if (!current) return 'missing' as const;
       if (current.published === published) return 'same' as const;
+      if (published) {
+        const [{ fetching } = { fetching: 0 }] = await tx
+          .select({ fetching: sql<number>`count(*)`.mapWith(Number) })
+          .from(reviewPhotos)
+          .where(and(eq(reviewPhotos.reviewId, id), isNull(reviewPhotos.fileKey)));
+        if (current.step !== 'done' || fetching > 0) return 'not_finished' as const;
+      }
       await tx
         .update(reviews)
         .set({ published, publishedAt: published ? this.edges.clock.now() : null })
@@ -276,6 +313,7 @@ export class ReviewsService {
       return 'changed' as const;
     });
     if (changed === 'missing') return null;
+    if (changed === 'not_finished') return 'not_finished';
     const [dto] = await this.rows(eq(reviews.id, id));
     return dto ?? null;
   }
@@ -316,66 +354,120 @@ export class ReviewsService {
   // ---- The «Отзывы» post
 
   /**
-   * Post a low review to the «Отзывы» topic: the text first, then each stored photo. Each step is
-   * stamped as it lands, so a retry after a failure sends only what is missing.
+   * A low review in the «Отзывы» topic, in two steps (spec Changes 2026-11-11): the card the moment
+   * the rating arrives (order, name, phone, rating, «Комментарий пишется…»), and once the review is
+   * finished its comment and photos as a reply to that card, or nothing when there is none. Each
+   * step is stamped as it lands, and one delivery holds the review's lease, so a retry or a second
+   * task sends only what is missing and never a card twice.
    */
   private async post(task: OutboxTask): Promise<void> {
-    const [found] = await this.db
-      .select({
-        review: reviews,
-        number: orders.number,
-        first: customers.firstName,
-        last: customers.lastName,
-        phone: customers.phone,
-        recipientPhone: orders.recipientPhone,
-      })
-      .from(reviews)
-      .innerJoin(orders, eq(orders.id, reviews.orderId))
-      .innerJoin(customers, eq(customers.id, reviews.customerId))
-      .where(eq(reviews.id, task.ref));
-    if (!found) return;
     const chatId = (await this.settings.get('bot.groupChatId')) ?? null;
     if (chatId === null) {
       this.log.warn(`review ${task.ref}: no orders group is set, nothing posted`);
       return;
     }
-    const threadId = (await this.settings.get('bot.topics')).reviews;
+    const now = this.edges.clock.now();
+    const [leased] = await this.db
+      .update(reviews)
+      .set({ postLeaseAt: now })
+      .where(
+        and(
+          eq(reviews.id, task.ref),
+          or(
+            isNull(reviews.postLeaseAt),
+            lt(reviews.postLeaseAt, new Date(now.getTime() - LEASE_MS)),
+          ),
+        ),
+      )
+      .returning({ id: reviews.id });
+    if (!leased) {
+      const [exists] = await this.db
+        .select({ id: reviews.id })
+        .from(reviews)
+        .where(eq(reviews.id, task.ref));
+      if (!exists) return;
+      throw new Error(`review ${task.ref} is being posted by another delivery`);
+    }
+    try {
+      const threadId = (await this.settings.get('bot.topics')).reviews;
+      await this.postCard(task.ref, chatId, threadId);
+      await this.postFollowUp(task.ref, chatId, threadId);
+    } finally {
+      await this.db.update(reviews).set({ postLeaseAt: null }).where(eq(reviews.id, task.ref));
+    }
+  }
+
+  private async postCard(id: number, chatId: number, threadId: number | null): Promise<void> {
+    const [found] = await this.db
+      .select({ review: reviews, number: orders.number, ...WHO })
+      .from(reviews)
+      .innerJoin(orders, eq(orders.id, reviews.orderId))
+      .innerJoin(customers, eq(customers.id, reviews.customerId))
+      .where(eq(reviews.id, id));
+    if (!found || found.review.topicPostedAt !== null) return;
     const { review } = found;
-    if (review.topicPostedAt === null) {
-      const lines = await this.db
-        .select({ name: orderLines.nameRu })
-        .from(orderLines)
-        .where(eq(orderLines.orderId, review.orderId))
-        .orderBy(asc(orderLines.position));
-      const name = [found.first, found.last].filter(Boolean).join(' ');
-      const phone = found.phone ?? found.recipientPhone;
-      const text = [
-        `<b>${fill(g.reviewTitle, { rating: String(review.rating), number: String(found.number) })}</b>`,
-        `${g.reviewName}: ${escapeHtml(name)}`,
-        `${g.reviewPhone}: ${escapeHtml(formatPhone(phone))}`,
-        `${g.reviewItems}: ${escapeHtml([...new Set(lines.map((l) => l.name))].join(', '))}`,
-        `${g.reviewComment}: ${review.comment ? escapeHtml(review.comment) : g.reviewNoComment}`,
-      ].join('\n');
-      await this.edges.telegram.send({ chatId, threadId, text, options: { ...FORMAT } });
-      await this.db
-        .update(reviews)
-        .set({ topicPostedAt: this.edges.clock.now() })
-        .where(eq(reviews.id, review.id));
+    const lines = await this.db
+      .select({ name: orderLines.nameRu })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, review.orderId))
+      .orderBy(asc(orderLines.position));
+    const who = whoOf(found);
+    const text = [
+      `<b>${fill(group.reviewTitle, { rating: String(review.rating), number: String(found.number) })}</b>`,
+      `${group.reviewName}: ${escapeHtml(who.name)}`,
+      `${group.reviewPhone}: ${escapeHtml(formatPhone(who.phone))}`,
+      `${group.reviewItems}: ${escapeHtml([...new Set(lines.map((l) => l.name))].join(', '))}`,
+      ...(review.step === 'done' ? [] : [group.reviewWriting]),
+    ].join('\n');
+    const sent = await this.edges.telegram.send({ chatId, threadId, text, options: { ...FORMAT } });
+    await this.db
+      .update(reviews)
+      .set({ topicPostedAt: this.edges.clock.now(), topicMessageId: sent.messageId })
+      .where(eq(reviews.id, id));
+  }
+
+  private async postFollowUp(id: number, chatId: number, threadId: number | null): Promise<void> {
+    const [review] = await this.db.select().from(reviews).where(eq(reviews.id, id));
+    // finished and released (no photo in flight), the card out, and not already followed up
+    if (
+      !review ||
+      review.followUpPostedAt !== null ||
+      review.topicMessageId === null ||
+      review.postQueuedAt === null
+    )
+      return;
+    const reply = {
+      reply_parameters: { message_id: review.topicMessageId, allow_sending_without_reply: true },
+    };
+    if (review.comment) {
+      const text = `${group.reviewComment}: ${escapeHtml(review.comment)}`;
+      await this.edges.telegram.send({ chatId, threadId, text, options: { ...FORMAT, ...reply } });
     }
     const photos = await this.db
       .select()
       .from(reviewPhotos)
-      .where(and(eq(reviewPhotos.reviewId, review.id), isNotNull(reviewPhotos.fileKey)))
+      .where(and(eq(reviewPhotos.reviewId, id), isNotNull(reviewPhotos.fileKey)))
       .orderBy(asc(reviewPhotos.id));
     for (const photo of photos) {
       if (photo.postedAt !== null) continue;
       const bytes = await this.edges.files.get(photo.fileKey!);
-      if (bytes) await this.edges.telegram.send({ chatId, threadId, text: '', photo: { bytes } });
+      if (bytes)
+        await this.edges.telegram.send({
+          chatId,
+          threadId,
+          text: '',
+          options: reply,
+          photo: { bytes },
+        });
       await this.db
         .update(reviewPhotos)
         .set({ postedAt: this.edges.clock.now() })
         .where(eq(reviewPhotos.id, photo.id));
     }
+    await this.db
+      .update(reviews)
+      .set({ followUpPostedAt: this.edges.clock.now() })
+      .where(eq(reviews.id, id));
   }
 }
 

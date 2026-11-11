@@ -46,6 +46,8 @@ export const adminReviewsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(ADMIN_REVIEWS_PAGE_SIZE),
   rating: z.coerce.number().int().min(1).max(5).optional(),
+  /** One order's review (the link from the order page). */
+  order: z.coerce.number().int().positive().optional(),
   state: z.enum(REVIEW_PUBLISHED_FILTERS).optional(),
   from: tashkentDaySchema.optional(),
   to: tashkentDaySchema.optional(),
@@ -63,6 +65,8 @@ export const adminReviewSchema = z.object({
   items: z.array(z.string()),
   /** Photo ids, served to staff at `/admin/reviews/photos/<id>`, published or not. */
   photoIds: z.array(z.number().int()),
+  /** Still being written in the bot (comment or photos open, or a photo being fetched): it cannot be published yet. */
+  finished: z.boolean(),
   published: z.boolean(),
   createdAt: z.string().datetime(),
   publishedAt: z.string().datetime().nullable(),
@@ -83,7 +87,7 @@ export type AdminReviewsPageDto = z.infer<typeof adminReviewsPageSchema>;
 export const setReviewPublishedBodySchema = z.object({ published: z.boolean() });
 
 export const adminReviewsErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found']),
+  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'not_finished']),
 });
 
 export const REVIEWS_EXPORT_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

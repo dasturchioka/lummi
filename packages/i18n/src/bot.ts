@@ -101,6 +101,7 @@ export const botMessages = defineMessages(
       reviewPhotoTryAgain: 'Сейчас не получилось принять фото. Отправьте его ещё раз через минуту.',
       reviewCommentTooLong:
         'Комментарий слишком длинный: можно до {max} символов. Сократите его и отправьте ещё раз.',
+      reviewPhotosFull: 'Можно приложить до {max} фото: лишние не приняты.',
       reviewThanks: 'Спасибо за отзыв! Он помогает нам делать LUMMI лучше.',
       reviewThanksLow:
         'Спасибо, что рассказали. Нам жаль, что что-то пошло не так: менеджер свяжется с вами.',
@@ -119,6 +120,7 @@ export const botMessages = defineMessages(
         reviewName: 'Покупатель',
         reviewComment: 'Комментарий',
         reviewNoComment: 'Без комментария',
+        reviewWriting: 'Комментарий пишется…',
         reviewItems: 'В заказе',
         discount: 'Скидка ({source})',
         delivery: 'Доставка',
@@ -245,6 +247,7 @@ export const botMessages = defineMessages(
       reviewPhotoTryAgain: 'Hozir rasmni qabul qilib boʻlmadi. Bir daqiqadan keyin qayta yuboring.',
       reviewCommentTooLong:
         'Izoh juda uzun: {max} belgigacha boʻlishi mumkin. Qisqartirib, qayta yuboring.',
+      reviewPhotosFull: '{max} tagacha rasm qoʻshish mumkin: ortiqchalari qabul qilinmadi.',
       reviewThanks: 'Sharhingiz uchun rahmat! U LUMMIni yaxshilashga yordam beradi.',
       reviewThanksLow:
         'Aytganingiz uchun rahmat. Nimadir yaxshi chiqmagani uchun afsusdamiz: menejer siz bilan bogʻlanadi.',
@@ -258,6 +261,7 @@ export const botMessages = defineMessages(
         reviewName: 'Xaridor',
         reviewComment: 'Izoh',
         reviewNoComment: 'Izohsiz',
+        reviewWriting: 'Izoh yozilmoqda…',
         reviewItems: 'Buyurtmada',
         discount: 'Chegirma ({source})',
         delivery: 'Yetkazish',

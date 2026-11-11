@@ -1516,10 +1516,19 @@ export const reviews = pgTable(
       .notNull()
       .default('comment'),
     stepAt: timestamp('step_at', { withTimezone: true }).notNull().defaultNow(),
-    /** Taken when the review is released; a low rating's post is queued with it. */
+    /** Taken when the review is finished and has no photo in flight; a low rating's follow-up is queued with it. */
     postQueuedAt: timestamp('post_queued_at', { withTimezone: true }),
-    /** The topic post's text is out (the photos follow). */
+    /** A low rating's card in «Отзывы» was queued (the sweep queues it again if it never lands). */
+    topicQueuedAt: timestamp('topic_queued_at', { withTimezone: true }),
+    /** The card is out, and its Telegram message (the follow-up replies to it). */
     topicPostedAt: timestamp('topic_posted_at', { withTimezone: true }),
+    topicMessageId: bigint('topic_message_id', { mode: 'number' }),
+    /** The follow-up (comment and photos as a reply to the card) is out, or there was nothing to add. */
+    followUpPostedAt: timestamp('follow_up_posted_at', { withTimezone: true }),
+    /** One delivery posts to the topic at a time: its claim, expiring after a few minutes. */
+    postLeaseAt: timestamp('post_lease_at', { withTimezone: true }),
+    /** «Можно приложить до N фото» was said once. */
+    photoLimitNoticeAt: timestamp('photo_limit_notice_at', { withTimezone: true }),
     published: boolean('published').notNull().default(false),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     createdAt: createdAt(),

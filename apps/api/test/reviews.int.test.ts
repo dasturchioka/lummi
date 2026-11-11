@@ -16,6 +16,7 @@ import {
   orderLines,
   orders,
   outbox,
+  receipts,
   regions,
   reviewPhotos,
   reviews,
@@ -116,7 +117,8 @@ async function slugs(n: number) {
  * Placed through the API, then moved to «Доставлен» in the DB with its history row: the payment
  * and fulfilment chain has its own tests.
  */
-async function deliveredOrder(user: TestUser = ali, phone = '998901234567', n = 2) {
+/** An order placed through the API and still waiting for payment (`deliveredOrder` moves it on). */
+async function placedOrder(user: TestUser = ali, phone = '998901234567', n = 2) {
   const s: Shopper = await shopper(user, phone);
   const chosen = await slugs(n);
   for (const slug of chosen) {
@@ -143,8 +145,18 @@ async function deliveredOrder(user: TestUser = ali, phone = '998901234567', n = 
   const res = await s.orders.create({ body });
   if (res.status !== 201) throw new Error(`order ${res.status}`);
   const [order] = await t.db.select().from(orders).where(eq(orders.number, res.body.number));
-  await deliver(order!.id);
   return { id: order!.id, number: res.body.number, slugs: chosen, client: s };
+}
+
+/**
+ * A delivered order of the first `n` fragrances (10 ml each), delivered at the fake clock's "now":
+ * placed through the API, then moved to «Доставлен» in the DB with its history row, as the payment
+ * and fulfilment chain has its own tests.
+ */
+async function deliveredOrder(user: TestUser = ali, phone = '998901234567', n = 2) {
+  const o = await placedOrder(user, phone, n);
+  await deliver(o.id);
+  return o;
 }
 
 async function deliver(orderId: number, at = t.edges.clock.now()) {
@@ -203,6 +215,21 @@ const sendPhoto = (u: TestUser, fileId: string, size = 20_000) =>
     },
   });
 
+const sendDocument = (u: TestUser, fileId: string, mime: string, name = 'file') =>
+  t.postUpdate({
+    update_id: ++updateId,
+    message: {
+      ...message(u),
+      document: {
+        file_id: fileId,
+        file_unique_id: `u-${fileId}`,
+        file_name: name,
+        mime_type: mime,
+        file_size: 20_000,
+      },
+    },
+  });
+
 let shot = 0;
 /** A real, distinct JPEG. */
 async function jpeg() {
@@ -221,7 +248,9 @@ const outboxFor = async (chatId: number) =>
   (await t.db.select().from(outbox).orderBy(asc(outbox.id))).filter((r) => r.chatId === chatId);
 /** The review requests sent to a customer (rows with rating buttons). */
 const asksTo = async (u: TestUser) =>
-  (await outboxFor(u.id)).filter((r) => buttons(r).some((b) => b.callback_data?.startsWith('rev:r:')));
+  (await outboxFor(u.id)).filter((r) =>
+    buttons(r).some((b) => b.callback_data?.startsWith('rev:r:')),
+  );
 const lastReplyTo = async (u: TestUser) => (await outboxFor(u.id)).at(-1)!;
 const buttons = (row: { options: unknown }) =>
   (
@@ -510,39 +539,67 @@ describe('photos', () => {
 });
 
 describe('the «Отзывы» topic', () => {
-  it('posts a low rating with the order number, phone, rating, comment and photos', async () => {
+  const cardOf = () => topicPosts()[0]!;
+
+  it('a low rating reaches the topic at once, before any comment', async () => {
     const o = await deliveredOrder();
     await request(o);
     await tap(ali, `rev:r:${o.id}:2`);
+    await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
+    const card = cardOf().plain;
+    expect(card).toContain(`№ ${o.number}`);
+    expect(card.replace(/\D/g, '')).toContain('998901234567');
+    expect(card).toContain('2/5');
+    expect(card).toContain(dictionaries.ru.bot.group.reviewWriting);
+    expect(cardOf().threadId).toBe(REVIEWS_TOPIC);
+  });
+
+  it('the comment and photos follow as a reply to that card, once', async () => {
+    const o = await deliveredOrder();
+    await request(o);
+    await tap(ali, `rev:r:${o.id}:2`);
+    await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
     await say(ali, 'Аромат <быстро> пропал & ушёл');
     await addPhoto('p1');
     await sendPhoto(ali, 'p1');
     await photosSettled();
+    expect(topicPosts()).toHaveLength(1); // nothing more until the review is finished
     await tap(ali, await doneButton());
-    await vi.waitFor(() => expect(topicPosts().length).toBeGreaterThanOrEqual(2));
-    const [text, photo] = topicPosts();
-    expect(text!.plain).toContain(String(o.number));
-    expect(text!.plain.replace(/\D/g, '')).toContain('998901234567');
-    expect(text!.plain).toContain('2/5');
-    expect(text!.plain).toContain('Аромат <быстро> пропал & ушёл');
+    await vi.waitFor(() => expect(topicPosts()).toHaveLength(3));
+    const [card, comment, photo] = topicPosts();
+    const replyTo = (m: typeof card) =>
+      (m!.options as { reply_parameters?: { message_id: number } }).reply_parameters?.message_id;
+    expect(comment!.plain).toContain('Аромат <быстро> пропал & ушёл');
+    expect(replyTo(comment)).toBe(card!.messageId);
     expect(photo!.photo).toBeDefined();
-    expect(ru.reviewThanksLow).toBeTruthy();
+    expect(replyTo(photo)).toBe(card!.messageId);
     expect((await outboxFor(ali.id)).map((r) => r.text)).toContain(ru.reviewThanksLow);
+    await tick();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(topicPosts()).toHaveLength(3);
   });
 
-  it('posts a low rating without a comment too, once', async () => {
+  it('with no comment and no photos the card is all there is', async () => {
     const o = await deliveredOrder();
     await request(o);
     await tap(ali, `rev:r:${o.id}:1`);
     await tap(ali, await skipButton());
-    const done = await doneButton();
-    await tap(ali, done);
-    await tap(ali, done);
+    await tap(ali, await doneButton());
     await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
     await tick();
     await new Promise((r) => setTimeout(r, 300));
     expect(topicPosts()).toHaveLength(1);
-    expect(topicPosts()[0]!.plain).toContain(dictionaries.ru.bot.group.reviewNoComment);
+  });
+
+  it('an abandoned review posts its comment when it idles out', async () => {
+    const o = await deliveredOrder();
+    await request(o);
+    await tap(ali, `rev:r:${o.id}:2`);
+    await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
+    t.edges.clock.advance(61 * 60_000);
+    await tick();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(topicPosts()).toHaveLength(1);
   });
 
   it('does not post a high rating', async () => {
@@ -562,23 +619,21 @@ describe('the «Отзывы» topic', () => {
     const o = await deliveredOrder();
     await request(o);
     await tap(ali, `rev:r:${o.id}:4`);
-    await tap(ali, await skipButton());
-    await tap(ali, await doneButton());
     await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
   });
 
-  it('waits for the group: with none set the review is kept and posts once it is', async () => {
+  it('waits for the group: with none set the card posts once one is', async () => {
     await t.db.delete(settings).where(eq(settings.key, 'bot.groupChatId'));
     const o = await deliveredOrder();
     await request(o);
     await tap(ali, `rev:r:${o.id}:1`);
-    await tap(ali, await skipButton());
+    await say(ali, 'Не понравилось');
     await tap(ali, await doneButton());
     await tick();
     expect(topicPosts()).toHaveLength(0);
     await t.app.get(SettingsService).set('bot.groupChatId', GROUP, { type: 'system' });
     await tick();
-    await vi.waitFor(() => expect(topicPosts()).toHaveLength(1));
+    await vi.waitFor(() => expect(topicPosts()).toHaveLength(2)); // the card, then the comment
   });
 });
 
@@ -889,6 +944,57 @@ describe('the admin panel', () => {
     ).toBe(404);
   });
 
+  it('refuses to publish a review still being written, and allows it once finished', async () => {
+    const o = await deliveredOrder();
+    await request(o);
+    await tap(ali, `rev:r:${o.id}:5`);
+    const [r] = await reviewRows();
+    const early = await owner.client.admin.reviews.setPublished({
+      params: { id: r!.id },
+      body: { published: true },
+    });
+    expect(early.status).toBe(409);
+    const listed = await owner.client.admin.reviews.list({ query: {} });
+    expect(listed.status === 200 && listed.body.items[0]!.finished).toBe(false);
+    await say(ali, 'Нравится');
+    await addPhoto('p1');
+    await sendPhoto(ali, 'p1');
+    await tap(ali, await doneButton());
+    await photosSettled();
+    const ok = await owner.client.admin.reviews.setPublished({
+      params: { id: r!.id },
+      body: { published: true },
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.status === 200 && ok.body.finished).toBe(true);
+  });
+
+  it('refuses to publish while a photo is still being fetched', async () => {
+    const { ra } = await seedThree();
+    await t.db.insert(reviewPhotos).values({ reviewId: ra.id, fileId: 'f' });
+    const res = await owner.client.admin.reviews.setPublished({
+      params: { id: ra.id },
+      body: { published: true },
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("shows the review on the order's admin page, and links to it by order number", async () => {
+    const { a, ra } = await seedThree();
+    const page = await manager.client.admin.orders.get({ params: { number: a.number } });
+    expect(page.status === 200 && page.body.review).toMatchObject({
+      id: ra.id,
+      rating: 5,
+      comment: 'Супер',
+      published: false,
+      finished: true,
+    });
+    const filtered = await manager.client.admin.reviews.list({ query: { order: a.number } });
+    expect(filtered.status === 200 && filtered.body.items.map((i) => i.id)).toEqual([ra.id]);
+    const other = await t.db.select().from(orders).where(eq(orders.customerId, ra.customerId));
+    expect(other.length).toBeGreaterThan(0);
+  });
+
   it('shows photos to staff, published or not, and to nobody else', async () => {
     const { ra } = await seedThree();
     t.edges.files.files.set('private/reviews/x.jpg', await jpeg());
@@ -922,5 +1028,63 @@ describe('the admin panel', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.join('|')).toContain('Не понравился, копия');
     expect(rows[0]!.join('|')).toContain('998901112233');
+  });
+});
+
+describe('receipts win over review photos', () => {
+  async function toPhotoStep() {
+    const o = await deliveredOrder();
+    await request(o);
+    await tap(ali, `rev:r:${o.id}:5`);
+    await say(ali, 'Нравится');
+    return o;
+  }
+
+  it('a PDF during the photo step reaches the receipt intake, not the review', async () => {
+    await toPhotoStep();
+    await sendDocument(ali, 'doc1', 'application/pdf', 'check.pdf');
+    await vi.waitFor(async () => expect((await lastReplyTo(ali)).text).toBe(ru.receiptNoOrders));
+    expect(await photoRows()).toHaveLength(0);
+    expect((await lastReplyTo(ali)).text).not.toBe(ru.reviewPhotoUnsupported);
+  });
+
+  it('an image while an order awaits payment is a receipt, never a review photo', async () => {
+    await toPhotoStep();
+    const waiting = await placedOrder(ali, '998901234567', 1);
+    await t.edges.telegramFiles.files.set('shot', await jpeg());
+    await sendPhoto(ali, 'shot');
+    await vi.waitFor(async () => expect(await t.db.select().from(receipts)).toHaveLength(1));
+    expect((await t.db.select().from(receipts))[0]!.orderId).toBe(waiting.id);
+    expect(await photoRows()).toHaveLength(0);
+    expect((await reviewRows())[0]!.step).toBe('photos');
+  });
+});
+
+describe('guards', () => {
+  it('an oversize id in a button is answered and ignored, never thrown', async () => {
+    const o = await deliveredOrder();
+    await request(o);
+    const res = await tap(ali, `rev:r:${'9'.repeat(21)}:5`);
+    expect(res.status).toBe(200);
+    await tap(ali, `rev:s:${'9'.repeat(21)}`);
+    await tap(ali, `rev:d:${'9'.repeat(21)}`);
+    expect(await reviewRows()).toHaveLength(0);
+    expect(t.edges.telegram.answered.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('an album arriving together keeps at most the setting, and says so once', async () => {
+    const o = await deliveredOrder();
+    await request(o);
+    await tap(ali, `rev:r:${o.id}:5`);
+    await say(ali, 'Нравится');
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    for (const id of ids) await addPhoto(id);
+    await Promise.all(ids.map((id) => sendPhoto(ali, id)));
+    await photosSettled();
+    expect(await photoRows()).toHaveLength(3);
+    const said = (await outboxFor(ali.id)).filter(
+      (r) => r.text === fill(ru.reviewPhotosFull, { max: '3' }),
+    );
+    expect(said).toHaveLength(1);
   });
 });

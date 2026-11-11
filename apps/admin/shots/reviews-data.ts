@@ -19,7 +19,7 @@ export async function seedShotReviews(db: Sql, repoRoot: string, filesDir: strin
       resolve(media, `shot-${n}.jpg`),
     );
   await db.query(
-    `delete from reviews where order_id in (select id from orders where number between 9004 and 9008)`,
+    `delete from reviews where order_id in (select id from orders where number between 9004 and 9009)`,
   );
   const long =
     'Аромат нравится, но стойкость слабее, чем я ожидала: к обеду почти ничего не остаётся. '
@@ -31,6 +31,8 @@ export async function seedShotReviews(db: Sql, repoRoot: string, filesDir: strin
     [9006, 4, 'Красивый и глубокий аромат, упаковка аккуратная.', true, 1],
     [9007, 1, long, false, 0],
     [9008, 3, null, false, 0],
+    // still being written in the bot: «Пишется», no publish button
+    [9009, 4, null, false, 0],
   ];
   for (const [number, rating, comment, published, daysAgo] of rows) {
     const r = await db.query(
@@ -47,4 +49,7 @@ export async function seedShotReviews(db: Sql, repoRoot: string, filesDir: strin
           [r.rows[0]!.id, `private/reviews/shot-${n}.jpg`],
         );
   }
+  await db.query(
+    `update reviews set step = 'photos' where order_id in (select id from orders where number = 9009)`,
+  );
 }

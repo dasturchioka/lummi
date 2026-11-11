@@ -1396,6 +1396,10 @@ export const screens: Screen[] = [
     act: imagesLoaded,
   },
   { id: 'reviews-published', path: '/reviews?state=published', as: 'manager' },
+  // the order page shows its review (rating, comment, photos, state) and a link to «Отзывы»
+  { id: 'order-review', path: '/orders/9005', as: 'manager', act: imagesLoaded },
+  { id: 'order-review-published', path: '/orders/9004', as: 'manager' },
+  { id: 'reviews-order', path: '/reviews?order=9005', as: 'manager', act: imagesLoaded },
   { id: 'reviews-empty', path: '/reviews?rating=5&from=2026-01-01&to=2026-01-02', as: 'manager' },
   // ---- Orders panel (#33): the list, every order state, the three dialogs, the credits
   { id: 'orders', path: '/orders', as: 'manager' },

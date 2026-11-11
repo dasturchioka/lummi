@@ -5,6 +5,7 @@ import {
   botPendingReceipts,
   customers,
   eq,
+  inArray,
   isNull,
   lt,
   orders,
@@ -137,6 +138,26 @@ export class BotReceipts implements OnApplicationShutdown {
       process: (job: Job<{ id: number }>) =>
         this.intake(job.data.id, { lastAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1) }),
     });
+  }
+
+  /**
+   * Whether the customer has an order waiting for a receipt or under check: while one does, every
+   * file they send is a receipt (ADR 0020, 0033), whatever else the bot is asking them for.
+   */
+  async hasOrderWaiting(tx: DbOrTx, telegramId: number): Promise<boolean> {
+    const customer = await this.customer(tx, telegramId);
+    if (!customer) return false;
+    const [waiting] = await tx
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, customer.id),
+          inArray(orders.status, ['awaiting_payment', 'receipt_review']),
+        ),
+      )
+      .limit(1);
+    return waiting !== undefined;
   }
 
   /** A photo or document arrived in a private chat. */

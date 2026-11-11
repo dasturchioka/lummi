@@ -1427,7 +1427,7 @@ const adminOrders = c.router({
   },
 });
 
-/** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
+/** Reviews (ticket #41): owner and manager; publishing is audited. The Excel export and the photos are files, not in the contract. */
 const adminReviews = c.router({
   reviews: {
     list: {
@@ -1452,12 +1452,15 @@ const adminReviews = c.router({
         401: adminReviewsErrorSchema,
         403: adminReviewsErrorSchema,
         404: adminReviewsErrorSchema,
+        409: adminReviewsErrorSchema,
       },
-      summary: 'Staff: publish a review on the product cards, or hide it again; audited with the staff member',
+      summary:
+        'Staff: publish a review on the product cards, or hide it again; audited with the staff member. Publishing a review still being written (its step is not done, or a photo is still being fetched) is a 409 not_finished',
     },
   },
 });
 
+/** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
 const adminCampaigns = c.router({
   campaignLinks: {
     list: {
