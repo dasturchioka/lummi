@@ -1,0 +1,4 @@
+{
+  "extends": "@lummi/config/tsconfig.base.json",
+  "include": ["src", "test", "*.ts"]
+}

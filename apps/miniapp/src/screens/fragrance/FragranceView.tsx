@@ -1,9 +1,11 @@
-import type { Bilingual, FragranceCard, VolumeCard } from '@lummi/contracts';
-import { fill } from '@lummi/i18n';
+import type { Bilingual, FragranceCard, UpgradeRightPrice, VolumeCard } from '@lummi/contracts';
+import { fill, formatCalendarDate } from '@lummi/i18n';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { keepNumberWithWord } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
+import { useDiscountsText } from '../../discounts/queries';
+import { volumesText } from '../../discounts/volumes';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
 import { FragranceBadge } from '../../ui/Badge';
@@ -231,17 +233,48 @@ function Pyramid({ card }: { card: FragranceCard }) {
 }
 
 /**
+ * The customer's upgrade right on the chosen volume (TZ §3.4: «цена со скидкой + Скидка за набор»;
+ * mockup 09): a Sage Wash block under the stock line, the discount on the left and its last day on
+ * the right, then what it covers. The price itself is on the tile and in the dock; the cart
+ * applies the right by itself.
+ */
+function RightDeal({ right, fullSizeMl }: { right: UpgradeRightPrice; fullSizeMl: number[] }) {
+  const { language } = usePrefs();
+  const d = useDiscountsText();
+  const day = formatCalendarDate(right.lastDay, language);
+  return (
+    <div
+      data-testid="right-deal"
+      className="type-small flex flex-col gap-0.5 rounded-btn bg-sage-wash px-3.5 py-2.5 text-sage-ink"
+    >
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="font-semibold">
+          {fill(d.cardDeal[right.source], { percent: String(right.percent) })}
+        </span>
+        <span className="whitespace-nowrap">{fill(d.until, { date: day })}</span>
+      </p>
+      <p className="text-pretty">
+        {fill(d.cardDealTerms, { volumes: volumesText(fullSizeMl, d.volumesOr) })}
+      </p>
+    </div>
+  );
+}
+
+/**
  * The dock (approved comp): «В корзину · <price>» and «Купить сейчас» for the chosen volume
  * (`BuyPair`); a sold-out volume turns it into one disabled button with the reason.
  */
 function Dock({
   volume,
+  right,
   adding = false,
   note,
   onAddToCart,
   onBuyNow,
 }: {
   volume: VolumeCard | undefined;
+  /** The customer's right on this volume: the dock shows its price, the regular one struck (#38). */
+  right?: UpgradeRightPrice;
   adding?: boolean;
   /** A brief line above the buttons («Осталось 3»). */
   note?: string;
@@ -260,7 +293,8 @@ function Dock({
       <DockNote text={note} />
       <BuyPair
         toCart={t.card.toCart}
-        price={volume.effectivePrice}
+        price={right?.price ?? volume.effectivePrice}
+        was={right ? volume.price : undefined}
         adding={adding}
         onAdd={() => onAddToCart?.(volume.ml)}
         onBuyNow={() => onBuyNow?.(volume.ml)}
@@ -302,6 +336,11 @@ export function FragranceView({
     () => (card.volumes.find((v) => v.available > 0) ?? card.volumes[0])?.ml,
   );
   const volume = card.volumes.find((v) => v.ml === ml) ?? card.volumes[0];
+  const rightPrices = Object.fromEntries(card.upgradeRightPrices.map((r) => [r.ml, r.price]));
+  const right =
+    volume && volume.available > 0
+      ? card.upgradeRightPrices.find((r) => r.ml === volume.ml)
+      : undefined;
 
   return (
     <Screen
@@ -309,6 +348,7 @@ export function FragranceView({
       dock={
         <Dock
           volume={volume}
+          right={right}
           adding={adding}
           note={note}
           onAddToCart={onAddToCart}
@@ -338,8 +378,14 @@ export function FragranceView({
 
         {volume ? (
           <section className="mt-6 flex flex-col gap-3">
-            <VolumeTiles volumes={card.volumes} selected={volume.ml} onSelect={setMl} />
+            <VolumeTiles
+              volumes={card.volumes}
+              rightPrices={rightPrices}
+              selected={volume.ml}
+              onSelect={setMl}
+            />
             <VolumeStatus volume={volume} />
+            {right ? <RightDeal right={right} fullSizeMl={card.fullSizeMl} /> : null}
           </section>
         ) : null}
 

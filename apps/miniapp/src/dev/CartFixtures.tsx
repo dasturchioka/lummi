@@ -66,12 +66,19 @@ const discount: CartDto = {
   deliveryCity: null,
   suggestions: [],
   promoCode: null,
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 100,
   quote: {
     lines: [priced(1, 1, 149_000, 149_000), priced(2, 2, 69_000, 138_000)],
     itemsSubtotal: 287_000,
-    discount: { type: 'upgrade_right', id: 1, source: 'set', amount: 29_800, lineKey: '1' },
+    discount: {
+      type: 'upgrade_right',
+      id: 1,
+      source: 'set',
+      percent: 20,
+      amount: 29_800,
+      lineKey: '1',
+    },
     thresholdBase: 'before',
     thresholdBaseAmount: 287_000,
     freeDeliveryThreshold: 250_000,
@@ -122,7 +129,7 @@ const worst: CartDto = {
   deliveryCity: KARAKALPAKSTAN,
   suggestions: [],
   promoCode: 'BLOGER_MALIKA_2026',
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 100,
   quote: {
     lines: [
@@ -179,7 +186,7 @@ const worstNudge: CartDto = {
     { slug: 's3', name: 'Si', brand: 'Giorgio Armani', ml: 10, photo: null, price: 69_000 },
   ],
   promoCode: null,
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 88,
   quote: {
     lines: [priced(1, 1, 219_000, 219_000), priced(2, 1, 69_000, 69_000, { soldOut: true })],
@@ -205,7 +212,7 @@ const unavailable: CartDto = {
   deliveryCity: null,
   suggestions: [],
   promoCode: null,
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 0,
   quote: {
     lines: [
@@ -234,7 +241,7 @@ const withCode = (invalid: PromoCodeInvalid | null, code = 'BLOGER10'): CartDto 
   ...plain,
   lines: PHOTOGRAPHED,
   promoCode: code,
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   quote: {
     ...plain.quote,
     ...(invalid
@@ -259,7 +266,7 @@ const promoWorst: CartDto = {
   deliveryCity: KARAKALPAKSTAN,
   suggestions: [],
   promoCode: LONG_CODE,
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 100,
   quote: {
     lines: [priced(1, 5, 219_000, 1_095_000), priced(2, 4, 219_000, 876_000)],
@@ -286,7 +293,7 @@ const promoFull: CartDto = {
   lines: PHOTOGRAPHED,
   deliveryCity: KARAKALPAKSTAN,
   promoCode: 'LUMMI100',
-  birthdayCouponWaiting: null,
+  entitlementWaiting: null,
   freeDeliveryProgress: 0,
   quote: {
     ...plain.quote,

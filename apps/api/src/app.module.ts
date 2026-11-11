@@ -41,6 +41,7 @@ import { BirthdayCouponJob } from './birthday/birthday-job';
 import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
+import { UpgradeRightReminders } from './upgrade-rights/upgrade-right-reminders';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
@@ -171,6 +172,7 @@ export class AppModule {
         OrdersGroupBot,
         DiscountSourceHooks,
         ReserveSweeps,
+        UpgradeRightReminders,
         CatalogAdminService,
         CatalogImportService,
         SetsAdminService,

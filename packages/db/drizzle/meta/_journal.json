@@ -180,8 +180,15 @@
     {
       "idx": 25,
       "version": "7",
-      "when": 1794363296834,
-      "tag": "0025_reviews",
+      "when": 1794362996065,
+      "tag": "0025_upgrade_rights",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794364738453,
+      "tag": "0026_reviews",
       "breakpoints": true
     }
   ]

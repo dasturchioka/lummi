@@ -73,6 +73,8 @@ const demo: FragranceCard = {
       photo: PHOTO[50],
     },
   ],
+  upgradeRightPrices: [],
+  fullSizeMl: [30, 50],
 };
 
 const worst: FragranceCard = {
@@ -153,6 +155,8 @@ const worst: FragranceCard = {
       photo: PHOTO[50],
     },
   ],
+  upgradeRightPrices: [],
+  fullSizeMl: [30, 50],
 };
 
 /** A fragrance sold in one volume only (the others "simply absent"), all notes on one level. */

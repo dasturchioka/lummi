@@ -328,6 +328,10 @@ export const adminMessages = defineMessages(
             'Не больше {max}: на минуту меньше, чем ожидание перевода по чеку и бронь товаров. Иначе сбой Humo может отменить оплаченный заказ.',
           wait_too_short:
             'Не меньше {min}: на минуту больше, чем «Юзербот молчит дольше» и «Humo молчит дольше». Иначе сбой Humo может отменить оплаченный заказ.',
+          reminder_first_not_before_last:
+            'Не меньше {min}: первое напоминание приходит раньше последнего, иначе бот его не отправит.',
+          reminder_last_not_after_first:
+            'Не больше {max}: последнее напоминание приходит позже первого, иначе бот не отправит первое.',
           unknown: 'Не удалось сохранить: значение не принято сервером.',
         },
       },
@@ -2027,6 +2031,10 @@ export const adminMessages = defineMessages(
             '{max} dan oshmasin: chek boʻyicha oʻtkazmani kutish va mahsulotlar bandligidan bir daqiqa kam. Aks holda Humo nosozligi toʻlangan buyurtmani bekor qilishi mumkin.',
           wait_too_short:
             '{min} dan kam boʻlmasin: «Userbot jim turgan vaqt» va «Humo jim turgan vaqt»dan bir daqiqa koʻp. Aks holda Humo nosozligi toʻlangan buyurtmani bekor qilishi mumkin.',
+          reminder_first_not_before_last:
+            '{min} dan kam boʻlmasin: birinchi eslatma oxirgisidan oldin keladi, aks holda bot uni yubormaydi.',
+          reminder_last_not_after_first:
+            '{max} dan oshmasin: oxirgi eslatma birinchisidan keyin keladi, aks holda bot birinchisini yubormaydi.',
           unknown: 'Saqlab boʻlmadi: server qiymatni qabul qilmadi.',
         },
       },

@@ -29,4 +29,15 @@ export type HumoMessageResult = z.infer<typeof humoMessageResultSchema>;
 /** The highest stored message_id: the userbot reads the Humo chat after it on restart. Null before the first. */
 export const humoLastMessageIdSchema = z.object({ messageId: z.number().int().nullable() });
 
+/**
+ * Where the userbot forwards each ➕ notification (#19): the orders group (`bot.groupChatId`) and
+ * its «Поступления» topic (`bot.topics.payments`). Null chat: the group is not set up, nothing is
+ * forwarded. Null topic: the group has no such topic yet, the forward goes to its general chat.
+ */
+export const userbotForwardTargetSchema = z.object({
+  chatId: z.number().int().nullable(),
+  topicId: z.number().int().positive().nullable(),
+});
+export type UserbotForwardTarget = z.infer<typeof userbotForwardTargetSchema>;
+
 export const internalErrorSchema = z.object({ code: z.enum(['unauthorized', 'forbidden']) });

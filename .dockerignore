@@ -24,3 +24,7 @@ materials/photos
 .impeccable
 *.md
 !materials/catalog/README.md
+
+# never send a userbot session to the build context
+**/.userbot
+**/*.enc

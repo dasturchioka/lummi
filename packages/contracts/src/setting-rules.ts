@@ -26,6 +26,17 @@ export const FEED_GUARD_MARGIN_SECONDS = 60;
 
 type FeedValues = Record<(typeof FEED_GUARD_KEYS | typeof FEED_WINDOW_KEYS)[number], number>;
 
+/**
+ * The upgrade-right reminders (#38): the first goes more days before the end than the last, or the
+ * sweep never sends it (it goes only while the last is not yet due).
+ */
+export const REMINDER_DAY_KEYS = [
+  'upgradeRights.firstReminderDays',
+  'upgradeRights.lastReminderDays',
+] as const satisfies readonly SettingKey[];
+
+type CrossValues = FeedValues & Record<(typeof REMINDER_DAY_KEYS)[number], number>;
+
 /** The longest a feed guard may be: a tick shorter than the wait window and the reserve. */
 export function feedGuardMax(v: Pick<FeedValues, (typeof FEED_WINDOW_KEYS)[number]>): number {
   return (
@@ -41,16 +52,22 @@ export function effectiveFeedGuard(seconds: number, v: Parameters<typeof feedGua
 
 /**
  * The issues saving `key` = `value` raises against the other settings' current values: a feed
- * guard at most `feedGuardMax`, a window at least a tick longer than both guards. Otherwise a
+ * guard at most `feedGuardMax`, a window at least a tick longer than both guards, the first
+ * upgrade-right reminder more days before the end than the last. Otherwise a
  * Humo feed failure could end a window before its payment pause starts, and cancel a paid order.
  */
 export function crossSettingIssues(
   key: SettingKey,
   value: unknown,
-  current: FeedValues,
+  current: CrossValues,
 ): SettingIssue[] {
   if (typeof value !== 'number') return [];
-  const next = { ...current, [key]: value } as FeedValues;
+  const next = { ...current, [key]: value } as CrossValues;
+  const [first, last] = REMINDER_DAY_KEYS;
+  if (key === first && value <= next[last])
+    return [{ path: [], code: 'reminder_first_not_before_last', min: next[last] + 1 }];
+  if (key === last && value >= next[first])
+    return [{ path: [], code: 'reminder_last_not_after_first', max: next[first] - 1 }];
   if ((FEED_GUARD_KEYS as readonly string[]).includes(key)) {
     const max = feedGuardMax(next);
     return value > max ? [{ path: [], code: 'feed_guard_too_long', max }] : [];
@@ -63,4 +80,8 @@ export function crossSettingIssues(
 }
 
 /** The settings `crossSettingIssues` reads. */
-export const CROSS_RULE_KEYS = [...FEED_GUARD_KEYS, ...FEED_WINDOW_KEYS] as const;
+export const CROSS_RULE_KEYS = [
+  ...FEED_GUARD_KEYS,
+  ...FEED_WINDOW_KEYS,
+  ...REMINDER_DAY_KEYS,
+] as const;

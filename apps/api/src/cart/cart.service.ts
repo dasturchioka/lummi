@@ -27,8 +27,8 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
-import { couponWaitingBehindCode } from '../birthday/birthday-coupons';
-import { activeMarkdown, type DiscountChoice } from '../pricing/quote';
+import { entitlementWaitingBehindCode } from '../entitlements/entitlements';
+import { activeMarkdown, volumePrice, type DiscountChoice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
@@ -86,7 +86,7 @@ export class CartService {
           )
         : [],
       promoCode: cartState?.promoCode ?? null,
-      birthdayCouponWaiting: couponWaitingBehindCode(q, entitlements),
+      entitlementWaiting: entitlementWaitingBehindCode(q, entitlements),
     };
   }
 
@@ -140,14 +140,7 @@ export class CartService {
     const out: CartSuggestionDto[] = [];
     for (const r of rows) {
       if (available(r.onHand, reserved.get(r.volumeId) ?? 0) === 0) continue;
-      const price =
-        activeMarkdown(
-          {
-            regular: r.price,
-            markdown: r.salePrice === null ? null : { price: r.salePrice, endsAt: r.saleEndsAt },
-          },
-          now,
-        ) ?? r.price;
+      const price = activeMarkdown(volumePrice(r), now) ?? r.price;
       if (price < gap) continue;
       out.push({ slug: r.slug, name: r.name, brand: r.brand, ml: 10, photo: r.photo, price });
       if (out.length === limit) break;

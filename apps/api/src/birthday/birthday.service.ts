@@ -1,12 +1,21 @@
-import { BIRTH_YEAR_MIN, type MyDiscountsDto, type SetBirthDateBody } from '@lummi/contracts';
 import { birthdayCoupons, customers, eq, type CustomerRow, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
+import { readPricingSettings } from '../pricing/pricing-settings';
+import { myUpgradeRights } from '../upgrade-rights/upgrade-rights';
 import { activeBirthdayCoupons, readBirthdayRules, toCouponDto } from './birthday-coupons';
-import { formatLocalDate, nextWindow, parseLocalDate, tashkentDay } from './birthday-dates';
+import {
+  BIRTH_YEAR_MIN,
+  formatLocalDate,
+  parseLocalDate,
+  tashkentDay,
+  type MyDiscountsDto,
+  type SetBirthDateBody,
+} from '@lummi/contracts';
+import { nextWindow } from './birthday-dates';
 
 export type SetBirthDateOutcome =
   | { kind: 'ok'; discounts: MyDiscountsDto }
@@ -47,7 +56,7 @@ export async function recordBirthDate(
   });
 }
 
-/** Profile «Мои скидки» and the one-time date of birth (ticket #30). */
+/** Profile «Мои скидки» (with the upgrade rights of #38) and the one-time date of birth (ticket #30). */
 @Injectable()
 export class BirthdayService {
   constructor(
@@ -119,6 +128,8 @@ export class BirthdayService {
     return {
       birthDate: c.birthDate,
       birthdayCoupons: active.map((coupon) => toCouponDto(coupon, now)),
+      upgradeRights: await myUpgradeRights(tx, customerId, now),
+      fullSizeMl: (await readPricingSettings(tx)).fullSizeVolumesMl,
       nextBirthdayCoupon: next,
       birthdayPercent: settings['birthday.percent'],
       birthdayDaysBefore: settings['birthday.daysBefore'],

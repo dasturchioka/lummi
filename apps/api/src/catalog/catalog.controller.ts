@@ -1,7 +1,7 @@
 import { contract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
-import { SessionGuard } from '../auth/session.guard';
+import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
 import { SearchService } from '../search/search.service';
 import { CatalogService } from './catalog.service';
 
@@ -14,9 +14,9 @@ export class CatalogController {
   ) {}
 
   @TsRestHandler(contract.catalog.fragrance)
-  fragrance() {
+  fragrance(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.catalog.fragrance, async ({ params }) => {
-      const card = await this.catalog.cardBySlug(params.slug);
+      const card = await this.catalog.cardBySlug(params.slug, customerId);
       if (!card) return { status: 404 as const, body: { code: 'not_found' as const } };
       return { status: 200 as const, body: card };
     });

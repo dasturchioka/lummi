@@ -54,6 +54,14 @@ export type SetLineKind = Exclude<LineKind, 'volume'>;
 export const SET_SIZE = 5;
 
 /**
+ * What opens an Upgrade right (ADR 0003): a delivered set, or a delivered single bottle of
+ * `SINGLE_RIGHT_ML`. The DB enum and the Discount's `source` are built from it.
+ */
+export const UPGRADE_RIGHT_SOURCES = ['set', 'single_10ml'] as const;
+/** The bottle a `single_10ml` right opens from (GLOSSARY: the 10 ml bottle is not Full size). */
+export const SINGLE_RIGHT_ML = 10;
+
+/**
  * `startapp` parameter -> Mini App route: the one list of targets. The Mini App routes with it,
  * the admin banner editor validates against it, and later tickets (broadcasts, set links) add
  * their targets here. An unknown or missing value lands on Home; an unknown fragrance slug lands
