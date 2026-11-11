@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "size": "node scripts/check-bundle-size.mjs",
     "shots": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx shots/run.ts",
+    "e2e": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local ../../node_modules/@playwright/test/cli.js test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

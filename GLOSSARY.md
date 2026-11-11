@@ -184,6 +184,14 @@ _Avoid_: Fake receipt, copy
 A receipt verdict meaning AI could not confirm it and a manager must decide. Not an order status.
 _Avoid_: Ручная проверка as a status, escalation
 
+**Payment state**:
+Where an order's money stands, as the admin shows it beside the status: unpaid, a receipt under check, a receipt in manual review, or paid. Paid once a payment was confirmed, whatever came after, so a cancelled paid order still reads paid (a refund is owed). Derived, not stored.
+_Avoid_: Payment status (there is one order status), оплачен as a status
+
+**Reject reason**:
+Why a manager turned a receipt down: one preset the customer reads as a sentence in their language (amount differs, not the shop card, transfer not received, unreadable, not a receipt), optionally with a note in the manager's words, or «другая причина», where the note is the reason. Only a manager rejects (ADR 0013).
+_Avoid_: Rejection comment, decline reason
+
 ### Order outcomes
 
 **Cancellation**:

@@ -5,7 +5,10 @@ import {
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
   ORDER_STATUSES,
+  RECEIPT_CHECK_OUTCOMES,
   RECEIPT_FILE_KINDS,
+  RECEIPT_REVIEW_REASONS,
+  RECEIPT_VERDICTS,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -822,8 +825,9 @@ export const orderActionEnum = pgEnum('order_action', ORDER_ACTIONS);
 /**
  * The order's history (ADR 0011): one row per status change, written by `transition()` in the
  * same transaction as the change, its audit entry and its customer message. `reason` is the
- * cancel reason code, or the text staff typed for a rejected receipt or a return; `payload` keeps
- * the rest (a tracking number, per-line back-to-stock flags, the on-hand changes).
+ * cancel reason code, a rejected receipt's preset code (`RECEIPT_REJECT_REASONS`), a staff link's
+ * typed reason, or the text staff typed for a return; `payload` keeps the rest (a receipt id, a
+ * staff note, a tracking number, per-line back-to-stock flags, the on-hand changes).
  */
 export const orderEvents = pgTable(
   'order_events',
@@ -873,24 +877,13 @@ export const shopCard = pgTable(
  * it, a manager sends it to manual review or rejects it with a reason, or the wait window ends
  * with `payment_not_found`. The order's status is separate.
  */
-export const receiptVerdictEnum = pgEnum('receipt_verdict', [
-  'pending',
-  'ai_confirmed',
-  'manual_review',
-  'manager_confirmed',
-  'rejected',
-  'payment_not_found',
-]);
+export const receiptVerdictEnum = pgEnum('receipt_verdict', RECEIPT_VERDICTS);
 /**
  * Why a receipt went to manual review (#32): the same file as another receipt (`duplicate`, #36
  * adds the perceptual hash), the AI's answer did not confirm it (`not_confirmed`), or the AI could
  * not be asked, attempt after attempt (`judge_failed`).
  */
-export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', [
-  'duplicate',
-  'not_confirmed',
-  'judge_failed',
-]);
+export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', RECEIPT_REVIEW_REASONS);
 /** Where the shopper sent it from: the payment screen, or the chat with the bot (#31). */
 export const receiptSourceEnum = pgEnum('receipt_source', ['miniapp', 'bot']);
 /** The original's kind, by its first bytes (ADR 0020). */
@@ -981,12 +974,7 @@ export interface StoredJudgement {
  * (`credit_taken`, the receipt keeps waiting for its own money), or the receipt was decided
  * while the AI was answering (`stale`).
  */
-export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', [
-  'confirmed',
-  'manual_review',
-  'credit_taken',
-  'stale',
-]);
+export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', RECEIPT_CHECK_OUTCOMES);
 
 /**
  * Every answer the receipt AI gave about a Receipt (ADR 0013, #32): the candidate credits it was

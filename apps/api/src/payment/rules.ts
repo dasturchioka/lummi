@@ -1,15 +1,12 @@
+import { ACCEPTED_RECEIPT_VERDICTS, WAITING_RECEIPT_VERDICTS } from '@lummi/contracts';
 import { orders, receipts, sql, type DbOrTx, type ReceiptRow, type SQL } from '@lummi/db';
 import { readSettings } from '../settings/settings.service';
 
 type ReceiptVerdict = ReceiptRow['verdict'];
 
-/**
- * Receipt verdicts still open (ADR 0012): `pending` waits for a fitting credit, `manual_review`
- * for a person after the AI could not confirm. Either may still be confirmed.
- */
-export const WAITING_VERDICTS: readonly ReceiptVerdict[] = ['pending', 'manual_review'];
-/** A receipt that confirmed its order's payment; an order has at most one. */
-export const ACCEPTED_VERDICTS: readonly ReceiptVerdict[] = ['ai_confirmed', 'manager_confirmed'];
+/** The contracts' verdict lists, the one source for both doors and the panel (ADR 0012). */
+export const WAITING_VERDICTS: readonly ReceiptVerdict[] = WAITING_RECEIPT_VERDICTS;
+export const ACCEPTED_VERDICTS: readonly ReceiptVerdict[] = ACCEPTED_RECEIPT_VERDICTS;
 
 /** `('a', 'b')` for `in (…)`, bound as parameters. */
 export const sqlList = (values: readonly string[]) =>

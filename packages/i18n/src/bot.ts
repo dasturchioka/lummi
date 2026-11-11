@@ -1,4 +1,7 @@
 import { defineMessages } from './define';
+import { fill } from './fill';
+import type { Language } from './language';
+import { ordersMessages } from './orders';
 
 /** Bot messages. Import from `@lummi/i18n/bot`; the Mini App never bundles them. Keys must match in both languages or typecheck fails. */
 export const botMessages = defineMessages(
@@ -25,6 +28,8 @@ export const botMessages = defineMessages(
         'Оплата заказа № {number} подтверждена ✅\nСкоро начнём собирать ваш заказ.',
       receiptRejected:
         'Чек к заказу № {number} не принят.\nПричина: {reason}\nПроверьте сумму и карту и загрузите чек ещё раз.',
+      /** The manager's own words under a preset reason (#33). */
+      rejectNote: 'Комментарий менеджера: {note}',
       /** The wait window ended with no fitting credit (ADR 0012); the order waits for payment again. */
       paymentNotFound:
         'Мы не нашли перевод по заказу № {number}.\nПроверьте сумму ({amount}) и карту и загрузите чек ещё раз до {until}.',
@@ -83,6 +88,7 @@ export const botMessages = defineMessages(
         '№ {number} buyurtma toʻlovi tasdiqlandi ✅\nTez orada buyurtmangizni yigʻishni boshlaymiz.',
       receiptRejected:
         '№ {number} buyurtma cheki qabul qilinmadi.\nSabab: {reason}\nSumma va kartani tekshirib, chekni qayta yuklang.',
+      rejectNote: 'Menejer izohi: {note}',
       paymentNotFound:
         '№ {number} buyurtma boʻyicha oʻtkazmani topa olmadik.\nSumma ({amount}) va kartani tekshirib, chekni {until} gacha qayta yuklang.',
       paymentNotFoundReserveEnded:
@@ -117,3 +123,51 @@ export const botMessages = defineMessages(
   },
 );
 export type BotMessages = (typeof botMessages)['ru'];
+
+/** A preset reason a manager rejects a receipt with (contracts `RECEIPT_REJECT_REASONS`). */
+export type ReceiptRejectReasonKey =
+  keyof (typeof ordersMessages)['ru']['orders']['receiptRejectReason'];
+
+/**
+ * The shopper's «Чек не принят» message (#33): the preset as a sentence in their language, the
+ * manager's note on its own line under it, or, for `other`, the note itself as the reason. The
+ * bot sends it and the admin's rejection dialog previews it.
+ */
+export function receiptRejectedText(
+  language: Language,
+  number: number,
+  reason: ReceiptRejectReasonKey,
+  note?: string | null,
+): string {
+  const t = botMessages[language].bot;
+  const why =
+    reason === 'other'
+      ? (note ?? '')
+      : [
+          ordersMessages[language].orders.receiptRejectReason[reason],
+          ...(note ? [fill(t.rejectNote, { note })] : []),
+        ].join('\n');
+  return fill(t.receiptRejected, { number: String(number), reason: why });
+}
+
+/** Why an order was cancelled (contracts `CANCEL_REASONS`). */
+export type CancelReasonKey = keyof (typeof ordersMessages)['ru']['orders']['cancelReason'];
+
+/**
+ * The shopper's «Отменён» message: the reason as a sentence in their language, and for a paid
+ * order the line that the manager will be in touch to return the money (ADR 0006). The bot sends
+ * it and the admin's cancel dialog previews it.
+ */
+export function orderCancelledText(
+  language: Language,
+  number: number,
+  reason: CancelReasonKey,
+  paid: boolean,
+): string {
+  const t = botMessages[language].bot;
+  const text = fill(t.orderCancelled, {
+    number: String(number),
+    reason: ordersMessages[language].orders.cancelReason[reason],
+  });
+  return paid ? `${text}\n${t.refundNote}` : text;
+}

@@ -506,7 +506,7 @@ describe('the one door', () => {
 
     expect(await orderNow(order.id)).toMatchObject({ status: 'awaiting_payment', creditId: null });
     // the capability went to PaymentConfirmation when the app started, and only to it
-    expect(() => machine.issuePaymentDoor()).toThrow();
+    expect(() => machine.issueDoor('confirm_payment')).toThrow();
   });
 
   it('a unique violation on the link answers credit_taken, never a 500', async () => {
@@ -704,7 +704,7 @@ describe('«Популярное» ranks by paid orders (#15, now that orders ge
     for (const [from, action, payload] of [
       ['payment_confirmed', 'accept', undefined],
       ['accepted', 'start_assembly', undefined],
-      ['assembling', 'hand_to_bts', { trackingNumber: 'BTS 1' }],
+      ['assembling', 'hand_to_bts', { trackingNumber: 'BTS 4471 0098' }],
       ['handed_to_bts', 'deliver', undefined],
       [
         'delivered',

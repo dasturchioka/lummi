@@ -2,6 +2,8 @@ import type { UserFromGetMe } from 'grammy/types';
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
+import { AdminOrdersController } from './admin-orders/admin-orders.controller';
+import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
@@ -29,6 +31,7 @@ import { PaymentMatching } from './payment/payment-matching';
 import { PaymentNotFound } from './payment/payment-not-found';
 import { PaymentPauses } from './payment/payment-pauses';
 import { ShopCardService } from './payment/shop-card.service';
+import { ReceiptRejection } from './payment/receipt-rejection';
 import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
 import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
@@ -119,6 +122,7 @@ export class AppModule {
         HumoFeedController,
         BroadcastController,
         PromoAdminController,
+        AdminOrdersController,
         CampaignsController,
         CampaignsAdminController,
       ],
@@ -170,12 +174,16 @@ export class AppModule {
         HumoFeedService,
         BroadcastService,
         PromoAdminService,
+        ReceiptRejection,
+        AdminOrdersService,
         CampaignsService,
       ],
       exports: [
         CreditEvents,
         OrderStatusService,
         PaymentConfirmation,
+        // the one reject door: the orders group (#37) rejects through it too
+        ReceiptRejection,
         HumoFeedService,
         SettingsService,
         AuditService,

@@ -59,7 +59,7 @@ function validPayload(action: OrderAction, actor: OrderActorType, from: OrderSta
     case 'confirm_payment':
       return { ...CREDIT_FACTS, receiptId: from === 'awaiting_payment' ? null : 7 };
     case 'reject_receipt':
-      return { reason: 'Сумма на чеке не совпадает с заказом' };
+      return { receiptId: 7, reason: 'amount_mismatch' };
     case 'payment_not_found':
       return { receiptId: 7, duplicateOf: null, pausedSeconds: 0, reserveEnded: false };
     case 'hand_to_bts':
@@ -214,16 +214,28 @@ describe('required payloads', () => {
     expect(planTransition('assembling', 'hand_to_bts', 'staff', { trackingNumber: '  ' })).toEqual(
       invalid,
     );
+    // six characters or more once trimmed (spec Changes 2026-11-11)
+    expect(
+      planTransition('assembling', 'hand_to_bts', 'staff', { trackingNumber: ' 12345 ' }),
+    ).toEqual(invalid);
     expect(
       planTransition('assembling', 'hand_to_bts', 'staff', { trackingNumber: ' 1234 5678 ' }),
     ).toMatchObject({ ok: true, payload: { trackingNumber: '1234 5678' } });
   });
 
-  it('a rejected receipt carries the manager’s reason', () => {
-    expect(planTransition('receipt_review', 'reject_receipt', 'staff', {})).toEqual(invalid);
-    expect(planTransition('receipt_review', 'reject_receipt', 'staff', { reason: ' ' })).toEqual(
-      invalid,
-    );
+  it('a rejected receipt names the receipt and carries a reason; «Другая причина» needs a note', () => {
+    const reject = (payload: unknown) =>
+      planTransition('receipt_review', 'reject_receipt', 'staff', payload);
+    expect(reject({})).toEqual(invalid);
+    expect(reject({ reason: 'wrong_card' })).toEqual(invalid);
+    expect(reject({ receiptId: 7, reason: 'Сумма не совпадает' })).toEqual(invalid);
+    expect(reject({ receiptId: 7, reason: 'other' })).toEqual(invalid);
+    expect(reject({ receiptId: 7, reason: 'other', note: '  ' })).toEqual(invalid);
+    expect(reject({ receiptId: 7, reason: 'wrong_card' })).toMatchObject({ ok: true });
+    expect(reject({ receiptId: 7, reason: 'other', note: ' Дата не та ' })).toMatchObject({
+      ok: true,
+      payload: { note: 'Дата не та' },
+    });
   });
 
   it('a return carries a reason and a back-to-stock flag per line', () => {

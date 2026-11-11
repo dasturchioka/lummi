@@ -44,3 +44,20 @@ function utcFields(d: Date): Required<TashkentDateTime> {
     second: d.getUTCSeconds(),
   };
 }
+
+/**
+ * The start of a Tashkent calendar day (`YYYY-MM-DD`, already checked to be a real day) as a UTC
+ * instant, `plusDays` later: day filters read `from` as its 00:00 and `to` up to the next midnight.
+ */
+export function tashkentDayStart(day: string, plusDays = 0): Date {
+  const [year, month, d] = day.split('-').map(Number) as [number, number, number];
+  // roll the calendar forward in UTC arithmetic, then read it back as a Tashkent wall-clock date
+  const rolled = new Date(Date.UTC(year, month - 1, d + plusDays));
+  return tashkentToUtc({
+    year: rolled.getUTCFullYear(),
+    month: rolled.getUTCMonth() + 1,
+    day: rolled.getUTCDate(),
+    hour: 0,
+    minute: 0,
+  }) as Date;
+}

@@ -1,10 +1,11 @@
 import { settingKeys, settingMeta, type AuditEntryDto, type SettingKey } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { AuditFiltersForm, type AuditFilters } from '@/components/audit-filters';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { CodeText } from '@/components/promo/code-text';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -36,12 +37,12 @@ const knownKey = (id: string | null): id is SettingKey =>
   id !== null && (settingKeys as string[]).includes(id);
 
 /** Readable action name; a code a later ticket adds shows as the code itself until it is labelled. */
-const actionLabel = (t: AdminMessages, code: string) =>
+export const actionLabel = (t: AdminMessages, code: string) =>
   (t.audit.actions as Record<string, string>)[code] ?? code;
 const targetLabel = (t: AdminMessages, type: string) =>
   (t.audit.targets as Record<string, string>)[type] ?? type;
 
-function who(t: AdminMessages, e: AuditEntryDto): string {
+export function who(t: AdminMessages, e: AuditEntryDto): string {
   if (e.actorType === 'staff') return e.actorName ?? t.audit.actors.unknownStaff;
   if (e.actorType === 'customer') return e.actorName ?? t.audit.actors.customer;
   return t.audit.actors[e.actorType];
@@ -87,7 +88,15 @@ function cardText(t: AdminMessages, v: unknown): string {
  * old value in Muted Ink; the words «было» / «стало» stay for screen readers. The raw payload
  * sits behind «Подробнее».
  */
-function Details({ t, language, e }: { t: AdminMessages; language: Language; e: AuditEntryDto }) {
+export function Details({
+  t,
+  language,
+  e,
+}: {
+  t: AdminMessages;
+  language: Language;
+  e: AuditEntryDto;
+}) {
   const { payload } = e;
   const pair = ((): [string, string] | null => {
     if (
@@ -253,35 +262,12 @@ export function AuditView({ t, language, items, total, page, pageSize, filters, 
         </Card>
       )}
 
-      {pages > 1 && (
-        <nav
-          aria-label={pageText}
-          className="mt-4 flex items-center justify-between gap-3 text-small text-muted-foreground"
-        >
-          <PageLink href={page > 1 ? href(page - 1) : null}>
-            <ChevronLeft strokeWidth={1.5} aria-hidden />
-            {t.audit.prev}
-          </PageLink>
-          <span className="text-center tabular-nums">{pageText}</span>
-          <PageLink href={page < pages ? href(page + 1) : null}>
-            {t.audit.next}
-            <ChevronRight strokeWidth={1.5} aria-hidden />
-          </PageLink>
-        </nav>
-      )}
+      <Pager
+        page={page}
+        pages={pages}
+        href={href}
+        labels={{ prev: t.audit.prev, next: t.audit.next, page: pageText }}
+      />
     </>
-  );
-}
-
-/** Previous / next; at either end it stays in place, disabled, so the row never jumps. */
-function PageLink({ href, children }: { href: string | null; children: React.ReactNode }) {
-  return href ? (
-    <Button asChild variant="outline" size="sm">
-      <Link href={href}>{children}</Link>
-    </Button>
-  ) : (
-    <Button variant="outline" size="sm" disabled>
-      {children}
-    </Button>
   );
 }
