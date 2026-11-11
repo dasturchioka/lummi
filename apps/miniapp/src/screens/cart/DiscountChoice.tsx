@@ -170,11 +170,12 @@ export function DiscountChoice({
         <p className="type-small mt-1 text-pretty text-muted">{c.hint}</p>
         {notice ? <div className="mt-2.5">{notice}</div> : null}
         {better ? (
+          // below ~380 px «Переключить» goes under the text, so the headline keeps one line
           <div
-            className="mt-3 flex items-center gap-3 rounded-btn bg-sage-wash py-2.5 pr-2.5 pl-3 shadow-[inset_0_0_0_1px_var(--c-sage)]"
+            className="mt-3 flex items-center gap-3 rounded-btn bg-sage-wash py-2.5 pr-2.5 pl-3 shadow-[inset_0_0_0_1px_var(--c-sage)] max-[379px]:flex-col max-[379px]:items-start max-[379px]:gap-2 max-[379px]:pr-3"
             data-testid="choice-better"
           >
-            <p className="min-w-0 flex-1 text-pretty">
+            <p className="min-w-0 flex-1 text-pretty max-[379px]:flex-none">
               <span
                 className="type-small block font-semibold text-sage-ink"
                 data-testid="better-text"
