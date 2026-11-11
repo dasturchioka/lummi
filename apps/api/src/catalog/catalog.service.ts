@@ -29,7 +29,9 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
-import { activeMarkdown } from '../pricing/quote';
+import { activeMarkdown, volumePrice } from '../pricing/quote';
+import { readPricingSettings } from '../pricing/pricing-settings';
+import { upgradeRightPrices } from '../upgrade-rights/upgrade-rights';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 
@@ -171,13 +173,7 @@ export const belowReserve = (onHand: number, reserved: number) => onHand < reser
 
 /** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
 export function toVolumeCard(v: VolumeRow, reserved: number, now: Date): VolumeCard {
-  const sale = activeMarkdown(
-    {
-      regular: v.price,
-      markdown: v.salePrice === null ? null : { price: v.salePrice, endsAt: v.saleEndsAt },
-    },
-    now,
-  );
+  const sale = activeMarkdown(volumePrice(v), now);
   return {
     ml: v.ml as VolumeCard['ml'],
     price: v.price,
@@ -412,8 +408,11 @@ export class CatalogService {
     return ids.slice(0, cfg['catalog.similarCount']).map((id) => toListItem(byId.get(id)!));
   }
 
-  /** The card for a customer. Hidden and unknown slugs are both `null`. Only customer-safe fields are selected. */
-  async cardBySlug(slug: string): Promise<FragranceCard | null> {
+  /**
+   * A fragrance card as `customerId` sees it, with the prices their upgrade rights give (#38).
+   * Hidden and unknown slugs are both `null`. Only customer-safe fields are selected.
+   */
+  async cardBySlug(slug: string, customerId: number): Promise<FragranceCard | null> {
     const [f] = await this.db
       .select({
         id: fragrances.id,
@@ -483,6 +482,8 @@ export class CatalogService {
       isHit: f.isHit,
       isNew: f.isNew,
       volumes: volumeRows.map((v) => toVolumeCard(v, reserved.get(v.id) ?? 0, now)),
+      upgradeRightPrices: await upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
+      fullSizeMl: (await readPricingSettings(this.db)).fullSizeVolumesMl,
     };
   }
 }

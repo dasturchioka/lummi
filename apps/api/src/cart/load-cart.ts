@@ -14,7 +14,8 @@ import {
 import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { loadEntitlements } from '../entitlements/entitlements';
-import { quote, type Entitlement, type QuoteLineInput } from '../pricing/quote';
+import { readPricingSettings } from '../pricing/pricing-settings';
+import { quote, volumePrice, type Entitlement, type QuoteLineInput } from '../pricing/quote';
 import { judgePromoCode, type JudgedPromoCode } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { loadDiscovery, tenMlOf, type DiscoveryState, type TenMl } from '../sets/sets';
@@ -312,22 +313,13 @@ export async function loadQuote(
   const judged: JudgedPromoCode | null = cartState?.promoCode
     ? await judgePromoCode(tx, cartState.promoCode, customerId, now)
     : null;
-  const settings = await readSettings(tx, [
-    'pricing.freeDeliveryThreshold',
-    'pricing.thresholdBase',
-    'pricing.discountsApplyToMarkedDown',
-    'pricing.fullSizeVolumesMl',
-    'delivery.defaultTariff',
-  ]);
+  const settings = await readSettings(tx, ['delivery.defaultTariff']);
   const quoteLines: QuoteLineInput[] = [
     ...volumeLines.map((l): QuoteLineInput => ({
       key: String(l.lineId),
       item: { kind: 'volume', fragranceId: l.fragranceId, volumeMl: l.ml },
       qty: l.qty,
-      price: {
-        regular: l.price,
-        markdown: l.salePrice === null ? null : { price: l.salePrice, endsAt: l.saleEndsAt },
-      },
+      price: volumePrice(l),
       soldOut: l.soldOut,
     })),
     // both kinds of set cost the Discovery set's price and are never marked down
@@ -348,12 +340,7 @@ export async function loadQuote(
     choice: cartState?.discountChoice ?? null,
     deliveryTariff:
       opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
-    settings: {
-      freeDeliveryThreshold: settings['pricing.freeDeliveryThreshold'],
-      thresholdBase: settings['pricing.thresholdBase'],
-      discountsApplyToMarkedDown: settings['pricing.discountsApplyToMarkedDown'],
-      fullSizeVolumesMl: settings['pricing.fullSizeVolumesMl'],
-    },
+    settings: await readPricingSettings(tx),
     now,
   });
   return {

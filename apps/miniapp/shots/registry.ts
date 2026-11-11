@@ -199,6 +199,12 @@ async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none'
     `update birthday_coupons set used_by_order_id = null where used_by_order_id in (${theirs})`,
     [ids],
   );
+  // an upgrade right goes with the order that opened it, and lets go of the one that held it (#38)
+  await db.query(
+    `update upgrade_rights set used_by_order_id = null where used_by_order_id in (${theirs})`,
+    [ids],
+  );
+  await db.query(`delete from upgrade_rights where source_order_id in (${theirs})`, [ids]);
   await db.query(`delete from orders where id in (${theirs})`, [ids]);
   if (consent)
     await db.query(`update customers set data_consent_at = $2 where telegram_id = any($1)`, [
@@ -3326,9 +3332,39 @@ export const screens: ScreenDef[] = [
   ...polishScreens,
   ...worstShortcutScreens,
   ...birthdayScreens(),
+  ...upgradeRightScreens(),
   ...favouriteScreens(),
 ];
 
+/* The birthday coupon written straight to the dev DB (#30); the upgrade-right shots use it too. */
+/** Today on the Tashkent calendar, in SQL. */
+const today = `(now() at time zone 'Asia/Tashkent')::date`;
+const forgetBirthday = async (db: ShotDb) => {
+  await db.query(
+    `delete from birthday_coupons where customer_id in (select id from customers where telegram_id = $1)`,
+    [SHOT_USER.id],
+  );
+  await db.query(
+    `update customers set birth_date = null, birth_date_set_at = null where telegram_id = $1`,
+    [SHOT_USER.id],
+  );
+};
+/** Born 30 years ago the day after tomorrow, entered two months ago; this year's coupon is out. */
+const withCoupon = async (db: ShotDb) => {
+  await forgetBirthday(db);
+  await db.query(
+    `update customers set birth_date = (${today} + 2 - interval '30 years')::date,
+       birth_date_set_at = now() - interval '60 days' where telegram_id = $1`,
+    [SHOT_USER.id],
+  );
+  await db.query(
+    `insert into birthday_coupons (customer_id, birthday_year, birthday, percent, max_amount, issued_at, expires_at)
+     select id, extract(year from ${today} + 2)::int, ${today} + 2, 20, 100000,
+       now() - interval '1 day', ((${today} + 10)::timestamp at time zone 'Asia/Tashkent')
+     from customers where telegram_id = $1`,
+    [SHOT_USER.id],
+  );
+};
 /**
  * Birthday coupons (#30): «Мои скидки» in Profile, the one-time date of birth (Profile sheet and
  * checkout's optional field), and the coupon as the cart's one discount, also when an entered
@@ -3336,33 +3372,6 @@ export const screens: ScreenDef[] = [
  * (shots cannot wait for 10:00): birthday in two days, so it opened yesterday and has 9 days left.
  */
 function birthdayScreens(): ScreenDef[] {
-  const today = `(now() at time zone 'Asia/Tashkent')::date`;
-  const forgetBirthday = async (db: ShotDb) => {
-    await db.query(
-      `delete from birthday_coupons where customer_id in (select id from customers where telegram_id = $1)`,
-      [SHOT_USER.id],
-    );
-    await db.query(
-      `update customers set birth_date = null, birth_date_set_at = null where telegram_id = $1`,
-      [SHOT_USER.id],
-    );
-  };
-  /** Born 30 years ago the day after tomorrow, entered two months ago; this year's coupon is out. */
-  const withCoupon = async (db: ShotDb) => {
-    await forgetBirthday(db);
-    await db.query(
-      `update customers set birth_date = (${today} + 2 - interval '30 years')::date,
-         birth_date_set_at = now() - interval '60 days' where telegram_id = $1`,
-      [SHOT_USER.id],
-    );
-    await db.query(
-      `insert into birthday_coupons (customer_id, birthday_year, birthday, percent, max_amount, issued_at, expires_at)
-       select id, extract(year from ${today} + 2)::int, ${today} + 2, 20, 100000,
-         now() - interval '1 day', ((${today} + 10)::timestamp at time zone 'Asia/Tashkent')
-       from customers where telegram_id = $1`,
-      [SHOT_USER.id],
-    );
-  };
   const done = async (ctx: { api: ApiClient; db: ShotDb }) => {
     await forgetPromo(ctx);
     await clearOrders(ctx.db);
@@ -3483,6 +3492,148 @@ function birthdayScreens(): ScreenDef[] {
         await withCoupon(db);
       },
       act: async ({ page }) => pickFirstPoint(page),
+      teardown: done,
+    },
+  ];
+}
+
+/** The five fragrances of the shots' set; the Discovery set is put back to the seed's afterwards. */
+const RIGHT_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
+
+/**
+ * Upgrade rights (#38): the fragrance card with «Скидка за набор», the right as the cart's one
+ * discount, an entered promo code winning over it, and «Мои скидки» with a right and a birthday
+ * coupon. The shopper orders a Discovery set of `RIGHT_FIVE` through the API; it is marked
+ * delivered and its right written straight to the dev DB, as the «Доставлен» move would open it
+ * (five days ago, so 25 days are left).
+ */
+function upgradeRightScreens(): ScreenDef[] {
+  const withRight = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+    await sharePhone(api);
+    await chooseCity(api);
+    await clearOrders(db);
+    await db.query('update discovery_set set on_hand = 10');
+    await db.query('delete from discovery_set_items');
+    await db.query(
+      `insert into discovery_set_items (position, fragrance_id)
+       select i, (select id from fragrances where slug = ($1::text[])[i])
+       from generate_subscripts($1::text[], 1) as i`,
+      [RIGHT_FIVE],
+    );
+    await placeOrder(api, [], {
+      fill: async (a) => {
+        await fillCart(a, []);
+        const res = await a.cart.addDiscovery({ body: { qty: 1 } });
+        if (res.status !== 200) throw new Error(`discovery add: HTTP ${res.status}`);
+      },
+    });
+    const mine = `select id from orders where customer_id = (select id from customers where telegram_id = $1)`;
+    await db.query(
+      `update orders set status = 'delivered', updated_at = now() where id in (${mine})`,
+      [SHOT_USER.id],
+    );
+    await db.query(
+      `insert into upgrade_rights (customer_id, source, source_order_id, source_position, source_unit,
+         fragrances, percent, opened_at, expires_at)
+       select o.customer_id, 'set', o.id, l.position, 0, l.set_composition, 20,
+         now() - interval '5 days', ((${today} + 26)::timestamp at time zone 'Asia/Tashkent')
+       from orders o join order_lines l on l.order_id = o.id
+       where o.id in (${mine}) and l.kind = 'discovery_set'`,
+      [SHOT_USER.id],
+    );
+  };
+  const done = async (ctx: { api: ApiClient; db: ShotDb }) => {
+    await forgetPromo(ctx);
+    await clearOrders(ctx.db);
+    await forgetBirthday(ctx.db);
+    await bestSets(ctx.db);
+    await emptyCart(ctx);
+  };
+  // 50 ml of a covered fragrance and a 10 ml of another: the right takes 20 % of the 50 ml and
+  // delivery stays free, the threshold counted before the discount
+  const rightCart: [string, 10 | 30 | 50][] = [
+    ['symphony', 50],
+    ['baccarat-rouge-540', 10],
+  ];
+  return [
+    {
+      id: 'card-set-discount',
+      path: '/p/symphony',
+      fullPage: true,
+      setup: withRight,
+      act: async ({ page }) => {
+        await page.getByRole('radio', { name: /30/ }).click();
+        await page.getByTestId('right-deal').waitFor();
+      },
+      teardown: done,
+    },
+    {
+      id: 'cart-set-discount',
+      path: '/cart',
+      fullPage: true,
+      setup: async (ctx) => {
+        await forgetPromo(ctx);
+        await withRight(ctx);
+        await fillCart(ctx.api, rightCart);
+      },
+      act: async ({ page }) => void (await page.getByTestId('line-deal').waitFor()),
+      teardown: done,
+    },
+    {
+      // an entered promo code wins (ADR 0002); the right waits, «Применить скидку» takes the code out
+      id: 'cart-set-discount-promo-wins',
+      path: '/cart',
+      fullPage: true,
+      setup: async (ctx) => {
+        await shotPromo(ctx.db);
+        await forgetPromo(ctx);
+        await withRight(ctx);
+        await fillCart(ctx.api, rightCart);
+        const res = await ctx.api.cart.applyPromoCode({ body: { code: 'bloger10' } });
+        if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+      },
+      act: async ({ page }) => void (await page.getByTestId('right-waiting').waitFor()),
+      teardown: done,
+    },
+    // the narrow Android check (360 px): the struck prices in the tiles and the dock, the cart's
+    // long brand line beside the price
+    {
+      id: 'card-set-discount-360',
+      path: '/p/symphony',
+      width: 360,
+      fullPage: true,
+      setup: withRight,
+      act: async ({ page }) => {
+        await page.getByRole('radio', { name: /50/ }).click();
+        await page.getByTestId('right-deal').waitFor();
+      },
+      teardown: done,
+    },
+    {
+      id: 'cart-set-discount-360',
+      path: '/cart',
+      width: 360,
+      fullPage: true,
+      setup: async (ctx) => {
+        await forgetPromo(ctx);
+        await withRight(ctx);
+        await fillCart(ctx.api, rightCart);
+      },
+      act: async ({ page }) => void (await page.getByTestId('line-deal').waitFor()),
+      teardown: done,
+    },
+    {
+      id: 'profile-discounts-right',
+      path: '/profile',
+      fullPage: true,
+      setup: async (ctx) => {
+        await withRight(ctx);
+        await withCoupon(ctx.db);
+      },
+      act: async ({ page }) => {
+        await page.getByTestId('upgrade-right').waitFor();
+        await page.getByTestId('birthday-coupon').waitFor();
+      },
       teardown: done,
     },
   ];

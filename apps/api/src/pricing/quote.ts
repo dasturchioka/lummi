@@ -15,6 +15,18 @@ export interface Price {
   markdown: { price: number; endsAt: Date | null } | null;
 }
 
+/** A volume's stored price columns as `quote()` takes them: the one mapping (ADR 0008). */
+export function volumePrice(v: {
+  price: number;
+  salePrice: number | null;
+  saleEndsAt: Date | null;
+}): Price {
+  return {
+    regular: v.price,
+    markdown: v.salePrice === null ? null : { price: v.salePrice, endsAt: v.saleEndsAt },
+  };
+}
+
 /** One cart line as priced now. A builder set and the Discovery set are both `set` items. */
 export interface QuoteLineInput {
   key: string;
@@ -247,7 +259,14 @@ function upgradeRightOption(
   const amount = percentOf(target.unitPrice, e.percent);
   if (amount === 0) return null;
   return {
-    discount: { type: 'upgrade_right', id: e.id, source: e.source, amount, lineKey: target.key },
+    discount: {
+      type: 'upgrade_right',
+      id: e.id,
+      source: e.source,
+      percent: e.percent,
+      amount,
+      lineKey: target.key,
+    },
     base: settings.thresholdBase.upgradeRight[e.source],
     expiresAt: e.expiresAt,
     growth: null,

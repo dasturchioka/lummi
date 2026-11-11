@@ -2,6 +2,7 @@ import type { BirthdayCouponDto, MyDiscountsDto } from '@lummi/contracts';
 import { fill, formatCalendarDate, formatMoney, plural } from '@lummi/i18n';
 import { useState } from 'react';
 import { WithManagerLink } from '../orders/CancelOrder';
+import { useOpenFragrance } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
 import { Badge } from '../ui/Badge';
@@ -10,6 +11,7 @@ import { Card } from '../ui/Card';
 import { AlertIcon, GiftIcon } from '../ui/icons';
 import { Skeleton } from '../ui/Skeleton';
 import { BirthDateSheet } from './BirthDateSheet';
+import { RightCard } from './RightCard';
 import { useDiscountsText, useMyDiscounts } from './queries';
 
 /**
@@ -103,8 +105,9 @@ function BirthdayCard({ data, onEnter }: { data: MyDiscountsDto; onEnter: () => 
 }
 
 /**
- * Profile → «Мои скидки» (#30; the upgrade rights of #38 join it): the active birthday coupons
- * with days left, else the next one or the invitation to enter the date of birth. Entering it
+ * Profile → «Мои скидки» (#30): the open upgrade rights (#38) with their fragrances and days left,
+ * then the active birthday coupons with days left, else the next one or the invitation to enter
+ * the date of birth. Entering it
  * needs the account phone first (one phone, one account), so the registration step runs before
  * the sheet when there is none.
  */
@@ -113,6 +116,7 @@ export function DiscountsSection() {
   const { ensurePhone } = useRegistration();
   const d = useDiscountsText();
   const query = useMyDiscounts();
+  const openFragrance = useOpenFragrance();
   const [open, setOpen] = useState(false);
   const data = query.data;
   const enter = async () => {
@@ -148,10 +152,17 @@ export function DiscountsSection() {
               {t.common.retry}
             </Button>
           </Card>
-        ) : data.birthdayCoupons.length > 0 ? (
-          data.birthdayCoupons.map((c) => <CouponCard key={c.id} c={c} />)
         ) : (
-          <BirthdayCard data={data} onEnter={() => void enter()} />
+          <>
+            {data.upgradeRights.map((r) => (
+              <RightCard key={r.id} right={r} fullSizeMl={data.fullSizeMl} onOpen={openFragrance} />
+            ))}
+            {data.birthdayCoupons.length > 0 ? (
+              data.birthdayCoupons.map((c) => <CouponCard key={c.id} c={c} />)
+            ) : (
+              <BirthdayCard data={data} onEnter={() => void enter()} />
+            )}
+          </>
         )}
       </div>
       {data ? (

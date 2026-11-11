@@ -1,4 +1,10 @@
-import type { Discount } from '@lummi/contracts';
+import {
+  formatLocalDate,
+  lastDayOf,
+  type CartDto,
+  type Discount,
+  type Quote,
+} from '@lummi/contracts';
 import type { DbOrTx } from '@lummi/db';
 import {
   birthdayEntitlements,
@@ -6,6 +12,11 @@ import {
   releaseBirthdayCoupon,
 } from '../birthday/birthday-coupons';
 import type { Entitlement } from '../pricing/quote';
+import {
+  holdUpgradeRight,
+  releaseUpgradeRight,
+  upgradeRightEntitlements,
+} from '../upgrade-rights/upgrade-rights';
 
 /**
  * Entitlements (GLOSSARY): the discount sources a customer holds and that apply without typing
@@ -17,7 +28,8 @@ import type { Entitlement } from '../pricing/quote';
  *   update) in the order's transaction;
  * - `releaseEntitlements`: a cancelled or returned order gives back what it held.
  *
- * A new source (the upgrade rights of #38) is one more `EntitlementSource` in `SOURCES`.
+ * Each source is one `EntitlementSource` in `SOURCES`: the birthday coupon (#30) and the upgrade
+ * right (#38).
  */
 export interface EntitlementSource {
   type: Entitlement['type'];
@@ -39,7 +51,14 @@ const birthdayCouponSource: EntitlementSource = {
   release: releaseBirthdayCoupon,
 };
 
-const SOURCES: readonly EntitlementSource[] = [birthdayCouponSource];
+const upgradeRightSource: EntitlementSource = {
+  type: 'upgrade_right',
+  active: upgradeRightEntitlements,
+  hold: holdUpgradeRight,
+  release: releaseUpgradeRight,
+};
+
+const SOURCES: readonly EntitlementSource[] = [birthdayCouponSource, upgradeRightSource];
 
 /** The Discount of an entitlement (not a promo code). */
 export type EntitlementDiscount = Extract<Discount, { type: Entitlement['type'] }>;
@@ -77,6 +96,28 @@ export function holdEntitlement(
 /** ADR 0005: a cancelled or returned order gives back the entitlement it held while within validity. */
 export async function releaseEntitlements(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
   for (const s of SOURCES) await s.release(tx, orderId, now);
+}
+
+/**
+ * The Entitlement an applied promo code keeps out (ADR 0002: an entered code wins): the one the
+ * server would pick without the code, i.e. the cheapest entitlement among the quote's alternatives
+ * (they come cheapest first, ties as `quote()` breaks them); null when none would discount the cart.
+ */
+export function entitlementWaitingBehindCode(
+  q: Quote,
+  entitlements: readonly Entitlement[],
+): CartDto['entitlementWaiting'] {
+  if (q.discount?.type !== 'promo_code') return null;
+  for (const { discount: d } of q.alternatives) {
+    if (!isEntitlementDiscount(d)) continue;
+    const e = entitlements.find((x) => x.type === d.type && x.id === d.id);
+    if (!e) continue;
+    const lastDay = formatLocalDate(lastDayOf(e.expiresAt));
+    return e.type === 'upgrade_right'
+      ? { type: e.type, id: e.id, source: e.source, percent: e.percent, lastDay }
+      : { type: e.type, id: e.id, percent: e.percent, lastDay };
+  }
+  return null;
 }
 
 /**

@@ -167,16 +167,30 @@ export class OrderStatusService {
     if (order.status !== expectedStatus) return { kind: 'conflict', order };
 
     const fx = EFFECTS[action] as Effects<A>;
-    const move: Move<A> = { order, lines: await linesOf(tx, order.id), payload: plan.payload };
+    const move: Move<A> = {
+      order,
+      lines: await linesOf(tx, order.id),
+      payload: plan.payload,
+      openedRights: [],
+    };
     if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 
     const now = this.edges.clock.now();
     const onHand: OnHandChange[] = fx.onHand
       ? await changeOnHand(tx, order.id, move.lines, fx.onHand(move))
       : [];
-    if (fx.discountSource) await this.discountSources.release(tx, order);
-    if (fx.discountSource === 'release_and_close_rights')
-      await this.discountSources.closeRightsOpenedBy(tx, order);
+    switch (fx.discountSource) {
+      case 'release':
+        await this.discountSources.release(tx, order);
+        break;
+      case 'release_and_close_rights':
+        await this.discountSources.release(tx, order);
+        await this.discountSources.closeRightsOpenedBy(tx, order);
+        break;
+      case 'open_rights':
+        move.openedRights = await this.discountSources.openRights(tx, order, move.lines);
+        break;
+    }
 
     const [updated] = await tx
       .update(orders)

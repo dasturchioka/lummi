@@ -1,7 +1,7 @@
 import { defineMessages } from './define';
 
 /**
- * Profile «Мои скидки» and the date of birth (ticket #30; #38 adds the upgrade rights). Its own
+ * Profile «Мои скидки» and the date of birth (ticket #30), with the upgrade rights (#38). Its own
  * namespace (`@lummi/i18n/discounts`), imported only by the lazy Profile and checkout, so the Mini
  * App's first screen does not carry these strings (ADR 0030 budget). Keys must match in both
  * languages or typecheck fails.
@@ -57,6 +57,35 @@ export const discountsMessages = defineMessages(
       couponWaits:
         'Купон ко дню рождения −{percent}% не суммируется с промокодом и ждёт вас до {date}.',
       useCoupon: 'Применить купон',
+      /** The cart: an entered promo code keeps the upgrade right out (ADR 0002). `{date}`: its last day. */
+      rightWaits: {
+        set: 'Скидка за набор −{percent}% не суммируется с промокодом и ждёт вас до {date}.',
+        single_10ml:
+          'Скидка −{percent}% за флакон 10 мл не суммируется с промокодом и ждёт вас до {date}.',
+      },
+      useRight: 'Применить скидку',
+      /** The fragrance card: the customer's right on the chosen full-size volume (TZ §3.4). */
+      cardDeal: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
+      /** Under it, what it covers. `{volumes}`: «30 или 50» from the setting. */
+      cardDealTerms: 'на один флакон {volumes} мл · применится в корзине',
+      /** Joins the last two full-size volumes: «30 или 50». */
+      volumesOr: 'или',
+      /** The cart line the right discounts (one bottle of it). */
+      lineDeal: {
+        set: 'Скидка за набор −{percent}% на один флакон',
+        single_10ml: 'Скидка за 10 мл −{percent}% на один флакон',
+      },
+      /** «Мои скидки»: the order that opened the right, so two rights are told apart. */
+      rightSource: {
+        set: 'Набор из заказа № {number}',
+        single_10ml: 'Флакон 10 мл из заказа № {number}',
+      },
+      /** An open upgrade right (TZ §3.4: «видна в профиле»). */
+      right: { set: 'Скидка за набор', single_10ml: 'Скидка за флакон 10 мл' },
+      rightTerms: {
+        set: 'На один полный флакон {volumes} мл любого аромата из набора. В корзине применится сама.',
+        single_10ml: 'На один полный флакон {volumes} мл этого аромата. В корзине применится сама.',
+      },
     },
   },
   {
@@ -102,6 +131,31 @@ export const discountsMessages = defineMessages(
       couponWaits:
         'Tugʻilgan kun kuponi −{percent}% promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
       useCoupon: 'Kuponni qoʻllash',
+      rightWaits: {
+        set: 'Toʻplam uchun −{percent}% chegirma promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
+        single_10ml:
+          '10 ml flakon uchun −{percent}% chegirma promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
+      },
+      useRight: 'Chegirmani qoʻllash',
+      cardDeal: {
+        set: 'Toʻplam chegirmasi −{percent}%',
+        single_10ml: '10 ml uchun chegirma −{percent}%',
+      },
+      cardDealTerms: 'bitta {volumes} ml flakonga · savatda qoʻllanadi',
+      volumesOr: 'yoki',
+      lineDeal: {
+        set: 'Toʻplam chegirmasi −{percent}% bitta flakonga',
+        single_10ml: '10 ml uchun chegirma −{percent}% bitta flakonga',
+      },
+      rightSource: {
+        set: '№ {number} buyurtmadagi toʻplam',
+        single_10ml: '№ {number} buyurtmadagi 10 ml flakon',
+      },
+      right: { set: 'Toʻplam chegirmasi', single_10ml: '10 ml flakon chegirmasi' },
+      rightTerms: {
+        set: 'Toʻplamdagi istalgan iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
+        single_10ml: 'Shu iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
+      },
     },
   },
 );
