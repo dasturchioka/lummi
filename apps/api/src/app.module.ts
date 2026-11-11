@@ -49,6 +49,8 @@ import { StockAdminController } from './admin/stock-admin.controller';
 import { CustomersAdminService } from './admin/customers-admin.service';
 import { StockAdminService } from './admin/stock-admin.service';
 import { SetsAdminService } from './admin/sets-admin.service';
+import { FavouritesController } from './favourites/favourites.controller';
+import { FavouritesService } from './favourites/favourites.service';
 import { SetsController } from './sets/sets.controller';
 import { SetsService } from './sets/sets.service';
 import { SearchService } from './search/search.service';
@@ -102,6 +104,7 @@ export class AppModule {
         CatalogController,
         CartController,
         SetsController,
+        FavouritesController,
         OrdersController,
         ReceiptsController,
         ReceiptsAdminController,
@@ -146,6 +149,7 @@ export class AppModule {
         CatalogService,
         CartService,
         SetsService,
+        FavouritesService,
         OrdersService,
         ReceiptsService,
         ShopCardService,

@@ -1,5 +1,5 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_FAVOURITE, SET_SIZE } from '@lummi/contracts/constants';
 import { buyNowParam } from '@lummi/contracts/buy-now';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter, useSearch } from '@tanstack/react-router';
@@ -19,6 +19,7 @@ import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { BuyPair } from '../ui/BuyPair';
 import { DockNote } from '../ui/DockNote';
+import { HeartButton } from '../ui/HeartButton';
 import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
@@ -127,10 +128,11 @@ export function DiscoverySetView({
       <article className="flex flex-col pt-3 pb-7">
         <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-photo">
           <SetPhoto hash={set.photo} sizes="(min-width: 520px) 488px, 100vw" eager />
-          <div className="absolute inset-x-3 top-3 flex items-center justify-between">
+          <div className="absolute inset-x-3 top-3 flex items-start justify-between">
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
+            <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} place="disc" />
           </div>
         </div>
 

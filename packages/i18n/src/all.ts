@@ -2,6 +2,7 @@ import type { Language } from './language';
 import { adminMessages } from './admin';
 import { botMessages } from './bot';
 import { discountsMessages } from './discounts';
+import { favouritesMessages } from './favourites';
 import { miniappMessages } from './miniapp';
 import { ordersMessages } from './orders';
 import { setsMessages } from './sets';
@@ -19,6 +20,7 @@ export const dictionaries = {
     ...ordersMessages.ru,
     ...setsMessages.ru,
     ...discountsMessages.ru,
+    ...favouritesMessages.ru,
     ...adminMessages.ru,
   },
   uz: {
@@ -28,6 +30,7 @@ export const dictionaries = {
     ...ordersMessages.uz,
     ...setsMessages.uz,
     ...discountsMessages.uz,
+    ...favouritesMessages.uz,
     ...adminMessages.uz,
   },
 } satisfies Record<Language, object>;

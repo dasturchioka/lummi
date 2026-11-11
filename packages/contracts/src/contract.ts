@@ -1,6 +1,7 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { birthDateErrorSchema, myDiscountsSchema, setBirthDateBodySchema } from './birthday';
+import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
   adminCampaignLinkSchema,
@@ -465,6 +466,36 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: cartSchema, 401: cartErrorSchema },
       summary: 'Remove the entered promo code',
+    },
+  },
+  favourites: {
+    ids: {
+      method: 'GET',
+      path: '/favourites',
+      responses: { 200: favouriteIdsSchema, 401: favouriteErrorSchema },
+      summary: 'The slugs of the favourite fragrances and whether the Discovery set is one',
+    },
+    list: {
+      method: 'GET',
+      path: '/favourites/list',
+      responses: { 200: favouriteListSchema, 401: favouriteErrorSchema },
+      summary: 'The favourites as list cards with today price and availability (hidden ones left out)',
+    },
+    add: {
+      method: 'PUT',
+      path: '/favourites/:target',
+      pathParams: z.object({ target: z.string().min(1).max(100) }),
+      body: c.noBody(),
+      responses: { 200: favouriteIdsSchema, 401: favouriteErrorSchema, 404: favouriteErrorSchema },
+      summary: 'Keep a fragrance (slug) or the Discovery set (`discovery-set`); idempotent',
+    },
+    remove: {
+      method: 'DELETE',
+      path: '/favourites/:target',
+      pathParams: z.object({ target: z.string().min(1).max(100) }),
+      body: c.noBody(),
+      responses: { 200: favouriteIdsSchema, 401: favouriteErrorSchema },
+      summary: 'Drop a favourite; idempotent, also for one never kept',
     },
   },
   campaigns: {
