@@ -3,6 +3,7 @@ import {
   lastDayOf,
   type CartDto,
   type Discount,
+  type DiscountOptionDto,
   type Quote,
 } from '@lummi/contracts';
 import type { DbOrTx } from '@lummi/db';
@@ -101,23 +102,79 @@ export async function releaseEntitlements(tx: DbOrTx, orderId: number, now: Date
 /**
  * The Entitlement an applied promo code keeps out (ADR 0002: an entered code wins): the one the
  * server would pick without the code, i.e. the cheapest entitlement among the quote's alternatives
- * (they come cheapest first, ties as `quote()` breaks them); null when none would discount the cart.
+ * (they come cheapest first, ties as `quote()` breaks them), with how much lower its total is
+ * («Скидка за набор выгоднее на … сум», #39); null when none would discount the cart.
  */
 export function entitlementWaitingBehindCode(
   q: Quote,
   entitlements: readonly Entitlement[],
 ): CartDto['entitlementWaiting'] {
   if (q.discount?.type !== 'promo_code') return null;
-  for (const { discount: d } of q.alternatives) {
+  for (const { discount: d, cheaperBy } of q.alternatives) {
     if (!isEntitlementDiscount(d)) continue;
     const e = entitlements.find((x) => x.type === d.type && x.id === d.id);
     if (!e) continue;
-    const lastDay = formatLocalDate(lastDayOf(e.expiresAt));
+    const terms = { ...termsOf(e), cheaperBy };
     return e.type === 'upgrade_right'
-      ? { type: e.type, id: e.id, source: e.source, percent: e.percent, lastDay }
-      : { type: e.type, id: e.id, percent: e.percent, lastDay };
+      ? { type: e.type, id: e.id, source: e.source, ...terms }
+      : { type: e.type, id: e.id, ...terms };
   }
   return null;
+}
+
+/** An entitlement's percent and last day (Tashkent), as «Мои скидки» and the cart name it. */
+function termsOf(e: Entitlement): NonNullable<DiscountOptionDto['terms']> {
+  return { percent: e.percent, lastDay: formatLocalDate(lastDayOf(e.expiresAt)) };
+}
+
+/**
+ * The cart's discount switch (#39, ADR 0002), from the quote alone: the applied choice and every
+ * alternative, plus «Не применять» (no discount, so the entitlements keep for a later order) while
+ * a discount is applied. Cheapest total first, ties to the entitlement that ends first, then the
+ * lowest id; «Не применять» always last. The order depends only on the options, never on which one
+ * is applied, so a row stays where it was when the shopper taps it. Empty when there is nothing
+ * to choose between: no discount at all, or just an applied code with no entitlement beside it
+ * (its own field takes it out).
+ */
+export function discountOptionsOf(
+  q: Quote,
+  entitlements: readonly Entitlement[],
+): DiscountOptionDto[] {
+  const find = (d: Discount | null) =>
+    isEntitlementDiscount(d)
+      ? (entitlements.find((e) => e.type === d.type && e.id === d.id) ?? null)
+      : null;
+  const rows = [
+    { discount: q.discount, deliveryFee: q.deliveryFee, total: q.total, applied: true },
+    ...q.alternatives.map((a) => ({ ...a, applied: false })),
+    ...(q.discount ? [{ discount: null, ...q.withoutDiscount, applied: false }] : []),
+  ].map(({ discount, deliveryFee, total, applied }) => {
+    const e = find(discount);
+    return { discount, deliveryFee, total, applied, terms: e ? termsOf(e) : null, e };
+  });
+  const choosing =
+    rows.length > 1 &&
+    (rows.some((r) => r.e !== null) || rows.find((r) => r.applied)!.discount === null);
+  if (!choosing) return [];
+  const last = Number.MAX_SAFE_INTEGER;
+  const key = (r: (typeof rows)[number]) => ({
+    none: r.discount === null ? 1 : 0,
+    expiry: r.e?.expiresAt.getTime() ?? last,
+    id: r.e?.id ?? 0,
+  });
+  return rows
+    .sort((a, b) => {
+      const ka = key(a);
+      const kb = key(b);
+      return (
+        ka.none - kb.none ||
+        a.total - b.total ||
+        ka.expiry - kb.expiry ||
+        ka.id - kb.id ||
+        (a.discount?.type ?? '').localeCompare(b.discount?.type ?? '')
+      );
+    })
+    .map(({ e: _e, ...row }) => row);
 }
 
 /**

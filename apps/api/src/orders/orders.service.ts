@@ -25,7 +25,6 @@ import {
   orderLines,
   orders,
   regions,
-  sql,
   volumes,
   type BtsPointRow,
   type CustomerRow,
@@ -459,14 +458,12 @@ export class OrdersService {
 
       // 4. The cart, the saved pair, consent, audit and the message. A cart order takes the entered
       // code with it, held or refused, so the next cart starts without one (spec Changes 2026-11-11
-      // (4), #29); a buy-now order leaves the cart, its code included, exactly as it was.
+      // (4), #29), and the discount choice made for these lines (#39): the next cart picks by
+      // itself again. A buy-now order leaves the cart, its code and choice included, as it was.
       if (source.kind === 'cart') {
         await tx
           .update(carts)
-          .set({
-            promoCode: null,
-            discountChoice: sql`case when ${carts.discountChoice}->>'type' = 'promo_code' then null else ${carts.discountChoice} end`,
-          })
+          .set({ promoCode: null, discountChoice: null })
           .where(eq(carts.customerId, c.id));
         await tx.delete(cartLines).where(
           and(

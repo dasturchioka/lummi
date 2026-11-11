@@ -474,12 +474,11 @@ describe('the stored discount choice and prefilled code', () => {
     expect(row).toMatchObject({ discountChoice: null, promoCode: null });
     const { CartService } = await import('../src/cart/cart.service');
     const svc = t.app.get(CartService);
-    await svc.setDiscountChoice(row!.customerId, { type: 'birthday_coupon', id: 7 });
+    await t.db.update(carts).set({ discountChoice: { type: 'birthday_coupon', id: 7 } });
     // the one way a code gets in: the typed path, which counts the attempt
     await svc.applyPromoCode(row!.customerId, 'summer');
     const [after] = await t.db.select().from(carts);
     expect(after).toMatchObject({ discountChoice: null, promoCode: 'SUMMER' });
-    await svc.setDiscountChoice(row!.customerId, { type: 'promo_code' });
     expect((await get()).promoCode).toBe('SUMMER');
   });
 });
@@ -501,7 +500,8 @@ describe('relink', () => {
     await fresh.add(s2!, 30);
     await t.db
       .update(carts)
-      .set({ promoCode: 'FRESH', discountChoice: { type: 'promo_code' } })
+      // «Не применять» (#39): a choice no quote finds stale, so reading the cart keeps it
+      .set({ promoCode: 'FRESH', discountChoice: { type: 'none' } })
       .where(
         eq(
           carts.customerId,
@@ -530,7 +530,7 @@ describe('relink', () => {
     expect(await t.db.select().from(carts)).toHaveLength(1);
     expect((await t.db.select().from(carts))[0]).toMatchObject({
       customerId: oldRow!.id,
-      discountChoice: { type: 'promo_code' },
+      discountChoice: { type: 'none' },
     });
   });
 
