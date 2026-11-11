@@ -1,5 +1,7 @@
 import {
   CREDIT_OPTIONS_LIMIT,
+  formatLocalDate,
+  lastDayOf,
   ORDER_NUMBER_MAX,
   PAYMENT_LINK_REASON_MIN,
   tashkentDayStart as dayStart,
@@ -22,8 +24,10 @@ import {
   type PaymentState,
   type ReceiptVerdict,
   type ReceiptRejectReason,
+  type RefundBody,
   type RejectReceiptBody,
   type StaffCancelBody,
+  type StaffReturnBody,
   type TransitionRefusal,
 } from '@lummi/contracts';
 import {
@@ -40,6 +44,7 @@ import {
   orders,
   receiptChecks,
   receipts,
+  refunds,
   sql,
   staff,
   type Db,
@@ -53,9 +58,14 @@ import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
 import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
+import { heldEntitlement } from '../entitlements/entitlements';
 import { readShopCard } from '../payment/shop-card.service';
+import { orderMoney, refundsOf } from '../refunds/order-money';
+import { Refunds } from '../refunds/refunds';
 import { readSettings } from '../settings/settings.service';
-import { DB } from '../tokens';
+import { DB, EDGES } from '../tokens';
+import type { Edges } from '../edges';
+import { rightsOpenedBy } from '../upgrade-rights/upgrade-rights';
 
 type ListQuery = { page: number; pageSize: number } & Omit<AdminOrdersQuery, 'page' | 'pageSize'>;
 type CreditsQuery = {
@@ -74,7 +84,7 @@ export type MoveOutcome =
    */
   | {
       kind: 'conflict';
-      code: 'status_changed' | 'receipt_changed' | 'credit_taken';
+      code: 'status_changed' | 'receipt_changed' | 'credit_taken' | 'refunds_changed';
       order: AdminOrderDto;
     }
   | {
@@ -84,7 +94,10 @@ export type MoveOutcome =
         | 'note_too_long'
         | 'reason_required'
         | 'reason_invalid'
-        | 'credit_mismatch';
+        | 'credit_mismatch'
+        | 'not_paid'
+        | 'refund_too_large'
+        | 'invalid_date';
       min?: number;
       max?: number;
       mismatch?: ('amount' | 'card')[];
@@ -136,10 +149,12 @@ const customerName = (c: { firstName: string; lastName: string | null }) =>
 export class AdminOrdersService {
   constructor(
     @Inject(DB) private readonly db: Db,
+    @Inject(EDGES) private readonly edges: Edges,
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
     @Inject(ReceiptRejection) private readonly rejection: ReceiptRejection,
     @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
     @Inject(AuditQueryService) private readonly auditQuery: AuditQueryService,
+    @Inject(Refunds) private readonly refunds: Refunds,
   ) {}
 
   /** Newest first. A search puts the order with that number first, then phone matches. */
@@ -169,8 +184,12 @@ export class AdminOrdersService {
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(where);
+    const refunded =
+      sql<number>`(select coalesce(sum(rf.amount), 0) from ${refunds} rf where rf.order_id = ${orders.id})`.mapWith(
+        Number,
+      );
     const rows = await this.db
-      .select({ order: orders, customer: customers, payment: paymentState })
+      .select({ order: orders, customer: customers, payment: paymentState, refunded })
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(where)
@@ -194,25 +213,28 @@ export class AdminOrdersService {
               ),
             )
             .orderBy(asc(orderLines.orderId), asc(orderLines.position));
-    const items = rows.map(({ order: o, customer: c, payment }): AdminOrderListItemDto => {
-      const own = lines.filter((l) => l.orderId === o.id);
-      const first = own[0];
-      if (!first) throw new Error(`order ${o.number} has no lines`);
-      return {
-        number: o.number,
-        status: o.status,
-        payment,
-        createdAt: o.createdAt.toISOString(),
-        total: o.total,
-        itemCount: own.reduce((n, l) => n + l.qty, 0),
-        firstLine: { name: { ru: first.nameRu, uz: first.nameUz }, ml: first.ml, qty: first.qty },
-        lineCount: own.length,
-        customer: { id: c.id, name: customerName(c), phone: c.phone },
-        recipient: { name: o.recipientName, phone: o.recipientPhone },
-        region: { ru: o.regionNameRu, uz: o.regionNameUz },
-        isGift: o.isGift,
-      };
-    });
+    const items = rows.map(
+      ({ order: o, customer: c, payment, refunded }): AdminOrderListItemDto => {
+        const own = lines.filter((l) => l.orderId === o.id);
+        const first = own[0];
+        if (!first) throw new Error(`order ${o.number} has no lines`);
+        return {
+          number: o.number,
+          status: o.status,
+          payment,
+          createdAt: o.createdAt.toISOString(),
+          total: o.total,
+          itemCount: own.reduce((n, l) => n + l.qty, 0),
+          firstLine: { name: { ru: first.nameRu, uz: first.nameUz }, ml: first.ml, qty: first.qty },
+          lineCount: own.length,
+          customer: { id: c.id, name: customerName(c), phone: c.phone },
+          recipient: { name: o.recipientName, phone: o.recipientPhone },
+          region: { ru: o.regionNameRu, uz: o.regionNameUz },
+          isGift: o.isGift,
+          refunded,
+        };
+      },
+    );
     return { items, total, page: q.page, pageSize: q.pageSize };
   }
 
@@ -303,8 +325,12 @@ export class AdminOrdersService {
         };
       }),
       credit: await this.matchedCredit(o, confirmations.at(-1)),
+      money: await orderMoney(this.db, o),
+      refunds: await refundsOf(this.db, o.id),
+      returned: returnedOf(o, events),
+      returnPreview: o.status === 'delivered' ? await this.returnPreview(o) : null,
       // the page's history as the contract has it: the link details stay with the credit
-      events: events.map(({ creditId: _credit, link: _link, ...e }) => e),
+      events: events.map(({ creditId: _credit, link: _link, returnLines: _lines, ...e }) => e),
       audit: await this.auditQuery.forTarget('order', o.id),
       limits: {
         rejectNoteMax: limits['receipts.rejectNoteMaxLength'],
@@ -379,6 +405,7 @@ export class AdminOrdersService {
         trackingNumber: text(p.trackingNumber),
         receiptId: typeof p.receiptId === 'number' ? p.receiptId : null,
         creditId: typeof p.creditId === 'number' ? p.creditId : null,
+        ...(e.action === 'return' ? { returnLines: returnLinesOf(p.lines) } : {}),
         ...(e.action === PAID_BY
           ? {
               link: {
@@ -578,6 +605,81 @@ export class AdminOrdersService {
     }
   }
 
+  /**
+   * The whole delivered order came back (ADR 0006): «Возвращён» through `transition()`, with the
+   * staff member's reason and a back-to-stock flag per line. On hand, the discount source and the
+   * rights the order opened follow in the move (`EFFECTS.return`, ADR 0005, 0010).
+   */
+  async returnOrder(staffId: number, number: number, body: StaffReturnBody): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const { expectedStatus, ...payload } = body;
+    const out = await this.status.transition(
+      id,
+      'return',
+      { type: 'staff', id: staffId },
+      expectedStatus,
+      payload,
+    );
+    return this.answer(out);
+  }
+
+  /**
+   * What a return of this delivered order would do now (ADR 0005, 0010), read by the same rules
+   * the move writes with: the lines to flag, the discount source it holds and whether it comes
+   * back, and the upgrade rights it opened, which close.
+   */
+  private async returnPreview(o: OrderRow): Promise<NonNullable<AdminOrderDto['returnPreview']>> {
+    const now = this.edges.clock.now();
+    const lines = await linesOf(this.db, o.id);
+    return {
+      lines: lines.map((l) => ({ position: l.position })),
+      discount: await this.heldDiscount(o, now),
+      rights: await rightsOpenedBy(this.db, o.id, now),
+    };
+  }
+
+  private async heldDiscount(
+    o: OrderRow,
+    now: Date,
+  ): Promise<NonNullable<AdminOrderDto['returnPreview']>['discount']> {
+    const d = o.discount;
+    if (d === null) return null;
+    if (d.type === 'promo_code') return { type: 'promo_code', code: d.code };
+    const held = await heldEntitlement(this.db, d, o.id, now);
+    if (!held) return null;
+    return {
+      type: d.type,
+      comesBack: held.comesBack,
+      lastDay: formatLocalDate(lastDayOf(held.expiresAt)),
+    };
+  }
+
+  /**
+   * A Refund on a paid order (ADR 0006), recorded by the staff member: the amount, the day it was
+   * sent and why. The status, the history and every discount stay as they are.
+   */
+  async refund(staffId: number, number: number, body: RefundBody): Promise<MoveOutcome> {
+    const id = await this.idOf(number);
+    if (id === null) return { kind: 'not_found' };
+    const out = await this.refunds.record({ orderId: id, staffId, ...body });
+    switch (out.kind) {
+      case 'recorded':
+        return { kind: 'done', order: await this.pageOf(out.order) };
+      case 'refunds_changed':
+        return { kind: 'conflict', code: 'refunds_changed', order: await this.pageOf(out.order) };
+      case 'too_large':
+        return { kind: 'refused', code: 'refund_too_large', max: out.max };
+      case 'not_paid':
+        return { kind: 'refused', code: 'not_paid' };
+      case 'invalid_date':
+        return { kind: 'refused', code: 'invalid_date' };
+      case 'not_found':
+      case 'try_again':
+        return { kind: out.kind };
+    }
+  }
+
   private async idOf(number: number): Promise<number | null> {
     if (!knownNumber(number)) return null;
     const [row] = await this.db
@@ -627,11 +729,39 @@ export function toCreditDto(
   };
 }
 
-/** A history row as the page reads it, with a confirmation's link details kept for the credit. */
+/**
+ * A history row as the page reads it, with a confirmation's link details kept for the credit and
+ * a return's per-line flags kept for the Return.
+ */
 type EventRow = AdminOrderEventDto & {
   creditId: number | null;
   link?: { differenceTiyin: number; offShopCard: boolean };
+  returnLines?: NonNullable<AdminOrderDto['returned']>['lines'];
 };
+
+/** A return's recorded flags (`order_events.payload.lines`), as `transition()` wrote them. */
+function returnLinesOf(raw: unknown): NonNullable<AdminOrderDto['returned']>['lines'] {
+  if (!Array.isArray(raw)) throw new Error('a return without its line flags');
+  return raw.map((l: { position?: unknown; backToStock?: unknown }) => {
+    if (typeof l.position !== 'number' || typeof l.backToStock !== 'boolean')
+      throw new Error('a return line flag of another shape');
+    return { position: l.position, backToStock: l.backToStock };
+  });
+}
+
+/** The Return of a «Возвращён» order, from its history: who, when, why, which lines went back. */
+function returnedOf(o: OrderRow, events: EventRow[]): AdminOrderDto['returned'] {
+  if (o.status !== 'returned') return null;
+  const e = events.findLast((x) => x.action === 'return');
+  if (!e || e.actor.id === null || !e.returnLines || e.reason === null)
+    throw new Error(`order ${o.number}: returned without its history`);
+  return {
+    reason: e.reason,
+    at: e.at,
+    by: { id: e.actor.id, name: e.actor.name },
+    lines: e.returnLines,
+  };
+}
 
 /** Who confirmed a payment, from its history row: the receipt AI or a staff member. */
 function confirmerOf(e: AdminOrderEventDto): NonNullable<AdminReceiptDto['confirmation']>['by'] {

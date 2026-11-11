@@ -19,6 +19,7 @@ import {
   inArray,
   isNull,
   orders,
+  sql,
   upgradeRights,
   type DbOrTx,
   type OrderLineRow,
@@ -26,6 +27,7 @@ import {
   type UpgradeRightRow,
   type VolumeRow,
 } from '@lummi/db';
+import type { HeldEntitlement } from '../entitlements/entitlements';
 import { readPricingSettings } from '../pricing/pricing-settings';
 import { judgePromoCode } from '../promo/promo-codes';
 import { quote, volumePrice, type Entitlement } from '../pricing/quote';
@@ -206,16 +208,51 @@ export async function holdUpgradeRight(
  * it went.
  */
 export async function releaseUpgradeRight(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
-  await tx
-    .update(upgradeRights)
-    .set({ usedByOrderId: null })
-    .where(
-      and(
-        eq(upgradeRights.usedByOrderId, orderId),
-        isNull(upgradeRights.closedAt),
-        gt(upgradeRights.expiresAt, now),
-      ),
-    );
+  await tx.update(upgradeRights).set({ usedByOrderId: null }).where(releasableRight(orderId, now));
+}
+
+/** The right `orderId` holds that a cancel or return at `now` gives back: in its term, not closed. */
+const releasableRight = (orderId: number, now: Date) =>
+  and(
+    eq(upgradeRights.usedByOrderId, orderId),
+    isNull(upgradeRights.closedAt),
+    gt(upgradeRights.expiresAt, now),
+  )!;
+
+/** The right the order holds, and whether a cancel or return at `now` would give it back. */
+export async function heldUpgradeRight(
+  tx: DbOrTx,
+  orderId: number,
+  now: Date,
+): Promise<HeldEntitlement | null> {
+  const [held] = await tx
+    .select({
+      expiresAt: upgradeRights.expiresAt,
+      comesBack: sql<boolean>`${releasableRight(orderId, now)}`,
+    })
+    .from(upgradeRights)
+    .where(eq(upgradeRights.usedByOrderId, orderId));
+  return held ?? null;
+}
+
+/**
+ * The rights a source order opened (#38), oldest first, for its return's preview (#40): a return
+ * closes them all; one spent on another order stays with it (`usedBy`), and one past its term or
+ * already closed changes nothing (`ended`).
+ */
+export async function rightsOpenedBy(tx: DbOrTx, sourceOrderId: number, now: Date) {
+  const rows = await tx
+    .select({ right: upgradeRights, usedBy: orders.number })
+    .from(upgradeRights)
+    .leftJoin(orders, eq(orders.id, upgradeRights.usedByOrderId))
+    .where(eq(upgradeRights.sourceOrderId, sourceOrderId))
+    .orderBy(asc(upgradeRights.id));
+  return rows.map(({ right: r, usedBy }) => ({
+    percent: r.percent,
+    lastDay: formatLocalDate(lastDayOf(r.expiresAt)),
+    usedBy: usedBy === null ? null : { number: usedBy },
+    ended: r.closedAt !== null || r.expiresAt <= now,
+  }));
 }
 
 /**

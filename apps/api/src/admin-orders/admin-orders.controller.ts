@@ -8,7 +8,7 @@ import { AdminOrdersService, type MoveOutcome } from './admin-orders.service';
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 
 /**
- * Every staff move's outcome as HTTP, in one place (fulfil, cancel, reject, confirm): the page now
+ * Every staff move's outcome as HTTP, in one place (fulfil, cancel, return, reject, confirm, refund): the page now
  * (200), 404, 409 with the page as it is now, 422 with what to fix, or 403.
  */
 function moveResponse(out: MoveOutcome) {
@@ -95,6 +95,20 @@ export class AdminOrdersController {
   rejectReceipt(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.orders.rejectReceipt, async ({ params, body }) =>
       moveResponse(await this.orders.rejectReceipt(actor.id, params.number, body)),
+    );
+  }
+
+  @TsRestHandler(adminContract.orders.return)
+  returnOrder(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.orders.return, async ({ params, body }) =>
+      moveResponse(await this.orders.returnOrder(actor.id, params.number, body)),
+    );
+  }
+
+  @TsRestHandler(adminContract.orders.refund)
+  refund(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.orders.refund, async ({ params, body }) =>
+      moveResponse(await this.orders.refund(actor.id, params.number, body)),
     );
   }
 

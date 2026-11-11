@@ -8,11 +8,13 @@ import {
 import type { DbOrTx } from '@lummi/db';
 import {
   birthdayEntitlements,
+  heldBirthdayCoupon,
   holdBirthdayCoupon,
   releaseBirthdayCoupon,
 } from '../birthday/birthday-coupons';
 import type { Entitlement } from '../pricing/quote';
 import {
+  heldUpgradeRight,
   holdUpgradeRight,
   releaseUpgradeRight,
   upgradeRightEntitlements,
@@ -26,7 +28,9 @@ import {
  * - `loadEntitlements`: every source's active entitlements, as `quote()` takes them;
  * - `holdEntitlement`: `createOrder` holds the one the quote applied (ADR 0005, a conditional
  *   update) in the order's transaction;
- * - `releaseEntitlements`: a cancelled or returned order gives back what it held.
+ * - `releaseEntitlements`: a cancelled or returned order gives back what it held;
+ * - `heldEntitlement`: what the order holds and whether that release would give it back now (the
+ *   return dialog's preview, #40), by the same condition the release writes with.
  *
  * Each source is one `EntitlementSource` in `SOURCES`: the birthday coupon (#30) and the upgrade
  * right (#38).
@@ -42,6 +46,14 @@ export interface EntitlementSource {
   ): Promise<boolean>;
   /** Whatever of this source the order held is active again while within validity; past it, lost. */
   release(tx: DbOrTx, orderId: number, now: Date): Promise<void>;
+  /** What of this source the order holds, and whether `release` at `now` would give it back. */
+  held(tx: DbOrTx, orderId: number, now: Date): Promise<HeldEntitlement | null>;
+}
+
+/** An entitlement an order holds: when it ends, and whether a cancel or return now gives it back. */
+export interface HeldEntitlement {
+  expiresAt: Date;
+  comesBack: boolean;
 }
 
 const birthdayCouponSource: EntitlementSource = {
@@ -49,6 +61,7 @@ const birthdayCouponSource: EntitlementSource = {
   active: birthdayEntitlements,
   hold: holdBirthdayCoupon,
   release: releaseBirthdayCoupon,
+  held: heldBirthdayCoupon,
 };
 
 const upgradeRightSource: EntitlementSource = {
@@ -56,6 +69,7 @@ const upgradeRightSource: EntitlementSource = {
   active: upgradeRightEntitlements,
   hold: holdUpgradeRight,
   release: releaseUpgradeRight,
+  held: heldUpgradeRight,
 };
 
 const SOURCES: readonly EntitlementSource[] = [birthdayCouponSource, upgradeRightSource];
@@ -91,6 +105,19 @@ export function holdEntitlement(
   hold: { customerId: number; orderId: number; now: Date },
 ): Promise<boolean> {
   return sourceOf(discount.type).hold(tx, { id: discount.id, ...hold });
+}
+
+/**
+ * The entitlement the order's Discount names, as the order holds it now (null when it holds none,
+ * e.g. one a cancel or return already released): when it ends and whether a release now gives it back.
+ */
+export function heldEntitlement(
+  tx: DbOrTx,
+  discount: EntitlementDiscount,
+  orderId: number,
+  now: Date,
+): Promise<HeldEntitlement | null> {
+  return sourceOf(discount.type).held(tx, orderId, now);
 }
 
 /** ADR 0005: a cancelled or returned order gives back the entitlement it held while within validity. */
