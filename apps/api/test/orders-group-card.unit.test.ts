@@ -156,6 +156,44 @@ describe('the card text', () => {
     expect(text).not.toMatch(/<&>/);
   });
 
+  it('names the discount by its source, and a set by its five fragrances', () => {
+    const { text } = renderCard(
+      data({
+        order: {
+          ...order,
+          itemsSubtotal: 299_000,
+          discount: { type: 'promo_code', code: 'LUMMI10', amount: 29_900 },
+          discountAmount: 29_900,
+          deliveryFee: 0,
+          total: 269_100,
+          amountDue: 269_100,
+        },
+        lines: [
+          {
+            ...line(0),
+            kind: 'builder_set',
+            volumeId: null,
+            nameRu: 'Набор 5 × 10 мл',
+            ml: 10,
+            qty: 1,
+            unitPrice: 299_000,
+            regularUnitPrice: 299_000,
+            lineTotal: 299_000,
+            setComposition: ['Symphony', 'Tygar', 'Megamare', 'Erba Pura', 'Oud Wood'].map(
+              (name, i) => ({ fragranceId: i + 1, name, brand: 'X' }),
+            ),
+          },
+        ],
+      }),
+    );
+    const shown = plainText(text, { parse_mode: 'HTML' }).replace(/[\u00a0\u202f]/g, ' ');
+    expect(shown).toContain('• Набор 5 × 10 мл × 1 — 299 000 сум');
+    expect(shown).toContain('   Symphony, Tygar, Megamare, Erba Pura, Oud Wood');
+    expect(shown).toContain('Скидка (Промокод LUMMI10): −29 900 сум');
+    expect(shown).toContain('Доставка: бесплатно');
+    expect(shown).toContain('Итого: 269 100 сум');
+  });
+
   it('escapes what people typed, everywhere it appears', () => {
     const { text } = renderCard(
       data({
