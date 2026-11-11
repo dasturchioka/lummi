@@ -249,6 +249,18 @@ async function press(user: { id: number; first_name: string }, text: string, on:
 
 /** A message in the group replying to `to` (a ForceReply question), as the webhook gets it. */
 async function reply(user: { id: number; first_name: string }, text: string, to: SentMessage) {
+  // a person answers once the question is in the chat, by which time the bot has recorded its
+  // message id (the fake shows the message a moment before the outbox stamps it)
+  await vi.waitFor(
+    async () => {
+      const [asked] = await t.db
+        .select({ id: outbox.id })
+        .from(outbox)
+        .where(and(eq(outbox.chatId, GROUP), eq(outbox.telegramMessageId, to.messageId)));
+      expect(asked).toBeDefined();
+    },
+    { timeout: 10_000 },
+  );
   const id = ++updateId;
   const res = await t.postUpdate({
     update_id: id,
