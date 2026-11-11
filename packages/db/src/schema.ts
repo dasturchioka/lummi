@@ -305,10 +305,11 @@ export const userbotHeartbeat = pgTable(
 export const paymentPauseCauseEnum = pgEnum('payment_pause_cause', ['heartbeat', 'silence']);
 
 /**
- * One outage of the payment feed (ADR 0012, #36). While a pause is open, no receipt gets
- * «оплата не найдена»; afterwards each receipt's wait window and its order's reserve are extended
- * by the part of every pause after the receipt was sent. The row is also the marker of the owner's
- * alerts: opening it alerts once, closing it alerts the recovery. At most one is open.
+ * One payment pause (ADR 0012, #36, GLOSSARY). While a pause is open, no receipt gets «оплата не
+ * найдена»; afterwards each receipt's wait window and its order's reserve are extended by the part
+ * of every pause after the receipt was sent. A heartbeat pause starts at the userbot's last
+ * heartbeat. `announced_at` marks the owner's alert, sent once the pause has lasted a few minutes;
+ * only an announced pause has its end announced. At most one is open.
  */
 export const paymentPauses = pgTable(
   'payment_pauses',
@@ -318,6 +319,8 @@ export const paymentPauses = pgTable(
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     /** Null while the pause lasts. */
     endedAt: timestamp('ended_at', { withTimezone: true }),
+    /** When the owner was told of it; null for a pause too short to announce. */
+    announcedAt: timestamp('announced_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('payment_pauses_one_open_idx')
@@ -922,10 +925,7 @@ export const receipts = pgTable(
       .references(() => orders.id),
     source: receiptSourceEnum('source').notNull(),
     verdict: receiptVerdictEnum('verdict').notNull().default('pending'),
-    /**
-     * Why it last went to manual review; null until it did. A repeat decided at once (#36) keeps
-     * `duplicate` too, the «Повторный чек» tag.
-     */
+    /** Why it last went to manual review; null until it did. */
     reviewReason: receiptReviewReasonEnum('review_reason'),
     /** The name the shopper's device gave the file, if any. */
     fileName: text('file_name'),
@@ -939,8 +939,9 @@ export const receipts = pgTable(
     sha256: text('sha256').notNull(),
     phash: text('phash').notNull(),
     /**
-     * The receipt this one repeats (the same file, or a look-alike image, accepted or sent earlier
-     * for another order): set when the repeat took the payment-not-found path at once (#36).
+     * The «Повторный чек» marker (#36): the receipt this repeat receipt repeats (the same file, or
+     * a look-alike image, accepted or sent earlier for another order), set when it took the
+     * payment-not-found path at once.
      */
     duplicateOf: bigint('duplicate_of', { mode: 'number' }).references(
       (): AnyPgColumn => receipts.id,

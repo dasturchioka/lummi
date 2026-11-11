@@ -5,15 +5,18 @@ import { formatDateTime, formatDuration, formatMoney } from '@lummi/i18n';
  * every owner alert. Plain functions, so the texts are in one place for the posts and the docs.
  */
 
-const at = (d: Date) => formatDateTime(d, 'ru');
+const dateTime = (d: Date) => formatDateTime(d, 'ru');
 const money = (n: number) => formatMoney(n, 'ru');
 const duration = (seconds: number) => formatDuration(seconds, 'ru');
 
-/** Where the order stands after payment not found. */
-function after(o: { reserveUntil: Date; cancelled: boolean }): string {
+/** What the shopper was told and where the order stands; `ask` is the request made of them. */
+function outcome(o: { reserveUntil: Date; cancelled: boolean }, ask: string): string[] {
   return o.cancelled
-    ? 'Бронь уже истекла: заказ отменён, товары вернулись в продажу.'
-    : `Заказ снова «Ожидает оплаты», бронь до ${at(o.reserveUntil)}.`;
+    ? [
+        'Бронь уже истекла: заказ отменён, товары вернулись в продажу.',
+        'Покупателю предложили написать менеджеру, если он уже перевёл деньги.',
+      ]
+    : [ask, `Заказ снова «Ожидает оплаты», бронь до ${dateTime(o.reserveUntil)}.`];
 }
 
 /** Info post: the wait window ended with no fitting credit (ADR 0012). Nobody has to act. */
@@ -30,13 +33,12 @@ export function paymentNotFoundPost(o: {
     o.pausedSeconds >= 60 ? ` (и ещё ${duration(o.pausedSeconds)} паузы ленты Humo)` : '';
   return [
     `Оплата не найдена: заказ № ${o.number}`,
-    `Чек от ${at(o.receiptAt)}: за ${duration(o.windowSeconds)}${paused} на карту магазина не пришёл перевод на ${money(o.amountDue)}.`,
-    'Покупателя попросили проверить сумму и карту и загрузить чек заново.',
-    after(o),
+    `Чек от ${dateTime(o.receiptAt)}: за ${duration(o.windowSeconds)}${paused} на карту магазина не пришёл перевод на ${money(o.amountDue)}.`,
+    ...outcome(o, 'Покупателя попросили проверить сумму и карту и загрузить чек заново.'),
   ].join('\n');
 }
 
-/** Info post: the receipt repeats one sent before; the AI was not asked (spec 2026-11-07). */
+/** Info post: a repeat receipt; the AI was not asked (spec 2026-11-07). */
 export function repeatedReceiptPost(o: {
   number: number;
   twinNumber: number;
@@ -48,20 +50,19 @@ export function repeatedReceiptPost(o: {
   return [
     `Повторный чек: заказ № ${o.number}`,
     `Этот чек уже был у заказа № ${o.twinNumber} (${how}). ИИ его не проверял.`,
-    'Покупателя попросили загрузить чек именно этого перевода.',
-    after(o),
+    ...outcome(o, 'Покупателя попросили загрузить чек именно этого перевода.'),
   ].join('\n');
 }
 
-/** Owner alert, once per outage: the payment feed stopped and every receipt timer is paused. */
+/** Owner alert, once per payment pause: the feed stopped and every receipt timer is paused. */
 export function pauseStartedAlert(o: { cause: 'heartbeat' | 'silence'; since: Date | null }) {
   const why =
     o.cause === 'heartbeat'
       ? o.since
-        ? `Юзербот не выходит на связь с ${at(o.since)}: поступления Humo не доходят до магазина.`
+        ? `Юзербот не выходит на связь с ${dateTime(o.since)}: поступления Humo не доходят до магазина.`
         : 'Юзербот ещё ни разу не выходил на связь: поступления Humo не доходят до магазина.'
       : o.since
-        ? `С ${at(o.since)} от Humo не пришло ни одного поступления, а покупатели ждут проверки чеков.`
+        ? `С ${dateTime(o.since)} от Humo не пришло ни одного поступления, а покупатели ждут проверки чеков.`
         : 'От Humo ещё не пришло ни одного поступления, а покупатели ждут проверки чеков.';
   return [
     'Таймеры чеков на паузе.',
@@ -70,7 +71,7 @@ export function pauseStartedAlert(o: { cause: 'heartbeat' | 'silence'; since: Da
   ].join('\n');
 }
 
-/** Owner alert when the outage is over: the timers go on, extended by the pause. */
+/** Owner alert when an announced payment pause ends: the timers go on, extended by it. */
 export function pauseEndedAlert(o: { startedAt: Date; endedAt: Date }) {
   const seconds = Math.round((o.endedAt.getTime() - o.startedAt.getTime()) / 1000);
   return [
@@ -97,5 +98,5 @@ export function uncheckedReceiptAlert(o: {
   const state = o.reviewReason
     ? WAITS_FOR[o.reviewReason]
     : `ждёт поступления ${money(o.amountDue)} на карту магазина`;
-  return `Чек к заказу № ${o.number} не проверен ${duration(o.waitedSeconds)} (загружен ${at(o.receiptAt)}): ${state}.`;
+  return `Чек к заказу № ${o.number} не проверен ${duration(o.waitedSeconds)} (загружен ${dateTime(o.receiptAt)}): ${state}.`;
 }

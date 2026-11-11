@@ -4,6 +4,7 @@ CREATE TABLE "payment_pauses" (
 	"cause" "payment_pause_cause" NOT NULL,
 	"started_at" timestamp with time zone NOT NULL,
 	"ended_at" timestamp with time zone,
+	"announced_at" timestamp with time zone,
 	CONSTRAINT "payment_pauses_ends_after_start" CHECK ("payment_pauses"."ended_at" >= "payment_pauses"."started_at")
 );
 --> statement-breakpoint

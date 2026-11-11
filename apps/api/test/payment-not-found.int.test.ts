@@ -10,6 +10,7 @@ import {
   orders,
   outbox,
   paymentPauses,
+  settings as settingsTable,
   receipts,
   shopCard,
   type OutboxRow,
@@ -81,11 +82,11 @@ afterEach(() => settled());
 const ali: TestUser = { id: 41, first_name: 'Ali', language_code: 'ru' };
 const vali: TestUser = { id: 42, first_name: 'Vali', language_code: 'uz' };
 
-/** One 10 ml bottle ordered by a shopper; the order as stored and the shopper's session. */
-async function placeOrder(user: TestUser = ali, phone = '998901234567') {
+/** One bottle (10 ml unless `ml`) ordered by a shopper; the order as stored and who ordered it. */
+async function placeOrder(user: TestUser = ali, phone = '998901234567', ml: 10 | 30 = 10) {
   const client = await shopper(t, user, phone);
   const [f] = await t.db.select({ slug: fragrances.slug }).from(fragrances).limit(1);
-  if ((await client.cart.addLine({ body: { slug: f!.slug, ml: 10, qty: 1 } })).status !== 200)
+  if ((await client.cart.addLine({ body: { slug: f!.slug, ml, qty: 1 } })).status !== 200)
     throw new Error('add');
   const point = await samarkandPoint(t);
   const checkout = await client.checkout.get({ query: { regionId: point.regionId } });
@@ -197,10 +198,14 @@ async function settled() {
   );
 }
 
-/** The worker's minute at `ms` from now, with the feed alive unless told otherwise. */
-async function minuteLater(ms: number, opts: { feed?: boolean } = {}) {
+/**
+ * The worker's minute at `ms` from now, with the feed alive (a heartbeat and a credit) unless told
+ * otherwise; `beat` keeps the heartbeat without a credit (the userbot up, Humo silent).
+ */
+async function minuteLater(ms: number, opts: { feed?: boolean; beat?: boolean } = {}) {
   t.edges.clock.advance(ms);
   if (opts.feed ?? true) await feedAlive();
+  else if (opts.beat) await userbotHeartbeat(t);
   await settled();
   await worker.tick();
 }
@@ -290,9 +295,11 @@ describe('payment not found (the wait window, ADR 0012)', () => {
     expect(notFound!.text).not.toContain('загрузите чек');
     expect(buttonsOf(notFound!).map((b) => b.text)).toContain('Написать менеджеру');
     expect(cancelled!.text).toContain(`Заказ № ${placed.order.number} отменён`);
-    expect((await systemPosts()).filter((p) => p.includes('Оплата не найдена'))).toEqual([
-      expect.stringContaining('заказ отменён'),
-    ]);
+    // the group reads what the shopper was really told
+    const [post] = (await systemPosts()).filter((p) => p.includes('Оплата не найдена'));
+    expect(post).toContain('заказ отменён');
+    expect(post).toContain('Покупателю предложили написать менеджеру');
+    expect(post).not.toContain('загрузить чек заново');
   });
 
   it('no shop card set: nothing to match against, so nothing is «not found»', async () => {
@@ -443,12 +450,17 @@ describe('the payment feed pauses every receipt timer (ADR 0012)', () => {
     await quietMinute(29 * MINUTE);
     expect(await pauseAlerts()).toEqual([]);
     await quietMinute(2 * MINUTE);
+    // paused from here on, announced once it has lasted a few minutes
+    expect(await t.db.select().from(paymentPauses)).toHaveLength(1);
+    expect(await pauseAlerts()).toEqual([]);
+    await quietMinute(5 * MINUTE);
     expect(await pauseAlerts()).toEqual([
       expect.stringContaining('от Humo не пришло ни одного поступления'),
     ]);
 
     // three hours of silence: the 2 h wait window does not run out
-    for (let i = 0; i < 6; i++) await quietMinute(30 * MINUTE);
+    await quietMinute(25 * MINUTE);
+    for (let i = 0; i < 5; i++) await quietMinute(30 * MINUTE);
     expect(await statusOf(placed)).toBe('receipt_review');
     expect(await pauseAlerts()).toHaveLength(1);
 
@@ -470,6 +482,101 @@ describe('the payment feed pauses every receipt timer (ADR 0012)', () => {
     expect(event!.payload).toMatchObject({ pausedSeconds: 3 * 3600, reserveEnded: false });
     // ordered 10:00:30 UTC with a 12 h reserve: 03:00 in Tashkent the next day, plus 3 h
     expect((await toShopper(placed)).at(-1)!.text).toContain('до 10 ноября, 06:00');
+  });
+
+  it('a window ending while the userbot has just fallen silent is not decided; the pause counts from its last heartbeat', async () => {
+    const placed = await placeOrder();
+    await feedAlive();
+    const receiptId = await upload(placed);
+    await settled();
+    // the userbot beats until 1 h 58 min, then stops; the window ends at 2 h
+    await minuteLater(HOUR + 58 * MINUTE);
+    for (let i = 0; i < 5; i++) await minuteLater(MINUTE, { feed: false });
+    // 2 h 03 min: no heartbeat since the window ended, so nothing is decided before the
+    // 5 min stale threshold even notices
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+    await minuteLater(MINUTE, { feed: false });
+    const [pause] = await t.db.select().from(paymentPauses);
+    expect(pause!.startedAt).toEqual(
+      new Date(placed.order.createdAt.getTime() + HOUR + 58 * MINUTE),
+    );
+
+    // back at 3 h: the receipt keeps the 2 minutes it had left when the userbot fell silent
+    await minuteLater(56 * MINUTE);
+    await minuteLater(MINUTE);
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+    await minuteLater(2 * MINUTE);
+    expect((await receiptNow(receiptId)).verdict).toBe('payment_not_found');
+  });
+
+  it('a manager rejecting after a pause gives the reserve back the paused time', async () => {
+    await settings.set('orders.reserveTtlSeconds', HOUR / 1000, { type: 'system' });
+    const placed = await placeOrder();
+    await minuteLater(10 * MINUTE);
+    const receiptId = await upload(placed);
+    await settled();
+    // the userbot is down from 0:15 to 2:15
+    await minuteLater(5 * MINUTE);
+    for (let i = 0; i < 4; i++) await minuteLater(30 * MINUTE, { feed: false });
+    await minuteLater(0);
+    expect(await statusOf(placed)).toBe('receipt_review');
+
+    const { client } = await t.managerSession();
+    const res = await client.admin.orders.rejectReceipt({
+      params: { number: placed.order.number },
+      body: { receiptId, reason: 'not_received' },
+    });
+    expect(res.status).toBe(200);
+    // reserved until 1:00, plus the 2 h pause: the shopper still has time to send another receipt
+    expect((await orderNow(placed.order.id)).reserveUntil).toEqual(
+      new Date(placed.order.reserveUntil.getTime() + 2 * HOUR),
+    );
+    await minuteLater(MINUTE);
+    expect(await statusOf(placed)).toBe('awaiting_payment');
+  });
+
+  it('a quiet shop with no credits at all: the moneyless receipt waits, the owner is told once', async () => {
+    const placed = await placeOrder();
+    await userbotHeartbeat(t);
+    const receiptId = await upload(placed);
+    await settled();
+    for (let i = 0; i < 12; i++) await minuteLater(30 * MINUTE, { feed: false, beat: true });
+    expect(await statusOf(placed)).toBe('receipt_review');
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+    expect(await pauseAlerts()).toEqual([
+      expect.stringContaining('От Humo ещё не пришло ни одного поступления'),
+    ]);
+  });
+
+  it('credits now and then, each within a few minutes of the silence threshold: the window goes on, no alerts', async () => {
+    const placed = await placeOrder();
+    await feedAlive();
+    const receiptId = await upload(placed);
+    await settled();
+    // a credit every 33 min: the silence threshold (30 min) passes for 3 min each time
+    for (let minute = 1; minute <= 3 * 60; minute++) {
+      t.edges.clock.advance(MINUTE);
+      await userbotHeartbeat(t);
+      if (minute % 33 === 0) await recordCredit(t, { som: 1_000 });
+      await worker.tick();
+      if ((await receiptNow(receiptId)).verdict !== 'pending') break;
+    }
+    expect((await receiptNow(receiptId)).verdict).toBe('payment_not_found');
+    expect(await pauseAlerts()).toEqual([]);
+  });
+
+  it('a receipt held for a person does not keep the silence pause armed', async () => {
+    const placed = await placeOrder();
+    await feedAlive();
+    t.edges.receiptJudge.verdicts = [notConfirmed];
+    const receiptId = await upload(placed);
+    await recordCredit(t, { som: placed.order.amountDue });
+    await settled();
+    expect((await receiptNow(receiptId)).verdict).toBe('manual_review');
+
+    for (let i = 0; i < 6; i++) await minuteLater(30 * MINUTE, { feed: false, beat: true });
+    expect(await pauseAlerts()).toEqual([]);
+    expect(await t.db.select().from(paymentPauses)).toEqual([]);
   });
 
   it('the userbot down while no receipt waits pauses nothing and alerts nobody', async () => {
@@ -504,6 +611,47 @@ describe('the payment feed pauses every receipt timer (ADR 0012)', () => {
   });
 });
 
+describe('the feed guards stay below the wait window and the reserve', () => {
+  it('the owner cannot save a combination where an outage could outlast them', async () => {
+    const { client } = await t.ownerSession();
+    const save = (key: string, value: number) =>
+      client.admin.settings.update({ params: { key }, body: { value } });
+
+    expect(await save('payments.humoSilenceSeconds', 7200)).toMatchObject({
+      status: 400,
+      body: { code: 'invalid_value', issues: [{ code: 'feed_guard_too_long', max: 7140 }] },
+    });
+    expect(await save('payments.notFoundAfterSeconds', 1800)).toMatchObject({
+      status: 400,
+      body: { code: 'invalid_value', issues: [{ code: 'wait_too_short', min: 1860 }] },
+    });
+    expect(await save('orders.reserveTtlSeconds', 1800)).toMatchObject({
+      status: 400,
+      body: { issues: [{ code: 'wait_too_short', min: 1860 }] },
+    });
+    // in the right order it saves
+    expect((await save('payments.humoSilenceSeconds', 1200)).status).toBe(200);
+    expect((await save('payments.notFoundAfterSeconds', 1800)).status).toBe(200);
+    expect((await save('orders.reserveTtlSeconds', 1800)).status).toBe(200);
+  });
+
+  it('a stored combination that breaks the rule is clamped when read', async () => {
+    // as if saved before the rule: a 10 min window and a 1 h silence threshold
+    await t.db.insert(settingsTable).values([
+      { key: 'payments.notFoundAfterSeconds', value: 600 },
+      { key: 'payments.humoSilenceSeconds', value: 3600 },
+    ]);
+    const placed = await placeOrder();
+    await userbotHeartbeat(t);
+    const receiptId = await upload(placed);
+    await settled();
+    // the threshold reads as 9 min: paused before the 10 min window can end
+    for (let i = 0; i < 12; i++) await minuteLater(MINUTE, { feed: false, beat: true });
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+    expect(await t.db.select().from(paymentPauses)).toHaveLength(1);
+  });
+});
+
 describe('a repeated receipt skips the AI and takes the payment-not-found path (spec 2026-11-07)', () => {
   it('the same file as a receipt that paid another order: no AI, «Повторный чек» in the group, the shopper asked for this transfer', async () => {
     const first = await placeOrder();
@@ -516,13 +664,18 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
     t.edges.receiptJudge.calls.length = 0;
 
     const second = await placeOrder(vali, '998907654321');
+    // a fitting credit is already there: had the duplicate rule failed, the AI would be asked
+    t.edges.clock.advance(MINUTE);
+    const own = await recordCredit(t, { som: second.order.amountDue });
+    await settled();
     const receiptId = await upload(second, file);
     await settled();
 
     expect(t.edges.receiptJudge.calls).toEqual([]);
     expect(await receiptNow(receiptId)).toMatchObject({
       verdict: 'payment_not_found',
-      reviewReason: 'duplicate',
+      duplicateOf: original,
+      reviewReason: null,
     });
     expect(await statusOf(second)).toBe('awaiting_payment');
     const [event] = await t.db
@@ -535,7 +688,6 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
         `Этот чек уже был у заказа № ${first.order.number} (тот же файл). ИИ его не проверял.`,
       ),
     ]);
-    expect((await receiptNow(receiptId)).duplicateOf).toBe(original);
     expect((await paymentScreen(second)).receipts).toMatchObject([
       { id: receiptId, state: 'repeat' },
     ]);
@@ -545,10 +697,6 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
     expect(buttonsOf(told).map((b) => b.text)).toContain('Menejerga yozish');
 
     // its own money can still pay the order: a new receipt for it is checked as usual
-    t.edges.clock.advance(MINUTE);
-    const own = await recordCredit(t, { som: second.order.amountDue });
-    await settled();
-    expect(t.edges.receiptJudge.calls).toEqual([]);
     await upload(second);
     await settled();
     expect(await statusOf(second)).toBe('payment_confirmed');
@@ -556,16 +704,25 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
   });
 
   it('the same file on two waiting orders: the later one takes the path, the first is held for a person', async () => {
+    t.edges.receiptJudge.respond = pickLatest;
     const first = await placeOrder();
-    const second = await placeOrder(vali, '998907654321');
+    // another volume, another amount: the second order's credit is never a candidate of the first
+    const second = await placeOrder(vali, '998907654321', 30);
+    expect(second.order.amountDue).not.toBe(first.order.amountDue);
     const file = await uniqueReceiptImage();
     const r1 = await upload(first, file);
+    await settled();
+    // the second order's money is there before its receipt: the AI would be asked if it were
+    // not a repeat
+    await recordCredit(t, { som: second.order.amountDue });
+    await settled();
     const r2 = await upload(second, file);
     await settled();
 
     expect(await receiptNow(r2)).toMatchObject({
       verdict: 'payment_not_found',
-      reviewReason: 'duplicate',
+      duplicateOf: r1,
+      reviewReason: null,
     });
     expect(await statusOf(second)).toBe('awaiting_payment');
     // the first may be the honest one: no AI either, but its own timers and a person
@@ -574,7 +731,6 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
       reviewReason: 'duplicate',
     });
     expect(await statusOf(first)).toBe('receipt_review');
-    t.edges.receiptJudge.respond = pickLatest;
     await recordCredit(t, { som: first.order.amountDue });
     await minuteLater(3 * HOUR);
     expect(t.edges.receiptJudge.calls).toEqual([]);
@@ -597,17 +753,23 @@ describe('a repeated receipt skips the AI and takes the payment-not-found path (
     expect((await receiptNow(lookAlike)).verdict).toBe('pending');
 
     await settings.set('receipts.duplicateImageDistance', 0, { type: 'system' });
+    t.edges.receiptJudge.respond = pickLatest;
     const third = await placeOrder(
       { id: 43, first_name: 'Sardor', language_code: 'ru' },
       '998901112233',
+      30,
     );
+    // its money is there: the AI would be asked if the look-alike were not caught
+    await recordCredit(t, { som: third.order.amountDue });
+    await settled();
     const again = await upload(third, await sharp(image).png({ compressionLevel: 9 }).toBuffer());
     await settled();
     expect(t.edges.receiptJudge.calls).toEqual([]);
     expect(await receiptNow(again)).toMatchObject({
       verdict: 'payment_not_found',
-      reviewReason: 'duplicate',
+      reviewReason: null,
     });
+    expect((await receiptNow(again)).duplicateOf).not.toBeNull();
     expect((await systemPosts()).filter((p) => p.includes('Повторный чек'))).toContainEqual(
       expect.stringContaining(`заказ № ${third.order.number}`),
     );

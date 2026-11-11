@@ -663,11 +663,12 @@ describe('duplicate receipts never confirm themselves', () => {
 
     const second = await placeOrder(vali, '998907654321');
     const receiptId = await upload(second, file);
-    // a repeat takes the payment-not-found path at once (#36)
+    // a repeat takes the payment-not-found path at once (#36), naming the receipt it repeats
     expect(await receiptNow(receiptId)).toMatchObject({
       verdict: 'payment_not_found',
-      reviewReason: 'duplicate',
+      reviewReason: null,
     });
+    expect((await receiptNow(receiptId)).duplicateOf).not.toBeNull();
     t.edges.clock.advance(60_000);
     await recordCredit(t, { som: second.order.amountDue });
     await settled();
@@ -698,7 +699,8 @@ describe('duplicate receipts never confirm themselves', () => {
     });
     expect(await receiptNow(r2)).toMatchObject({
       verdict: 'payment_not_found',
-      reviewReason: 'duplicate',
+      duplicateOf: r1,
+      reviewReason: null,
     });
   });
 });

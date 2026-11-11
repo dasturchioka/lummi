@@ -1,5 +1,5 @@
 {
-  "id": "f27f27df-a5d5-4ec3-8b7b-09b222db4550",
+  "id": "7dbc3a7d-52ca-4057-9663-098047c798e2",
   "prevId": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "version": "7",
   "dialect": "postgresql",
@@ -3360,6 +3360,12 @@
         },
         "ended_at": {
           "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "announced_at": {
+          "name": "announced_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

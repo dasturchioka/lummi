@@ -714,6 +714,7 @@ describe('reject a receipt', () => {
     const out = await machine().transition(id, 'reject_receipt', manager, 'receipt_review', {
       receiptId,
       reason: 'wrong_card',
+      pausedSeconds: 0,
     });
     expect(out).toEqual({ kind: 'refused', code: 'forbidden' });
     expect((await orderRow(number)).status).toBe('receipt_review');

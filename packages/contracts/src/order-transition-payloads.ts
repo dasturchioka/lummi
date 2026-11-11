@@ -34,6 +34,27 @@ const nothing = z.object({}).strict().optional();
 /** A reason typed by staff (a return), kept as written. */
 const typedReason = text(1, 500);
 
+const rejectReceiptChoice = z
+  .object({
+    receiptId: rowId,
+    reason: z.enum(RECEIPT_REJECT_REASONS),
+    note: text(1, RECEIPT_REJECT_NOTE_HARD_MAX).optional(),
+  })
+  .strict();
+/** `other` is said in the manager's own words: it needs the note. */
+const otherHasNote = (p: { reason: string; note?: string }) =>
+  p.reason !== 'other' || p.note !== undefined;
+
+/**
+ * The receipt a manager turns down (the one they looked at, so a newer upload is never rejected
+ * by a stale screen), a preset reason the shopper reads in their language, and an optional note in
+ * the manager's words, required for `other` (#33): the admin's body, and the move's payload
+ * without what the server adds.
+ */
+export const rejectReceiptChoiceSchema = rejectReceiptChoice.refine(otherHasNote, {
+  path: ['note'],
+});
+
 /**
  * What each move must carry (ADR 0011, 0006): the Receipt a submission brought, the tracking
  * number for «Передан в BTS», a reason for every cancel, the Receipt a rejection turns down with
@@ -65,18 +86,14 @@ export const transitionPayloadSchemas = {
     })
     .strict(),
   /**
-   * The Receipt a manager turns down (the one they looked at, so a newer upload is never rejected
-   * by a stale screen), a preset reason the shopper reads in their language, and an optional note
-   * in the manager's words, required for `other` (#33). Only `ReceiptRejection` makes this move.
+   * What the manager chose (`rejectReceiptChoiceSchema`, #33) plus the time the payment feed was
+   * paused while the receipt waited, which gives the reserve back that time (#36). Only
+   * `ReceiptRejection` makes this move.
    */
-  reject_receipt: z
-    .object({
-      receiptId: rowId,
-      reason: z.enum(RECEIPT_REJECT_REASONS),
-      note: text(1, RECEIPT_REJECT_NOTE_HARD_MAX).optional(),
-    })
+  reject_receipt: rejectReceiptChoice
+    .extend({ pausedSeconds: z.number().int().nonnegative() })
     .strict()
-    .refine((p) => p.reason !== 'other' || p.note !== undefined, { path: ['note'] }),
+    .refine(otherHasNote, { path: ['note'] }),
   /**
    * The wait window ended with no fitting credit, or the receipt repeats one sent before
    * (ADR 0012, #36). Only `PaymentNotFound` makes it: it names the Receipt it decides (so a newer

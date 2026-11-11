@@ -752,8 +752,8 @@ export const settingDefinitions = {
       uz: 'Oʻxshash rasm boʻyicha takroriy chek',
     },
     hint: {
-      ru: 'Пусто — повторным считается только тот же файл. Число от 0 до 16 — ещё и картинка, отличающаяся от чека другого заказа не больше чем на столько бит из 64. Осторожно: чеки одного банковского приложения похожи между собой, и честный чек может уйти в «оплата не найдена».',
-      uz: 'Boʻsh — faqat aynan oʻsha fayl takroriy hisoblanadi. 0 dan 16 gacha son — boshqa buyurtma chekidan 64 bitdan koʻpi bilan shuncha bitga farq qiladigan rasm ham. Ehtiyot boʻling: bitta bank ilovasining cheklari bir-biriga oʻxshaydi va halol chek «toʻlov topilmadi»ga tushishi mumkin.',
+      ru: 'Пусто — повторным считается только тот же файл. Число от 0 до 16 — ещё и картинка, отличающаяся от чека другого заказа не больше чем на столько бит из 64. Включение в течение минуты проверит и чеки, которые уже ждут. Осторожно: чеки одного банковского приложения похожи между собой, и честный чек может уйти в «оплата не найдена».',
+      uz: 'Boʻsh — faqat aynan oʻsha fayl takroriy hisoblanadi. 0 dan 16 gacha son — boshqa buyurtma chekidan 64 bitdan koʻpi bilan shuncha bitga farq qiladigan rasm ham. Yoqilgach, bir daqiqa ichida kutayotgan cheklar ham tekshiriladi. Ehtiyot boʻling: bitta bank ilovasining cheklari bir-biriga oʻxshaydi va halol chek «toʻlov topilmadi»ga tushishi mumkin.',
     },
   },
   /** Per-call timeouts; on expiry TypeSafe falls back to OpenAI, OpenAI means "failed". */

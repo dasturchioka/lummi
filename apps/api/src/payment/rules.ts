@@ -59,11 +59,14 @@ export function twinOf(maxDistance: number | null, opts: { repeat: boolean }): S
 }
 
 /**
- * Receipt `r` is a duplicate: it never confirms itself and the AI is never asked (#32). A repeat
- * (a later copy) takes the payment-not-found path (#36); the first copy waits for a person.
+ * Receipt `r` is a duplicate: it never confirms itself and the AI is never asked (#32). The later
+ * receipt (`isRepeat`) takes the payment-not-found path (#36); the first waits for a person.
  */
 export const isDuplicate = (maxDistance: number | null) =>
   sql`exists (select 1 from ${receipts} twin where ${twinOf(maxDistance, { repeat: false })})`;
+/** Receipt `r` is a repeat receipt (GLOSSARY): the same as one accepted, or sent earlier for another order. */
+export const isRepeat = (maxDistance: number | null) =>
+  sql`exists (select 1 from ${receipts} twin where ${twinOf(maxDistance, { repeat: true })})`;
 
 /** The setting `receipts.duplicateImageDistance`: null compares whole files only. */
 export async function duplicateImageDistance(db: DbOrTx): Promise<number | null> {

@@ -27,6 +27,7 @@ import { describeError } from '../logging/describe-error';
 import { DISPATCH_TIMEOUT_MS, OutboxService } from '../outbox/outbox.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce } from '../util/transient';
+import { forEachSettled } from '../util/for-each-settled';
 import { withTimeout } from '../util/with-timeout';
 import { WorkerRuntime } from '../worker/runtime';
 import { PaymentConfirmation } from './payment-confirmation';
@@ -37,6 +38,7 @@ import {
   duplicateImageDistance,
   isDuplicate,
   isDuplicateReceipt,
+  isRepeat,
   sameReceipt,
   sqlList,
   twinOf,
@@ -99,8 +101,8 @@ class JudgeUnavailable extends Error {
  *   not answer is not an answer: the job's attempts retry it, and only the last one sends the
  *   receipt to manual review. Whoever loses a race for a credit (two receipts, one credit) hears
  *   `credit_taken` from the door and keeps waiting for its own money.
- * - A duplicate receipt (`isDuplicate`) is never asked about: a repeat takes the payment-not-found
- *   path at once (#36), the first copy goes to manual review.
+ * - A duplicate receipt (`isDuplicate`) is never asked about: a repeat receipt takes the
+ *   payment-not-found path at once (#36), the first receipt goes to manual review.
  */
 @Injectable()
 export class PaymentMatching implements OnApplicationShutdown {
@@ -161,8 +163,9 @@ export class PaymentMatching implements OnApplicationShutdown {
    * Duplicates never confirm themselves (spec 2026-11-07): the AI is never asked about one. Of the
    * waiting receipts (only `receiptId` and its twins, or all: the sweep), a **repeat** (the same
    * receipt as one accepted, or as one sent earlier for another order) takes the payment-not-found
-   * path at once (#36), tagged `duplicate`, with a «Повторный чек» post; the first copy, which may
-   * be the honest one, goes to manual review (reason `duplicate`) and keeps its own timers.
+   * path at once (#36), marked with the receipt it repeats (`duplicate_of`), with a «Повторный чек»
+   * post; the first receipt, which may be the honest one, goes to manual review (reason
+   * `duplicate`) and keeps its own timers.
    */
   async holdDuplicates(only: { receiptId?: number } = {}): Promise<number[]> {
     const maxDistance = await duplicateImageDistance(this.db);
@@ -171,6 +174,16 @@ export class PaymentMatching implements OnApplicationShutdown {
         ? sql`and (r.id = ${only.receiptId} or exists (
             select 1 from ${receipts} x where x.id = ${only.receiptId} and ${sameReceipt('x', 'r', maxDistance)}))`
         : sql``;
+    // the first receipt waits for a person (#32); the later one is decided below
+    const { rows: held } = await this.db.execute<{ id: string }>(sql`
+      update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
+      where r.verdict in (${sqlList(WAITING_VERDICTS)})
+        and r.review_reason is distinct from 'duplicate'
+        and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
+        and ${isDuplicate(maxDistance)}
+        and not ${isRepeat(maxDistance)}
+        ${scope}
+      returning r.id`);
     const { rows: repeats } = await this.db.execute<{
       id: string;
       twin: string;
@@ -188,28 +201,15 @@ export class PaymentMatching implements OnApplicationShutdown {
       ) t
       where r.verdict in (${sqlList(WAITING_VERDICTS)}) and o.status = 'receipt_review' ${scope}
       order by r.id`);
-    let failure: unknown = null;
-    for (const r of repeats) {
-      try {
-        await this.notFound.decide(Number(r.id), {
-          kind: 'repeat',
-          duplicateOf: Number(r.twin),
-          sameFile: r.same_file,
-        });
-      } catch (e) {
-        failure ??= e; // the others still go; the caller (or the sweep) hears of it
-      }
-    }
-    const { rows } = await this.db.execute<{ id: string }>(sql`
-      update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
-      where r.verdict in (${sqlList(WAITING_VERDICTS)})
-        and r.review_reason is distinct from 'duplicate'
-        and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
-        and ${isDuplicate(maxDistance)}
-        ${scope}
-      returning r.id`);
-    if (failure) throw failure;
-    return rows.map((r) => Number(r.id));
+    // one that fails does not hold up the others; the caller (or the sweep) hears of it
+    await forEachSettled(repeats, (r) =>
+      this.notFound.decide(Number(r.id), {
+        kind: 'repeat',
+        duplicateOf: Number(r.twin),
+        sameFile: r.same_file,
+      }),
+    );
+    return held.map((r) => Number(r.id));
   }
 
   /**

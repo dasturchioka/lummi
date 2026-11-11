@@ -5,20 +5,23 @@ import {
   receipts,
   shopCard,
   sql,
+  userbotHeartbeat,
   type Db,
   type DbOrTx,
   type ReceiptRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
+import { extendReserve } from '../order-status/effects';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { AlertService } from '../outbox/alert.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
+import { forEachSettled } from '../util/for-each-settled';
 import { retryTransientOnce } from '../util/transient';
 import { WorkerRuntime } from '../worker/runtime';
-import { at, PAUSED, PaymentPauses, pausedSecondsAfter } from './payment-pauses';
+import { PAUSED, PaymentPauses, pausedSecondsAfter, sqlInstant } from './payment-pauses';
 import { CANDIDATE, sqlList, WAITING_VERDICTS } from './rules';
 import { paymentNotFoundPost, repeatedReceiptPost, uncheckedReceiptAlert } from './staff-posts';
 
@@ -68,9 +71,13 @@ export class PaymentNotFound {
    */
   async sweep(): Promise<void> {
     const now = this.edges.clock.now();
-    const paused = await this.outbox.withTx((tx) => this.pauses.check(tx, now));
-    if (!paused) await this.decideDue(now);
-    await this.alertUnchecked(now);
+    try {
+      const paused = await this.outbox.withTx((tx) => this.pauses.check(tx, now));
+      if (!paused) await this.decideDue(now);
+    } finally {
+      // a receipt that fails to be decided never holds up the owner's alerts
+      await this.alertUnchecked(now);
+    }
   }
 
   /** Every receipt whose wait window ended with no fitting credit. */
@@ -81,16 +88,7 @@ export class PaymentNotFound {
       where ${due(window, now)}
       order by r.id
       limit ${BATCH}`);
-    let failure: unknown = null;
-    for (const { id } of rows) {
-      try {
-        await this.decide(Number(id), { kind: 'window' });
-      } catch (e) {
-        // one receipt that fails does not hold up the others; the sweep still reports the failure
-        failure ??= e;
-      }
-    }
-    if (failure) throw failure;
+    await forEachSettled(rows, ({ id }) => this.decide(Number(id), { kind: 'window' }));
   }
 
   /**
@@ -132,7 +130,7 @@ export class PaymentNotFound {
     }
 
     const pausedSeconds = await this.pauses.pausedSeconds(tx, receipt.createdAt, now);
-    const reserveUntil = new Date(order.reserveUntil.getTime() + pausedSeconds * 1000);
+    const reserveUntil = extendReserve(order.reserveUntil, pausedSeconds);
     const reserveEnded = reserveUntil <= now;
     const duplicateOf = reason.kind === 'repeat' ? reason.duplicateOf : null;
 
@@ -152,10 +150,8 @@ export class PaymentNotFound {
       .update(receipts)
       .set({
         verdict: 'payment_not_found',
-        // the «Повторный чек» tag, and which receipt it repeats
-        ...(reason.kind === 'repeat'
-          ? { reviewReason: 'duplicate' as const, duplicateOf: reason.duplicateOf }
-          : {}),
+        // the «Повторный чек» marker: the receipt it repeats
+        ...(reason.kind === 'repeat' ? { duplicateOf: reason.duplicateOf } : {}),
       })
       .where(eq(receipts.id, receiptId));
     if (reserveEnded) {
@@ -219,13 +215,13 @@ export class PaymentNotFound {
         created_at: string | Date;
         review_reason: ReceiptRow['reviewReason'];
       }>(sql`
-        update ${receipts} r set unchecked_alert_at = ${at(now)}
+        update ${receipts} r set unchecked_alert_at = ${sqlInstant(now)}
         from ${orders} o
         where o.id = r.order_id
           and o.status = 'receipt_review'
           and r.verdict in (${sqlList(WAITING_VERDICTS)})
           and r.unchecked_alert_at is null
-          and r.created_at + make_interval(secs => ${after}) <= ${at(now)}
+          and r.created_at + make_interval(secs => ${after}) <= ${sqlInstant(now)}
         returning o.number, o.amount_due, r.created_at, r.review_reason`);
       for (const row of rows) {
         const receiptAt = new Date(row.created_at);
@@ -252,16 +248,20 @@ export class PaymentNotFound {
 
 /**
  * Receipt `r` of order `o` is due for payment not found at `now`: still waiting while its order is
- * under check, the payment feed not paused, its wait window over (extended by the pauses since it
- * was sent), a shop card set (without one there are no candidates to judge by), and no Candidate
- * credit for the order at all.
+ * under check, no payment pause open, its wait window over (extended by the pauses since it was
+ * sent), the userbot seen **after** the window ended (so a window that ends while the userbot has
+ * just fallen silent, before its pause is noticed, is not decided; with the #19 heartbeat sent
+ * only once caught up, a credit can then only be missed within one heartbeat), a shop card set
+ * (without one there are no candidates to judge by), and no Candidate credit for the order at all.
  */
 function due(windowSeconds: number, now: Date) {
+  const windowEnd = sql`(r.created_at + make_interval(secs => ${windowSeconds} + ${pausedSecondsAfter(sql`r.created_at`, now)}))`;
   return sql`(
     o.status = 'receipt_review'
     and r.verdict in (${sqlList(WAITING_VERDICTS)})
     and not ${PAUSED}
-    and r.created_at + make_interval(secs => ${windowSeconds} + ${pausedSecondsAfter(sql`r.created_at`, now)}) <= ${at(now)}
+    and ${windowEnd} <= ${sqlInstant(now)}
+    and exists (select 1 from ${userbotHeartbeat} h where h.seen_at >= ${windowEnd})
     and exists (select 1 from ${shopCard})
     and not exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE})
   )`;

@@ -45,9 +45,16 @@ const bot = (language: Language) => botMessages[language].bot;
 const number = (m: Move<OrderAction>) => String(m.order.number);
 const paid = (m: Move<OrderAction>) => PAID_STATUSES.includes(m.order.status);
 
-/** The reserve after payment not found: as it was, plus the time the payment feed was paused. */
-const extendedReserve = (m: Move<'payment_not_found'>) =>
-  new Date(m.order.reserveUntil.getTime() + m.payload.pausedSeconds * 1000);
+/**
+ * The reserve of an order going back to «Ожидает оплаты» from «Чек на проверке»: as it was, plus
+ * the time the payment feed was paused while its receipt waited (ADR 0012, #36). The one
+ * computation: the moves' columns and `PaymentNotFound` (to tell whether it has ended) use it.
+ */
+export function extendReserve(reserveUntil: Date, pausedSeconds: number): Date {
+  return new Date(reserveUntil.getTime() + pausedSeconds * 1000);
+}
+const extendedReserve = (m: Move<'payment_not_found' | 'reject_receipt'>) =>
+  extendReserve(m.order.reserveUntil, m.payload.pausedSeconds);
 
 /** A return's flags name every line of the order exactly once (ADR 0006). */
 function flagsNameEveryLine(m: Move<'return'>): boolean {
@@ -80,6 +87,8 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   reject_receipt: {
     audit: 'order.receipt_rejected',
+    // a paused Humo feed does not eat the reserve of an order under check (ADR 0012, #36)
+    columns: (m) => ({ reserveUntil: extendedReserve(m) }),
     // the preset reads as a sentence in the shopper's language, the manager's note under it (#33)
     message: (m, lang) => ({
       text: receiptRejectedText(lang, m.order.number, m.payload.reason, m.payload.note),
