@@ -4,6 +4,7 @@ import {
   CANCEL_REASONS,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
+  TYPED_REASON_MAX,
   type OrderAction,
 } from './order-machine';
 import { RECEIPT_REJECT_NOTE_HARD_MAX, RECEIPT_REJECT_REASONS } from './receipt-review';
@@ -31,8 +32,8 @@ const rowId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 
 /** A move that needs nothing: no payload, or an empty one. */
 const nothing = z.object({}).strict().optional();
-/** A reason typed by staff (a return), kept as written. */
-const typedReason = text(1, 500);
+/** A reason typed by staff (a return, a refund), trimmed. */
+const typedReason = text(1, TYPED_REASON_MAX);
 
 const rejectReceiptChoice = z
   .object({
