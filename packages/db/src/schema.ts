@@ -9,6 +9,7 @@ import {
   RECEIPT_FILE_KINDS,
   RECEIPT_REVIEW_REASONS,
   RECEIPT_VERDICTS,
+  type CancelReason,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -182,6 +183,14 @@ export const processedUpdates = pgTable('processed_updates', {
 });
 
 /**
+ * What an outbox row does when delivered: send its message, or bring an order's card in the
+ * orders group up to date (`ref` = the order id; rendered from the order at delivery, #37).
+ */
+export const OUTBOX_KINDS = ['message', 'order_card'] as const;
+export type OutboxKind = (typeof OUTBOX_KINDS)[number];
+export const outboxKindEnum = pgEnum('outbox_kind', OUTBOX_KINDS);
+
+/**
  * Transactional outbox (ADR 0021): callers insert in the same transaction as the state change.
  * Pending = neither sent_at nor failed_at. queued_at is the marker stamped when the worker hands the
  * row to BullMQ; a row stuck queued past the requeue window is handed over again (jobId = id dedups).
@@ -191,6 +200,9 @@ export const outbox = pgTable(
   'outbox',
   {
     id: id(),
+    kind: outboxKindEnum('kind').notNull().default('message'),
+    /** What a non-message row is about: the order id of an `order_card` row. */
+    ref: bigint('ref', { mode: 'number' }),
     chatId: bigint('chat_id', { mode: 'number' }).notNull(),
     threadId: integer('thread_id'),
     text: text('text').notNull(),
@@ -1023,6 +1035,70 @@ export const botPendingReceipts = pgTable(
   (t) => [index('bot_pending_receipts_created_idx').on(t.createdAt)],
 );
 export type BotPendingReceiptRow = typeof botPendingReceipts.$inferSelect;
+
+/** The keyboard under an order's card: the next step, the cancel reasons, or one reason to confirm. */
+export type OrderCardPanel =
+  { kind: 'steps' } | { kind: 'cancel' } | { kind: 'confirm_cancel'; reason: CancelReason };
+
+/**
+ * An order's one card in the orders group's «Заказы» topic (#37, spec Changes 2026-11-07),
+ * created in the transaction that confirms its payment; the primary key keeps it to one. The row
+ * is the card's state, and Telegram catches up with it: every change bumps `version` and queues
+ * an `order_card` outbox row, whose delivery renders the card from the order as it is then and
+ * posts it (no `message_id` yet) or edits it (only when `shown_hash` differs). `syncing_at` is the
+ * lease one delivery holds meanwhile, so two never race on one message; the holder goes round
+ * again while `version` moved. The receipt goes once, as a reply to the card.
+ */
+export const orderCards = pgTable('order_cards', {
+  orderId: bigint('order_id', { mode: 'number' })
+    .primaryKey()
+    .references(() => orders.id, { onDelete: 'cascade' }),
+  /** The orders group and its «Заказы» topic when the card was posted (settings `bot.*`). */
+  chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+  threadId: integer('thread_id'),
+  /** Telegram's id of the card message; null until it is posted. */
+  messageId: bigint('message_id', { mode: 'number' }),
+  /** The receipt the payment was confirmed with; null for a credit that came without one. */
+  receiptId: bigint('receipt_id', { mode: 'number' }).references(() => receipts.id),
+  /** When the receipt went as a reply to the card (or turned out to be gone from storage). */
+  receiptPostedAt: timestamp('receipt_posted_at', { withTimezone: true }),
+  panel: jsonb('panel').$type<OrderCardPanel>().notNull().default({ kind: 'steps' }),
+  version: integer('version').notNull().default(1),
+  /** A hash of the text and keyboard Telegram shows. */
+  shownHash: text('shown_hash'),
+  syncingAt: timestamp('syncing_at', { withTimezone: true }),
+  createdAt: createdAt(),
+});
+export type OrderCardRow = typeof orderCards.$inferSelect;
+
+/**
+ * «Передан в BTS» pressed on a card (#37): the bot asks the staff member who pressed it for the
+ * tracking number by ForceReply. Their reply to that message (found through the outbox row's
+ * Telegram message id) makes the handover from `expected_status`; a bad number asks again with
+ * a new prompt. Closed when answered, asked again, or the order moved on.
+ */
+export const orderCardPrompts = pgTable(
+  'order_card_prompts',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    staffId: bigint('staff_id', { mode: 'number' })
+      .notNull()
+      .references(() => staff.id, { onDelete: 'cascade' }),
+    expectedStatus: orderStatusEnum('expected_status').notNull(),
+    /** The question as sent: its row holds the chat and, once sent, the Telegram message id. */
+    outboxId: bigint('outbox_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => outbox.id, { onDelete: 'cascade' }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('order_card_prompts_order_idx').on(t.orderId)],
+);
+export type OrderCardPromptRow = typeof orderCardPrompts.$inferSelect;
 
 /**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
