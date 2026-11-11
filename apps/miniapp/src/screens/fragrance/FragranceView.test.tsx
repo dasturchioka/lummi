@@ -69,6 +69,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
       photo: 'c'.repeat(16),
     },
   ],
+  upgradeRightPrices: [],
   ...over,
 });
 
@@ -151,5 +152,57 @@ describe('FragranceView', () => {
     show(card({ isHit: true, isNew: true }));
     expect(screen.getByText('Хит')).toBeTruthy();
     expect(screen.queryByText('Новинка')).toBeNull();
+  });
+
+  describe('an upgrade right (TZ §3.4 «Скидка за набор»)', () => {
+    /** No markdown, 50 ml in stock, and the customer's right on both full-size volumes. */
+    const withRight = (source: 'set' | 'single_10ml' = 'set') =>
+      card({
+        volumes: card().volumes.map((v) => ({
+          ...v,
+          salePrice: null,
+          salePercent: null,
+          saleEndsAt: null,
+          effectivePrice: v.price,
+          available: 5,
+        })),
+        upgradeRightPrices: [
+          { ml: 30, price: 119_200, source, percent: 20, lastDay: '2026-12-09' },
+          { ml: 50, price: 175_200, source, percent: 20, lastDay: '2026-12-09' },
+        ],
+      });
+
+    it('strikes the regular price on the covered tiles and names the discount for the chosen one', () => {
+      show(withRight());
+      // 10 ml is chosen first: no right on it
+      expect(screen.queryByTestId('right-deal')).toBeNull();
+      const tile = screen.getByRole('radio', { name: /30/ });
+      expect(
+        within(tile)
+          .getByText(/149\D000/)
+          .closest('s'),
+      ).toBeTruthy();
+      expect(within(tile).getByText(/119\D200/)).toBeTruthy();
+      fireEvent.click(tile);
+      const deal = screen.getByTestId('right-deal');
+      expect(deal.textContent).toContain('Скидка за набор −20%');
+      expect(deal.textContent).toContain('до 9 декабря');
+    });
+
+    it('in Uzbek, and for a right from a 10 ml bottle', () => {
+      language = 'uz';
+      show(withRight('single_10ml'));
+      fireEvent.click(screen.getByRole('radio', { name: /50/ }));
+      const deal = screen.getByTestId('right-deal');
+      expect(deal.textContent).toContain('10 ml uchun chegirma −20%');
+      expect(deal.textContent).toContain('9-dekabrgacha');
+    });
+
+    it('never on a sold-out volume', () => {
+      const c = withRight();
+      show({ ...c, volumes: c.volumes.map((v) => (v.ml === 30 ? { ...v, available: 0 } : v)) });
+      fireEvent.click(screen.getByRole('radio', { name: /30/ }));
+      expect(screen.queryByTestId('right-deal')).toBeNull();
+    });
   });
 });

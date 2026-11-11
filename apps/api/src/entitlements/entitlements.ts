@@ -1,10 +1,11 @@
-import type { Discount } from '@lummi/contracts';
+import type { CartDto, Discount, Quote } from '@lummi/contracts';
 import type { DbOrTx } from '@lummi/db';
 import {
   birthdayEntitlements,
   holdBirthdayCoupon,
   releaseBirthdayCoupon,
 } from '../birthday/birthday-coupons';
+import { formatLocalDate, lastDayOf } from '../birthday/birthday-dates';
 import type { Entitlement } from '../pricing/quote';
 import {
   holdUpgradeRight,
@@ -90,6 +91,28 @@ export function holdEntitlement(
 /** ADR 0005: a cancelled or returned order gives back the entitlement it held while within validity. */
 export async function releaseEntitlements(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
   for (const s of SOURCES) await s.release(tx, orderId, now);
+}
+
+/**
+ * The Entitlement an applied promo code keeps out (ADR 0002: an entered code wins): the one the
+ * server would pick without the code, i.e. the cheapest entitlement among the quote's alternatives
+ * (they come cheapest first, ties as `quote()` breaks them); null when none would discount the cart.
+ */
+export function entitlementWaitingBehindCode(
+  q: Quote,
+  entitlements: readonly Entitlement[],
+): CartDto['entitlementWaiting'] {
+  if (q.discount?.type !== 'promo_code') return null;
+  for (const { discount: d } of q.alternatives) {
+    if (!isEntitlementDiscount(d)) continue;
+    const e = entitlements.find((x) => x.type === d.type && x.id === d.id);
+    if (!e) continue;
+    const lastDay = formatLocalDate(lastDayOf(e.expiresAt));
+    return e.type === 'upgrade_right'
+      ? { type: e.type, id: e.id, source: e.source, percent: e.percent, lastDay }
+      : { type: e.type, id: e.id, percent: e.percent, lastDay };
+  }
+  return null;
 }
 
 /**

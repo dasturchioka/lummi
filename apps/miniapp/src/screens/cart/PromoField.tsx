@@ -49,7 +49,7 @@ export function PromoField({
   busy,
   pending,
   notice,
-  couponWaiting = null,
+  waiting = null,
   onApply,
   onRemove,
 }: {
@@ -60,8 +60,8 @@ export function PromoField({
   busy: boolean;
   pending?: 'apply' | 'remove';
   notice: PromoNotice;
-  /** The birthday coupon the applied code keeps out, as the server judged it (#30). */
-  couponWaiting?: CartDto['birthdayCouponWaiting'];
+  /** The entitlement the applied code keeps out (a birthday coupon, an upgrade right), as the server judged it. */
+  waiting?: CartDto['entitlementWaiting'];
   onApply: (code: string) => void;
   onRemove: () => void;
 }) {
@@ -223,24 +223,30 @@ export function PromoField({
             </span>
           </p>
         ) : null}
-        {applied && couponWaiting ? (
-          // ADR 0002: the entered code wins; the coupon waits, and taking the code out lets the
-          // server pick it (#39 builds the full switch)
-          <p className="type-small mt-1.5 px-1 text-pretty text-muted" data-testid="coupon-waiting">
-            {fill(d.couponWaits, {
-              percent: String(couponWaiting.percent),
-              date: formatCalendarDate(couponWaiting.lastDay, language),
-            })}{' '}
+        {applied && waiting ? (
+          // ADR 0002: the entered code wins; the coupon or the right waits, and taking the code
+          // out lets the server pick it (#39 builds the full switch)
+          <p
+            className="type-small mt-1.5 px-1 text-pretty text-muted"
+            data-testid={waiting.type === 'birthday_coupon' ? 'coupon-waiting' : 'right-waiting'}
+          >
+            {fill(
+              waiting.type === 'birthday_coupon' ? d.couponWaits : d.rightWaits[waiting.source],
+              {
+                percent: String(waiting.percent),
+                date: formatCalendarDate(waiting.lastDay, language),
+              },
+            )}{' '}
             <button
               type="button"
               aria-disabled={busy || undefined}
-              data-testid="coupon-use"
+              data-testid={waiting.type === 'birthday_coupon' ? 'coupon-use' : 'right-use'}
               onClick={() => {
                 if (!busy) onRemove();
               }}
               className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
             >
-              {d.useCoupon}
+              {waiting.type === 'birthday_coupon' ? d.useCoupon : d.useRight}
             </button>
           </p>
         ) : null}

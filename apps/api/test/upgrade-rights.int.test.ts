@@ -578,6 +578,22 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
         { discount: { type: 'upgrade_right', id: right.id, amount: 43_800 }, total: 200_200 },
       ],
     });
+    // the cart says the right waits behind the code, with its terms and last day
+    expect((await s.cart.get()).body).toMatchObject({
+      entitlementWaiting: {
+        type: 'upgrade_right',
+        id: right.id,
+        source: 'set',
+        percent: 20,
+        lastDay: '2026-12-09',
+      },
+    });
+    // taking the code out lets the server pick the right
+    expect((await s.cart.removePromoCode()).body).toMatchObject({
+      entitlementWaiting: null,
+      quote: { discount: { type: 'upgrade_right', id: right.id } },
+    });
+    await s.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
     const order = await placeOrder(s);
     expect((await orderRow(order)).discount).toMatchObject({ type: 'promo_code' });
     expect(await rightPrices(s, inBox[0]!)).toEqual(SET_PRICES);

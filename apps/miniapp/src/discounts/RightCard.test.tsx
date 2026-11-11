@@ -1,0 +1,72 @@
+import type { MyUpgradeRightDto } from '@lummi/contracts';
+import { sharedMessages, type Language } from '@lummi/i18n';
+import { miniappMessages } from '@lummi/i18n/miniapp';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+let language: Language = 'ru';
+vi.mock('../lib/prefs', () => ({
+  usePrefs: () => ({
+    language,
+    theme: 'light',
+    t: { ...sharedMessages[language], ...miniappMessages[language] },
+  }),
+}));
+
+import { RightCard } from './RightCard';
+
+afterEach(() => {
+  cleanup();
+  language = 'ru';
+});
+
+const right = (over: Partial<MyUpgradeRightDto> = {}): MyUpgradeRightDto => ({
+  id: 1,
+  source: 'set',
+  percent: 20,
+  fragrances: [
+    { name: 'Symphony', brand: 'Louis Vuitton', slug: 'symphony' },
+    { name: 'Megamare', brand: 'Orto Parisi', slug: 'megamare' },
+    { name: 'Tygar', brand: 'Bvlgari', slug: null },
+    { name: 'Guidance', brand: 'Amouage', slug: 'guidance' },
+    { name: 'Blue Sapphire', brand: 'Boadicea', slug: 'blue-sapphire' },
+  ],
+  lastDay: '2026-12-09',
+  daysLeft: 25,
+  ...over,
+});
+
+describe('RightCard («Мои скидки», TZ §3.4)', () => {
+  it('names the discount, its five fragrances and how long it lasts', () => {
+    render(<RightCard right={right()} onOpen={vi.fn()} />);
+    expect(screen.getByText('Скидка за набор')).toBeTruthy();
+    expect(screen.getByText('−20%')).toBeTruthy();
+    for (const name of ['Symphony', 'Megamare', 'Tygar', 'Guidance', 'Blue Sapphire'])
+      expect(screen.getByText(name)).toBeTruthy();
+    expect(screen.getByText('Осталось 25 дней · до 9 декабря')).toBeTruthy();
+  });
+
+  it('opens the card of a fragrance on sale; a hidden one is plain text', () => {
+    const onOpen = vi.fn();
+    render(<RightCard right={right()} onOpen={onOpen} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Megamare' }));
+    expect(onOpen).toHaveBeenCalledWith('megamare');
+    expect(screen.queryByRole('button', { name: 'Tygar' })).toBeNull();
+  });
+
+  it('the last day, in Uzbek, for a right from a 10 ml bottle', () => {
+    language = 'uz';
+    render(
+      <RightCard
+        right={right({
+          source: 'single_10ml',
+          daysLeft: 0,
+          fragrances: [{ name: 'Symphony', brand: 'Louis Vuitton', slug: 'symphony' }],
+        })}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('10 ml flakon chegirmasi')).toBeTruthy();
+    expect(screen.getByText('Oxirgi kun · 9-dekabrgacha')).toBeTruthy();
+  });
+});
