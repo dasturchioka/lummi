@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import type { ReceiptJudgeInput, ReceiptJudgement } from '../src/edges';
 import { seedCatalog } from '../src/catalog/seed';
+import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { SettingsService } from '../src/settings/settings.service';
 import type { WorkerRuntime } from '../src/worker/runtime';
@@ -345,6 +346,23 @@ describe('after payment not found, the newest receipt is the only waiting one (#
     expect((await receiptNow(second)).verdict).toBe('ai_confirmed');
     expect((await receiptNow(first)).verdict).toBe('payment_not_found');
     expect((await orderNow(placed.order.id)).creditId).toBe(creditId);
+  });
+
+  it('has one door: transition() refuses payment_not_found from anyone but PaymentNotFound', async () => {
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    await settled();
+    const out = await t.app
+      .get(OrderStatusService)
+      .transition(placed.order.id, 'payment_not_found', { type: 'system' }, 'receipt_review', {
+        receiptId,
+        duplicateOf: null,
+        pausedSeconds: 0,
+        reserveEnded: false,
+      });
+    expect(out).toEqual({ kind: 'refused', code: 'forbidden' });
+    expect(await statusOf(placed)).toBe('receipt_review');
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
   });
 
   it('the payment door refuses the decided receipt', async () => {

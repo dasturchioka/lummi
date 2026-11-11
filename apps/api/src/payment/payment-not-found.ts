@@ -46,6 +46,9 @@ export type NotFoundReason =
  */
 @Injectable()
 export class PaymentNotFound {
+  /** The capability for `payment_not_found`: this class is the only holder. */
+  private readonly door: symbol;
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
@@ -55,6 +58,7 @@ export class PaymentNotFound {
     @Inject(PaymentPauses) private readonly pauses: PaymentPauses,
     @Inject(WorkerRuntime) runtime: WorkerRuntime,
   ) {
+    this.door = status.issueDoor('payment_not_found');
     runtime.register({ name: 'payment-not-found', run: () => this.sweep() });
   }
 
@@ -139,6 +143,7 @@ export class PaymentNotFound {
       { type: 'system' },
       'receipt_review',
       { receiptId, duplicateOf, pausedSeconds, reserveEnded },
+      this.door,
     );
     // the order is locked «Чек на проверке»: any refusal here is a bug, and rolls back
     if (moved.kind !== 'done')
