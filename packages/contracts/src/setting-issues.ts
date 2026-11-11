@@ -12,6 +12,10 @@ export const settingIssueSchema = z.object({
     'invalid_format',
     'invalid_option',
     'invalid',
+    /** A payment-feed guard not under the wait window and the reserve by a tick (`max`, #36). */
+    'feed_guard_too_long',
+    /** The wait window or the reserve not a tick over the payment-feed guards (`min`, #36). */
+    'wait_too_short',
   ]),
   min: z.number().optional(),
   max: z.number().optional(),

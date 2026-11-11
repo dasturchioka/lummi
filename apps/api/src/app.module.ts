@@ -28,6 +28,8 @@ import { OrdersController } from './orders/orders.controller';
 import { ShopCardController } from './payment/shop-card.controller';
 import { PaymentConfirmation } from './payment/payment-confirmation';
 import { PaymentMatching } from './payment/payment-matching';
+import { PaymentNotFound } from './payment/payment-not-found';
+import { PaymentPauses } from './payment/payment-pauses';
 import { ShopCardService } from './payment/shop-card.service';
 import { ReceiptRejection } from './payment/receipt-rejection';
 import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
@@ -150,6 +152,8 @@ export class AppModule {
         ShopCardService,
         PaymentConfirmation,
         PaymentMatching,
+        PaymentNotFound,
+        PaymentPauses,
         OrderStatusService,
         DiscountSourceHooks,
         ReserveSweeps,

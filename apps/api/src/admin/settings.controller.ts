@@ -8,7 +8,11 @@ import {
 import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
-import { SettingsService, type SettingRowState } from '../settings/settings.service';
+import {
+  SettingRefusedError,
+  SettingsService,
+  type SettingRowState,
+} from '../settings/settings.service';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 
 const toDto = (s: SettingRowState): SettingState => ({
@@ -46,7 +50,13 @@ export class SettingsController {
           body: { code: 'invalid_value' as const, issues: toSettingIssues(parsed.error) },
         };
       }
-      await this.settings.set(key, parsed.data as never, { type: 'staff', id: actor.id });
+      try {
+        await this.settings.set(key, parsed.data as never, { type: 'staff', id: actor.id });
+      } catch (e) {
+        if (!(e instanceof SettingRefusedError)) throw e;
+        // fits its own schema, but not with the settings it depends on (#36)
+        return { status: 400 as const, body: { code: 'invalid_value' as const, issues: e.issues } };
+      }
       return { status: 200 as const, body: toDto(await this.settings.state(key)) };
     });
   }

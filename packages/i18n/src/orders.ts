@@ -162,6 +162,13 @@ export const ordersMessages = defineMessages(
         'Мы обновляем реквизиты для оплаты. Не\u00a0переводите деньги, пока здесь нет карты. Если вопрос срочный, напишите менеджеру.',
       /** Above the upload while no card is set: a shopper who paid before still sends the receipt. */
       alreadyPaid: 'Если вы уже оплатили\u00a0— загрузите чек.',
+      /** Above the payment when the last receipt found no money in the wait window (#36). */
+      noTransferTitle: 'Мы не нашли перевод',
+      noTransferText:
+        'По чеку, отправленному {day} в {time}, мы не нашли перевод. Проверьте сумму и карту и загрузите чек ещё раз.',
+      /** The same when the last receipt repeated another order's (#36). */
+      repeatTitle: 'Этот чек уже был у другого заказа',
+      repeatText: 'Загрузите чек перевода именно за этот заказ.',
       /** On the order page while it waits for payment. */
       goToPay: 'Перейти к оплате',
     },
@@ -430,6 +437,11 @@ export const ordersMessages = defineMessages(
       unavailableText:
         'Toʻlov rekvizitlarini yangilayapmiz. Bu yerda karta paydo boʻlmaguncha pul oʻtkazmang. Savol shoshilinch boʻlsa, menejerga yozing.',
       alreadyPaid: 'Agar toʻlagan boʻlsangiz, chekni yuklang.',
+      noTransferTitle: 'Oʻtkazmani topa olmadik',
+      noTransferText:
+        'Siz {day} kuni soat {time} da yuborgan chek boʻyicha oʻtkazmani topa olmadik. Summa va kartani tekshirib, chekni qayta yuklang.',
+      repeatTitle: 'Bu chek boshqa buyurtmaga yuborilgan',
+      repeatText: 'Aynan shu buyurtma uchun oʻtkazma chekini yuklang.',
       goToPay: 'Toʻlovga oʻtish',
     },
     orders: {

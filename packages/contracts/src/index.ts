@@ -8,6 +8,7 @@ export * from './catalog';
 export * from './quote';
 export * from './settings';
 export * from './setting-issues';
+export * from './setting-rules';
 export * from './tashkent';
 export { adminContract, apiContract, contract, internalContract } from './contract';
 export * from './telegram-username';

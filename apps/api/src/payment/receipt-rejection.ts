@@ -1,5 +1,6 @@
 import {
   charCount,
+  rejectReceiptChoiceSchema,
   WAITING_RECEIPT_VERDICTS,
   type ReceiptRejectReason,
   type TransitionRefusal,
@@ -16,11 +17,13 @@ import {
   type ReceiptRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { planTransition } from '../order-status/machine';
+import type { Edges } from '../edges';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
+import { EDGES } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
+import { PaymentPauses } from './payment-pauses';
 
 export interface RejectReceiptInput {
   orderId: number;
@@ -63,6 +66,8 @@ export class ReceiptRejection {
   constructor(
     @Inject(OrderStatusService) private readonly status: OrderStatusService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(PaymentPauses) private readonly pauses: PaymentPauses,
+    @Inject(EDGES) private readonly edges: Edges,
   ) {
     this.door = status.issueDoor('reject_receipt');
   }
@@ -81,10 +86,13 @@ export class ReceiptRejection {
     tx: DbOrTx,
     input: RejectReceiptInput,
   ): Promise<Exclude<RejectReceiptOutcome, { kind: 'try_again' }>> {
-    const payload = { receiptId: input.receiptId, reason: input.reason, note: input.note };
-    const plan = planTransition('receipt_review', 'reject_receipt', 'staff', payload);
-    if (!plan.ok) return { kind: 'refused', code: plan.code };
-    const { note } = plan.payload;
+    const choice = rejectReceiptChoiceSchema.safeParse({
+      receiptId: input.receiptId,
+      reason: input.reason,
+      note: input.note,
+    });
+    if (!choice.success) return { kind: 'refused', code: 'invalid_payload' };
+    const { note } = choice.data;
     if (note !== undefined) {
       const max = (await readSettings(tx, ['receipts.rejectNoteMaxLength']))[
         'receipts.rejectNoteMaxLength'
@@ -116,13 +124,19 @@ export class ReceiptRejection {
     if (!WAITING_RECEIPT_VERDICTS.includes(receipt.verdict) || latest?.id !== receipt.id)
       return { kind: 'receipt_changed', order, verdict: receipt.verdict };
 
+    // a payment pause while it waited gives the reserve back that time (#36), as payment not found does
+    const pausedSeconds = await this.pauses.pausedSeconds(
+      tx,
+      receipt.createdAt,
+      this.edges.clock.now(),
+    );
     const moved = await this.status.transitionIn(
       tx,
       order.id,
       'reject_receipt',
       { type: 'staff', id: input.staffId },
       'receipt_review',
-      payload,
+      { ...choice.data, pausedSeconds },
       this.door,
     );
     // the order is locked in «Чек на проверке» and the payload fits: any refusal is a bug

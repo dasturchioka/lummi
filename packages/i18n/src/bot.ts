@@ -39,8 +39,15 @@ export const botMessages = defineMessages(
         'Чек к заказу № {number} не принят.\nПричина: {reason}\nПроверьте сумму и карту и загрузите чек ещё раз.',
       /** The manager's own words under a preset reason (#33). */
       rejectNote: 'Комментарий менеджера: {note}',
+      /** The wait window ended with no fitting credit (ADR 0012); the order waits for payment again. */
       paymentNotFound:
-        'Мы не нашли перевод по заказу № {number}.\nПроверьте сумму ({amount}) и карту и загрузите чек ещё раз.',
+        'Мы не нашли перевод по заказу № {number}.\nПроверьте сумму ({amount}) и карту и загрузите чек ещё раз до {until}.',
+      /** The same, when the reserve has ended too: the cancel message follows. */
+      paymentNotFoundReserveEnded:
+        'Мы не нашли перевод по заказу № {number}, а время брони истекло.\nЕсли вы уже перевели {amount}, напишите менеджеру — мы проверим.',
+      /** The receipt repeats one sent for another order (spec Changes 2026-11-07, payment details). */
+      paymentNotFoundDuplicate:
+        'Этот чек уже отправляли к другому заказу, поэтому принять его к заказу № {number} мы не можем.\nЗагрузите чек перевода {amount} именно за этот заказ до {until}.',
       assembling: 'Собираем заказ № {number} 📦\nБережно упакуем ароматы и передадим в BTS.',
       handedToBts:
         'Заказ № {number} передан в BTS 🚚\nТрек-номер: {tracking}\nДоставка до пункта BTS — до 48 часов.',
@@ -100,7 +107,11 @@ export const botMessages = defineMessages(
         '№ {number} buyurtma cheki qabul qilinmadi.\nSabab: {reason}\nSumma va kartani tekshirib, chekni qayta yuklang.',
       rejectNote: 'Menejer izohi: {note}',
       paymentNotFound:
-        '№ {number} buyurtma boʻyicha oʻtkazmani topa olmadik.\nSumma ({amount}) va kartani tekshirib, chekni qayta yuklang.',
+        '№ {number} buyurtma boʻyicha oʻtkazmani topa olmadik.\nSumma ({amount}) va kartani tekshirib, chekni {until} gacha qayta yuklang.',
+      paymentNotFoundReserveEnded:
+        '№ {number} buyurtma boʻyicha oʻtkazmani topa olmadik, bandlik muddati esa tugadi.\nAgar {amount} oʻtkazgan boʻlsangiz, menejerga yozing — tekshirib beramiz.',
+      paymentNotFoundDuplicate:
+        'Bu chek boshqa buyurtmaga yuborilgan, shuning uchun uni № {number} buyurtmaga qabul qila olmaymiz.\nAynan shu buyurtma uchun {amount} oʻtkazma chekini {until} gacha yuklang.',
       assembling:
         '№ {number} buyurtmani yigʻyapmiz 📦\nAtirlarni ehtiyotkorlik bilan qadoqlab, BTSga topshiramiz.',
       handedToBts:
