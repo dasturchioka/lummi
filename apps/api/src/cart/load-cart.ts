@@ -88,6 +88,8 @@ export interface LoadedQuote {
   city: DeliveryCityDto | null;
   /** The entered promo code's id when it passed the DB checks; the order holds a use of it. */
   promoCodeId: number | null;
+  /** The customer's active entitlements the quote chose from. */
+  entitlements: Entitlement[];
 }
 
 /** A line as stored: what was asked for. Volume, price and stock are resolved when it is read. */
@@ -338,9 +340,10 @@ export async function loadQuote(
     })),
   ];
   quoteLines.sort((a, b) => Number(a.key) - Number(b.key));
+  const entitlements = opts.entitlements ?? (await loadEntitlements(tx, customerId, now));
   const q = quote({
     lines: quoteLines,
-    entitlements: opts.entitlements ?? (await loadEntitlements(tx, customerId, now)),
+    entitlements,
     promoCode: judged?.promoCode ?? null,
     choice: cartState?.discountChoice ?? null,
     deliveryTariff:
@@ -359,6 +362,7 @@ export async function loadQuote(
     cartState,
     city,
     promoCodeId: judged?.promoCodeId ?? null,
+    entitlements,
   };
 }
 

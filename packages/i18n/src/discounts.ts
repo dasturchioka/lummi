@@ -51,6 +51,12 @@ export const discountsMessages = defineMessages(
       alreadySet: 'Дата рождения уже указана.',
       /** Checkout, under the optional field (mockup 06). */
       checkoutHint: 'Пришлём купон −{percent}% ко дню рождения. Дату можно указать один раз.',
+      /** A valid date read back in words before it is stored for good. `{date}`: «14 марта 1996». */
+      confirmDate: '{date} — изменить потом нельзя, проверьте',
+      /** The cart: an entered promo code keeps the coupon out (ADR 0002). `{date}`: its last day. */
+      couponWaits:
+        'Купон ко дню рождения −{percent}% не суммируется с промокодом и ждёт вас до {date}.',
+      useCoupon: 'Применить купон',
     },
   },
   {
@@ -92,6 +98,10 @@ export const discountsMessages = defineMessages(
       alreadySet: 'Tugʻilgan sana allaqachon kiritilgan.',
       checkoutHint:
         'Tugʻilgan kuningizga −{percent}% kupon yuboramiz. Sanani faqat bir marta kiritish mumkin.',
+      confirmDate: '{date} — keyin oʻzgartirib boʻlmaydi, tekshirib oling',
+      couponWaits:
+        'Tugʻilgan kun kuponi −{percent}% promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
+      useCoupon: 'Kuponni qoʻllash',
     },
   },
 );

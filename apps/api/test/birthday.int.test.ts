@@ -516,6 +516,8 @@ describe('the coupon in the cart and the order', () => {
       deliveryFee: 25_000,
       total: 200_200,
     });
+    // applied, so nothing waits behind a code
+    expect((await s.cart.get()).body).toMatchObject({ birthdayCouponWaiting: null });
   });
 
   it('keeps the percent and cap it was issued with when the settings change', async () => {
@@ -564,10 +566,58 @@ describe('the coupon in the cart and the order', () => {
         { discount: { type: 'birthday_coupon', id: coupon.id, amount: 43_800 }, total: 200_200 },
       ],
     });
+    // the cart says the coupon waits behind the code, with its terms and last day
+    expect((await s.cart.get()).body).toMatchObject({
+      birthdayCouponWaiting: { id: coupon.id, percent: 20, lastDay: '2027-03-21' },
+    });
     // the order takes the code, and the coupon stays the customer's
     const order = await placeOrder(s);
     expect(order.discount).toMatchObject({ type: 'promo_code' });
     expect((await s.me.discounts()).body).toMatchObject({ birthdayCoupons: [{ id: coupon.id }] });
+  });
+
+  it('«Применить купон» is the code taken out: the server then picks the coupon by itself', async () => {
+    const [a] = await slugs(1);
+    const { s, coupon } = await withCoupon();
+    const owner = await t.ownerSession();
+    await owner.client.admin.promoCodes.create({
+      body: {
+        code: 'BLOGER10',
+        kind: 'percent',
+        percent: 10,
+        amount: null,
+        maxDiscount: null,
+        expiresOn: null,
+        minOrderTotal: null,
+        totalLimit: null,
+        perCustomerLimit: null,
+        newCustomersOnly: false,
+        appliesToMarkedDown: false,
+        active: true,
+      },
+    });
+    await add(s, a!, 50);
+    await s.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
+    const after = await s.cart.removePromoCode();
+    expect(after).toMatchObject({
+      status: 200,
+      body: {
+        promoCode: null,
+        birthdayCouponWaiting: null,
+        quote: { discount: { type: 'birthday_coupon', id: coupon.id } },
+      },
+    });
+  });
+
+  it('a code that does not apply leaves nothing waiting: the coupon is applied', async () => {
+    const [a] = await slugs(1);
+    const { s, coupon } = await withCoupon();
+    await add(s, a!, 50);
+    await s.cart.applyPromoCode({ body: { code: 'NOSUCHCODE' } });
+    expect((await s.cart.get()).body).toMatchObject({
+      quote: { discount: { type: 'birthday_coupon', id: coupon.id } },
+      birthdayCouponWaiting: null,
+    });
   });
 
   it('the order holds it (ADR 0005): the snapshot carries it, Profile no longer lists it, the next cart has none', async () => {
