@@ -12,11 +12,13 @@ import {
 import {
   and,
   asc,
+  carts,
   eq,
   fragrances,
   gt,
   inArray,
   isNull,
+  orders,
   upgradeRights,
   type DbOrTx,
   type OrderLineRow,
@@ -25,6 +27,7 @@ import {
   type VolumeRow,
 } from '@lummi/db';
 import { readPricingSettings } from '../pricing/pricing-settings';
+import { judgePromoCode } from '../promo/promo-codes';
 import { quote, volumePrice, type Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 
@@ -219,7 +222,8 @@ export async function releaseUpgradeRight(tx: DbOrTx, orderId: number, now: Date
  * The fragrance card's «Скидка за набор» prices (TZ §3.4 «Отображение»): for each Full size volume
  * of the fragrance, the price of one bottle with the customer's best covering right, as `quote()`
  * prices a cart of that bottle alone (ADR 0001, 0007; a marked-down volume only when the setting
- * allows it, ADR 0008). Delivery is left out: the label is about the bottle.
+ * allows it, ADR 0008). Delivery is left out: the label is about the bottle. None while an entered
+ * promo code the shop accepts sits in the cart: that code wins there (ADR 0002).
  */
 export async function upgradeRightPrices(
   tx: DbOrTx,
@@ -232,6 +236,14 @@ export async function upgradeRightPrices(
     r.fragrances.some((f) => f.fragranceId === fragranceId),
   );
   if (covering.length === 0) return [];
+  // an entered code the shop accepts wins in the cart (ADR 0002), so the right will not apply:
+  // the card offers no right price meanwhile; a refused code never wins
+  const [cart] = await tx
+    .select({ promoCode: carts.promoCode })
+    .from(carts)
+    .where(eq(carts.customerId, customerId));
+  if (cart?.promoCode && (await judgePromoCode(tx, cart.promoCode, customerId, now)).promoCodeId)
+    return [];
   const settings = await readPricingSettings(tx);
   const out: UpgradeRightPrice[] = [];
   // every volume goes to `quote()`, which discounts only what `pricing.fullSizeVolumesMl` calls full size
@@ -269,7 +281,8 @@ export async function upgradeRightPrices(
 
 /**
  * Profile «Мои скидки» (TZ §3.4: «Сохраняются в аккаунте, видны в профиле»): the open rights,
- * soonest to end first, each with its fragrances as bought (linked while on sale) and days left.
+ * soonest to end first, each with the order that opened it, its fragrances as bought (linked
+ * while on sale) and days left.
  */
 export async function myUpgradeRights(
   tx: DbOrTx,
@@ -286,11 +299,20 @@ export async function myUpgradeRights(
           .from(fragrances)
           .where(and(inArray(fragrances.id, ids), eq(fragrances.hidden, false)));
   const slugOf = new Map(onSale.map((f) => [f.id, f.slug]));
+  const sources =
+    rights.length === 0
+      ? []
+      : await tx
+          .select({ id: orders.id, number: orders.number })
+          .from(orders)
+          .where(inArray(orders.id, [...new Set(rights.map((r) => r.sourceOrderId))]));
+  const numberOf = new Map(sources.map((o) => [o.id, o.number]));
   return rights.map((r) => {
     const lastDay = lastDayOf(r.expiresAt);
     return {
       id: r.id,
       source: r.source,
+      sourceOrderNumber: numberOf.get(r.sourceOrderId)!,
       percent: r.percent,
       fragrances: r.fragrances.map((f) => ({
         name: f.name,

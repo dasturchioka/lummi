@@ -70,6 +70,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
     },
   ],
   upgradeRightPrices: [],
+  fullSizeMl: [30, 50],
   ...over,
 });
 
@@ -187,6 +188,29 @@ describe('FragranceView', () => {
       const deal = screen.getByTestId('right-deal');
       expect(deal.textContent).toContain('Скидка за набор −20%');
       expect(deal.textContent).toContain('до 9 декабря');
+      // what the 20 % covers, the volumes from the setting
+      expect(deal.textContent?.replace(/\u00a0/g, ' ')).toContain(
+        'на один флакон 30 или 50 мл · применится в корзине',
+      );
+      // the dock agrees with the tile: the right price, the regular one struck (ruling 2026-11-11)
+      const dock = screen.getByRole('button', { name: /В корзину/ });
+      expect(dock.textContent).toMatch(/119\D200/);
+      expect(dock.querySelector('s')?.textContent).toMatch(/149\D000/);
+    });
+
+    it('the dock keeps the bottle price on a volume the right does not cover', () => {
+      show(withRight());
+      const dock = screen.getByRole('button', { name: /В корзину/ });
+      expect(dock.textContent).toMatch(/69\D000/);
+      expect(dock.querySelector('s')).toBeNull();
+    });
+
+    it('names only the full-size volumes the setting gives', () => {
+      show({ ...withRight(), fullSizeMl: [50] });
+      fireEvent.click(screen.getByRole('radio', { name: /30/ }));
+      expect(screen.getByTestId('right-deal').textContent?.replace(/\u00a0/g, ' ')).toContain(
+        'на один флакон 50 мл',
+      );
     });
 
     it('in Uzbek, and for a right from a 10 ml bottle', () => {
@@ -196,6 +220,9 @@ describe('FragranceView', () => {
       const deal = screen.getByTestId('right-deal');
       expect(deal.textContent).toContain('10 ml uchun chegirma −20%');
       expect(deal.textContent).toContain('9-dekabrgacha');
+      expect(deal.textContent?.replace(/\u00a0/g, ' ')).toContain(
+        'bitta 30 yoki 50 ml flakonga · savatda qoʻllanadi',
+      );
     });
 
     it('never on a sold-out volume', () => {

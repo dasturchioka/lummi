@@ -6,17 +6,22 @@ import { Badge } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { BottleIcon } from '../ui/icons';
 import { useDiscountsText } from './queries';
+import { volumesText } from './volumes';
 
 /**
- * An open upgrade right in «Мои скидки» (TZ §3.4; mockup 08's set card): what it is, «−20%» as the
+ * An open upgrade right in «Мои скидки» (TZ §3.4; mockup 08's set card): what it is and the order
+ * that opened it («Набор из заказа № 1042»), what it covers (the volumes from the setting), «−20%» as the
  * discount badge, the fragrances it covers in the Name role, each with «по мотивам <brand>» (CLAUDE.md)
  * and opening its card while on sale, and how long it lasts. It applies in the cart by itself, so the card has no button.
  */
 export function RightCard({
   right,
+  fullSizeMl,
   onOpen,
 }: {
   right: MyUpgradeRightDto;
+  /** The volumes it discounts (setting `pricing.fullSizeVolumesMl`), from «Мои скидки». */
+  fullSizeMl: number[];
   onOpen: (slug: string) => void;
 }) {
   const { t, language } = usePrefs();
@@ -32,7 +37,12 @@ export function RightCard({
           <span className="type-row font-semibold">{d.right[right.source]}</span>
           <Badge tone="discount">−{right.percent}%</Badge>
         </p>
-        <p className="type-small mt-0.5 text-pretty text-muted">{d.rightTerms[right.source]}</p>
+        <p className="type-small mt-0.5 text-ink">
+          {fill(d.rightSource[right.source], { number: String(right.sourceOrderNumber) })}
+        </p>
+        <p className="type-small mt-0.5 text-pretty text-muted">
+          {fill(d.rightTerms[right.source], { volumes: volumesText(fullSizeMl, d.volumesOr) })}
+        </p>
         <ul className="mt-2 flex flex-col gap-1">
           {right.fragrances.map((f) => (
             // a hanging indent: a name that wraps stays one item; the original always follows it

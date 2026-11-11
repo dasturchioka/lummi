@@ -71,7 +71,14 @@ const discount: CartDto = {
   quote: {
     lines: [priced(1, 1, 149_000, 149_000), priced(2, 2, 69_000, 138_000)],
     itemsSubtotal: 287_000,
-    discount: { type: 'upgrade_right', id: 1, source: 'set', amount: 29_800, lineKey: '1' },
+    discount: {
+      type: 'upgrade_right',
+      id: 1,
+      source: 'set',
+      percent: 20,
+      amount: 29_800,
+      lineKey: '1',
+    },
     thresholdBase: 'before',
     thresholdBaseAmount: 287_000,
     freeDeliveryThreshold: 250_000,

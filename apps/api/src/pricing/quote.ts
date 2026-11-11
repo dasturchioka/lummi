@@ -259,7 +259,14 @@ function upgradeRightOption(
   const amount = percentOf(target.unitPrice, e.percent);
   if (amount === 0) return null;
   return {
-    discount: { type: 'upgrade_right', id: e.id, source: e.source, amount, lineKey: target.key },
+    discount: {
+      type: 'upgrade_right',
+      id: e.id,
+      source: e.source,
+      percent: e.percent,
+      amount,
+      lineKey: target.key,
+    },
     base: settings.thresholdBase.upgradeRight[e.source],
     expiresAt: e.expiresAt,
     growth: null,

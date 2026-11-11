@@ -524,6 +524,16 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
   it('discounts one full-size bottle of a covered fragrance by 20 %, delivery left out', async () => {
     const { s, inBox, right } = await withRight();
     await add(s, inBox[0]!, 30, 2);
+    // a 10 ml line besides: the quote names the line the right discounts, so the cart marks it
+    await add(s, inBox[1]!, 10);
+    const cart = await s.cart.get();
+    if (cart.status !== 200) throw new Error('cart');
+    const thirty = cart.body.lines.find((l) => l.kind === 'volume' && l.ml === 30)!;
+    // and its percent, so the line reads «Скидка за набор −20%» without client arithmetic
+    expect(cart.body.quote.discount).toMatchObject({ lineKey: String(thirty.id), percent: 20 });
+    await s.cart.removeLine({
+      params: { lineId: cart.body.lines.find((l) => l.kind === 'volume' && l.ml === 10)!.id },
+    });
     expect(await quoteOf(s)).toMatchObject({
       itemsSubtotal: 298_000,
       // one bottle: 20 % of 149 000
@@ -594,11 +604,17 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
         lastDay: '2026-12-09',
       },
     });
+    // the code wins, so the card shows no right price while it is in the cart (ruling 2026-11-11)
+    expect(await rightPrices(s, inBox[1]!)).toEqual([]);
     // taking the code out lets the server pick the right
     expect((await s.cart.removePromoCode()).body).toMatchObject({
       entitlementWaiting: null,
       quote: { discount: { type: 'upgrade_right', id: right.id } },
     });
+    expect(await rightPrices(s, inBox[1]!)).toEqual(SET_PRICES);
+    // a code the shop refuses never wins: the card keeps the right price
+    await s.cart.applyPromoCode({ body: { code: 'NOSUCHCODE' } });
+    expect(await rightPrices(s, inBox[1]!)).toEqual(SET_PRICES);
     await s.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
     const order = await placeOrder(s);
     expect((await orderRow(order)).discount).toMatchObject({ type: 'promo_code' });
@@ -749,7 +765,8 @@ describe('«Мои скидки» lists open rights with their fragrances and da
     const box = await client.sets.discovery();
     if (box.status !== 200) throw new Error('discovery');
     await client.cart.addDiscovery({ body: { qty: 1 } });
-    await fulfilTo(await placeOrder(client), 'delivered');
+    const discoveryOrder = await placeOrder(client);
+    await fulfilTo(discoveryOrder, 'delivered');
     // a builder set delivered a day later, with a shorter term set meanwhile
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
     await setSetting('upgradeRights.set.validityDays', 10);
@@ -757,17 +774,21 @@ describe('«Мои скидки» lists open rights with their fragrances and da
     const inBox = box.body.fragrances.map((f) => f.slug);
     const picked = (await allSlugs()).filter((x) => !inBox.includes(x)).slice(0, 5);
     await later.cart.addBuilder({ body: { slugs: picked, qty: 1 } });
-    await fulfilTo(await placeOrder(later), 'delivered');
+    const builderOrder = await placeOrder(later);
+    await fulfilTo(builderOrder, 'delivered');
     // the owner hides one of the builder's fragrances: still listed, without a link
     await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, picked[0]!));
 
     const res = await later.me.discounts();
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
+    // the volumes a right discounts, from pricing.fullSizeVolumesMl
+    expect(res.body.fullSizeMl).toEqual([30, 50]);
     expect(res.body.upgradeRights).toEqual([
       {
         id: expect.any(Number),
         source: 'set',
+        sourceOrderNumber: builderOrder,
         percent: 20,
         fragrances: expect.any(Array),
         lastDay: '2026-11-20',
@@ -776,6 +797,7 @@ describe('«Мои скидки» lists open rights with their fragrances and da
       {
         id: expect.any(Number),
         source: 'set',
+        sourceOrderNumber: discoveryOrder,
         percent: 20,
         fragrances: box.body.fragrances.map((f) => ({
           name: f.name,
@@ -903,8 +925,14 @@ describe('full size is a setting (pricing.fullSizeVolumesMl)', () => {
     const inBox = await discoverySlugs(client);
     await client.cart.addDiscovery({ body: { qty: 1 } });
     await fulfilTo(await placeOrder(client), 'delivered');
+    const fullSize = async () => {
+      const card = await client.catalog.fragrance({ params: { slug: inBox[0]! } });
+      return card.status === 200 ? card.body.fullSizeMl : null;
+    };
+    expect(await fullSize()).toEqual([30, 50]);
     await setSetting('pricing.fullSizeVolumesMl', [50]);
     expect(await rightPrices(client, inBox[0]!)).toEqual([SET_PRICES[1]]);
+    expect(await fullSize()).toEqual([50]);
   });
 });
 

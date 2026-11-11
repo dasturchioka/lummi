@@ -66,11 +66,25 @@ export const discountsMessages = defineMessages(
       useRight: 'Применить скидку',
       /** The fragrance card: the customer's right on the chosen full-size volume (TZ §3.4). */
       cardDeal: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
+      /** Under it, what it covers. `{volumes}`: «30 или 50» from the setting. */
+      cardDealTerms: 'на один флакон {volumes} мл · применится в корзине',
+      /** Joins the last two full-size volumes: «30 или 50». */
+      volumesOr: 'или',
+      /** The cart line the right discounts (one bottle of it). */
+      lineDeal: {
+        set: 'Скидка за набор −{percent}% на один флакон',
+        single_10ml: 'Скидка за 10 мл −{percent}% на один флакон',
+      },
+      /** «Мои скидки»: the order that opened the right, so two rights are told apart. */
+      rightSource: {
+        set: 'Набор из заказа № {number}',
+        single_10ml: 'Флакон 10 мл из заказа № {number}',
+      },
       /** An open upgrade right (TZ §3.4: «видна в профиле»). */
       right: { set: 'Скидка за набор', single_10ml: 'Скидка за флакон 10 мл' },
       rightTerms: {
-        set: 'На один полный флакон любого аромата из набора. В корзине применится сама.',
-        single_10ml: 'На один полный флакон этого аромата. В корзине применится сама.',
+        set: 'На один полный флакон {volumes} мл любого аромата из набора. В корзине применится сама.',
+        single_10ml: 'На один полный флакон {volumes} мл этого аромата. В корзине применится сама.',
       },
     },
   },
@@ -127,10 +141,20 @@ export const discountsMessages = defineMessages(
         set: 'Toʻplam chegirmasi −{percent}%',
         single_10ml: '10 ml uchun chegirma −{percent}%',
       },
+      cardDealTerms: 'bitta {volumes} ml flakonga · savatda qoʻllanadi',
+      volumesOr: 'yoki',
+      lineDeal: {
+        set: 'Toʻplam chegirmasi −{percent}% bitta flakonga',
+        single_10ml: '10 ml uchun chegirma −{percent}% bitta flakonga',
+      },
+      rightSource: {
+        set: '№ {number} buyurtmadagi toʻplam',
+        single_10ml: '№ {number} buyurtmadagi 10 ml flakon',
+      },
       right: { set: 'Toʻplam chegirmasi', single_10ml: '10 ml flakon chegirmasi' },
       rightTerms: {
-        set: 'Toʻplamdagi istalgan iforning bitta toʻliq flakoniga. Savatda oʻzi qoʻllanadi.',
-        single_10ml: 'Shu iforning bitta toʻliq flakoniga. Savatda oʻzi qoʻllanadi.',
+        set: 'Toʻplamdagi istalgan iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
+        single_10ml: 'Shu iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
       },
     },
   },

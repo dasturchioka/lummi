@@ -14,6 +14,7 @@ import { Money } from './Money';
 export function BuyPair({
   toCart,
   price,
+  was,
   adding = false,
   onAdd,
   onBuyNow,
@@ -21,6 +22,8 @@ export function BuyPair({
   /** «В корзину», in the caller's own words. */
   toCart: string;
   price: number;
+  /** A higher price struck before it (the fragrance card with an upgrade right, #38). */
+  was?: number;
   adding?: boolean;
   onAdd: () => void;
   onBuyNow: () => void;
@@ -47,6 +50,11 @@ export function BuyPair({
       <span aria-hidden="true" className="opacity-60">
         ·
       </span>
+      {was !== undefined ? (
+        <s className="opacity-60">
+          <Money amount={was} size="small" />
+        </s>
+      ) : null}
       <Money amount={price} />
     </span>
   );
@@ -66,7 +74,15 @@ export function BuyPair({
         {stacked ? (
           <span className="flex flex-col items-center gap-1">
             {toCart}
-            <Money amount={price} size="small" className="opacity-80" />
+            {/* the struck price steps above the price rather than past the button's edge */}
+            <span className="flex flex-wrap items-baseline justify-center gap-x-1.5">
+              {was !== undefined ? (
+                <s className="opacity-60">
+                  <Money amount={was} size="small" />
+                </s>
+              ) : null}
+              <Money amount={price} size="small" className="opacity-80" />
+            </span>
           </span>
         ) : (
           oneLine

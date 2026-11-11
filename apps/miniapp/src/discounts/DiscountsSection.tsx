@@ -155,7 +155,7 @@ export function DiscountsSection() {
         ) : (
           <>
             {data.upgradeRights.map((r) => (
-              <RightCard key={r.id} right={r} onOpen={openFragrance} />
+              <RightCard key={r.id} right={r} fullSizeMl={data.fullSizeMl} onOpen={openFragrance} />
             ))}
             {data.birthdayCoupons.length > 0 ? (
               data.birthdayCoupons.map((c) => <CouponCard key={c.id} c={c} />)

@@ -8,6 +8,8 @@ import { upgradeRightSourceSchema } from './quote';
 export const myUpgradeRightSchema = z.object({
   id: z.number().int(),
   source: upgradeRightSourceSchema,
+  /** The order that opened it («Набор из заказа № 1042»), so two rights are told apart. */
+  sourceOrderNumber: z.number().int(),
   percent: z.number().int(),
   /**
    * The covered fragrances as bought (a set's five, or the one 10 ml bottle's); `slug` opens the

@@ -5,6 +5,7 @@ import { keepNumberWithWord } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
 import { useDiscountsText } from '../../discounts/queries';
+import { volumesText } from '../../discounts/volumes';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
 import { FragranceBadge } from '../../ui/Badge';
@@ -229,23 +230,29 @@ function Pyramid({ card }: { card: FragranceCard }) {
 
 /**
  * The customer's upgrade right on the chosen volume (TZ §3.4: «цена со скидкой + Скидка за набор»;
- * mockup 09): a Sage Wash row under the stock line, the discount on the left and its last day on
- * the right. The price itself is on the tile; the cart applies the right by itself.
+ * mockup 09): a Sage Wash block under the stock line, the discount on the left and its last day on
+ * the right, then what it covers. The price itself is on the tile and in the dock; the cart
+ * applies the right by itself.
  */
-function RightDeal({ right }: { right: UpgradeRightPrice }) {
+function RightDeal({ right, fullSizeMl }: { right: UpgradeRightPrice; fullSizeMl: number[] }) {
   const { language } = usePrefs();
   const d = useDiscountsText();
   const day = formatCalendarDate(right.lastDay, language);
   return (
-    <p
+    <div
       data-testid="right-deal"
-      className="type-small flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 rounded-btn bg-sage-wash px-3.5 py-2.5 text-sage-ink"
+      className="type-small flex flex-col gap-0.5 rounded-btn bg-sage-wash px-3.5 py-2.5 text-sage-ink"
     >
-      <span className="font-semibold">
-        {fill(d.cardDeal[right.source], { percent: String(right.percent) })}
-      </span>
-      <span className="whitespace-nowrap">{fill(d.until, { date: day })}</span>
-    </p>
+      <p className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className="font-semibold">
+          {fill(d.cardDeal[right.source], { percent: String(right.percent) })}
+        </span>
+        <span className="whitespace-nowrap">{fill(d.until, { date: day })}</span>
+      </p>
+      <p className="text-pretty">
+        {fill(d.cardDealTerms, { volumes: volumesText(fullSizeMl, d.volumesOr) })}
+      </p>
+    </div>
   );
 }
 
@@ -255,12 +262,15 @@ function RightDeal({ right }: { right: UpgradeRightPrice }) {
  */
 function Dock({
   volume,
+  right,
   adding = false,
   note,
   onAddToCart,
   onBuyNow,
 }: {
   volume: VolumeCard | undefined;
+  /** The customer's right on this volume: the dock shows its price, the regular one struck (#38). */
+  right?: UpgradeRightPrice;
   adding?: boolean;
   /** A brief line above the buttons («Осталось 3»). */
   note?: string;
@@ -279,7 +289,8 @@ function Dock({
       <DockNote text={note} />
       <BuyPair
         toCart={t.card.toCart}
-        price={volume.effectivePrice}
+        price={right?.price ?? volume.effectivePrice}
+        was={right ? volume.price : undefined}
         adding={adding}
         onAdd={() => onAddToCart?.(volume.ml)}
         onBuyNow={() => onBuyNow?.(volume.ml)}
@@ -330,6 +341,7 @@ export function FragranceView({
       dock={
         <Dock
           volume={volume}
+          right={right}
           adding={adding}
           note={note}
           onAddToCart={onAddToCart}
@@ -366,7 +378,7 @@ export function FragranceView({
               onSelect={setMl}
             />
             <VolumeStatus volume={volume} />
-            {right ? <RightDeal right={right} /> : null}
+            {right ? <RightDeal right={right} fullSizeMl={card.fullSizeMl} /> : null}
           </section>
         ) : null}
 

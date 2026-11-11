@@ -1,4 +1,10 @@
-import type { CartDto, CartLineDto, CartSuggestionDto, QuoteLine } from '@lummi/contracts';
+import type {
+  CartDto,
+  CartLineDto,
+  CartSuggestionDto,
+  Discount,
+  QuoteLine,
+} from '@lummi/contracts';
 import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
@@ -12,6 +18,7 @@ import {
   useRemovePromoCode,
   useSetQuantity,
 } from '../cart/queries';
+import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
 import { usePrefs } from '../lib/prefs';
@@ -278,6 +285,7 @@ function Stepper({
 function Line({
   line,
   priced,
+  deal,
   busy,
   pending,
   onQty,
@@ -285,6 +293,8 @@ function Line({
 }: {
   line: CartLineDto;
   priced: QuoteLine | undefined;
+  /** The upgrade right the quote applied to one bottle of this line (#38). */
+  deal?: UpgradeRightDiscount;
   busy: boolean;
   pending?: 'qty' | 'remove';
   onQty: (qty: number) => void;
@@ -292,6 +302,7 @@ function Line({
 }) {
   const { t } = usePrefs();
   const s = useSetsText();
+  const d = useDiscountsText();
   const router = useRouter();
   const out = line.soldOut;
   return (
@@ -323,6 +334,14 @@ function Line({
                 <p className="type-small mt-1 text-muted">
                   {line.ml}&nbsp;{t.card.ml}
                 </p>
+                {deal ? (
+                  <p
+                    className="type-caption mt-1 font-medium text-pretty text-sage-ink"
+                    data-testid="line-deal"
+                  >
+                    {fill(d.lineDeal[deal.source], { percent: String(deal.percent) })}
+                  </p>
+                ) : null}
               </>
             ) : (
               <>
@@ -424,6 +443,14 @@ interface Row {
   priced: QuoteLine | undefined;
   leaving: boolean;
 }
+
+type UpgradeRightDiscount = Extract<Discount, { type: 'upgrade_right' }>;
+
+/** The upgrade right the quote applied to this line (its `lineKey`), if any. */
+const dealOn = (cart: CartDto, line: CartLineDto): UpgradeRightDiscount | undefined => {
+  const d = cart.quote.discount;
+  return d?.type === 'upgrade_right' && d.lineKey === String(line.id) ? d : undefined;
+};
 
 const priceOf = (cart: CartDto, line: CartLineDto) =>
   cart.quote.lines.find((l) => l.key === String(line.id));
@@ -599,6 +626,7 @@ export function CartView({
               <Line
                 line={line}
                 priced={priced}
+                deal={dealOn(data, line)}
                 busy={busy}
                 pending={pending.line === line.id ? pending.kind : undefined}
                 onQty={(qty) => onQty(line.id, qty)}

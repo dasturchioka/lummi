@@ -78,6 +78,8 @@ export const fragranceCardSchema = z.object({
    * ADR 0008). Empty without a covering right.
    */
   upgradeRightPrices: z.array(upgradeRightPriceSchema),
+  /** The volumes a right discounts (setting `pricing.fullSizeVolumesMl`), for «на один флакон 30 или 50 мл». */
+  fullSizeMl: z.array(z.number().int()),
 });
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 

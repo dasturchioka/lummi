@@ -3575,7 +3575,7 @@ function upgradeRightScreens(): ScreenDef[] {
         await withRight(ctx);
         await fillCart(ctx.api, rightCart);
       },
-      act: async ({ page }) => void (await page.getByTestId('discount-row').waitFor()),
+      act: async ({ page }) => void (await page.getByTestId('line-deal').waitFor()),
       teardown: done,
     },
     {
@@ -3592,6 +3592,33 @@ function upgradeRightScreens(): ScreenDef[] {
         if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
       },
       act: async ({ page }) => void (await page.getByTestId('right-waiting').waitFor()),
+      teardown: done,
+    },
+    // the narrow Android check (360 px): the struck prices in the tiles and the dock, the cart's
+    // long brand line beside the price
+    {
+      id: 'card-set-discount-360',
+      path: '/p/symphony',
+      width: 360,
+      fullPage: true,
+      setup: withRight,
+      act: async ({ page }) => {
+        await page.getByRole('radio', { name: /50/ }).click();
+        await page.getByTestId('right-deal').waitFor();
+      },
+      teardown: done,
+    },
+    {
+      id: 'cart-set-discount-360',
+      path: '/cart',
+      width: 360,
+      fullPage: true,
+      setup: async (ctx) => {
+        await forgetPromo(ctx);
+        await withRight(ctx);
+        await fillCart(ctx.api, rightCart);
+      },
+      act: async ({ page }) => void (await page.getByTestId('line-deal').waitFor()),
       teardown: done,
     },
     {

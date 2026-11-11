@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
+import { readPricingSettings } from '../pricing/pricing-settings';
 import { myUpgradeRights } from '../upgrade-rights/upgrade-rights';
 import { activeBirthdayCoupons, readBirthdayRules, toCouponDto } from './birthday-coupons';
 import {
@@ -128,6 +129,7 @@ export class BirthdayService {
       birthDate: c.birthDate,
       birthdayCoupons: active.map((coupon) => toCouponDto(coupon, now)),
       upgradeRights: await myUpgradeRights(tx, customerId, now),
+      fullSizeMl: (await readPricingSettings(tx)).fullSizeVolumesMl,
       nextBirthdayCoupon: next,
       birthdayPercent: settings['birthday.percent'],
       birthdayDaysBefore: settings['birthday.daysBefore'],

@@ -23,6 +23,8 @@ export const discountSchema = z.discriminatedUnion('type', [
     type: z.literal('upgrade_right'),
     id,
     source: upgradeRightSourceSchema,
+    /** The right's own percent, for «Скидка за набор −20%» on the line it discounts. */
+    percent: z.number().int(),
     amount: som,
     /** The line holding the single full-size unit the right discounts (ADR 0007). */
     lineKey: z.string(),

@@ -23,6 +23,7 @@ afterEach(() => {
 const right = (over: Partial<MyUpgradeRightDto> = {}): MyUpgradeRightDto => ({
   id: 1,
   source: 'set',
+  sourceOrderNumber: 1042,
   percent: 20,
   fragrances: [
     { name: 'Symphony', brand: 'Louis Vuitton', slug: 'symphony' },
@@ -38,9 +39,14 @@ const right = (over: Partial<MyUpgradeRightDto> = {}): MyUpgradeRightDto => ({
 
 describe('RightCard («Мои скидки», TZ §3.4)', () => {
   it('names the discount, its five fragrances with their originals, and how long it lasts', () => {
-    render(<RightCard right={right()} onOpen={vi.fn()} />);
+    render(<RightCard right={right()} fullSizeMl={[30, 50]} onOpen={vi.fn()} />);
     expect(screen.getByText('Скидка за набор')).toBeTruthy();
     expect(screen.getByText('−20%')).toBeTruthy();
+    // which set it came from, and what it covers (the volumes from the setting)
+    expect(screen.getByText('Набор из заказа № 1042')).toBeTruthy();
+    expect(screen.getByText(/^На один полный флакон/).textContent?.replace(/\u00a0/g, ' ')).toBe(
+      'На один полный флакон 30 или 50 мл любого аромата из набора. В корзине применится сама.',
+    );
     // CLAUDE.md: never a fragrance name without «по мотивам <brand>»
     const items = screen
       .getAllByRole('listitem')
@@ -57,7 +63,7 @@ describe('RightCard («Мои скидки», TZ §3.4)', () => {
 
   it('opens the card of a fragrance on sale; a hidden one is plain text', () => {
     const onOpen = vi.fn();
-    render(<RightCard right={right()} onOpen={onOpen} />);
+    render(<RightCard right={right()} fullSizeMl={[30, 50]} onOpen={onOpen} />);
     fireEvent.click(screen.getByRole('button', { name: 'Megamare' }));
     expect(onOpen).toHaveBeenCalledWith('megamare');
     expect(screen.queryByRole('button', { name: 'Tygar' })).toBeNull();
@@ -72,10 +78,15 @@ describe('RightCard («Мои скидки», TZ §3.4)', () => {
           daysLeft: 0,
           fragrances: [{ name: 'Symphony', brand: 'Louis Vuitton', slug: 'symphony' }],
         })}
+        fullSizeMl={[50]}
         onOpen={vi.fn()}
       />,
     );
     expect(screen.getByText('10 ml flakon chegirmasi')).toBeTruthy();
+    expect(screen.getByText('№ 1042 buyurtmadagi 10 ml flakon')).toBeTruthy();
+    expect(screen.getByText(/flakoniga\./).textContent?.replace(/\u00a0/g, ' ')).toBe(
+      'Shu iforning bitta toʻliq 50 ml flakoniga. Savatda oʻzi qoʻllanadi.',
+    );
     expect(screen.getByRole('listitem').textContent?.replace(/\u00a0/g, ' ')).toBe(
       'Symphony Louis Vuitton asosida',
     );

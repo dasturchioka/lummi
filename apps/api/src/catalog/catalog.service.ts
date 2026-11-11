@@ -30,6 +30,7 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { activeMarkdown, volumePrice } from '../pricing/quote';
+import { readPricingSettings } from '../pricing/pricing-settings';
 import { upgradeRightPrices } from '../upgrade-rights/upgrade-rights';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
@@ -482,6 +483,7 @@ export class CatalogService {
       isNew: f.isNew,
       volumes: volumeRows.map((v) => toVolumeCard(v, reserved.get(v.id) ?? 0, now)),
       upgradeRightPrices: await upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
+      fullSizeMl: (await readPricingSettings(this.db)).fullSizeVolumesMl,
     };
   }
 }
