@@ -1482,7 +1482,7 @@ export const birthdayCoupons = pgTable(
 export type BirthdayCouponRow = typeof birthdayCoupons.$inferSelect;
 
 /**
- * One row per distinct error (ADR 0035). The fingerprint hashes the error class, the route and the
+ * One row per distinct error (ADR 0036). The fingerprint hashes the error class, the route and the
  * top stack frames, so a repeat only raises `count` and `last_seen_at`. No message, no query string,
  * no parameter: nothing in this table can hold personal data.
  */
@@ -1503,7 +1503,7 @@ export const errorEvents = pgTable(
   (t) => [uniqueIndex('error_events_fingerprint_key').on(t.fingerprint)],
 );
 
-/** What the backup script last reported, one row (ADR 0035): the API alerts when `last_success_at` gets too old. */
+/** What the backup script last reported, one row (ADR 0036): the API alerts when `last_success_at` gets too old. */
 export const backupStatus = pgTable(
   'backup_status',
   {
@@ -1519,7 +1519,7 @@ export const backupStatus = pgTable(
 );
 
 /**
- * The worker's last tick, one row, written by the worker and read by the API's watch (ADR 0035).
+ * The worker's last tick, one row, written by the worker and read by the API's watch (ADR 0036).
  * `outage_alerted_at` is set when the "worker is silent" alert went out and cleared on recovery,
  * so an outage alerts once and its end once.
  */

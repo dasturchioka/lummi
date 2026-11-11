@@ -24,7 +24,8 @@ x-api-env: &api-env
   TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:?set TYPESAFE_API_KEY}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
-  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,172.28.0.0/24
+  # Only the userbot's network (ADR 0031, 0035): nothing on `lummi`, Caddy included, passes the check.
+  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,172.28.1.0/24
   FILES_DIR: /data/files
   API_HOST: 0.0.0.0
   API_PORT: '4000'
@@ -74,6 +75,8 @@ services:
 
   api:
     <<: *api
+    # `userbot`: the only network the userbot shares with us, so it never sees Postgres or Redis.
+    networks: [lummi, userbot]
     volumes:
       - files:/data/files
     healthcheck:
@@ -126,10 +129,44 @@ services:
       retries: 6
       start_period: 20s
 
-  # The Humo userbot (ADR 0014) has no entrypoint in the repo yet (ticket #13 builds the parser and
-  # the internal endpoints, not the mtcute client). Off by default on staging; add the service here
-  # under `profiles: [userbot]` when its image exists. It would join the `lummi` network
-  # (172.28.0.0/24 is already in INTERNAL_ALLOWED_CIDRS) and send x-internal-secret.
+  # The Humo userbot (ADR 0014, ADR 0035): a personal Telegram account, so it is off until someone has
+  # logged in on this server. Enable it with COMPOSE_PROFILES=userbot in .env (docs/run-guide.md →
+  # Userbot). Its own network holds only it and the API (172.28.1.0/24, the one subnet in
+  # INTERNAL_ALLOWED_CIDRS); it calls the API with x-internal-secret and reaches nothing else of ours:
+  # no database, no Redis, no files volume. It holds no capabilities, cannot gain privileges, and
+  # writes only its session volume and a tmpfs /tmp.
+  # The USERBOT_* values are checked by the userbot itself at start (`:?` here would break every
+  # stack that does not run it).
+  userbot:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-userbot:${IMAGE_TAG:-latest}
+    profiles: [userbot]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
+      USERBOT_API_ID: ${USERBOT_API_ID:-}
+      USERBOT_API_HASH: ${USERBOT_API_HASH:-}
+      USERBOT_SESSION_KEY: ${USERBOT_SESSION_KEY:-}
+      USERBOT_LISTEN_CHAT_ID: ${USERBOT_LISTEN_CHAT_ID:-}
+      # Production: true (the official Humo bot is verified). Off for the staging test bot.
+      USERBOT_REQUIRE_VERIFIED: ${USERBOT_REQUIRE_VERIFIED:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - userbot-data:/data/userbot
+    networks: [userbot]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    # A small init as PID 1 passes SIGTERM on, so `stop` works even while it is parked.
+    init: true
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    # No Docker healthcheck on purpose: a parked userbot (no session yet, or the session was ended)
+    # would fail every `up -d --wait` deploy. Its health is its heartbeat: the API pauses receipt
+    # timers and alerts the owner when it goes stale (#36, ADR 0025).
 
   postgres:
     image: postgres:17-alpine
@@ -164,10 +201,15 @@ services:
 
 networks:
   lummi:
-    # Pinned: the staging host already uses 172.17-172.22/16, and INTERNAL_ALLOWED_CIDRS names this subnet.
+    # Pinned: the staging host already uses 172.17-172.22/16.
     ipam:
       config:
         - subnet: 172.28.0.0/24
+  # The userbot and the API only. Not `internal`: the userbot must reach Telegram.
+  userbot:
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
 
 volumes:
   pgdata:
@@ -175,3 +217,5 @@ volumes:
   files:
   caddy-data:
   caddy-config:
+  # The userbot's sealed session (ADR 0014). Back it up with the encrypted .env (ADR 0025).
+  userbot-data:

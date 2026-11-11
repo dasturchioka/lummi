@@ -116,7 +116,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
     if (this.ticking) return;
     this.ticking = true;
     try {
-      // At the start of the tick: a tick that hangs stops the beats, and the API's watch alerts (ADR 0035).
+      // At the start of the tick: a tick that hangs stops the beats, and the API's watch alerts (ADR 0036).
       await this.watch
         .beat()
         .catch((e: unknown) => this.log.error(`heartbeat failed: ${describeError(e)}`));

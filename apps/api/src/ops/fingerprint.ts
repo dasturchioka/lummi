@@ -2,7 +2,7 @@ import { DrizzleQueryError } from '@lummi/db';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 
-/** What identifies an error in the `error_events` table; none of it can hold personal data (ADR 0035). */
+/** What identifies an error in the `error_events` table; none of it can hold personal data (ADR 0036). */
 export interface ErrorSignature {
   errorClass: string;
   route: string;

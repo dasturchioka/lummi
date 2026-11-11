@@ -45,7 +45,7 @@ telegram_alert() {
     log 'alert could not be sent'
 }
 
-# Tell the API a run finished (ADR 0035). `docker exec` into the api container: the call comes from
+# Tell the API a run finished (ADR 0036). `docker exec` into the api container: the call comes from
 # 127.0.0.1 there and the secret is read from the container's own environment, never from argv.
 # Arguments: the names of skipped steps. A failure here is only a warning; the API's stale-backup check covers it.
 report_to_api() {

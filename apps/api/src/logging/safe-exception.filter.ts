@@ -24,7 +24,7 @@ export class SafeExceptionFilter extends BaseExceptionFilter {
   override catch(exception: unknown, host: ArgumentsHost): void {
     if (exception instanceof HttpException) return super.catch(exception, host);
     this.log.error(describeError(exception));
-    // Filed by class, route pattern and frames (ADR 0035); the query string and the ids never leave here.
+    // Filed by class, route pattern and frames (ADR 0036); the query string and the ids never leave here.
     const req = host.switchToHttp().getRequest<{
       method?: string;
       route?: { path?: string };

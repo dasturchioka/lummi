@@ -9,7 +9,7 @@ import { OpsNotifier, everyMinute } from './ops-notifier.service';
 const SKIP_ALERT_EVERY_MS = 24 * 3600 * 1000;
 
 /**
- * The host's backup script reports each finished run to `POST /internal/backup/report` (ADR 0035).
+ * The host's backup script reports each finished run to `POST /internal/backup/report` (ADR 0036).
  * A run that skipped a step (no second-copy target, no userbot session) is alerted at most once a
  * day; no report for `ops.backupStaleSeconds` is alerted once per gap, and the next report ends the
  * gap. A failed run is alerted by the host itself (`OnFailure=`); this watch covers the failures

@@ -8,7 +8,7 @@ import { OpsNotifier, everyMinute } from './ops-notifier.service';
 type Claim = { kind: 'down'; at: Date; silentMs: number } | { kind: 'up'; was: Date; now: Date };
 
 /**
- * The worker beats once per tick into `worker_heartbeat`; the API process watches it (ADR 0035).
+ * The worker beats once per tick into `worker_heartbeat`; the API process watches it (ADR 0036).
  * After `ops.workerSilentSeconds` without a beat the owner and the developer get one alert per
  * outage, and one more when the worker is back.
  *

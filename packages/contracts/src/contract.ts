@@ -161,6 +161,7 @@ import {
   humoMessageBodySchema,
   humoMessageResultSchema,
   internalErrorSchema,
+  userbotForwardTargetSchema,
 } from './internal';
 
 import {
@@ -1534,7 +1535,18 @@ export const internalContract = c.router({
       403: internalErrorSchema,
     },
     summary:
-      'The backup script finished a run (ADR 0035); the API alerts when none comes for too long',
+      'The backup script finished a run (ADR 0036); the API alerts when none comes for too long',
+  },
+  userbotForwardTarget: {
+    method: 'GET',
+    path: '/internal/userbot/forward-target',
+    responses: {
+      200: userbotForwardTargetSchema,
+      401: internalErrorSchema,
+      403: internalErrorSchema,
+    },
+    summary:
+      'Where the userbot forwards ➕ notifications: the orders group and its «Поступления» topic',
   },
 });
 

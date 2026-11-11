@@ -4,7 +4,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { InternalGuard } from '../internal/internal.guard';
 import { BackupWatch } from './backup-watch.service';
 
-/** What the host's backup script calls (ADR 0031 network and secret, ADR 0035). */
+/** What the host's backup script calls (ADR 0031 network and secret, ADR 0036). */
 @Controller()
 @UseGuards(InternalGuard)
 export class OpsController {

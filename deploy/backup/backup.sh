@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily backup (ADR 0024, 0025, 0035): encrypted pg_dump + rotation by date, the encrypted secrets, an
+# Daily backup (ADR 0024, 0025, 0036): encrypted pg_dump + rotation by date, the encrypted secrets, an
 # encrypted mirror of the private receipts, then the second copy. Runs on the host as root from the
 # systemd timer in this folder (03:00 Asia/Tashkent). See docs/run-guide.md.
 #
