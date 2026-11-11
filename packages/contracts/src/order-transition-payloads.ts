@@ -32,8 +32,8 @@ const rowId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 
 /** A move that needs nothing: no payload, or an empty one. */
 const nothing = z.object({}).strict().optional();
-/** A reason typed by staff (a return, a refund), trimmed. */
-const typedReason = text(1, TYPED_REASON_MAX);
+/** A reason typed by staff (a return, a refund), trimmed: 1 to `TYPED_REASON_MAX` characters. */
+export const typedReason = text(1, TYPED_REASON_MAX);
 
 const rejectReceiptChoice = z
   .object({

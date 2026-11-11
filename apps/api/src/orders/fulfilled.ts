@@ -6,8 +6,9 @@ import { inArray, orders, sql, type SQL } from '@lummi/db';
  * decides it, so every total that counts "what the customer actually bought" (the customers list,
  * later the reports and the birthday and loyalty rules) agrees.
  *
- * A return is its own status today (`returned`, ADR 0011), so «Доставлен» alone is "not returned".
- * When a return can happen to a part of an order (#40), change this one line.
+ * A Return takes back the whole order into its own status (`returned`, ADR 0006, 0011; #40), so
+ * «Доставлен» alone is "not returned". A Refund changes no status: a refunded order stays
+ * fulfilled, and reports subtract its refunds (#42).
  */
 export const FULFILLED_STATUSES = ['delivered'] as const satisfies readonly OrderStatus[];
 

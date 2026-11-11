@@ -4,13 +4,34 @@ import {
   type AdminOrderDto,
   type OrderStatus,
 } from '@lummi/contracts';
-import { asc, credits, eq, refunds, sql, staff, type DbOrTx, type OrderRow } from '@lummi/db';
+import {
+  asc,
+  credits,
+  eq,
+  orders,
+  refunds,
+  sql,
+  staff,
+  type DbOrTx,
+  type OrderRow,
+} from '@lummi/db';
 
 /**
  * A paid order that ended here owes its money back (ADR 0006): a cancel after payment, or the
  * whole order returned. Until the refunds cover it, staff are reminded to send it.
  */
 const ENDED: readonly OrderStatus[] = ['cancelled', 'returned'];
+
+/**
+ * What an order's Refunds sent back, whole so'm, 0 with none: a subquery for a select over
+ * `orders` (not aliased), one value per order row. The page's money and the list's «Возврат N сум»
+ * both read it. The outer row is named in full: drizzle leaves a lone table's columns unqualified,
+ * and a bare `id` in here would be the refund's own.
+ */
+export const refundedSum = () =>
+  sql<number>`(select coalesce(sum(rf.amount), 0) from ${refunds} rf where rf.order_id = "orders"."id")`.mapWith(
+    Number,
+  );
 
 /** Where an order's money stands against its Refunds (the page's `money`). */
 export type OrderMoney = AdminOrderDto['money'];
@@ -22,9 +43,9 @@ export type OrderMoney = AdminOrderDto['money'];
  */
 export async function orderMoney(db: DbOrTx, order: OrderRow): Promise<OrderMoney> {
   const [{ refunded } = { refunded: 0 }] = await db
-    .select({ refunded: sql<number>`coalesce(sum(${refunds.amount}), 0)`.mapWith(Number) })
-    .from(refunds)
-    .where(eq(refunds.orderId, order.id));
+    .select({ refunded: refundedSum() })
+    .from(orders)
+    .where(eq(orders.id, order.id));
   if (order.creditId === null)
     return { paid: null, paidOn: null, refunded, refundable: 0, owed: 0 };
   const [credit] = await db
