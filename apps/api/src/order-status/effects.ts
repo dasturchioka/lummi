@@ -1,6 +1,6 @@
 import { PAID_STATUSES, type OrderAction, type TransitionPayload } from '@lummi/contracts';
 import type { OrderLineRow, OrderRow, orders } from '@lummi/db';
-import { fill, formatMoney, type Language } from '@lummi/i18n';
+import { fill, formatDateTime, formatMoney, type Language } from '@lummi/i18n';
 import { botMessages } from '@lummi/i18n/bot';
 import { ordersMessages } from '@lummi/i18n/orders';
 import type { OnHandMove } from './on-hand';
@@ -46,6 +46,10 @@ const bot = (language: Language) => botMessages[language].bot;
 const number = (m: Move<OrderAction>) => String(m.order.number);
 const paid = (m: Move<OrderAction>) => PAID_STATUSES.includes(m.order.status);
 
+/** The reserve after payment not found: as it was, plus the time the payment feed was paused. */
+const extendedReserve = (m: Move<'payment_not_found'>) =>
+  new Date(m.order.reserveUntil.getTime() + m.payload.pausedSeconds * 1000);
+
 /** A return's flags name every line of the order exactly once (ADR 0006). */
 function flagsNameEveryLine(m: Move<'return'>): boolean {
   const positions = m.payload.lines.map((f) => f.position);
@@ -84,13 +88,24 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   payment_not_found: {
     audit: 'order.payment_not_found',
-    message: (m, lang) => ({
-      text: fill(bot(lang).paymentNotFound, {
-        number: number(m),
-        amount: formatMoney(m.order.amountDue, lang),
-      }),
-      manager: true,
-    }),
+    // a paused Humo feed does not eat the reserve of an order under check (ADR 0012, #36)
+    columns: (m) => ({ reserveUntil: extendedReserve(m) }),
+    message: (m, lang) => {
+      const t = bot(lang);
+      const text = m.payload.reserveEnded
+        ? t.paymentNotFoundReserveEnded
+        : m.payload.duplicateOf !== null
+          ? t.paymentNotFoundDuplicate
+          : t.paymentNotFound;
+      return {
+        text: fill(text, {
+          number: number(m),
+          amount: formatMoney(m.order.amountDue, lang),
+          until: formatDateTime(extendedReserve(m), lang),
+        }),
+        manager: true,
+      };
+    },
   },
   accept: {
     audit: 'order.accepted',

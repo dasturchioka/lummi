@@ -30,7 +30,18 @@ import { retryTransientOnce } from '../util/transient';
 import { withTimeout } from '../util/with-timeout';
 import { WorkerRuntime } from '../worker/runtime';
 import { PaymentConfirmation } from './payment-confirmation';
-import { CANDIDATE, IS_DUPLICATE, isDuplicateReceipt, sqlList, WAITING_VERDICTS } from './rules';
+import { PaymentNotFound } from './payment-not-found';
+import {
+  ACCEPTED_VERDICTS,
+  CANDIDATE,
+  duplicateImageDistance,
+  isDuplicate,
+  isDuplicateReceipt,
+  sameReceipt,
+  sqlList,
+  twinOf,
+  WAITING_VERDICTS,
+} from './rules';
 import { lastFour, readShopCard } from './shop-card.service';
 
 const JOB = 'receipt.check';
@@ -88,7 +99,8 @@ class JudgeUnavailable extends Error {
  *   not answer is not an answer: the job's attempts retry it, and only the last one sends the
  *   receipt to manual review. Whoever loses a race for a credit (two receipts, one credit) hears
  *   `credit_taken` from the door and keeps waiting for its own money.
- * - A duplicate receipt (`IS_DUPLICATE`) goes to manual review at once and is never asked about.
+ * - A duplicate receipt (`isDuplicate`) is never asked about: a repeat takes the payment-not-found
+ *   path at once (#36), the first copy goes to manual review.
  */
 @Injectable()
 export class PaymentMatching implements OnApplicationShutdown {
@@ -102,6 +114,7 @@ export class PaymentMatching implements OnApplicationShutdown {
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
+    @Inject(PaymentNotFound) private readonly notFound: PaymentNotFound,
     @Inject(CreditEvents) creditEvents: CreditEvents,
     @Inject(WorkerRuntime) runtime: WorkerRuntime,
   ) {
@@ -145,19 +158,57 @@ export class PaymentMatching implements OnApplicationShutdown {
   }
 
   /**
-   * Duplicates never confirm themselves (spec 2026-11-07): every waiting receipt that is the same
-   * file as one accepted or sent for another order (only those sharing `receiptId`'s file, or all:
-   * the sweep) goes to manual review at once, reason `duplicate`, and the AI is never asked.
+   * Duplicates never confirm themselves (spec 2026-11-07): the AI is never asked about one. Of the
+   * waiting receipts (only `receiptId` and its twins, or all: the sweep), a **repeat** (the same
+   * receipt as one accepted, or as one sent earlier for another order) takes the payment-not-found
+   * path at once (#36), tagged `duplicate`, with a «Повторный чек» post; the first copy, which may
+   * be the honest one, goes to manual review (reason `duplicate`) and keeps its own timers.
    */
   async holdDuplicates(only: { receiptId?: number } = {}): Promise<number[]> {
+    const maxDistance = await duplicateImageDistance(this.db);
+    const scope =
+      only.receiptId !== undefined
+        ? sql`and (r.id = ${only.receiptId} or exists (
+            select 1 from ${receipts} x where x.id = ${only.receiptId} and ${sameReceipt('x', 'r', maxDistance)}))`
+        : sql``;
+    const { rows: repeats } = await this.db.execute<{
+      id: string;
+      twin: string;
+      same_file: boolean;
+    }>(sql`
+      select r.id, t.id as twin, t.same_file
+      from ${receipts} r
+      join ${orders} o on o.id = r.order_id
+      cross join lateral (
+        select twin.id, twin.sha256 = r.sha256 as same_file
+        from ${receipts} twin
+        where ${twinOf(maxDistance, { repeat: true })}
+        order by twin.verdict in (${sqlList(ACCEPTED_VERDICTS)}) desc, twin.sha256 = r.sha256 desc, twin.id
+        limit 1
+      ) t
+      where r.verdict in (${sqlList(WAITING_VERDICTS)}) and o.status = 'receipt_review' ${scope}
+      order by r.id`);
+    let failure: unknown = null;
+    for (const r of repeats) {
+      try {
+        await this.notFound.decide(Number(r.id), {
+          kind: 'repeat',
+          duplicateOf: Number(r.twin),
+          sameFile: r.same_file,
+        });
+      } catch (e) {
+        failure ??= e; // the others still go; the caller (or the sweep) hears of it
+      }
+    }
     const { rows } = await this.db.execute<{ id: string }>(sql`
       update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
       where r.verdict in (${sqlList(WAITING_VERDICTS)})
         and r.review_reason is distinct from 'duplicate'
         and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
-        and ${IS_DUPLICATE}
-        ${only.receiptId !== undefined ? sql`and r.sha256 = (select sha256 from ${receipts} where id = ${only.receiptId})` : sql``}
+        and ${isDuplicate(maxDistance)}
+        ${scope}
       returning r.id`);
+    if (failure) throw failure;
     return rows.map((r) => Number(r.id));
   }
 
@@ -275,6 +326,7 @@ export class PaymentMatching implements OnApplicationShutdown {
    * never shown (only `receiptId`, or only those `creditId` is such a candidate for).
    */
   private async receiptsToCheck(only: { receiptId?: number; creditId?: number }) {
+    const maxDistance = await duplicateImageDistance(this.db);
     const { rows } = await this.db.execute<{ id: string }>(sql`
       select r.id
       from ${receipts} r
@@ -287,7 +339,7 @@ export class PaymentMatching implements OnApplicationShutdown {
             select 1 from ${receiptChecks} k where k.receipt_id = r.id and k.outcome is null
           )
           or (
-            not ${IS_DUPLICATE}
+            not ${isDuplicate(maxDistance)}
             and exists (
               select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE}
               where not exists (

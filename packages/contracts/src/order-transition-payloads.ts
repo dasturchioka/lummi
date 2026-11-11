@@ -46,7 +46,21 @@ export const transitionPayloadSchemas = {
     })
     .strict(),
   reject_receipt: z.object({ reason: typedReason }).strict(),
-  payment_not_found: nothing,
+  /**
+   * The wait window ended with no fitting credit, or the receipt repeats one sent before
+   * (ADR 0012, #36). Only `PaymentNotFound` makes it: it names the Receipt it decides (so a newer
+   * upload is never the one marked), the receipt it repeats, the time the payment feed was paused
+   * while it waited (the reserve is extended by it), and whether the reserve has ended even so
+   * (the order is then cancelled by the system right after).
+   */
+  payment_not_found: z
+    .object({
+      receiptId: z.number().int().positive(),
+      duplicateOf: z.number().int().positive().nullable(),
+      pausedSeconds: z.number().int().nonnegative(),
+      reserveEnded: z.boolean(),
+    })
+    .strict(),
   accept: nothing,
   start_assembly: nothing,
   hand_to_bts: z.object({ trackingNumber: z.string().trim().min(1).max(64) }).strict(),

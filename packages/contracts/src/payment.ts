@@ -41,8 +41,17 @@ export const adminShopCardSchema = z.object({
 export type AdminShopCardDto = z.infer<typeof adminShopCardSchema>;
 
 /** One uploaded Receipt as its shopper sees it (newest first on the payment screen). */
+/**
+ * What became of a Receipt, as the shopper may know it (ADR 0011: «Чек на проверке» whether the AI
+ * or a person is checking): still being checked, accepted, rejected by a manager, or «оплата не
+ * найдена» after the wait window (`not_found`) or at once as a repeat of another order's (`repeat`, #36).
+ */
+export const RECEIPT_STATES = ['checking', 'accepted', 'rejected', 'not_found', 'repeat'] as const;
+export type ReceiptState = (typeof RECEIPT_STATES)[number];
+
 export const receiptSummarySchema = z.object({
   id: z.number().int(),
+  state: z.enum(RECEIPT_STATES),
   createdAt: z.string().datetime(),
   /** The name the shopper's device gave the file; null when it gave none. */
   fileName: z.string().nullable(),
