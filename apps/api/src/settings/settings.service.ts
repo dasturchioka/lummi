@@ -1,6 +1,9 @@
 import {
+  CROSS_RULE_KEYS,
+  crossSettingIssues,
   settingDefinitions,
   settingKeys,
+  type SettingIssue,
   type SettingKey,
   type SettingValue,
 } from '@lummi/contracts';
@@ -48,6 +51,13 @@ export async function readSettings<K extends SettingKey>(
   return out as { [P in K]: SettingValue<P> };
 }
 
+/** A value that fits its own schema but breaks a rule between settings (`crossSettingIssues`). */
+export class SettingRefusedError extends Error {
+  constructor(readonly issues: SettingIssue[]) {
+    super(`setting refused: ${issues.map((i) => i.code).join(', ')}`);
+  }
+}
+
 export interface SettingRowState {
   key: SettingKey;
   value: unknown;
@@ -89,7 +99,11 @@ export class SettingsService {
     return (await this.listAll()).find((s) => s.key === key) as SettingRowState;
   }
 
-  /** The only way to change a setting: validates, writes, and audits old and new in one transaction (the caller's when `outer` is given). */
+  /**
+   * The only way to change a setting: validates (its schema, then the rules between settings,
+   * `SettingRefusedError`), writes, and audits old and new in one transaction (the caller's when
+   * `outer` is given).
+   */
   async set<K extends SettingKey>(
     key: K,
     value: SettingValue<K>,
@@ -103,6 +117,10 @@ export class SettingsService {
       const [row] = await tx.select().from(settings).where(eq(settings.key, key)).for('update');
       const old = row ? row.value : settingDefinitions[key].default;
       if (isDeepStrictEqual(old, parsed)) return; // nothing changed: no write, no audit noise
+      if ((CROSS_RULE_KEYS as readonly SettingKey[]).includes(key)) {
+        const issues = crossSettingIssues(key, parsed, await readSettings(tx, CROSS_RULE_KEYS));
+        if (issues.length > 0) throw new SettingRefusedError(issues);
+      }
       await tx
         .insert(settings)
         .values({ key, value: parsed })
