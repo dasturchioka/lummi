@@ -3,7 +3,11 @@ import { auditEntrySchema, tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
 import { bilingualSchema } from './catalog';
 import { ORDER_ACTIONS, ORDER_ACTOR_TYPES } from './order-machine';
-import { rejectReceiptChoiceSchema, transitionPayloadSchemas } from './order-transition-payloads';
+import {
+  rejectReceiptChoiceSchema,
+  transitionPayloadSchemas,
+  typedReason,
+} from './order-transition-payloads';
 import { orderSchema, orderStatusSchema } from './orders';
 import { RECEIPT_FILE_KINDS } from './receipt-upload';
 import {
@@ -322,15 +326,16 @@ export const adminOrderSchema = z.object({
       lines: z.array(z.object({ position: z.number().int().nonnegative() })),
       /**
        * The discount source the order holds (ADR 0005): a promo-code use is voided; a birthday
-       * coupon or an upgrade right comes back to the customer while within its term (`comesBack`),
-       * past it, it is lost. Null when the order had no discount.
+       * coupon or an upgrade right comes back to the customer (`lost: null`) while within its term
+       * and, for a right, not closed. Otherwise it is lost: `expired` past its term, `closed` when
+       * the order that opened the right was returned (#38). Null when the order had no discount.
        */
       discount: z
         .discriminatedUnion('type', [
           z.object({ type: z.literal('promo_code'), code: z.string() }),
           z.object({
             type: z.enum(['birthday_coupon', 'upgrade_right']),
-            comesBack: z.boolean(),
+            lost: z.enum(['expired', 'closed']).nullable(),
             lastDay: tashkentDaySchema,
           }),
         ])
@@ -426,7 +431,7 @@ export const refundBodySchema = z
   .object({
     amount: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     date: tashkentDaySchema,
-    reason: transitionPayloadSchemas.return.shape.reason,
+    reason: typedReason,
     expectedRefunded: som.max(Number.MAX_SAFE_INTEGER),
   })
   .strict();

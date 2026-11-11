@@ -50,11 +50,18 @@ export interface EntitlementSource {
   held(tx: DbOrTx, orderId: number, now: Date): Promise<HeldEntitlement | null>;
 }
 
-/** An entitlement an order holds: when it ends, and whether a cancel or return now gives it back. */
+/**
+ * An entitlement an order holds: when it ends, and whether a cancel or return now gives it back
+ * (`lost: null`) or why not: its term is over (`expired`), or it was closed (`closed`: an upgrade
+ * right whose source order was returned, #38).
+ */
 export interface HeldEntitlement {
   expiresAt: Date;
-  comesBack: boolean;
+  lost: EntitlementLost | null;
 }
+
+/** Why a cancel or return no longer gives an entitlement back. */
+export type EntitlementLost = 'expired' | 'closed';
 
 const birthdayCouponSource: EntitlementSource = {
   type: 'birthday_coupon',

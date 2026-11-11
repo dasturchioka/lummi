@@ -44,13 +44,12 @@ import {
   orders,
   receiptChecks,
   receipts,
-  refunds,
   sql,
   staff,
   type Db,
   type OrderRow,
 } from '@lummi/db';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditQueryService } from '../audit/audit-query.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
@@ -60,7 +59,7 @@ import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-
 import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
 import { heldEntitlement } from '../entitlements/entitlements';
 import { readShopCard } from '../payment/shop-card.service';
-import { orderMoney, refundsOf } from '../refunds/order-money';
+import { orderMoney, refundedSum, refundsOf } from '../refunds/order-money';
 import { Refunds } from '../refunds/refunds';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
@@ -184,10 +183,7 @@ export class AdminOrdersService {
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(where);
-    const refunded =
-      sql<number>`(select coalesce(sum(rf.amount), 0) from ${refunds} rf where rf.order_id = ${orders.id})`.mapWith(
-        Number,
-      );
+    const refunded = refundedSum();
     const rows = await this.db
       .select({ order: orders, customer: customers, payment: paymentState, refunded })
       .from(orders)
@@ -405,7 +401,7 @@ export class AdminOrdersService {
         trackingNumber: text(p.trackingNumber),
         receiptId: typeof p.receiptId === 'number' ? p.receiptId : null,
         creditId: typeof p.creditId === 'number' ? p.creditId : null,
-        ...(e.action === 'return' ? { returnLines: returnLinesOf(p.lines) } : {}),
+        ...(e.action === 'return' ? { returnLines: returnLinesOf(p.lines) ?? undefined } : {}),
         ...(e.action === PAID_BY
           ? {
               link: {
@@ -650,7 +646,7 @@ export class AdminOrdersService {
     if (!held) return null;
     return {
       type: d.type,
-      comesBack: held.comesBack,
+      lost: held.lost,
       lastDay: formatLocalDate(lastDayOf(held.expiresAt)),
     };
   }
@@ -739,27 +735,35 @@ type EventRow = AdminOrderEventDto & {
   returnLines?: NonNullable<AdminOrderDto['returned']>['lines'];
 };
 
+const log = new Logger('AdminOrders');
+
 /**
  * A return's recorded flags (`order_events.payload.lines`, as `transition()` wrote them, in the
- * order staff sent them), by position: the order of `order.lines`.
+ * order staff sent them), by position: the order of `order.lines`. Null when the payload has
+ * another shape.
  */
-function returnLinesOf(raw: unknown): NonNullable<AdminOrderDto['returned']>['lines'] {
-  if (!Array.isArray(raw)) throw new Error('a return without its line flags');
-  return raw
-    .map((l: { position?: unknown; backToStock?: unknown }) => {
-      if (typeof l.position !== 'number' || typeof l.backToStock !== 'boolean')
-        throw new Error('a return line flag of another shape');
-      return { position: l.position, backToStock: l.backToStock };
-    })
-    .sort((a, b) => a.position - b.position);
+function returnLinesOf(raw: unknown): NonNullable<AdminOrderDto['returned']>['lines'] | null {
+  if (!Array.isArray(raw)) return null;
+  const lines: NonNullable<AdminOrderDto['returned']>['lines'] = [];
+  for (const l of raw as { position?: unknown; backToStock?: unknown }[]) {
+    if (typeof l?.position !== 'number' || typeof l.backToStock !== 'boolean') return null;
+    lines.push({ position: l.position, backToStock: l.backToStock });
+  }
+  return lines.sort((a, b) => a.position - b.position);
 }
 
-/** The Return of a «Возвращён» order, from its history: who, when, why, which lines went back. */
+/**
+ * The Return of a «Возвращён» order, from its history: who, when, why, which lines went back. A
+ * history row that does not say so (written by hand, an older shape) is logged and the page shows
+ * the order without the Return block rather than not at all.
+ */
 function returnedOf(o: OrderRow, events: EventRow[]): AdminOrderDto['returned'] {
   if (o.status !== 'returned') return null;
   const e = events.findLast((x) => x.action === 'return');
-  if (!e || e.actor.id === null || !e.returnLines || e.reason === null)
-    throw new Error(`order ${o.number}: returned without its history`);
+  if (!e || e.actor.id === null || !e.returnLines || e.reason === null) {
+    log.warn(`order ${o.number}: returned, but its history does not say how; no Return shown`);
+    return null;
+  }
   return {
     reason: e.reason,
     at: e.at,

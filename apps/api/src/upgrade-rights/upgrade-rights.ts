@@ -219,7 +219,10 @@ const releasableRight = (orderId: number, now: Date) =>
     gt(upgradeRights.expiresAt, now),
   )!;
 
-/** The right the order holds, and whether a cancel or return at `now` would give it back. */
+/**
+ * The right the order holds, and whether a cancel or return at `now` would give it back (by the
+ * release's own condition); if not, why: closed (its source order was returned) before ended.
+ */
 export async function heldUpgradeRight(
   tx: DbOrTx,
   orderId: number,
@@ -228,11 +231,14 @@ export async function heldUpgradeRight(
   const [held] = await tx
     .select({
       expiresAt: upgradeRights.expiresAt,
+      closedAt: upgradeRights.closedAt,
       comesBack: sql<boolean>`${releasableRight(orderId, now)}`,
     })
     .from(upgradeRights)
     .where(eq(upgradeRights.usedByOrderId, orderId));
-  return held ?? null;
+  if (!held) return null;
+  const lost = held.comesBack ? null : held.closedAt !== null ? 'closed' : 'expired';
+  return { expiresAt: held.expiresAt, lost };
 }
 
 /**

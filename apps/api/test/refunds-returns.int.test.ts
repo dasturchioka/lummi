@@ -12,6 +12,7 @@ import {
   eq,
   fragrances,
   inArray,
+  orderEvents,
   orders,
   outbox,
   regions,
@@ -627,6 +628,34 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
 });
 
 describe('a Return is only from «Доставлен», in the admin panel, with a reason', () => {
+  it('a returned order whose history row lost its flags still opens, without the Return block', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const number = await orderBottles(client, await slugs(t, 1));
+    await fulfilTo(number, 'delivered');
+    const { client: staff } = await t.managerSession();
+    const lines = [{ position: 0, backToStock: true }];
+    expect(
+      (
+        await staff.admin.orders.return({
+          params: { number },
+          body: { expectedStatus: 'delivered', reason: 'Вернули', lines },
+        })
+      ).status,
+    ).toBe(200);
+    // a row written by hand, or in an older shape
+    await t.db
+      .update(orderEvents)
+      .set({ payload: { lines: [{ position: '0' }] } })
+      .where(
+        and(eq(orderEvents.orderId, (await orderRow(number)).id), eq(orderEvents.action, 'return')),
+      );
+    const page = await staff.admin.orders.get({ params: { number } });
+    expect(page.status === 200 && [page.body.order.status, page.body.returned]).toEqual([
+      'returned',
+      null,
+    ]);
+  });
+
   it('refused from any other status, and from a stale screen as a conflict; it happens once', async () => {
     const client = await shopper(t, ali, '998901112233');
     const [a, b] = await slugs(t, 2);
@@ -766,7 +795,7 @@ describe('a Return releases the order’s discount source and closes the rights 
     const { client: staff } = await t.managerSession();
     expect((await preview(staff, used))?.discount).toEqual({
       type: 'upgrade_right',
-      comesBack: true,
+      lost: null,
       lastDay: '2026-12-09',
     });
     const listed = async () => {
@@ -786,7 +815,7 @@ describe('a Return releases the order’s discount source and closes the rights 
     const { client: staff } = await t.managerSession();
     expect((await preview(staff, used))?.discount).toEqual({
       type: 'upgrade_right',
-      comesBack: false,
+      lost: 'expired',
       lastDay: '2026-12-09',
     });
     expect((await returnWhole(staff, used)).status).toBe(200);
@@ -795,6 +824,26 @@ describe('a Return releases the order’s discount source and closes the rights 
       .from(upgradeRights)
       .where(eq(upgradeRights.usedByOrderId, (await orderRow(used)).id));
     expect(right).toBeDefined();
+  });
+
+  it('a right its set order’s return closed is lost too: the dialog says closed, not ended', async () => {
+    const { client, source, used } = await rightSpentOn('delivered');
+    const { client: staff } = await t.managerSession();
+    expect((await returnWhole(staff, source)).status).toBe(200);
+    // well within its term, but closed: the order that spent it gets nothing back
+    expect((await preview(staff, used))?.discount).toEqual({
+      type: 'upgrade_right',
+      lost: 'closed',
+      lastDay: '2026-12-09',
+    });
+    expect((await returnWhole(staff, used)).status).toBe(200);
+    const [right] = await t.db
+      .select()
+      .from(upgradeRights)
+      .where(eq(upgradeRights.usedByOrderId, (await orderRow(used)).id));
+    expect(right?.closedAt).not.toBeNull();
+    const mine = await client.me.discounts();
+    expect(mine.status === 200 && mine.body.upgradeRights).toEqual([]);
   });
 
   it('a promo-code use is voided: the code counts it no more', async () => {
@@ -854,7 +903,7 @@ describe('a Return releases the order’s discount source and closes the rights 
     const { client: staff } = await t.managerSession();
     expect((await preview(staff, number))?.discount).toEqual({
       type: 'birthday_coupon',
-      comesBack: true,
+      lost: null,
       lastDay: '2026-12-08',
     });
     expect(await coupons()).toBe(0);
@@ -869,7 +918,7 @@ describe('a Return releases the order’s discount source and closes the rights 
     const { client: staff } = await t.managerSession();
     expect((await preview(staff, number))?.discount).toEqual({
       type: 'birthday_coupon',
-      comesBack: false,
+      lost: 'expired',
       lastDay: '2026-12-08',
     });
     expect((await returnWhole(staff, number)).status).toBe(200);

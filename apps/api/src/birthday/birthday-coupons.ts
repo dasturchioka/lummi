@@ -114,7 +114,10 @@ export async function releaseBirthdayCoupon(tx: DbOrTx, orderId: number, now: Da
 const releasableCoupon = (orderId: number, now: Date) =>
   and(eq(birthdayCoupons.usedByOrderId, orderId), gt(birthdayCoupons.expiresAt, now))!;
 
-/** The coupon the order holds, and whether a cancel or return at `now` would give it back. */
+/**
+ * The coupon the order holds, and whether a cancel or return at `now` would give it back (by the
+ * release's own condition); a coupon is only ever lost to its term.
+ */
 export async function heldBirthdayCoupon(
   tx: DbOrTx,
   orderId: number,
@@ -127,5 +130,6 @@ export async function heldBirthdayCoupon(
     })
     .from(birthdayCoupons)
     .where(eq(birthdayCoupons.usedByOrderId, orderId));
-  return held ?? null;
+  if (!held) return null;
+  return { expiresAt: held.expiresAt, lost: held.comesBack ? null : 'expired' };
 }
