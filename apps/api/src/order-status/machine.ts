@@ -1,6 +1,5 @@
 import {
-  CANCEL_REASON_ONLY_FROM,
-  CANCEL_REASONS_BY_ACTOR,
+  cancelReasonsFor,
   findTransition,
   transitionPayloadSchemas,
   type OrderAction,
@@ -36,8 +35,7 @@ export function planTransition<A extends OrderAction>(
   const data = parsed.data as TransitionPayload<A>;
   if (action === 'cancel') {
     const { reason } = data as TransitionPayload<'cancel'>;
-    const onlyFrom = CANCEL_REASON_ONLY_FROM[reason];
-    if (!CANCEL_REASONS_BY_ACTOR[actor].includes(reason) || (onlyFrom && onlyFrom !== from))
+    if (!cancelReasonsFor(actor, from).includes(reason))
       return { ok: false, code: 'invalid_payload' };
   }
   return { ok: true, to: edge.to, payload: data };

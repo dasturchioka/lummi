@@ -1958,6 +1958,37 @@ export const screens: ScreenDef[] = [
     act: async ({ page }) => openFirstOrder(page),
     teardown: checkoutDone,
   },
+  {
+    // #37: handed to BTS from the orders group, with the tracking number under its step
+    id: 'order-detail-tracking',
+    path: '/orders',
+    fullPage: true,
+    setup: async ({ api, db }) => {
+      await sharePhone(api);
+      await clearOrders(db, { consent: 'given' });
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 30],
+      ]);
+      await moveNewestOrder(db, {
+        from: 'awaiting_payment',
+        to: 'handed_to_bts',
+        action: 'hand_to_bts',
+        actor: 'staff',
+      });
+      await db.query(
+        `update orders set tracking_number = 'BTS 4471 0098 5521'
+         where id = (select o.id from orders o join customers c on c.id = o.customer_id
+                     where c.telegram_id = $1 order by o.number desc limit 1)`,
+        [SHOT_USER.id],
+      );
+    },
+    act: async ({ page }) => {
+      await openFirstOrder(page);
+      await page.getByTestId('tracking-number').waitFor();
+    },
+    teardown: checkoutDone,
+  },
   // #24: «Отменить заказ» while unpaid, its confirmation, and a cancelled order (detail and list).
   {
     id: 'order-cancel',
