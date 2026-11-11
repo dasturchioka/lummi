@@ -3,8 +3,11 @@ import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
 import { and, desc, eq, favourites, fragrances, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { CatalogService } from '../catalog/catalog.service';
-import { loadDiscovery } from '../sets/sets';
+import { SetsService } from '../sets/sets.service';
 import { DB } from '../tokens';
+
+/** The DB's spelling of the set; the route's is `DISCOVERY_FAVOURITE`. */
+const SET_KIND = 'discovery_set' as const;
 
 /**
  * Favourites (#45): a heart per customer and target, a fragrance or the Discovery set. Add and
@@ -16,13 +19,14 @@ export class FavouritesService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(SetsService) private readonly sets: SetsService,
   ) {}
 
-  /** Slugs (newest saved first) of the visible favourite fragrances, and whether the set is one. */
-  async ids(customerId: number): Promise<FavouriteIds> {
+  /** The visible favourite fragrances, newest saved first, and whether the set is one (two reads, shared by `ids` and `list`). */
+  private async kept(customerId: number) {
     const [fragranceRows, setRows] = await Promise.all([
       this.db
-        .select({ slug: fragrances.slug })
+        .select({ id: fragrances.id, slug: fragrances.slug })
         .from(favourites)
         .innerJoin(fragrances, eq(fragrances.id, favourites.fragranceId))
         .where(and(eq(favourites.customerId, customerId), eq(fragrances.hidden, false)))
@@ -30,18 +34,21 @@ export class FavouritesService {
       this.db
         .select({ id: favourites.id })
         .from(favourites)
-        .where(and(eq(favourites.customerId, customerId), eq(favourites.kind, 'discovery_set'))),
+        .where(and(eq(favourites.customerId, customerId), eq(favourites.kind, SET_KIND))),
     ]);
-    return { slugs: fragranceRows.map((r) => r.slug), discoverySet: setRows.length > 0 };
+    return { fragrances: fragranceRows, discoverySet: setRows.length > 0 };
+  }
+
+  /** Slugs (newest saved first) of the visible favourite fragrances, and whether the set is one. */
+  async ids(customerId: number): Promise<FavouriteIds> {
+    const k = await this.kept(customerId);
+    return { slugs: k.fragrances.map((r) => r.slug), discoverySet: k.discoverySet };
   }
 
   /** `null` for a fragrance that is unknown or hidden. */
   async add(customerId: number, target: string): Promise<FavouriteIds | null> {
     if (target === DISCOVERY_FAVOURITE) {
-      await this.db
-        .insert(favourites)
-        .values({ customerId, kind: 'discovery_set' })
-        .onConflictDoNothing();
+      await this.db.insert(favourites).values({ customerId, kind: SET_KIND }).onConflictDoNothing();
     } else {
       const [f] = await this.db
         .select({ id: fragrances.id })
@@ -60,7 +67,7 @@ export class FavouritesService {
     if (target === DISCOVERY_FAVOURITE) {
       await this.db
         .delete(favourites)
-        .where(and(eq(favourites.customerId, customerId), eq(favourites.kind, 'discovery_set')));
+        .where(and(eq(favourites.customerId, customerId), eq(favourites.kind, SET_KIND)));
     } else {
       const [f] = await this.db
         .select({ id: fragrances.id })
@@ -75,27 +82,10 @@ export class FavouritesService {
   }
 
   async list(customerId: number): Promise<FavouriteList> {
-    const rows = await this.db
-      .select({ id: fragrances.id })
-      .from(favourites)
-      .innerJoin(fragrances, eq(fragrances.id, favourites.fragranceId))
-      .where(and(eq(favourites.customerId, customerId), eq(fragrances.hidden, false)))
-      .orderBy(desc(favourites.createdAt), desc(favourites.id));
-    const items = await this.catalog.listItems(rows.map((r) => r.id));
-    const [set] = await this.db
-      .select({ id: favourites.id })
-      .from(favourites)
-      .where(and(eq(favourites.customerId, customerId), eq(favourites.kind, 'discovery_set')));
-    if (!set) return { items, discoverySet: null };
-    const { row, available } = await loadDiscovery(this.db);
-    return {
-      items,
-      discoverySet: {
-        price: row.price,
-        available,
-        soldOut: available === 0,
-        photo: row.photoHash,
-      },
-    };
+    const k = await this.kept(customerId);
+    const items = await this.catalog.listItems(k.fragrances.map((r) => r.id));
+    if (!k.discoverySet) return { items, discoverySet: null };
+    const { price, available, soldOut, photo } = await this.sets.discovery();
+    return { items, discoverySet: { price, available, soldOut, photo } };
   }
 }

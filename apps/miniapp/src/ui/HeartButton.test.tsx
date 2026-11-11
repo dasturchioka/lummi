@@ -78,16 +78,41 @@ describe('HeartButton', () => {
     done(ok({ slugs: ['symphony', 'oud'], discoverySet: false }));
   });
 
-  it('rolls back when the server refuses', async () => {
-    add.mockResolvedValue({ status: 500, body: {} });
+  it('empties again on a refusal, before anything is re-read', async () => {
+    // the re-read after a failure never answers: only the rollback itself can empty the heart
+    let reject!: (v: unknown) => void;
+    add.mockReturnValue(new Promise((r) => (reject = r)));
     wrap(<HeartButton target="symphony" name="Symphony" />);
     fireEvent.click(await screen.findByRole('button', { name: 'В избранное: Symphony' }));
-    await waitFor(() => expect(add).toHaveBeenCalled());
+    const filled = await screen.findByRole('button', { name: 'Убрать из избранного: Symphony' });
+    expect(filled.getAttribute('aria-pressed')).toBe('true');
+    ids.mockReturnValue(new Promise(() => {}));
+    reject({ status: 500, body: {} });
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'В избранное: Symphony' }).getAttribute('aria-pressed'),
       ).toBe('false'),
     );
+  });
+
+  it('keeps another heart’s change when one is rolled back', async () => {
+    let reject!: (v: unknown) => void;
+    add.mockImplementation(({ params }: { params: { target: string } }) =>
+      params.target === 'symphony' ? new Promise((r) => (reject = r)) : new Promise(() => {}),
+    );
+    wrap(
+      <>
+        <HeartButton target="symphony" name="Symphony" />
+        <HeartButton target="tygar" name="Tygar" />
+      </>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'В избранное: Symphony' }));
+    fireEvent.click(screen.getByRole('button', { name: 'В избранное: Tygar' }));
+    await screen.findByRole('button', { name: 'Убрать из избранного: Tygar' });
+    ids.mockReturnValue(new Promise(() => {}));
+    reject({ status: 500, body: {} });
+    await screen.findByRole('button', { name: 'В избранное: Symphony' });
+    expect(screen.getByRole('button', { name: 'Убрать из избранного: Tygar' })).toBeTruthy();
   });
 
   it('removes a kept one, and the Discovery set hearts under its own target', async () => {
@@ -96,7 +121,7 @@ describe('HeartButton', () => {
     wrap(
       <>
         <HeartButton target="oud" name="Oud" />
-        <HeartButton target="discovery-set" name="Discovery set" disc />
+        <HeartButton target="discovery-set" name="Discovery set" place="disc" />
       </>,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Убрать из избранного: Oud' }));

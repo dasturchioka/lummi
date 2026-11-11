@@ -3,9 +3,10 @@ import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '../lib/api';
 
-/** `['favourites', 'ids']` is the hearts' query, `['favourites', 'list']` the page's (same prefix). */
+/** The mutation key; `['favourites', 'ids']` is the hearts' query, `['favourites', 'list']` the page's. */
 export const FAVOURITES_KEY = ['favourites'] as const;
 const IDS_KEY = ['favourites', 'ids'] as const;
+const LIST_KEY = ['favourites', 'list'] as const;
 
 /**
  * The slugs every heart reads: one small request, shared by all cards (ticket #45, ADR 0030
@@ -47,20 +48,26 @@ export function useToggleFavourite() {
       await qc.cancelQueries({ queryKey: IDS_KEY });
       qc.setQueryData<FavouriteIds>(IDS_KEY, (ids) => apply(ids, v));
     },
-    onError: (_e, v) =>
-      qc.setQueryData<FavouriteIds>(IDS_KEY, (ids) => apply(ids, { ...v, on: !v.on })),
-    // the last toggle in flight settles both the hearts and the page's list
-    onSettled: () => {
-      if (qc.isMutating({ mutationKey: FAVOURITES_KEY }) === 1)
-        void qc.invalidateQueries({ queryKey: FAVOURITES_KEY });
+    // the answer is the whole truth; the last toggle in flight writes it (an earlier one must not
+    // wipe a later heart's guess)
+    onSuccess: (ids) => {
+      if (qc.isMutating({ mutationKey: FAVOURITES_KEY }) === 1) qc.setQueryData(IDS_KEY, ids);
     },
+    // a failure puts back just that target, then the last one in flight re-reads what is true
+    onError: (_e, v) => {
+      qc.setQueryData<FavouriteIds>(IDS_KEY, (ids) => apply(ids, { ...v, on: !v.on }));
+      if (qc.isMutating({ mutationKey: FAVOURITES_KEY }) === 1)
+        void qc.invalidateQueries({ queryKey: IDS_KEY });
+    },
+    // the page's list is stale either way (inactive unless the page is open)
+    onSettled: () => void qc.invalidateQueries({ queryKey: LIST_KEY }),
   });
 }
 
 /** The page's cards: today's price and stock, newest saved first. Lazy, with the screen. */
 export function useFavouriteList() {
   return useQuery({
-    queryKey: ['favourites', 'list'] as const,
+    queryKey: LIST_KEY,
     staleTime: 0,
     queryFn: async () => unwrap(await api.favourites.list(), 200),
   });

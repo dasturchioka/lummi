@@ -125,15 +125,16 @@ function Gallery({
           }`}
         />
       ) : null}
-      <div className="absolute inset-x-3 top-3 flex items-center justify-between">
+      <div className="absolute inset-x-3 top-3 flex items-start justify-between">
         <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
           <ArrowLeftIcon size={20} />
         </button>
-        <div className="flex items-center gap-2">
-          <HeartButton target={card.slug} name={card.name} disc />
+        {/* the action column: share, the heart under it */}
+        <div className="flex flex-col items-center gap-2">
           <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
             <ShareIcon size={20} />
           </button>
+          <HeartButton target={card.slug} name={card.name} place="disc" />
         </div>
       </div>
     </div>

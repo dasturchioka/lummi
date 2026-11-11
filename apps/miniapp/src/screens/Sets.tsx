@@ -128,11 +128,11 @@ export function DiscoverySetView({
       <article className="flex flex-col pt-3 pb-7">
         <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-photo">
           <SetPhoto hash={set.photo} sizes="(min-width: 520px) 488px, 100vw" eager />
-          <div className="absolute inset-x-3 top-3 flex items-center justify-between">
+          <div className="absolute inset-x-3 top-3 flex items-start justify-between">
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
-            <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} disc />
+            <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} place="disc" />
           </div>
         </div>
 

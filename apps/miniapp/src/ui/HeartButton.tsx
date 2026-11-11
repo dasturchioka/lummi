@@ -3,7 +3,7 @@ import { fill } from '@lummi/i18n';
 import { useFavouriteIds, useToggleFavourite } from '../favourites/queries';
 import { usePrefs } from '../lib/prefs';
 import { hapticSuccess } from '../lib/telegram';
-import { HeartIcon } from './icons-core';
+import { HeartIcon } from './icons';
 import { DISC } from './photoDisc';
 
 /**
@@ -15,11 +15,19 @@ import { DISC } from './photoDisc';
 export function HeartButton({
   target,
   name,
-  disc = false,
+  place = 'photo',
+  className = '',
 }: {
   target: string;
   name: string;
-  disc?: boolean;
+  /**
+   * `photo`: 28 px disc inset 4 px in the photo's top-left, clear of the printed LUMMI. wordmark
+   * (it starts a quarter of the way in) on a grid card. `corner`: the top-right of a card whose
+   * photo is too narrow for that (a row, the set card). `disc`: the 40 px overlay for the big
+   * photos; the caller places it.
+   */
+  place?: 'photo' | 'corner' | 'disc';
+  className?: string;
 }) {
   const { t } = usePrefs();
   const ids = useFavouriteIds().data;
@@ -29,6 +37,8 @@ export function HeartButton({
       ? ids.discoverySet
       : ids.slugs.includes(target)
     : false;
+  const small =
+    'absolute z-10 grid size-7 place-items-center rounded-pill bg-photo-disc text-photo-disc-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] after:absolute after:-inset-2 active:scale-95';
   return (
     <button
       type="button"
@@ -40,12 +50,12 @@ export function HeartButton({
         toggle.mutate({ target, on: !on });
       }}
       className={
-        disc
-          ? DISC
-          : 'absolute top-1.5 left-1.5 z-10 grid size-8 place-items-center rounded-pill bg-photo-disc text-photo-disc-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] after:absolute after:-inset-1.5 active:scale-95'
+        place === 'disc'
+          ? `${DISC} ${className}`
+          : `${small} ${place === 'photo' ? 'top-1 left-1' : 'top-1 right-1'} ${className}`
       }
     >
-      <HeartIcon size={disc ? 20 : 18} fill={on ? 'currentColor' : 'none'} />
+      <HeartIcon size={place === 'disc' ? 20 : 16} fill={on ? 'currentColor' : 'none'} />
     </button>
   );
 }

@@ -199,11 +199,12 @@ export function FragranceListCard({
             sizes="96px"
             className={`aspect-[3/4] w-24 rounded-photo ${faded}`}
           />
-          <HeartButton target={item.slug} name={item.name} />
           <AddButton item={item} />
         </div>
       )}
-      <span className="flex min-w-0 flex-1 flex-col">
+      {/* A row's photo is too narrow to keep the heart clear of the wordmark: it takes the card's corner. */}
+      {compact ? null : <HeartButton target={item.slug} name={item.name} place="corner" />}
+      <span className={`flex min-w-0 flex-1 flex-col ${compact ? '' : 'pr-5'}`}>
         {lockup}
         {price ? (
           <span className={`flex items-center ${compact ? 'mt-1' : 'mt-1.5 min-h-[30px]'}`}>

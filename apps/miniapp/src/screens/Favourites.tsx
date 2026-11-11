@@ -1,53 +1,45 @@
-import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
 import { favouritesMessages } from '@lummi/i18n/favourites';
 import { useRouter } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { useFavouriteList } from '../favourites/queries';
 import { useOpenFragrance } from '../lib/navigation';
 import { usePrefs } from '../lib/prefs';
-import { useSetsText } from '../sets/actions';
+import { hapticSuccess } from '../lib/telegram';
+import { useAddDiscovery, useSetsText } from '../sets/actions';
+import { DiscoveryCard } from './sets/SetCards';
 import { Button } from '../ui/Button';
 import { FragranceGrid } from '../ui/FragranceGrid';
 import { CardSkeleton } from '../ui/GridSkeleton';
-import { HeartButton } from '../ui/HeartButton';
-import { HeartIcon } from '../ui/icons';
-import { Money } from '../ui/Money';
+import { HeartIcon, PlusIcon, Spinner } from '../ui/icons';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
-import { SetPhoto } from '../ui/SetPhoto';
+import { armShopNote, showShopNote } from '../ui/ShopNoteHost';
 import { EmptyState, ErrorState } from '../ui/States';
 
-/** The Discovery set among the favourites: its photo, today's price and stock; the card opens its screen. */
-function FavouriteSet({ set }: { set: { price: number; soldOut: boolean; photo: string | null } }) {
-  const { t } = usePrefs();
+/** The set's quick add, the card's «+» for a box: one tap puts it in the cart. */
+function SetAdd() {
   const s = useSetsText();
-  const router = useRouter();
+  const add = useAddDiscovery();
+  useEffect(armShopNote, []);
   return (
-    <div className="relative mb-2 flex items-center gap-3 rounded-card bg-card p-2 pr-3">
-      <div className="relative aspect-[3/4] w-24 shrink-0 overflow-hidden rounded-photo bg-photo">
-        <SetPhoto hash={set.photo} sizes="96px" />
-        <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} />
-      </div>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="type-label text-muted">{t.home.discoveryLabel}</span>
-        <span className="type-name mt-0.5 text-ink [overflow-wrap:anywhere]">
-          {s.discoveryTitle}
-        </span>
-        <span className="mt-1.5 flex min-h-[30px] items-center">
-          {set.soldOut ? (
-            <span className="type-small text-muted">{s.soldOut}</span>
-          ) : (
-            <Money amount={set.price} />
-          )}
-        </span>
-      </span>
-      <button
-        type="button"
-        aria-label={s.discoveryTitle}
-        data-testid="favourite-set"
-        onClick={() => void router.navigate({ to: '/sets/discovery' })}
-        className="absolute inset-0 rounded-card"
-      />
-    </div>
+    <button
+      type="button"
+      aria-label={s.toCart}
+      data-testid="favourite-set-add"
+      disabled={add.isPending}
+      onClick={() =>
+        add.mutate(undefined, {
+          onSuccess: () => {
+            hapticSuccess();
+            showShopNote(s.added);
+          },
+          onError: () => showShopNote(s.soldOut),
+        })
+      }
+      className="absolute right-3 bottom-3 z-10 grid size-8 place-items-center rounded-btn bg-btn text-btn-ink transition-[scale,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] after:absolute after:-inset-1.5 hover:opacity-90 active:scale-95 disabled:opacity-100"
+    >
+      {add.isPending ? <Spinner size={16} /> : <PlusIcon size={18} />}
+    </button>
   );
 }
 
@@ -93,7 +85,11 @@ export function Favourites() {
         />
       ) : (
         <>
-          {data.discoverySet ? <FavouriteSet set={data.discoverySet} /> : null}
+          {data.discoverySet ? (
+            <div className="mb-2">
+              <DiscoveryCard extra={data.discoverySet.soldOut ? null : <SetAdd />} />
+            </div>
+          ) : null}
           {data.items.length > 0 ? (
             <FragranceGrid items={data.items} onSelect={open} label={f.title} />
           ) : null}
