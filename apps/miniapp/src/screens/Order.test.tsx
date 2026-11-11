@@ -92,6 +92,7 @@ const order = (over: Partial<OrderDto> = {}): OrderDto => ({
   thresholdBaseAmount: 69_000,
   total: 94_000,
   amountDue: 94_000,
+  trackingNumber: null,
   cancellation: null,
   ...over,
 });

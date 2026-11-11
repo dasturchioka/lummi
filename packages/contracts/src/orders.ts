@@ -216,6 +216,8 @@ export const orderSchema = z.object({
   total: som,
   /** What the customer transfers to the shop card; equals the total in stage 1 (ADR 0012). */
   amountDue: som,
+  /** BTS's tracking number, from «Передан в BTS» on (#37); null before. */
+  trackingNumber: z.string().nullable(),
   /** Why and when the order was cancelled; null unless it is «Отменён». */
   cancellation: z
     .object({
