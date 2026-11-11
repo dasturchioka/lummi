@@ -460,22 +460,21 @@ async function chooseReceipt(page: Page) {
  */
 async function notFoundOrder(ctx: { api: ApiClient; db: ShotDb }, { repeat }: { repeat: boolean }) {
   await unpaidOrder(ctx);
-  await ctx.db.query(
-    `insert into receipts (order_id, source, verdict, review_reason, kind, size, original_key,
-       normalized_key, normalized_mime, width, height, sha256, phash, created_at)
-     select o.id, 'miniapp', 'payment_not_found', $2, 'png', 184320, 'shots/' || gen_random_uuid(),
+  const { rows } = await ctx.db.query(
+    `insert into receipts (order_id, source, verdict, kind, size, original_key, normalized_key,
+       normalized_mime, width, height, sha256, phash, created_at)
+     select o.id, 'miniapp', 'payment_not_found', 'png', 184320, 'shots/' || gen_random_uuid(),
        'shots/' || gen_random_uuid(), 'image/png', 720, 1280, repeat('a', 64), repeat('0', 16),
        now() - interval '2 hours'
      from orders o
      where o.customer_id = (select id from customers where telegram_id = $1)
-     order by o.id desc limit 1`,
-    [SHOT_USER.id, repeat ? 'duplicate' : null],
+     order by o.id desc limit 1
+     returning id`,
+    [SHOT_USER.id],
   );
-  // a repeat names the receipt it repeats; any receipt will do for the screen
+  // a repeat receipt names the receipt it repeats; any receipt will do for the screen
   if (repeat)
-    await ctx.db.query(
-      `update receipts set duplicate_of = id where verdict = 'payment_not_found' and duplicate_of is null and review_reason = 'duplicate'`,
-    );
+    await ctx.db.query('update receipts set duplicate_of = id where id = $1', [rows[0]!.id]);
 }
 
 /** Without a card: the order was placed while there was one, then the owner took it off. */

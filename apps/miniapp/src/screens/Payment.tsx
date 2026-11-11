@@ -4,7 +4,7 @@ import {
   RECEIPT_ACCEPT,
   type ReceiptUploadError,
 } from '@lummi/contracts/constants';
-import { fill, formatDateTime, formatTime, plural } from '@lummi/i18n';
+import { fill, formatDateTime, formatDayMonth, formatTime, plural } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -312,7 +312,10 @@ function LastReceiptNote({ receipt }: { receipt: ReceiptSummaryDto | undefined }
         <span className="type-small mt-1 block text-pretty text-muted">
           {repeat
             ? o.payment.repeatText
-            : fill(o.payment.noTransferText, { at: formatDateTime(receipt.createdAt, language) })}
+            : fill(o.payment.noTransferText, {
+                day: formatDayMonth(receipt.createdAt, language),
+                time: formatTime(receipt.createdAt),
+              })}
         </span>
       </span>
     </Card>

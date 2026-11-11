@@ -165,7 +165,7 @@ export const ordersMessages = defineMessages(
       /** Above the payment when the last receipt found no money in the wait window (#36). */
       noTransferTitle: 'Мы не нашли перевод',
       noTransferText:
-        'По чеку от {at} на карту магазина не пришёл перевод на эту сумму. Проверьте сумму и карту и загрузите чек ещё раз.',
+        'По чеку, отправленному {day} в {time}, мы не нашли перевод. Проверьте сумму и карту и загрузите чек ещё раз.',
       /** The same when the last receipt repeated another order's (#36). */
       repeatTitle: 'Этот чек уже был у другого заказа',
       repeatText: 'Загрузите чек перевода именно за этот заказ.',
@@ -439,7 +439,7 @@ export const ordersMessages = defineMessages(
       alreadyPaid: 'Agar toʻlagan boʻlsangiz, chekni yuklang.',
       noTransferTitle: 'Oʻtkazmani topa olmadik',
       noTransferText:
-        'Siz {at} da yuborgan chek boʻyicha doʻkon kartasiga bu summadagi oʻtkazma kelmadi. Summa va kartani tekshirib, chekni qayta yuklang.',
+        'Siz {day} kuni soat {time} da yuborgan chek boʻyicha oʻtkazmani topa olmadik. Summa va kartani tekshirib, chekni qayta yuklang.',
       repeatTitle: 'Bu chek boshqa buyurtmaga yuborilgan',
       repeatText: 'Aynan shu buyurtma uchun oʻtkazma chekini yuklang.',
       goToPay: 'Toʻlovga oʻtish',

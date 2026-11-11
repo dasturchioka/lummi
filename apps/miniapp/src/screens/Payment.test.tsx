@@ -91,7 +91,9 @@ describe('the payment screen after the last receipt found no money (#36)', () =>
     renderPayment([receipt('not_found')]);
     const note = screen.getByTestId('last-receipt-note');
     expect(note.textContent).toContain('Мы не нашли перевод');
-    expect(note.textContent).toContain('По чеку от 9 ноября, 15:05');
+    expect(note.textContent).toContain(
+      'По чеку, отправленному 9 ноября в 15:05, мы не нашли перевод',
+    );
     expect(screen.getByTestId('pay-until')).toBeTruthy();
   });
 
