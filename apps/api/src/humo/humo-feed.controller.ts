@@ -26,6 +26,14 @@ export class HumoFeedController {
     }));
   }
 
+  @TsRestHandler(internalContract.userbotForwardTarget)
+  userbotForwardTarget() {
+    return tsRestHandler(internalContract.userbotForwardTarget, async () => ({
+      status: 200 as const,
+      body: await this.feed.forwardTarget(),
+    }));
+  }
+
   @TsRestHandler(internalContract.userbotHeartbeat)
   userbotHeartbeat() {
     return tsRestHandler(internalContract.userbotHeartbeat, async () => {

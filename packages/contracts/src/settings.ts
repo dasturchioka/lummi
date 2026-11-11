@@ -576,7 +576,8 @@ export const settingDefinitions = {
     },
     fields: {
       orders: { ru: 'Заказы', uz: 'Buyurtmalar' },
-      payments: { ru: 'Оплаты', uz: 'Toʻlovlar' },
+      // The «Поступления» topic (spec Changes 2026-11-07): the userbot forwards Humo ➕ there (#19).
+      payments: { ru: 'Поступления', uz: 'Tushumlar' },
       reviews: { ru: 'Отзывы', uz: 'Sharhlar' },
       system: { ru: 'Системные', uz: 'Tizim' },
     },

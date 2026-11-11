@@ -1,9 +1,10 @@
-import type { HumoMessageResult } from '@lummi/contracts';
+import type { HumoMessageResult, UserbotForwardTarget } from '@lummi/contracts';
 import { credits, desc, eq, humoMessages, userbotHeartbeat, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { AlertService } from '../outbox/alert.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { CreditEvents } from './credit-events';
 import { parseHumoMessage, type HumoParseError } from './humo-parser';
@@ -29,6 +30,7 @@ export class HumoFeedService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(AlertService) private readonly alerts: AlertService,
     @Inject(CreditEvents) private readonly events: CreditEvents,
+    @Inject(SettingsService) private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -84,6 +86,16 @@ export class HumoFeedService {
       .orderBy(desc(humoMessages.messageId))
       .limit(1);
     return row?.messageId ?? null;
+  }
+
+  /**
+   * Where the userbot forwards ➕ notifications (#19): the orders group and its «Поступления»
+   * topic, read on every call so a group that became a supergroup is followed at once.
+   */
+  async forwardTarget(): Promise<UserbotForwardTarget> {
+    const chatId = await this.settings.get('bot.groupChatId');
+    if (chatId === null) return { chatId: null, topicId: null };
+    return { chatId, topicId: (await this.settings.get('bot.topics')).payments };
   }
 
   async userbotHeartbeat(): Promise<void> {
