@@ -43,7 +43,7 @@ export default function PhotoViewer({
       aria-modal="true"
       aria-label={t.title}
       data-testid="photo-viewer"
-      className="fixed inset-0 z-50 flex flex-col bg-black/92 text-white"
+      className="fixed inset-0 z-50 flex flex-col bg-bar text-bar-active"
     >
       <div className="flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2">
         <span className="type-small tabular-nums">
@@ -53,7 +53,7 @@ export default function PhotoViewer({
           type="button"
           aria-label={t.close}
           onClick={onClose}
-          className="grid size-10 place-items-center rounded-full bg-white/12"
+          className="grid size-10 place-items-center rounded-full bg-bar-ink/20"
         >
           <CloseIcon size={20} />
         </button>

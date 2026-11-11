@@ -23,3 +23,6 @@ export function formatFileSize(bytes: number, language: Language): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} ${kb}`;
   return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} ${mb}`;
 }
+
+/** A review average as it is shown and read aloud: one decimal, always a comma («4,7»), in RU and UZ. */
+export const formatAverage = (value: number): string => value.toFixed(1).replace('.', ',');

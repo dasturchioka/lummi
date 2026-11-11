@@ -105,6 +105,7 @@ describe('the reviews block', () => {
     wrap(<ReviewsBlock target="symphony" />);
     fireEvent.click(await screen.findByRole('button', { name: 'Фото 2 из 2' }));
     const viewer = await screen.findByTestId('photo-viewer', {}, { timeout: 5000 });
+    expect(viewer.className).toMatch(/\bbg-bar\b/);
     expect(within(viewer).getAllByAltText('Фото покупателя')).toHaveLength(2);
     fireEvent.click(within(viewer).getByRole('button', { name: 'Закрыть' }));
     await waitFor(() => expect(screen.queryByTestId('photo-viewer')).toBeNull());

@@ -1,4 +1,5 @@
-import { fill, formatDayMonth, plural, type Language } from '@lummi/i18n';
+import { formatAverage } from '../../lib/format';
+import { fill, formatDayMonth, plural } from '@lummi/i18n';
 import { reviewsMessages } from '@lummi/i18n/reviews';
 import type { PublicReview } from '@lummi/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -12,13 +13,6 @@ import { Skeleton } from '../../ui/Skeleton';
 const PhotoViewer = lazy(() => import('./PhotoViewer'));
 
 const STAR = 'M12 3.8l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.8 6.9 19.5l1-5.7-4.1-4 5.7-.8z';
-
-/** The average as it is read aloud and shown: one decimal, the locale's separator («4,7»). */
-const formatAverage = (value: number, language: Language) =>
-  value.toLocaleString(language === 'uz' ? 'uz-UZ' : 'ru-RU', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
 
 /**
  * Five linear stars. `rating` may be fractional (the average): a star is filled by its share, so
@@ -175,14 +169,14 @@ export function ReviewsBlock({ target }: { target: string }) {
               className="text-[28px] leading-none font-semibold text-ink tabular-nums"
               data-testid="reviews-average"
             >
-              {formatAverage(q.data.average ?? 0, language)}
+              {formatAverage(q.data.average ?? 0)}
             </span>
             <div className="flex flex-col gap-1">
               <Stars
                 rating={q.data.average ?? 0}
                 size={18}
                 label={fill(t.averageLabel, {
-                  rating: formatAverage(q.data.average ?? 0, language),
+                  rating: formatAverage(q.data.average ?? 0),
                 })}
               />
               <span className="type-small text-muted">
