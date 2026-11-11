@@ -21,6 +21,15 @@ export const botMessages = defineMessages(
       /** Before the reserve ends while the order still waits for a receipt (setting `orders.reserveReminderSeconds`). */
       reserveReminder:
         'Бронь заказа № {number} действует до {until} ⏳\nЗагрузите чек об оплате {amount}, и бронь сохранится до проверки.',
+      /**
+       * An unused upgrade right, some days before its last day (TZ §3.4: 7 and 1; #38). `{until}` is
+       * the last day, `{names}` the covered fragrances.
+       */
+      upgradeRightReminder: {
+        set: 'Напоминаем: скидка за набор −{percent}% действует до {until} включительно ⏳\nОна на один полный флакон любого аромата из набора: {names}.',
+        single_10ml:
+          'Напоминаем: скидка −{percent}% за флакон 10 мл действует до {until} включительно ⏳\nОна на один полный флакон аромата {names}.',
+      },
       /** One message per status change (spec Changes 2026-11-07, customer messages); none for «Принят» or a return. */
       receiptReceived:
         'Чек к заказу № {number} получен 🧾\nПроверяем оплату и напишем, как только она подтвердится.',
@@ -75,6 +84,11 @@ export const botMessages = defineMessages(
       writeManager: 'Menejerga yozish',
       reserveReminder:
         '№ {number} buyurtma bandligi {until} gacha amal qiladi ⏳\n{amount} toʻlov chekini yuklang, shunda bandlik tekshiruvgacha saqlanadi.',
+      upgradeRightReminder: {
+        set: 'Eslatma: toʻplam uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU toʻplamdagi istalgan iforning bitta toʻliq flakoniga: {names}.',
+        single_10ml:
+          'Eslatma: 10 ml flakon uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU {names} iforining bitta toʻliq flakoniga.',
+      },
       receiptReceived:
         '№ {number} buyurtma cheki qabul qilindi 🧾\nToʻlovni tekshiryapmiz, tasdiqlanishi bilan xabar beramiz.',
       paymentConfirmed:

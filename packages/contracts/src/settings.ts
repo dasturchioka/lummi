@@ -392,6 +392,119 @@ export const settingDefinitions = {
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
     },
   },
+  // Upgrade rights (TZ §3.4, ADR 0003, #38), separate per source. A right takes its percent and
+  // end when it opens, so a change here applies to rights opened afterwards. Their threshold base
+  // and marked-down flag are the `pricing.thresholdBase` and `pricing.discountsApplyToMarkedDown`
+  // entries above. Switching a source off stops new rights; open ones keep working.
+  /** A delivered set opens a right (TZ §3.4). */
+  'upgradeRights.set.enabled': {
+    schema: z.boolean(),
+    default: true,
+    area: 'pricing',
+    label: { ru: 'Скидка за набор включена', uz: 'Toʻplam uchun chegirma yoqilgan' },
+    hint: {
+      ru: 'Доставленный набор даёт скидку на один полный флакон (30 или 50 мл) аромата из набора. Выключение не отменяет уже открытые скидки.',
+      uz: 'Yetkazilgan toʻplam undagi ifor uchun bitta toʻliq flakonga (30 yoki 50 ml) chegirma beradi. Oʻchirish ochilgan chegirmalarni bekor qilmaydi.',
+    },
+  },
+  'upgradeRights.set.percent': {
+    schema: z.number().int().min(1).max(100),
+    default: 20,
+    area: 'pricing',
+    unit: 'none',
+    label: { ru: 'Скидка за набор, %', uz: 'Toʻplam uchun chegirma, %' },
+    hint: {
+      ru: 'На один полный флакон, без доставки. Новое значение действует для скидок, открытых после сохранения.',
+      uz: 'Bitta toʻliq flakonga, yetkazib berishsiz. Yangi qiymat saqlangandan keyin ochilgan chegirmalarga amal qiladi.',
+    },
+  },
+  'upgradeRights.set.validityDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 30,
+    area: 'pricing',
+    unit: 'days',
+    label: { ru: 'Скидка за набор: срок', uz: 'Toʻplam uchun chegirma: muddat' },
+    hint: {
+      ru: 'Считается со дня доставки набора по Ташкенту; скидка действует до конца последнего дня.',
+      uz: 'Toʻplam yetkazilgan kundan Toshkent vaqti bilan hisoblanadi; chegirma oxirgi kun oxirigacha amal qiladi.',
+    },
+  },
+  /** A delivered single 10 ml bottle opens a right on that fragrance (ADR 0003; off until the owner decides). */
+  'upgradeRights.single10ml.enabled': {
+    schema: z.boolean(),
+    default: false,
+    area: 'pricing',
+    label: { ru: 'Скидка за флакон 10 мл включена', uz: '10 ml flakon uchun chegirma yoqilgan' },
+    hint: {
+      ru: 'Доставленный флакон 10 мл даёт скидку на полный флакон того же аромата: одна на аромат в заказе.',
+      uz: 'Yetkazilgan 10 ml flakon xuddi shu iforning toʻliq flakoniga chegirma beradi: buyurtmadagi har bir iforga bitta.',
+    },
+  },
+  'upgradeRights.single10ml.percent': {
+    schema: z.number().int().min(1).max(100),
+    default: 20,
+    area: 'pricing',
+    unit: 'none',
+    label: { ru: 'Скидка за флакон 10 мл, %', uz: '10 ml flakon uchun chegirma, %' },
+    hint: {
+      ru: 'На один полный флакон, без доставки. Новое значение действует для скидок, открытых после сохранения.',
+      uz: 'Bitta toʻliq flakonga, yetkazib berishsiz. Yangi qiymat saqlangandan keyin ochilgan chegirmalarga amal qiladi.',
+    },
+  },
+  'upgradeRights.single10ml.validityDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 30,
+    area: 'pricing',
+    unit: 'days',
+    label: { ru: 'Скидка за флакон 10 мл: срок', uz: '10 ml flakon uchun chegirma: muddat' },
+    hint: {
+      ru: 'Считается со дня доставки по Ташкенту; скидка действует до конца последнего дня.',
+      uz: 'Yetkazilgan kundan Toshkent vaqti bilan hisoblanadi; chegirma oxirgi kun oxirigacha amal qiladi.',
+    },
+  },
+  /** The bot reminds an unused right when this many days are left (TZ §3.4: 7 and 1), at `reminderHour`. */
+  'upgradeRights.firstReminderDays': {
+    schema: z.number().int().min(1).max(60),
+    default: 7,
+    area: 'pricing',
+    unit: 'days',
+    label: {
+      ru: 'Скидка на полный флакон: первое напоминание',
+      uz: 'Toʻliq flakon chegirmasi: birinchi eslatma',
+    },
+    hint: {
+      ru: 'За сколько дней до конца скидки бот напомнит о ней. Больше, чем для последнего напоминания.',
+      uz: 'Chegirma tugashidan necha kun oldin bot eslatadi. Oxirgi eslatmadagidan koʻp boʻlsin.',
+    },
+  },
+  'upgradeRights.lastReminderDays': {
+    schema: z.number().int().min(0).max(30),
+    default: 1,
+    area: 'pricing',
+    unit: 'days',
+    label: {
+      ru: 'Скидка на полный флакон: последнее напоминание',
+      uz: 'Toʻliq flakon chegirmasi: oxirgi eslatma',
+    },
+    hint: {
+      ru: 'За сколько дней до конца скидки бот напомнит в последний раз. 0 — в последний день.',
+      uz: 'Chegirma tugashidan necha kun oldin bot oxirgi marta eslatadi. 0 — oxirgi kuni.',
+    },
+  },
+  'upgradeRights.reminderHour': {
+    schema: z.number().int().min(0).max(23),
+    default: 10,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Скидка на полный флакон: час напоминаний',
+      uz: 'Toʻliq flakon chegirmasi: eslatma soati',
+    },
+    hint: {
+      ru: 'По Ташкенту, от 0 до 23: напоминания приходят в начале этого часа.',
+      uz: 'Toshkent vaqti bilan, 0 dan 23 gacha: eslatmalar shu soat boshida keladi.',
+    },
+  },
   /** Orders take the last campaign link opened within this many days before ordering (#35, ADR 0022). */
   'campaigns.attributionWindowDays': {
     schema: z.number().int().min(1).max(365),

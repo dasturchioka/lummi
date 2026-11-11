@@ -11,6 +11,7 @@ import {
   TIMES_OF_DAY,
   VOLUMES_ML,
 } from './constants';
+import { upgradeRightSourceSchema } from './quote';
 
 /** A text that exists in both languages; the client picks by the customer's language. */
 export const bilingualSchema = z.object({ ru: z.string(), uz: z.string() });
@@ -33,6 +34,18 @@ export const volumeCardSchema = z.object({
   photo: z.string().nullable(),
 });
 export type VolumeCard = z.infer<typeof volumeCardSchema>;
+
+/** One full-size volume as the customer's upgrade right prices it (ADR 0003, 0007). */
+export const upgradeRightPriceSchema = z.object({
+  ml: z.union([z.literal(30), z.literal(50)]),
+  /** The price to pay for one bottle with the right: the volume's price less the right's discount. */
+  price: z.number().int().nonnegative(),
+  source: upgradeRightSourceSchema,
+  percent: z.number().int(),
+  /** The right's last day, Tashkent `YYYY-MM-DD` (it works through 23:59:59). */
+  lastDay: z.string(),
+});
+export type UpgradeRightPrice = z.infer<typeof upgradeRightPriceSchema>;
 
 export const fragranceCardSchema = z.object({
   slug: z.string(),
@@ -57,6 +70,13 @@ export const fragranceCardSchema = z.object({
   isNew: z.boolean(),
   /** Always in 10 / 30 / 50 order; a volume that does not exist is simply absent. */
   volumes: z.array(volumeCardSchema),
+  /**
+   * The full-size volumes an upgrade right the customer holds would discount (TZ §3.4: «цена со
+   * скидкой + Скидка за набор»), each with the price to pay with it, computed by the server's
+   * `quote()` (one bottle, rounded down; never a marked-down volume unless the setting allows it,
+   * ADR 0008). Empty without a covering right.
+   */
+  upgradeRightPrices: z.array(upgradeRightPriceSchema),
 });
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 

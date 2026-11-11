@@ -152,9 +152,18 @@ export class OrderStatusService {
     const onHand: OnHandChange[] = fx.onHand
       ? await changeOnHand(tx, order.id, move.lines, fx.onHand(move))
       : [];
-    if (fx.discountSource) await this.discountSources.release(tx, order);
-    if (fx.discountSource === 'release_and_close_rights')
-      await this.discountSources.closeRightsOpenedBy(tx, order);
+    switch (fx.discountSource) {
+      case 'release':
+        await this.discountSources.release(tx, order);
+        break;
+      case 'release_and_close_rights':
+        await this.discountSources.release(tx, order);
+        await this.discountSources.closeRightsOpenedBy(tx, order);
+        break;
+      case 'open_rights':
+        await this.discountSources.openRights(tx, order, move.lines);
+        break;
+    }
 
     const [updated] = await tx
       .update(orders)

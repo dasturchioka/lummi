@@ -9,6 +9,7 @@ import {
   RECEIPT_FILE_KINDS,
   RECEIPT_REVIEW_REASONS,
   RECEIPT_VERDICTS,
+  UPGRADE_RIGHT_SOURCES,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -817,6 +818,61 @@ export const orderEvents = pgTable(
   },
   (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
 );
+
+export const upgradeRightSourceEnum = pgEnum('upgrade_right_source', UPGRADE_RIGHT_SOURCES);
+
+/**
+ * An Upgrade right (ADR 0003, ticket #38): opened when its source order reaches «Доставлен», one
+ * per set unit (covering the set's five fragrances as bought, ADR 0009) or, while that source is
+ * switched on, one per fragrance bought as a single 10 ml bottle. It discounts one Full size
+ * bottle of a covered fragrance once. Percent and the end are fixed when it opens. Its state is
+ * derived (ADR 0005): active while no order holds it (`used_by_order_id`), it is not closed and
+ * `expires_at` (00:00 Tashkent the day after its last day, exclusive) has not come. An order holds
+ * it with a conditional update; a cancel or return of that order clears the link while within
+ * validity. A returned source order closes it (`closed_at`); one already spent stays with the
+ * order that used it. The reminder markers are stamped once each, sent or not (a blocked bot).
+ */
+export const upgradeRights = pgTable(
+  'upgrade_rights',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    source: upgradeRightSourceEnum('source').notNull(),
+    sourceOrderId: bigint('source_order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id),
+    /** The source order line, and which unit of it (a set line of qty 2 opens units 0 and 1). */
+    sourcePosition: smallint('source_position').notNull(),
+    sourceUnit: smallint('source_unit').notNull(),
+    /** The covered fragrances as bought: a set's five, or the one 10 ml bottle's. */
+    fragrances: jsonb('fragrances')
+      .$type<{ fragranceId: number; name: string; brand: string }[]>()
+      .notNull(),
+    percent: smallint('percent').notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedByOrderId: bigint('used_by_order_id', { mode: 'number' }).references(() => orders.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    firstReminderAt: timestamp('first_reminder_at', { withTimezone: true }),
+    lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('upgrade_rights_source_idx').on(t.sourceOrderId, t.sourcePosition, t.sourceUnit),
+    uniqueIndex('upgrade_rights_used_by_order_idx')
+      .on(t.usedByOrderId)
+      .where(sql`${t.usedByOrderId} is not null`),
+    index('upgrade_rights_customer_idx').on(t.customerId, t.expiresAt),
+    check(
+      'upgrade_rights_terms_check',
+      sql`${t.percent} between 1 and 100 and ${t.expiresAt} > ${t.openedAt} and jsonb_array_length(${t.fragrances}) between 1 and 5 and ${t.sourceUnit} >= 0`,
+    ),
+  ],
+);
+
+export type UpgradeRightRow = typeof upgradeRights.$inferSelect;
 
 /**
  * The shop card shoppers transfer to (spec §4, #28): one row, owner-only, every change audited

@@ -33,8 +33,11 @@ export interface Effects<A extends OrderAction> {
    * order's on-hand rows are locked first, then the returned lines move (none: the lock only).
    */
   onHand?: (m: Move<A>) => OnHandMove;
-  /** ADR 0005: release the discount source the order held; a return also closes the rights it opened. */
-  discountSource?: 'release' | 'release_and_close_rights';
+  /**
+   * Discount sources (ADR 0003, 0005): release the one the order held; a return also closes the
+   * upgrade rights it opened; delivery opens them.
+   */
+  discountSource?: 'release' | 'release_and_close_rights' | 'open_rights';
   /** Columns the move sets on the order besides its status. */
   columns?: (m: Move<A>) => Partial<typeof orders.$inferInsert>;
   /** The shopper's message (spec Changes 2026-11-07); none for «Принят» and none for a return. */
@@ -114,6 +117,8 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
   },
   deliver: {
     audit: 'order.delivered',
+    // a delivered set (or single 10 ml bottle, once switched on) opens its upgrade rights (#38)
+    discountSource: 'open_rights',
     message: (m, lang) => ({ text: fill(bot(lang).delivered, { number: number(m) }) }),
   },
   return: {

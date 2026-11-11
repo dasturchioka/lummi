@@ -36,6 +36,7 @@ import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
+import { UpgradeRightReminders } from './upgrade-rights/upgrade-right-reminders';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
@@ -148,6 +149,7 @@ export class AppModule {
         OrderStatusService,
         DiscountSourceHooks,
         ReserveSweeps,
+        UpgradeRightReminders,
         CatalogAdminService,
         CatalogImportService,
         SetsAdminService,

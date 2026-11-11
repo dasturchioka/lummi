@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { UPGRADE_RIGHT_SOURCES } from './constants';
 
 /**
  * The Quote: the server-computed price breakdown of a cart (ADR 0001). Clients get only this
@@ -13,7 +14,7 @@ export const thresholdBaseSchema = z.enum(['before', 'after']);
 export type ThresholdBase = z.infer<typeof thresholdBaseSchema>;
 
 /** What opened an upgrade right: a delivered set, or a delivered single 10 ml bottle (ADR 0003). */
-export const upgradeRightSourceSchema = z.enum(['set', 'single_10ml']);
+export const upgradeRightSourceSchema = z.enum(UPGRADE_RIGHT_SOURCES);
 export type UpgradeRightSource = z.infer<typeof upgradeRightSourceSchema>;
 
 /** The one Discount on an order and the discount source it comes from. */

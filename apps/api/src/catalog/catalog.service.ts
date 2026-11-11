@@ -30,6 +30,7 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { activeMarkdown } from '../pricing/quote';
+import { upgradeRightPrices } from '../upgrade-rights/upgrade-rights';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 
@@ -413,7 +414,8 @@ export class CatalogService {
   }
 
   /** The card for a customer. Hidden and unknown slugs are both `null`. Only customer-safe fields are selected. */
-  async cardBySlug(slug: string): Promise<FragranceCard | null> {
+  /** A fragrance card as `customerId` sees it: with the prices their upgrade rights give (#38). */
+  async cardBySlug(slug: string, customerId: number): Promise<FragranceCard | null> {
     const [f] = await this.db
       .select({
         id: fragrances.id,
@@ -483,6 +485,7 @@ export class CatalogService {
       isHit: f.isHit,
       isNew: f.isNew,
       volumes: volumeRows.map((v) => toVolumeCard(v, reserved.get(v.id) ?? 0, now)),
+      upgradeRightPrices: await upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
     };
   }
 }
