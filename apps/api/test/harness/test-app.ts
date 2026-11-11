@@ -1,6 +1,8 @@
 import { createDb, shopCard, staff, type Db, type StaffRole, type StaffRow } from '@lummi/db';
 import type { INestApplication } from '@nestjs/common';
 import { initClient } from '@ts-rest/core';
+import { Queue } from 'bullmq';
+import { Redis } from 'ioredis';
 import { apiContract } from '@lummi/contracts';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -150,6 +152,27 @@ export async function createTestApp(
   });
   await app.listen(0, '127.0.0.1');
   const baseUrl = await app.getUrl();
+  let worker: WorkerRuntime | undefined;
+  let redis: Redis | undefined;
+  const queueNames = [
+    env.OUTBOX_QUEUE,
+    env.EVENTS_QUEUE,
+    env.RECEIPT_CHECKS_QUEUE,
+    env.BOT_RECEIPTS_QUEUE,
+    env.BROADCAST_QUEUE,
+    env.BIRTHDAY_QUEUE,
+  ];
+  /** Waiting, delayed and finished jobs out of every queue (running ones are waited for first). */
+  const clearQueues = async () => {
+    redis ??= new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+    for (const name of queueNames) {
+      const queue = new Queue(name, { connection: redis });
+      await queue.drain(true);
+      await queue.clean(0, 0, 'failed');
+      await queue.clean(0, 0, 'completed');
+      await queue.close();
+    }
+  };
 
   const initData: TestApp['initData'] = (user = DEFAULT_TEST_USER, overrides = {}) =>
     signInitData({
@@ -199,9 +222,10 @@ export async function createTestApp(
       });
     },
     startWorker() {
-      const w = app.get(WorkerRuntime);
-      w.start();
-      return w;
+      const started = app.get(WorkerRuntime);
+      started.start();
+      worker = started;
+      return started;
     },
     widgetPayload,
     signInStaff,
@@ -213,6 +237,12 @@ export async function createTestApp(
       return { token: res.body.token, client: makeClient(baseUrl, res.body.token) };
     },
     async reset() {
+      // Jobs live in Redis and survive the truncate, while every id restarts: a job still running,
+      // or queued, from the test before would run against this test's rows of the same ids, or
+      // keep its job id and stop this test's row from being queued (#37 review). Wait for the
+      // running ones, drop the rest, and only then truncate.
+      await worker?.pause();
+      await clearQueues();
       const { rows } = await pool.query<{ tablename: string }>(
         `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE '\\_\\_%'`,
       );
@@ -236,9 +266,11 @@ export async function createTestApp(
       await pool.query(
         `INSERT INTO discovery_set (id, price, on_hand, is_placeholder) VALUES (true, 299000, 0, true)`,
       );
+      await worker?.resume();
     },
     async close() {
       await app.close();
+      redis?.disconnect();
       await pool.end();
       const a = new pg.Client({ connectionString: adminUrl });
       await a.connect();

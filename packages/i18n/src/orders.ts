@@ -200,6 +200,8 @@ export const ordersMessages = defineMessages(
         handedToBts: 'Передан в BTS',
         delivered: 'Доставлен',
       },
+      /** Under «Передан в BTS» once the manager entered it (#37). */
+      tracking: 'Трек-номер: {tracking}',
       lines: 'Состав заказа',
       qty: '{ml} мл · {qty} шт.',
       units: '{qty} шт.',
@@ -477,6 +479,7 @@ export const ordersMessages = defineMessages(
         handedToBts: 'BTSga topshirildi',
         delivered: 'Yetkazildi',
       },
+      tracking: 'Trek-raqam: {tracking}',
       lines: 'Buyurtma tarkibi',
       qty: '{ml} ml · {qty} ta',
       units: '{qty} ta',

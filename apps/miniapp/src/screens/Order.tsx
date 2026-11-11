@@ -254,7 +254,11 @@ export function OrderView({ order }: { order: OrderDto }) {
         <Cancelled cancellation={order.cancellation} />
       ) : order.status !== 'cancelled' ? (
         <Card className="mt-3 p-4">
-          <Timeline status={order.status} createdAt={order.createdAt} />
+          <Timeline
+            status={order.status}
+            createdAt={order.createdAt}
+            trackingNumber={order.trackingNumber}
+          />
         </Card>
       ) : null}
 

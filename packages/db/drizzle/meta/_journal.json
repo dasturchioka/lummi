@@ -169,6 +169,13 @@
       "when": 1794359410303,
       "tag": "0023_favourites",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794362108465,
+      "tag": "0024_orders_group",
+      "breakpoints": true
     }
   ]
 }
