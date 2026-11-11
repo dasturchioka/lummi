@@ -144,6 +144,10 @@ _Avoid_: Copy, order history, archived order
 An order the customer marked «Это подарок» at checkout: gift-packed, with an optional greeting card text and no receipt in the parcel. Not a gift certificate (that is a deferred means of payment).
 _Avoid_: Present, gift certificate, gift card
 
+**Order card**:
+The one message per paid order in the orders group's «Заказы» topic: what to fulfil, the history, and buttons for the next step or a cancel. Posted when the payment is confirmed and edited in place on every change.
+_Avoid_: Order post, group message, ticket
+
 **Receipt**:
 A customer's proof of a card transfer (screenshot or PDF) uploaded for an order. One order may have several; at most one is accepted.
 _Avoid_: Check, чек (in code), payment proof, fiscal receipt

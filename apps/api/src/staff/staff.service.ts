@@ -17,8 +17,8 @@ export class StaffService {
     @Inject(StaffSessionService) private readonly sessions: StaffSessionService,
   ) {}
 
-  async findByTelegramId(telegramId: number): Promise<StaffRow | null> {
-    const [row] = await this.db.select().from(staff).where(eq(staff.telegramId, telegramId));
+  async findByTelegramId(telegramId: number, db: DbOrTx = this.db): Promise<StaffRow | null> {
+    const [row] = await db.select().from(staff).where(eq(staff.telegramId, telegramId));
     return row ?? null;
   }
 

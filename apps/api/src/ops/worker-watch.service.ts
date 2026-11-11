@@ -8,7 +8,7 @@ import { DB, EDGES } from '../tokens';
 const CHECK_EVERY_MS = 60_000;
 
 /**
- * The worker beats once per tick into `worker_heartbeat`; the API process watches it (ADR 0034).
+ * The worker beats once per tick into `worker_heartbeat`; the API process watches it (ADR 0035).
  * After `ops.workerSilentMinutes` without a beat the owner (DMs and the «Системные» topic) and the
  * developer get one alert per outage, and one more when the beat returns.
  *

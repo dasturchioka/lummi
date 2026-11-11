@@ -136,7 +136,7 @@ Data stays in Uzbekistan (ADR 0020): backups of `pgdata` and `files` go to stora
 
 ## Backups and restore
 
-Decision: a **host systemd timer**, not a Compose service (ADR 0034). The restore test must start a throwaway Postgres container, and `rsync` has to read the `files` volume and ssh to the second location. Doing that from a container would mean handing it the Docker socket, which is root on the host. A timer on the host needs only `age`, `rsync` and Docker, and `OnCalendar=... Asia/Tashkent` fixes the time whatever the host's timezone.
+Decision: a **host systemd timer**, not a Compose service (ADR 0035). The restore test must start a throwaway Postgres container, and `rsync` has to read the `files` volume and ssh to the second location. Doing that from a container would mean handing it the Docker socket, which is root on the host. A timer on the host needs only `age`, `rsync` and Docker, and `OnCalendar=... Asia/Tashkent` fixes the time whatever the host's timezone.
 
 What runs every day at 03:00 Asia/Tashkent (`deploy/backup/backup.sh`):
 

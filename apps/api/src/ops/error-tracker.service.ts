@@ -8,7 +8,7 @@ import { DB, EDGES } from '../tokens';
 import { signError } from './fingerprint';
 
 /**
- * Errors in our own table, no foreign tracker (ADR 0034). The first occurrence of a fingerprint
+ * Errors in our own table, no foreign tracker (ADR 0035). The first occurrence of a fingerprint
  * pings the developer's chat through the outbox, in the same transaction as the row; a repeat only
  * counts. Recording never throws: the error being recorded is already one too many.
  */

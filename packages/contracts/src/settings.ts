@@ -879,7 +879,7 @@ export const settingDefinitions = {
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
     },
   },
-  /** Minutes without a worker tick before the API alerts (ADR 0034). */
+  /** Minutes without a worker tick before the API alerts (ADR 0035). */
   'ops.workerSilentMinutes': {
     schema: z.number().int().min(2).max(60),
     default: 3,
@@ -894,7 +894,7 @@ export const settingDefinitions = {
       uz: 'Fon xizmati har daqiqada belgi qoldiradi. Bundan uzoq jim tursa, egasi va dasturchi bir marta xabar oladi, xizmat qaytganda yana bir marta.',
     },
   },
-  /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0034). Null = nobody. */
+  /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0035). Null = nobody. */
   'ops.developerChatId': {
     schema: z
       .number()

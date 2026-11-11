@@ -116,7 +116,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
     if (this.ticking) return;
     this.ticking = true;
     try {
-      // At the start of the tick: a tick that hangs stops the beats, and the API's watch alerts (ADR 0034).
+      // At the start of the tick: a tick that hangs stops the beats, and the API's watch alerts (ADR 0035).
       await this.watch
         .beat()
         .catch((e: unknown) => this.log.error(`heartbeat failed: ${describeError(e)}`));
@@ -217,6 +217,23 @@ export class WorkerRuntime implements OnApplicationShutdown {
         queueConnection.disconnect();
       }
     }
+  }
+
+  /**
+   * Stop taking jobs and wait for the running ones to finish; `resume()` takes jobs again. The test
+   * harness brackets its reset with them, so no job outlives the test that queued it.
+   */
+  async pause(): Promise<void> {
+    await this.starting?.catch(() => undefined);
+    await Promise.all(this.workers().map((w) => w.pause()));
+  }
+
+  async resume(): Promise<void> {
+    await Promise.all(this.workers().map((w) => w.resume()));
+  }
+
+  private workers(): Worker[] {
+    return [...(this.worker ? [this.worker] : []), ...this.extraWorkers.map((w) => w.worker)];
   }
 
   private async process(job: Job<{ id: number }>): Promise<void> {
