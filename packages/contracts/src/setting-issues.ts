@@ -16,6 +16,10 @@ export const settingIssueSchema = z.object({
     'feed_guard_too_long',
     /** The wait window or the reserve not a tick over the payment-feed guards (`min`, #36). */
     'wait_too_short',
+    /** The first upgrade-right reminder not more days before the end than the last (`min`, #38). */
+    'reminder_first_not_before_last',
+    /** The last upgrade-right reminder not fewer days before the end than the first (`max`, #38). */
+    'reminder_last_not_after_first',
   ]),
   min: z.number().optional(),
   max: z.number().optional(),

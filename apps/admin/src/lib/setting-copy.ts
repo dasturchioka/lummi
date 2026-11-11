@@ -37,6 +37,10 @@ export function issueMessage(t: AdminMessages, issue: SettingIssue): string {
       return fill(s.feed_guard_too_long, { max: String(issue.max) });
     case 'wait_too_short':
       return fill(s.wait_too_short, { min: String(issue.min) });
+    case 'reminder_first_not_before_last':
+      return fill(s.reminder_first_not_before_last, { min: String(issue.min) });
+    case 'reminder_last_not_after_first':
+      return fill(s.reminder_last_not_after_first, { max: String(issue.max) });
     default:
       return s[issue.code];
   }
