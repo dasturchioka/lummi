@@ -169,6 +169,13 @@
       "when": 1794359916110,
       "tag": "0023_orders_group",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794360579131,
+      "tag": "0024_upgrade_rights",
+      "breakpoints": true
     }
   ]
 }
