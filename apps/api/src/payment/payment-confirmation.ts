@@ -1,4 +1,5 @@
 import {
+  charCount,
   findTransition,
   PAYMENT_LINK_REASON_MIN,
   type OrderStatus,
@@ -149,7 +150,7 @@ export class PaymentConfirmation {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(DB) private readonly db: Db,
   ) {
-    this.door = status.issuePaymentDoor();
+    this.door = status.issueDoor('confirm_payment');
   }
 
   /** In its own transaction, retried once on a deadlock; the message is queued after the commit. */
@@ -226,7 +227,8 @@ export class PaymentConfirmation {
           'payments.linkReasonMaxLength'
         ];
         reason = input.reason.trim();
-        if (reason.length < PAYMENT_LINK_REASON_MIN || reason.length > max)
+        // characters as a person counts them, as the panel's counter and the payload schema do
+        if (charCount(reason) < PAYMENT_LINK_REASON_MIN || charCount(reason) > max)
           return { kind: 'reason_invalid', min: PAYMENT_LINK_REASON_MIN, max };
       }
       if (misfits.length > 0 && !reason) return { kind: 'reason_required', mismatch: misfits };

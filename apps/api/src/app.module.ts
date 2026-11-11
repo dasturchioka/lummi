@@ -2,6 +2,8 @@ import type { UserFromGetMe } from 'grammy/types';
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
+import { AdminOrdersController } from './admin-orders/admin-orders.controller';
+import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
 import { CatalogAdminController, OnHandController } from './admin/catalog-admin.controller';
@@ -27,6 +29,7 @@ import { ShopCardController } from './payment/shop-card.controller';
 import { PaymentConfirmation } from './payment/payment-confirmation';
 import { PaymentMatching } from './payment/payment-matching';
 import { ShopCardService } from './payment/shop-card.service';
+import { ReceiptRejection } from './payment/receipt-rejection';
 import { ReceiptsAdminController, ReceiptsController } from './receipts/receipts.controller';
 import { ReceiptsService } from './receipts/receipts.service';
 import { OrdersService } from './orders/orders.service';
@@ -69,6 +72,8 @@ import { InternalGuard } from './internal/internal.guard';
 import { WorkerRuntime } from './worker/runtime';
 import { ContentAdminController, ContentController } from './content/content.controller';
 import { ContentService } from './content/content.service';
+import { CampaignsAdminController, CampaignsController } from './campaigns/campaigns.controller';
+import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
 import { SettingsService } from './settings/settings.service';
@@ -118,6 +123,9 @@ export class AppModule {
         HumoFeedController,
         BroadcastController,
         PromoAdminController,
+        AdminOrdersController,
+        CampaignsController,
+        CampaignsAdminController,
         DiscountsController,
       ],
       providers: [
@@ -166,6 +174,9 @@ export class AppModule {
         HumoFeedService,
         BroadcastService,
         PromoAdminService,
+        ReceiptRejection,
+        AdminOrdersService,
+        CampaignsService,
         BirthdayService,
         BirthdayCouponJob,
       ],
@@ -173,6 +184,8 @@ export class AppModule {
         CreditEvents,
         OrderStatusService,
         PaymentConfirmation,
+        // the one reject door: the orders group (#37) rejects through it too
+        ReceiptRejection,
         HumoFeedService,
         SettingsService,
         AuditService,

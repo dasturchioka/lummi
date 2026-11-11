@@ -145,8 +145,15 @@
     {
       "idx": 20,
       "version": "7",
-      "when": 1794352446759,
-      "tag": "0020_birthday_coupons",
+      "when": 1794352109739,
+      "tag": "0020_campaign_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794355255348,
+      "tag": "0021_birthday_coupons",
       "breakpoints": true
     }
   ]

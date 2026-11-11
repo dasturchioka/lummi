@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { SHOT_QR_CODE, WORST_LINK_CODE } from './campaign-data';
 import { customerScreens, stockScreens } from './stock-data';
 import {
   forgetPromoList,
@@ -14,6 +15,7 @@ import {
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
+import { SHOT_ORDER } from './orders-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
@@ -32,6 +34,29 @@ async function openFragrance(page: Page, which: number | string = 0) {
           .nth(which);
   await link.first().click();
   await page.locator('form [data-volume]').first().waitFor();
+}
+
+/**
+ * A full-page capture of an order page waits for every receipt image to decode, and scrolls
+ * through once: a phone viewport paints an image below the fold only after it was in view.
+ */
+async function imagesLoaded({ page }: { page: Page }) {
+  await page.waitForFunction(() =>
+    [...document.images].every((i) => i.complete && i.naturalWidth > 0),
+  );
+  const height = await page.evaluate(() => document.body.scrollHeight);
+  for (let y = 0; y < height; y += 600) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await page.waitForTimeout(60);
+  }
+}
+
+/** Presses a button on the order page and waits for the dialog it opens. */
+async function openOrderDialog(page: Page, name: string) {
+  await page.getByRole('button', { name, exact: true }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.waitFor();
+  return dialog;
 }
 
 /** Brings the volume editor to the top of the viewport (below the phone's top bar). */
@@ -553,6 +578,43 @@ export const screens: Screen[] = [
       await page.getByText(t.promo.inUse, { exact: true }).waitFor();
     },
     teardown: ({ db }) => forgetUses(db),
+  },
+  // Campaign links (ticket #35): the list, the editor of a hand-made link, a new link, and the QR.
+  { id: 'campaign-list', path: '/campaign-links', as: 'owner' },
+  {
+    id: 'campaign-editor',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: SHOT_QR_CODE, exact: true }).first().click();
+      await page.locator('#c-code').waitFor();
+    },
+  },
+  { id: 'campaign-new', path: '/campaign-links/new', as: 'owner' },
+  {
+    id: 'campaign-qr',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: SHOT_QR_CODE, exact: true }).first().click();
+      const qr = page.locator('img[src*="/qr"]');
+      await qr.waitFor();
+      await page.waitForFunction(() => {
+        const img = document.querySelector<HTMLImageElement>('img[src*="/qr"]');
+        return !!img && img.complete && img.naturalWidth > 0;
+      });
+      await qr.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  {
+    // the 40-character code and the longest label, on the list's row
+    id: 'campaign-editor-worst',
+    path: '/campaign-links',
+    as: 'owner',
+    act: async ({ page }) => {
+      await page.getByRole('link', { name: WORST_LINK_CODE, exact: true }).first().click();
+      await page.locator('#c-code').waitFor();
+    },
   },
   { id: 'promo-audit', path: '/audit?action=promo.created', as: 'owner' },
   // break-ui (#29), captured into shots/29/worst-case/: sixty codes in every state, and the editor
@@ -1324,6 +1386,162 @@ export const screens: Screen[] = [
       });
     },
   },
+  // ---- Orders panel (#33): the list, every order state, the three dialogs, the credits
+  { id: 'orders', path: '/orders', as: 'manager' },
+  { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
+  { id: 'orders-search', path: '/orders?q=93+555', as: 'manager' },
+  { id: 'orders-empty', path: '/orders?q=7777777', as: 'manager' },
+  {
+    id: 'order-awaiting',
+    path: `/orders/${SHOT_ORDER.awaiting}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  {
+    id: 'order-checking',
+    path: `/orders/${SHOT_ORDER.checking}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  { id: 'order-review', path: `/orders/${SHOT_ORDER.review}`, as: 'manager', act: imagesLoaded },
+  { id: 'order-paid', path: `/orders/${SHOT_ORDER.paid}`, as: 'manager', act: imagesLoaded },
+  {
+    id: 'order-assembling',
+    path: `/orders/${SHOT_ORDER.assembling}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  { id: 'order-shipped', path: `/orders/${SHOT_ORDER.shipped}`, as: 'manager', act: imagesLoaded },
+  {
+    id: 'order-delivered',
+    path: `/orders/${SHOT_ORDER.delivered}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  {
+    id: 'order-cancelled',
+    path: `/orders/${SHOT_ORDER.cancelled}`,
+    as: 'owner',
+    act: imagesLoaded,
+  },
+  { id: 'order-expired', path: `/orders/${SHOT_ORDER.expired}`, as: 'manager', act: imagesLoaded },
+  { id: 'order-worst', path: `/orders/${SHOT_ORDER.worst}`, as: 'owner', act: imagesLoaded },
+  {
+    id: 'order-reject',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.amount_mismatch, { exact: true }).check();
+      await dialog
+        .locator('textarea')
+        .fill(
+          'В чеке 144 000 сум, а к переводу 179 100 сум. Переведите разницу и пришлите оба чека.',
+        );
+    },
+  },
+  {
+    // a shopper who reads Uzbek: the preview is in their language, whatever the manager's
+    id: 'order-reject-uz-shopper',
+    path: `/orders/${SHOT_ORDER.checking}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.other, { exact: true }).check();
+      await dialog.locator('textarea').fill('Chekda boshqa kunning sanasi koʻrsatilgan.');
+    },
+  },
+  {
+    id: 'order-reject-empty',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.reject);
+      await dialog.getByLabel(t.orders.rejectReasons.other, { exact: true }).check();
+      await dialog.getByRole('button', { name: t.orders.detail.reject, exact: true }).click();
+      await dialog.getByText(t.orders.rejectNoteRequired).waitFor();
+    },
+  },
+  {
+    id: 'order-cancel',
+    path: `/orders/${SHOT_ORDER.paid}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.step.cancel);
+      await dialog.getByLabel(t.orders.cancelReasons.out_of_stock, { exact: true }).check();
+      await dialog.locator('textarea').fill('Флакон разбился при сборке');
+    },
+  },
+  {
+    id: 'order-hand',
+    path: `/orders/${SHOT_ORDER.assembling}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.step.hand_to_bts);
+      await dialog.getByLabel(t.orders.trackingLabel).fill('UZB 7704 1131 0058');
+    },
+  },
+  {
+    // the receipt in manual review: Candidate credits first
+    id: 'order-confirm',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      const first = dialog.locator('[data-credit-option] input').first();
+      await first.waitFor();
+      await first.check();
+    },
+  },
+  {
+    // «Показать другие», one of another amount picked: the reason it needs
+    id: 'order-confirm-other',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      await dialog.locator('[data-credit-option]').first().waitFor();
+      await dialog.getByRole('button', { name: /\(\d+\)$/ }).click();
+      // the transfer 40 000 short, the one the rejected receipt showed: the oldest of the others
+      const short = dialog.locator('[data-credit-option]').last();
+      await short.locator('input').check();
+      await short.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await dialog.locator('textarea').fill('Перевела двумя частями, вторая придёт вечером');
+    },
+  },
+  {
+    // money that came with no receipt, from «Ожидает оплаты»
+    id: 'order-confirm-no-receipt',
+    path: `/orders/${SHOT_ORDER.awaiting}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.detail.confirm);
+      await dialog.locator('[data-credit-option] input').first().check();
+    },
+  },
+  {
+    id: 'credits-link',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.locator('[data-link-credit]:visible').first().click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel(t.credits.orderNumber).fill(String(SHOT_ORDER.awaiting));
+      await dialog.getByRole('button', { name: t.credits.find, exact: true }).click();
+      await dialog.locator('[data-link-order]').waitFor();
+    },
+  },
+  { id: 'credits', path: '/credits', as: 'manager' },
+  { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
   ...stockScreens,
   ...customerScreens,
   { id: 'not-found', path: '/no-such-page', as: 'owner' },

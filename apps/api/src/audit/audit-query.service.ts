@@ -1,21 +1,11 @@
-import { tashkentToUtc, type AuditEntryDto, type AuditQuery } from '@lummi/contracts';
+import {
+  tashkentDayStart as dayStart,
+  type AuditEntryDto,
+  type AuditQuery,
+} from '@lummi/contracts';
 import { alias, and, auditLog, customers, desc, eq, sql, staff, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { DB } from '../tokens';
-
-/** The start of a Tashkent day as a UTC instant; the caller has already checked it is a real day. */
-function dayStart(day: string, plusDays = 0): Date {
-  const [year, month, d] = day.split('-').map(Number) as [number, number, number];
-  // roll the calendar forward in UTC arithmetic, then read it back as a Tashkent wall-clock date
-  const rolled = new Date(Date.UTC(year, month - 1, d + plusDays));
-  return tashkentToUtc({
-    year: rolled.getUTCFullYear(),
-    month: rolled.getUTCMonth() + 1,
-    day: rolled.getUTCDate(),
-    hour: 0,
-    minute: 0,
-  }) as Date;
-}
 
 type Parsed = { page: number; pageSize: number } & Omit<AuditQuery, 'page' | 'pageSize'>;
 
@@ -43,6 +33,25 @@ export class AuditQueryService {
       .select({ total: sql<number>`count(*)::int` })
       .from(auditLog)
       .where(where);
+    const items = await this.entries(where, q.pageSize, (q.page - 1) * q.pageSize);
+    return { items, total, page: q.page, pageSize: q.pageSize };
+  }
+
+  /** Every entry about one target (an order's page lists them), newest first. */
+  async forTarget(targetType: string, targetId: string | number, limit = 200) {
+    return this.entries(
+      and(eq(auditLog.targetType, targetType), eq(auditLog.targetId, String(targetId))),
+      limit,
+      0,
+    );
+  }
+
+  /** Entries newest first, with the actor's name (staff or customer) and a staff target's name. */
+  private async entries(
+    where: ReturnType<typeof and>,
+    limit: number,
+    offset: number,
+  ): Promise<AuditEntryDto[]> {
     const rows = await this.db
       .select({
         row: auditLog,
@@ -62,10 +71,10 @@ export class AuditQueryService {
       )
       .where(where)
       .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
-      .limit(q.pageSize)
-      .offset((q.page - 1) * q.pageSize);
+      .limit(limit)
+      .offset(offset);
 
-    const items: AuditEntryDto[] = rows.map(({ row, staffName, customerName, targetName }) => ({
+    return rows.map(({ row, staffName, customerName, targetName }) => ({
       id: row.id,
       createdAt: row.createdAt.toISOString(),
       actorType: row.actorType,
@@ -77,7 +86,6 @@ export class AuditQueryService {
       targetName: targetName ?? null,
       payload: row.payload as Record<string, unknown>,
     }));
-    return { items, total, page: q.page, pageSize: q.pageSize };
   }
 
   /** Staff are listed one by one; customers, the AI and the system are one filter each. */

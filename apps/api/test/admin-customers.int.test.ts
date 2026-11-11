@@ -74,7 +74,7 @@ async function walkTo(
   const path = [
     ['accepted', 'accept', mgr, undefined],
     ['assembling', 'start_assembly', mgr, undefined],
-    ['handed_to_bts', 'hand_to_bts', mgr, { trackingNumber: 'BTS 1' }],
+    ['handed_to_bts', 'hand_to_bts', mgr, { trackingNumber: 'BTS 4471 0098' }],
     ['delivered', 'deliver', mgr, undefined],
   ] as const;
   let from: OrderStatus = 'payment_confirmed';

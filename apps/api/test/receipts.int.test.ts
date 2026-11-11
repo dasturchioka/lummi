@@ -20,7 +20,7 @@ import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
-import { OrderStatusService } from '../src/order-status/order-status.service';
+import { ReceiptRejection } from '../src/payment/receipt-rejection';
 import { pdfRenderSlots } from '../src/receipts/pdf-first-page';
 import { receiptPdf } from './harness/pdf';
 import type { TestUser } from './harness/sign-init-data';
@@ -144,22 +144,21 @@ async function receiptRows(number: number) {
 /** The private FileStore's keys (the fake edge), sorted. */
 const storedKeys = () => [...t.edges.files.files.keys()].sort();
 
-/** A manager rejects the receipt under check, as the admin panel will (#33): back to «Ожидает оплаты». */
+/** A manager rejects the receipt under check, as the admin panel does (#33): back to «Ожидает оплаты». */
 async function rejectReceipt(number: number) {
   const [o] = await t.db.select({ id: orders.id }).from(orders).where(eq(orders.number, number));
+  const [waiting] = await t.db
+    .select({ id: receipts.id })
+    .from(receipts)
+    .where(and(eq(receipts.orderId, o!.id), eq(receipts.verdict, 'pending')));
   const manager = await t.managerSession();
-  const out = await t.app
-    .get(OrderStatusService)
-    .transition(
-      o!.id,
-      'reject_receipt',
-      { type: 'staff', id: manager.staff.id },
-      'receipt_review',
-      {
-        reason: 'Сумма не совпадает',
-      },
-    );
-  if (out.kind !== 'done') throw new Error(`reject: ${out.kind}`);
+  const out = await t.app.get(ReceiptRejection).reject({
+    orderId: o!.id,
+    receiptId: waiting!.id,
+    reason: 'amount_mismatch',
+    staffId: manager.staff.id,
+  });
+  if (out.kind !== 'rejected') throw new Error(`reject: ${out.kind}`);
 }
 
 /** A file as the customer route serves it. */

@@ -221,6 +221,18 @@ export const ordersMessages = defineMessages(
         payment_not_received: 'Оплата не поступила',
         not_collected_at_bts: 'Заказ не забрали в пункте BTS',
       },
+      /**
+       * Why a manager did not accept a receipt, as the shopper reads it in the bot's «Чек не
+       * принят» message (#33); `other` is the manager's own note instead.
+       */
+      receiptRejectReason: {
+        amount_mismatch: 'Сумма в чеке не совпадает с суммой заказа',
+        wrong_card: 'Перевод отправлен не на карту магазина',
+        not_received: 'Перевод не поступил на карту магазина',
+        unreadable: 'Чек не читается: нужен полный снимок экрана',
+        not_a_receipt: 'На изображении нет чека об оплате',
+        other: 'Другая причина',
+      },
       cancelledAt: 'Отменён {at}',
       cancel: 'Отменить заказ',
       cancelTitle: 'Отменить заказ № {number}?',
@@ -480,6 +492,14 @@ export const ordersMessages = defineMessages(
         unreachable: 'Siz bilan bogʻlana olmadik',
         payment_not_received: 'Toʻlov kelib tushmadi',
         not_collected_at_bts: 'Buyurtma BTS punktidan olib ketilmadi',
+      },
+      receiptRejectReason: {
+        amount_mismatch: 'Chekdagi summa buyurtma summasiga mos kelmaydi',
+        wrong_card: 'Oʻtkazma doʻkon kartasiga yuborilmagan',
+        not_received: 'Oʻtkazma doʻkon kartasiga kelib tushmagan',
+        unreadable: 'Chek oʻqilmayapti: ekranning toʻliq surati kerak',
+        not_a_receipt: 'Rasmda toʻlov cheki yoʻq',
+        other: 'Boshqa sabab',
       },
       cancelledAt: 'Bekor qilindi: {at}',
       cancel: 'Buyurtmani bekor qilish',

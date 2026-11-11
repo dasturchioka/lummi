@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { campaignCodeOf } from '@lummi/contracts/constants';
 import { App } from './app/App';
 import { router } from './app/router';
 import { session } from './lib/api';
@@ -15,7 +16,11 @@ async function main() {
 
   // `startapp` -> route, once, on launch. Unknown values land on Home.
   const start = launchStartParam();
-  if (start !== null && location.pathname === '/') {
+  const campaign = campaignCodeOf(start);
+  if (campaign && location.pathname === '/') {
+    // `l_<code>`: the API logs the open and names the target (ticket #35); loaded only for these launches
+    void import('./lib/campaign').then((m) => m.openCampaignLaunch(campaign));
+  } else if (start !== null && location.pathname === '/') {
     void router.navigate({ to: routeForStartParam(start), replace: true });
   }
 

@@ -379,38 +379,79 @@ export class CartService {
    * past that the stored code stays as it was. Whatever the code, it is stored and the quote says
    * whether it applies.
    */
-  async applyPromoCode(customerId: number, code: string): Promise<ApplyCodeOutcome> {
+  async applyPromoCode(
+    customerId: number,
+    code: string,
+    opts: { countAttempt?: boolean } = {},
+  ): Promise<ApplyCodeOutcome> {
+    const count = opts.countAttempt ?? true;
     return this.db.transaction(async (tx) => {
       await this.touch(tx, customerId);
-      const [row] = await tx
-        .select({ attempts: carts.promoAttempts, since: carts.promoAttemptsSince })
-        .from(carts)
-        .where(eq(carts.customerId, customerId))
-        .for('update');
-      const s = await readSettings(tx, ['promo.attemptLimit', 'promo.attemptWindowSeconds']);
-      const now = this.edges.clock.now();
-      const windowMs = s['promo.attemptWindowSeconds'] * 1000;
-      const since = row?.since ?? null;
-      const fresh = since === null || now.getTime() - since.getTime() >= windowMs;
-      const attempts = fresh ? 0 : (row?.attempts ?? 0);
-      if (!fresh && attempts >= s['promo.attemptLimit']) {
-        const left = since.getTime() + windowMs - now.getTime();
-        return {
-          kind: 'too_many_attempts',
-          retryAfterSeconds: Math.max(1, Math.ceil(left / 1000)),
-        };
-      }
+      const w = await this.attemptWindow(tx, customerId);
+      if (count && w.retryAfterSeconds !== null)
+        return { kind: 'too_many_attempts', retryAfterSeconds: w.retryAfterSeconds };
       await tx
         .update(carts)
         .set({
           promoCode: normalizePromoCode(code),
           discountChoice: null,
-          promoAttempts: attempts + 1,
-          promoAttemptsSince: fresh ? now : since,
+          // a code a campaign link supplied is not a guess: it neither counts nor starts the window
+          ...(count ? { promoAttempts: w.attempts + 1, promoAttemptsSince: w.since } : {}),
         })
         .where(eq(carts.customerId, customerId));
       return { kind: 'ok' };
     });
+  }
+
+  /**
+   * Seconds until the customer may guess again, or null while they may. Reading does not spend an
+   * attempt. A campaign open asks this first, so past the budget even a real link code is refused
+   * and the answer is no oracle for promo codes (ticket #35).
+   */
+  async guessWait(customerId: number): Promise<number | null> {
+    return this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
+      return (await this.attemptWindow(tx, customerId)).retryAfterSeconds;
+    });
+  }
+
+  /** A guess that found nothing (a campaign code that does not exist) costs an attempt, like a refused code. */
+  async spendGuess(customerId: number): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
+      const w = await this.attemptWindow(tx, customerId);
+      await tx
+        .update(carts)
+        .set({ promoAttempts: w.attempts + 1, promoAttemptsSince: w.since })
+        .where(eq(carts.customerId, customerId));
+    });
+  }
+
+  /**
+   * The customer's typed-guess window (`promo.attemptLimit` per `promo.attemptWindowSeconds`, a
+   * fixed window from the first), with the cart row locked. `attempts` and `since` are what to
+   * store after one more guess; `retryAfterSeconds` is set while the budget is spent.
+   */
+  private async attemptWindow(tx: DbOrTx, customerId: number) {
+    const [row] = await tx
+      .select({ attempts: carts.promoAttempts, since: carts.promoAttemptsSince })
+      .from(carts)
+      .where(eq(carts.customerId, customerId))
+      .for('update');
+    const s = await readSettings(tx, ['promo.attemptLimit', 'promo.attemptWindowSeconds']);
+    const now = this.edges.clock.now();
+    const windowMs = s['promo.attemptWindowSeconds'] * 1000;
+    const stored = row?.since ?? null;
+    const fresh = stored === null || now.getTime() - stored.getTime() >= windowMs;
+    const attempts = fresh ? 0 : (row?.attempts ?? 0);
+    const spent = !fresh && attempts >= s['promo.attemptLimit'];
+    return {
+      attempts,
+      since: fresh ? now : stored,
+      retryAfterSeconds: spent
+        ? Math.max(1, Math.ceil((stored.getTime() + windowMs - now.getTime()) / 1000))
+        : null,
+    };
   }
 
   /** Makes sure the customer's cart row exists. */

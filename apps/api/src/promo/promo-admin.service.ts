@@ -17,7 +17,9 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { isUniqueViolation } from '../admin/catalog-admin.service';
 import { AuditService } from '../audit/audit.service';
+import { CampaignsService } from '../campaigns/campaigns.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { promoState } from './promo-codes';
@@ -37,7 +39,7 @@ function toColumns({ expiresOn, ...rest }: PromoCodeInput) {
 
 /** The editable fields as the form shows them: what the audit diffs and the list returns. */
 function fieldsOf(r: PromoCodeRow): PromoCodeInput {
-  const { id: _id, createdAt: _c, updatedAt: _u, expiresAt, ...rest } = r;
+  const { id: _id, createdAt: _c, updatedAt: _u, campaignLinkMade: _l, expiresAt, ...rest } = r;
   return { ...rest, expiresOn: tashkentDateOf(expiresAt) };
 }
 
@@ -62,12 +64,6 @@ function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
   return out;
 }
 
-/** 23505, whether Drizzle wrapped the driver error or not. */
-function isUniqueViolation(e: unknown): boolean {
-  const err = (e as { code?: string; cause?: { code?: string } }) ?? {};
-  return err.code === '23505' || err.cause?.code === '23505';
-}
-
 /** Owner-only promo code admin (ADR 0017): every change is audited with the actor. */
 @Injectable()
 export class PromoAdminService {
@@ -75,6 +71,7 @@ export class PromoAdminService {
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
   ) {}
 
   async list(): Promise<AdminPromoCode[]> {
@@ -102,6 +99,8 @@ export class PromoAdminService {
           targetId: row!.id,
           payload: fieldsOf(row!),
         });
+        // every promo code has a campaign link (ticket #35)
+        await this.campaigns.ensurePromoLink(tx, row!, { type: 'staff', id: actor.id });
         return { ok: true, value: (await this.get(row!.id, tx))! } as const;
       });
     } catch (e) {
@@ -155,6 +154,7 @@ export class PromoAdminService {
         .where(eq(promoCodeUses.promoCodeId, id))
         .limit(1);
       if (used) return fail('in_use');
+      await this.campaigns.releasePromoCode(tx, id);
       await tx.delete(promoCodes).where(eq(promoCodes.id, id));
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },

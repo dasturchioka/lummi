@@ -1,0 +1,46 @@
+name: E2E
+# Seam 3 of ADR 0028: one happy-path browser test (apps/miniapp/e2e) against a disposable stack.
+# A workflow of its own, not a job in ci.yml: deploy.yml calls ci.yml as its `check`, so a job there
+# would hold every deploy back on a flake. This one reports on branches and pull requests only.
+on:
+  push:
+    branches-ignore: [stage-1, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - id: playwright
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: E2E
+        # The bot token only signs initData for the API under test; it is not a real bot.
+        env:
+          BOT_TOKEN: '123456789:e2e-signing-key-not-a-real-bot'
+          SESSION_SECRET: e2e-session-secret-e2e-session-secret
+        run: npm run e2e -w @lummi/miniapp
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            apps/miniapp/playwright-report
+            apps/miniapp/test-results
+          retention-days: 7

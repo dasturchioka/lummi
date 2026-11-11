@@ -44,6 +44,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Checkout (ticket #23, 2026-11-10).**
   - Consent wording: built as the mockup's «Согласен(на) на обработку персональных данных, включая дату рождения.» (TZ §9 asks consent incl. birthday on the first order); the lawyer should approve it with the public offer, and say whether it needs a link to a privacy page.
   - The Recipient phone is accepted only from the countries in the setting `orders.recipientPhoneCountryCodes` (default +998 only). Should a foreign number be allowed for a recipient collecting at a BTS point?
+- **Tracking number length (ticket #33).** «Передан в BTS» takes a tracking number of 6–64 characters, trimmed, with no pattern. Confirm the minimum against a real BTS waybill once the first parcel is shipped, and tighten it (a pattern setting) only if staff mistype.
 - **A transfer that differs from the amount due (ticket #32).** The AI confirms only an exact transfer to the shop card. A manager may link a credit with another amount (tiyin included) or on another card, with a typed reason; the difference is recorded on the order. Who handles the difference? An overpayment: refund the difference (a Refund) or keep it? An underpayment: accept it, or ask the customer for the rest before the order is «Принят»? Built: nothing happens automatically; the manager's reason records what was decided.
 - **Favourites.** Not in the TZ; it comes from the approved design (heart on cards). The list lives in Profile → «Избранное».
 - **Delivery city on Home.**
@@ -107,3 +108,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - Returns window «[3] дней» is written as «3 дней»: confirm the number, and have the customer's lawyer check the whole returns text (the 3-day window and the rule for opened perfume). The FAQ's first question was reworded to avoid the banned word «оригинал»; confirm the wording. Longevity in the FAQ reads «до 24 часов» (customer, 2026-11-07), not the draft's «[8–12] часов».
 - **Uzum Market store URL.** Ask the customer for the link to the LUMMI store on Uzum Market. The Contacts page names the store as plain text until then (there is no setting or placeholder for it yet); once the URL arrives, the owner can make it a link in the admin. The page also lists @lummi_manager (from `shop.managerUsername`), t.me/lummi_uz and instagram.com/lummi.uz.
 - Promo banner title is set in Manrope 600, not the Cormorant italic (promo copy is not a fragrance or set name). Ask the customer to confirm the font for banner titles.
+
+## Campaign links (ticket #35)
+- **Share mark.** ADR 0022 says plain navigation links are "not tracked beyond a share mark". We log nothing for them (the `p_<slug>` shape is the mark). If the owner wants shares counted, we need a separate event, since «Поделиться» opens by someone else are indistinguishable from direct launches.
+- **Prefill replaces the cart's code.** A link's promo code overwrites a code the shopper already entered. Confirm, or keep the shopper's own code.
+- **Automatic links for promo codes** lead to the catalog with source «Другое»; the owner edits them (target, source, label) per campaign.

@@ -1,4 +1,5 @@
 export * from './admin';
+export * from './admin-orders';
 export * from './admin-catalog';
 export * from './auth';
 export * from './delivery';
@@ -22,4 +23,5 @@ export * from './payment';
 export * from './order-transition-payloads';
 export * from './admin-stock';
 export * from './promo';
+export * from './campaign';
 export * from './birthday';

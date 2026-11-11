@@ -1,10 +1,14 @@
 import type { Discount } from '@lummi/contracts';
 import {
+  CAMPAIGN_SOURCES,
   LINE_KINDS,
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
   ORDER_STATUSES,
+  RECEIPT_CHECK_OUTCOMES,
   RECEIPT_FILE_KINDS,
+  RECEIPT_REVIEW_REASONS,
+  RECEIPT_VERDICTS,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -70,6 +74,10 @@ export const customers = pgTable(
     deliveryCity: text('delivery_city'),
     /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
     dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
+    /** The first campaign link they ever opened: the acquisition source, never overwritten (ADR 0022). */
+    acquisitionLinkId: bigint('acquisition_link_id', { mode: 'number' }).references(
+      () => campaignLinks.id,
+    ),
     /**
      * Date of birth (TZ §3.8), `YYYY-MM-DD`: entered once by the customer, in Profile or at checkout;
      * afterwards only staff correct it. `birth_date_set_at` starts the abuse guard (no coupon before
@@ -715,6 +723,10 @@ export const orders = pgTable(
     creditId: bigint('credit_id', { mode: 'number' }).references(() => credits.id),
     /** The Mini App's key for one checkout attempt: a repeated request returns this order. */
     idempotencyKey: uuid('idempotency_key').notNull(),
+    /** The last campaign link the customer opened within `campaigns.attributionWindowDays` before ordering (ADR 0022). */
+    campaignLinkId: bigint('campaign_link_id', { mode: 'number' }).references(
+      () => campaignLinks.id,
+    ),
     /** BTS's tracking number, required by «Передан в BTS» (ADR 0011). */
     trackingNumber: text('tracking_number'),
     /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
@@ -799,8 +811,9 @@ export const orderActionEnum = pgEnum('order_action', ORDER_ACTIONS);
 /**
  * The order's history (ADR 0011): one row per status change, written by `transition()` in the
  * same transaction as the change, its audit entry and its customer message. `reason` is the
- * cancel reason code, or the text staff typed for a rejected receipt or a return; `payload` keeps
- * the rest (a tracking number, per-line back-to-stock flags, the on-hand changes).
+ * cancel reason code, a rejected receipt's preset code (`RECEIPT_REJECT_REASONS`), a staff link's
+ * typed reason, or the text staff typed for a return; `payload` keeps the rest (a receipt id, a
+ * staff note, a tracking number, per-line back-to-stock flags, the on-hand changes).
  */
 export const orderEvents = pgTable(
   'order_events',
@@ -850,24 +863,13 @@ export const shopCard = pgTable(
  * it, a manager sends it to manual review or rejects it with a reason, or the wait window ends
  * with `payment_not_found`. The order's status is separate.
  */
-export const receiptVerdictEnum = pgEnum('receipt_verdict', [
-  'pending',
-  'ai_confirmed',
-  'manual_review',
-  'manager_confirmed',
-  'rejected',
-  'payment_not_found',
-]);
+export const receiptVerdictEnum = pgEnum('receipt_verdict', RECEIPT_VERDICTS);
 /**
  * Why a receipt went to manual review (#32): the same file as another receipt (`duplicate`, #36
  * adds the perceptual hash), the AI's answer did not confirm it (`not_confirmed`), or the AI could
  * not be asked, attempt after attempt (`judge_failed`).
  */
-export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', [
-  'duplicate',
-  'not_confirmed',
-  'judge_failed',
-]);
+export const receiptReviewReasonEnum = pgEnum('receipt_review_reason', RECEIPT_REVIEW_REASONS);
 /** Where the shopper sent it from: the payment screen, or the chat with the bot (#31). */
 export const receiptSourceEnum = pgEnum('receipt_source', ['miniapp', 'bot']);
 /** The original's kind, by its first bytes (ADR 0020). */
@@ -943,12 +945,7 @@ export interface StoredJudgement {
  * (`credit_taken`, the receipt keeps waiting for its own money), or the receipt was decided
  * while the AI was answering (`stale`).
  */
-export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', [
-  'confirmed',
-  'manual_review',
-  'credit_taken',
-  'stale',
-]);
+export const receiptCheckOutcomeEnum = pgEnum('receipt_check_outcome', RECEIPT_CHECK_OUTCOMES);
 
 /**
  * Every answer the receipt AI gave about a Receipt (ADR 0013, #32): the candidate credits it was
@@ -1130,6 +1127,8 @@ export const promoCodes = pgTable(
     /** TZ «применять к уценённым»; off: marked-down items are not discounted (ADR 0008). */
     appliesToMarkedDown: boolean('applies_to_marked_down').notNull().default(false),
     active: boolean('active').notNull().default(true),
+    /** Its automatic campaign link was made (#35); a link the owner deleted is never made again. */
+    campaignLinkMade: boolean('campaign_link_made').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1178,6 +1177,53 @@ export const promoCodeUses = pgTable(
 export type PromoCodeRow = typeof promoCodes.$inferSelect;
 export type PromoCodeUseRow = typeof promoCodeUses.$inferSelect;
 
+export const campaignSourceEnum = pgEnum('campaign_source', CAMPAIGN_SOURCES);
+
+/**
+ * A Campaign link (ticket #35, ADR 0022): `startapp=l_<code>` opens `target` (a start target from
+ * `@lummi/contracts/constants`) and prefills `promo_code_id`'s code in the cart. The code's case is
+ * kept (Telegram keeps it) but two links never differ only by case. Every promo code gets one.
+ */
+export const campaignLinks = pgTable(
+  'campaign_links',
+  {
+    id: id(),
+    code: text('code').notNull(),
+    target: text('target').notNull(),
+    promoCodeId: bigint('promo_code_id', { mode: 'number' }).references(() => promoCodes.id),
+    source: campaignSourceEnum('source').notNull(),
+    sourceLabel: text('source_label'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('campaign_links_code_idx').on(sql`lower(${t.code})`),
+    index('campaign_links_promo_idx').on(t.promoCodeId),
+    check('campaign_links_code_check', sql`${t.code} ~ '^[A-Za-z0-9_-]{3,40}$'`),
+  ],
+);
+
+/** One row per open: customer, link, time. "Opens" in reports count distinct customers (ADR 0022). */
+export const campaignOpens = pgTable(
+  'campaign_opens',
+  {
+    id: id(),
+    linkId: bigint('link_id', { mode: 'number' })
+      .notNull()
+      .references(() => campaignLinks.id),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('campaign_opens_customer_idx').on(t.customerId, t.openedAt),
+    index('campaign_opens_link_idx').on(t.linkId, t.customerId),
+  ],
+);
+
+export type CampaignLinkRow = typeof campaignLinks.$inferSelect;
+export type CampaignOpenRow = typeof campaignOpens.$inferSelect;
 /**
  * A birthday coupon (TZ §3.8, ticket #30): issued by the daily job at 10:00 Asia/Tashkent,
  * `birthday.daysBefore` days before the customer's birthday, one per customer per birthday year

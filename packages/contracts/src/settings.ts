@@ -4,6 +4,7 @@ import { telegramUsernameSchema } from './telegram-username';
 import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
+import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
 
 /** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
 export const BOT_CHOICE_MAX_SECONDS = 86_400;
@@ -25,6 +26,7 @@ export type SettingArea = (typeof SETTING_AREAS)[number];
 export const SETTING_UNITS = [
   'none',
   'seconds',
+  'days',
   'ms',
   'sum',
   'ml',
@@ -261,6 +263,18 @@ export const settingDefinitions = {
       uz: 'Ilova qabul qiladigan eng katta chek skrinshoti yoki PDF fayli.',
     },
   },
+  /** The longest note a manager may add when rejecting a receipt (#33, spec Changes 2026-11-11). */
+  'receipts.rejectNoteMaxLength': {
+    schema: z.number().int().min(20).max(RECEIPT_REJECT_NOTE_HARD_MAX),
+    default: 300,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Длина комментария к отклонённому чеку', uz: 'Rad etilgan chekka izoh uzunligi' },
+    hint: {
+      ru: 'Сколько символов менеджер может написать покупателю, когда не принимает чек.',
+      uz: 'Chek qabul qilinmaganda menejer xaridorga nechta belgi yozishi mumkin.',
+    },
+  },
   /**
    * How long the bot keeps a receipt the shopper sent while several orders waited for payment,
    * until they choose the order with a button (#31). Later, the bot asks them to send it again.
@@ -376,6 +390,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Объёмы, на которые действует право на апгрейд. Только больше 10 мл, через запятую.',
       uz: 'Yangilash huquqi amal qiladigan hajmlar. Faqat 10 ml dan katta, vergul bilan.',
+    },
+  },
+  /** Orders take the last campaign link opened within this many days before ordering (#35, ADR 0022). */
+  'campaigns.attributionWindowDays': {
+    schema: z.number().int().min(1).max(365),
+    default: 7,
+    area: 'shop',
+    unit: 'days',
+    label: { ru: 'Окно атрибуции ссылок', uz: 'Havolalarni hisobga olish oynasi' },
+    hint: {
+      ru: 'Заказ получает источник из последней рекламной ссылки, открытой за столько суток до заказа (сутки = ровно 24 часа).',
+      uz: 'Buyurtma manbasi — buyurtmadan shuncha sutka oldin ochilgan oxirgi reklama havolasi (sutka = roppa-rosa 24 soat).',
     },
   },
   /** Promo codes are guessable: a customer may type this many per window (ticket #29). */

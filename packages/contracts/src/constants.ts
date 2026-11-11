@@ -8,6 +8,7 @@ export * from './order-machine';
 export * from './recipient';
 export * from './promo-code';
 export * from './receipt-upload';
+export * from './receipt-review';
 export * from './birth-date';
 export * from './tashkent';
 export const POINT_SEARCH_MIN = 2;
@@ -71,11 +72,42 @@ export const STATIC_START_TARGETS = {
 /** `p_<slug>` opens that fragrance's card (slugs are ASCII kebab case, ADR 0016). */
 export const FRAGRANCE_START_PARAM = /^p_([a-z0-9]+(?:-[a-z0-9]+)*)$/;
 
+/** Where a campaign link is placed (ticket #35); `blogger` and `other` carry a label; `promo_code` is the automatic link of a promo code, labelled by it. */
+export const CAMPAIGN_SOURCES = [
+  'instagram',
+  'telegram_channel',
+  'store_qr',
+  'blogger',
+  'promo_code',
+  'other',
+] as const;
+export type CampaignSource = (typeof CAMPAIGN_SOURCES)[number];
+/**
+ * `l_<code>` is a tracked campaign link (ticket #35, ADR 0022): a key into the owner's list, not
+ * a screen. The Mini App asks the API to log the open and resolve it to one of the targets above;
+ * an unknown code lands on Home. A code is `A-Z a-z 0-9 _ -` (what `startapp` allows), at most 40
+ * characters, so `l_<code>` stays far inside Telegram's 64.
+ */
+const CAMPAIGN_CODE_CHARS = '[A-Za-z0-9_-]{3,40}';
+export const CAMPAIGN_CODE_PATTERN = new RegExp(`^${CAMPAIGN_CODE_CHARS}$`);
+export const CAMPAIGN_START_PARAM = new RegExp(`^l_(${CAMPAIGN_CODE_CHARS})$`);
+
+/** The `startapp` value of a campaign link. */
+export const campaignStartParam = (code: string): string => `l_${code}`;
+
+/** The campaign code of a launch parameter, or null when it is any other kind of target. */
+export const campaignCodeOf = (param: string | null | undefined): string | null =>
+  (param && CAMPAIGN_START_PARAM.exec(param)?.[1]) || null;
+
 /** The fixed targets in order, for the pickers: the banner editor and the broadcast composer. */
 export type StartTarget = keyof typeof STATIC_START_TARGETS;
 export const START_TARGETS = Object.keys(STATIC_START_TARGETS) as StartTarget[];
 
-/** A value an owner may link to (a banner, a broadcast button): a fixed target or a fragrance. */
+/**
+ * A value an owner may link to (a banner, a broadcast button, a campaign link's target): a fixed
+ * target or a fragrance. A campaign link is not one: it resolves to one of these, never to another
+ * link, and a banner opens its target in-app with no round trip to log an open.
+ */
 export const isStartTarget = (v: string): boolean =>
   Object.hasOwn(STATIC_START_TARGETS, v) || FRAGRANCE_START_PARAM.test(v);
 
