@@ -63,6 +63,14 @@ export class FakeTelegramSender implements TelegramSender {
   readonly answered: string[] = [];
   /** Callback answers with their toast text, in order. */
   readonly answers: { id: string; text?: string }[] = [];
+  /** While true, each edit waits here until the test lands it (applies) or fails it: a slow Telegram. */
+  holdEdits = false;
+  readonly heldEdits: { message: EditedMessage; land: () => void; fail: (e: Error) => void }[] = [];
+  /**
+   * Groups that became supergroups (old id → new id): Telegram refuses the old id, and an edit
+   * there answers what `editError` maps to `MessageGoneError`.
+   */
+  readonly migrated = new Map<number, number>();
   async answerCallback(callbackQueryId: string, text?: string): Promise<void> {
     this.answered.push(callbackQueryId);
     this.answers.push({ id: callbackQueryId, ...(text === undefined ? {} : { text }) });
@@ -78,6 +86,8 @@ export class FakeTelegramSender implements TelegramSender {
     const failure = this.failures.get(message.chatId)?.shift();
     if (failure) throw failure;
     if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
+    if (this.migrated.has(message.chatId))
+      throw new Error('Bad Request: group chat was upgraded to a supergroup chat');
     this.sent.push(message);
     const messageId = this.sent.length;
     this.messages.set(messageId, {
@@ -94,6 +104,9 @@ export class FakeTelegramSender implements TelegramSender {
   }
   /** Like Telegram: an edit that changes nothing is "not modified", which the real sender swallows. */
   async edit(message: EditedMessage): Promise<void> {
+    if (this.holdEdits)
+      await new Promise<void>((land, fail) => this.heldEdits.push({ message, land, fail }));
+    if (this.migrated.has(message.chatId)) throw new MessageGoneError();
     const failure = this.failures.get(message.chatId)?.shift();
     if (failure) throw failure;
     if (this.blockedChats.has(message.chatId)) throw new BotBlockedError(message.chatId);
@@ -118,6 +131,10 @@ export class FakeTelegramSender implements TelegramSender {
     this.answers.length = 0;
     this.failures.clear();
     this.blockedChats.clear();
+    this.holdEdits = false;
+    // a test that stopped halfway leaves no delivery hanging in the queue
+    for (const held of this.heldEdits.splice(0)) held.fail(new Error('test over'));
+    this.migrated.clear();
   }
 }
 

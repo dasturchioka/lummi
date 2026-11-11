@@ -74,7 +74,7 @@ export class InvalidFileIdError extends Error {
   }
 }
 
-/** The message to edit is gone (deleted, or the chat moved): post it again instead. */
+/** The message to edit is gone (deleted, or the group became a supergroup): post it again. */
 export class MessageGoneError extends Error {
   constructor() {
     super('Telegram has no such message to edit');
@@ -156,9 +156,12 @@ export class GrammySender implements TelegramSender {
 export function editError(e: unknown): 'not_modified' | Error {
   if (!(e instanceof GrammyError)) return e instanceof Error ? e : new Error(String(e));
   if (e.error_code === 400 && /message is not modified/i.test(e.description)) return 'not_modified';
+  // gone: deleted, the group became a supergroup (migrate_to_chat_id), or the chat is not ours
   if (
     e.error_code === 400 &&
-    /message to edit not found|message can't be edited/i.test(e.description)
+    /message to edit not found|message can't be edited|upgraded to a supergroup|chat not found/i.test(
+      e.description,
+    )
   )
     return new MessageGoneError();
   if (e.error_code === 403) return new BotBlockedError(Number(e.payload.chat_id ?? 0));

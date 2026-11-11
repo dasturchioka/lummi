@@ -9,6 +9,7 @@ import {
   asc,
   btsPoints,
   eq,
+  orderCards,
   fragrances,
   orderLines,
   orders,
@@ -29,7 +30,7 @@ import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { SettingsService } from '../src/settings/settings.service';
 import { WorkerRuntime } from '../src/worker/runtime';
-import type { SentMessage } from './fakes';
+import { plainText, type SentMessage } from './fakes';
 import { payWithCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, TEST_MINIAPP_URL, type TestApp } from './harness/test-app';
@@ -248,7 +249,13 @@ async function press(user: { id: number; first_name: string }, text: string, on:
 }
 
 /** A message in the group replying to `to` (a ForceReply question), as the webhook gets it. */
-async function reply(user: { id: number; first_name: string }, text: string, to: SentMessage) {
+async function reply(
+  user: { id: number; first_name: string },
+  text: string,
+  to: SentMessage,
+  chatId = GROUP,
+) {
+  const chat = { ...groupChat, id: chatId };
   // a person answers once the question is in the chat, by which time the bot has recorded its
   // message id (the fake shows the message a moment before the outbox stamps it)
   await vi.waitFor(
@@ -256,7 +263,7 @@ async function reply(user: { id: number; first_name: string }, text: string, to:
       const [asked] = await t.db
         .select({ id: outbox.id })
         .from(outbox)
-        .where(and(eq(outbox.chatId, GROUP), eq(outbox.telegramMessageId, to.messageId)));
+        .where(and(eq(outbox.chatId, chatId), eq(outbox.telegramMessageId, to.messageId)));
       expect(asked).toBeDefined();
     },
     { timeout: 10_000 },
@@ -269,14 +276,14 @@ async function reply(user: { id: number; first_name: string }, text: string, to:
       message_thread_id: ORDERS_TOPIC,
       is_topic_message: true,
       date: 1_700_000_000,
-      chat: groupChat,
+      chat,
       from: from(user),
       text,
       reply_to_message: {
         message_id: to.messageId,
         message_thread_id: ORDERS_TOPIC,
         date: 1_700_000_000,
-        chat: groupChat,
+        chat,
         from: botUser,
         text: to.plain,
       },
@@ -738,13 +745,133 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
       (await card(order.number, (text) => text.includes('Собирается — Dilnoza'))).messageId,
     ).toBe(again.messageId);
   });
-});
 
-// keep the imports the next slices use
-void vali;
-void dilnoza;
-void bekzod;
-void outsider;
-void addStaff;
-void buttons;
-void outbox;
+  it('a group that became a supergroup: its cards and questions follow the new chat id', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await press(dilnoza, '📦 Собирается', await cardWith(order.number, '📦 Собирается'));
+    await press(dilnoza, '🚚 Передан в BTS', await cardWith(order.number, '🚚 Передан в BTS'));
+    const question = await groupMessage((m) => m.plain.includes('введите трек-номер BTS'));
+
+    // Telegram moves the group: the old id is refused from now on
+    const NEW = -1009876543210;
+    t.edges.telegram.migrated.set(GROUP, NEW);
+    const res = await t.postUpdate({
+      update_id: ++updateId,
+      message: {
+        message_id: 777,
+        date: 1_700_000_000,
+        chat: { id: GROUP, type: 'group', title: 'Lummi' },
+        from: from(dilnoza),
+        migrate_to_chat_id: NEW,
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(await t.app.get(SettingsService).get('bot.groupChatId')).toBe(NEW);
+    const [row] = await t.db.select().from(orderCards).where(eq(orderCards.orderId, order.id));
+    expect(row!.chatId).toBe(NEW);
+
+    // the question still counts, answered in the new chat; the card shows the change there
+    await reply(dilnoza, 'BTS-555666', question, NEW);
+    expect(await statusOf(order.number)).toBe('handed_to_bts');
+    await vi.waitFor(
+      () => {
+        const moved = [...t.edges.telegram.messages.values()].find(
+          (m) => m.chatId === NEW && m.plain.startsWith(`Заказ № ${order.number} · Передан в BTS`),
+        );
+        expect(moved?.threadId).toBe(ORDERS_TOPIC);
+        // with its receipt, as a reply to it
+        expect(
+          [...t.edges.telegram.messages.values()].filter(
+            (m) => m.chatId === NEW && m.photo && repliesTo(moved!.messageId)(m),
+          ),
+        ).toHaveLength(1);
+      },
+      { timeout: 10_000 },
+    );
+  });
+
+  it('a delivery that outlived its lease leaves the next holder alone, and the newest card stays on screen', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    const telegram = t.edges.telegram;
+    const leaseOf = async () =>
+      (await t.db.select().from(orderCards).where(eq(orderCards.orderId, order.id)))[0]!.syncingAt;
+
+    // the first delivery hangs in Telegram past outbox.requeueAfterSeconds (300 s)
+    telegram.holdEdits = true;
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await vi.waitFor(() => expect(telegram.heldEdits).toHaveLength(1), { timeout: 10_000 });
+    const first = await leaseOf();
+    t.edges.clock.advance(10 * MIN);
+
+    // a second change: its delivery takes the expired lease and renders the newer card
+    const admin = await t.signInStaff('manager', bekzod);
+    const moved = await admin.client.admin.orders.fulfil({
+      params: { number: order.number },
+      body: { action: 'start_assembly', expectedStatus: 'accepted' },
+    });
+    expect(moved.status).toBe(200);
+    await vi.waitFor(() => expect(telegram.heldEdits).toHaveLength(2), { timeout: 10_000 });
+    const second = await leaseOf();
+    expect(second!.getTime()).toBeGreaterThan(first!.getTime());
+
+    // the first call fails late: it must not free the lease the second delivery holds
+    telegram.heldEdits[0]!.fail(new Error('socket hang up'));
+    await vi.waitFor(async () => {
+      const [late] = await t.db
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.kind, 'order_card'), eq(outbox.ref, order.id)))
+        .orderBy(asc(outbox.id))
+        .offset(1)
+        .limit(1);
+      expect(late!.sendingAt).toBeNull();
+    });
+    expect(await leaseOf()).toEqual(second);
+
+    // the second lands; then a late success of an old render is overwritten by the newest one
+    telegram.heldEdits[1]!.land();
+    await card(order.number, (text) => text.includes('Собирается — Bekzod'));
+    await vi.waitFor(async () => expect(await leaseOf()).toBeNull());
+  });
+
+  it('an old render that lands after a newer one is put right', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    const telegram = t.edges.telegram;
+    telegram.holdEdits = true;
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await vi.waitFor(() => expect(telegram.heldEdits).toHaveLength(1), { timeout: 10_000 });
+    t.edges.clock.advance(10 * MIN);
+    const admin = await t.signInStaff('manager', bekzod);
+    await admin.client.admin.orders.fulfil({
+      params: { number: order.number },
+      body: { action: 'start_assembly', expectedStatus: 'accepted' },
+    });
+    await vi.waitFor(() => expect(telegram.heldEdits).toHaveLength(2), { timeout: 10_000 });
+
+    // the newer render lands first and is recorded as shown
+    telegram.holdEdits = false;
+    telegram.heldEdits[1]!.land();
+    await card(order.number, (text) => text.startsWith(`Заказ № ${order.number} · Собирается`));
+    // then the old one lands: Telegram shows «Принят» again, until the card is put right
+    const status = (e: { text: string }) =>
+      plainText(e.text, { parse_mode: 'HTML' }).split('\n')[0];
+    const before = telegram.edited.length;
+    telegram.heldEdits[0]!.land();
+    await vi.waitFor(
+      async () => {
+        const [row] = await t.db.select().from(orderCards).where(eq(orderCards.orderId, order.id));
+        expect(row!.syncingAt).toBeNull();
+        expect(telegram.edited.slice(before).map(status)).toEqual([
+          `Заказ № ${order.number} · Принят`,
+          `Заказ № ${order.number} · Собирается`,
+        ]);
+      },
+      { timeout: 15_000 },
+    );
+    expect(cardOf(order.number)!.plain.split('\n')[0]).toBe(`Заказ № ${order.number} · Собирается`);
+  });
+});

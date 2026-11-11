@@ -230,9 +230,13 @@ describe('editing a message', () => {
         ),
       ),
     ).toBe('not_modified');
-    expect(editError(error(400, 'Bad Request: message to edit not found'))).toBeInstanceOf(
-      MessageGoneError,
-    );
+    for (const gone of [
+      'Bad Request: message to edit not found',
+      // the group became a supergroup (migrate_to_chat_id), or the bot can no longer see it
+      'Bad Request: group chat was upgraded to a supergroup chat',
+      'Bad Request: chat not found',
+    ])
+      expect(editError(error(400, gone))).toBeInstanceOf(MessageGoneError);
     const limited = editError(error(429, 'Too Many Requests: retry after 7', { retry_after: 7 }));
     expect(limited).toBeInstanceOf(RateLimitedError);
     expect((limited as RateLimitedError).retryAfterSeconds).toBe(7);

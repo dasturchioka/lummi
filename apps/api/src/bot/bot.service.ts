@@ -13,6 +13,7 @@ import { EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
 import { BotReceipts, RECEIPT_CALLBACK, type IncomingReceipt } from './bot-receipts.service';
 import { CARD_CALLBACK } from '../orders-group/card-view';
+import { OrderCards } from '../orders-group/order-cards';
 import { OrdersGroupBot } from '../orders-group/orders-group-bot';
 
 export const BOT_INFO = Symbol('BOT_INFO');
@@ -41,6 +42,7 @@ export class BotService implements OnApplicationShutdown {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(BotReceipts) private readonly botReceipts: BotReceipts,
     @Inject(OrdersGroupBot) private readonly ordersGroup: OrdersGroupBot,
+    @Inject(OrderCards) private readonly orderCards: OrderCards,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(BOT_INFO) botInfo: UserFromGetMe | undefined,
   ) {
@@ -223,6 +225,8 @@ export class BotService implements OnApplicationShutdown {
     const to = ctx.message?.migrate_to_chat_id;
     const from = ctx.chat?.id;
     if (!to || !from) return;
+    // its order cards and open questions move along, whatever the setting says by now (#37)
+    await this.orderCards.moveGroup(ctx.tx, from, to);
     if ((await this.settings.get('bot.groupChatId', ctx.tx)) !== from) return;
     await this.settings.set('bot.groupChatId', to, { type: 'system' }, ctx.tx);
     this.log.warn(`orders group migrated ${from} -> ${to}`);
