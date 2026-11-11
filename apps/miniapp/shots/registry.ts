@@ -3580,7 +3580,7 @@ function upgradeRightScreens(): ScreenDef[] {
       teardown: done,
     },
     {
-      // an entered promo code wins (ADR 0002); the right waits, «Применить скидку» takes the code out
+      // an entered promo code wins (ADR 0002); the right says how much cheaper it is (#39)
       id: 'cart-set-discount-promo-wins',
       path: '/cart',
       fullPage: true,
@@ -3665,6 +3665,23 @@ function discountChoiceScreens(
   };
   const checked = (page: Page, n: number) =>
     page.getByRole('radio').nth(n).and(page.locator('[aria-checked="true"]')).waitFor();
+  // the shopper chose the coupon, which then ended: the next cart answer reports it, once
+  const staleChoice = async (ctx: { api: ApiClient; db: ShotDb }) => {
+    await both(ctx);
+    const cart = await ctx.api.cart.get();
+    if (cart.status !== 200) throw new Error(`cart: HTTP ${cart.status}`);
+    const coupon = cart.body.discountOptions.find((o) => o.discount?.type === 'birthday_coupon');
+    if (coupon?.discount?.type !== 'birthday_coupon') throw new Error('no coupon offered');
+    const res = await ctx.api.cart.chooseDiscount({
+      body: { type: 'birthday_coupon', id: coupon.discount.id },
+    });
+    if (res.status !== 200) throw new Error(`choose: HTTP ${res.status}`);
+    await ctx.db.query(
+      `update birthday_coupons set expires_at = now()
+       where customer_id in (select id from customers where telegram_id = $1)`,
+      [SHOT_USER.id],
+    );
+  };
   return [
     {
       // no code: the server picked the set right; the coupon and «Не применять» with their totals
@@ -3723,25 +3740,32 @@ function discountChoiceScreens(
       id: 'cart-choice-stale',
       path: '/cart',
       fullPage: true,
-      setup: async (ctx) => {
-        await both(ctx);
-        const cart = await ctx.api.cart.get();
-        if (cart.status !== 200) throw new Error(`cart: HTTP ${cart.status}`);
-        const coupon = cart.body.discountOptions.find(
-          (o) => o.discount?.type === 'birthday_coupon',
-        );
-        if (coupon?.discount?.type !== 'birthday_coupon') throw new Error('no coupon offered');
-        const res = await ctx.api.cart.chooseDiscount({
-          body: { type: 'birthday_coupon', id: coupon.discount.id },
-        });
-        if (res.status !== 200) throw new Error(`choose: HTTP ${res.status}`);
-        await ctx.db.query(
-          `update birthday_coupons set expires_at = now()
-           where customer_id in (select id from customers where telegram_id = $1)`,
-          [SHOT_USER.id],
-        );
-      },
+      setup: staleChoice,
       act: async ({ page }) => void (await page.getByTestId('choice-stale').waitFor()),
+      teardown: done,
+    },
+    {
+      // the tab bar's read on launch reported it, then an add from the catalog answered without it
+      // before the cart opened: the cart still says so
+      id: 'cart-choice-stale-after-add',
+      path: '/catalog',
+      fullPage: true,
+      setup: staleChoice,
+      act: async ({ page }) => {
+        const bar = page.getByRole('navigation', { name: 'LUMMI' });
+        await bar.getByLabel('2', { exact: true }).waitFor();
+        await page.getByTestId('list-add').first().click();
+        const added = page.waitForResponse(
+          (r) => r.url().endsWith('/cart/lines') && r.request().method() === 'POST',
+        );
+        await page
+          .getByTestId('volume-sheet')
+          .getByRole('button', { name: /В корзину|Savatga/ })
+          .click();
+        await added;
+        await bar.getByRole('link', { name: /Корзина|Savat/ }).click();
+        await page.getByTestId('choice-stale').waitFor();
+      },
       teardown: done,
     },
   ];

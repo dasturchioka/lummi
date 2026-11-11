@@ -20,6 +20,7 @@ import {
   useSetQuantity,
 } from '../cart/queries';
 import { useChooseDiscount } from '../cart/choose';
+import { useStaleChoice } from '../cart/stale-choice';
 import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
@@ -680,10 +681,9 @@ export function Cart() {
   const removePromo = useRemovePromoCode();
   const choose = useChooseDiscount();
   const busy = useIsMutating() > 0;
-  // The server reports a stale choice once (and then picks by itself): keep the notice on screen
-  // until the shopper picks a discount themselves.
-  const [stale, setStale] = useState(false);
-  if (cart.data?.quote.staleChoice && !stale) setStale(true);
+  // The server reports a stale choice once, in whichever cart answer came first (and then picks by
+  // itself): the notice stays until the shopper picks a discount themselves or types a code.
+  const { stale, clear: clearStale } = useStaleChoice();
 
   if (cart.isError && !cart.data)
     return (
@@ -743,11 +743,14 @@ export function Cart() {
       onRemove={(lineId) => remove.mutate(lineId)}
       onCheckout={() => void router.navigate({ to: '/checkout' })}
       promoNotice={promoNotice}
-      onApplyPromo={(code) => applyPromo.mutate(code)}
+      onApplyPromo={(code) => {
+        clearStale();
+        applyPromo.mutate(code);
+      }}
       onRemovePromo={() => removePromo.mutate()}
       staleChoice={stale}
       onChoose={(choice) => {
-        setStale(false);
+        clearStale();
         choose.mutate(choice);
       }}
     />
