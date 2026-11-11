@@ -105,6 +105,51 @@ describe('CartView: the discount switch (#39)', () => {
     expect(onChoose.mock.calls).toEqual([[{ type: 'upgrade_right', id: 1 }]]);
   });
 
+  it('the hint is worded by source: a 10 ml bottle’s right, the birthday coupon', () => {
+    const promo = CART_FIXTURES['choice-promo'];
+    const waiting = promo.entitlementWaiting;
+    if (waiting?.type !== 'upgrade_right') throw new Error('the fixture waits with a set right');
+    render(
+      <CartView cart={{ ...promo, entitlementWaiting: { ...waiting, source: 'single_10ml' } }} />,
+    );
+    expect(read(screen.getByTestId('better-text'))).toBe('Скидка за 10 мл выгоднее на 15 450 сум');
+    cleanup();
+
+    const onChoose = vi.fn();
+    render(
+      <CartView
+        cart={{
+          ...promo,
+          entitlementWaiting: {
+            type: 'birthday_coupon',
+            id: 5,
+            percent: 15,
+            lastDay: '2026-11-21',
+            cheaperBy: 3_700,
+          },
+        }}
+        onChoose={onChoose}
+      />,
+    );
+    expect(read(screen.getByTestId('better-text'))).toBe(
+      'Купон ко дню рождения выгоднее на 3 700 сум',
+    );
+    expect(read(screen.getByTestId('better-detail'))).toBe('до 21 ноября');
+    fireEvent.click(screen.getByRole('button', { name: 'Переключить' }));
+    expect(onChoose.mock.calls).toEqual([[{ type: 'birthday_coupon', id: 5 }]]);
+  });
+
+  it('no hint while the entered code is not dearer than the entitlement', () => {
+    const promo = CART_FIXTURES['choice-promo'];
+    render(
+      <CartView
+        cart={{ ...promo, entitlementWaiting: { ...promo.entitlementWaiting!, cheaperBy: 0 } }}
+      />,
+    );
+    expect(screen.getByTestId('discount-choice')).toBeTruthy();
+    expect(screen.queryByTestId('choice-better')).toBeNull();
+  });
+
   it('in Uzbek', () => {
     language = 'uz';
     render(<CartView cart={CART_FIXTURES['choice-promo']} />);
