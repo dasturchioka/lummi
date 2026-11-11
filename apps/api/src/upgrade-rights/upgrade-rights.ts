@@ -141,6 +141,59 @@ export function toEntitlement(r: UpgradeRightRow): Extract<Entitlement, { type: 
   };
 }
 
+/** The active rights as `quote()` takes them (the `EntitlementSource`'s `active`). */
+export async function upgradeRightEntitlements(
+  tx: DbOrTx,
+  customerId: number,
+  now: Date,
+): Promise<Extract<Entitlement, { type: 'upgrade_right' }>[]> {
+  return (await activeUpgradeRights(tx, customerId, now)).map(toEntitlement);
+}
+
+/**
+ * ADR 0005: the order holds the right, `UPDATE … WHERE used_by_order_id IS NULL AND closed_at IS
+ * NULL AND expires_at > now`, in the transaction that creates it. False when another order holds
+ * it, its source order was returned, or it has ended.
+ */
+export async function holdUpgradeRight(
+  tx: DbOrTx,
+  hold: { id: number; customerId: number; orderId: number; now: Date },
+): Promise<boolean> {
+  const held = await tx
+    .update(upgradeRights)
+    .set({ usedByOrderId: hold.orderId })
+    .where(
+      and(
+        eq(upgradeRights.id, hold.id),
+        eq(upgradeRights.customerId, hold.customerId),
+        isNull(upgradeRights.usedByOrderId),
+        isNull(upgradeRights.closedAt),
+        gt(upgradeRights.expiresAt, hold.now),
+      ),
+    )
+    .returning({ id: upgradeRights.id });
+  return held.length === 1;
+}
+
+/**
+ * A cancelled or returned order gives its right back while it is still within its term (TZ §3.4:
+ * «право восстанавливается в пределах срока»), so it is active again. Past its end, or once its
+ * source order was returned (closed), it stays with the order that used it, the record of where
+ * it went.
+ */
+export async function releaseUpgradeRight(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
+  await tx
+    .update(upgradeRights)
+    .set({ usedByOrderId: null })
+    .where(
+      and(
+        eq(upgradeRights.usedByOrderId, orderId),
+        isNull(upgradeRights.closedAt),
+        gt(upgradeRights.expiresAt, now),
+      ),
+    );
+}
+
 /**
  * The fragrance card's «Скидка за набор» prices (TZ §3.4 «Отображение»): for each Full size volume
  * of the fragrance, the price of one bottle with the customer's best covering right, as `quote()`

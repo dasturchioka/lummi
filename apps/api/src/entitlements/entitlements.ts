@@ -6,6 +6,11 @@ import {
   releaseBirthdayCoupon,
 } from '../birthday/birthday-coupons';
 import type { Entitlement } from '../pricing/quote';
+import {
+  holdUpgradeRight,
+  releaseUpgradeRight,
+  upgradeRightEntitlements,
+} from '../upgrade-rights/upgrade-rights';
 
 /**
  * Entitlements (GLOSSARY): the discount sources a customer holds and that apply without typing
@@ -17,7 +22,8 @@ import type { Entitlement } from '../pricing/quote';
  *   update) in the order's transaction;
  * - `releaseEntitlements`: a cancelled or returned order gives back what it held.
  *
- * A new source (the upgrade rights of #38) is one more `EntitlementSource` in `SOURCES`.
+ * Each source is one `EntitlementSource` in `SOURCES`: the birthday coupon (#30) and the upgrade
+ * right (#38).
  */
 export interface EntitlementSource {
   type: Entitlement['type'];
@@ -39,7 +45,14 @@ const birthdayCouponSource: EntitlementSource = {
   release: releaseBirthdayCoupon,
 };
 
-const SOURCES: readonly EntitlementSource[] = [birthdayCouponSource];
+const upgradeRightSource: EntitlementSource = {
+  type: 'upgrade_right',
+  active: upgradeRightEntitlements,
+  hold: holdUpgradeRight,
+  release: releaseUpgradeRight,
+};
+
+const SOURCES: readonly EntitlementSource[] = [birthdayCouponSource, upgradeRightSource];
 
 /** The Discount of an entitlement (not a promo code). */
 export type EntitlementDiscount = Extract<Discount, { type: Entitlement['type'] }>;

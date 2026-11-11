@@ -19,11 +19,12 @@ import {
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { WorkerRuntime } from '../src/worker/runtime';
-import { shopper } from './harness/orders';
+import { shopper, whileLockedUntil } from './harness/orders';
 import { payWithCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
@@ -71,14 +72,14 @@ async function allSlugs() {
 }
 
 /** The checkout body for the cart as it is now, to a Samarkand point at the quoted total. */
-async function checkoutBody(client: Shopper, extra: Partial<CreateOrderBody> = {}) {
+async function checkoutBody(client: Shopper, extra: Partial<CreateOrderBody> = {}, item?: string) {
   const [region] = (await t.db.select().from(regions)).filter((r) => r.nameRu.startsWith('Самарк'));
   const [point] = await t.db
     .select()
     .from(btsPoints)
     .where(and(eq(btsPoints.regionId, region!.id), eq(btsPoints.active, true)))
     .limit(1);
-  const checkout = await client.checkout.get({ query: { regionId: region!.id } });
+  const checkout = await client.checkout.get({ query: { regionId: region!.id, item } });
   if (checkout.status !== 200) throw new Error(`checkout ${checkout.status}`);
   return {
     recipientName: 'Ali Valiyev',
@@ -480,5 +481,238 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
     t.edges.clock.set(new Date('2026-11-13T05:00:00Z'));
     await tick();
     expect(await reminders()).toHaveLength(1);
+  });
+});
+
+describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
+  /** Ali, whose Discovery set was delivered on 9 November: one right on its five, through 9 December. */
+  async function withRight() {
+    const s = await shopper(t, ali, '998901112233');
+    const inBox = await discoverySlugs(s);
+    const outside = (await allSlugs()).filter((x) => !inBox.includes(x));
+    await s.cart.addDiscovery({ body: { qty: 1 } });
+    const source = await placeOrder(s);
+    await fulfilTo(source, 'delivered');
+    const [right] = await rightsOf(source);
+    return { s, inBox, outside, right: right!, source };
+  }
+  async function add(c: Shopper, slug: string, ml: 10 | 30 | 50, qty = 1) {
+    const res = await c.cart.addLine({ body: { slug, ml, qty } });
+    if (res.status !== 200) throw new Error(`add ${slug}: ${res.status}`);
+  }
+  async function quoteOf(c: Shopper) {
+    const cart = await c.cart.get();
+    if (cart.status !== 200) throw new Error(`cart ${cart.status}`);
+    return cart.body.quote;
+  }
+  async function buyNow(c: Shopper, item: string) {
+    const res = await c.orders.create({ body: await checkoutBody(c, { item }, item) });
+    if (res.status !== 201) throw new Error(`order ${res.status} ${JSON.stringify(res.body)}`);
+    return res.body;
+  }
+
+  it('discounts one full-size bottle of a covered fragrance by 20 %, delivery left out', async () => {
+    const { s, inBox, right } = await withRight();
+    await add(s, inBox[0]!, 30, 2);
+    expect(await quoteOf(s)).toMatchObject({
+      itemsSubtotal: 298_000,
+      // one bottle: 20 % of 149 000
+      discount: { type: 'upgrade_right', id: right.id, source: 'set', amount: 29_800 },
+      thresholdBase: 'before',
+      deliveryFee: 0,
+      total: 268_200,
+    });
+  });
+
+  it('covers only its five fragrances, and never a 10 ml', async () => {
+    const { s, inBox, outside } = await withRight();
+    await add(s, outside[0]!, 50);
+    await add(s, inBox[0]!, 10);
+    expect(await quoteOf(s)).toMatchObject({ itemsSubtotal: 288_000, discount: null });
+  });
+
+  it('the free-delivery threshold is counted before the right’s discount', async () => {
+    const { s, inBox, outside } = await withRight();
+    // 219 000 + 69 000 = 288 000 reaches 250 000; less 43 800 it would not
+    await add(s, inBox[0]!, 50);
+    await add(s, outside[0]!, 10);
+    expect(await quoteOf(s)).toMatchObject({
+      itemsSubtotal: 288_000,
+      discount: { type: 'upgrade_right', amount: 43_800 },
+      thresholdBaseAmount: 288_000,
+      deliveryFee: 0,
+      total: 244_200,
+    });
+  });
+
+  it('an entered promo code wins; the right stays the customer’s', async () => {
+    const { s, inBox, right } = await withRight();
+    const owner = await t.ownerSession();
+    const created = await owner.client.admin.promoCodes.create({
+      body: {
+        code: 'BLOGER10',
+        kind: 'percent',
+        percent: 10,
+        amount: null,
+        maxDiscount: null,
+        expiresOn: null,
+        minOrderTotal: null,
+        totalLimit: null,
+        perCustomerLimit: null,
+        newCustomersOnly: false,
+        appliesToMarkedDown: false,
+        active: true,
+      },
+    });
+    expect(created.status).toBe(201);
+    await add(s, inBox[0]!, 50);
+    await s.cart.applyPromoCode({ body: { code: 'BLOGER10' } });
+    expect(await quoteOf(s)).toMatchObject({
+      discount: { type: 'promo_code', code: 'BLOGER10', amount: 21_900 },
+      total: 222_100,
+      alternatives: [
+        { discount: { type: 'upgrade_right', id: right.id, amount: 43_800 }, total: 200_200 },
+      ],
+    });
+    const order = await placeOrder(s);
+    expect((await orderRow(order)).discount).toMatchObject({ type: 'promo_code' });
+    expect(await rightPrices(s, inBox[0]!)).toEqual(SET_PRICES);
+  });
+
+  it('without a code the server picks the lowest total including delivery: the right over a bigger birthday coupon', async () => {
+    const { s, inBox, outside, right } = await withRight();
+    // born 1 December: the coupon (20 % of items, threshold after it) arrives 28 November at 10:00
+    expect(
+      (await s.me.setBirthDate({ body: { birthDate: '1996-12-01', consent: true } })).status,
+    ).toBe(200);
+    t.edges.clock.set(new Date('2026-11-28T05:00:00Z'));
+    await t.app.get(BirthdayCouponJob).run();
+    const later = (await t.signIn(ali)).client;
+
+    // 219 000 + 69 000: the right takes 43 800 and delivery stays free (244 200); the coupon takes
+    // 57 600, but 230 400 is under the threshold, so delivery comes back (255 400)
+    await add(later, inBox[0]!, 50);
+    await add(later, outside[0]!, 10);
+    expect(await quoteOf(later)).toMatchObject({
+      discount: { type: 'upgrade_right', id: right.id, amount: 43_800 },
+      total: 244_200,
+      alternatives: [{ discount: { type: 'birthday_coupon', amount: 57_600 }, total: 255_400 }],
+    });
+
+    // with more in the cart the coupon’s 20 % of everything is cheaper overall
+    await add(later, outside[1]!, 50);
+    expect(await quoteOf(later)).toMatchObject({
+      itemsSubtotal: 507_000,
+      discount: { type: 'birthday_coupon', amount: 100_000 },
+      total: 407_000,
+    });
+  });
+
+  it('the order holds it: the snapshot carries it, the card and the next cart no longer have it', async () => {
+    const { s, inBox, right, source } = await withRight();
+    await add(s, inBox[0]!, 50);
+    const number = await placeOrder(s);
+    const row = await orderRow(number);
+    expect(row).toMatchObject({
+      discount: { type: 'upgrade_right', id: right.id, source: 'set', amount: 43_800 },
+      total: 200_200,
+    });
+    expect((await rightsOf(source))[0]).toMatchObject({ usedByOrderId: row.id });
+    expect(await rightPrices(s, inBox[1]!)).toEqual([]);
+    await add(s, inBox[1]!, 50);
+    expect(await quoteOf(s)).toMatchObject({ discount: null });
+  });
+
+  it('«Купить сейчас» takes it too', async () => {
+    const { s, inBox, right } = await withRight();
+    const order = await buyNow(s, `volume:${inBox[2]}:30`);
+    expect(order.discount).toMatchObject({ type: 'upgrade_right', id: right.id, amount: 29_800 });
+  });
+
+  it('two concurrent orders cannot both use it: one holds it, the other gets 409 with the new quote', async () => {
+    const { s, inBox, right } = await withRight();
+    const bodies = [
+      await checkoutBody(s, { item: `volume:${inBox[0]}:50` }, `volume:${inBox[0]}:50`),
+      await checkoutBody(s, { item: `volume:${inBox[1]}:50` }, `volume:${inBox[1]}:50`),
+    ] as const;
+    expect(bodies.map((b) => b.confirmedDiscount)).toMatchObject([
+      { type: 'upgrade_right', id: right.id },
+      { type: 'upgrade_right', id: right.id },
+    ]);
+    const results = await whileLockedUntil(t, 'upgrade_rights', 2, () =>
+      Promise.all([s.orders.create({ body: bodies[0] }), s.orders.create({ body: bodies[1] })]),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(results.find((r) => r.status === 201)).toMatchObject({
+      body: { discount: { type: 'upgrade_right', id: right.id, amount: 43_800 } },
+    });
+    expect(results.find((r) => r.status === 409)).toMatchObject({
+      body: { code: 'total_changed', checkout: { quote: { discount: null, total: 244_000 } } },
+    });
+  });
+
+  it('a cancel gives it back within its term; past the term it is lost', async () => {
+    const { s, inBox, right, source } = await withRight();
+    await add(s, inBox[0]!, 50);
+    const first = await placeOrder(s);
+    const cancel = (c: Shopper, number: number) =>
+      c.orders.cancel({ params: { number }, body: { expectedStatus: 'awaiting_payment' } });
+    expect((await cancel(s, first)).status).toBe(200);
+    expect(await rightPrices(s, inBox[0]!)).toEqual(SET_PRICES);
+
+    // 9 December, 23:00 Tashkent: the last hour of the right
+    t.edges.clock.set(new Date('2026-12-09T18:00:00Z'));
+    const later = (await t.signIn(ali)).client;
+    await add(later, inBox[0]!, 50);
+    const second = await placeOrder(later);
+    expect((await orderRow(second)).discount).toMatchObject({
+      type: 'upgrade_right',
+      id: right.id,
+    });
+    // cancelled at 00:30 on 10 December: the right ended meanwhile, so it stays with that order
+    t.edges.clock.set(new Date('2026-12-09T19:30:00Z'));
+    expect((await cancel((await t.signIn(ali)).client, second)).status).toBe(200);
+    expect((await rightsOf(source))[0]).toMatchObject({
+      usedByOrderId: (await orderRow(second)).id,
+    });
+  });
+
+  it('a returned set order closes the right it opened; an order that already used it keeps its discount', async () => {
+    const { s, inBox, right, source } = await withRight();
+    await add(s, inBox[0]!, 50);
+    const used = await placeOrder(s);
+    const manager = await t.managerSession();
+    const out = await t.app
+      .get(OrderStatusService)
+      .transition(
+        (await orderRow(source)).id,
+        'return',
+        { type: 'staff', id: manager.staff.id },
+        'delivered',
+        { reason: 'Не подошёл аромат', lines: [{ position: 0, backToStock: true }] },
+      );
+    expect(out.kind).toBe('done');
+    expect((await orderRow(used)).discount).toMatchObject({ type: 'upgrade_right', id: right.id });
+    // cancelling the order that used it does not bring a closed right back
+    await s.orders.cancel({
+      params: { number: used },
+      body: { expectedStatus: 'awaiting_payment' },
+    });
+    expect(await rightPrices(s, inBox[0]!)).toEqual([]);
+    await add(s, inBox[0]!, 50);
+    expect(await quoteOf(s)).toMatchObject({ discount: null });
+  });
+
+  it('no reminder for a right an order holds', async () => {
+    const { s, inBox } = await withRight();
+    await add(s, inBox[0]!, 50);
+    // paid, so the reserve sweep does not cancel it (a cancel would give the right back)
+    await fulfilTo(await placeOrder(s), 'payment_confirmed');
+    t.edges.clock.set(new Date('2026-12-02T05:00:00Z'));
+    await tick();
+    t.edges.clock.set(new Date('2026-12-08T05:00:00Z'));
+    await tick();
+    const rows = await t.db.select().from(outbox);
+    expect(rows.filter((r) => /Напоминаем/.test(r.text))).toEqual([]);
   });
 });
