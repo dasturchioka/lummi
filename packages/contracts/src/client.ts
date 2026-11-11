@@ -64,6 +64,9 @@ export const clientRoutes = {
     add: route('PUT', '/favourites/:target', [200, 401, 404]),
     remove: route('DELETE', '/favourites/:target', [200, 401]),
   },
+  reviews: {
+    forTarget: route('GET', '/reviews/:target', [200, 401, 404]),
+  },
   content: {
     home: route('GET', '/content/home', [200, 401]),
     pages: route('GET', '/content/pages', [200, 401]),

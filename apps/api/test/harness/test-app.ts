@@ -120,6 +120,7 @@ export async function createTestApp(
     EVENTS_QUEUE: `e_${dbName}`,
     RECEIPT_CHECKS_QUEUE: `r_${dbName}`,
     BOT_RECEIPTS_QUEUE: `bq_${dbName}`,
+    REVIEW_PHOTOS_QUEUE: `rp_${dbName}`,
     RECEIPT_CHECK_BACKOFF_MS: '200',
     BROADCAST_QUEUE: `b_${dbName}`,
     BIRTHDAY_QUEUE: `d_${dbName}`,
@@ -159,6 +160,7 @@ export async function createTestApp(
     env.EVENTS_QUEUE,
     env.RECEIPT_CHECKS_QUEUE,
     env.BOT_RECEIPTS_QUEUE,
+    env.REVIEW_PHOTOS_QUEUE,
     env.BROADCAST_QUEUE,
     env.BIRTHDAY_QUEUE,
   ];

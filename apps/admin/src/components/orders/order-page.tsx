@@ -1,5 +1,6 @@
 'use client';
 
+import { OrderReviewSection } from '@/components/reviews/order-review';
 import {
   charCount,
   FULFIL_ACTIONS,
@@ -352,6 +353,7 @@ export function OrderPage({
           <PaymentSection page={page} t={t} language={language} />
           <CommentSection page={page} t={t} language={language} />
           <GiftSection page={page} t={t} language={language} />
+          <OrderReviewSection review={page.review} t={t} />
         </div>
       </div>
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">

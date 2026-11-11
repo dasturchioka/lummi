@@ -37,6 +37,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - Up to 3 photos, sent to the bot after the comment.
   - A review shows on every fragrance and set of its order.
   - Card block: average rating, count, latest published reviews.
+  - Built (#41): the block is on the fragrance and Discovery set cards; the builder («Свой набор») screen has none yet (the API serves `builder-set`). Our defaults, to confirm with the customer: request after 24 h, low = 1–3, three photos, five reviews on the card.
 - **«Это подарок».**
   - Is gift packaging free? (Built free, spec Changes 2026-11-10 checkout.)
   - Is the greeting card text typed by the customer, and is there a length limit? (Built: typed, optional, at most 250 characters, an admin setting.)

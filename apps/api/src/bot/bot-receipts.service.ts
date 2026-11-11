@@ -5,6 +5,7 @@ import {
   botPendingReceipts,
   customers,
   eq,
+  inArray,
   isNull,
   lt,
   orders,
@@ -55,6 +56,26 @@ const DECLARED_MIMES: ReadonlySet<string> = new Set([
 ]);
 /** Files waiting for a choice are deleted after the longest the setting allows, twice over. */
 const PENDING_KEEP_MS = 2 * BOT_CHOICE_MAX_SECONDS * 1000;
+
+/**
+ * The file to fetch out of what the shopper sent, or why it cannot be: its declared type or size
+ * already refuses it. A photo's largest size still under the cap wins (Telegram lists sizes
+ * smallest first). Shared with the review photos (#41); the first bytes decide the real type later.
+ */
+export function pickIncomingFile(
+  file: IncomingReceipt,
+  maxBytes: number,
+  declaredMimes: ReadonlySet<string>,
+): { fileId: string; name?: string } | 'unsupported' | 'too_large' {
+  if (file.kind === 'photo') {
+    const fits = file.sizes.filter((s) => s.size === undefined || s.size <= maxBytes);
+    const best = fits.at(-1);
+    return best ? { fileId: best.fileId } : 'too_large';
+  }
+  if (file.mime && !declaredMimes.has(file.mime.toLowerCase())) return 'unsupported';
+  if (file.size !== undefined && file.size > maxBytes) return 'too_large';
+  return { fileId: file.fileId, ...(file.name ? { name: file.name } : {}) };
+}
 
 type BotTexts = (typeof dictionaries)['ru']['bot'];
 
@@ -117,6 +138,26 @@ export class BotReceipts implements OnApplicationShutdown {
       process: (job: Job<{ id: number }>) =>
         this.intake(job.data.id, { lastAttempt: job.attemptsMade + 1 >= (job.opts.attempts ?? 1) }),
     });
+  }
+
+  /**
+   * Whether the customer has an order waiting for a receipt or under check: while one does, every
+   * file they send is a receipt (ADR 0020, 0033), whatever else the bot is asking them for.
+   */
+  async hasOrderWaiting(tx: DbOrTx, telegramId: number): Promise<boolean> {
+    const customer = await this.customer(tx, telegramId);
+    if (!customer) return false;
+    const [waiting] = await tx
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, customer.id),
+          inArray(orders.status, ['awaiting_payment', 'receipt_review']),
+        ),
+      )
+      .limit(1);
+    return waiting !== undefined;
   }
 
   /** A photo or document arrived in a private chat. */
@@ -341,20 +382,8 @@ export class BotReceipts implements OnApplicationShutdown {
     }
   }
 
-  /** The file to fetch, or why it cannot be: its declared type or size already refuses it. */
-  private pick(
-    file: IncomingReceipt,
-    maxBytes: number,
-  ): { fileId: string; name?: string } | 'unsupported' | 'too_large' {
-    if (file.kind === 'photo') {
-      // Telegram lists sizes smallest first: the largest one still under the cap
-      const fits = file.sizes.filter((s) => s.size === undefined || s.size <= maxBytes);
-      const best = fits.at(-1);
-      return best ? { fileId: best.fileId } : 'too_large';
-    }
-    if (file.mime && !DECLARED_MIMES.has(file.mime.toLowerCase())) return 'unsupported';
-    if (file.size !== undefined && file.size > maxBytes) return 'too_large';
-    return { fileId: file.fileId, ...(file.name ? { name: file.name } : {}) };
+  private pick(file: IncomingReceipt, maxBytes: number) {
+    return pickIncomingFile(file, maxBytes, DECLARED_MIMES);
   }
 
   private notAwaiting(t: BotTexts, order: Pick<OrderRow, 'number' | 'status'>): string {

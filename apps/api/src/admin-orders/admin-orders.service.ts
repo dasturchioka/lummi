@@ -51,6 +51,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditQueryService } from '../audit/audit-query.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
 import { linesOf, toOrderDto } from '../orders/orders.service';
@@ -154,6 +155,7 @@ export class AdminOrdersService {
     @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
     @Inject(AuditQueryService) private readonly auditQuery: AuditQueryService,
     @Inject(Refunds) private readonly refunds: Refunds,
+    @Inject(ReviewsService) private readonly reviews: ReviewsService,
   ) {}
 
   /** Newest first. A search puts the order with that number first, then phone matches. */
@@ -326,6 +328,7 @@ export class AdminOrdersService {
       returned: returnedOf(o, events),
       returnPreview: o.status === 'delivered' ? await this.returnPreview(o) : null,
       // the page's history as the contract has it: the link details stay with the credit
+      review: await this.reviews.ofOrder(o.id),
       events: events.map(({ creditId: _credit, link: _link, returnLines: _lines, ...e }) => e),
       audit: await this.auditQuery.forTarget('order', o.id),
       limits: {

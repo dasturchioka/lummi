@@ -10,6 +10,7 @@
     "./sets": "./src/sets.ts",
     "./discounts": "./src/discounts.ts",
     "./favourites": "./src/favourites.ts",
+    "./reviews": "./src/reviews.ts",
     "./bot": "./src/bot.ts",
     "./admin": "./src/admin.ts",
     "./all": "./src/all.ts"
