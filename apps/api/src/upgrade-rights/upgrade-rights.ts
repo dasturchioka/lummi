@@ -1,9 +1,16 @@
-import { SINGLE_RIGHT_ML, type UpgradeRightPrice } from '@lummi/contracts';
+import {
+  SINGLE_RIGHT_ML,
+  tashkentDayStart,
+  type MyUpgradeRightDto,
+  type UpgradeRightPrice,
+} from '@lummi/contracts';
 import {
   and,
   asc,
   eq,
+  fragrances,
   gt,
+  inArray,
   isNull,
   upgradeRights,
   type DbOrTx,
@@ -15,7 +22,13 @@ import {
 import { readPricingSettings } from '../pricing/pricing-settings';
 import { quote, type Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import { lastDayOf, rightTerm } from './right-term';
+import {
+  addDays,
+  daysLeft,
+  formatLocalDate,
+  lastDayOf,
+  tashkentDay,
+} from '../birthday/birthday-dates';
 
 /**
  * Upgrade rights (TZ §3.4, ADR 0003, ticket #38): opened by a delivered set or single 10 ml
@@ -25,6 +38,15 @@ import { lastDayOf, rightTerm } from './right-term';
  */
 
 type InsertRight = typeof upgradeRights.$inferInsert;
+
+/**
+ * When a right opened at `openedAt` ends (TZ §3.4: «30 дней с момента статуса Доставлен»), counted
+ * in Tashkent days: opened on day D, it works through the whole of day D + `validityDays` and ends
+ * at 00:00 the day after, so the hour of delivery never shortens the last day.
+ */
+export function rightEnd(openedAt: Date, validityDays: number): Date {
+  return tashkentDayStart(formatLocalDate(addDays(tashkentDay(openedAt), validityDays)), 1);
+}
 
 /**
  * On «Доставлен» (the `deliver` move, in its transaction): each set unit opens one right covering
@@ -53,7 +75,7 @@ export async function openUpgradeRights(
     sourceOrderId: order.id,
     percent,
     openedAt: now,
-    expiresAt: rightTerm(now, validityDays).expiresAt,
+    expiresAt: rightEnd(now, validityDays),
   });
 
   const rows: InsertRight[] = [];
@@ -243,8 +265,44 @@ export async function upgradeRightPrices(
       price: q.total,
       source: right.source,
       percent: right.percent,
-      lastDay: lastDayOf(right.expiresAt),
+      lastDay: formatLocalDate(lastDayOf(right.expiresAt)),
     });
   }
   return out;
+}
+
+/**
+ * Profile «Мои скидки» (TZ §3.4: «Сохраняются в аккаунте, видны в профиле»): the open rights,
+ * soonest to end first, each with its fragrances as bought (linked while on sale) and days left.
+ */
+export async function myUpgradeRights(
+  tx: DbOrTx,
+  customerId: number,
+  now: Date,
+): Promise<MyUpgradeRightDto[]> {
+  const rights = await activeUpgradeRights(tx, customerId, now);
+  const ids = [...new Set(rights.flatMap((r) => r.fragrances.map((f) => f.fragranceId)))];
+  const onSale =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({ id: fragrances.id, slug: fragrances.slug })
+          .from(fragrances)
+          .where(and(inArray(fragrances.id, ids), eq(fragrances.hidden, false)));
+  const slugOf = new Map(onSale.map((f) => [f.id, f.slug]));
+  return rights.map((r) => {
+    const lastDay = lastDayOf(r.expiresAt);
+    return {
+      id: r.id,
+      source: r.source,
+      percent: r.percent,
+      fragrances: r.fragrances.map((f) => ({
+        name: f.name,
+        brand: f.brand,
+        slug: slugOf.get(f.fragranceId) ?? null,
+      })),
+      lastDay: formatLocalDate(lastDay),
+      daysLeft: daysLeft(lastDay, now),
+    };
+  });
 }

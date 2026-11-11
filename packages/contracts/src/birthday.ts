@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isCalendarDate } from './birth-date';
+import { myUpgradeRightSchema } from './upgrade-rights';
 
 /**
  * The date of birth and the birthday coupon as the Mini App sees them (TZ §3.8, ticket #30). The
@@ -48,6 +49,8 @@ export const myDiscountsSchema = z.object({
   birthDate: z.string().nullable(),
   /** Active coupons, soonest to end first. */
   birthdayCoupons: z.array(birthdayCouponSchema),
+  /** Open upgrade rights (#38), soonest to end first. */
+  upgradeRights: z.array(myUpgradeRightSchema),
   /**
    * While no coupon is active: the first day of the next one (`YYYY-MM-DD`, «появится 11 марта»);
    * null without a date of birth.

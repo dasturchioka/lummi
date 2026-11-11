@@ -11,17 +11,16 @@ import {
   type DbOrTx,
   type UpgradeRightRow,
 } from '@lummi/db';
-import { fill, formatDayMonth } from '@lummi/i18n';
+import { fill, formatCalendarDate } from '@lummi/i18n';
 import { botMessages } from '@lummi/i18n/bot';
 import { Inject, Injectable } from '@nestjs/common';
 import { CustomersService } from '../auth/customers.service';
+import { formatLocalDate, lastDayOf } from '../birthday/birthday-dates';
 import type { Env } from '../env';
 import type { OutboxMessage } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { ENV } from '../tokens';
 import { WorkerRuntime, type SweepContext } from '../worker/runtime';
-
-const DAY_MS = 86_400_000;
 
 /**
  * The upgrade-right reminders (TZ §3.4: «Бот напоминает за 7 и 1 день до окончания, если не
@@ -95,7 +94,8 @@ export class UpgradeRightReminders {
       for (const right of due) {
         const c = recipients.get(right.customerId);
         if (!c) throw new Error(`upgrade right ${right.id} has no customer`);
-        if (await this.customers.canMessage(c.telegramId)) messages.push(this.message(c, right));
+        if (await this.customers.canMessage(c.telegramId, tx))
+          messages.push(this.message(c, right));
       }
       await outbox.enqueue(tx, messages);
     });
@@ -114,7 +114,7 @@ export class UpgradeRightReminders {
       chatId: c.telegramId,
       text: fill(t.upgradeRightReminder[right.source], {
         percent: String(right.percent),
-        until: formatDayMonth(new Date(right.expiresAt.getTime() - DAY_MS), c.language),
+        until: formatCalendarDate(formatLocalDate(lastDayOf(right.expiresAt)), c.language),
         names: right.fragrances.map((f) => f.name).join(', '),
       }),
       options: url

@@ -154,8 +154,8 @@ async function rightPrices(client: Shopper, slug: string) {
 }
 
 /**
- * The rights an order opened, in the order it opened them.
- * TODO(#38 after #30): read them from «Мои скидки» once it lists rights.
+ * The rights an order opened, as stored, in the order it opened them. «Мои скидки» lists only open
+ * ones, so the tests that check a closed or held right, or which order opened it, read the rows.
  */
 async function rightsOf(number: number) {
   const { id } = await orderRow(number);
@@ -216,6 +216,8 @@ describe('opening on «Доставлен»', () => {
 
     const rights = await rightsOf(number);
     expect(rights).toHaveLength(2);
+    const listed = await client.me.discounts();
+    expect(listed.status === 200 && listed.body.upgradeRights).toHaveLength(2);
     for (const r of rights) {
       expect(r.source).toBe('set');
       expect(r.fragrances.map((f) => f.fragranceId).sort()).toEqual(
@@ -391,8 +393,9 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
     const inBox = await discoverySlugs(client);
     await client.cart.addDiscovery({ body: { qty: 1 } });
     await fulfilTo(await placeOrder(client), 'delivered');
-    const names = (await client.sets.discovery()).body as { fragrances: { name: string }[] };
-    return { client, inBox, names: names.fragrances.map((f) => f.name) };
+    const box = await client.sets.discovery();
+    if (box.status !== 200) throw new Error(`discovery ${box.status}`);
+    return { client, inBox, names: box.body.fragrances.map((f) => f.name) };
   }
 
   it('sends each once, at 10:00 Tashkent, in the customer language, naming the five fragrances', async () => {
@@ -442,7 +445,7 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
   });
 
   it('a blocked bot gets no message, and the right stays on the card', async () => {
-    const { client, inBox } = await deliveredSet(ali, '998901112233');
+    const { inBox } = await deliveredSet(ali, '998901112233');
     await t.db.update(customers).set({ botBlocked: true }).where(eq(customers.telegramId, ali.id));
     t.edges.clock.set(FIRST);
     await tick();
@@ -451,7 +454,8 @@ describe('reminders (TZ §3.4: 7 days and 1 day before the end, when unused)', (
     expect(await reminders()).toHaveLength(0);
     const later = (await t.signIn(ali)).client;
     expect(await rightPrices(later, inBox[0]!)).toEqual(SET_PRICES);
-    void client;
+    const listed = await later.me.discounts();
+    expect(listed.status === 200 && listed.body.upgradeRights).toHaveLength(1);
   });
 
   it('follow the settings: days before the end and the hour', async () => {
@@ -714,5 +718,65 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
     await tick();
     const rows = await t.db.select().from(outbox);
     expect(rows.filter((r) => /Напоминаем/.test(r.text))).toEqual([]);
+  });
+});
+
+describe('«Мои скидки» lists open rights with their fragrances and days left', () => {
+  it('soonest to end first, with the five as bought, a link to each card on sale, and the days left', async () => {
+    const client = await shopper(t, ali, '998901112233');
+    const box = await client.sets.discovery();
+    if (box.status !== 200) throw new Error('discovery');
+    await client.cart.addDiscovery({ body: { qty: 1 } });
+    await fulfilTo(await placeOrder(client), 'delivered');
+    // a builder set delivered a day later, with a shorter term set meanwhile
+    t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
+    await setSetting('upgradeRights.set.validityDays', 10);
+    const later = (await t.signIn(ali)).client;
+    const inBox = box.body.fragrances.map((f) => f.slug);
+    const picked = (await allSlugs()).filter((x) => !inBox.includes(x)).slice(0, 5);
+    await later.cart.addBuilder({ body: { slugs: picked, qty: 1 } });
+    await fulfilTo(await placeOrder(later), 'delivered');
+    // the owner hides one of the builder's fragrances: still listed, without a link
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, picked[0]!));
+
+    const res = await later.me.discounts();
+    expect(res.status).toBe(200);
+    if (res.status !== 200) return;
+    expect(res.body.upgradeRights).toEqual([
+      {
+        id: expect.any(Number),
+        source: 'set',
+        percent: 20,
+        fragrances: expect.any(Array),
+        lastDay: '2026-11-20',
+        daysLeft: 10,
+      },
+      {
+        id: expect.any(Number),
+        source: 'set',
+        percent: 20,
+        fragrances: box.body.fragrances.map((f) => ({
+          name: f.name,
+          brand: f.brand,
+          slug: f.slug,
+        })),
+        lastDay: '2026-12-09',
+        daysLeft: 29,
+      },
+    ]);
+    // the builder's five, the hidden one without its link
+    const builder = res.body.upgradeRights[0]!.fragrances;
+    const [hidden] = await t.db.select().from(fragrances).where(eq(fragrances.slug, picked[0]!));
+    expect(builder.filter((f) => f.slug === null).map((f) => f.name)).toEqual([hidden!.name]);
+    expect(builder.flatMap((f) => (f.slug ? [f.slug] : [])).sort()).toEqual(picked.slice(1).sort());
+
+    // used by an order: no longer listed; the last day itself reads 0 days left
+    await later.cart.addLine({ body: { slug: picked[1]!, ml: 50, qty: 1 } });
+    await placeOrder(later);
+    t.edges.clock.set(new Date('2026-12-09T10:00:00Z'));
+    const lastDay = await (await t.signIn(ali)).client.me.discounts();
+    expect(lastDay.status === 200 && lastDay.body.upgradeRights).toMatchObject([
+      { lastDay: '2026-12-09', daysLeft: 0 },
+    ]);
   });
 });

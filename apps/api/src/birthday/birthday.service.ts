@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
+import { myUpgradeRights } from '../upgrade-rights/upgrade-rights';
 import { activeBirthdayCoupons, readBirthdayRules, toCouponDto } from './birthday-coupons';
 import { formatLocalDate, nextWindow, parseLocalDate, tashkentDay } from './birthday-dates';
 
@@ -47,7 +48,7 @@ export async function recordBirthDate(
   });
 }
 
-/** Profile «Мои скидки» and the one-time date of birth (ticket #30). */
+/** Profile «Мои скидки» (with the upgrade rights of #38) and the one-time date of birth (ticket #30). */
 @Injectable()
 export class BirthdayService {
   constructor(
@@ -119,6 +120,7 @@ export class BirthdayService {
     return {
       birthDate: c.birthDate,
       birthdayCoupons: active.map((coupon) => toCouponDto(coupon, now)),
+      upgradeRights: await myUpgradeRights(tx, customerId, now),
       nextBirthdayCoupon: next,
       birthdayPercent: settings['birthday.percent'],
       birthdayDaysBefore: settings['birthday.daysBefore'],
