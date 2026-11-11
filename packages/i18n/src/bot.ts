@@ -60,6 +60,9 @@ export const botMessages = defineMessages(
         'К заказу № {number} чек уже отправлен и проверяется. Мы напишем, как только оплата подтвердится.',
       orderNotAwaiting: 'Заказ № {number} уже не ожидает оплаты, чек не нужен.',
       receiptExpired: 'Этот выбор устарел. Отправьте чек ещё раз.',
+      /** The birthday coupon, 10:00 Tashkent a few days before (TZ §3.8, #30): `{max}` is money, `{until}` the last day. */
+      birthdayCoupon:
+        'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
       /**
        * The orders group (#37): the order's card in «Заказы», its buttons and the tracking-number
        * question. Staff read it, so it goes out in Russian, like the owner alerts.
@@ -158,6 +161,8 @@ export const botMessages = defineMessages(
         '№ {number} buyurtmaga chek allaqachon yuborilgan va tekshirilmoqda. Toʻlov tasdiqlanishi bilan xabar beramiz.',
       orderNotAwaiting: '№ {number} buyurtma endi toʻlov kutmayapti, chek kerak emas.',
       receiptExpired: 'Bu tanlov eskirgan. Chekni qayta yuboring.',
+      birthdayCoupon:
+        'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
       group: {
         title: '№ {number} buyurtma',
         discount: 'Chegirma ({source})',

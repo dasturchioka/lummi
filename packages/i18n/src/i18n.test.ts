@@ -3,6 +3,7 @@ import { dictionaries } from './all';
 import {
   defineMessages,
   fill,
+  formatCalendarDate,
   formatDateTime,
   formatDecimal,
   formatDayMonth,
@@ -151,5 +152,13 @@ describe('dates on the Tashkent wall clock', () => {
     expect(formatDateTime(new Date('2026-11-09T22:00:00Z'), 'uz')).toBe('10-noyabr, 03:00');
     expect(formatDayMonth('2026-12-31T19:00:00Z', 'ru')).toBe('1 января');
     expect(formatDayMonth('2026-12-31T18:59:59Z', 'uz')).toBe('31-dekabr');
+  });
+
+  it('writes a calendar day (no time zone: it is a date, like a birthday), with or without the year', () => {
+    expect(formatCalendarDate('2027-03-11', 'ru')).toBe('11 марта');
+    expect(formatCalendarDate('2027-03-11', 'uz')).toBe('11-mart');
+    expect(formatCalendarDate('1996-03-14', 'ru', true)).toBe('14 марта 1996');
+    expect(formatCalendarDate('1996-03-14', 'uz', true)).toBe('1996-yil 14-mart');
+    expect(formatCalendarDate('2000-02-29', 'ru', true)).toBe('29 февраля 2000');
   });
 });

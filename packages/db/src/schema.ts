@@ -18,6 +18,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -51,34 +52,50 @@ export const broadcastDeliveryStatusEnum = pgEnum('broadcast_delivery_status', [
 ]);
 
 /** A Customer is a Telegram account (ADR 0004). */
-export const customers = pgTable('customers', {
-  id: id(),
-  telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name'),
-  username: text('username'),
-  language: languageEnum('language').notNull(),
-  /** Light by default whatever Telegram says; dark is a Profile option (spec 2026-11-07). */
-  theme: themeEnum('theme').notNull().default('light'),
-  /** Telegram answered 403 to a send; /start clears it. Reports show such sends as "не доставлено". */
-  botBlocked: boolean('bot_blocked').notNull().default(false),
-  /** Account phone (ADR 0004): only from Telegram's signed shared contact, `+` and digits, unique. */
-  phone: text('phone').unique(),
-  phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
-  /** The answer to requestWriteAccess; null = not asked yet. Refused also sets botBlocked. */
-  writeAccess: writeAccessEnum('write_access'),
-  /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
-  deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
-  deliveryCity: text('delivery_city'),
-  /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
-  dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
-  /** The first campaign link they ever opened: the acquisition source, never overwritten (ADR 0022). */
-  acquisitionLinkId: bigint('acquisition_link_id', { mode: 'number' }).references(
-    () => campaignLinks.id,
-  ),
-  createdAt: createdAt(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const customers = pgTable(
+  'customers',
+  {
+    id: id(),
+    telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
+    firstName: text('first_name').notNull(),
+    lastName: text('last_name'),
+    username: text('username'),
+    language: languageEnum('language').notNull(),
+    /** Light by default whatever Telegram says; dark is a Profile option (spec 2026-11-07). */
+    theme: themeEnum('theme').notNull().default('light'),
+    /** Telegram answered 403 to a send; /start clears it. Reports show such sends as "не доставлено". */
+    botBlocked: boolean('bot_blocked').notNull().default(false),
+    /** Account phone (ADR 0004): only from Telegram's signed shared contact, `+` and digits, unique. */
+    phone: text('phone').unique(),
+    phoneVerifiedAt: timestamp('phone_verified_at', { withTimezone: true }),
+    /** The answer to requestWriteAccess; null = not asked yet. Refused also sets botBlocked. */
+    writeAccess: writeAccessEnum('write_access'),
+    /** Delivery city shown on Home (spec 2026-11-07): where, never what it costs. Set together or not at all. */
+    deliveryRegionId: bigint('delivery_region_id', { mode: 'number' }).references(() => regions.id),
+    deliveryCity: text('delivery_city'),
+    /** Data-processing consent (TZ §3.6), given with the first order; null until then. */
+    dataConsentAt: timestamp('data_consent_at', { withTimezone: true }),
+    /** The first campaign link they ever opened: the acquisition source, never overwritten (ADR 0022). */
+    acquisitionLinkId: bigint('acquisition_link_id', { mode: 'number' }).references(
+      () => campaignLinks.id,
+    ),
+    /**
+     * Date of birth (TZ §3.8), `YYYY-MM-DD`: entered once by the customer, in Profile or at checkout;
+     * afterwards only staff correct it. `birth_date_set_at` starts the abuse guard (no coupon before
+     * `birthday.firstCouponAfterDays`). Set together or not at all.
+     */
+    birthDate: date('birth_date', { mode: 'string' }),
+    birthDateSetAt: timestamp('birth_date_set_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'customers_birth_date_check',
+      sql`(${t.birthDate} is null) = (${t.birthDateSetAt} is null)`,
+    ),
+  ],
+);
 
 /**
  * The 14 delivery regions (spec §8). `delivery_tariff` is the per-region price in so'm (flat 25 000
@@ -1283,3 +1300,45 @@ export const campaignOpens = pgTable(
 
 export type CampaignLinkRow = typeof campaignLinks.$inferSelect;
 export type CampaignOpenRow = typeof campaignOpens.$inferSelect;
+/**
+ * A birthday coupon (TZ §3.8, ticket #30): issued by the daily job at 10:00 Asia/Tashkent,
+ * `birthday.daysBefore` days before the customer's birthday, one per customer per birthday year
+ * (the year of the birthday it celebrates; a 29 February birthday is celebrated on 28 February in a
+ * common year). Percent and cap are fixed at issue, as the bot message announced them. Its state is
+ * derived (ADR 0005): active while `used_by_order_id` is null and `expires_at` (00:00 Tashkent the
+ * day after its last day, exclusive) has not come; an order holds it with a conditional update and a
+ * cancel or return clears the link. `outbox_id` is its message; null when the customer could not be
+ * messaged (bot blocked, write access refused), which reports show as «не доставлено».
+ */
+export const birthdayCoupons = pgTable(
+  'birthday_coupons',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    birthdayYear: integer('birthday_year').notNull(),
+    /** The day it celebrates, `YYYY-MM-DD`. */
+    birthday: date('birthday', { mode: 'string' }).notNull(),
+    percent: smallint('percent').notNull(),
+    maxAmount: integer('max_amount').notNull(),
+    issuedAt: timestamp('issued_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedByOrderId: bigint('used_by_order_id', { mode: 'number' }).references(() => orders.id),
+    /** The outbox row of its message (no FK: the outbox may be pruned). */
+    outboxId: bigint('outbox_id', { mode: 'number' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('birthday_coupons_customer_year_idx').on(t.customerId, t.birthdayYear),
+    uniqueIndex('birthday_coupons_used_by_order_idx')
+      .on(t.usedByOrderId)
+      .where(sql`${t.usedByOrderId} is not null`),
+    check(
+      'birthday_coupons_terms_check',
+      sql`${t.percent} between 1 and 100 and ${t.maxAmount} >= 0 and ${t.expiresAt} > ${t.issuedAt}`,
+    ),
+  ],
+);
+
+export type BirthdayCouponRow = typeof birthdayCoupons.$inferSelect;

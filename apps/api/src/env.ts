@@ -70,6 +70,8 @@ export const envSchema = z
       .optional(),
     /** BullMQ queue of domain events the worker handles (credit recorded); API and worker must agree. */
     EVENTS_QUEUE: z.string().min(1).default('events'),
+    /** BullMQ queue of the daily birthday-coupon job (a repeatable job, 10:00 Asia/Tashkent; ticket #30). */
+    BIRTHDAY_QUEUE: z.string().min(1).default('birthday-coupons'),
     /** BullMQ queue of receipt checks (the receipt AI, ADR 0013); API and worker must agree. */
     RECEIPT_CHECKS_QUEUE: z.string().min(1).default('receipt-checks'),
     /** BullMQ queue of receipts sent to the bot, downloaded and taken in by the worker (#31); API and worker must agree. */

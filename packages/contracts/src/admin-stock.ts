@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { birthDateSchema } from './birthday';
 import { ORDER_STATUSES } from './order-status';
 
 /* ---- stock (#27) ---- */
@@ -79,6 +80,8 @@ export const adminCustomerSchema = z.object({
   phone: z.string().nullable(),
   language: z.enum(['ru', 'uz']),
   botBlocked: z.boolean(),
+  /** `YYYY-MM-DD`, entered once by the customer; staff correct it (TZ §3.8, #30). Null until entered. */
+  birthDate: z.string().nullable(),
   /** Every order the customer placed, whatever its status. */
   ordersCount: z.number().int(),
   /** Total of the Fulfilled orders only (GLOSSARY): delivered and not returned. */
@@ -114,5 +117,8 @@ export const adminStockErrorSchema = z.object({
 });
 
 export const adminCustomersErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found']),
+  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid_birth_date', 'phone_required']),
 });
+
+/** Staff correct a customer's date of birth (TZ §3.8: «только админ может изменить»). */
+export const adminSetBirthDateBodySchema = z.object({ birthDate: birthDateSchema });

@@ -26,6 +26,8 @@ export const ORDER_INPUT_ERRORS = [
   'invalid_recipient_phone',
   /** «Купить сейчас» named a fragrance or set that is unknown or no longer sold (hidden). */
   'unknown_item',
+  /** The date of birth is before 1900 or after today in Tashkent. */
+  'invalid_birth_date',
 ] as const;
 export type OrderInputError = (typeof ORDER_INPUT_ERRORS)[number];
 

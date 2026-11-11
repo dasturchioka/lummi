@@ -1,5 +1,5 @@
 {
-  "id": "8b1fa642-08e3-4442-845d-b960f2680bf5",
+  "id": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "prevId": "fdda5eea-1429-4d31-98df-f3c5705146fd",
   "version": "7",
   "dialect": "postgresql",
@@ -114,6 +114,167 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.birthday_coupons": {
+      "name": "birthday_coupons",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "birthday_coupons_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "birthday_year": {
+          "name": "birthday_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "birthday": {
+          "name": "birthday",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "percent": {
+          "name": "percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_amount": {
+          "name": "max_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_by_order_id": {
+          "name": "used_by_order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outbox_id": {
+          "name": "outbox_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "birthday_coupons_customer_year_idx": {
+          "name": "birthday_coupons_customer_year_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "birthday_year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "birthday_coupons_used_by_order_idx": {
+          "name": "birthday_coupons_used_by_order_idx",
+          "columns": [
+            {
+              "expression": "used_by_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"birthday_coupons\".\"used_by_order_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "birthday_coupons_customer_id_customers_id_fk": {
+          "name": "birthday_coupons_customer_id_customers_id_fk",
+          "tableFrom": "birthday_coupons",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "birthday_coupons_used_by_order_id_orders_id_fk": {
+          "name": "birthday_coupons_used_by_order_id_orders_id_fk",
+          "tableFrom": "birthday_coupons",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "used_by_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "birthday_coupons_terms_check": {
+          "name": "birthday_coupons_terms_check",
+          "value": "\"birthday_coupons\".\"percent\" between 1 and 100 and \"birthday_coupons\".\"max_amount\" >= 0 and \"birthday_coupons\".\"expires_at\" > \"birthday_coupons\".\"issued_at\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.bot_pending_receipts": {
@@ -1336,6 +1497,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birth_date_set_at": {
+          "name": "birth_date_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1398,7 +1571,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "customers_birth_date_check": {
+          "name": "customers_birth_date_check",
+          "value": "(\"customers\".\"birth_date\" is null) = (\"customers\".\"birth_date_set_at\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.discovery_set": {
@@ -2236,247 +2414,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.order_card_prompts": {
-      "name": "order_card_prompts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "order_card_prompts_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "staff_id": {
-          "name": "staff_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_status": {
-          "name": "expected_status",
-          "type": "order_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outbox_id": {
-          "name": "outbox_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "order_card_prompts_order_idx": {
-          "name": "order_card_prompts_order_idx",
-          "columns": [
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "order_card_prompts_order_id_orders_id_fk": {
-          "name": "order_card_prompts_order_id_orders_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_card_prompts_staff_id_staff_id_fk": {
-          "name": "order_card_prompts_staff_id_staff_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "staff",
-          "columnsFrom": [
-            "staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_card_prompts_outbox_id_outbox_id_fk": {
-          "name": "order_card_prompts_outbox_id_outbox_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "outbox",
-          "columnsFrom": [
-            "outbox_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "order_card_prompts_outbox_id_unique": {
-          "name": "order_card_prompts_outbox_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "outbox_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.order_cards": {
-      "name": "order_cards",
-      "schema": "",
-      "columns": {
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_id": {
-          "name": "receipt_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_posted_at": {
-          "name": "receipt_posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "panel": {
-          "name": "panel",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{\"kind\":\"steps\"}'::jsonb"
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "shown_hash": {
-          "name": "shown_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "syncing_at": {
-          "name": "syncing_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "order_cards_order_id_orders_id_fk": {
-          "name": "order_cards_order_id_orders_id_fk",
-          "tableFrom": "order_cards",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_cards_receipt_id_receipts_id_fk": {
-          "name": "order_cards_receipt_id_receipts_id_fk",
-          "tableFrom": "order_cards",
-          "tableTo": "receipts",
-          "columnsFrom": [
-            "receipt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.order_events": {
       "name": "order_events",
       "schema": "",
@@ -3292,20 +3229,6 @@
             "cache": "1",
             "cycle": false
           }
-        },
-        "kind": {
-          "name": "kind",
-          "type": "outbox_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'message'"
-        },
-        "ref": {
-          "name": "ref",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
         },
         "chat_id": {
           "name": "chat_id",
@@ -4931,14 +4854,6 @@
         "delivered",
         "returned",
         "cancelled"
-      ]
-    },
-    "public.outbox_kind": {
-      "name": "outbox_kind",
-      "schema": "public",
-      "values": [
-        "message",
-        "order_card"
       ]
     },
     "public.promo_kind": {

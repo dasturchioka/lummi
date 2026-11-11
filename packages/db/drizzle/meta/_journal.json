@@ -152,8 +152,15 @@
     {
       "idx": 21,
       "version": "7",
-      "when": 1794355581027,
-      "tag": "0021_orders_group",
+      "when": 1794355255348,
+      "tag": "0021_birthday_coupons",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794358012928,
+      "tag": "0022_orders_group",
       "breakpoints": true
     }
   ]

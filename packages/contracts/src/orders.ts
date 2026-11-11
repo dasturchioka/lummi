@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { birthDateSchema } from './birthday';
 import { parseBuyNowParam, BUY_NOW_ITEM_MAX } from './buy-now';
 import { builderLineSchema, cartSchema, discoveryLineSchema, volumeLineSchema } from './cart';
 import { btsPointSchema, deliveryCitySchema, regionSchema } from './delivery';
@@ -102,6 +103,11 @@ export const checkoutSchema = z.object({
   defaultSavedPointId: z.number().int().nullable(),
   /** A shop card is set; without one checkout is closed: «Оплата временно недоступна» (#28). */
   paymentAvailable: z.boolean(),
+  /**
+   * The date of birth (`YYYY-MM-DD`), asked once and optional (TZ §3.6): null until entered, when
+   * checkout offers the field; `percent` is the coupon it brings (setting `birthday.percent`).
+   */
+  birthday: z.object({ date: z.string().nullable(), percent: z.number().int() }),
 });
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 
@@ -137,6 +143,12 @@ export const createOrderBodySchema = z.object({
   giftMessage: z.string().trim().max(GIFT_MESSAGE_HARD_MAX).optional(),
   /** Data-processing consent; required while `needsConsent`. */
   consent: z.boolean().default(false),
+  /**
+   * The date of birth, optional, entered once (TZ §3.6, §3.8): stored with the order while the
+   * customer has none, ignored once they have one. A day after today or before 1900 is 422
+   * `invalid_birth_date`.
+   */
+  birthDate: birthDateSchema.optional(),
   /** The «Итого» the shopper saw and confirmed: they will transfer exactly this (ADR 0001). */
   confirmedTotal: som,
   /**

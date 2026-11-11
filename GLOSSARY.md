@@ -104,6 +104,10 @@ _Avoid_: Completed, closed, successful order
 A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances) or a delivered single 10 ml bottle (covers that fragrance).
 _Avoid_: Set discount right, loyalty discount, repeat-purchase discount
 
+**Birthday coupon**:
+A customer's entitlement to a percentage off the items of one order, issued once per birthday year at 10:00 Tashkent a few days before their birthday and valid until a few days after it. Needs the date of birth, which the customer enters once.
+_Avoid_: Birthday discount, birthday promo code, gift
+
 **Full size**:
 A 30 ml or 50 ml bottle. The 10 ml bottle is not full size.
 _Avoid_: Big bottle, flakon

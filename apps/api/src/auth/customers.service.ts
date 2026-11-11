@@ -225,9 +225,12 @@ export class CustomersService {
       .where(eq(customers.telegramId, telegramId));
   }
 
-  /** False for a customer who refused write access or blocked the bot; true for anyone else. */
-  async canMessage(telegramId: number): Promise<boolean> {
-    const [c] = await this.db
+  /**
+   * False for a customer who refused write access or blocked the bot; true for anyone else. Pass the
+   * caller's transaction when it holds one, so the read never waits for a second pool connection.
+   */
+  async canMessage(telegramId: number, tx: DbOrTx = this.db): Promise<boolean> {
+    const [c] = await tx
       .select({ botBlocked: customers.botBlocked, writeAccess: customers.writeAccess })
       .from(customers)
       .where(eq(customers.telegramId, telegramId));
@@ -248,7 +251,8 @@ export const broadcastReachableSql = sql`(${customers.botBlocked} = false and ${
  * older one at relink (ADR 0032). Each ticket that adds a table with a `customer_id` extends this
  * (the cart, #18, moves its lines, discount choice and promo code; preferences stay with the older record).
  * Orders and data consent never move: only a record without a phone is merged away, and an order
- * needs the account phone (#23), so such a record has neither.
+ * needs the account phone (#23), so such a record has neither. Nor a date of birth or a birthday
+ * coupon (#30): entering the date needs the account phone, and the job issues only to such records.
  */
 export async function moveCustomerData(
   tx: DbOrTx,

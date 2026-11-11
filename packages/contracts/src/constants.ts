@@ -9,6 +9,8 @@ export * from './recipient';
 export * from './promo-code';
 export * from './receipt-upload';
 export * from './receipt-review';
+export * from './birth-date';
+export * from './tashkent';
 export const POINT_SEARCH_MIN = 2;
 export const POINT_SEARCH_LIMIT = 50;
 

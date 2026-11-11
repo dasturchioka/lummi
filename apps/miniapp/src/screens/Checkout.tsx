@@ -22,6 +22,9 @@ import { promoReasonText } from '../cart/promo';
 import { CART_KEY } from '../cart/queries';
 import { ChosenPoint } from '../delivery/ChosenPoint';
 import { DeliveryPicker } from '../delivery/DeliveryPicker';
+import { judgeBirthDate, tashkentToday } from '../discounts/birth-date';
+import { BirthDateField } from '../discounts/BirthDateField';
+import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace, regionName, useCities, type Picked } from '../delivery/queries';
 import { CardIcon } from '../orders/icons';
 import { MoneySummary, SectionTitle } from '../orders/parts';
@@ -244,6 +247,7 @@ function Loading() {
  */
 export function Checkout() {
   const o = useOrdersText();
+  const d = useDiscountsText();
   const { t, language, customer } = usePrefs();
   const router = useRouter();
   const qc = useQueryClient();
@@ -265,6 +269,9 @@ export function Checkout() {
   const [gift, setGift] = useState(false);
   const [giftMessage, setGiftMessage] = useState('');
   const [consent, setConsent] = useState(false);
+  const [birth, setBirth] = useState('');
+  const [birthBlurred, setBirthBlurred] = useState(false);
+  const [birthRefused, setBirthRefused] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -428,6 +435,10 @@ export function Checkout() {
   const codesText = codes.map((c) => `+${c}`).join(', ');
   const onlyUzbekistan = codes.length === 1 && codes[0] === '998';
   const giftTooLong = gift && giftMessage.trim().length > data.giftMessageMax;
+  // the optional date of birth, offered while the customer has none (TZ §3.6, #30)
+  const askBirth = data.birthday.date === null;
+  const birthVerdict = askBirth ? judgeBirthDate(birth, tashkentToday()) : null;
+  const birthBad = !!birthVerdict && (!birthVerdict.ok || birthRefused);
 
   // Field errors show once the field was left or a submit was tried (and a server refusal).
   const errors = {
@@ -444,10 +455,21 @@ export function Checkout() {
             : fill(o.checkout.phoneNotAllowed, { codes: codesText })
         : null,
     consent: attempted && data.needsConsent && !consent ? o.checkout.needConsent : null,
+    birth:
+      birthRefused || ((attempted || birthBlurred) && birthBad)
+        ? birthVerdict && !birthVerdict.ok && birthVerdict.reason === 'format'
+          ? d.formatError
+          : d.rangeError
+        : null,
     gift: giftTooLong ? fill(o.checkout.giftTooLong, { max: String(data.giftMessageMax) }) : null,
   };
   const invalid =
-    !dest || !nameValue.trim() || !phoneOk || (data.needsConsent && !consent) || giftTooLong;
+    !dest ||
+    !nameValue.trim() ||
+    !phoneOk ||
+    (data.needsConsent && !consent) ||
+    giftTooLong ||
+    birthBad;
 
   const place =
     dest?.kind === 'point'
@@ -495,6 +517,7 @@ export function Checkout() {
       gift,
       giftMessage: gift && giftMessage.trim() ? giftMessage.trim() : undefined,
       consent,
+      ...(birthVerdict?.ok && birthVerdict.iso ? { birthDate: birthVerdict.iso } : {}),
       confirmedTotal: confirmed.total,
       confirmedDiscount: confirmed.discount,
       idempotencyKey: attemptKey.current,
@@ -540,6 +563,7 @@ export function Checkout() {
           } else {
             // the allowed countries or the consent changed meanwhile: re-read what checkout asks
             if (r.code === 'invalid_recipient_phone') setPhoneRefused(true);
+            if (r.code === 'invalid_birth_date') setBirthRefused(true);
             void qc.invalidateQueries({ queryKey: ['checkout'] });
             setError(o.checkout.fixErrors);
           }
@@ -656,6 +680,19 @@ export function Checkout() {
           }
           error={errors.phone}
         />
+        {askBirth ? (
+          <BirthDateField
+            value={birth}
+            onChange={(v) => {
+              setBirth(v);
+              setBirthRefused(false);
+            }}
+            onBlur={() => setBirthBlurred(true)}
+            aside={o.checkout.optional}
+            hint={fill(d.checkoutHint, { percent: String(data.birthday.percent) })}
+            error={errors.birth}
+          />
+        ) : null}
       </section>
 
       <section className="mt-[26px] flex flex-col gap-3.5">
