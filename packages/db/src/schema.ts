@@ -218,7 +218,7 @@ export const outbox = pgTable(
   {
     id: id(),
     kind: outboxKindEnum('kind').notNull().default('message'),
-    /** What a non-message row is about: the order id of an `order_card` row. */
+    /** What a task is about (the order id of an `order_card` row); null for a message. */
     ref: bigint('ref', { mode: 'number' }),
     chatId: bigint('chat_id', { mode: 'number' }).notNull(),
     threadId: integer('thread_id'),
@@ -237,6 +237,8 @@ export const outbox = pgTable(
     index('outbox_pending_idx')
       .on(t.createdAt)
       .where(sql`sent_at is null and failed_at is null`),
+    // a message has its text and no ref; a task (text '') always says what it is about
+    check('outbox_task_ref', sql`(${t.kind} = 'message') = (${t.ref} is null)`),
   ],
 );
 
@@ -1092,7 +1094,8 @@ export type OrderCardRow = typeof orderCards.$inferSelect;
  * «Передан в BTS» pressed on a card (#37): the bot asks the staff member who pressed it for the
  * tracking number by ForceReply. Their reply to that message (found through the outbox row's
  * Telegram message id) makes the handover from `expected_status`; a bad number asks again with
- * a new prompt. Closed when answered, asked again, or the order moved on.
+ * a new prompt. At most one is open per order: answered, or replaced by a newer question (a
+ * re-ask, another press), it is closed; a reply to a closed one changes nothing.
  */
 export const orderCardPrompts = pgTable(
   'order_card_prompts',

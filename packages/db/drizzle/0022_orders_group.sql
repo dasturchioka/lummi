@@ -31,4 +31,5 @@ ALTER TABLE "order_card_prompts" ADD CONSTRAINT "order_card_prompts_staff_id_sta
 ALTER TABLE "order_card_prompts" ADD CONSTRAINT "order_card_prompts_outbox_id_outbox_id_fk" FOREIGN KEY ("outbox_id") REFERENCES "public"."outbox"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_cards" ADD CONSTRAINT "order_cards_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "order_cards" ADD CONSTRAINT "order_cards_receipt_id_receipts_id_fk" FOREIGN KEY ("receipt_id") REFERENCES "public"."receipts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "order_card_prompts_order_idx" ON "order_card_prompts" USING btree ("order_id");
+CREATE INDEX "order_card_prompts_order_idx" ON "order_card_prompts" USING btree ("order_id");--> statement-breakpoint
+ALTER TABLE "outbox" ADD CONSTRAINT "outbox_task_ref" CHECK (("outbox"."kind" = 'message') = ("outbox"."ref" is null));

@@ -3,8 +3,7 @@
 import {
   CANCEL_NOTE_MAX,
   charCount,
-  CANCEL_REASON_ONLY_FROM,
-  CANCEL_REASONS_BY_ACTOR,
+  cancelReasonsFor,
   RECEIPT_REJECT_REASONS,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
@@ -294,10 +293,7 @@ export function CancelDialog({
   const reader: Language = page.customer.language;
   const o = t.orders;
   const status = page.order.status;
-  const reasons = CANCEL_REASONS_BY_ACTOR.staff.filter((r) => {
-    const only = CANCEL_REASON_ONLY_FROM[r];
-    return !only || only === status;
-  });
+  const reasons = cancelReasonsFor('staff', status);
   const [reason, setReason] = useState<CancelReason | null>(null);
   const [note, setNote] = useState('');
   const [tried, setTried] = useState(false);

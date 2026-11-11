@@ -71,7 +71,7 @@ export class OrderCards {
     @Inject(OrderStatusService) status: OrderStatusService,
   ) {
     status.afterMove((tx, move) => this.onMove(tx, move));
-    outbox.handle('order_card', (row) => this.sync(row.ref!));
+    outbox.handle('order_card', (task) => this.sync(task.ref));
   }
 
   private async onMove(tx: DbOrTx, move: MadeMove): Promise<void> {

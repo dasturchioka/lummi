@@ -30,12 +30,18 @@ export interface OutboxMessage {
   options?: Record<string, unknown>;
 }
 
-/**
- * Delivers one row of a kind other than `message` (its `ref` says what about). Throwing leaves the
- * row pending for the queue's next attempt; `BotBlockedError` fails it for good.
- */
-export type OutboxHandler = (row: OutboxRow) => Promise<void>;
 type TaskKind = Exclude<OutboxKind, 'message'>;
+/** A row of a kind other than `message`: work about `ref` (an order id for `order_card`). */
+export interface OutboxTask {
+  id: number;
+  kind: TaskKind;
+  ref: number;
+}
+/**
+ * Delivers one task. Throwing leaves the row pending for the queue's next attempt;
+ * `BotBlockedError` fails it for good.
+ */
+export type OutboxHandler = (task: OutboxTask) => Promise<void>;
 
 /** Give up waiting for Redis after this long; the minute tick is the safety net. */
 export const DISPATCH_TIMEOUT_MS = 3000;
@@ -206,8 +212,9 @@ export class OutboxService implements OnApplicationShutdown {
         messageId = (await this.edges.telegram.send(toMessage(row))).messageId;
       } else {
         const handler = this.handlers.get(row.kind);
-        if (!handler) throw new Error(`no handler for outbox kind ${row.kind}`);
-        await handler(row);
+        // `outbox_task_ref` keeps a task's ref; its text column is the empty string
+        if (!handler || row.ref === null) throw new Error(`outbox ${row.id}: no ${row.kind} task`);
+        await handler({ id: row.id, kind: row.kind, ref: row.ref });
       }
       await this.db
         .update(outbox)

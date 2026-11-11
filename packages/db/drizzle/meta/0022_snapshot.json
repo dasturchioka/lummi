@@ -1,5 +1,5 @@
 {
-  "id": "422cf173-d6c8-4118-81ce-10da49cf7fa4",
+  "id": "fd16c5a7-4f0d-4b2d-ab0b-5add5490b653",
   "prevId": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "version": "7",
   "dialect": "postgresql",
@@ -3576,7 +3576,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "outbox_task_ref": {
+          "name": "outbox_task_ref",
+          "value": "(\"outbox\".\"kind\" = 'message') = (\"outbox\".\"ref\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.processed_updates": {

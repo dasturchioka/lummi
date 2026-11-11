@@ -1,4 +1,5 @@
 import {
+  cancelReasonsFor,
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
   transitionPayloadSchemas,
@@ -22,15 +23,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { OrderStatusService, type TransitionActor } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { StaffService } from '../staff/staff.service';
 import { EDGES } from '../tokens';
-import {
-  decodePress,
-  escapeHtml,
-  isStepStatus,
-  NEXT_STEP,
-  staffCancelReasons,
-  type CardPress,
-} from './card-view';
+import { decodePress, escapeHtml, isStepStatus, NEXT_STEP, type CardPress } from './card-view';
 import { OrderCards } from './order-cards';
 
 const g = dictionaries.ru.bot.group;
@@ -65,18 +60,22 @@ export class OrdersGroupBot {
     @Inject(OrderCards) private readonly cards: OrderCards,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(EDGES) private readonly edges: Edges,
+    @Inject(StaffService) private readonly staff: StaffService,
   ) {}
 
-  /** Handle a tap; returns the toast to answer it with (undefined: none). */
+  /**
+   * Handle a tap; returns the toast to answer it with (undefined: none). A button the bot never
+   * drew (forged data, a step that does not exist) answers «Нельзя» and changes nothing.
+   */
   async onTap(tx: DbOrTx, tap: CardTap): Promise<string | undefined> {
-    const press = decodePress(tap.data);
-    if (!press) return undefined;
-    const member = await activeStaff(tx, tap.fromId);
+    const member = await this.activeStaff(tx, tap.fromId);
     if (!member) return g.noAccess;
+    const press = decodePress(tap.data);
+    if (!press) return g.refused;
     const actor: TransitionActor = { type: 'staff', id: member.id };
     switch (press.verb) {
       case 'next': {
-        if (!isStepStatus(press.expected)) return this.changed(tx, press.orderId);
+        if (!isStepStatus(press.expected)) return g.refused;
         const action = NEXT_STEP[press.expected];
         if (action === 'hand_to_bts') return this.askTracking(tx, press, member);
         const out = await this.status.transitionIn(
@@ -87,7 +86,7 @@ export class OrdersGroupBot {
           press.expected,
           undefined,
         );
-        return out.kind === 'done' ? undefined : this.changed(tx, press.orderId);
+        return this.answer(tx, press.orderId, out.kind);
       }
       case 'confirm': {
         const out = await this.status.transitionIn(
@@ -98,17 +97,27 @@ export class OrdersGroupBot {
           press.expected,
           { reason: press.reason },
         );
-        return out.kind === 'done' ? undefined : this.changed(tx, press.orderId);
+        return this.answer(tx, press.orderId, out.kind);
       }
       case 'cancel':
         return this.panel(tx, press, { kind: 'cancel' });
       case 'reason':
-        if (!staffCancelReasons(press.expected).includes(press.reason))
-          return this.changed(tx, press.orderId);
+        if (!cancelReasonsFor('staff', press.expected).includes(press.reason)) return g.refused;
         return this.panel(tx, press, { kind: 'confirm_cancel', reason: press.reason });
       case 'back':
         return this.panel(tx, press, { kind: 'steps' });
     }
+  }
+
+  /** No toast when the move was made; «Уже изменено» when the order moved on; «Нельзя» otherwise. */
+  private async answer(
+    tx: DbOrTx,
+    orderId: number,
+    kind: 'done' | 'conflict' | 'refused' | 'not_found',
+  ): Promise<string | undefined> {
+    if (kind === 'done') return undefined;
+    if (kind === 'conflict') return this.changed(tx, orderId);
+    return g.refused;
   }
 
   /**
@@ -124,6 +133,7 @@ export class OrdersGroupBot {
         closedAt: orderCardPrompts.closedAt,
         threadId: outbox.threadId,
         number: orders.number,
+        status: orders.status,
         askedName: staff.name,
       })
       .from(orderCardPrompts)
@@ -144,17 +154,22 @@ export class OrdersGroupBot {
       });
     const number = String(prompt.number);
 
-    const member = await activeStaff(tx, m.fromId);
+    const member = await this.activeStaff(tx, m.fromId);
     if (!member) {
       await say(g.noAccess);
       return true;
     }
-    if (member.id !== prompt.staffId) {
-      await say(fill(g.trackingNotYours, { number, name: prompt.askedName }));
+    if (prompt.closedAt) {
+      // answered already, or a newer question replaced it while the order still waits for one
+      await say(
+        fill(prompt.status === prompt.expectedStatus ? g.trackingSuperseded : g.trackingStale, {
+          number,
+        }),
+      );
       return true;
     }
-    if (prompt.closedAt) {
-      await say(fill(g.trackingStale, { number }));
+    if (member.id !== prompt.staffId) {
+      await say(fill(g.trackingNotYours, { number, name: prompt.askedName }));
       return true;
     }
     const parsed = transitionPayloadSchemas.hand_to_bts.safeParse({ trackingNumber: m.text ?? '' });
@@ -167,7 +182,7 @@ export class OrdersGroupBot {
         }),
         { reply_markup: forceReply() },
       );
-      await tx.insert(orderCardPrompts).values({
+      await this.ask(tx, {
         orderId: prompt.orderId,
         staffId: member.id,
         expectedStatus: prompt.expectedStatus,
@@ -181,12 +196,9 @@ export class OrdersGroupBot {
       'hand_to_bts',
       { type: 'staff', id: member.id },
       prompt.expectedStatus,
-      { trackingNumber: m.text! },
+      parsed.data,
     );
-    await tx
-      .update(orderCardPrompts)
-      .set({ closedAt: this.edges.clock.now() })
-      .where(and(eq(orderCardPrompts.orderId, prompt.orderId), isNull(orderCardPrompts.closedAt)));
+    await this.closeQuestions(tx, prompt.orderId);
     if (out.kind !== 'done') {
       await this.cards.touch(tx, prompt.orderId);
       await say(fill(g.trackingStale, { number }));
@@ -228,7 +240,7 @@ export class OrdersGroupBot {
           : {}),
       },
     });
-    await tx.insert(orderCardPrompts).values({
+    await this.ask(tx, {
       orderId: press.orderId,
       staffId: member.id,
       expectedStatus: press.expected,
@@ -254,20 +266,30 @@ export class OrdersGroupBot {
     return undefined;
   }
 
+  /** A new tracking-number question for the order; any earlier one it still had stops counting. */
+  private async ask(tx: DbOrTx, question: typeof orderCardPrompts.$inferInsert): Promise<void> {
+    await this.closeQuestions(tx, question.orderId);
+    await tx.insert(orderCardPrompts).values(question);
+  }
+
+  private async closeQuestions(tx: DbOrTx, orderId: number): Promise<void> {
+    await tx
+      .update(orderCardPrompts)
+      .set({ closedAt: this.edges.clock.now() })
+      .where(and(eq(orderCardPrompts.orderId, orderId), isNull(orderCardPrompts.closedAt)));
+  }
+
+  /** Staff by Telegram id, only while active (ADR 0017). */
+  private async activeStaff(tx: DbOrTx, telegramId: number): Promise<StaffRow | null> {
+    const member = await this.staff.findByTelegramId(telegramId, tx);
+    return member?.active ? member : null;
+  }
+
   /** The card moved on since it was drawn: say so, and draw it again as it is now. */
   private async changed(tx: DbOrTx, orderId: number): Promise<string> {
     await this.cards.touch(tx, orderId);
     return g.changed;
   }
-}
-
-/** Staff by Telegram id, only while active (ADR 0017). */
-async function activeStaff(tx: DbOrTx, telegramId: number): Promise<StaffRow | null> {
-  const [row] = await tx
-    .select()
-    .from(staff)
-    .where(and(eq(staff.telegramId, telegramId), eq(staff.active, true)));
-  return row ?? null;
 }
 
 const forceReply = () => ({

@@ -316,6 +316,15 @@ const repliesTo = (messageId: number) => (m: SentMessage) =>
 const cardWith = (number: number, button: string) =>
   card(number, () => buttons(cardOf(number)!).some((b) => b.text === button));
 
+/** What a shopper sees as available for the order's first line's volume. */
+async function availableOf(orderId: number) {
+  const [line] = await t.db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
+  const { client } = await t.signIn(ali);
+  const res = await client.catalog.fragrance({ params: { slug: line!.slug! } });
+  if (res.status !== 200) throw new Error(`fragrance ${res.status}`);
+  return res.body.volumes.find((v) => v.ml === line!.ml)!.available;
+}
+
 /** On hand of the order's first line's volume. */
 async function onHandOf(orderId: number) {
   const [line] = await t.db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
@@ -473,6 +482,13 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     expect(await statusOf(order.number)).toBe('assembling');
     expect(await onHandOf(order.id)).toBe(onHand);
 
+    // the first question stopped counting when the bot asked again
+    const toFirst = await reply(dilnoza, 'BTS 1111 2222', question);
+    expect((await groupMessage(repliesTo(toFirst))).plain).toBe(
+      `Этот вопрос по заказу № ${order.number} уже не действует: ответьте на последний вопрос бота.`,
+    );
+    expect(await statusOf(order.number)).toBe('assembling');
+
     // the good number, to the new question: trimmed, saved, and the bottle leaves the shelf
     t.edges.clock.advance(30 * MIN);
     await reply(dilnoza, '  BTS 4471 0098  ', again);
@@ -514,7 +530,10 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
   it('walks Принят → Собирается → Передан в BTS → Доставлен: the card edited each time, history added, the shopper told in their language', async () => {
     await addStaff(dilnoza);
-    const order = await paidOrder(vali, {}, '998907654321');
+    const order = await paidOrder(vali, { giftMessage: '' }, '998907654321');
+    const posted = await card(order.number);
+    // a gift with no greeting says so: the parcel still goes without a receipt inside
+    expect(posted.plain).toContain('🎁 Это подарок\nБез открытки');
     const heard = toShopper(vali).length;
 
     await press(dilnoza, '✅ Принят', await card(order.number));
@@ -593,9 +612,16 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     expect(c.plain).toContain('Отменить заказ? Причина: Нет в наличии.');
     expect(await statusOf(order.number)).toBe('payment_confirmed');
 
+    // before handover the bottle is still on the shelf, held by the order's reserve
+    const onHand = await onHandOf(order.id);
+    expect(await availableOf(order.id)).toBe(onHand - 1);
+
     t.edges.clock.advance(3 * MIN);
     await press(dilnoza, 'Да, отменить: Нет в наличии', c);
     expect(await statusOf(order.number)).toBe('cancelled');
+    // the cancel ends the reserve and leaves on hand alone (ADR 0010)
+    expect(await onHandOf(order.id)).toBe(onHand);
+    expect(await availableOf(order.id)).toBe(onHand);
     c = await card(order.number, (text) => text.startsWith(`Заказ № ${order.number} · Отменён`));
     expect(buttons(c)).toEqual([]);
     expect(c.plain).toContain('❌ Отменён — Dilnoza, 15:03: Нет в наличии');
@@ -873,5 +899,64 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
       { timeout: 15_000 },
     );
     expect(cardOf(order.number)!.plain.split('\n')[0]).toBe(`Заказ № ${order.number} · Собирается`);
+  });
+
+  it('a button the bot never drew answers «Нельзя» and changes nothing', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    const c = await card(order.number);
+    const forged = async (data: string) => {
+      const id = ++updateId;
+      await t.postUpdate({
+        update_id: id,
+        callback_query: {
+          id: `cb-${id}`,
+          from: from(dilnoza),
+          chat_instance: 'group',
+          data,
+          message: {
+            message_id: c.messageId,
+            date: 1_700_000_000,
+            chat: groupChat,
+            from: botUser,
+            text: c.plain,
+          },
+        },
+      });
+      return t.edges.telegram.answers.find((a) => a.id === `cb-${id}`)?.text;
+    };
+    for (const data of [
+      'ord:zz',
+      // no step leads on from a delivered order
+      `ord:n:${order.id}:delivered`,
+      // «Не забрал в BTS» fits only a parcel handed over
+      `ord:r:${order.id}:payment_confirmed:not_collected_at_bts`,
+      `ord:y:${order.id}:payment_confirmed:not_collected_at_bts`,
+      // no such order
+      'ord:n:999999:payment_confirmed',
+    ])
+      expect(await forged(data)).toBe('Нельзя');
+    expect(await statusOf(order.number)).toBe('payment_confirmed');
+  });
+
+  it('a second press on «Передан в BTS» replaces the first question', async () => {
+    await addStaff(dilnoza);
+    await addStaff(bekzod);
+    const order = await paidOrder();
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await press(dilnoza, '📦 Собирается', await cardWith(order.number, '📦 Собирается'));
+    const c = await cardWith(order.number, '🚚 Передан в BTS');
+    await press(dilnoza, '🚚 Передан в BTS', c);
+    const first = await groupMessage((m) => m.plain.startsWith('Dilnoza, введите трек-номер'));
+    await press(bekzod, '🚚 Передан в BTS', c);
+    const second = await groupMessage((m) => m.plain.startsWith('Bekzod, введите трек-номер'));
+
+    const late = await reply(dilnoza, 'BTS 1234 5678', first);
+    expect((await groupMessage(repliesTo(late))).plain).toBe(
+      `Этот вопрос по заказу № ${order.number} уже не действует: ответьте на последний вопрос бота.`,
+    );
+    expect(await statusOf(order.number)).toBe('assembling');
+    await reply(bekzod, 'BTS 8765 4321', second);
+    expect((await orderRow(order.number)).trackingNumber).toBe('BTS 8765 4321');
   });
 });

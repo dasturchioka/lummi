@@ -1,7 +1,6 @@
 import {
-  CANCEL_REASON_ONLY_FROM,
   CANCEL_REASONS,
-  CANCEL_REASONS_BY_ACTOR,
+  cancelReasonsFor,
   ORDER_STATUSES,
   type CancelReason,
   type OrderAction,
@@ -74,14 +73,6 @@ export function decodePress(data: string): CardPress | null {
     return { verb, orderId, expected, reason };
   }
   return m[4] === undefined ? { verb, orderId, expected } : null;
-}
-
-/** The reasons staff may cancel with from `status` (TZ §6; «Не забрал в BTS» only after handover). */
-export function staffCancelReasons(status: OrderStatus): CancelReason[] {
-  return CANCEL_REASONS_BY_ACTOR.staff.filter((r) => {
-    const only = CANCEL_REASON_ONLY_FROM[r];
-    return !only || only === status;
-  });
 }
 
 /** One line of the order's history, with the name of whoever made the move. */
@@ -316,7 +307,7 @@ function cardKeyboard(d: CardData, language: Language): InlineButton[][] | null 
   switch (d.panel.kind) {
     case 'cancel':
       return [
-        ...staffCancelReasons(status).map((reason) => [
+        ...cancelReasonsFor('staff', status).map((reason) => [
           button(reasons[reason], { verb: 'reason', orderId, expected: status, reason }),
         ]),
         [back],

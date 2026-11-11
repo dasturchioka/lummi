@@ -102,6 +102,8 @@ export const botMessages = defineMessages(
         back: '‹ Назад',
         changed: 'Уже изменено',
         noAccess: 'Нет доступа',
+        /** A button the bot never drew: forged data, or a step that does not exist. */
+        refused: 'Нельзя',
         askTracking:
           '{name}, введите трек-номер BTS для заказа № {number} ответом на это сообщение.',
         trackingPlaceholder: 'Трек-номер BTS',
@@ -111,6 +113,8 @@ export const botMessages = defineMessages(
         trackingNotYours:
           'Трек-номер для заказа № {number} ждём от {name}. Чтобы ввести его самим, нажмите «Передан в BTS» на карточке.',
         trackingStale: 'Заказ № {number} уже изменён, трек-номер не сохранён.',
+        trackingSuperseded:
+          'Этот вопрос по заказу № {number} уже не действует: ответьте на последний вопрос бота.',
         receiptCaption: 'Чек к заказу № {number}',
       },
     },
@@ -198,6 +202,7 @@ export const botMessages = defineMessages(
         back: '‹ Orqaga',
         changed: 'Allaqachon oʻzgargan',
         noAccess: 'Ruxsat yoʻq',
+        refused: 'Mumkin emas',
         askTracking:
           '{name}, № {number} buyurtmaning BTS trek-raqamini shu xabarga javob qilib yuboring.',
         trackingPlaceholder: 'BTS trek-raqami',
@@ -207,6 +212,8 @@ export const botMessages = defineMessages(
         trackingNotYours:
           '№ {number} buyurtmaning trek-raqamini {name} kiritadi. Oʻzingiz kiritish uchun kartochkadagi «BTSga topshirildi» tugmasini bosing.',
         trackingStale: '№ {number} buyurtma allaqachon oʻzgargan, trek-raqam saqlanmadi.',
+        trackingSuperseded:
+          '№ {number} buyurtma boʻyicha bu savol endi amal qilmaydi: botning oxirgi savoliga javob bering.',
         receiptCaption: '№ {number} buyurtma cheki',
       },
     },
