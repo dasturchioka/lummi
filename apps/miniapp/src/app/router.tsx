@@ -53,7 +53,7 @@ function Shell() {
   return (
     <>
       <Outlet />
-      <ShopNoteHost tabBar={showTabBar && !keyboardOpen} />
+      <ShopNoteHost tabBar={showTabBar && !keyboardOpen} screen={pathname} />
       {showTabBar ? <TabBar badges={{ cart: cartCount }} hidden={keyboardOpen} /> : null}
     </>
   );

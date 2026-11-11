@@ -23,8 +23,10 @@ vi.mock('../lib/api', () => ({
   },
 }));
 
+import { act } from 'react';
 import { AddButton } from './AddButton';
 import { ShopNote } from './ShopNote';
+import { showShopNote } from './ShopNoteHost';
 
 afterEach(() => {
   cleanup();
@@ -168,5 +170,16 @@ describe('the list card «+» (#25)', () => {
     fireEvent.click(screen.getByTestId('list-add'));
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Осталось 2'));
     expect(haptic).not.toHaveBeenCalled();
+  });
+});
+
+describe('the note a «+» leaves', () => {
+  it('belongs to its screen: another screen (the cart, its order button) opens without it', () => {
+    const { rerender } = render(<ShopNote tabBar screen="/catalog" />);
+    act(() => showShopNote('Добавлено в корзину'));
+    expect(screen.getByRole('status').textContent).toBe('Добавлено в корзину');
+    rerender(<ShopNote tabBar screen="/cart" />);
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(screen.getByTestId('shop-note').hasAttribute('data-open')).toBe(false);
   });
 });
