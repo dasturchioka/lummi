@@ -76,6 +76,8 @@ export const envSchema = z
     RECEIPT_CHECKS_QUEUE: z.string().min(1).default('receipt-checks'),
     /** BullMQ queue of receipts sent to the bot, downloaded and taken in by the worker (#31); API and worker must agree. */
     BOT_RECEIPTS_QUEUE: z.string().min(1).default('bot-receipts'),
+    /** BullMQ queue of review photos sent to the bot, fetched and stored by the worker (#41); API and worker must agree. */
+    REVIEW_PHOTOS_QUEUE: z.string().min(1).default('review-photos'),
     /** First retry delay of a receipt check whose judge could not answer, and of a bot receipt's download (doubles each time); tests shorten it. */
     RECEIPT_CHECK_BACKOFF_MS: z.coerce.number().int().min(1).default(5000),
 

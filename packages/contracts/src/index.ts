@@ -27,3 +27,4 @@ export * from './promo';
 export * from './campaign';
 export * from './birthday';
 export * from './favourites';
+export * from './reviews';

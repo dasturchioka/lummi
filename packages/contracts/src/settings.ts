@@ -879,6 +879,78 @@ export const settingDefinitions = {
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
     },
   },
+  // ---- Reviews (#41, spec Changes 2026-11-11)
+  /** A review request goes to the shopper this long after «Доставлен», once. */
+  'reviews.requestDelayHours': {
+    schema: z.number().int().min(1).max(720),
+    default: 24,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Запрос отзыва через, часов', uz: 'Sharh soʻrovi necha soatdan keyin' },
+    hint: {
+      ru: 'Через сколько часов после статуса «Доставлен» бот один раз спросит «Как вам заказ?».',
+      uz: 'Buyurtma «Yetkazildi» boʻlgandan necha soat keyin bot bir marta «Buyurtma sizga qanday?» deb soʻraydi.',
+    },
+  },
+  /** Ratings up to this go straight to the «Отзывы» topic of the orders group. */
+  'reviews.lowRatingMax': {
+    schema: z.number().int().min(1).max(4),
+    default: 3,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Низкая оценка: до', uz: 'Past baho: gacha' },
+    hint: {
+      ru: 'Оценки до этого числа включительно попадают в тему «Отзывы» группы заказов, чтобы менеджер связался с покупателем.',
+      uz: 'Shu songacha (shu son ham) baholar buyurtmalar guruhining «Sharhlar» mavzusiga tushadi, menejer xaridor bilan bogʻlanadi.',
+    },
+  },
+  /** Photos a shopper may add to a review; 0 turns the photo step off. The size cap is the receipt's (`receipts.maxUploadMb`). */
+  'reviews.maxPhotos': {
+    schema: z.number().int().min(0).max(5),
+    default: 3,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Фото в отзыве, не больше', uz: 'Sharhdagi rasmlar, koʻpi bilan' },
+    hint: {
+      ru: 'Сколько фото покупатель может добавить к отзыву. 0 отключает фото. Размер файла ограничен настройкой «Размер файла чека».',
+      uz: 'Xaridor sharhga nechta rasm qoʻsha oladi. 0 rasmlarni oʻchiradi. Fayl hajmi «Chek faylining hajmi» sozlamasi bilan cheklanadi.',
+    },
+  },
+  'reviews.commentMaxLength': {
+    schema: z.number().int().min(50).max(3000),
+    default: 1000,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Длина комментария к отзыву', uz: 'Sharh izohining uzunligi' },
+    hint: {
+      ru: 'Сколько символов может быть в комментарии покупателя.',
+      uz: 'Xaridor izohida nechta belgi boʻlishi mumkin.',
+    },
+  },
+  /** An unfinished review (comment or photos still open) is closed after this long without a message. */
+  'reviews.idleFinishMinutes': {
+    schema: z.number().int().min(5).max(1440),
+    default: 60,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Завершить отзыв без ответа через, минут', uz: 'Javobsiz sharhni yakunlash, daqiqa' },
+    hint: {
+      ru: 'Если покупатель оценил заказ, но не написал комментарий и не нажал «Готово», отзыв закрывается сам, и низкая оценка уходит менеджерам.',
+      uz: 'Xaridor buyurtmani baholab, izoh yozmasa va «Tayyor» tugmasini bosmasa, sharh oʻzi yopiladi va past baho menejerlarga yuboriladi.',
+    },
+  },
+  /** How many of the latest published reviews the product card shows. */
+  'reviews.cardLimit': {
+    schema: z.number().int().min(1).max(20),
+    default: 5,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Отзывов на карточке', uz: 'Kartochkadagi sharhlar' },
+    hint: {
+      ru: 'Сколько последних опубликованных отзывов показывает карточка аромата или набора. Средняя оценка считается по всем.',
+      uz: 'Ifor yoki toʻplam kartochkasi nechta soʻnggi eʼlon qilingan sharhni koʻrsatadi. Oʻrtacha baho hammasi boʻyicha hisoblanadi.',
+    },
+  },
   // ---- Messaging
   /** Broadcast sends per second. Telegram allows about 30 per second to different chats, so 25 is the ceiling (ADR 0021). Read when the worker starts. */
   'broadcast.sendRatePerSecond': {

@@ -67,6 +67,24 @@ export const botMessages = defineMessages(
         'К заказу № {number} чек уже отправлен и проверяется. Мы напишем, как только оплата подтвердится.',
       orderNotAwaiting: 'Заказ № {number} уже не ожидает оплаты, чек не нужен.',
       receiptExpired: 'Этот выбор устарел. Отправьте чек ещё раз.',
+      /** The review request (#41, setting `reviews.requestDelayHours` after «Доставлен»): 1-5 buttons follow. */
+      reviewRequest: 'Как вам заказ № {number}? Оцените его от 1 до 5.',
+      reviewAskComment:
+        'Спасибо за оценку {rating}! Если хотите, напишите пару слов о ваших впечатлениях. Или нажмите «Пропустить».',
+      reviewSkip: 'Пропустить',
+      reviewDone: 'Готово',
+      reviewAskPhotos: 'Можно добавить до {max} фото. Отправьте их сюда или нажмите «Готово».',
+      reviewPhotoTaken: 'Фото {n} из {max} получено.',
+      reviewPhotoUnsupported:
+        'Это фото принять не получилось. Отправьте снимок в формате JPG, PNG или WebP.',
+      reviewPhotoTooLarge: 'Фото слишком большое: можно до {max} МБ.',
+      reviewPhotoTryAgain: 'Сейчас не получилось принять фото. Отправьте его ещё раз через минуту.',
+      reviewCommentTooLong:
+        'Комментарий слишком длинный: можно до {max} символов. Сократите его и отправьте ещё раз.',
+      reviewThanks: 'Спасибо за отзыв! Он помогает нам делать LUMMI лучше.',
+      reviewThanksLow:
+        'Спасибо, что рассказали. Нам жаль, что что-то пошло не так: менеджер свяжется с вами.',
+      reviewAlready: 'Вы уже оценили этот заказ. Спасибо!',
       /** The birthday coupon, 10:00 Tashkent a few days before (TZ §3.8, #30): `{max}` is money, `{until}` the last day. */
       birthdayCoupon:
         'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
@@ -76,6 +94,12 @@ export const botMessages = defineMessages(
        */
       group: {
         title: 'Заказ № {number}',
+        reviewTitle: 'Отзыв {rating}/5 · заказ № {number}',
+        reviewPhone: 'Телефон',
+        reviewName: 'Покупатель',
+        reviewComment: 'Комментарий',
+        reviewNoComment: 'Без комментария',
+        reviewItems: 'В заказе',
         discount: 'Скидка ({source})',
         delivery: 'Доставка',
         free: 'бесплатно',
@@ -176,10 +200,34 @@ export const botMessages = defineMessages(
         '№ {number} buyurtmaga chek allaqachon yuborilgan va tekshirilmoqda. Toʻlov tasdiqlanishi bilan xabar beramiz.',
       orderNotAwaiting: '№ {number} buyurtma endi toʻlov kutmayapti, chek kerak emas.',
       receiptExpired: 'Bu tanlov eskirgan. Chekni qayta yuboring.',
+      reviewRequest: '№ {number} buyurtma sizga qanday? 1 dan 5 gacha baholang.',
+      reviewAskComment:
+        'Bahoyingiz uchun rahmat: {rating}! Xohlasangiz, taassurotlaringiz haqida bir-ikki soʻz yozing. Yoki «Oʻtkazib yuborish» tugmasini bosing.',
+      reviewSkip: 'Oʻtkazib yuborish',
+      reviewDone: 'Tayyor',
+      reviewAskPhotos:
+        '{max} tagacha rasm qoʻshish mumkin. Ularni shu yerga yuboring yoki «Tayyor» tugmasini bosing.',
+      reviewPhotoTaken: 'Rasm {n} / {max} qabul qilindi.',
+      reviewPhotoUnsupported:
+        'Bu rasmni qabul qilib boʻlmadi. JPG, PNG yoki WebP formatidagi suratni yuboring.',
+      reviewPhotoTooLarge: 'Rasm juda katta: {max} MB gacha boʻlishi mumkin.',
+      reviewPhotoTryAgain: 'Hozir rasmni qabul qilib boʻlmadi. Bir daqiqadan keyin qayta yuboring.',
+      reviewCommentTooLong:
+        'Izoh juda uzun: {max} belgigacha boʻlishi mumkin. Qisqartirib, qayta yuboring.',
+      reviewThanks: 'Sharhingiz uchun rahmat! U LUMMIni yaxshilashga yordam beradi.',
+      reviewThanksLow:
+        'Aytganingiz uchun rahmat. Nimadir yaxshi chiqmagani uchun afsusdamiz: menejer siz bilan bogʻlanadi.',
+      reviewAlready: 'Siz bu buyurtmani allaqachon baholagansiz. Rahmat!',
       birthdayCoupon:
         'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
       group: {
         title: '№ {number} buyurtma',
+        reviewTitle: 'Sharh {rating}/5 · № {number} buyurtma',
+        reviewPhone: 'Telefon',
+        reviewName: 'Xaridor',
+        reviewComment: 'Izoh',
+        reviewNoComment: 'Izohsiz',
+        reviewItems: 'Buyurtmada',
         discount: 'Chegirma ({source})',
         delivery: 'Yetkazish',
         free: 'bepul',

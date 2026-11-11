@@ -82,6 +82,8 @@ const order: OrderRow = {
   campaignLinkId: null,
   trackingNumber: null,
   reserveReminderSentAt: null,
+  reviewRequestedAt: null,
+  reviewRequest: null,
   createdAt: new Date('2026-11-09T10:00:00Z'),
   updatedAt: new Date('2026-11-09T10:00:00Z'),
 };

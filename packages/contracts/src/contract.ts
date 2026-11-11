@@ -1,6 +1,15 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { birthDateErrorSchema, myDiscountsSchema, setBirthDateBodySchema } from './birthday';
+import {
+  adminReviewsErrorSchema,
+  adminReviewsPageSchema,
+  adminReviewsQuerySchema,
+  adminReviewSchema,
+  reviewsBlockSchema,
+  reviewsErrorSchema,
+  setReviewPublishedBodySchema,
+} from './reviews';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
@@ -495,6 +504,16 @@ export const contract = c.router({
       body: c.noBody(),
       responses: { 200: favouriteIdsSchema, 401: favouriteErrorSchema },
       summary: 'Drop a favourite; idempotent, also for one never kept',
+    },
+  },
+  reviews: {
+    forTarget: {
+      method: 'GET',
+      path: '/reviews/:target',
+      pathParams: z.object({ target: z.string().min(1).max(100) }),
+      responses: { 200: reviewsBlockSchema, 401: reviewsErrorSchema, 404: reviewsErrorSchema },
+      summary:
+        'The reviews block of a fragrance (slug), `discovery-set` or `builder-set`: the average and count of the published reviews and the latest few; unpublished ones never appear',
     },
   },
   campaigns: {
@@ -1406,6 +1425,36 @@ const adminOrders = c.router({
 });
 
 /** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
+const adminReviews = c.router({
+  reviews: {
+    list: {
+      method: 'GET',
+      path: '/admin/reviews',
+      query: adminReviewsQuerySchema,
+      responses: {
+        200: adminReviewsPageSchema,
+        401: adminReviewsErrorSchema,
+        403: adminReviewsErrorSchema,
+      },
+      summary:
+        'Staff: every review (published or not), newest first, filtered by rating, state and Tashkent days, with the average and the published count; the Excel export is GET /admin/reviews/export with the same filters',
+    },
+    setPublished: {
+      method: 'PUT',
+      path: '/admin/reviews/:id/published',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: setReviewPublishedBodySchema,
+      responses: {
+        200: adminReviewSchema,
+        401: adminReviewsErrorSchema,
+        403: adminReviewsErrorSchema,
+        404: adminReviewsErrorSchema,
+      },
+      summary: 'Staff: publish a review on the product cards, or hide it again; audited with the staff member',
+    },
+  },
+});
+
 const adminCampaigns = c.router({
   campaignLinks: {
     list: {
@@ -1486,6 +1535,7 @@ export const adminContract = c.router({
   ...adminBroadcasts,
   ...adminPromo,
   ...adminCampaigns,
+  ...adminReviews,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
