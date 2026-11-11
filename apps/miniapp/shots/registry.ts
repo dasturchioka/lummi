@@ -3479,6 +3479,15 @@ function favouriteScreens(): ScreenDef[] {
   return [
     { id: 'fav-home', path: '/', setup: heart(kept), teardown: forget },
     { id: 'fav-catalog', path: '/catalog', fullPage: true, setup: heart(kept), teardown: forget },
+    {
+      id: 'fav-catalog-360',
+      path: '/catalog',
+      width: 360,
+      fullPage: true,
+      setup: heart(kept),
+      teardown: forget,
+    },
+    { id: 'fav-search', path: '/search?q=tygar', setup: heart(kept), teardown: forget },
     { id: 'fav-fragrance', path: '/p/tygar', setup: heart(['tygar']), teardown: forget },
     {
       id: 'fav-discovery-card',
