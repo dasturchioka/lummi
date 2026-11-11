@@ -130,19 +130,12 @@ export function DiscountChoice({
     return fill(c.option[sourceOf(x)], { percent });
   };
   const detail = (o: DiscountOptionDto): ReactNode[] => {
-    const delivery =
-      someFree && o.deliveryFee > 0 ? (
-        <span key="delivery" className="whitespace-nowrap tabular-nums">
-          {fill(c.plusDelivery, { amount: formatMoney(o.deliveryFee, language) })}
-        </span>
-      ) : null;
-    if (o.discount === null) return [delivery, keeps ? c.noneKeeps : null].filter((p) => p);
+    if (o.discount === null) return keeps ? [c.noneKeeps] : [];
     const bottle = bottleOf(o.discount, cart.lines, c.bottle);
     return [
       <span key="amount" className="whitespace-nowrap text-sage-ink tabular-nums">
         −{formatMoney(o.discount.amount, language)}
       </span>,
-      delivery,
       bottle,
       o.terms ? <span className="whitespace-nowrap">{until(o.terms.lastDay)}</span> : null,
     ].filter((p) => p);
@@ -221,6 +214,11 @@ export function DiscountChoice({
           const key = choiceKey(choice);
           const inFlight = pending === key;
           const parts = detail(o);
+          // its own line, so the amount and the date stay together above it
+          const delivery =
+            someFree && o.deliveryFee > 0
+              ? fill(c.plusDelivery, { amount: formatMoney(o.deliveryFee, language) })
+              : null;
           return (
             <button
               key={key}
@@ -262,6 +260,14 @@ export function DiscountChoice({
                     data-testid="option-detail"
                   >
                     <Joined parts={parts} />
+                  </span>
+                ) : null}
+                {delivery ? (
+                  <span
+                    className="type-small mt-0.5 block text-muted tabular-nums"
+                    data-testid="option-delivery"
+                  >
+                    {delivery}
                   </span>
                 ) : null}
               </span>

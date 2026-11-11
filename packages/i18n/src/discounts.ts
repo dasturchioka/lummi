@@ -69,7 +69,7 @@ export const discountsMessages = defineMessages(
         /** Under «Не применять» while an entitlement is among the choices. */
         noneKeeps: 'Скидка сохранится на следующий заказ',
         /** What an upgrade right discounts: «Tygar 30 мл». */
-        bottle: '{name} {ml} мл',
+        bottle: '{name} {ml}\u00a0мл',
         /** A row whose total carries the delivery another choice leaves free: `{amount}` is money. */
         plusDelivery: '+ доставка {amount}',
         /** An entered code is cheaper than none of the entitlements: `{amount}` is money. */
@@ -178,7 +178,7 @@ export const discountsMessages = defineMessages(
         },
         none: 'Qoʻllamaslik',
         noneKeeps: 'Chegirma keyingi buyurtmaga saqlanadi',
-        bottle: '{name} {ml} ml',
+        bottle: '{name} {ml}\u00a0ml',
         plusDelivery: '+ {amount} yetkazish',
         better: {
           set: 'Toʻplam chegirmasi {amount} foydaliroq',
