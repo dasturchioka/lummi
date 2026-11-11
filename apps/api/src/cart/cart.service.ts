@@ -362,10 +362,13 @@ export class CartService {
 
   /**
    * Removes a line. The discount choice belongs to the lines: once the last one is gone it is moot
-   * (#39), and the next cart picks by itself again.
+   * (#39), and the next cart picks by itself again. The cart row is taken first, as every cart
+   * write and `createOrder` take it (the row, then its lines): the other way round, a checkout of
+   * this cart and this delete would wait on each other.
    */
   async remove(customerId: number, lineId: number): Promise<void> {
     await this.db.transaction(async (tx) => {
+      await this.touch(tx, customerId);
       await tx
         .delete(cartLines)
         .where(and(eq(cartLines.id, lineId), eq(cartLines.customerId, customerId)));

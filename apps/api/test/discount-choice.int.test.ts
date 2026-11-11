@@ -3,10 +3,16 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { birthdayCoupons, eq, fragrances, orders, upgradeRights } from '@lummi/db';
+import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
-import { samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
+import {
+  samarkandPoint,
+  shopper,
+  slugs as slugsOf,
+  untilWaitingOnLocks,
+} from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
 
@@ -582,5 +588,29 @@ describe('checkout honours the choice', () => {
       status: 201,
       body: { discount: { type: 'upgrade_right', id: r.id } },
     });
+  });
+});
+
+describe('removing a line while a cart checkout holds the cart', () => {
+  it('waits its turn behind the checkout instead of deadlocking with it', async () => {
+    const c = await shopper(t, ali, '998901112233');
+    const id = await customerIdOf(c);
+    const [x] = await slugsOf(t, 1);
+    // the last line: removing it also drops the choice on the cart row (#39)
+    const lineId = (await add(c, x!, 50)).lines[0]!.id;
+    const checkout = new pg.Client({ connectionString: t.env.DATABASE_URL });
+    await checkout.connect();
+    try {
+      // as `createOrder` does: the cart row first, then (after the order) its lines
+      await checkout.query('begin');
+      await checkout.query('select 1 from carts where customer_id = $1 for update', [id]);
+      const removing = c.cart.removeLine({ params: { lineId } });
+      await untilWaitingOnLocks(checkout, 1);
+      await checkout.query('delete from cart_lines where customer_id = $1', [id]);
+      await checkout.query('commit');
+      expect(await removing).toMatchObject({ status: 200, body: { lines: [] } });
+    } finally {
+      await checkout.end();
+    }
   });
 });
