@@ -18,11 +18,12 @@ export class DiscountSourceHooks {
   /**
    * A cancelled order, or one returned as a whole, releases the source it held: an upgrade right
    * (#38) or a birthday coupon (#30) gets its `used_by_order_id` cleared and is active again while
-   * still within validity, otherwise lost; a promo-code use (#29) is voided.
+   * still within validity; past it, it is lost and keeps the link. A promo-code use (#29) is voided.
    */
   async release(tx: DbOrTx, order: OrderRow): Promise<void> {
-    await voidPromoUse(tx, order.id, this.edges.clock.now());
-    await releaseEntitlements(tx, order.id);
+    const now = this.edges.clock.now();
+    await voidPromoUse(tx, order.id, now);
+    await releaseEntitlements(tx, order.id, now);
   }
 
   /**

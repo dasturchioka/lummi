@@ -2,7 +2,7 @@ import { adminContract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { StaffRow } from '@lummi/db';
-import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
+import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import { CustomersAdminService } from './customers-admin.service';
 
 /**
@@ -32,13 +32,15 @@ export class CustomersAdminController {
     });
   }
 
-  /** TZ §3.8: the customer enters the date of birth once; staff correct it, audited (#30). */
+  /** TZ §3.8: the customer enters the date of birth once; only the owner corrects it, audited (#30). */
   @TsRestHandler(adminContract.customers.setBirthDate)
+  @UseGuards(OwnerGuard)
   setBirthDate(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.customers.setBirthDate, async ({ params, body }) => {
       const r = await this.customers.setBirthDate(actor.id, params.id, body.birthDate);
       if (r === 'not_found') return { status: 404 as const, body: { code: r } };
-      if (r === 'invalid_birth_date') return { status: 422 as const, body: { code: r } };
+      if (r === 'invalid_birth_date' || r === 'phone_required')
+        return { status: 422 as const, body: { code: r } };
       return { status: 200 as const, body: r };
     });
   }

@@ -20,17 +20,20 @@ import type { AdminMessages } from '@/lib/i18n';
 import { QUIET_ACTION } from '@/lib/ui-classes';
 
 /**
- * The customer's date of birth on their page, with «Исправить» (TZ §3.8: the customer enters it
- * once; only staff change it). The API audits the old and new date.
+ * The customer's date of birth on their page, with «Исправить» for the owner (TZ §3.8: the customer
+ * enters it once; «изменить может только админ»). A customer without an account phone cannot hold
+ * one, so there is nothing to correct. The API audits the change.
  */
 export function CustomerBirthDate({
   id,
   birthDate,
+  canEdit,
   language,
   t,
 }: {
   id: number;
   birthDate: string | null;
+  canEdit: boolean;
   language: Language;
   t: AdminMessages;
 }) {
@@ -43,22 +46,26 @@ export function CustomerBirthDate({
       ) : (
         <span className="font-normal text-muted-foreground">{c.noBirthDate}</span>
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        className={`${QUIET_ACTION} -my-1 h-auto px-1 py-0.5`}
-        onClick={() => setOpen(true)}
-        data-testid="birth-date-edit"
-      >
-        {c.birthDateEdit}
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          {open && (
-            <BirthDateForm id={id} initial={birthDate} t={t} onSaved={() => setOpen(false)} />
-          )}
-        </DialogContent>
-      </Dialog>
+      {canEdit ? (
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`${QUIET_ACTION} -my-1 h-auto px-1 py-0.5`}
+            onClick={() => setOpen(true)}
+            data-testid="birth-date-edit"
+          >
+            {c.birthDateEdit}
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent>
+              {open && (
+                <BirthDateForm id={id} initial={birthDate} t={t} onSaved={() => setOpen(false)} />
+              )}
+            </DialogContent>
+          </Dialog>
+        </>
+      ) : null}
     </span>
   );
 }
@@ -99,7 +106,11 @@ function BirthDateForm({
             router.refresh();
           } else
             setError(
-              res?.status === 422 || res?.status === 400 ? c.birthDateInvalid : t.errors.generic,
+              res?.status === 403
+                ? t.errors.forbidden
+                : res?.status === 422 || res?.status === 400
+                  ? c.birthDateInvalid
+                  : t.errors.generic,
             );
         }}
       >

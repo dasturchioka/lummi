@@ -4,6 +4,7 @@ import {
   celebratedOn,
   couponWindow,
   daysLeft,
+  lastDayOf,
   nextWindow,
   openWindow,
   type BirthdayRules,
@@ -14,7 +15,12 @@ import {
  * issued at 10:00 three days before the birthday, valid through the seventh day after it, 29
  * February celebrated on 28 February in a common year. Expected instants are written out by hand.
  */
-const RULES: BirthdayRules = { daysBefore: 3, daysAfter: 7, firstCouponAfterDays: 14 };
+const RULES: BirthdayRules = {
+  daysBefore: 3,
+  daysAfter: 7,
+  firstCouponAfterDays: 14,
+  issueHour: 10,
+};
 const d = (s: string) => {
   const [year, month, day] = s.split('-').map(Number) as [number, number, number];
   return { year, month, day };
@@ -65,6 +71,14 @@ describe('the coupon window', () => {
     const w = couponWindow(d('2000-02-29'), 2028, RULES);
     expect(w.firstDay).toEqual(d('2028-02-26'));
     expect(w.lastDay).toEqual(d('2028-03-07'));
+  });
+
+  it('opens at the issue hour of the settings (TZ: «в 10:00», changed in admin)', () => {
+    const w = couponWindow(d('1996-03-14'), 2027, { ...RULES, issueHour: 14 });
+    expect(w.issuesAt.toISOString()).toBe('2027-03-11T09:00:00.000Z'); // 14:00 in Tashkent
+    expect(w.expiresAt.toISOString()).toBe('2027-03-21T19:00:00.000Z');
+    const midnight = couponWindow(d('1996-03-14'), 2027, { ...RULES, issueHour: 0 });
+    expect(midnight.issuesAt.toISOString()).toBe('2027-03-10T19:00:00.000Z');
   });
 
   it('follows the settings', () => {
@@ -121,6 +135,13 @@ describe('the birth dates whose window is open on a Tashkent day', () => {
     const list = md(birthDaysOpenOn(d('2028-02-26'), RULES));
     expect(list.filter((x) => x === '2-29')).toHaveLength(1);
     expect(list).toContain('2-28');
+  });
+});
+
+describe('the last day', () => {
+  it('is the Tashkent day before `expires_at` (00:00 Tashkent, exclusive)', () => {
+    expect(lastDayOf(new Date('2027-03-21T19:00:00Z'))).toEqual(d('2027-03-21'));
+    expect(lastDayOf(new Date('2027-01-09T19:00:00Z'))).toEqual(d('2027-01-09'));
   });
 });
 

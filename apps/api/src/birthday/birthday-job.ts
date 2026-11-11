@@ -8,21 +8,22 @@ import {
   type CustomerRow,
   type Db,
 } from '@lummi/db';
-import { fill, formatDayMonth, formatMoney } from '@lummi/i18n';
+import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
 import { botMessages } from '@lummi/i18n/bot';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CustomersService } from '../auth/customers.service';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { OutboxService, type OutboxMessage } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
+import { describeError } from '../logging/describe-error';
 import { DB, EDGES, ENV } from '../tokens';
 import { WorkerRuntime } from '../worker/runtime';
 import { readBirthdayRules } from './birthday-coupons';
 import {
   birthDaysOpenOn,
   formatLocalDate,
-  ISSUE_HOUR,
+  lastDayOf,
   openWindow,
   parseLocalDate,
   passesGuard,
@@ -31,13 +32,17 @@ import {
 } from './birthday-dates';
 
 /** The repeatable job's id: one per queue, upserted on every worker start. */
-const SCHEDULE_ID = 'birthday-coupons-daily';
+const SCHEDULE_ID = 'birthday-coupons';
+/** A run that failed for some customers is run again (they are idempotent) after 1, 2, 4 minutes. */
+const RUN_ATTEMPTS = 4;
 
 /**
- * The daily birthday-coupon job (TZ §3.8, ticket #30; ADR 0021): a BullMQ repeatable job at 10:00
- * Asia/Tashkent. Each run issues a coupon to every customer whose window is open at that moment
- * (from 10:00 `birthday.daysBefore` days before the birthday through `birthday.daysAfter` days
- * after it), so a day the job missed is caught up while the window lasts and never early.
+ * The birthday-coupon job (TZ §3.8, ticket #30; ADR 0021): a BullMQ repeatable job at the start of
+ * every hour on the Asia/Tashkent clock, so the setting `birthday.issueHour` (TZ: 10:00, changed in
+ * the admin) is read at each run, never baked into a schedule. Each run issues a coupon to every
+ * customer whose window is open at that moment (from `issueHour` on the day `birthday.daysBefore`
+ * days before the birthday through `birthday.daysAfter` days after it), so a run the worker missed
+ * is caught up while the window lasts and never early.
  *
  * One coupon per customer per birthday year: the unique index on (customer, birthday year) makes a
  * second or concurrent run insert nothing, and the message is queued only with the row it inserted,
@@ -57,12 +62,19 @@ export class BirthdayCouponJob {
   ) {
     runtime.registerQueue({
       queue: env.BIRTHDAY_QUEUE,
-      schedules: [{ id: SCHEDULE_ID, pattern: `0 ${ISSUE_HOUR} * * *`, tz: 'Asia/Tashkent' }],
+      schedules: [
+        { id: SCHEDULE_ID, pattern: '0 * * * *', tz: 'Asia/Tashkent', attempts: RUN_ATTEMPTS },
+      ],
       process: async () => void (await this.run()),
     });
   }
 
-  /** Issues every coupon due now; returns how many it issued. */
+  private readonly log = new Logger('BirthdayCoupons');
+
+  /**
+   * Issues every coupon due now; returns how many it issued. One customer's failure is logged (no
+   * personal data) and does not stop the others; the run then fails, so BullMQ runs it again.
+   */
   async run(): Promise<number> {
     const now = this.edges.clock.now();
     const rules = await readBirthdayRules(this.db);
@@ -83,12 +95,22 @@ export class BirthdayCouponJob {
         ),
       );
     let issued = 0;
+    let due = 0;
+    let failed = 0;
     for (const c of candidates) {
       if (c.birthDate === null || c.birthDateSetAt === null) continue;
       const w = openWindow(parseLocalDate(c.birthDate), now, rules);
       if (!w || !passesGuard(w, c.birthDateSetAt, rules)) continue;
-      if (await this.issue(c, w, now)) issued++;
+      due++;
+      try {
+        if (await this.issue(c, w, now)) issued++;
+      } catch (e) {
+        failed++;
+        this.log.error(`customer ${c.id}: coupon not issued: ${describeError(e)}`);
+      }
     }
+    if (failed > 0)
+      throw new Error(`birthday coupons: ${failed} of ${due} customers failed (${issued} issued)`);
     return issued;
   }
 
@@ -109,7 +131,8 @@ export class BirthdayCouponJob {
         .onConflictDoNothing({ target: [birthdayCoupons.customerId, birthdayCoupons.birthdayYear] })
         .returning();
       if (!coupon) return false;
-      if (await this.customers.canMessage(c.telegramId)) {
+      // read in this transaction: the run holds a pool connection already
+      if (await this.customers.canMessage(c.telegramId, tx)) {
         const [outboxId] = await this.outbox.enqueue(tx, this.message(c, coupon));
         await tx.update(birthdayCoupons).set({ outboxId }).where(eq(birthdayCoupons.id, coupon.id));
       }
@@ -128,8 +151,7 @@ export class BirthdayCouponJob {
       text: fill(t.birthdayCoupon, {
         percent: String(coupon.percent),
         max: formatMoney(coupon.maxAmount, c.language),
-        // the last day is the one before `expires_at` (00:00 Tashkent)
-        until: formatDayMonth(new Date(coupon.expiresAt.getTime() - 1000), c.language),
+        until: formatCalendarDate(formatLocalDate(lastDayOf(coupon.expiresAt)), c.language),
       }),
       options: url
         ? { reply_markup: { inline_keyboard: [[{ text: t.openShop, web_app: { url } }]] } }

@@ -117,7 +117,7 @@ export const adminStockErrorSchema = z.object({
 });
 
 export const adminCustomersErrorSchema = z.object({
-  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid_birth_date']),
+  code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid_birth_date', 'phone_required']),
 });
 
 /** Staff correct a customer's date of birth (TZ §3.8: «только админ может изменить»). */

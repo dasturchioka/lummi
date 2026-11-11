@@ -2,9 +2,9 @@ import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
 
 /**
  * The birthday coupon's calendar (TZ §3.8, ticket #30), pure: no DB, no clock. Every day is a day
- * on the Asia/Tashkent wall clock (CLAUDE.md schedules). A coupon is issued at 10:00 Tashkent
- * `daysBefore` days before the birthday and works through the whole `daysAfter`-th day after it; a
- * 29 February birthday is celebrated on 28 February in a common year.
+ * on the Asia/Tashkent wall clock (CLAUDE.md schedules). A coupon is issued at `issueHour` (TZ:
+ * 10:00) Tashkent `daysBefore` days before the birthday and works through the whole `daysAfter`-th
+ * day after it; a 29 February birthday is celebrated on 28 February in a common year.
  */
 
 /** A calendar day; months are 1–12. */
@@ -20,10 +20,9 @@ export interface BirthdayRules {
   daysAfter: number;
   /** Abuse guard (TZ §3.8): no coupon opens sooner than this many days after the date was entered. */
   firstCouponAfterDays: number;
+  /** The Tashkent hour a window opens (TZ §3.8: «в 10:00 по Ташкенту», changed in the admin). */
+  issueHour: number;
 }
-
-/** The daily job's hour (TZ §3.8: «в 10:00 по Ташкенту»), and so the hour a window opens. */
-export const ISSUE_HOUR = 10;
 
 const DAY_MS = 86_400_000;
 
@@ -34,7 +33,7 @@ export interface CouponWindow {
   birthday: LocalDate;
   firstDay: LocalDate;
   lastDay: LocalDate;
-  /** 10:00 Tashkent on the first day. */
+  /** `issueHour` Tashkent on the first day. */
   issuesAt: Date;
   /** 00:00 Tashkent the day after the last day: the coupon works while now is before it. */
   expiresAt: Date;
@@ -93,7 +92,7 @@ export function couponWindow(birth: LocalDate, year: number, rules: BirthdayRule
     birthday,
     firstDay,
     lastDay,
-    issuesAt: atTashkent(firstDay, ISSUE_HOUR),
+    issuesAt: atTashkent(firstDay, rules.issueHour),
     expiresAt: atTashkent(addDays(lastDay, 1), 0),
   };
 }
@@ -156,6 +155,11 @@ export function birthDaysOpenOn(
     if (b.month === 2 && b.day === 28 && !isLeap(b.year)) out.set('2-29', { month: 2, day: 29 });
   }
   return [...out.values()];
+}
+
+/** The last day a coupon works: the Tashkent day before its `expires_at` (00:00 Tashkent, exclusive). */
+export function lastDayOf(expiresAt: Date): LocalDate {
+  return addDays(tashkentDay(expiresAt), -1);
 }
 
 /** Whole Tashkent days from today to `lastDay`: 0 on the last day itself. */

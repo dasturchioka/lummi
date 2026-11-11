@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { judgeBirthDate, maskBirthDate } from './birth-date';
+import { judgeBirthDate, maskBirthDate, tashkentToday } from './birth-date';
 
 describe('the date of birth as typed (ДД.ММ.ГГГГ)', () => {
   it.each([
@@ -22,6 +22,13 @@ describe('the date of birth as typed (ДД.ММ.ГГГГ)', () => {
   it('erasing past a dot leaves the digits only', () => {
     expect(maskBirthDate('14.03')).toBe('14.03');
     expect(maskBirthDate('14.0')).toBe('14.0');
+  });
+});
+
+describe('today in Tashkent (UTC+5)', () => {
+  it('turns at 19:00 UTC', () => {
+    expect(tashkentToday(new Date('2026-11-09T18:59:59Z'))).toBe('2026-11-09');
+    expect(tashkentToday(new Date('2026-11-09T19:00:00Z'))).toBe('2026-11-10');
   });
 });
 

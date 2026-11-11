@@ -446,8 +446,26 @@ export const settingDefinitions = {
       uz: 'Tugʻilgan kun kuponi: bayramgacha kunlar',
     },
     hint: {
-      ru: 'Купон приходит в 10:00 по Ташкенту за столько дней до дня рождения и сразу действует.',
-      uz: 'Kupon tugʻilgan kundan shuncha kun oldin Toshkent vaqti bilan 10:00 da keladi va darhol amal qiladi.',
+      ru: 'Купон приходит в час отправки по Ташкенту за столько дней до дня рождения и сразу действует.',
+      uz: 'Kupon tugʻilgan kundan shuncha kun oldin Toshkent vaqti bilan yuborish soatida keladi va darhol amal qiladi.',
+    },
+  },
+  /**
+   * The Tashkent hour the coupon arrives (TZ §3.8: «в 10:00 по Ташкенту», changed in the admin). The
+   * job runs every hour and issues once this hour has come on the first day.
+   */
+  'birthday.issueHour': {
+    schema: z.number().int().min(0).max(23),
+    default: 10,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Купон ко дню рождения: час отправки',
+      uz: 'Tugʻilgan kun kuponi: yuborish soati',
+    },
+    hint: {
+      ru: 'По Ташкенту, от 0 до 23: купон приходит в начале этого часа.',
+      uz: 'Toshkent vaqti bilan, 0 dan 23 gacha: kupon shu soat boshida keladi.',
     },
   },
   /** The coupon works through the end of this many days after the birthday (TZ: 7). */

@@ -23,7 +23,9 @@ vi.mock('../src/birthday/birthday-coupons', async (importOriginal) => {
  * ADR 0005's guard (ticket #30): the coupon the quote applied is gone by the time `createOrder`
  * holds it. Nothing in the shop does that under the customer lock, so another session ends the
  * coupon from inside the hold; the order is then created again from a new quote, which no longer
- * has it, and the shopper gets 409 with the new total. No order is left behind.
+ * has it, and the shopper gets 409 with the new total. No order is left behind. Only this path
+ * needs the mock; the hold's own `expires_at > now` guard is tested on the clock boundary without
+ * one, in `birthday.int.test.ts`.
  */
 const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(

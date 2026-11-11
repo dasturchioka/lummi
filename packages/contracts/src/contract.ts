@@ -978,7 +978,7 @@ const adminCore = c.router({
         422: adminCustomersErrorSchema,
       },
       summary:
-        'Owner and manager: correct the date of birth (the customer enters it once), audited with the old and new date',
+        'Owner only: correct the date of birth (the customer enters it once); needs the account phone; audited as the fact',
     },
   },
   onHand: {

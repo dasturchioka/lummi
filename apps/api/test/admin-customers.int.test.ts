@@ -303,14 +303,14 @@ describe('the date of birth', () => {
     });
   });
 
-  it('staff correct it, audited with the old and new date; the abuse guard keeps counting from the first entry', async () => {
+  it('the owner corrects it, audited without the date itself; the abuse guard keeps counting from the first entry', async () => {
     const id = await aliId();
     const entered = new Date('2026-11-01T10:00:00Z');
     await t.db
       .update(customers)
       .set({ birthDate: '1996-03-14', birthDateSetAt: entered })
       .where(eq(customers.id, id));
-    const res = await manager.client.admin.customers.setBirthDate({
+    const res = await owner.client.admin.customers.setBirthDate({
       params: { id },
       body: { birthDate: '1996-04-14' },
     });
@@ -324,14 +324,39 @@ describe('the date of birth', () => {
     expect(audit).toMatchObject([
       {
         actorType: 'staff',
-        actorId: manager.staff.id,
+        actorId: owner.staff.id,
         targetId: String(id),
-        payload: { from: '1996-03-14', to: '1996-04-14' },
+        payload: { changed: true },
       },
     ]);
+    // the date of birth is personal data: the audit, which staff read, records only the fact
+    expect(JSON.stringify(audit[0]!.payload)).not.toContain('1996');
   });
 
-  it('staff may set it for a customer who has none; it counts as entered now', async () => {
+  it('a manager may not correct it (403): TZ «изменить может только админ»', async () => {
+    const id = await aliId();
+    const res = await manager.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '1996-04-14' },
+    });
+    expect(res.status).toBe(403);
+    const [c] = await t.db.select().from(customers).where(eq(customers.id, id));
+    expect(c!.birthDate).toBeNull();
+  });
+
+  it('needs the account phone (422): a record without one is merged away at relink', async () => {
+    const { client } = await t.signIn(vali);
+    expect((await client.me.get()).status).toBe(200);
+    const [c] = await t.db.select().from(customers).where(eq(customers.telegramId, vali.id));
+    expect(
+      await owner.client.admin.customers.setBirthDate({
+        params: { id: c!.id },
+        body: { birthDate: '1996-03-14' },
+      }),
+    ).toMatchObject({ status: 422, body: { code: 'phone_required' } });
+  });
+
+  it('the owner may set it for a customer who has none; it counts as entered now', async () => {
     const id = await aliId();
     const res = await owner.client.admin.customers.setBirthDate({
       params: { id },

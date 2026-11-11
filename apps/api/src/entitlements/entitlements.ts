@@ -28,20 +28,14 @@ export interface EntitlementSource {
     tx: DbOrTx,
     hold: { id: number; customerId: number; orderId: number; now: Date },
   ): Promise<boolean>;
-  /** Whatever of this source the order held is active again while within validity. */
-  release(tx: DbOrTx, orderId: number): Promise<void>;
+  /** Whatever of this source the order held is active again while within validity; past it, lost. */
+  release(tx: DbOrTx, orderId: number, now: Date): Promise<void>;
 }
 
 const birthdayCouponSource: EntitlementSource = {
   type: 'birthday_coupon',
   active: birthdayEntitlements,
-  hold: (tx, h) =>
-    holdBirthdayCoupon(tx, {
-      couponId: h.id,
-      customerId: h.customerId,
-      orderId: h.orderId,
-      now: h.now,
-    }),
+  hold: holdBirthdayCoupon,
   release: releaseBirthdayCoupon,
 };
 
@@ -80,9 +74,9 @@ export function holdEntitlement(
   return sourceOf(discount.type).hold(tx, { id: discount.id, ...hold });
 }
 
-/** ADR 0005: a cancelled or returned order gives back the entitlement it held, whatever its source. */
-export async function releaseEntitlements(tx: DbOrTx, orderId: number): Promise<void> {
-  for (const s of SOURCES) await s.release(tx, orderId);
+/** ADR 0005: a cancelled or returned order gives back the entitlement it held while within validity. */
+export async function releaseEntitlements(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
+  for (const s of SOURCES) await s.release(tx, orderId, now);
 }
 
 /**

@@ -184,6 +184,9 @@ export class OrdersService {
    *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
    *    waits here and then sees this order's reserve; every checkout takes them in this order;
    *    then the entered promo code's row, so one for its last use waits and then sees this use;
+   *    the applied entitlement (a birthday coupon, #30) is locked last, by its conditional hold
+   *    once the order row exists (3); one already taken there creates the order again from a new
+   *    quote, which answers 409;
    * 2. the quote is recomputed under that lock with the destination region's tariff, its lines
    *    capped at available; a total other than the one the shopper confirmed is refused (409)
    *    with the new checkout, since they will transfer exactly that amount;

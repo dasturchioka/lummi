@@ -115,22 +115,25 @@ export class CustomersAdminService {
   }
 
   /**
-   * Staff correct the date of birth (TZ §3.8: the customer enters it once, only staff change it),
-   * audited with the old and new date. The abuse guard keeps counting from the customer's own
-   * entry; a date set here for a customer who had none counts as entered now. A coupon already
-   * issued for this birthday year stays, and no second one comes for it (one per year).
+   * The owner corrects the date of birth (TZ §3.8: the customer enters it once, «изменить может
+   * только админ»), audited as the fact only (the date is personal data). Like the customer's own
+   * entry it needs the account phone, so a record that relink would merge away never holds one.
+   * The abuse guard keeps counting from the customer's own entry; a date set here for a customer who
+   * had none counts as entered now. A coupon already issued for this birthday year stays, and no
+   * second one comes for it (one per year).
    */
   async setBirthDate(
     staffId: number,
     id: number,
     birthDate: string,
-  ): Promise<AdminCustomerDetail | 'not_found' | 'invalid_birth_date'> {
+  ): Promise<AdminCustomerDetail | 'not_found' | 'invalid_birth_date' | 'phone_required'> {
     const now = this.edges.clock.now();
     if (!isPlausibleBirthDate(birthDate, now)) return 'invalid_birth_date';
     const done = await this.db.transaction(async (tx) => {
       const [c] = await tx.select().from(customers).where(eq(customers.id, id)).for('update');
-      if (!c) return false;
-      if (c.birthDate === birthDate) return true;
+      if (!c) return 'not_found' as const;
+      if (!c.phone) return 'phone_required' as const;
+      if (c.birthDate === birthDate) return 'ok' as const;
       await tx
         .update(customers)
         .set({ birthDate, birthDateSetAt: c.birthDateSetAt ?? now, updatedAt: now })
@@ -140,11 +143,11 @@ export class CustomersAdminService {
         action: 'customer.birth_date_corrected',
         targetType: 'customer',
         targetId: id,
-        payload: { from: c.birthDate, to: birthDate },
+        payload: { changed: true },
       });
-      return true;
+      return 'ok' as const;
     });
-    if (!done) return 'not_found';
+    if (done !== 'ok') return done;
     const detail = await this.get(id);
     return detail ?? 'not_found';
   }

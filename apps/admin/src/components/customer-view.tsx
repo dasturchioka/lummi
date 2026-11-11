@@ -22,10 +22,13 @@ export function CustomerView({
   t,
   language,
   customer,
+  isOwner,
 }: {
   t: AdminMessages;
   language: Language;
   customer: AdminCustomerDetail;
+  /** The date of birth's «Исправить» is the owner's (TZ §3.8). */
+  isOwner: boolean;
 }) {
   const c = t.customers;
   const status = ordersMessages[language].orders.status;
@@ -46,6 +49,7 @@ export function CustomerView({
         key="birth"
         id={customer.id}
         birthDate={customer.birthDate}
+        canEdit={isOwner && customer.phone !== null}
         language={language}
         t={t}
       />,

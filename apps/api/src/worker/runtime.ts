@@ -42,9 +42,11 @@ export interface Sweep {
  */
 export interface JobSchedule {
   id: string;
-  /** Cron, read on the `tz` wall clock: `0 10 * * *` is 10:00 every day. */
+  /** Cron, read on the `tz` wall clock: `0 * * * *` is the start of every hour. */
   pattern: string;
   tz: string;
+  /** Runs of a job that throws, backing off from a minute; the job must be idempotent. */
+  attempts?: number;
 }
 
 /**
@@ -191,7 +193,15 @@ export class WorkerRuntime implements OnApplicationShutdown {
           await queue.upsertJobScheduler(
             s.id,
             { pattern: s.pattern, tz: s.tz },
-            { name: s.id, opts: { removeOnComplete: true, removeOnFail: 100 } },
+            {
+              name: s.id,
+              opts: {
+                attempts: s.attempts ?? 1,
+                backoff: { type: 'exponential', delay: 60_000 },
+                removeOnComplete: true,
+                removeOnFail: 100,
+              },
+            },
           );
       } finally {
         await queue.close();

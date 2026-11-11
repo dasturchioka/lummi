@@ -1,4 +1,4 @@
-import { BIRTH_YEAR_MIN, isCalendarDate } from '@lummi/contracts/constants';
+import { BIRTH_YEAR_MIN, isCalendarDate, utcToTashkent } from '@lummi/contracts/constants';
 
 /**
  * The date of birth as the shopper types it: `ДД.ММ.ГГГГ` on a digit keyboard, the dots added as
@@ -34,7 +34,8 @@ export function judgeBirthDate(masked: string, today: string): BirthDateVerdict 
   return { ok: true, iso };
 }
 
-/** Today in Tashkent (UTC+5 all year) as `YYYY-MM-DD`. */
+/** Today in Tashkent as `YYYY-MM-DD`, by the shared wall-clock helper. */
 export function tashkentToday(now = new Date()): string {
-  return new Date(now.getTime() + 5 * 3600_000).toISOString().slice(0, 10);
+  const { year, month, day } = utcToTashkent(now);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }

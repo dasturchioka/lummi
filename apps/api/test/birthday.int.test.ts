@@ -25,6 +25,7 @@ import { seedCatalog } from '../src/catalog/seed';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { holdBirthdayCoupon } from '../src/birthday/birthday-coupons';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
+import { OutboxService } from '../src/outbox/outbox.service';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
@@ -101,9 +102,12 @@ describe('the date of birth: entered once', () => {
         actorType: 'customer',
         actorId: c.id,
         targetId: String(c.id),
-        payload: { birthDate: '1996-03-14' },
+        payload: { via: 'profile', set: true },
       },
     ]);
+    // the date of birth is personal data: the audit, which staff read, records only the fact
+    const [entry] = await audits('customer.birth_date_set');
+    expect(JSON.stringify(entry!.payload)).not.toContain('1996');
     expect(await audits('customer.data_consent_given')).toMatchObject([
       { actorType: 'customer', payload: { via: 'birth_date' } },
     ]);
@@ -276,11 +280,14 @@ describe('the daily job at 10:00 Asia/Tashkent issues the coupon', () => {
     expect(await coupons()).toHaveLength(1);
     expect(await messages()).toHaveLength(1);
 
-    // Vali's window opens a day later; three runs at once still issue his coupon once
+    // Vali's window opens a day later. Three runs at once, held at a barrier until all three
+    // wait to write his coupon, then let go together: the unique index lets one insert.
     await bornOn('1996-03-15', vali, '998901112233');
     t.edges.clock.set(new Date('2027-03-12T05:00:00Z'));
     const job = t.app.get(BirthdayCouponJob);
-    await Promise.all([job.run(), job.run(), job.run()]);
+    await whileTableLocked('birthday_coupons', 3, () =>
+      Promise.all([job.run(), job.run(), job.run()]),
+    );
     expect((await coupons()).map((c) => c.birthday)).toEqual(['2027-03-14', '2027-03-15']);
     expect(await messages()).toHaveLength(2);
   });
@@ -299,6 +306,44 @@ describe('the daily job at 10:00 Asia/Tashkent issues the coupon', () => {
     expect(await coupons()).toHaveLength(1);
     await runJobAt('2028-02-26T05:00:00Z');
     expect((await coupons()).map((c) => c.birthday)).toEqual(['2027-02-28', '2028-02-29']);
+  });
+
+  it('the issue hour is a setting: at 14:00 Tashkent, not a second earlier', async () => {
+    const owner = await t.ownerSession();
+    const res = await owner.client.admin.settings.update({
+      params: { key: 'birthday.issueHour' },
+      body: { value: 14 },
+    });
+    expect(res.status).toBe(200);
+    await bornOn('1996-03-14');
+    await runJobAt('2027-03-11T05:00:00Z'); // 10:00
+    await runJobAt('2027-03-11T08:59:59Z'); // 13:59:59
+    expect(await coupons()).toHaveLength(0);
+    await runJobAt('2027-03-11T09:00:00Z'); // 14:00
+    const [coupon] = await coupons();
+    expect(coupon!.issuedAt.toISOString()).toBe('2027-03-11T09:00:00.000Z');
+    expect(coupon!.expiresAt.toISOString()).toBe('2027-03-21T19:00:00.000Z');
+  });
+
+  it('one customer’s failure does not stop the run; the run then fails, so it is retried', async () => {
+    await bornOn('1996-03-14');
+    await bornOn('1996-03-14', vali, '998901112233');
+    const outbox = t.app.get(OutboxService);
+    const enqueue = outbox.enqueue.bind(outbox);
+    vi.spyOn(outbox, 'enqueue').mockImplementation(async (tx, m) => {
+      const list = Array.isArray(m) ? m : [m];
+      if (list.some((x) => x.chatId === ali.id)) throw new Error('outbox down for one row');
+      return enqueue(tx, m);
+    });
+    await expect(runJobAt('2027-03-11T05:00:00Z')).rejects.toThrow(/1 of 2/);
+    // Vali's coupon and message went through; Ali's transaction rolled back whole
+    expect((await coupons()).map((c) => c.customerId)).toEqual([(await customerOf(vali)).id]);
+    expect(await messages()).toMatchObject([{ chatId: vali.id }]);
+    vi.restoreAllMocks();
+    // the retry issues the rest, once
+    await runJobAt('2027-03-11T05:00:05Z');
+    expect(await coupons()).toHaveLength(2);
+    expect(await messages()).toHaveLength(2);
   });
 
   it('a 2 January birthday gets next year’s coupon on 30 December', async () => {
@@ -341,7 +386,7 @@ describe('the daily job at 10:00 Asia/Tashkent issues the coupon', () => {
 });
 
 describe('the worker schedules the job', () => {
-  it('as a BullMQ repeatable job at 10:00 every day, Asia/Tashkent', async () => {
+  it('as a BullMQ repeatable job every hour on the Asia/Tashkent clock (the hour is a setting)', async () => {
     t.startWorker();
     const queue = new Queue(t.env.BIRTHDAY_QUEUE, { connection: { url: t.env.REDIS_URL } });
     try {
@@ -350,7 +395,7 @@ describe('the worker schedules the job', () => {
         schedulers = await queue.getJobSchedulers();
         if (schedulers.length === 0) await new Promise((r) => setTimeout(r, 50));
       }
-      expect(schedulers).toMatchObject([{ pattern: '0 10 * * *', tz: 'Asia/Tashkent' }]);
+      expect(schedulers).toMatchObject([{ pattern: '0 * * * *', tz: 'Asia/Tashkent' }]);
     } finally {
       await queue.close();
     }
@@ -587,7 +632,7 @@ describe('the coupon in the cart and the order', () => {
     await t.db.update(birthdayCoupons).set({ usedByOrderId: null });
     const now = t.edges.clock.now();
     const hold = (orderId: number) => ({
-      couponId: coupon.id,
+      id: coupon.id,
       customerId: coupon.customerId,
       orderId,
       now,
@@ -609,6 +654,29 @@ describe('the coupon in the cart and the order', () => {
     commit();
     expect(await Promise.all([one, two])).toEqual([true, false]);
     expect((await coupons())[0]).toMatchObject({ usedByOrderId: idOf(first.number) });
+  });
+
+  it('the hold itself refuses a coupon past its end: held at 23:59:59 on the last day, not at 00:00', async () => {
+    const [a, b] = await slugs(2);
+    const { s, coupon } = await withCoupon();
+    const first = await placeOrder(s, `volume:${a}:10`);
+    const second = await placeOrder(s, `volume:${b}:10`);
+    const ids = await t.db.select({ id: orders.id, number: orders.number }).from(orders);
+    const idOf = (n: number) => ids.find((r) => r.number === n)!.id;
+    await t.db.update(birthdayCoupons).set({ usedByOrderId: null });
+    const holdAt = (orderId: number, iso: string) =>
+      t.db.transaction((tx) =>
+        holdBirthdayCoupon(tx, {
+          id: coupon.id,
+          customerId: coupon.customerId,
+          orderId,
+          now: new Date(iso),
+        }),
+      );
+    expect(await holdAt(idOf(first.number), '2027-03-21T19:00:00Z')).toBe(false);
+    expect((await coupons())[0]).toMatchObject({ usedByOrderId: null });
+    expect(await holdAt(idOf(second.number), '2027-03-21T18:59:59Z')).toBe(true);
+    expect((await coupons())[0]).toMatchObject({ usedByOrderId: idOf(second.number) });
   });
 
   it('a cancel within validity gives it back (ADR 0005), through the release hook', async () => {
@@ -640,6 +708,9 @@ describe('the coupon in the cart and the order', () => {
     t.edges.clock.set(new Date('2027-03-21T19:00:00Z')); // 00:00 on 22 March
     const later = await signedIn();
     await cancel(later, order.number);
+    // lost, not given back: it stays with the order that used it (ADR 0005)
+    const [row] = await t.db.select().from(orders).where(eq(orders.number, order.number));
+    expect((await coupons())[0]).toMatchObject({ usedByOrderId: row!.id });
     expect((await later.me.discounts()).body).toMatchObject({
       birthdayCoupons: [],
       nextBirthdayCoupon: { opensOn: '2028-03-11' },
@@ -727,7 +798,7 @@ describe('the date of birth at checkout', () => {
     expect(c).toMatchObject({ birthDate: '1996-03-14' });
     expect(c.birthDateSetAt?.toISOString()).toBe('2026-11-09T10:00:00.000Z');
     expect(await audits('customer.birth_date_set')).toMatchObject([
-      { payload: { birthDate: '1996-03-14', via: 'checkout' } },
+      { payload: { via: 'checkout', set: true } },
     ]);
     expect((await checkoutBody(s)).checkout.birthday).toEqual({ date: '1996-03-14', percent: 20 });
   });
@@ -762,7 +833,9 @@ async function whileTableLocked<T>(table: string, waiters: number, run: () => Pr
     await locker.query('begin');
     await locker.query(`lock table ${table} in exclusive mode`);
     const pending = run();
-    await waitForLockWaiters(waiters, locker);
+    // polled from another session: inside the locker's transaction Postgres keeps serving the
+    // first snapshot of pg_stat_activity, so the count would never move
+    await waitForLockWaiters(waiters);
     await locker.query('commit');
     return await pending;
   } finally {
@@ -770,15 +843,16 @@ async function whileTableLocked<T>(table: string, waiters: number, run: () => Pr
   }
 }
 
-/** Waits until `n` sessions of this database are blocked on a lock. */
-async function waitForLockWaiters(n: number, via?: pg.Client) {
-  const client = via ?? new pg.Client({ connectionString: t.env.DATABASE_URL });
-  if (!via) await client.connect();
+/** Waits until `n` sessions of this database are blocked on a lock (polled outside any transaction). */
+async function waitForLockWaiters(n: number) {
+  const client = new pg.Client({ connectionString: t.env.DATABASE_URL });
+  await client.connect();
   try {
     for (const deadline = Date.now() + 10_000; ;) {
       const { rows } = await client.query<{ n: number }>(
         `select count(*)::int as n from pg_stat_activity
-         where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()`,
+         where datname = current_database() and state = 'active' and wait_event_type = 'Lock'
+           and pid <> pg_backend_pid()`,
       );
       if (rows[0]!.n >= n) return;
       if (Date.now() > deadline)
@@ -786,6 +860,6 @@ async function waitForLockWaiters(n: number, via?: pg.Client) {
       await new Promise((r) => setTimeout(r, 20));
     }
   } finally {
-    if (!via) await client.end();
+    await client.end();
   }
 }

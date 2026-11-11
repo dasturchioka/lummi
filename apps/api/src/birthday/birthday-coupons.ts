@@ -2,13 +2,7 @@ import type { BirthdayCouponDto } from '@lummi/contracts';
 import { and, asc, birthdayCoupons, eq, gt, isNull, type DbOrTx } from '@lummi/db';
 import type { Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
-import {
-  daysLeft,
-  formatLocalDate,
-  tashkentDay,
-  addDays,
-  type BirthdayRules,
-} from './birthday-dates';
+import { daysLeft, formatLocalDate, lastDayOf, type BirthdayRules } from './birthday-dates';
 
 /**
  * Birthday coupons as orders and the cart see them (ticket #30, ADR 0005): the customer's active
@@ -23,11 +17,13 @@ export async function readBirthdayRules(tx: DbOrTx): Promise<BirthdayRules> {
     'birthday.daysBefore',
     'birthday.daysAfter',
     'birthday.firstCouponAfterDays',
+    'birthday.issueHour',
   ]);
   return {
     daysBefore: s['birthday.daysBefore'],
     daysAfter: s['birthday.daysAfter'],
     firstCouponAfterDays: s['birthday.firstCouponAfterDays'],
+    issueHour: s['birthday.issueHour'],
   };
 }
 
@@ -62,12 +58,12 @@ export async function birthdayEntitlements(
   }));
 }
 
-/** An active coupon as Profile shows it: its last day is the Tashkent day before `expires_at`. */
+/** An active coupon as Profile shows it. */
 export function toCouponDto(
   c: { id: number; percent: number; maxAmount: number; expiresAt: Date },
   now: Date,
 ): BirthdayCouponDto {
-  const lastDay = addDays(tashkentDay(c.expiresAt), -1);
+  const lastDay = lastDayOf(c.expiresAt);
   return {
     id: c.id,
     percent: c.percent,
@@ -83,14 +79,14 @@ export function toCouponDto(
  */
 export async function holdBirthdayCoupon(
   tx: DbOrTx,
-  hold: { couponId: number; customerId: number; orderId: number; now: Date },
+  hold: { id: number; customerId: number; orderId: number; now: Date },
 ): Promise<boolean> {
   const held = await tx
     .update(birthdayCoupons)
     .set({ usedByOrderId: hold.orderId })
     .where(
       and(
-        eq(birthdayCoupons.id, hold.couponId),
+        eq(birthdayCoupons.id, hold.id),
         eq(birthdayCoupons.customerId, hold.customerId),
         isNull(birthdayCoupons.usedByOrderId),
         gt(birthdayCoupons.expiresAt, hold.now),
@@ -101,12 +97,13 @@ export async function holdBirthdayCoupon(
 }
 
 /**
- * A cancelled or returned order lets go of its coupon (ADR 0005): active again while still within
- * validity, otherwise expired, as its state is derived from `expires_at`.
+ * A cancelled or returned order gives its coupon back while it is still within validity (ADR 0005:
+ * «в пределах срока»), so it is active again. Past its end it is lost and stays with the order that
+ * used it, the record of where it went.
  */
-export async function releaseBirthdayCoupon(tx: DbOrTx, orderId: number): Promise<void> {
+export async function releaseBirthdayCoupon(tx: DbOrTx, orderId: number, now: Date): Promise<void> {
   await tx
     .update(birthdayCoupons)
     .set({ usedByOrderId: null })
-    .where(eq(birthdayCoupons.usedByOrderId, orderId));
+    .where(and(eq(birthdayCoupons.usedByOrderId, orderId), gt(birthdayCoupons.expiresAt, now)));
 }

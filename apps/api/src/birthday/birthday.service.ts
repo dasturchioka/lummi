@@ -42,7 +42,8 @@ export async function recordBirthDate(
     action: 'customer.birth_date_set',
     targetType: 'customer',
     targetId: c.id,
-    payload: { birthDate, via },
+    // the fact, not the date: the audit is read by staff, and a date of birth is personal data
+    payload: { via, set: true },
   });
 }
 

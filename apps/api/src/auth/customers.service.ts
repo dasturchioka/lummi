@@ -225,9 +225,12 @@ export class CustomersService {
       .where(eq(customers.telegramId, telegramId));
   }
 
-  /** False for a customer who refused write access or blocked the bot; true for anyone else. */
-  async canMessage(telegramId: number): Promise<boolean> {
-    const [c] = await this.db
+  /**
+   * False for a customer who refused write access or blocked the bot; true for anyone else. Pass the
+   * caller's transaction when it holds one, so the read never waits for a second pool connection.
+   */
+  async canMessage(telegramId: number, tx: DbOrTx = this.db): Promise<boolean> {
+    const [c] = await tx
       .select({ botBlocked: customers.botBlocked, writeAccess: customers.writeAccess })
       .from(customers)
       .where(eq(customers.telegramId, telegramId));
