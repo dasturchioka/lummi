@@ -26,3 +26,4 @@ export * from './admin-stock';
 export * from './promo';
 export * from './campaign';
 export * from './birthday';
+export * from './favourites';

@@ -162,6 +162,13 @@
       "when": 1794357928944,
       "tag": "0022_payment_pauses",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794359410303,
+      "tag": "0023_favourites",
+      "breakpoints": true
     }
   ]
 }

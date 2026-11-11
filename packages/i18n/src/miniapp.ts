@@ -79,6 +79,9 @@ export const miniappMessages = defineMessages(
       /** The sheet's add found the volume gone (409): it names it and the way on. */
       volumeGone: '{ml} мл закончился — выберите другой объём',
       volumeGoneLast: '{ml} мл закончился, других объёмов сейчас нет',
+      /** The heart on a card (#45). */
+      favourite: 'В избранное: {name}',
+      unfavourite: 'Убрать из избранного: {name}',
     },
     /** The empty screens behind the tabs until their tickets build them. */
     placeholder: {
@@ -378,6 +381,8 @@ export const miniappMessages = defineMessages(
       chooseVolume: 'Hajmni tanlang',
       volumeGone: '{ml} ml tugadi — boshqa hajmni tanlang',
       volumeGoneLast: '{ml} ml tugadi, boshqa hajmlar hozircha yoʻq',
+      favourite: 'Sevimlilarga: {name}',
+      unfavourite: 'Sevimlilardan olib tashlash: {name}',
     },
     placeholder: {
       catalog: {
