@@ -3745,6 +3745,24 @@ function discountChoiceScreens(
       teardown: done,
     },
     {
+      // the coupon ended under the open cart; tapping it is refused (409), and the cart says so
+      id: 'cart-choice-refused',
+      path: '/cart',
+      fullPage: true,
+      setup: both,
+      act: async ({ page, db }) => {
+        await page.getByTestId('discount-choice').waitFor();
+        await db.query(
+          `update birthday_coupons set expires_at = now()
+           where customer_id in (select id from customers where telegram_id = $1)`,
+          [SHOT_USER.id],
+        );
+        await page.getByRole('radio', { name: /Купон|kuponi/ }).click();
+        await page.getByTestId('choice-stale').waitFor();
+      },
+      teardown: done,
+    },
+    {
       // the tab bar's read on launch reported it, then an add from the catalog answered without it
       // before the cart opened: the cart still says so
       id: 'cart-choice-stale-after-add',
