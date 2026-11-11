@@ -6,6 +6,7 @@ import { usePrefs } from '../lib/prefs';
 import { AddButton } from './AddButton';
 import { attribution } from './attribution';
 import { FragranceBadge } from './Badge';
+import { HeartButton } from './HeartButton';
 
 /**
  * One fragrance in a list: the DESIGN.md product card with the card's label lockup (caps attribution
@@ -169,6 +170,7 @@ export function FragranceListCard({
             sizes="(min-width: 520px) 240px, 45vw"
             className={`aspect-[3/4] w-full rounded-photo ${faded}`}
           />
+          <HeartButton target={item.slug} name={item.name} />
           <AddButton item={item} />
         </div>
         <span className="flex flex-1 flex-col px-1 pt-2.5">
@@ -200,7 +202,9 @@ export function FragranceListCard({
           <AddButton item={item} />
         </div>
       )}
-      <span className="flex min-w-0 flex-1 flex-col">
+      {/* A row's photo is too narrow to keep the heart clear of the wordmark: it takes the card's corner. */}
+      {compact ? null : <HeartButton target={item.slug} name={item.name} place="corner" />}
+      <span className={`flex min-w-0 flex-1 flex-col ${compact ? '' : 'pr-5'}`}>
         {lockup}
         {price ? (
           <span className={`flex items-center ${compact ? 'mt-1' : 'mt-1.5 min-h-[30px]'}`}>

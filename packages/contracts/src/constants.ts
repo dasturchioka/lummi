@@ -121,3 +121,6 @@ export const INFO_PAGE_SLUGS = [
   'offer',
 ] as const;
 export type InfoPageSlug = (typeof INFO_PAGE_SLUGS)[number];
+
+/** The target that stands for the Discovery set in `PUT/DELETE /favourites/:target` (#45). */
+export const DISCOVERY_FAVOURITE = 'discovery-set';

@@ -13,6 +13,11 @@ vi.mock('../lib/prefs', () => ({
   }),
 }));
 
+vi.mock('../favourites/queries', () => ({
+  useFavouriteIds: () => ({ data: undefined }),
+  useToggleFavourite: () => ({ mutate: vi.fn() }),
+}));
+
 import { FragranceListCard } from './FragranceListCard';
 
 const item = (over: Partial<FragranceListItem> = {}): FragranceListItem => ({
@@ -65,7 +70,17 @@ describe('FragranceListCard', () => {
     language = 'ru';
     const onSelect = vi.fn();
     render(<FragranceListCard item={item()} onSelect={onSelect} />);
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть Symphony' }));
     expect(onSelect).toHaveBeenCalledWith('symphony');
+  });
+
+  it('puts the heart beside the card button, never inside it, and it does not open the card', () => {
+    language = 'ru';
+    const onSelect = vi.fn();
+    render(<FragranceListCard item={item()} onSelect={onSelect} />);
+    const heart = screen.getByRole('button', { name: 'В избранное: Symphony' });
+    expect(heart.closest('button[aria-label^="Открыть"]')).toBeNull();
+    fireEvent.click(heart);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

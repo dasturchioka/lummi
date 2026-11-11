@@ -1,4 +1,5 @@
 import { formatPhone } from '@lummi/i18n';
+import { favouritesMessages } from '@lummi/i18n/favourites';
 import { useRouter } from '@tanstack/react-router';
 import { useInfoPages } from '../content/queries';
 import { DiscountsSection } from '../discounts/DiscountsSection';
@@ -6,7 +7,7 @@ import { SavedPointsSection } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
-import { ChevronIcon, ContrastIcon, GlobeIcon, PhoneIcon } from '../ui/icons';
+import { ChevronIcon, ContrastIcon, GlobeIcon, HeartIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -117,6 +118,18 @@ export function Profile() {
           }
         />
       </CardList>
+      {/* Favourites work before registration: the customer exists from sign-in. */}
+      <div className="mt-3">
+        <CardList>
+          <ListRow
+            leading={<HeartIcon size={20} />}
+            label={favouritesMessages[language].favourites.title}
+            hint={favouritesMessages[language].favourites.rowHint}
+            trailing={<ChevronIcon size={18} />}
+            onClick={() => void router.navigate({ to: '/favourites' })}
+          />
+        </CardList>
+      </div>
       {customer ? <DiscountsSection /> : null}
       {customer?.phone ? <SavedPointsSection /> : null}
       {pages && pages.length > 0 ? (

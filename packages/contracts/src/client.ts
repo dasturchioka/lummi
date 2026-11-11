@@ -58,6 +58,12 @@ export const clientRoutes = {
     discovery: route('GET', '/sets/discovery', [200, 401]),
     builder: route('GET', '/sets/builder', [200, 401]),
   },
+  favourites: {
+    ids: route('GET', '/favourites', [200, 401]),
+    list: route('GET', '/favourites/list', [200, 401]),
+    add: route('PUT', '/favourites/:target', [200, 401, 404]),
+    remove: route('DELETE', '/favourites/:target', [200, 401]),
+  },
   content: {
     home: route('GET', '/content/home', [200, 401]),
     pages: route('GET', '/content/pages', [200, 401]),

@@ -557,6 +557,38 @@ export const carts = pgTable('carts', {
 });
 
 /**
+ * A customer's favourite (#45): one fragrance, or the Discovery set (`fragrance_id` null). Kept
+ * once per customer and target; the list reads newest first. A hidden fragrance stays saved and
+ * comes back when the owner shows it again; the list just leaves it out meanwhile.
+ */
+export const favourites = pgTable(
+  'favourites',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['fragrance', 'discovery_set'] })
+      .notNull()
+      .default('fragrance'),
+    fragranceId: bigint('fragrance_id', { mode: 'number' }).references(() => fragrances.id, {
+      onDelete: 'cascade',
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('favourites_customer_fragrance_idx').on(t.customerId, t.fragranceId),
+    uniqueIndex('favourites_customer_set_idx')
+      .on(t.customerId)
+      .where(sql`kind = 'discovery_set'`),
+    check(
+      'favourites_target_check',
+      sql`(${t.kind} = 'fragrance') = (${t.fragranceId} is not null)`,
+    ),
+  ],
+);
+
+/**
  * The Discovery set (ADR 0009): one row, true to its own `id` like the heartbeat. It is a product
  * with its own price, photo and stock; `on_hand` never touches 10 ml stock. A builder set has no
  * row of its own and costs `price` too (spec Changes 2026-11-10, sets). The composition is the

@@ -14,6 +14,11 @@ vi.mock('../../lib/prefs', () => ({
 }));
 vi.mock('../../lib/share', () => ({ openExternal: vi.fn() }));
 
+vi.mock('../../favourites/queries', () => ({
+  useFavouriteIds: () => ({ data: undefined }),
+  useToggleFavourite: () => ({ mutate: vi.fn() }),
+}));
+
 import { FragranceView } from './FragranceView';
 
 const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
