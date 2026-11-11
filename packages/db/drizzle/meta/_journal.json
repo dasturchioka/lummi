@@ -180,8 +180,8 @@
     {
       "idx": 25,
       "version": "7",
-      "when": 1794362591530,
-      "tag": "0025_ops_monitoring",
+      "when": 1794362996065,
+      "tag": "0025_upgrade_rights",
       "breakpoints": true
     }
   ]

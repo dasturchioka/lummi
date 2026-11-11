@@ -1,5 +1,5 @@
 {
-  "id": "7ecb03b7-887d-4e9d-a561-29f0e35bd989",
+  "id": "24a98302-35ee-447e-9eca-9468b657140d",
   "prevId": "b68a8bb1-8558-4194-bfc5-31f11fe65196",
   "version": "7",
   "dialect": "postgresql",
@@ -1691,95 +1691,6 @@
           "value": "\"discovery_set_items\".\"position\" between 1 and 5"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.error_events": {
-      "name": "error_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "error_events_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "fingerprint": {
-          "name": "fingerprint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "error_class": {
-          "name": "error_class",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "route": {
-          "name": "route",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "frames": {
-          "name": "frames",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "count": {
-          "name": "count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "error_events_fingerprint_key": {
-          "name": "error_events_fingerprint_key",
-          "columns": [
-            {
-              "expression": "fingerprint",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.families": {
@@ -5159,6 +5070,232 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.upgrade_rights": {
+      "name": "upgrade_rights",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "upgrade_rights_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "upgrade_right_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_order_id": {
+          "name": "source_order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_position": {
+          "name": "source_position",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_unit": {
+          "name": "source_unit",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fragrances": {
+          "name": "fragrances",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "percent": {
+          "name": "percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "opened_at": {
+          "name": "opened_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_by_order_id": {
+          "name": "used_by_order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_reminder_at": {
+          "name": "first_reminder_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_reminder_at": {
+          "name": "last_reminder_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "upgrade_rights_source_idx": {
+          "name": "upgrade_rights_source_idx",
+          "columns": [
+            {
+              "expression": "source_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_position",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_unit",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "upgrade_rights_used_by_order_idx": {
+          "name": "upgrade_rights_used_by_order_idx",
+          "columns": [
+            {
+              "expression": "used_by_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"upgrade_rights\".\"used_by_order_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "upgrade_rights_customer_idx": {
+          "name": "upgrade_rights_customer_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "upgrade_rights_customer_id_customers_id_fk": {
+          "name": "upgrade_rights_customer_id_customers_id_fk",
+          "tableFrom": "upgrade_rights",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "upgrade_rights_source_order_id_orders_id_fk": {
+          "name": "upgrade_rights_source_order_id_orders_id_fk",
+          "tableFrom": "upgrade_rights",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "source_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "upgrade_rights_used_by_order_id_orders_id_fk": {
+          "name": "upgrade_rights_used_by_order_id_orders_id_fk",
+          "tableFrom": "upgrade_rights",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "used_by_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "upgrade_rights_terms_check": {
+          "name": "upgrade_rights_terms_check",
+          "value": "\"upgrade_rights\".\"percent\" between 1 and 100 and \"upgrade_rights\".\"expires_at\" > \"upgrade_rights\".\"opened_at\" and jsonb_array_length(\"upgrade_rights\".\"fragrances\") between 1 and 5 and \"upgrade_rights\".\"source_unit\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.userbot_heartbeat": {
       "name": "userbot_heartbeat",
       "schema": "",
@@ -5311,43 +5448,6 @@
         "volumes_money_check": {
           "name": "volumes_money_check",
           "value": "\"volumes\".\"price\" >= 0 and (\"volumes\".\"sale_price\" is null or \"volumes\".\"sale_price\" >= 0) and \"volumes\".\"on_hand\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.worker_heartbeat": {
-      "name": "worker_heartbeat",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "boolean",
-          "primaryKey": true,
-          "notNull": true,
-          "default": true
-        },
-        "seen_at": {
-          "name": "seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outage_alerted_at": {
-          "name": "outage_alerted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "worker_heartbeat_one_row": {
-          "name": "worker_heartbeat_one_row",
-          "value": "\"worker_heartbeat\".\"id\""
         }
       },
       "isRLSEnabled": false
@@ -5594,6 +5694,14 @@
         "evening",
         "day_evening",
         "everyday"
+      ]
+    },
+    "public.upgrade_right_source": {
+      "name": "upgrade_right_source",
+      "schema": "public",
+      "values": [
+        "set",
+        "single_10ml"
       ]
     },
     "public.write_access": {
