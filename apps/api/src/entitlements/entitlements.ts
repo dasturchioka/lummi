@@ -68,6 +68,15 @@ export function isEntitlementDiscount(d: Discount | null): d is EntitlementDisco
   return d !== null && d.type !== 'promo_code';
 }
 
+/** The entitlement a quote's discount came from (the same type and id); null for a code or none. */
+function entitlementOf(
+  entitlements: readonly Entitlement[],
+  d: Discount | null,
+): Entitlement | null {
+  if (!isEntitlementDiscount(d)) return null;
+  return entitlements.find((e) => e.type === d.type && e.id === d.id) ?? null;
+}
+
 /** Every source's active entitlements, for the quote. */
 export async function loadEntitlements(
   tx: DbOrTx,
@@ -110,9 +119,8 @@ export function entitlementWaitingBehindCode(
   entitlements: readonly Entitlement[],
 ): CartDto['entitlementWaiting'] {
   if (q.discount?.type !== 'promo_code') return null;
-  for (const { discount: d, cheaperBy } of q.alternatives) {
-    if (!isEntitlementDiscount(d)) continue;
-    const e = entitlements.find((x) => x.type === d.type && x.id === d.id);
+  for (const { discount, cheaperBy } of q.alternatives) {
+    const e = entitlementOf(entitlements, discount);
     if (!e) continue;
     const terms = { ...termsOf(e), cheaperBy };
     return e.type === 'upgrade_right'
@@ -140,16 +148,12 @@ export function discountOptionsOf(
   q: Quote,
   entitlements: readonly Entitlement[],
 ): DiscountOptionDto[] {
-  const find = (d: Discount | null) =>
-    isEntitlementDiscount(d)
-      ? (entitlements.find((e) => e.type === d.type && e.id === d.id) ?? null)
-      : null;
   const rows = [
     { discount: q.discount, deliveryFee: q.deliveryFee, total: q.total, applied: true },
     ...q.alternatives.map((a) => ({ ...a, applied: false })),
     ...(q.discount ? [{ discount: null, ...q.withoutDiscount, applied: false }] : []),
   ].map(({ discount, deliveryFee, total, applied }) => {
-    const e = find(discount);
+    const e = entitlementOf(entitlements, discount);
     return { discount, deliveryFee, total, applied, terms: e ? termsOf(e) : null, e };
   });
   const choosing =
