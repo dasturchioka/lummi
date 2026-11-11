@@ -104,10 +104,11 @@ function photoError(
   };
 }
 
-
 /** The current catalog export, opened for editing (the owner's session rides on `page.request`). */
 async function exportWorkbook(page: Page, edit: (wb: ExcelJS.Workbook) => void) {
-  const bytes = await (await page.request.get(new URL('/api/admin/catalog/export', page.url()).href)).body();
+  const bytes = await (
+    await page.request.get(new URL('/api/admin/catalog/export', page.url()).href)
+  ).body();
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(bytes as unknown as ArrayBuffer);
   edit(wb);
@@ -1386,6 +1387,16 @@ export const screens: Screen[] = [
       });
     },
   },
+  // ---- Reviews panel (#41): the list, its filters, an empty result
+  { id: 'reviews', path: '/reviews', as: 'manager', act: imagesLoaded },
+  {
+    id: 'reviews-filtered',
+    path: '/reviews?rating=2&state=hidden',
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  { id: 'reviews-published', path: '/reviews?state=published', as: 'manager' },
+  { id: 'reviews-empty', path: '/reviews?rating=5&from=2026-01-01&to=2026-01-02', as: 'manager' },
   // ---- Orders panel (#33): the list, every order state, the three dialogs, the credits
   { id: 'orders', path: '/orders', as: 'manager' },
   { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
