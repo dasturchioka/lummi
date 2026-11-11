@@ -12,6 +12,8 @@ import type { Edges } from '../edges';
 import { EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
 import { BotReceipts, RECEIPT_CALLBACK, type IncomingReceipt } from './bot-receipts.service';
+import { CARD_CALLBACK } from '../orders-group/card-view';
+import { OrdersGroupBot } from '../orders-group/orders-group-bot';
 
 export const BOT_INFO = Symbol('BOT_INFO');
 
@@ -38,6 +40,7 @@ export class BotService implements OnApplicationShutdown {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(BotReceipts) private readonly botReceipts: BotReceipts,
+    @Inject(OrdersGroupBot) private readonly ordersGroup: OrdersGroupBot,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(BOT_INFO) botInfo: UserFromGetMe | undefined,
   ) {
@@ -45,8 +48,13 @@ export class BotService implements OnApplicationShutdown {
     this.initialized = botInfo !== undefined;
     this.bot.use((ctx, next) => this.dedupe(ctx, next));
     this.bot.command('start', (ctx) => this.onStart(ctx));
+    // the orders group first: a reply there is never a receipt, and anything else passes on
+    this.bot
+      .chatType(['group', 'supergroup'])
+      .on('message', (ctx, next) => this.onGroupMessage(ctx, next));
     this.bot.on(['message:photo', 'message:document'], (ctx) => this.onReceiptFile(ctx));
     this.bot.callbackQuery(RECEIPT_CALLBACK, (ctx) => this.onReceiptChoice(ctx));
+    this.bot.callbackQuery(CARD_CALLBACK, (ctx) => this.onCardTap(ctx));
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
     this.bot.catch((err) =>
@@ -184,6 +192,30 @@ export class BotService implements OnApplicationShutdown {
     ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id));
     const job = await this.botReceipts.onChoice(ctx.tx, query.from.id, query.data);
     if (job) ctx.afterCommit.push(job);
+  }
+
+  /** A button under an order's card in the orders group (#37), answered right after the commit. */
+  private async onCardTap(ctx: BotContext): Promise<void> {
+    const query = ctx.callbackQuery;
+    if (!query?.data || query.from.is_bot) return;
+    const id = query.id;
+    const toast = await this.ordersGroup.onTap(ctx.tx, { fromId: query.from.id, data: query.data });
+    ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id, toast));
+  }
+
+  /** A reply to one of the bot's questions in a group (the tracking number, #37); the rest passes on. */
+  private async onGroupMessage(ctx: BotContext, next: () => Promise<void>): Promise<void> {
+    const m = ctx.message;
+    const to = m?.reply_to_message;
+    if (!m || !to || !ctx.from || ctx.from.is_bot || to.from?.id !== ctx.me.id) return next();
+    const handled = await this.ordersGroup.onReply(ctx.tx, {
+      chatId: m.chat.id,
+      messageId: m.message_id,
+      fromId: ctx.from.id,
+      text: m.text,
+      replyTo: to.message_id,
+    });
+    if (!handled) await next();
   }
 
   /** The group became a supergroup: its chat id changed. Follow it if it is our orders group. */
