@@ -281,6 +281,7 @@ export function FragranceView({
   note,
   onAddToCart,
   onBuyNow,
+  reviews,
   footer,
 }: {
   card: FragranceCard;
@@ -290,6 +291,8 @@ export function FragranceView({
   note?: string;
   onAddToCart?: (ml: VolumeCard['ml']) => void;
   onBuyNow?: (ml: VolumeCard['ml']) => void;
+  /** Under the notes pyramid: the reviews block (#41), which loads on its own. */
+  reviews?: ReactNode;
   /** After the Uzum button: «Похожие ароматы», which loads on its own. */
   footer?: ReactNode;
 }) {
@@ -341,6 +344,7 @@ export function FragranceView({
         ) : null}
 
         <Pyramid card={card} />
+        {reviews}
 
         {card.uzumUrl ? (
           <Button

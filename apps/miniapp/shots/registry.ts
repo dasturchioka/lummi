@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Page, Route } from '@playwright/test';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { SHOT_USER, type ApiClient, type ShotUser } from './api';
@@ -3327,6 +3329,7 @@ export const screens: ScreenDef[] = [
   ...worstShortcutScreens,
   ...birthdayScreens(),
   ...favouriteScreens(),
+  ...reviewScreens(),
 ];
 
 /**
@@ -3555,5 +3558,100 @@ function favouriteScreens(): ScreenDef[] {
         await worstData.teardown!(ctx);
       },
     },
+  ];
+}
+
+/**
+ * The reviews block on the fragrance card (#41): three published reviews of Symphony (two of them
+ * by other customers, one with photos), and the empty state of a fragrance nobody reviewed. The
+ * orders are real (placed through the API) and moved to «Доставлен» in the dev database; the
+ * photo is the Discovery box shot from `materials/`, stored where the API's `FileStore` keeps it.
+ */
+function reviewScreens(): ScreenDef[] {
+  const OTHERS = [
+    { telegramId: 700_100_001, firstName: 'Севара' },
+    { telegramId: 700_100_002, firstName: 'Азиз' },
+  ];
+  const scroll = async ({ page }: { page: Page }) => {
+    await page.getByTestId('reviews-block').scrollIntoViewIfNeeded();
+    await page.getByTestId('reviews-block').scrollIntoViewIfNeeded();
+  };
+  const seed = async ({ api, db }: { api: ApiClient; db: ShotDb }) => {
+    await sharePhone(api);
+    await clearOrders(db, { consent: 'given' });
+    for (let i = 0; i < 3; i++)
+      await placeOrder(api, [
+        ['symphony', 10],
+        ['tygar', 10],
+      ]);
+    const photo = resolve(import.meta.dirname, '../../../materials/photos/discovery-set-box.jpg');
+    const media = resolve(import.meta.dirname, '../../api/media/private/reviews');
+    mkdirSync(media, { recursive: true });
+    copyFileSync(photo, resolve(media, 'shot-1.jpg'));
+    copyFileSync(photo, resolve(media, 'shot-2.jpg'));
+    const orders = (
+      await db.query(
+        `select o.id from orders o join customers c on c.id = o.customer_id
+         where c.telegram_id = $1 order by o.id`,
+        [SHOT_USER.id],
+      )
+    ).rows.map((r) => Number(r.id));
+    const mine = (await db.query(`select id from customers where telegram_id = $1`, [SHOT_USER.id]))
+      .rows[0]!.id;
+    const owners: unknown[] = [mine];
+    for (const o of OTHERS) {
+      const row = await db.query(
+        `insert into customers (telegram_id, first_name, language) values ($1, $2, 'ru')
+         on conflict (telegram_id) do update set first_name = excluded.first_name returning id`,
+        [o.telegramId, o.firstName],
+      );
+      owners.push(row.rows[0]!.id);
+    }
+    const texts = [
+      'Держится весь день, а к вечеру остаётся мягкий тёплый шлейф. Получила много комплиментов.',
+      'Красивый и глубокий аромат, очень понравилась упаковка. Покупаю в третий раз.',
+      null,
+    ];
+    const ratings = [5, 4, 5];
+    for (let i = 0; i < 3; i++) {
+      await db.query(`update orders set status = 'delivered', customer_id = $2 where id = $1`, [
+        orders[i],
+        owners[i],
+      ]);
+      const r = await db.query(
+        `insert into reviews (order_id, customer_id, rating, comment, step, post_queued_at, published, published_at, created_at)
+         values ($1, $2, $3, $4, 'done', now(), true, now() - ($5 || ' days')::interval, now() - ($5 || ' days')::interval)
+         returning id`,
+        [orders[i], owners[i], ratings[i], texts[i], String(i)],
+      );
+      if (i === 1)
+        for (const n of [1, 2])
+          await db.query(
+            `insert into review_photos (review_id, file_id, file_key) values ($1, 'shot', $2)`,
+            [r.rows[0]!.id, `private/reviews/shot-${n}.jpg`],
+          );
+    }
+  };
+  const forget = async ({ db }: { db: ShotDb }) => {
+    await db.query(
+      `delete from orders where customer_id in (select id from customers where telegram_id = any($1))`,
+      [OTHERS.map((o) => o.telegramId)],
+    );
+    await db.query(`delete from customers where telegram_id = any($1)`, [
+      OTHERS.map((o) => o.telegramId),
+    ]);
+    await clearOrders(db);
+  };
+  return [
+    {
+      id: 'reviews-block',
+      path: '/p/symphony',
+      setup: seed,
+      teardown: forget,
+      act: scroll,
+    },
+    // a fragrance no order held: the empty state
+    { id: 'reviews-empty', path: '/p/power-of-you', act: scroll },
+    { id: 'reviews-empty-set', path: '/sets/discovery', act: scroll },
   ];
 }
