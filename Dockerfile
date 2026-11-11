@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.7
-# One Dockerfile, three images (ADR 0024). Build one at a time on a small machine:
-#   docker build --target api   -t lummi-api   .
-#   docker build --target admin -t lummi-admin .
-#   docker build --target web   -t lummi-web   --build-arg VITE_BOT_LINK=https://t.me/<bot> .
+# One Dockerfile, four images (ADR 0024). Build one at a time on a small machine:
+#   docker build --target api     -t lummi-api     .
+#   docker build --target admin   -t lummi-admin   .
+#   docker build --target web     -t lummi-web     --build-arg VITE_BOT_LINK=https://t.me/<bot> .
+#   docker build --target userbot -t lummi-userbot .
 ARG NODE_IMAGE=node:24-slim
 ARG CADDY_IMAGE=caddy:2.10-alpine
 
@@ -13,6 +14,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/admin/package.json apps/admin/
 COPY apps/miniapp/package.json apps/miniapp/
+COPY apps/userbot/package.json apps/userbot/
 COPY packages/config/package.json packages/config/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
@@ -48,6 +50,29 @@ ENV FILES_DIR=/data/files API_HOST=0.0.0.0 API_PORT=4000
 USER node
 WORKDIR /app/apps/api
 EXPOSE 4000
+CMD ["node", "--import", "tsx", "src/main.ts"]
+
+# ---- userbot-deps: production dependencies of the userbot workspace only
+FROM manifests AS userbot-deps
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev -w @lummi/userbot
+
+# ---- userbot: the Humo userbot (ADR 0014), its own image so the personal session never shares a
+# process or an image with the API. No database client, no access to the files volume. The sealed
+# session lives on the `userbot-data` volume at /data/userbot (owner-only).
+FROM ${NODE_IMAGE} AS userbot
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=userbot-deps /app/node_modules node_modules
+COPY package.json ./
+COPY packages/config packages/config
+COPY packages/contracts packages/contracts
+COPY packages/i18n packages/i18n
+COPY apps/userbot/package.json apps/userbot/tsconfig.json apps/userbot/
+COPY apps/userbot/src apps/userbot/src
+RUN mkdir -p /data/userbot && chown node:node /data/userbot && chmod 700 /data/userbot
+ENV USERBOT_SESSION_FILE=/data/userbot/session.enc
+USER node
+WORKDIR /app/apps/userbot
 CMD ["node", "--import", "tsx", "src/main.ts"]
 
 # ---- build-deps: every workspace with dev dependencies, for the two front-end builds

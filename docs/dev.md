@@ -124,6 +124,7 @@ The userbot (ADR 0014) calls the API over `internalContract`, from an allowed ne
 - `POST /internal/humo/messages` `{messageId, text}` records a ➕ as a credit. A ➖ is ignored and not stored. Anything else is stored raw, flagged, and alerts the owner. A repeated `messageId` changes nothing (`duplicate: true`). The accepted variants are in `docs/spec.md` → Changes 2026-11-09 «Humo credit intake».
 - `GET /internal/humo/last-message-id` returns where the userbot resumes after a restart.
 - `POST /internal/userbot/heartbeat` `{}` stamps the userbot's last-seen time (the one row of `userbot_heartbeat`).
+- `GET /internal/userbot/forward-target` returns `{chatId, topicId}`: where the userbot forwards ➕ (`bot.groupChatId` and `bot.topics.payments`, the «Поступления» topic), read on every call.
 
 Try it against a running API:
 
@@ -143,6 +144,15 @@ Payment matching subscribes with `CreditEvents.onCreditRecorded(handler)` in a p
 - Payment matching (#32) checks receipts on `RECEIPT_CHECKS_QUEUE` (default `receipt-checks`, job id `receipt-<id>`); the API queues a check after an upload, the worker after a credit and from the `receipt-matching` sweep, so both must use the same one. A check whose judge could not answer is retried after `RECEIPT_CHECK_BACKOFF_MS` (5000, doubling; the tests use 200). Tests script the judge with `t.edges.receiptJudge.respond`, record credits with `recordCredit` and pay an order with `payWithCredit` (`apps/api/test/harness/payments.ts`).
 
 Real Humo messages go in `apps/api/test/fixtures/humo-messages.ts`, and the parser test runs each one.
+
+## Userbot (`apps/userbot`)
+
+The mtcute userbot of ADR 0014 / 0035: it reads `USERBOT_LISTEN_CHAT_ID`, posts every message to the endpoints above in id order (retrying until accepted), forwards each ➕, catches up after restarts and reconnects, and beats once caught up. It never touches the DB.
+
+- **Tests** (`npm test -w @lummi/userbot`) run against a fake mtcute client (`test/fakes/fake-mtcute.ts`: chats with mtcute's raw messages, an empty peer cache like a fresh in-memory session, dialogs, users, forwards, flood and auth errors as mtcute raises them) and a fake API (`test/fakes/fake-api.ts`, #13's rules). They never reach Telegram. `src/telegram.ts` is the seam: `MtcuteClient` is the part of mtcute's client in use, and `mtcute-client.ts` checks at compile time that the real one fits.
+- **Never log a message text, the session or a key.** Log message ids and `describeError(e)` (`src/telegram.ts`), which names an error without its message.
+- **Run it locally** (optional; it logs into your own account, ADR 0023): create a test bot with @BotFather, press Start in it from your account, and set the `USERBOT_*` and `HUMO_TEST_*` keys of `.env.example` in `.env.local` (`USERBOT_SESSION_FILE=./.userbot/session.enc`, git-ignored). Then `npm run login -w @lummi/userbot` once, the API with `INTERNAL_API_SECRET`, `npm run dev -w @lummi/userbot`, and `npm run humo:sample -w @lummi/userbot -- credit 99000 --card 1234`.
+- mtcute is pinned (0.32.7; every `@mtcute/*` package it pulls in is in root `overrides`): it holds a login, so an upgrade is its own change.
 
 Logs: an unexpected error is logged only as `describeError()` (`apps/api/src/logging/`), never with its message or stack, because a failed query's message carries its parameters, which hold personal data. Use `describeError(e)` wherever you log, store or alert an error.
 
