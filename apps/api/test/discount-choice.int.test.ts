@@ -437,7 +437,7 @@ describe('«Не применять»', () => {
   });
 
   it('removing the entered code keeps it; only typing a code replaces it', async () => {
-    const { c } = await aliWithCoupon();
+    const { c, coupon: b } = await aliWithCoupon();
     await promo('BLOGER5', 5);
     await c.cart.applyPromoCode({ body: { code: 'BLOGER5' } });
     const none = await c.cart.chooseDiscount({ body: { type: 'none' } });
@@ -452,6 +452,21 @@ describe('«Не применять»', () => {
     expect(removed).toMatchObject({
       status: 200,
       body: { promoCode: null, quote: { discount: null } },
+    });
+    // typing a code ends it: the code wins again (ADR 0002), 5 % of 219 000 = 10 950, counted
+    // after it: 208 050 + 25 000. The coupon (200 200) is 32 850 cheaper and says so.
+    const typed = await c.cart.applyPromoCode({ body: { code: 'BLOGER5' } });
+    expect(typed).toMatchObject({
+      status: 200,
+      body: {
+        quote: {
+          discount: { type: 'promo_code', code: 'BLOGER5', amount: 10_950 },
+          deliveryFee: 25_000,
+          total: 233_050,
+          staleChoice: false,
+        },
+        entitlementWaiting: { type: 'birthday_coupon', id: b.id, cheaperBy: 32_850 },
+      },
     });
   });
 
