@@ -161,6 +161,9 @@ export function cancelReasonsFor(actor: OrderActorType, from: OrderStatus): Canc
 /** The longest note staff add to a cancel (kept in the history only); the dialog reads it too. */
 export const CANCEL_NOTE_MAX = 500;
 
+/** The longest reason staff type for a return or a refund (#40); the dialogs read it too. */
+export const TYPED_REASON_MAX = 500;
+
 /**
  * BTS's tracking number for «Передан в BTS», checked loosely (spec Changes 2026-11-11): its format
  * is BTS's, so only surrounding space is trimmed and a minimum length catches a slip of the finger.

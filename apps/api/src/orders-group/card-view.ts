@@ -7,6 +7,7 @@ import {
   type OrderStatus,
 } from '@lummi/contracts';
 import type { OrderCardPanel, OrderLineRow, OrderRow } from '@lummi/db';
+import type { OrderMoney } from '../refunds/order-money';
 import {
   fill,
   formatDayMonth,
@@ -98,6 +99,8 @@ export interface CardData {
   };
   events: readonly CardEvent[];
   panel: OrderCardPanel;
+  /** What paid the order and what went back (`orderMoney`, #40). */
+  money: OrderMoney;
 }
 
 type InlineButton = { text: string; callback_data: string };
@@ -237,9 +240,17 @@ function cardText(
     );
   }
   if (o.trackingNumber) out.push(`🚚 ${g.tracking}: <code>${escapeHtml(o.trackingNumber)}</code>`);
-  // paid once a payment was confirmed, whatever came after (#33's payment state): a Refund is owed
-  if (o.status === 'cancelled' && d.events.some((e) => e.action === 'confirm_payment'))
-    out.push(`💸 ${g.refundDue}`);
+  // a paid order that ended owes its money back until Refunds cover it (#33, #40)
+  const m = d.money;
+  if (m.refunded > 0)
+    out.push(
+      `💸 ${
+        m.owed > 0
+          ? fill(g.refundedOwed, { amount: money(m.refunded), owed: money(m.owed) })
+          : fill(g.refunded, { amount: money(m.refunded) })
+      }`,
+    );
+  else if (m.owed > 0) out.push(`💸 ${g.refundDue}`);
 
   out.push('', `<b>${g.history}</b>`);
   const history = historyLines(d, language);

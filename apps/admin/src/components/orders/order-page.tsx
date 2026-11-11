@@ -8,8 +8,9 @@ import {
   type AdminOrderDto,
   type AdminReceiptDto,
   type FulfilAction,
+  type OrderAction,
 } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
+import { formatMoney, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -23,13 +24,15 @@ import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent } from '@/lib/setting-copy';
 import { QUIET_ACTION } from '@/lib/ui-classes';
-import { cn, fill } from '@/lib/utils';
-import { PaymentBadge, paymentWorthShowing, StatusBadge } from './badges';
+import { fill } from '@/lib/utils';
+import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
 import {
   CancelDialog,
   ConfirmPaymentDialog,
   HandToBtsDialog,
+  RefundDialog,
   RejectDialog,
+  ReturnDialog,
   type Failure,
 } from './order-dialogs';
 import {
@@ -45,7 +48,7 @@ import {
 } from './order-sections';
 
 /** Staff may make this move from that status (the contracts' table, ADR 0011). */
-const staffMay = (status: AdminOrderDto['order']['status'], action: FulfilAction | 'cancel') =>
+const staffMay = (status: AdminOrderDto['order']['status'], action: OrderAction) =>
   findTransition(status, action)?.actors.includes('staff') ?? false;
 
 type Dialog =
@@ -53,7 +56,42 @@ type Dialog =
   | { kind: 'confirm'; receiptId: number | null; key: number }
   | { kind: 'cancel'; key: number }
   | { kind: 'hand'; key: number }
+  | { kind: 'refund'; key: number }
+  | { kind: 'return'; key: number }
   | null;
+
+/**
+ * What a paid order that ended still owes its shopper (#40): «верните N», then what went back and
+ * what is left, until the Refunds cover it. Nothing for an order that is not ended or not paid.
+ */
+function OwedLine({
+  page,
+  t,
+  language,
+}: {
+  page: AdminOrderDto;
+  t: AdminMessages;
+  language: Language;
+}) {
+  const m = page.money;
+  const money = (n: number) => formatMoney(n, language);
+  const ended = page.order.status === 'cancelled' || page.order.status === 'returned';
+  if (!ended || m.paid === null) return null;
+  const text =
+    m.owed === 0
+      ? m.refunded > 0
+        ? fill(t.orders.money.settled, { amount: money(m.refunded) })
+        : null
+      : m.refunded > 0
+        ? fill(t.orders.money.partlyOwed, { refunded: money(m.refunded), owed: money(m.owed) })
+        : fill(t.orders.money.owed, { amount: money(m.owed) });
+  if (!text) return null;
+  return (
+    <p className="mt-1 font-medium tabular-nums" data-owed={m.owed}>
+      {text}
+    </p>
+  );
+}
 
 /** What every move answers: the order page now, or why not. */
 type MoveResponse = Awaited<ReturnType<typeof browserApi.orders.fulfil>>;
@@ -100,7 +138,9 @@ export function OrderPage({
             ? o.receiptChanged
             : res.body.code === 'credit_taken'
               ? o.creditTaken
-              : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
+              : res.body.code === 'refunds_changed'
+                ? o.refund.changed
+                : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
         );
         return null;
       case 422:
@@ -120,6 +160,16 @@ export function OrderPage({
             };
           case 'credit_mismatch':
             return { text: res.body.what === 'before_order' ? o.beforeOrder : o.notAllowed };
+          case 'refund_too_large':
+            return {
+              text: fill(o.refund.amountTooLarge, {
+                max: formatMoney(res.body.max ?? 0, language),
+              }),
+            };
+          case 'invalid_date':
+            return { text: o.refund.dateInvalid };
+          case 'not_paid':
+            return { text: o.refund.notPaid };
           default:
             return { text: o.notAllowed };
         }
@@ -156,7 +206,14 @@ export function OrderPage({
         ? o.stepHint[status as keyof typeof o.stepHint]
         : null;
   const cancellation = page.order.cancellation;
+  const returned = page.returned;
   const canCancel = staffMay(status, 'cancel');
+  const canReturn = staffMay(status, 'return') && page.returnPreview !== null;
+  const money = page.money;
+  const canRefund = money.paid !== null && money.refundable > 0;
+  // an order that ended paid waits for its money to go back: then the refund is the next step
+  const refundIsNext = canRefund && money.owed > 0;
+  const openRefund = () => setDialog({ kind: 'refund', key: Date.now() });
 
   return (
     <>
@@ -181,6 +238,9 @@ export function OrderPage({
               {paymentWorthShowing(status, page.payment) && (
                 <PaymentBadge payment={page.payment} t={t} />
               )}
+              {money.refunded > 0 && (
+                <RefundBadge amount={money.refunded} t={t} language={language} />
+              )}
             </div>
             {cancellation ? (
               <div className="grid gap-1 text-sm">
@@ -188,17 +248,35 @@ export function OrderPage({
                 <p className="text-small text-muted-foreground tabular-nums">
                   {fill(o.cancelledAt, { at: formatTashkent(cancellation.at) })}
                 </p>
-                {cancellation.afterPayment && <p className="mt-1">{o.refundDue}</p>}
+                <OwedLine page={page} t={t} language={language} />
+              </div>
+            ) : returned ? (
+              <div className="grid gap-1 text-sm" data-returned>
+                <p className="font-medium text-pretty [overflow-wrap:anywhere]">
+                  {returned.reason}
+                </p>
+                <p className="text-small text-muted-foreground tabular-nums">
+                  {fill(o.ret.returnedBy, {
+                    at: formatTashkent(returned.at),
+                    name: returned.by.name ?? d.actor.removed,
+                  })}
+                </p>
+                <OwedLine page={page} t={t} language={language} />
               </div>
             ) : (
               hint && <p className="text-sm text-pretty text-muted-foreground">{hint}</p>
             )}
             {notice && <Notice title={notice} />}
-            {(next || status === 'awaiting_payment') && (
+            {(next || status === 'awaiting_payment' || refundIsNext) && (
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 {next && (
                   <Button onClick={() => void step(next)} loading={busy === next} data-next={next}>
                     {o.step[next]}
+                  </Button>
+                )}
+                {refundIsNext && (
+                  <Button onClick={openRefund} data-refund>
+                    {o.refund.action}
                   </Button>
                 )}
                 {/* a credit that came with no receipt (TZ §4): money on the card is what counts */}
@@ -212,19 +290,49 @@ export function OrderPage({
                 )}
               </div>
             )}
-            {/* cancelling is never beside the routine step: a quiet action under a hairline */}
-            {canCancel && (
+            {/* cancelling, returning and refunding are never beside the routine step: quiet
+                actions under a hairline */}
+            {(canCancel || canReturn || (canRefund && !refundIsNext)) && (
               <div className="-mx-4 -mb-1 border-t border-border px-4 pt-2 sm:-mx-6 sm:px-6">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn('-ml-3', QUIET_ACTION)}
-                  onClick={() => setDialog({ kind: 'cancel', key: Date.now() })}
-                  disabled={busy !== null}
-                  data-cancel
-                >
-                  {o.step.cancel}
-                </Button>
+                {/* the first label lines up with the card's text; each keeps its own tap area */}
+                <div className="-ml-3 flex flex-wrap gap-x-1">
+                  {canReturn && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={QUIET_ACTION}
+                      onClick={() => setDialog({ kind: 'return', key: Date.now() })}
+                      disabled={busy !== null}
+                      data-return
+                    >
+                      {o.ret.action}
+                    </Button>
+                  )}
+                  {canRefund && !refundIsNext && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={QUIET_ACTION}
+                      onClick={openRefund}
+                      disabled={busy !== null}
+                      data-refund
+                    >
+                      {o.refund.action}
+                    </Button>
+                  )}
+                  {canCancel && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={QUIET_ACTION}
+                      onClick={() => setDialog({ kind: 'cancel', key: Date.now() })}
+                      disabled={busy !== null}
+                      data-cancel
+                    >
+                      {o.step.cancel}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </Card>
@@ -294,6 +402,40 @@ export function OrderPage({
             apply(
               await browserApi.orders
                 .cancel({ params, body: { ...body, expectedStatus: status } })
+                .catch(() => null),
+            )
+          }
+        />
+      )}
+      {dialog?.kind === 'refund' && (
+        <RefundDialog
+          key={dialog.key}
+          open
+          onOpenChange={(v) => !v && setDialog(null)}
+          page={page}
+          t={t}
+          language={language}
+          onSubmit={async (body) =>
+            apply(
+              await browserApi.orders
+                .refund({ params, body: { ...body, expectedRefunded: money.refunded } })
+                .catch(() => null),
+            )
+          }
+        />
+      )}
+      {dialog?.kind === 'return' && (
+        <ReturnDialog
+          key={dialog.key}
+          open
+          onOpenChange={(v) => !v && setDialog(null)}
+          page={page}
+          t={t}
+          language={language}
+          onSubmit={async (body) =>
+            apply(
+              await browserApi.orders
+                .return({ params, body: { ...body, expectedStatus: status } })
                 .catch(() => null),
             )
           }

@@ -72,6 +72,7 @@ import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { BotReceipts } from './bot/bot-receipts.service';
 import { OrderCards } from './orders-group/order-cards';
+import { Refunds } from './refunds/refunds';
 import { OrdersGroupBot } from './orders-group/orders-group-bot';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
@@ -204,6 +205,7 @@ export class AppModule {
         PromoAdminService,
         ReceiptRejection,
         AdminOrdersService,
+        Refunds,
         CampaignsService,
         BirthdayService,
         BirthdayCouponJob,

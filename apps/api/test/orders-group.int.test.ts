@@ -702,6 +702,60 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     expect(c.plain).not.toContain('Отменить заказ?');
   });
 
+  it('a Refund recorded in the admin redraws the card: what went back, and what is still owed (#40)', async () => {
+    const order = await paidOrder();
+    const admin = await t.signInStaff('manager', bekzod);
+    const cancelled = await admin.client.admin.orders.cancel({
+      params: { number: order.number },
+      body: { expectedStatus: 'payment_confirmed', reason: 'out_of_stock' },
+    });
+    expect(cancelled.status).toBe(200);
+    const showing = (line: string) => card(order.number, (text) => text.includes(line));
+    await showing('💸 Заказ был оплачен: верните деньги покупателю.');
+    const refund = (amount: number, expectedRefunded: number) =>
+      admin.client.admin.orders.refund({
+        params: { number: order.number },
+        body: { amount, date: '2026-11-09', reason: 'Вернули на карту', expectedRefunded },
+      });
+    const half = Math.floor(order.amountDue / 2);
+    const money = (n: number) => formatMoney(n, 'ru');
+    expect((await refund(half, 0)).status).toBe(200);
+    let c = await showing(
+      `💸 Возвращено покупателю: ${money(half)}. Осталось вернуть ${money(order.amountDue - half)}.`,
+    );
+    expect(c.plain).not.toContain('верните деньги');
+    expect((await refund(order.amountDue - half, half)).status).toBe(200);
+    c = await showing(`💸 Возвращено покупателю: ${money(order.amountDue)}.`);
+    expect(c.plain).not.toContain('Осталось');
+    // the same card all along
+    expect(groupMessages().filter((m) => !m.photo && m.plain.startsWith('Заказ'))).toHaveLength(1);
+  });
+
+  it('a Refund is not a move: the card shows it and keeps the panel a manager has open (#40)', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    await press(dilnoza, 'Отменить', await card(order.number));
+    await cardWith(order.number, '‹ Назад');
+    const admin = await t.signInStaff('manager', bekzod);
+    const refund = await admin.client.admin.orders.refund({
+      params: { number: order.number },
+      body: { amount: 10_000, date: '2026-11-09', reason: 'Переплата', expectedRefunded: 0 },
+    });
+    expect(refund.status).toBe(200);
+    const c = await card(order.number, (text) =>
+      text.includes(`💸 Возвращено покупателю: ${formatMoney(10_000, 'ru')}.`),
+    );
+    // the reasons Dilnoza is choosing from are still there
+    expect(buttons(c).map((b) => b.text)).toEqual([
+      'Нет в наличии',
+      'Покупатель отказался',
+      'Не дозвонились',
+      'Оплата не поступила',
+      '‹ Назад',
+    ]);
+    expect(c.plain).toContain('Отмена заказа: выберите причину.');
+  });
+
   it('exactly one card per order, however often the confirmation or the card job is delivered', async () => {
     const client = await shopper();
     const order = await placeOrder(client);

@@ -120,6 +120,7 @@ const data = (over: Partial<CardData> = {}): CardData => ({
   },
   events: [],
   panel: { kind: 'steps' },
+  money: { paid: 94_000, paidOn: '2026-11-09', refunded: 0, refundable: 94_000, owed: 0 },
   ...over,
 });
 
@@ -212,6 +213,42 @@ describe('the card text', () => {
     expect(text).toContain('A &lt;b&gt;&amp;');
     expect(text).toContain('&lt;/a&gt;&lt;a href=&quot;x&quot;&gt;');
     expect(text).toContain('<a href="tg://user?id=41">&lt;i&gt;Ali&lt;/i&gt; &amp;</a>');
+  });
+});
+
+describe('the money a paid order owes back (Refunds, #40)', () => {
+  const shown = (over: Partial<CardData>) =>
+    plainText(renderCard(data(over)).text, { parse_mode: 'HTML' }).replace(/[\u00a0\u202f]/g, ' ');
+  const paid = (refunded: number) => ({
+    paid: 94_000,
+    paidOn: '2026-11-09',
+    refunded,
+    refundable: 94_000 - refunded,
+    owed: 0,
+  });
+
+  it('an order that ended paid asks for the money back until the refunds cover it', () => {
+    for (const status of ['cancelled', 'returned'] as const) {
+      const ended = { ...order, status };
+      expect(shown({ order: ended, money: { ...paid(0), owed: 94_000 } }), status).toContain(
+        '💸 Заказ был оплачен: верните деньги покупателю.',
+      );
+      const part = shown({ order: ended, money: { ...paid(30_000), owed: 64_000 } });
+      expect(part, status).toContain(
+        '💸 Возвращено покупателю: 30 000 сум. Осталось вернуть 64 000 сум.',
+      );
+      expect(part, status).not.toContain('верните деньги');
+      const all = shown({ order: ended, money: paid(94_000) });
+      expect(all, status).toContain('💸 Возвращено покупателю: 94 000 сум.');
+      expect(all, status).not.toContain('Осталось');
+    }
+  });
+
+  it('a refund on an order still on its way, or delivered, is shown as it is', () => {
+    expect(shown({ order: { ...order, status: 'delivered' }, money: paid(20_000) })).toContain(
+      '💸 Возвращено покупателю: 20 000 сум.',
+    );
+    expect(shown({ money: paid(0) })).not.toContain('💸');
   });
 });
 

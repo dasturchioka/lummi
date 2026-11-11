@@ -1,5 +1,6 @@
 import type { BirthdayCouponDto } from '@lummi/contracts';
-import { and, asc, birthdayCoupons, eq, gt, isNull, type DbOrTx } from '@lummi/db';
+import { and, asc, birthdayCoupons, eq, gt, isNull, sql, type DbOrTx } from '@lummi/db';
+import type { HeldEntitlement } from '../entitlements/entitlements';
 import type { Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { daysLeft, formatLocalDate, lastDayOf } from '@lummi/contracts';
@@ -106,5 +107,29 @@ export async function releaseBirthdayCoupon(tx: DbOrTx, orderId: number, now: Da
   await tx
     .update(birthdayCoupons)
     .set({ usedByOrderId: null })
-    .where(and(eq(birthdayCoupons.usedByOrderId, orderId), gt(birthdayCoupons.expiresAt, now)));
+    .where(releasableCoupon(orderId, now));
+}
+
+/** The coupon `orderId` holds that a cancel or return at `now` gives back: within validity. */
+const releasableCoupon = (orderId: number, now: Date) =>
+  and(eq(birthdayCoupons.usedByOrderId, orderId), gt(birthdayCoupons.expiresAt, now))!;
+
+/**
+ * The coupon the order holds, and whether a cancel or return at `now` would give it back (by the
+ * release's own condition); a coupon is only ever lost to its term.
+ */
+export async function heldBirthdayCoupon(
+  tx: DbOrTx,
+  orderId: number,
+  now: Date,
+): Promise<HeldEntitlement | null> {
+  const [held] = await tx
+    .select({
+      expiresAt: birthdayCoupons.expiresAt,
+      comesBack: sql<boolean>`${releasableCoupon(orderId, now)}`,
+    })
+    .from(birthdayCoupons)
+    .where(eq(birthdayCoupons.usedByOrderId, orderId));
+  if (!held) return null;
+  return { expiresAt: held.expiresAt, lost: held.comesBack ? null : 'expired' };
 }

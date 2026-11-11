@@ -8,7 +8,14 @@ import {
   type CancelReason,
   type ReceiptRejectReason,
 } from '@lummi/contracts';
-import { formatDecimal, formatMoney, formatPhone, formatTiyin, type Language } from '@lummi/i18n';
+import {
+  formatCalendarDate,
+  formatDecimal,
+  formatMoney,
+  formatPhone,
+  formatTiyin,
+  type Language,
+} from '@lummi/i18n';
 import { ChevronRight, ExternalLink, FileText, Gift } from 'lucide-react';
 import Link from 'next/link';
 import { actionLabel, Details, who } from '@/components/audit-view';
@@ -281,11 +288,15 @@ const rejectLabel = (t: AdminMessages, reason: string) =>
     ? t.orders.rejectReasons[reason as ReceiptRejectReason]
     : reason;
 
-/** The lines as bought (the snapshot) and the totals, every amount from the server. */
+/**
+ * The lines as bought (the snapshot) and the totals, every amount from the server. A returned
+ * order says of each line whether it went back on hand (#40).
+ */
 export function LinesSection({ page, t, language }: Props) {
   const d = t.orders.detail;
   const o = page.order;
   const discount = o.discount;
+  const flags = page.returned?.lines;
   return (
     <Section title={d.lines}>
       <ul className="-mt-1 divide-y divide-border">
@@ -310,6 +321,17 @@ export function LinesSection({ page, t, language }: Props) {
                     </li>
                   ))}
                 </ol>
+              )}
+              {flags?.[i] && (
+                <p
+                  className={cn(
+                    'mt-1.5 text-small font-medium',
+                    flags[i].backToStock ? 'text-sage-ink' : 'text-muted-foreground',
+                  )}
+                  data-back-to-stock={flags[i].backToStock}
+                >
+                  {flags[i].backToStock ? t.orders.ret.toStockMark : t.orders.ret.offStockMark}
+                </p>
               )}
             </div>
             <div className="shrink-0 text-right tabular-nums">
@@ -468,8 +490,44 @@ export function PaymentSection({ page, t, language }: Props) {
             <span className="text-muted-foreground">{d.noCredit}</span>
           )}
         </Fact>
+        {page.refunds.length > 0 && <Refunds page={page} t={t} language={language} />}
       </dl>
     </Section>
+  );
+}
+
+/**
+ * The order's Refunds (ADR 0006, #40), oldest first: what went back of what paid it, then each
+ * transfer with its day, its reason, and who recorded it when.
+ */
+function Refunds({ page, t, language }: Props) {
+  const r = t.orders.refund;
+  const money = (n: number) => formatMoney(n, language);
+  return (
+    <Fact label={r.section}>
+      <span className="block font-medium tabular-nums">
+        {fill(r.total, { refunded: money(page.money.refunded), paid: money(page.money.paid ?? 0) })}
+      </span>
+      <ul className="mt-2 grid gap-3" data-refunds>
+        {page.refunds.map((x) => (
+          <li key={x.id} className="grid gap-0.5">
+            <span className="font-medium whitespace-nowrap tabular-nums">
+              {fill(r.line, {
+                amount: money(x.amount),
+                date: formatCalendarDate(x.date, language),
+              })}
+            </span>
+            <span className="text-small text-pretty [overflow-wrap:anywhere]">{x.reason}</span>
+            <span className="text-small text-muted-foreground tabular-nums">
+              {fill(r.by, {
+                name: x.by.name ?? t.orders.detail.actor.removed,
+                at: formatTashkent(x.at),
+              })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Fact>
   );
 }
 

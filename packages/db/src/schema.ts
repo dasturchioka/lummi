@@ -988,6 +988,37 @@ export const upgradeRights = pgTable(
 export type UpgradeRightRow = typeof upgradeRights.$inferSelect;
 
 /**
+ * A Refund (ADR 0006, #40): money sent back to the shopper's card for a paid order, as staff
+ * record it: whole so'm, the Tashkent day it was sent, the reason and who recorded it (no FK, like
+ * `order_events.actor_id`: a removed staff member's refunds stay). It may be partial; an order's
+ * refunds together never exceed what paid it (its Credit, whole so'm), checked under the order's
+ * row lock. It never changes the order's status or a discount source; reports subtract it (#42).
+ */
+export const refunds = pgTable(
+  'refunds',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id),
+    amount: integer('amount').notNull(),
+    /** The Tashkent day the money was sent, `YYYY-MM-DD`. */
+    refundedOn: date('refunded_on', { mode: 'string' }).notNull(),
+    reason: text('reason').notNull(),
+    staffId: bigint('staff_id', { mode: 'number' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('refunds_order_idx').on(t.orderId, t.id),
+    // the sales report reads refunds by day (#42)
+    index('refunds_day_idx').on(t.refundedOn),
+    check('refunds_amount_check', sql`${t.amount} > 0`),
+  ],
+);
+
+export type RefundRow = typeof refunds.$inferSelect;
+
+/**
  * The shop card shoppers transfer to (spec §4, #28): one row, owner-only, every change audited
  * with the number masked. No row means no card: checkout is closed («Оплата временно недоступна»).
  * Its own record, not a setting: it is the shop's payment detail, not a rule value, and the

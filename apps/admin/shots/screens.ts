@@ -59,6 +59,21 @@ async function openOrderDialog(page: Page, name: string) {
   return dialog;
 }
 
+/** Exactly 500 characters, the most a return's reason takes (`TYPED_REASON_MAX`). */
+const LONGEST_RETURN_REASON =
+  'Покупательница вернула всю посылку через пункт BTS: коробка пришла мятой, два флакона по 50 мл протекли в дороге и залили остальные, на трёх флаконах по 30 мл стёрлись этикетки, а флаконы по 10 мл вскрыли. Целыми и в заводской плёнке остались только пять позиций, их можно продать снова. Остальное списать после осмотра, фото повреждений в чате заказов. Деньги вернуть на ту же карту Humo, с которой пришла оплата, после согласования с владельцем; покупательницу предупредили, она согласна подождать.';
+
+/** «Оформить возврат товара» on the twelve-line worst case: five lines flagged, the longest reason. */
+async function worstReturnDialog({ page, t }: ScreenContext) {
+  const dialog = await openOrderDialog(page, t.orders.ret.action);
+  const lines = dialog.locator('[data-return-line] input');
+  for (const i of [0, 2, 5, 8, 11]) await lines.nth(i).check();
+  await dialog.locator('textarea').fill(LONGEST_RETURN_REASON);
+  // typing scrolled the form: start from its title
+  await dialog.evaluate((el) => el.scrollTo(0, 0));
+  return dialog;
+}
+
 /** Brings the volume editor to the top of the viewport (below the phone's top bar). */
 async function scrollToVolumes(page: Page) {
   await page.locator('[data-volume="10"]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -1557,6 +1572,76 @@ export const screens: Screen[] = [
   },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
+  // ---- Refunds and returns (#40): a returned order with a refund, and the two dialogs
+  {
+    id: 'order-returned',
+    path: `/orders/${SHOT_ORDER.returned}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  {
+    // what is still owed after the partial refund comes in as the amount
+    id: 'order-refund',
+    path: `/orders/${SHOT_ORDER.returned}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.refund.action);
+      await dialog
+        .locator('textarea')
+        .fill('Вернули остаток на карту покупателя: заказ вернулся целиком.');
+    },
+  },
+  {
+    // a delivered order before its return: two lines go back on hand, the third leaked
+    id: 'order-return',
+    path: `/orders/${SHOT_ORDER.deliveredMany}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.ret.action);
+      const lines = dialog.locator('[data-return-line] input');
+      await lines.nth(0).check();
+      await lines.nth(1).check();
+      await dialog.locator('textarea').fill('Покупательница вернула посылку: флакон 50 мл протёк.');
+      // typing scrolled the form: show it from its title, the flags and the effects below
+      await dialog.evaluate((el) => el.scrollTo(0, 0));
+    },
+  },
+  {
+    // the refund dialog on a delivered order with nothing owed: a refund is the manager's call
+    id: 'order-refund-delivered',
+    path: `/orders/${SHOT_ORDER.deliveredMany}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.refund.action);
+      await dialog.getByLabel(t.orders.refund.amount).fill('25000');
+      await dialog.locator('textarea').fill('Компенсация за задержку доставки');
+    },
+  },
+  {
+    // the return dialog at its worst: twelve lines, a 60-character name, five flagged, a reason of
+    // the full 500 characters, seven-digit money; from the top (the flags)…
+    id: 'order-return-worst',
+    path: `/orders/${SHOT_ORDER.deliveredWorst}`,
+    as: 'owner',
+    fullPage: false,
+    act: async (ctx) => {
+      await worstReturnDialog(ctx);
+    },
+  },
+  {
+    // …and at its end (the reason, what will happen, the summary)
+    id: 'order-return-worst-end',
+    path: `/orders/${SHOT_ORDER.deliveredWorst}`,
+    as: 'owner',
+    fullPage: false,
+    act: async (ctx) => {
+      const dialog = await worstReturnDialog(ctx);
+      await dialog.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    },
+  },
   ...stockScreens,
   ...customerScreens,
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
