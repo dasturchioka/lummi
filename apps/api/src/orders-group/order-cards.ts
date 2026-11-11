@@ -212,12 +212,7 @@ export class OrderCards {
   private async showOnce(card: OrderCardRow, claim: Date): Promise<'shown' | 'lost'> {
     const view = renderCard(await this.data(card), GROUP_LANGUAGE);
     const hash = hashOf(view);
-    const own = (version?: number) =>
-      and(
-        eq(orderCards.orderId, card.orderId),
-        eq(orderCards.syncingAt, claim),
-        version === undefined ? undefined : eq(orderCards.version, version),
-      );
+    const own = and(eq(orderCards.orderId, card.orderId), eq(orderCards.syncingAt, claim));
     let { messageId, chatId, threadId, receiptPostedAt } = card;
     if (messageId !== null && hash !== card.shownHash) {
       try {
@@ -240,14 +235,22 @@ export class OrderCards {
         receiptPostedAt = null;
       }
       if (messageId !== null) {
-        // recorded only for the version it was drawn for: a newer change draws it again
+        // recorded only over what this pass read: a late delivery that marked the card unshown
+        // meanwhile (its old render may have landed after this edit) gets another pass
         const [recorded] = await this.db
           .update(orderCards)
           .set({ shownHash: hash })
-          .where(own(card.version))
+          .where(
+            and(
+              own,
+              card.shownHash === null
+                ? isNull(orderCards.shownHash)
+                : eq(orderCards.shownHash, card.shownHash),
+            ),
+          )
           .returning({ id: orderCards.orderId });
         if (!recorded && !(await this.holds(card.orderId, claim)))
-          return this.lostAfterCall(card.orderId);
+          return this.lostAfterCall(card.orderId, claim);
       }
     }
     if (messageId === null) {
@@ -268,9 +271,9 @@ export class OrderCards {
           threadId,
           messageId,
           receiptPostedAt,
-          shownHash: sql`case when ${orderCards.version} = ${card.version} then ${hash} end`,
+          shownHash: hash,
         })
-        .where(own())
+        .where(own)
         .returning({ id: orderCards.orderId });
       if (!recorded) {
         this.log.warn(
@@ -295,14 +298,19 @@ export class OrderCards {
   }
 
   /**
-   * This delivery's edit landed after its lease expired, maybe after a newer one: nothing it saw
-   * can be trusted as shown, so the card is marked unshown and drawn again by a fresh delivery.
+   * This delivery's edit landed after its lease expired, maybe after a newer one: what Telegram
+   * shows is unknown, so the card is marked unshown (a value no render hashes to, which also stops
+   * the current holder recording its own render over it) and drawn again; the version bump keeps
+   * that holder going round, and a fresh delivery comes for the case it already let go.
    */
-  private async lostAfterCall(orderId: number): Promise<'lost'> {
+  private async lostAfterCall(orderId: number, claim: Date): Promise<'lost'> {
     await this.outbox.withTx(async (tx) => {
       const [card] = await tx
         .update(orderCards)
-        .set({ version: sql`${orderCards.version} + 1`, shownHash: null })
+        .set({
+          version: sql`${orderCards.version} + 1`,
+          shownHash: `unshown:${claim.toISOString()}`,
+        })
         .where(eq(orderCards.orderId, orderId))
         .returning({ chatId: orderCards.chatId });
       if (card) await this.outbox.enqueueTask(tx, 'order_card', orderId, card.chatId);

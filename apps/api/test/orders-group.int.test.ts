@@ -53,8 +53,11 @@ afterAll(() => t.close());
 beforeEach(async () => {
   vi.restoreAllMocks();
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
-  t.edges.telegram.reset();
+  // nothing held from the test before, so the reset's wait for running jobs ends; anything that
+  // lands meanwhile is wiped with the fake right after
+  t.edges.telegram.releaseHeld();
   await t.reset();
+  t.edges.telegram.reset();
   await seedCatalog(t.db, { materialsDir });
   await importBtsPoints(t.db, snapshot);
   const config = t.app.get(SettingsService);

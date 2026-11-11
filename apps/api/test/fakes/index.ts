@@ -66,6 +66,10 @@ export class FakeTelegramSender implements TelegramSender {
   /** While true, each edit waits here until the test lands it (applies) or fails it: a slow Telegram. */
   holdEdits = false;
   readonly heldEdits: { message: EditedMessage; land: () => void; fail: (e: Error) => void }[] = [];
+  /** The same for sends. */
+  holdSends = false;
+  readonly heldSends: { message: OutboundMessage; land: () => void; fail: (e: Error) => void }[] =
+    [];
   /**
    * Groups that became supergroups (old id → new id): Telegram refuses the old id, and an edit
    * there answers what `editError` maps to `MessageGoneError`.
@@ -76,6 +80,8 @@ export class FakeTelegramSender implements TelegramSender {
     this.answers.push({ id: callbackQueryId, ...(text === undefined ? {} : { text }) });
   }
   async send(message: OutboundMessage): Promise<SendResult> {
+    if (this.holdSends)
+      await new Promise<void>((land, fail) => this.heldSends.push({ message, land, fail }));
     if (
       message.photo &&
       'fileId' in message.photo &&
@@ -122,6 +128,13 @@ export class FakeTelegramSender implements TelegramSender {
       edits: current.edits + 1,
     });
   }
+  /** Stop holding, and fail whatever is held: a test that stopped halfway leaves nothing hanging. */
+  releaseHeld(): void {
+    this.holdEdits = false;
+    this.holdSends = false;
+    for (const held of [...this.heldEdits.splice(0), ...this.heldSends.splice(0)])
+      held.fail(new Error('test over'));
+  }
   /** Forget everything sent (between tests). */
   reset(): void {
     this.sent.length = 0;
@@ -131,9 +144,7 @@ export class FakeTelegramSender implements TelegramSender {
     this.answers.length = 0;
     this.failures.clear();
     this.blockedChats.clear();
-    this.holdEdits = false;
-    // a test that stopped halfway leaves no delivery hanging in the queue
-    for (const held of this.heldEdits.splice(0)) held.fail(new Error('test over'));
+    this.releaseHeld();
     this.migrated.clear();
   }
 }
