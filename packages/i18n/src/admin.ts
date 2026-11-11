@@ -324,6 +324,10 @@ export const adminMessages = defineMessages(
           invalid_format: 'Неверный формат.',
           invalid_option: 'Выберите значение из списка.',
           invalid: 'Значение не подходит.',
+          feed_guard_too_long:
+            'Не больше {max}: на минуту меньше, чем ожидание перевода по чеку и бронь товаров. Иначе сбой Humo может отменить оплаченный заказ.',
+          wait_too_short:
+            'Не меньше {min}: на минуту больше, чем «Юзербот молчит дольше» и «Humo молчит дольше». Иначе сбой Humo может отменить оплаченный заказ.',
           unknown: 'Не удалось сохранить: значение не принято сервером.',
         },
       },
@@ -1970,6 +1974,10 @@ export const adminMessages = defineMessages(
           invalid_format: 'Format notoʻgʻri.',
           invalid_option: 'Roʻyxatdan qiymat tanlang.',
           invalid: 'Qiymat mos kelmaydi.',
+          feed_guard_too_long:
+            '{max} dan oshmasin: chek boʻyicha oʻtkazmani kutish va mahsulotlar bandligidan bir daqiqa kam. Aks holda Humo nosozligi toʻlangan buyurtmani bekor qilishi mumkin.',
+          wait_too_short:
+            '{min} dan kam boʻlmasin: «Userbot jim turgan vaqt» va «Humo jim turgan vaqt»dan bir daqiqa koʻp. Aks holda Humo nosozligi toʻlangan buyurtmani bekor qilishi mumkin.',
           unknown: 'Saqlab boʻlmadi: server qiymatni qabul qilmadi.',
         },
       },

@@ -33,6 +33,10 @@ export function issueMessage(t: AdminMessages, issue: SettingIssue): string {
       return fill(issue.exclusive ? s.too_big_exclusive : s.too_big, { max: String(issue.max) });
     case 'too_few_items':
       return fill(s.too_few_items, { min: String(issue.min) });
+    case 'feed_guard_too_long':
+      return fill(s.feed_guard_too_long, { max: String(issue.max) });
+    case 'wait_too_short':
+      return fill(s.wait_too_short, { min: String(issue.min) });
     default:
       return s[issue.code];
   }

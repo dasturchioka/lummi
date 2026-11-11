@@ -15,6 +15,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Env } from '../env';
 import { readSettings } from '../settings/settings.service';
 import { ENV } from '../tokens';
+import { forEachSettled } from '../util/for-each-settled';
 import { WorkerRuntime, type SweepContext } from '../worker/runtime';
 import { reserveReminder } from './messages';
 import { OrderStatusService } from './order-status.service';
@@ -85,34 +86,28 @@ export class ReserveSweeps {
       .where(and(eq(orders.status, 'awaiting_payment'), lte(orders.reserveUntil, now)))
       .orderBy(asc(orders.reserveUntil), asc(orders.id))
       .limit(EXPIRY_BATCH);
-    let failure: unknown = null;
-    for (const { id } of due) {
-      try {
-        await withTx(async (tx) => {
-          // Re-read under the lock: the shopper may have cancelled, a receipt may have gone in,
-          // or the reserve may have been extended since the select above.
-          const [still] = await tx
-            .select({ id: orders.id })
-            .from(orders)
-            .where(
-              and(
-                eq(orders.id, id),
-                eq(orders.status, 'awaiting_payment'),
-                lte(orders.reserveUntil, now),
-              ),
-            )
-            .for('update');
-          if (!still) return;
-          await this.status.transitionIn(tx, id, 'cancel', { type: 'system' }, 'awaiting_payment', {
-            reason: 'reserve_expired',
-          });
+    // one order that fails does not hold up the others; the sweep still reports the failure
+    await forEachSettled(due, ({ id }) =>
+      withTx(async (tx) => {
+        // Re-read under the lock: the shopper may have cancelled, a receipt may have gone in,
+        // or the reserve may have been extended since the select above.
+        const [still] = await tx
+          .select({ id: orders.id })
+          .from(orders)
+          .where(
+            and(
+              eq(orders.id, id),
+              eq(orders.status, 'awaiting_payment'),
+              lte(orders.reserveUntil, now),
+            ),
+          )
+          .for('update');
+        if (!still) return;
+        await this.status.transitionIn(tx, id, 'cancel', { type: 'system' }, 'awaiting_payment', {
+          reason: 'reserve_expired',
         });
-      } catch (e) {
-        // one order that fails does not hold up the others; the sweep still reports the failure
-        failure ??= e;
-      }
-    }
-    if (failure) throw failure;
+      }),
+    );
   }
 
   private async recipients(tx: DbOrTx, ids: number[]) {

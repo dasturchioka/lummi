@@ -663,10 +663,12 @@ describe('duplicate receipts never confirm themselves', () => {
 
     const second = await placeOrder(vali, '998907654321');
     const receiptId = await upload(second, file);
+    // a repeat takes the payment-not-found path at once (#36), naming the receipt it repeats
     expect(await receiptNow(receiptId)).toMatchObject({
-      verdict: 'manual_review',
-      reviewReason: 'duplicate',
+      verdict: 'payment_not_found',
+      reviewReason: null,
     });
+    expect((await receiptNow(receiptId)).duplicateOf).not.toBeNull();
     t.edges.clock.advance(60_000);
     await recordCredit(t, { som: second.order.amountDue });
     await settled();
@@ -674,11 +676,11 @@ describe('duplicate receipts never confirm themselves', () => {
     await settled();
 
     expect(t.edges.receiptJudge.calls).toHaveLength(0);
-    expect(await statusOf(second)).toBe('receipt_review');
+    expect(await statusOf(second)).toBe('awaiting_payment');
     expect((await orderNow(second.order.id)).creditId).toBeNull();
   });
 
-  it('the same file on two waiting orders holds both for a person', async () => {
+  it('the same file on two waiting orders: the first is held for a person, the later one is not found (#36)', async () => {
     const first = await placeOrder();
     const second = await placeOrder(vali, '998907654321');
     const file = await uniqueReceiptImage();
@@ -691,10 +693,14 @@ describe('duplicate receipts never confirm themselves', () => {
     await settled();
 
     expect(t.edges.receiptJudge.calls).toHaveLength(0);
-    for (const id of [r1, r2])
-      expect(await receiptNow(id)).toMatchObject({
-        verdict: 'manual_review',
-        reviewReason: 'duplicate',
-      });
+    expect(await receiptNow(r1)).toMatchObject({
+      verdict: 'manual_review',
+      reviewReason: 'duplicate',
+    });
+    expect(await receiptNow(r2)).toMatchObject({
+      verdict: 'payment_not_found',
+      duplicateOf: r1,
+      reviewReason: null,
+    });
   });
 });

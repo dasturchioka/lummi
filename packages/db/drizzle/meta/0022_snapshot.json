@@ -1,5 +1,5 @@
 {
-  "id": "42d63fcf-6ca1-4bd8-abbb-49ee1a2cb5c8",
+  "id": "7dbc3a7d-52ca-4057-9663-098047c798e2",
   "prevId": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "version": "7",
   "dialect": "postgresql",
@@ -1757,132 +1757,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.favourites": {
-      "name": "favourites",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "favourites_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'fragrance'"
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "favourites_customer_fragrance_idx": {
-          "name": "favourites_customer_fragrance_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "fragrance_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "favourites_customer_set_idx": {
-          "name": "favourites_customer_set_idx",
-          "columns": [
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'discovery_set'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "favourites_customer_id_customers_id_fk": {
-          "name": "favourites_customer_id_customers_id_fk",
-          "tableFrom": "favourites",
-          "tableTo": "customers",
-          "columnsFrom": [
-            "customer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "favourites_fragrance_id_fragrances_id_fk": {
-          "name": "favourites_fragrance_id_fragrances_id_fk",
-          "tableFrom": "favourites",
-          "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "favourites_target_check": {
-          "name": "favourites_target_check",
-          "value": "(\"favourites\".\"kind\" = 'fragrance') = (\"favourites\".\"fragrance_id\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.fragrance_notes": {
       "name": "fragrance_notes",
       "schema": "",
@@ -3450,6 +3324,83 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.payment_pauses": {
+      "name": "payment_pauses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "payment_pauses_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "cause": {
+          "name": "cause",
+          "type": "payment_pause_cause",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "announced_at": {
+          "name": "announced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_pauses_one_open_idx": {
+          "name": "payment_pauses_one_open_idx",
+          "columns": [
+            {
+              "expression": "(\"ended_at\" is null)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payment_pauses\".\"ended_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_pauses_ends_after_start": {
+          "name": "payment_pauses_ends_after_start",
+          "value": "\"payment_pauses\".\"ended_at\" >= \"payment_pauses\".\"started_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.processed_updates": {
       "name": "processed_updates",
       "schema": "",
@@ -4086,6 +4037,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "duplicate_of": {
+          "name": "duplicate_of",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unchecked_alert_at": {
+          "name": "unchecked_alert_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4170,6 +4133,19 @@
           "tableTo": "orders",
           "columnsFrom": [
             "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receipts_duplicate_of_receipts_id_fk": {
+          "name": "receipts_duplicate_of_receipts_id_fk",
+          "tableFrom": "receipts",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "duplicate_of"
           ],
           "columnsTo": [
             "id"
@@ -4980,6 +4956,14 @@
         "delivered",
         "returned",
         "cancelled"
+      ]
+    },
+    "public.payment_pause_cause": {
+      "name": "payment_pause_cause",
+      "schema": "public",
+      "values": [
+        "heartbeat",
+        "silence"
       ]
     },
     "public.promo_kind": {
