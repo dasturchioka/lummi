@@ -17,9 +17,11 @@ export const SHOT_ORDER = {
   worst: 9008,
   expired: 9009,
   assembling: 9010,
+  returned: 9011,
+  deliveredMany: 9012,
 } as const;
 const FIRST = 9001;
-const LAST = 9010;
+const LAST = 9012;
 /** Shot Humo messages take reserved ids no other shot uses (the customers: 990000101-104). */
 const HUMO_FIRST = 990001;
 
@@ -126,6 +128,8 @@ type Spec = {
   /** How the confirming credit differs, and who linked it (default: exact, by the AI). */
   link?: { deltaTiyin?: number; card?: string; reason?: string; staff?: number };
   spare?: Spare[];
+  /** Refunds staff recorded (#40): a share of the total, rounded down to 1 000 so'm. */
+  refunds?: { share: number; at: string; reason: string; staff: number }[];
 };
 
 const AUDIT: Record<string, string> = {
@@ -137,6 +141,7 @@ const AUDIT: Record<string, string> = {
   start_assembly: 'order.assembling',
   hand_to_bts: 'order.handed_to_bts',
   deliver: 'order.delivered',
+  return: 'order.returned',
   cancel: 'order.cancelled',
 };
 
@@ -205,10 +210,12 @@ function receiptHtml(amount: number, at: string, bank: string) {
 }
 
 /**
- * Shot data for the orders panel (#33): four customers and ten orders, one in each state the
+ * Shot data for the orders panel (#33): four customers and twelve orders, one in each state the
  * order page has to show, plus the worst case (twelve lines, a 60-character name, seven-digit
  * totals, five receipts, a typed address and a long comment), with their history, audit entries
- * and receipt images, and a handful of Humo credits, none linked yet. Replaced on every run.
+ * and receipt images, and a handful of Humo credits, none linked yet. A returned order carries a
+ * partial Refund and a delivered one of three lines with a promo code waits for its return
+ * dialog (#40). Replaced on every run.
  */
 export async function seedShotOrders(db: Sql, filesDir: string) {
   await forgetShotOrders(db);
@@ -653,6 +660,79 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
       ],
       steps: walk(at(10, 9, 50), 'assembling', dilnoza),
     },
+    {
+      number: 9011,
+      customer: ali,
+      status: 'returned',
+      at: at(5, 11, 30),
+      lines: [
+        { pick: 4, ml: 30, qty: 2 },
+        { pick: 8, ml: 50, qty: 1 },
+        { pick: 15, ml: 10, qty: 1 },
+      ],
+      tracking: 'UZB 7704 0950 0031',
+      receipts: [
+        {
+          at: at(5, 11, 41),
+          verdict: 'ai_confirmed',
+          file: 'IMG_5102.PNG',
+          source: 'miniapp',
+          amount: 0,
+          check: SURE,
+        },
+      ],
+      steps: [
+        ...walk(at(5, 11, 30), 'delivered', dilnoza, 'UZB 7704 0950 0031'),
+        {
+          action: 'return',
+          from: 'delivered',
+          to: 'returned',
+          at: at(9, 17, 20),
+          by: { type: 'staff', staff: muhammadjon },
+          reason:
+            'Покупатель вернул посылку целиком: флакон 50 мл протёк в дороге, остальное в заводской упаковке.',
+          payload: {
+            lines: [
+              { position: 0, backToStock: true },
+              { position: 1, backToStock: false },
+              { position: 2, backToStock: true },
+            ],
+          },
+        },
+      ],
+      refunds: [
+        {
+          share: 0.4,
+          at: at(10, 10, 5),
+          reason: 'Перевели на карту покупателя за протёкший флакон 50 мл.',
+          staff: dilnoza,
+        },
+      ],
+    },
+    {
+      number: 9012,
+      customer: dil,
+      status: 'delivered',
+      at: at(7, 15, 40),
+      lines: [
+        { pick: 6, ml: 30, qty: 1 },
+        { pick: 10, ml: 10, qty: 2 },
+        { pick: 19, ml: 50, qty: 1 },
+      ],
+      promo: { code: 'LUMMI10', amount: 0 },
+      tracking: 'UZB 7704 1003 0078',
+      receipts: [
+        {
+          at: at(7, 15, 52),
+          verdict: 'ai_confirmed',
+          file: 'chek_7_noyabr.jpg',
+          source: 'bot',
+          amount: 0,
+          check: SURE,
+        },
+      ],
+      steps: walk(at(7, 15, 40), 'delivered', muhammadjon, 'UZB 7704 1003 0078'),
+    },
   ];
 
   const SHOP_LAST4 = '7364';
@@ -900,6 +980,27 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
         );
       }
 
+      // the Refunds staff recorded (#40), each audited with what was paid and refunded before
+      let refundedBefore = 0;
+      for (const r of s.refunds ?? []) {
+        const amount = Math.floor((total * r.share) / 1000) * 1000;
+        const day = new Date(new Date(r.at).getTime() + 5 * 3600_000).toISOString().slice(0, 10);
+        await db.query(
+          `insert into refunds (order_id, amount, refunded_on, reason, staff_id, created_at)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [orderId, amount, day, r.reason, r.staff, r.at],
+        );
+        await audit(db, { type: 'staff', id: r.staff }, 'order.refunded', orderId, r.at, {
+          number: s.number,
+          amount,
+          date: day,
+          reason: r.reason,
+          paid: total,
+          refundedBefore,
+        });
+        refundedBefore += amount;
+      }
+
       // the receipt AI's answers (#32): shown the credit that paid it, or the first one waiting
       for (const [i, r] of (s.receipts ?? []).entries()) {
         const shown = linkedCredit ?? spareIds[0];
@@ -972,6 +1073,7 @@ export async function forgetShotOrders(db: Sql) {
     [ids],
   );
   await db.query(`delete from receipts where order_id = any($1::bigint[])`, [ids]);
+  await db.query(`delete from refunds where order_id = any($1::bigint[])`, [ids]);
   await db.query(`delete from orders where number between $1 and $2`, [FIRST, LAST]);
   await db.query(
     `delete from credits where humo_message_id >= $1 and humo_message_id < $1 + 1000`,

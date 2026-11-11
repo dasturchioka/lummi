@@ -1542,6 +1542,54 @@ export const screens: Screen[] = [
   },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
+  // ---- Refunds and returns (#40): a returned order with a refund, and the two dialogs
+  {
+    id: 'order-returned',
+    path: `/orders/${SHOT_ORDER.returned}`,
+    as: 'manager',
+    act: imagesLoaded,
+  },
+  {
+    // what is still owed after the partial refund comes in as the amount
+    id: 'order-refund',
+    path: `/orders/${SHOT_ORDER.returned}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.refund.action);
+      await dialog
+        .locator('textarea')
+        .fill('Вернули остаток на карту покупателя: заказ вернулся целиком.');
+    },
+  },
+  {
+    // a delivered order before its return: two lines go back on hand, the third leaked
+    id: 'order-return',
+    path: `/orders/${SHOT_ORDER.deliveredMany}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.ret.action);
+      const lines = dialog.locator('[data-return-line] input');
+      await lines.nth(0).check();
+      await lines.nth(1).check();
+      await dialog.locator('textarea').fill('Покупательница вернула посылку: флакон 50 мл протёк.');
+      // typing scrolled the form: show it from its title, the flags and the effects below
+      await dialog.evaluate((el) => el.scrollTo(0, 0));
+    },
+  },
+  {
+    // the refund dialog on a delivered order with nothing owed: a refund is the manager's call
+    id: 'order-refund-delivered',
+    path: `/orders/${SHOT_ORDER.deliveredMany}`,
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      const dialog = await openOrderDialog(page, t.orders.refund.action);
+      await dialog.getByLabel(t.orders.refund.amount).fill('25000');
+      await dialog.locator('textarea').fill('Компенсация за задержку доставки');
+    },
+  },
   ...stockScreens,
   ...customerScreens,
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
