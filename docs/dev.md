@@ -149,10 +149,10 @@ Real Humo messages go in `apps/api/test/fixtures/humo-messages.ts`, and the pars
 
 The mtcute userbot of ADR 0014 / 0035: it reads `USERBOT_LISTEN_CHAT_ID`, posts every message to the endpoints above in id order (retrying until accepted), forwards each ➕, catches up after restarts and reconnects, and beats once caught up. It never touches the DB.
 
-- **Tests** (`npm test -w @lummi/userbot`) run against a fake mtcute client (`test/fakes/fake-mtcute.ts`: chats, an empty peer cache like a fresh in-memory session, dialogs, forwards, flood and auth errors as mtcute raises them) and a fake API (`test/fakes/fake-api.ts`, #13's rules). They never reach Telegram. `src/telegram.ts` is the seam: `MtcuteClient` is the part of mtcute's client in use, and `mtcute-client.ts` checks at compile time that the real one fits.
+- **Tests** (`npm test -w @lummi/userbot`) run against a fake mtcute client (`test/fakes/fake-mtcute.ts`: chats with mtcute's raw messages, an empty peer cache like a fresh in-memory session, dialogs, users, forwards, flood and auth errors as mtcute raises them) and a fake API (`test/fakes/fake-api.ts`, #13's rules). They never reach Telegram. `src/telegram.ts` is the seam: `MtcuteClient` is the part of mtcute's client in use, and `mtcute-client.ts` checks at compile time that the real one fits.
 - **Never log a message text, the session or a key.** Log message ids and `describeError(e)` (`src/telegram.ts`), which names an error without its message.
 - **Run it locally** (optional; it logs into your own account, ADR 0023): create a test bot with @BotFather, press Start in it from your account, and set the `USERBOT_*` and `HUMO_TEST_*` keys of `.env.example` in `.env.local` (`USERBOT_SESSION_FILE=./.userbot/session.enc`, git-ignored). Then `npm run login -w @lummi/userbot` once, the API with `INTERNAL_API_SECRET`, `npm run dev -w @lummi/userbot`, and `npm run humo:sample -w @lummi/userbot -- credit 99000 --card 1234`.
-- mtcute is pinned (0.32.7, with `@mtcute/core`, `wasm`, `html-parser`, `markdown-parser` in root `overrides`): it holds a login, so an upgrade is its own change.
+- mtcute is pinned (0.32.7; every `@mtcute/*` package it pulls in is in root `overrides`): it holds a login, so an upgrade is its own change.
 
 Logs: an unexpected error is logged only as `describeError()` (`apps/api/src/logging/`), never with its message or stack, because a failed query's message carries its parameters, which hold personal data. Use `describeError(e)` wherever you log, store or alert an error.
 
