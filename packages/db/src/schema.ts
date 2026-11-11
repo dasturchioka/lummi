@@ -205,7 +205,7 @@ export const processedUpdates = pgTable('processed_updates', {
  * What an outbox row does when delivered: send its message, or bring an order's card in the
  * orders group up to date (`ref` = the order id; rendered from the order at delivery, #37).
  */
-export const OUTBOX_KINDS = ['message', 'order_card'] as const;
+export const OUTBOX_KINDS = ['message', 'order_card', 'review_post'] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 export const outboxKindEnum = pgEnum('outbox_kind', OUTBOX_KINDS);
 
@@ -817,6 +817,13 @@ export const orders = pgTable(
     trackingNumber: text('tracking_number'),
     /** The reserve reminder's marker (ADR 0021): stamped with the message, so it goes once. */
     reserveReminderSentAt: timestamp('reserve_reminder_sent_at', { withTimezone: true }),
+    /**
+     * The review request's marker (ADR 0021, #41): stamped with the message, so it goes once.
+     * `review_request` says what came of it: `sent`, or `not_delivered` when the customer had
+     * blocked the bot (nothing is sent then, and never later).
+     */
+    reviewRequestedAt: timestamp('review_requested_at', { withTimezone: true }),
+    reviewRequest: text('review_request', { enum: ['sent', 'not_delivered'] }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -844,6 +851,10 @@ export const orders = pgTable(
       'orders_total_adds_up',
       sql`${t.total} = ${t.itemsSubtotal} - ${t.discountAmount} + ${t.deliveryFee}`,
     ),
+    // the review sweep reads delivered orders not yet asked
+    index('orders_review_due_idx')
+      .on(t.id)
+      .where(sql`${t.status} = 'delivered' and ${t.reviewRequestedAt} is null`),
   ],
 );
 
@@ -1485,6 +1496,85 @@ export const birthdayCoupons = pgTable(
 );
 
 export type BirthdayCouponRow = typeof birthdayCoupons.$inferSelect;
+
+/**
+ * A review (#41): the customer's rating of one delivered order (one per order), with an optional
+ * comment and photos. It starts private; staff publish it, and a published one shows on the cards
+ * of every fragrance and set in its order. `step` is where the bot conversation is: waiting for the
+ * comment, for photos, or done. A review is released (a low one posted to «Отзывы») once its step
+ * is done and no photo is still being fetched; `post_queued_at` is that claim, taken once.
+ * `step_at` is the last message, for the sweep that closes an abandoned review.
+ */
+export const reviews = pgTable(
+  'reviews',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    rating: smallint('rating').notNull(),
+    comment: text('comment'),
+    step: text('step', { enum: ['comment', 'photos', 'done'] })
+      .notNull()
+      .default('comment'),
+    stepAt: timestamp('step_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Taken when the review is finished and has no photo in flight; a low rating's follow-up is queued with it. */
+    postQueuedAt: timestamp('post_queued_at', { withTimezone: true }),
+    /** A low rating's card in «Отзывы» was queued (the sweep queues it again if it never lands). */
+    topicQueuedAt: timestamp('topic_queued_at', { withTimezone: true }),
+    /** The card is out, and its Telegram message (the follow-up replies to it). */
+    topicPostedAt: timestamp('topic_posted_at', { withTimezone: true }),
+    topicMessageId: bigint('topic_message_id', { mode: 'number' }),
+    /** The follow-up (comment and photos as a reply to the card) is out, or there was nothing to add. */
+    followUpPostedAt: timestamp('follow_up_posted_at', { withTimezone: true }),
+    /** One delivery posts to the topic at a time: its claim, expiring after a few minutes. */
+    postLeaseAt: timestamp('post_lease_at', { withTimezone: true }),
+    /** «Можно приложить до N фото» was said once. */
+    photoLimitNoticeAt: timestamp('photo_limit_notice_at', { withTimezone: true }),
+    published: boolean('published').notNull().default(false),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('reviews_order_idx').on(t.orderId),
+    index('reviews_created_idx').on(t.createdAt),
+    index('reviews_published_idx')
+      .on(t.publishedAt)
+      .where(sql`${t.published}`),
+    check('reviews_rating_check', sql`${t.rating} between 1 and 5`),
+  ],
+);
+export type ReviewRow = typeof reviews.$inferSelect;
+
+/**
+ * A photo of a review. The row is written in the update's transaction with Telegram's `file_id`;
+ * a BullMQ job fetches it, checks it by its first bytes, and stores it through `FileStore`
+ * (`file_key`, private); null `file_key` means still being fetched. `public_key` is the unguessable
+ * name of its public URL, which serves the photo only while its review is published.
+ */
+export const reviewPhotos = pgTable(
+  'review_photos',
+  {
+    id: id(),
+    reviewId: bigint('review_id', { mode: 'number' })
+      .notNull()
+      .references(() => reviews.id, { onDelete: 'cascade' }),
+    fileId: text('file_id').notNull(),
+    fileKey: text('file_key'),
+    publicKey: uuid('public_key').notNull().defaultRandom(),
+    /** Sent to the topic. */
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('review_photos_review_idx').on(t.reviewId, t.id),
+    uniqueIndex('review_photos_public_key_idx').on(t.publicKey),
+  ],
+);
+export type ReviewPhotoRow = typeof reviewPhotos.$inferSelect;
 
 /**
  * One row per distinct error (ADR 0036). The fingerprint hashes the error class, the route and the

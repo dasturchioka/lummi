@@ -21,6 +21,7 @@ import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
 import { seedShotOrders } from './orders-data';
+import { seedShotReviews } from './reviews-data';
 import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';
 import { seedShotShopCard } from './shop-card-data';
@@ -244,6 +245,11 @@ async function main() {
   const db: ShotSql = { query: (sql, params) => client!.query(sql, params) };
   // the orders panel's shot orders, receipts (files where the API reads them) and credits
   await seedShotOrders(db, resolve(repoRoot, 'apps/api', process.env.FILES_DIR ?? 'media'));
+  await seedShotReviews(
+    db,
+    repoRoot,
+    resolve(repoRoot, 'apps/api', process.env.FILES_DIR ?? 'media'),
+  );
   let count = 0;
   for (const lang of LANGS) {
     // one browser per language: `--lang` is what makes date fields show the local format

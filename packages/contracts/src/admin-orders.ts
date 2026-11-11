@@ -1,3 +1,4 @@
+import { adminReviewSchema } from './reviews';
 import { z } from 'zod';
 import { auditEntrySchema, tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
@@ -266,6 +267,8 @@ export const adminOrderSchema = z.object({
       }),
     })
     .nullable(),
+  /** The order's review (#41), whether published or not; null when the shopper has not rated it. */
+  review: adminReviewSchema.nullable(),
   events: z.array(adminOrderEventSchema),
   /** The audit entries about this order, newest first. */
   audit: z.array(auditEntrySchema),

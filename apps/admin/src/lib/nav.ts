@@ -54,7 +54,7 @@ export const NAV: NavGroup[] = [
       { key: 'credits', icon: BanknoteArrowDown, href: '/credits', roles: ALL },
       { key: 'btsPoints', icon: MapPin, href: '/bts-points', roles: ALL },
       { key: 'customers', icon: Users, href: '/customers', roles: ALL },
-      { key: 'reviews', icon: MessageSquareText, href: null, roles: OWNER },
+      { key: 'reviews', icon: MessageSquareText, href: '/reviews', roles: ALL },
     ],
   },
   {

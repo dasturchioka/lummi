@@ -28,3 +28,4 @@ export * from './campaign';
 export * from './birthday';
 export * from './upgrade-rights';
 export * from './favourites';
+export * from './reviews';

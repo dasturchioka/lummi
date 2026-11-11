@@ -12,6 +12,7 @@ import type { Edges } from '../edges';
 import { EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
 import { BotReceipts, RECEIPT_CALLBACK, type IncomingReceipt } from './bot-receipts.service';
+import { REVIEW_CALLBACK, ReviewsBot } from '../reviews/reviews-bot';
 import { CARD_CALLBACK } from '../orders-group/card-view';
 import { OrderCards } from '../orders-group/order-cards';
 import { OrdersGroupBot } from '../orders-group/orders-group-bot';
@@ -41,6 +42,7 @@ export class BotService implements OnApplicationShutdown {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(BotReceipts) private readonly botReceipts: BotReceipts,
+    @Inject(ReviewsBot) private readonly reviewsBot: ReviewsBot,
     @Inject(OrdersGroupBot) private readonly ordersGroup: OrdersGroupBot,
     @Inject(OrderCards) private readonly orderCards: OrderCards,
     @Inject(EDGES) private readonly edges: Edges,
@@ -54,8 +56,10 @@ export class BotService implements OnApplicationShutdown {
     this.bot
       .chatType(['group', 'supergroup'])
       .on('message', (ctx, next) => this.onGroupMessage(ctx, next));
+    this.bot.chatType('private').on('message:text', (ctx) => this.onText(ctx));
     this.bot.on(['message:photo', 'message:document'], (ctx) => this.onReceiptFile(ctx));
     this.bot.callbackQuery(RECEIPT_CALLBACK, (ctx) => this.onReceiptChoice(ctx));
+    this.bot.callbackQuery(REVIEW_CALLBACK, (ctx) => this.onReviewTap(ctx));
     this.bot.callbackQuery(CARD_CALLBACK, (ctx) => this.onCardTap(ctx));
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
@@ -182,7 +186,34 @@ export class BotService implements OnApplicationShutdown {
           }
         : null;
     if (!file) return;
+    // A receipt always wins (ADR 0020, 0033): with an order waiting for payment every file goes to
+    // the receipt intake. Otherwise a review waiting for photos (#41) takes the images it can, and
+    // whatever it cannot (a PDF) falls through to the receipt intake too.
+    const photo = (await this.botReceipts.hasOrderWaiting(ctx.tx, ctx.from.id))
+      ? null
+      : await this.reviewsBot.onFile(ctx.tx, ctx.from.id, file);
+    if (photo) {
+      if (photo.after) ctx.afterCommit.push(photo.after);
+      return;
+    }
     const job = await this.botReceipts.onFile(ctx.tx, ctx.from.id, ctx.from.language_code, file);
+    if (job) ctx.afterCommit.push(job);
+  }
+
+  /** Text in a private chat is the comment of a review waiting for one (#41); anything else is ignored. */
+  private async onText(ctx: BotContext): Promise<void> {
+    const text = ctx.message?.text;
+    if (!text || !ctx.from || ctx.from.is_bot) return;
+    await this.reviewsBot.onText(ctx.tx, ctx.from.id, text);
+  }
+
+  /** A review button: the rating, «Пропустить» or «Готово» (#41). */
+  private async onReviewTap(ctx: BotContext): Promise<void> {
+    const query = ctx.callbackQuery;
+    if (!query?.data || query.from.is_bot) return;
+    const id = query.id;
+    ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id));
+    const job = await this.reviewsBot.onTap(ctx.tx, query.from.id, query.data);
     if (job) ctx.afterCommit.push(job);
   }
 

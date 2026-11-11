@@ -25,6 +25,7 @@ import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
 import { AlertIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon, PlusIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
+import { ReviewsBlock } from './reviews/ReviewsBlock';
 import { Screen } from '../ui/Screen';
 import { SetPhoto } from '../ui/SetPhoto';
 import { Skeleton } from '../ui/Skeleton';
@@ -86,6 +87,7 @@ export function DiscoverySetView({
   onAdd = () => undefined,
   onBuyNow = () => undefined,
   onOpen = () => undefined,
+  reviews,
 }: {
   set: DiscoverySet;
   adding?: boolean;
@@ -95,6 +97,8 @@ export function DiscoverySetView({
   /** «Купить сейчас»: a checkout of this one set, the cart left as it is (#25). */
   onBuyNow?: () => void;
   onOpen?: (slug: string) => void;
+  /** Under the composition: the reviews block (#41). */
+  reviews?: ReactNode;
 }) {
   const { t, language } = usePrefs();
   const s = useSetsText();
@@ -188,6 +192,7 @@ export function DiscoverySetView({
             </ul>
           </section>
         ) : null}
+        {reviews}
         <p className="type-small mt-6 text-muted">{t.card.disclaimer}</p>
       </article>
     </Screen>
@@ -216,6 +221,7 @@ export function DiscoverySetScreen() {
       note={note}
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
+      reviews={<ReviewsBlock target="discovery-set" />}
       onBuyNow={() =>
         void router.navigate({
           to: '/checkout',
