@@ -59,7 +59,9 @@ function validPayload(action: OrderAction, actor: OrderActorType, from: OrderSta
     case 'confirm_payment':
       return { ...CREDIT_FACTS, receiptId: from === 'awaiting_payment' ? null : 7 };
     case 'reject_receipt':
-      return { receiptId: 7, reason: 'amount_mismatch' };
+      return { receiptId: 7, reason: 'amount_mismatch', pausedSeconds: 0 };
+    case 'payment_not_found':
+      return { receiptId: 7, duplicateOf: null, pausedSeconds: 0, reserveEnded: false };
     case 'hand_to_bts':
       return { trackingNumber: 'BTS-778812' };
     case 'return':
@@ -123,6 +125,22 @@ describe('required payloads', () => {
     expect(
       planTransition('awaiting_payment', 'submit_receipt', 'customer', { receiptId: 12 }),
     ).toMatchObject({ ok: true, to: 'receipt_review', payload: { receiptId: 12 } });
+  });
+
+  it('payment not found names the Receipt it decides and what extended the reserve (#36)', () => {
+    const move = (payload: unknown) =>
+      planTransition('receipt_review', 'payment_not_found', 'system', payload);
+    expect(move(undefined)).toEqual(invalid);
+    expect(
+      move({ receiptId: 7, duplicateOf: null, pausedSeconds: -1, reserveEnded: false }),
+    ).toEqual(invalid);
+    expect(
+      move({ receiptId: 7, duplicateOf: 3, pausedSeconds: 600, reserveEnded: true }),
+    ).toMatchObject({
+      ok: true,
+      to: 'awaiting_payment',
+      payload: { receiptId: 7, duplicateOf: 3, pausedSeconds: 600, reserveEnded: true },
+    });
   });
 
   it('a payment is confirmed only with the Credit that paid it (#32)', () => {
@@ -206,14 +224,16 @@ describe('required payloads', () => {
   });
 
   it('a rejected receipt names the receipt and carries a reason; «Другая причина» needs a note', () => {
-    const reject = (payload: unknown) =>
-      planTransition('receipt_review', 'reject_receipt', 'staff', payload);
+    // the server adds the time the payment feed was paused while the receipt waited (#36)
+    const reject = (payload: object) =>
+      planTransition('receipt_review', 'reject_receipt', 'staff', { pausedSeconds: 0, ...payload });
     expect(reject({})).toEqual(invalid);
     expect(reject({ reason: 'wrong_card' })).toEqual(invalid);
     expect(reject({ receiptId: 7, reason: 'Сумма не совпадает' })).toEqual(invalid);
     expect(reject({ receiptId: 7, reason: 'other' })).toEqual(invalid);
     expect(reject({ receiptId: 7, reason: 'other', note: '  ' })).toEqual(invalid);
     expect(reject({ receiptId: 7, reason: 'wrong_card' })).toMatchObject({ ok: true });
+    expect(reject({ receiptId: 7, reason: 'wrong_card', pausedSeconds: -1 })).toEqual(invalid);
     expect(reject({ receiptId: 7, reason: 'other', note: ' Дата не та ' })).toMatchObject({
       ok: true,
       payload: { note: 'Дата не та' },

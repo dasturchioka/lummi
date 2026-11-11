@@ -4,6 +4,7 @@ import {
   type OrderDto,
   type PaymentDto,
   type ReceiptFileKind,
+  type ReceiptState,
   type ReceiptSummaryDto,
   type ReceiptUploadError,
 } from '@lummi/contracts';
@@ -65,8 +66,25 @@ export interface ReceiptFile {
   inline: boolean;
 }
 
+/** The receipt's verdict as the shopper may know it: never whether a person or the AI checks it. */
+function stateOf(r: ReceiptRow): ReceiptState {
+  switch (r.verdict) {
+    case 'pending':
+    case 'manual_review':
+      return 'checking';
+    case 'ai_confirmed':
+    case 'manager_confirmed':
+      return 'accepted';
+    case 'rejected':
+      return 'rejected';
+    case 'payment_not_found':
+      return r.duplicateOf === null ? 'not_found' : 'repeat';
+  }
+}
+
 export const toReceiptSummary = (r: ReceiptRow): ReceiptSummaryDto => ({
   id: r.id,
+  state: stateOf(r),
   createdAt: r.createdAt.toISOString(),
   fileName: r.fileName,
   size: r.size,

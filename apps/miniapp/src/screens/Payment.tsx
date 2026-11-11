@@ -4,7 +4,7 @@ import {
   RECEIPT_ACCEPT,
   type ReceiptUploadError,
 } from '@lummi/contracts/constants';
-import { fill, formatDateTime, formatTime, plural } from '@lummi/i18n';
+import { fill, formatDateTime, formatDayMonth, formatTime, plural } from '@lummi/i18n';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -285,6 +285,37 @@ function NoCard() {
         </span>
         <span className="type-small mt-1 block text-pretty text-muted">
           {o.payment.unavailableText}
+        </span>
+      </span>
+    </Card>
+  );
+}
+
+/**
+ * Why the order waits for payment again (#36): its last receipt found no transfer in the wait
+ * window, or repeated another order's. The bot said so too, but not every shopper reads the bot.
+ */
+function LastReceiptNote({ receipt }: { receipt: ReceiptSummaryDto | undefined }) {
+  const { language } = usePrefs();
+  const o = useOrdersText();
+  if (receipt?.state !== 'not_found' && receipt?.state !== 'repeat') return null;
+  const repeat = receipt.state === 'repeat';
+  return (
+    <Card className="mb-4 flex items-start gap-3.5 p-4" data-testid="last-receipt-note">
+      <span className="grid size-12 shrink-0 place-items-center rounded-pill bg-block text-ink">
+        <AlertIcon size={22} />
+      </span>
+      <span className="min-w-0">
+        <span className="type-heading block text-pretty text-ink">
+          {repeat ? o.payment.repeatTitle : o.payment.noTransferTitle}
+        </span>
+        <span className="type-small mt-1 block text-pretty text-muted">
+          {repeat
+            ? o.payment.repeatText
+            : fill(o.payment.noTransferText, {
+                day: formatDayMonth(receipt.createdAt, language),
+                time: formatTime(receipt.createdAt),
+              })}
         </span>
       </span>
     </Card>
@@ -600,6 +631,7 @@ function PayStep({ payment }: { payment: PaymentDto }) {
   return (
     <Screen tabBar={false} dock={dock}>
       <Head order={order} />
+      <LastReceiptNote receipt={payment.receipts[0]} />
       {card ? (
         <>
           <Deadline

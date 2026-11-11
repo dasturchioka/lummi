@@ -549,20 +549,21 @@ describe('the one door', () => {
     const first = await placeOrder();
     const second = await placeOrder(vali, '998907654321');
     const file = await uniqueReceiptImage();
-    await sendReceipt(first.order, file);
-    const receiptId = await sendReceipt(second.order, file);
-    const creditId = await recordCredit(t, { som: second.order.amountDue });
+    const receiptId = await sendReceipt(first.order, file);
+    // the later copy takes the payment-not-found path at once (#36); the first waits for a person
+    await sendReceipt(second.order, file);
+    const creditId = await recordCredit(t, { som: first.order.amountDue });
 
     expect(
-      await confirm({ orderId: second.order.id, creditId, receiptId, actor: { type: 'ai' } }),
+      await confirm({ orderId: first.order.id, creditId, receiptId, actor: { type: 'ai' } }),
     ).toEqual({ kind: 'duplicate_receipt' });
-    expect(await orderNow(second.order.id)).toMatchObject({
+    expect(await orderNow(first.order.id)).toMatchObject({
       status: 'receipt_review',
       creditId: null,
     });
     const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
     expect(
-      (await confirm({ orderId: second.order.id, creditId, receiptId, actor: manager })).kind,
+      (await confirm({ orderId: first.order.id, creditId, receiptId, actor: manager })).kind,
     ).toBe('confirmed');
   });
 });

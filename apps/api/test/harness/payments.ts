@@ -26,6 +26,19 @@ export function creditText(opts: { som: number; tiyin?: number; at: Date; last4?
 
 let nextMessageId = 1;
 
+const internalClient = (t: TestApp) =>
+  initClient(internalContract, {
+    baseUrl: t.baseUrl,
+    baseHeaders: { 'x-internal-secret': TEST_INTERNAL_SECRET },
+    throwOnUnknownStatus: true,
+  });
+
+/** The userbot's heartbeat (ADR 0014), at the fake clock's now. */
+export async function userbotHeartbeat(t: TestApp): Promise<void> {
+  const res = await internalClient(t).userbotHeartbeat({ body: {} });
+  if (res.status !== 200) throw new Error(`heartbeat: ${res.status}`);
+}
+
 /**
  * A Credit recorded the way production records one: the userbot posts the Humo message to the
  * internal endpoint (ADR 0014), which queues the "credit recorded" event. `at` defaults to the
@@ -35,12 +48,7 @@ export async function recordCredit(
   t: TestApp,
   opts: { som: number; tiyin?: number; at?: Date; last4?: string; messageId?: number },
 ): Promise<number> {
-  const client = initClient(internalContract, {
-    baseUrl: t.baseUrl,
-    baseHeaders: { 'x-internal-secret': TEST_INTERNAL_SECRET },
-    throwOnUnknownStatus: true,
-  });
-  const res = await client.humoMessage({
+  const res = await internalClient(t).humoMessage({
     body: {
       messageId: opts.messageId ?? nextMessageId++,
       text: creditText({ ...opts, at: opts.at ?? t.edges.clock.now() }),

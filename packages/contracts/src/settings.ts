@@ -312,6 +312,26 @@ export const settingDefinitions = {
       uz: 'Xodim buyurtmaga boshqa summadagi yoki boshqa kartaga tushgan toʻlovni bogʻlaganda yozishi mumkin boʻlgan belgilar soni.',
     },
   },
+  /**
+   * The wait window (ADR 0012, #36): a receipt with no fitting credit this long after it was sent
+   * becomes «оплата не найдена», and its order goes back to «Ожидает оплаты» (cancelled if the
+   * reserve has ended). The time the Humo feed was paused does not count.
+   */
+  'payments.notFoundAfterSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(10 * 60)
+      .max(7 * 86_400),
+    default: 2 * 3600,
+    area: 'shop',
+    unit: 'seconds',
+    label: { ru: 'Сколько ждать перевод по чеку', uz: 'Chek boʻyicha oʻtkazmani qancha kutish' },
+    hint: {
+      ru: 'Если за это время на карту магазина не пришёл перевод на сумму заказа, покупатель получит «оплата не найдена» и сможет загрузить чек заново. Пока лента Humo не работает, время не идёт. 7 200 секунд = 2 часа.',
+      uz: 'Shu vaqt ichida doʻkon kartasiga buyurtma summasidagi oʻtkazma kelmasa, xaridor «toʻlov topilmadi» xabarini oladi va chekni qayta yuklay oladi. Humo lentasi ishlamayotganda vaqt hisoblanmaydi. 7 200 soniya = 2 soat.',
+    },
+  },
   /** How many 10 ml suggestions the cart's free-delivery thread offers (spec Changes 2026-11-10). */
   'cart.suggestionsLimit': {
     schema: z.number().int().min(0).max(12),
@@ -561,6 +581,62 @@ export const settingDefinitions = {
       system: { ru: 'Системные', uz: 'Tizim' },
     },
   },
+  /**
+   * The payment feed is down when the userbot's last heartbeat (it beats every minute) is older
+   * than this: receipt timers pause and the owner is alerted once (ADR 0012, #36).
+   */
+  'payments.heartbeatStaleSeconds': {
+    schema: z.number().int().min(120).max(3600),
+    default: 300,
+    area: 'system',
+    unit: 'seconds',
+    label: { ru: 'Юзербот молчит дольше', uz: 'Userbot jim turgan vaqt' },
+    hint: {
+      ru: 'Юзербот выходит на связь каждую минуту. Если его нет дольше этого срока, таймеры чеков встают на паузу и владелец получает предупреждение. Держите меньше времени ожидания перевода по чеку.',
+      uz: 'Userbot har daqiqada aloqaga chiqadi. Bundan uzoqroq aloqa boʻlmasa, cheklar taymerlari pauzaga qoʻyiladi va egasi ogohlantiriladi. Chek boʻyicha oʻtkazmani kutish vaqtidan kamroq qiling.',
+    },
+  },
+  /**
+   * Humo is silent when no credit has arrived for this long while receipts wait (TZ §4 «Humo
+   * молчит > 30 мин»): receipt timers pause and the owner is alerted once (ADR 0012, #36).
+   */
+  'payments.humoSilenceSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(5 * 60)
+      .max(86_400),
+    default: 30 * 60,
+    area: 'system',
+    unit: 'seconds',
+    label: { ru: 'Humo молчит дольше', uz: 'Humo jim turgan vaqt' },
+    hint: {
+      ru: 'Если чеки ждут, а поступлений от Humo нет дольше этого срока, таймеры чеков встают на паузу и владелец получает предупреждение. Держите меньше времени ожидания перевода по чеку, иначе сбой Humo может отменить оплаченный заказ. 1 800 секунд = 30 минут.',
+      uz: 'Cheklar kutib turgan, lekin Humo tushumlari bundan uzoqroq kelmasa, cheklar taymerlari pauzaga qoʻyiladi va egasi ogohlantiriladi. Chek boʻyicha oʻtkazmani kutish vaqtidan kamroq qiling, aks holda Humo nosozligi toʻlangan buyurtmani bekor qilishi mumkin. 1 800 soniya = 30 daqiqa.',
+    },
+  },
+  /**
+   * A receipt waiting (for its credit or for a person) longer than this alerts the owner, once per
+   * receipt (TZ §6 «Чек не проверен > 15 мин», #36).
+   */
+  'payments.uncheckedReceiptAlertSeconds': {
+    schema: z
+      .number()
+      .int()
+      .min(60)
+      .max(7 * 86_400),
+    default: 15 * 60,
+    area: 'system',
+    unit: 'seconds',
+    label: {
+      ru: 'Предупреждать о непроверенном чеке через',
+      uz: 'Tekshirilmagan chek haqida ogohlantirish',
+    },
+    hint: {
+      ru: 'Если чек ждёт поступления или решения менеджера дольше этого срока, владелец получит одно предупреждение об этом чеке. 900 секунд = 15 минут.',
+      uz: 'Chek tushumni yoki menejer qarorini bundan uzoqroq kutsa, egasi shu chek haqida bitta ogohlantirish oladi. 900 soniya = 15 daqiqa.',
+    },
+  },
   /** Telegram ids (owner, developer) who get alerts in DM as well as in the Системные topic. */
   'bot.alertRecipients': {
     schema: z.array(z.number().int().positive()),
@@ -659,6 +735,25 @@ export const settingDefinitions = {
     hint: {
       ru: 'От 0 до 1. Насколько ИИ должен быть уверен в выбранном времени.',
       uz: '0 dan 1 gacha. AI tanlangan vaqtga qanchalik ishonishi kerak.',
+    },
+  },
+  /**
+   * A receipt is a repeat of another order's when its image's 64-bit perceptual hash (#28) differs
+   * in at most this many bits (#36); null compares whole files (SHA-256) only. Off by default: the
+   * hash is too coarse to tell two receipts of one bank app apart (spec Changes 2026-11-11, #36).
+   */
+  'receipts.duplicateImageDistance': {
+    schema: z.number().int().min(0).max(16).nullable(),
+    default: null,
+    area: 'ai',
+    unit: 'count',
+    label: {
+      ru: 'Повторный чек по похожему изображению',
+      uz: 'Oʻxshash rasm boʻyicha takroriy chek',
+    },
+    hint: {
+      ru: 'Пусто — повторным считается только тот же файл. Число от 0 до 16 — ещё и картинка, отличающаяся от чека другого заказа не больше чем на столько бит из 64. Включение в течение минуты проверит и чеки, которые уже ждут. Осторожно: чеки одного банковского приложения похожи между собой, и честный чек может уйти в «оплата не найдена».',
+      uz: 'Boʻsh — faqat aynan oʻsha fayl takroriy hisoblanadi. 0 dan 16 gacha son — boshqa buyurtma chekidan 64 bitdan koʻpi bilan shuncha bitga farq qiladigan rasm ham. Yoqilgach, bir daqiqa ichida kutayotgan cheklar ham tekshiriladi. Ehtiyot boʻling: bitta bank ilovasining cheklari bir-biriga oʻxshaydi va halol chek «toʻlov topilmadi»ga tushishi mumkin.',
     },
   },
   /** Per-call timeouts; on expiry TypeSafe falls back to OpenAI, OpenAI means "failed". */
