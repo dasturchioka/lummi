@@ -1,14 +1,17 @@
 import { eq, errorEvents, outbox, settings as settingsTable, workerHeartbeat } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { BackupWatch } from '../src/ops/backup-watch.service';
+import { OpsNotifier } from '../src/ops/ops-notifier.service';
 import { ErrorTracker } from '../src/ops/error-tracker.service';
 import { WorkerWatch } from '../src/ops/worker-watch.service';
 import { SettingsService } from '../src/settings/settings.service';
-import { createTestApp, type TestApp } from './harness/test-app';
+import { TEST_INTERNAL_SECRET, createTestApp, type TestApp } from './harness/test-app';
 
 let t: TestApp;
 let tracker: ErrorTracker;
 let watch: WorkerWatch;
 let settings: SettingsService;
+let backups: BackupWatch;
 const DEV = 4242;
 const OWNER = 11;
 const MIN = 60_000;
@@ -18,6 +21,7 @@ beforeAll(async () => {
   tracker = t.app.get(ErrorTracker);
   watch = t.app.get(WorkerWatch);
   settings = t.app.get(SettingsService);
+  backups = t.app.get(BackupWatch);
 });
 afterAll(() => t.close());
 beforeEach(async () => {
@@ -58,6 +62,14 @@ describe('error tracking', () => {
       await t.db.select().from(outbox),
     ]);
     expect(dump).not.toMatch(/998901234567|Amir Temur|Ali/);
+  });
+
+  it('pings once when the same new error is recorded many times at once', async () => {
+    await Promise.all(Array.from({ length: 12 }, () => tracker.record(failing('x'), 'GET /race')));
+    const rows = await t.db.select().from(errorEvents);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.count).toBe(12);
+    expect(await t.db.select().from(outbox)).toHaveLength(1);
   });
 
   it('records quietly while no developer chat is set', async () => {
@@ -125,7 +137,7 @@ describe('worker heartbeat watch', () => {
   });
 
   it('the silence limit is a setting', async () => {
-    await settings.set('ops.workerSilentMinutes', 10, { type: 'system' });
+    await settings.set('ops.workerSilentSeconds', 600, { type: 'system' });
     await watch.beat();
     t.edges.clock.advance(9 * MIN);
     await watch.check();
@@ -148,10 +160,106 @@ describe('worker heartbeat watch', () => {
     expect(row!.outageAlertedAt).not.toBeNull();
   });
 
+  it('an API restart during an outage never reports a recovery while the worker is dead', async () => {
+    await watch.beat();
+    t.edges.clock.advance(4 * MIN);
+    await watch.check();
+    expect(t.edges.telegram.sent).toHaveLength(2);
+
+    // the API restarts: a new instance, a fresh start time, the worker still silent
+    const restarted = new WorkerWatch(t.db, t.edges, settings, t.app.get(OpsNotifier));
+    t.edges.clock.advance(MIN);
+    await restarted.check();
+    t.edges.clock.advance(10 * MIN);
+    await restarted.check();
+    expect(t.edges.telegram.sent).toHaveLength(2); // no «снова работает», and no second alarm
+
+    await watch.beat();
+    await restarted.check();
+    expect(t.edges.telegram.sent).toHaveLength(4);
+    expect(t.edges.telegram.sent[3]!.text).toContain('снова работает');
+  });
+
+  it('a slow Telegram never blocks the worker beat (no lock held while sending)', async () => {
+    await watch.beat();
+    t.edges.clock.advance(4 * MIN);
+    const send = t.edges.telegram.send.bind(t.edges.telegram);
+    t.edges.telegram.send = async (m) => {
+      await new Promise((r) => setTimeout(r, 800));
+      return send(m);
+    };
+    try {
+      const looking = watch.check();
+      await new Promise((r) => setTimeout(r, 150)); // the claim is committed, the sends are in flight
+      const started = Date.now();
+      await watch.beat();
+      expect(Date.now() - started).toBeLessThan(400);
+      await looking;
+      expect(t.edges.telegram.sent).toHaveLength(2);
+    } finally {
+      t.edges.telegram.send = send;
+    }
+  });
+
+  it('two looks at the same time alert once', async () => {
+    await watch.beat();
+    t.edges.clock.advance(4 * MIN);
+    await Promise.all([watch.check(), watch.check()]);
+    expect(t.edges.telegram.sent).toHaveLength(2);
+  });
+
   it('the worker tick writes the beat', async () => {
     const worker = t.startWorker();
     await worker.tick();
     const [row] = await t.db.select().from(workerHeartbeat);
     expect(row!.seenAt).toEqual(t.edges.clock.now());
+  });
+});
+
+describe('backup watch', () => {
+  const HOUR = 3_600_000;
+
+  it('stays quiet while reports keep coming', async () => {
+    await backups.report([]);
+    t.edges.clock.advance(20 * HOUR);
+    await backups.check();
+    expect(t.edges.telegram.sent).toHaveLength(0);
+  });
+
+  it('alerts once when no report comes for longer than the setting, and again only after a new gap', async () => {
+    await backups.report([]);
+    t.edges.clock.advance(27 * HOUR);
+    await backups.check();
+    await backups.check();
+    expect(t.edges.telegram.sent).toHaveLength(2); // owner + developer
+    expect(t.edges.telegram.sent[0]!.text).toContain('Бэкап');
+
+    await backups.report([]); // the gap ends
+    t.edges.clock.advance(27 * HOUR);
+    await backups.check();
+    expect(t.edges.telegram.sent).toHaveLength(4);
+  });
+
+  it('alerts a skipped step at most once a day', async () => {
+    await backups.report(['second-copy']);
+    await backups.report(['second-copy']);
+    expect(t.edges.telegram.sent).toHaveLength(2);
+    expect(t.edges.telegram.sent[0]!.text).toContain('second-copy');
+    t.edges.clock.advance(25 * HOUR);
+    await backups.report(['second-copy']);
+    expect(t.edges.telegram.sent).toHaveLength(4);
+  });
+
+  it('takes the report over the internal endpoint, and refuses it without the secret', async () => {
+    const url = `${t.baseUrl}/internal/backup/report`;
+    const body = JSON.stringify({ skipped: [] });
+    const headers = { 'content-type': 'application/json' };
+    expect((await fetch(url, { method: 'POST', headers, body })).status).toBe(401);
+    const ok = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, 'x-internal-secret': TEST_INTERNAL_SECRET },
+      body,
+    });
+    expect(ok.status).toBe(200);
   });
 });

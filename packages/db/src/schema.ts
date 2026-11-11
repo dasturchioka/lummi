@@ -1503,6 +1503,21 @@ export const errorEvents = pgTable(
   (t) => [uniqueIndex('error_events_fingerprint_key').on(t.fingerprint)],
 );
 
+/** What the backup script last reported, one row (ADR 0035): the API alerts when `last_success_at` gets too old. */
+export const backupStatus = pgTable(
+  'backup_status',
+  {
+    /** Always true: the primary key that keeps this table to one row. */
+    id: boolean('id').primaryKey().default(true),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    /** Set when the "no backup" alert went out, cleared by the next report: one alert per gap. */
+    staleAlertedAt: timestamp('stale_alerted_at', { withTimezone: true }),
+    /** When skipped steps were last alerted: at most once a day. */
+    skipAlertedAt: timestamp('skip_alerted_at', { withTimezone: true }),
+  },
+  (t) => [check('backup_status_one_row', sql`${t.id}`)],
+);
+
 /**
  * The worker's last tick, one row, written by the worker and read by the API's watch (ADR 0035).
  * `outage_alerted_at` is set when the "worker is silent" alert went out and cleared on recovery,

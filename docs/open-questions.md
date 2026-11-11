@@ -125,4 +125,4 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Second backup location inside Uzbekistan** (ADR 0025): the customer names it (a second PRO-DATA storage or a small Uzbek VPS, his cost). Until then `BACKUP_RSYNC_TARGET` stays empty and only the VPS holds backups.
 - **The owner's age key pair.** The owner (or Sardor with him) generates it on his own computer and sends only the public `age1...` line; the private file is kept offline in two places. Confirm who holds it and that he has tested a decrypt.
 - **Developer's Telegram id** for `ops.developerChatId`, and the account for the external uptime monitor (customer's or ours).
-- **Receipts in the second copy** go over ssh unencrypted by `age` (they are files, rsynced as they are). Confirm the target's access control is acceptable, or ask for an encrypted archive of `media/` instead.
+- **Second location setup.** It needs a user for the VPS with the restricted `rrsync` keys (or the rotation script), and a cron for `offsite-rotate.sh`; receipts there are `age`-encrypted per file, the public photos are plain.

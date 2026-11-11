@@ -12,6 +12,7 @@ import { PinoLogger } from './logging/pino-logger';
 import { parseEnv } from './env';
 import { seedContent } from './content/seed';
 import { CampaignsService } from './campaigns/campaigns.service';
+import { BackupWatch } from './ops/backup-watch.service';
 import { WorkerWatch } from './ops/worker-watch.service';
 import { syncSearchIndex } from './search/search-index';
 
@@ -40,6 +41,7 @@ const linked = await app.get(CampaignsService).backfillPromoLinks();
 if (linked > 0) log.log(`campaign links: made ${linked} for existing promo codes`, 'Main');
 await app.get(BotService).start();
 app.get(WorkerWatch).start();
+app.get(BackupWatch).start();
 await app.listen(env.API_PORT, env.API_HOST);
 log.log(`API listening on http://${env.API_HOST}:${env.API_PORT}`, 'Main');
 process.on('SIGTERM', () => void pool.end());

@@ -50,15 +50,31 @@ export function errorClassOf(e: unknown): string {
 }
 
 /**
+ * The stack without its header. The header is `Name: message`, and the message may span lines and
+ * contain text that looks like a frame (`\n    at X (y:1:1)`): user input must never become a
+ * frame. The header is cut by the message itself; when the stack does not contain it (the message
+ * was changed after the throw) nothing can be trusted and no frames are taken.
+ */
+function stackBody(error: Error): string | null {
+  const stack = error.stack;
+  if (!stack) return null;
+  const message = error.message;
+  if (message === '') return stack.slice(stack.indexOf('\n') + 1);
+  const at = stack.indexOf(message);
+  return at === -1 ? null : stack.slice(at + message.length);
+}
+
+/**
  * The first application frames as `function file.ts`: no line numbers (they move with every
- * deploy), no node_modules, no node internals, and never the stack's first line (the message).
+ * deploy), no node_modules, no node internals, and nothing from the message.
  */
 export function framesOf(e: unknown): string {
-  const stack = findQueryError(e)?.stack ?? (e instanceof Error ? e.stack : undefined);
-  if (!stack) return '';
+  const source = findQueryError(e) ?? (e instanceof Error ? e : null);
+  const body = source ? stackBody(source) : null;
+  if (!body) return '';
   const frames: string[] = [];
-  for (const line of stack.split('\n')) {
-    const m = /^\s+at (?:async )?(?:(.+?) \()?(.+?):\d+:\d+\)?$/.exec(line);
+  for (const line of body.split('\n')) {
+    const m = /^ {4}at (?:async )?(?:(.+?) \()?(.+?):\d+:\d+\)?$/.exec(line);
     if (!m) continue;
     const [, fn, file] = m;
     if (!file || file.includes('node_modules') || file.startsWith('node:')) continue;

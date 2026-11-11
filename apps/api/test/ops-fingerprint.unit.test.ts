@@ -40,6 +40,25 @@ describe('signError', () => {
     expect(sig.frames).not.toMatch(/:\d+/); // no line numbers
   });
 
+  it('takes no frame, no personal data and no new fingerprint from a message that looks like a stack', () => {
+    const plain = signError(thrower('boom'), 'GET /x');
+    const forged = signError(
+      thrower(
+        'Ali 998901234567\n    at stealPhone (/srv/Amir-Temur-1.ts:1:1)\n    at x (/y.ts:2:2)',
+      ),
+      'GET /x',
+    );
+    expect(forged.frames).toBe(plain.frames);
+    expect(forged.fingerprint).toBe(plain.fingerprint);
+    expect(JSON.stringify(forged)).not.toMatch(/stealPhone|Amir|998901234567/);
+  });
+
+  it('ignores a frame-like message set after the throw', () => {
+    const e = thrower('first');
+    e.message = 'changed\n    at evil (/z.ts:1:1)';
+    expect(signError(e, 'GET /x').frames).not.toContain('evil');
+  });
+
   it('files a non-error thrown value without crashing', () => {
     expect(errorClassOf('boom')).toBe('NonError');
     expect(signError(undefined, 'worker:tick').frames).toBe('');

@@ -183,6 +183,13 @@
       "when": 1794362996065,
       "tag": "0025_upgrade_rights",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794363608243,
+      "tag": "0026_ops_monitoring",
+      "breakpoints": true
     }
   ]
 }

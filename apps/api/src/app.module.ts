@@ -95,6 +95,9 @@ export interface AppDeps {
 }
 
 import { ErrorTracker } from './ops/error-tracker.service';
+import { BackupWatch } from './ops/backup-watch.service';
+import { OpsNotifier } from './ops/ops-notifier.service';
+import { OpsController } from './ops/ops.controller';
 import { WorkerWatch } from './ops/worker-watch.service';
 
 @Module({})
@@ -132,6 +135,7 @@ export class AppModule {
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
+        OpsController,
         BroadcastController,
         PromoAdminController,
         AdminOrdersController,
@@ -197,7 +201,9 @@ export class AppModule {
         BirthdayService,
         BirthdayCouponJob,
         ErrorTracker,
+        OpsNotifier,
         WorkerWatch,
+        BackupWatch,
       ],
       exports: [
         CreditEvents,

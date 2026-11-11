@@ -992,19 +992,31 @@ export const settingDefinitions = {
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
     },
   },
-  /** Minutes without a worker tick before the API alerts (ADR 0035). */
-  'ops.workerSilentMinutes': {
-    schema: z.number().int().min(2).max(60),
-    default: 3,
+  /** Seconds without a worker tick before the API alerts (ADR 0035). */
+  'ops.workerSilentSeconds': {
+    schema: z.number().int().min(60).max(3600),
+    default: 180,
     area: 'worker',
-    unit: 'count',
+    unit: 'seconds',
     label: {
-      ru: 'Минут тишины фонового сервиса до тревоги',
-      uz: 'Fon xizmati jim turganda ogohlantirish (daqiqa)',
+      ru: 'Тишина фонового сервиса до тревоги',
+      uz: 'Fon xizmati jim turganda ogohlantirish',
     },
     hint: {
       ru: 'Фоновый сервис отмечается каждую минуту. Если его нет дольше этого срока, владелец и разработчик получают сообщение один раз, и ещё одно, когда сервис вернётся.',
       uz: 'Fon xizmati har daqiqada belgi qoldiradi. Bundan uzoq jim tursa, egasi va dasturchi bir marta xabar oladi, xizmat qaytganda yana bir marta.',
+    },
+  },
+  /** Seconds without a successful backup report before the API alerts (ADR 0035): 26 h covers a daily run plus slack. */
+  'ops.backupStaleSeconds': {
+    schema: z.number().int().min(3600).max(604_800),
+    default: 93_600,
+    area: 'system',
+    unit: 'seconds',
+    label: { ru: 'Бэкапа нет дольше', uz: 'Zaxira nusxasi boʻlmagan muddat' },
+    hint: {
+      ru: 'Бэкап отчитывается раз в сутки. Если отчёта нет дольше этого срока, владелец и разработчик получают сообщение один раз.',
+      uz: 'Zaxira nusxasi kuniga bir marta hisobot beradi. Hisobot bundan uzoq boʻlmasa, egasi va dasturchi bir marta xabar oladi.',
     },
   },
   /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0035). Null = nobody. */
