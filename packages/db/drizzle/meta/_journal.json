@@ -148,6 +148,13 @@
       "when": 1794352109739,
       "tag": "0020_campaign_links",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794354974552,
+      "tag": "0021_payment_pauses",
+      "breakpoints": true
     }
   ]
 }

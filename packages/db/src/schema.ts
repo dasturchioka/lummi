@@ -25,6 +25,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 /** Internal keys are `bigint identity` (ADR 0016); money columns elsewhere are `integer` so'm. */
@@ -276,6 +277,36 @@ export const userbotHeartbeat = pgTable(
   },
   (t) => [check('userbot_heartbeat_one_row', sql`${t.id}`)],
 );
+
+/**
+ * What paused the payment feed (ADR 0012, #36): the userbot's heartbeat went stale (or never
+ * came), or no Humo credit arrived for too long while receipts waited.
+ */
+export const paymentPauseCauseEnum = pgEnum('payment_pause_cause', ['heartbeat', 'silence']);
+
+/**
+ * One outage of the payment feed (ADR 0012, #36). While a pause is open, no receipt gets
+ * «оплата не найдена»; afterwards each receipt's wait window and its order's reserve are extended
+ * by the part of every pause after the receipt was sent. The row is also the marker of the owner's
+ * alerts: opening it alerts once, closing it alerts the recovery. At most one is open.
+ */
+export const paymentPauses = pgTable(
+  'payment_pauses',
+  {
+    id: id(),
+    cause: paymentPauseCauseEnum('cause').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    /** Null while the pause lasts. */
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('payment_pauses_one_open_idx')
+      .on(sql`(${t.endedAt} is null)`)
+      .where(sql`${t.endedAt} is null`),
+    check('payment_pauses_ends_after_start', sql`${t.endedAt} >= ${t.startedAt}`),
+  ],
+);
+export type PaymentPauseRow = typeof paymentPauses.$inferSelect;
 
 /*
  * Catalog (ADR 0018): translatable text is a pair of NOT NULL columns, names of fragrances and
@@ -881,7 +912,10 @@ export const receipts = pgTable(
       .references(() => orders.id),
     source: receiptSourceEnum('source').notNull(),
     verdict: receiptVerdictEnum('verdict').notNull().default('pending'),
-    /** Why it last went to manual review; null until it did. */
+    /**
+     * Why it last went to manual review; null until it did. A repeat decided at once (#36) keeps
+     * `duplicate` too, the «Повторный чек» tag.
+     */
     reviewReason: receiptReviewReasonEnum('review_reason'),
     /** The name the shopper's device gave the file, if any. */
     fileName: text('file_name'),
@@ -894,6 +928,18 @@ export const receipts = pgTable(
     height: integer('height').notNull(),
     sha256: text('sha256').notNull(),
     phash: text('phash').notNull(),
+    /**
+     * The receipt this one repeats (the same file, or a look-alike image, accepted or sent earlier
+     * for another order): set when the repeat took the payment-not-found path at once (#36).
+     */
+    duplicateOf: bigint('duplicate_of', { mode: 'number' }).references(
+      (): AnyPgColumn => receipts.id,
+    ),
+    /**
+     * When the owner was alerted that this receipt waited longer than the setting
+     * `payments.uncheckedReceiptAlertSeconds` (#36); the marker that keeps it to one alert.
+     */
+    uncheckedAlertAt: timestamp('unchecked_alert_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (t) => [
