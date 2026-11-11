@@ -166,8 +166,6 @@ export const miniappMessages = defineMessages(
       inStock: 'В наличии',
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
-      /** The customer's upgrade right on the chosen full-size volume (TZ §3.4 «Скидка за набор»). */
-      rightDeal: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
       notes: { top: 'Верх', heart: 'Сердце', base: 'База' },
       uzum: 'Купить на Uzum',
       toCart: 'В корзину',
@@ -464,10 +462,6 @@ export const miniappMessages = defineMessages(
       inStock: 'Sotuvda bor',
       unavailable: 'Sotuvda yoʻq',
       saleUntil: '{date}',
-      rightDeal: {
-        set: 'Toʻplam chegirmasi −{percent}%',
-        single_10ml: '10 ml uchun chegirma −{percent}%',
-      },
       notes: { top: 'Yuqori', heart: 'Yurak', base: 'Baza' },
       uzum: 'Uzum’da sotib olish',
       toCart: 'Savatga',

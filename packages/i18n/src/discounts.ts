@@ -64,6 +64,8 @@ export const discountsMessages = defineMessages(
           'Скидка −{percent}% за флакон 10 мл не суммируется с промокодом и ждёт вас до {date}.',
       },
       useRight: 'Применить скидку',
+      /** The fragrance card: the customer's right on the chosen full-size volume (TZ §3.4). */
+      cardDeal: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
       /** An open upgrade right (TZ §3.4: «видна в профиле»). */
       right: { set: 'Скидка за набор', single_10ml: 'Скидка за флакон 10 мл' },
       rightTerms: {
@@ -121,6 +123,10 @@ export const discountsMessages = defineMessages(
           '10 ml flakon uchun −{percent}% chegirma promokod bilan qoʻshilmaydi va {date}gacha sizni kutadi.',
       },
       useRight: 'Chegirmani qoʻllash',
+      cardDeal: {
+        set: 'Toʻplam chegirmasi −{percent}%',
+        single_10ml: '10 ml uchun chegirma −{percent}%',
+      },
       right: { set: 'Toʻplam chegirmasi', single_10ml: '10 ml flakon chegirmasi' },
       rightTerms: {
         set: 'Toʻplamdagi istalgan iforning bitta toʻliq flakoniga. Savatda oʻzi qoʻllanadi.',

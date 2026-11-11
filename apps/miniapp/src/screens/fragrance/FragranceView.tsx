@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { keepNumberWithWord } from '../../lib/format';
 import { photoSrcSet, photoUrl } from '../../lib/media';
 import { photoHeight } from '../../lib/photo-widths';
+import { useDiscountsText } from '../../discounts/queries';
 import { usePrefs } from '../../lib/prefs';
 import { openExternal } from '../../lib/share';
 import { FragranceBadge } from '../../ui/Badge';
@@ -232,7 +233,8 @@ function Pyramid({ card }: { card: FragranceCard }) {
  * the right. The price itself is on the tile; the cart applies the right by itself.
  */
 function RightDeal({ right }: { right: UpgradeRightPrice }) {
-  const { t, language } = usePrefs();
+  const { language } = usePrefs();
+  const d = useDiscountsText();
   const day = formatCalendarDate(right.lastDay, language);
   return (
     <p
@@ -240,11 +242,9 @@ function RightDeal({ right }: { right: UpgradeRightPrice }) {
       className="type-small flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 rounded-btn bg-sage-wash px-3.5 py-2.5 text-sage-ink"
     >
       <span className="font-semibold">
-        {fill(t.card.rightDeal[right.source], { percent: String(right.percent) })}
+        {fill(d.cardDeal[right.source], { percent: String(right.percent) })}
       </span>
-      <span className="whitespace-nowrap">
-        {fill(t.card.saleUntil, { date: language === 'uz' ? `${day}gacha` : day })}
-      </span>
+      <span className="whitespace-nowrap">{fill(d.until, { date: day })}</span>
     </p>
   );
 }
