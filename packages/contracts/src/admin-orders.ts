@@ -3,7 +3,7 @@ import { auditEntrySchema, tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
 import { bilingualSchema } from './catalog';
 import { ORDER_ACTIONS, ORDER_ACTOR_TYPES } from './order-machine';
-import { transitionPayloadSchemas } from './order-transition-payloads';
+import { rejectReceiptChoiceSchema, transitionPayloadSchemas } from './order-transition-payloads';
 import { orderSchema, orderStatusSchema } from './orders';
 import { RECEIPT_FILE_KINDS } from './receipt-upload';
 import {
@@ -304,11 +304,11 @@ export const staffCancelBodySchema = transitionPayloadSchemas.cancel.extend({ ex
 export type StaffCancelBody = z.input<typeof staffCancelBodySchema>;
 
 /**
- * `POST /admin/orders/:number/reject-receipt`: the `reject_receipt` payload itself, the receipt the
- * manager looked at, a preset reason and a note (required for `other`; its working limit is the
- * setting `receipts.rejectNoteMaxLength`).
+ * `POST /admin/orders/:number/reject-receipt`: the manager's part of the `reject_receipt` payload,
+ * the receipt they looked at, a preset reason and a note (required for `other`; its working limit
+ * is the setting `receipts.rejectNoteMaxLength`). The server adds the paused time (#36).
  */
-export const rejectReceiptBodySchema = transitionPayloadSchemas.reject_receipt;
+export const rejectReceiptBodySchema = rejectReceiptChoiceSchema;
 export type RejectReceiptBody = z.input<typeof rejectReceiptBodySchema>;
 
 /**

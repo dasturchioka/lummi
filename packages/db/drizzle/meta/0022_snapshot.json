@@ -1,5 +1,5 @@
 {
-  "id": "fd16c5a7-4f0d-4b2d-ab0b-5add5490b653",
+  "id": "7dbc3a7d-52ca-4057-9663-098047c798e2",
   "prevId": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "version": "7",
   "dialect": "postgresql",
@@ -2414,247 +2414,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.order_card_prompts": {
-      "name": "order_card_prompts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "order_card_prompts_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "staff_id": {
-          "name": "staff_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expected_status": {
-          "name": "expected_status",
-          "type": "order_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outbox_id": {
-          "name": "outbox_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "order_card_prompts_order_idx": {
-          "name": "order_card_prompts_order_idx",
-          "columns": [
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "order_card_prompts_order_id_orders_id_fk": {
-          "name": "order_card_prompts_order_id_orders_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_card_prompts_staff_id_staff_id_fk": {
-          "name": "order_card_prompts_staff_id_staff_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "staff",
-          "columnsFrom": [
-            "staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_card_prompts_outbox_id_outbox_id_fk": {
-          "name": "order_card_prompts_outbox_id_outbox_id_fk",
-          "tableFrom": "order_card_prompts",
-          "tableTo": "outbox",
-          "columnsFrom": [
-            "outbox_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "order_card_prompts_outbox_id_unique": {
-          "name": "order_card_prompts_outbox_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "outbox_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.order_cards": {
-      "name": "order_cards",
-      "schema": "",
-      "columns": {
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_id": {
-          "name": "receipt_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_posted_at": {
-          "name": "receipt_posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "panel": {
-          "name": "panel",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{\"kind\":\"steps\"}'::jsonb"
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "shown_hash": {
-          "name": "shown_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "syncing_at": {
-          "name": "syncing_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "order_cards_order_id_orders_id_fk": {
-          "name": "order_cards_order_id_orders_id_fk",
-          "tableFrom": "order_cards",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "order_cards_receipt_id_receipts_id_fk": {
-          "name": "order_cards_receipt_id_receipts_id_fk",
-          "tableFrom": "order_cards",
-          "tableTo": "receipts",
-          "columnsFrom": [
-            "receipt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.order_events": {
       "name": "order_events",
       "schema": "",
@@ -3471,20 +3230,6 @@
             "cycle": false
           }
         },
-        "kind": {
-          "name": "kind",
-          "type": "outbox_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'message'"
-        },
-        "ref": {
-          "name": "ref",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "chat_id": {
           "name": "chat_id",
           "type": "bigint",
@@ -3576,10 +3321,82 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.payment_pauses": {
+      "name": "payment_pauses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "payment_pauses_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "cause": {
+          "name": "cause",
+          "type": "payment_pause_cause",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "announced_at": {
+          "name": "announced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "payment_pauses_one_open_idx": {
+          "name": "payment_pauses_one_open_idx",
+          "columns": [
+            {
+              "expression": "(\"ended_at\" is null)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payment_pauses\".\"ended_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
       "checkConstraints": {
-        "outbox_task_ref": {
-          "name": "outbox_task_ref",
-          "value": "(\"outbox\".\"kind\" = 'message') = (\"outbox\".\"ref\" is null)"
+        "payment_pauses_ends_after_start": {
+          "name": "payment_pauses_ends_after_start",
+          "value": "\"payment_pauses\".\"ended_at\" >= \"payment_pauses\".\"started_at\""
         }
       },
       "isRLSEnabled": false
@@ -4220,6 +4037,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "duplicate_of": {
+          "name": "duplicate_of",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unchecked_alert_at": {
+          "name": "unchecked_alert_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4304,6 +4133,19 @@
           "tableTo": "orders",
           "columnsFrom": [
             "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "receipts_duplicate_of_receipts_id_fk": {
+          "name": "receipts_duplicate_of_receipts_id_fk",
+          "tableFrom": "receipts",
+          "tableTo": "receipts",
+          "columnsFrom": [
+            "duplicate_of"
           ],
           "columnsTo": [
             "id"
@@ -5116,12 +4958,12 @@
         "cancelled"
       ]
     },
-    "public.outbox_kind": {
-      "name": "outbox_kind",
+    "public.payment_pause_cause": {
+      "name": "payment_pause_cause",
       "schema": "public",
       "values": [
-        "message",
-        "order_card"
+        "heartbeat",
+        "silence"
       ]
     },
     "public.promo_kind": {
