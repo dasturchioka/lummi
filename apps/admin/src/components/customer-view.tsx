@@ -68,7 +68,7 @@ export function CustomerView({
         actions={customer.botBlocked ? <BlockedBadge t={t} /> : undefined}
       />
       <Card className="mb-6 p-4 sm:p-6">
-        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
           {facts.map(([label, value]) => (
             <div key={label} className="min-w-0">
               <dt className="text-small text-muted-foreground">{label}</dt>
