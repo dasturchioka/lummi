@@ -739,14 +739,19 @@ type EventRow = AdminOrderEventDto & {
   returnLines?: NonNullable<AdminOrderDto['returned']>['lines'];
 };
 
-/** A return's recorded flags (`order_events.payload.lines`), as `transition()` wrote them. */
+/**
+ * A return's recorded flags (`order_events.payload.lines`, as `transition()` wrote them, in the
+ * order staff sent them), by position: the order of `order.lines`.
+ */
 function returnLinesOf(raw: unknown): NonNullable<AdminOrderDto['returned']>['lines'] {
   if (!Array.isArray(raw)) throw new Error('a return without its line flags');
-  return raw.map((l: { position?: unknown; backToStock?: unknown }) => {
-    if (typeof l.position !== 'number' || typeof l.backToStock !== 'boolean')
-      throw new Error('a return line flag of another shape');
-    return { position: l.position, backToStock: l.backToStock };
-  });
+  return raw
+    .map((l: { position?: unknown; backToStock?: unknown }) => {
+      if (typeof l.position !== 'number' || typeof l.backToStock !== 'boolean')
+        throw new Error('a return line flag of another shape');
+      return { position: l.position, backToStock: l.backToStock };
+    })
+    .sort((a, b) => a.position - b.position);
 }
 
 /** The Return of a «Возвращён» order, from its history: who, when, why, which lines went back. */

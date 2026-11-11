@@ -7,6 +7,7 @@ import {
   and,
   asc,
   auditLog,
+  birthdayCoupons,
   btsPoints,
   eq,
   fragrances,
@@ -18,6 +19,7 @@ import {
   volumes,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import { ReceiptsService } from '../src/receipts/receipts.service';
@@ -589,6 +591,19 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
     ]);
   });
 
+  it('the page lists the flags in the order of the lines, whatever order they were sent in', async () => {
+    const { number } = await deliveredMix();
+    const { client } = await t.managerSession();
+    const lines = await linesOfPage(client, number);
+    const flags = lines.map((l) => ({ position: l.position, backToStock: l.kind === 'volume' }));
+    const res = await client.admin.orders.return({
+      params: { number },
+      body: { expectedStatus: 'delivered', reason: 'Вернули', lines: [...flags].reverse() },
+    });
+    expect(res.status).toBe(200);
+    expect(res.status === 200 && res.body.returned?.lines).toEqual(flags);
+  });
+
   it('a builder set flagged back puts one 10 ml of each of its five back; the rest stays', async () => {
     const { number, bottleVolume, builderVolumes } = await deliveredMix();
     const { client } = await t.managerSession();
@@ -805,6 +820,62 @@ describe('a Return releases the order’s discount source and closes the rights 
     });
     expect((await returnWhole(owner.client, number)).status).toBe(200);
     expect(await code()).toMatchObject({ uses: 0, state: 'active' });
+  });
+
+  /**
+   * Ali, born 1 December, entered on 9 November: his coupon comes at 10:00 on 28 November and runs
+   * through 8 December (the settings' 3 days before, 7 after). He orders a 50 ml bottle with it
+   * that day, and it is delivered.
+   */
+  async function couponOrder() {
+    const client = await shopper(t, ali, '998901112233');
+    expect(
+      (await client.me.setBirthDate({ body: { birthDate: '1990-12-01', consent: true } })).status,
+    ).toBe(200);
+    t.edges.clock.set(new Date('2026-11-28T05:00:00Z'));
+    await t.app.get(BirthdayCouponJob).run();
+    t.edges.clock.set(new Date('2026-11-28T06:00:00Z'));
+    const { client: later } = await t.signIn(ali);
+    const [a] = await slugs(t, 1);
+    await later.cart.addLine({ body: { slug: a!, ml: 50, qty: 1 } });
+    const number = await placeOrder(later);
+    expect((await orderRow(number)).discount).toMatchObject({ type: 'birthday_coupon' });
+    await fulfilTo(number, 'delivered');
+    const coupons = async () => {
+      const res = await (await t.signIn(ali)).client.me.discounts();
+      if (res.status !== 200) throw new Error(`discounts ${res.status}`);
+      return res.body.birthdayCoupons.length;
+    };
+    return { number, coupons };
+  }
+
+  it('a birthday coupon comes back within its term', async () => {
+    const { number, coupons } = await couponOrder();
+    const { client: staff } = await t.managerSession();
+    expect((await preview(staff, number))?.discount).toEqual({
+      type: 'birthday_coupon',
+      comesBack: true,
+      lastDay: '2026-12-08',
+    });
+    expect(await coupons()).toBe(0);
+    expect((await returnWhole(staff, number)).status).toBe(200);
+    expect(await coupons()).toBe(1);
+  });
+
+  it('a birthday coupon past its term is lost: it stays with the returned order', async () => {
+    const { number, coupons } = await couponOrder();
+    // 00:00 on 9 December in Tashkent: the coupon's last day is over
+    t.edges.clock.set(new Date('2026-12-08T19:00:00Z'));
+    const { client: staff } = await t.managerSession();
+    expect((await preview(staff, number))?.discount).toEqual({
+      type: 'birthday_coupon',
+      comesBack: false,
+      lastDay: '2026-12-08',
+    });
+    expect((await returnWhole(staff, number)).status).toBe(200);
+    const [coupon] = await t.db.select().from(birthdayCoupons);
+    expect(coupon?.usedByOrderId).toBe((await orderRow(number)).id);
+    expect(await coupons()).toBe(0);
   });
 
   it('a returned set order closes its rights; the order that spent one keeps its discount', async () => {
