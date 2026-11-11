@@ -52,6 +52,17 @@ export function formatDayMonth(instant: Date | string, language: Language): stri
   return language === 'uz' ? `${day}-${name}` : `${day} ${name}`;
 }
 
+/**
+ * A calendar day written `YYYY-MM-DD` (a date, not an instant: a birthday, a coupon's first day):
+ * `14 марта` / `14-mart`, with the year `14 марта 1996` / `1996-yil 14-mart`.
+ */
+export function formatCalendarDate(iso: string, language: Language, withYear = false): string {
+  const [year, month, day] = iso.split('-').map(Number) as [number, number, number];
+  const name = MONTHS[language][month - 1] ?? '';
+  if (language === 'uz') return withYear ? `${year}-yil ${day}-${name}` : `${day}-${name}`;
+  return withYear ? `${day} ${name} ${year}` : `${day} ${name}`;
+}
+
 /** The Tashkent wall-clock time: `20:40`. */
 export function formatTime(instant: Date | string): string {
   const { hour, minute } = tashkent(instant);

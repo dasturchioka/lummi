@@ -124,3 +124,10 @@ export const TruckIcon = (p: P) => (
     {...p}
   />
 );
+/** A calendar page: the date of birth field (mockup 06). */
+export const CalendarIcon = (p: P) => (
+  <Icon
+    d="M5.5 6h13a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM4.5 10h15M8.5 4v4M15.5 4v4"
+    {...p}
+  />
+);

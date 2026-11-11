@@ -308,6 +308,32 @@ export const customerScreens: Screen[] = [
       await page.locator('[data-testid^="order-row-"]').first().waitFor();
     },
   },
+  ...(['owner', 'manager'] as const).map(
+    (as): Screen => ({
+      // #30: the date of birth on the page; only the owner corrects it (dialog open), a manager
+      // sees the date alone
+      id: `customer-birth-date-${as}`,
+      path: '/customers?q=ali_valiyev',
+      as,
+      setup: async ({ db }) => {
+        await seedCustomers(db);
+        await db.query(
+          `update customers set birth_date = '1996-03-14', birth_date_set_at = now() where telegram_id = $1`,
+          [FIRST],
+        );
+      },
+      teardown: ({ db }) => clearCustomers(db),
+      act: async ({ page }) => {
+        await page.locator('main a[href^="/customers/"]:visible').first().click();
+        await page.locator('[data-testid="birth-date"]').waitFor();
+        if (as === 'owner') {
+          await page.locator('[data-testid="birth-date-edit"]').click();
+          await page.getByRole('dialog').waitFor();
+        }
+      },
+      fullPage: false,
+    }),
+  ),
   {
     id: 'w-customers-500',
     path: '/customers?sort=spent&page=3',

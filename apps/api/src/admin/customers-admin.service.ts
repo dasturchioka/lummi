@@ -5,9 +5,12 @@ import type {
   CustomersQuery,
 } from '@lummi/contracts';
 import { customers, desc, eq, orders, sql, type CustomerRow, type Db, type SQL } from '@lummi/db';
+import { AuditService } from '../audit/audit.service';
+import { isPlausibleBirthDate } from '../birthday/birthday.service';
+import type { Edges } from '../edges';
 import { Inject, Injectable } from '@nestjs/common';
 import { fulfilledTotal } from '../orders/fulfilled';
-import { DB } from '../tokens';
+import { DB, EDGES } from '../tokens';
 import { containsIgnoringApostrophes } from '../util/apostrophe-match';
 
 /** First and last name as the panel shows them. */
@@ -21,7 +24,11 @@ const nameOf = (c: Pick<CustomerRow, 'firstName' | 'lastName'>) =>
  */
 @Injectable()
 export class CustomersAdminService {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(EDGES) private readonly edges: Edges,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   /** Per customer: all orders and the Fulfilled total, in one grouped pass over `orders`. */
   private stats() {
@@ -107,6 +114,44 @@ export class CustomersAdminService {
     };
   }
 
+  /**
+   * The owner corrects the date of birth (TZ §3.8: the customer enters it once, «изменить может
+   * только админ»), audited as the fact only (the date is personal data). Like the customer's own
+   * entry it needs the account phone, so a record that relink would merge away never holds one.
+   * The abuse guard keeps counting from the customer's own entry; a date set here for a customer who
+   * had none counts as entered now. A coupon already issued for this birthday year stays, and no
+   * second one comes for it (one per year).
+   */
+  async setBirthDate(
+    staffId: number,
+    id: number,
+    birthDate: string,
+  ): Promise<AdminCustomerDetail | 'not_found' | 'invalid_birth_date' | 'phone_required'> {
+    const now = this.edges.clock.now();
+    if (!isPlausibleBirthDate(birthDate, now)) return 'invalid_birth_date';
+    const done = await this.db.transaction(async (tx) => {
+      const [c] = await tx.select().from(customers).where(eq(customers.id, id)).for('update');
+      if (!c) return 'not_found' as const;
+      if (!c.phone) return 'phone_required' as const;
+      if (c.birthDate === birthDate) return 'ok' as const;
+      await tx
+        .update(customers)
+        .set({ birthDate, birthDateSetAt: c.birthDateSetAt ?? now, updatedAt: now })
+        .where(eq(customers.id, id));
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: staffId },
+        action: 'customer.birth_date_corrected',
+        targetType: 'customer',
+        targetId: id,
+        payload: { changed: true },
+      });
+      return 'ok' as const;
+    });
+    if (done !== 'ok') return done;
+    const detail = await this.get(id);
+    return detail ?? 'not_found';
+  }
+
   private dto(c: CustomerRow, ordersCount: number, totalSpent: number): AdminCustomer {
     return {
       id: c.id,
@@ -116,6 +161,7 @@ export class CustomersAdminService {
       phone: c.phone,
       language: c.language,
       botBlocked: c.botBlocked,
+      birthDate: c.birthDate,
       ordersCount,
       totalSpent,
       createdAt: c.createdAt.toISOString(),

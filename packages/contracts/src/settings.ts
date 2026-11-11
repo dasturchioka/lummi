@@ -544,6 +544,99 @@ export const settingDefinitions = {
       uz: 'Shuncha urinishdan keyin yangi kodni oyna tugagach kiritish mumkin.',
     },
   },
+  // Birthday coupon (TZ §3.8, #30). Its threshold base and marked-down flag are the
+  // `pricing.thresholdBase` and `pricing.discountsApplyToMarkedDown` entries above. Percent and
+  // cap are fixed on each coupon when it is issued, as its bot message announced them.
+  /** The coupon's discount on items, whole percent (TZ: 20%). */
+  'birthday.percent': {
+    schema: z.number().int().min(1).max(100),
+    default: 20,
+    area: 'pricing',
+    unit: 'none',
+    label: { ru: 'Купон ко дню рождения, %', uz: 'Tugʻilgan kun kuponi, %' },
+    hint: {
+      ru: 'Скидка на товары, без доставки. Новое значение действует для следующих купонов.',
+      uz: 'Tovarlarga chegirma, yetkazib berishsiz. Yangi qiymat keyingi kuponlarga amal qiladi.',
+    },
+  },
+  /** The most one coupon takes off (TZ: «Max скидка [amount]»; to confirm, open-questions). */
+  'birthday.maxAmount': {
+    schema: z.number().int().min(0).max(100_000_000),
+    default: 100_000,
+    area: 'pricing',
+    unit: 'sum',
+    label: {
+      ru: 'Купон ко дню рождения: наибольшая скидка',
+      uz: 'Tugʻilgan kun kuponi: eng katta chegirma',
+    },
+    hint: {
+      ru: 'Больше этой суммы купон не скидывает, сколько бы ни стоили товары.',
+      uz: 'Tovarlar qancha boʻlmasin, kupon bundan koʻp chegirma bermaydi.',
+    },
+  },
+  /** The coupon arrives this many days before the birthday, at 10:00 Tashkent (TZ: 3). */
+  'birthday.daysBefore': {
+    schema: z.number().int().min(0).max(30),
+    default: 3,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Купон ко дню рождения: дней до праздника',
+      uz: 'Tugʻilgan kun kuponi: bayramgacha kunlar',
+    },
+    hint: {
+      ru: 'Купон приходит в час отправки по Ташкенту за столько дней до дня рождения и сразу действует.',
+      uz: 'Kupon tugʻilgan kundan shuncha kun oldin Toshkent vaqti bilan yuborish soatida keladi va darhol amal qiladi.',
+    },
+  },
+  /**
+   * The Tashkent hour the coupon arrives (TZ §3.8: «в 10:00 по Ташкенту», changed in the admin). The
+   * job runs every hour and issues once this hour has come on the first day.
+   */
+  'birthday.issueHour': {
+    schema: z.number().int().min(0).max(23),
+    default: 10,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Купон ко дню рождения: час отправки',
+      uz: 'Tugʻilgan kun kuponi: yuborish soati',
+    },
+    hint: {
+      ru: 'По Ташкенту, от 0 до 23: купон приходит в начале этого часа.',
+      uz: 'Toshkent vaqti bilan, 0 dan 23 gacha: kupon shu soat boshida keladi.',
+    },
+  },
+  /** The coupon works through the end of this many days after the birthday (TZ: 7). */
+  'birthday.daysAfter': {
+    schema: z.number().int().min(0).max(30),
+    default: 7,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Купон ко дню рождения: дней после праздника',
+      uz: 'Tugʻilgan kun kuponi: bayramdan keyingi kunlar',
+    },
+    hint: {
+      ru: 'Купон действует до конца этого дня после дня рождения. Новое значение действует для следующих купонов.',
+      uz: 'Kupon tugʻilgan kundan keyingi shu kun oxirigacha amal qiladi. Yangi qiymat keyingi kuponlarga amal qiladi.',
+    },
+  },
+  /** Abuse guard (TZ §3.8): the first coupon opens no sooner than this many days after the date was entered. */
+  'birthday.firstCouponAfterDays': {
+    schema: z.number().int().min(0).max(365),
+    default: 14,
+    area: 'pricing',
+    unit: 'none',
+    label: {
+      ru: 'Первый купон ко дню рождения не раньше чем через, дней',
+      uz: 'Birinchi tugʻilgan kun kuponi kamida necha kundan keyin, kun',
+    },
+    hint: {
+      ru: 'Защита от злоупотреблений: считается от дня, когда покупатель указал дату рождения.',
+      uz: 'Suiisteʼmoldan himoya: xaridor tugʻilgan sanasini kiritgan kundan hisoblanadi.',
+    },
+  },
   // ---- Bot and orders group
   // Orders group (spec Changes 2026-11-07). Null until the group is set up; the bot follows migrate_to_chat_id.
   'bot.groupChatId': {
