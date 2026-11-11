@@ -82,6 +82,19 @@ export const cartSchema = z.object({
   suggestions: z.array(cartSuggestionSchema),
   /** The link-prefilled or entered promo code (the promo ticket reads and clears it). */
   promoCode: z.string().nullable(),
+  /**
+   * An entered promo code is applied while the customer's birthday coupon would also discount this
+   * cart (ADR 0002: the code wins): the coupon waiting behind it, as the server judged it. Null
+   * otherwise. Taking the code out lets the server pick the coupon (#30; #39 builds the switch).
+   */
+  birthdayCouponWaiting: z
+    .object({
+      id: z.number().int(),
+      percent: z.number().int(),
+      /** Its last day, Tashkent `YYYY-MM-DD`. */
+      lastDay: z.string(),
+    })
+    .nullable(),
 });
 export type CartDto = z.infer<typeof cartSchema>;
 

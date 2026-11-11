@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { birthDateErrorSchema, myDiscountsSchema, setBirthDateBodySchema } from './birthday';
 import { addCartLineBodySchema, cartErrorSchema, cartSchema, setCartLineBodySchema } from './cart';
 import {
   adminCampaignLinkSchema,
@@ -42,6 +43,7 @@ import {
   adminCustomerDetailSchema,
   adminCustomersErrorSchema,
   adminCustomersPageSchema,
+  adminSetBirthDateBodySchema,
   adminStockErrorSchema,
   customersQuerySchema,
   stockListSchema,
@@ -272,6 +274,27 @@ export const contract = c.router({
         404: savedPointErrorSchema,
       },
       summary: 'Forget one saved pair (never touches an order); answers with the list left',
+    },
+    discounts: {
+      method: 'GET',
+      path: '/me/discounts',
+      responses: { 200: myDiscountsSchema, 401: birthDateErrorSchema },
+      summary:
+        '«Мои скидки»: the date of birth, active birthday coupons with days left, and when the next one opens',
+    },
+    setBirthDate: {
+      method: 'PUT',
+      path: '/me/birth-date',
+      body: setBirthDateBodySchema,
+      responses: {
+        200: myDiscountsSchema,
+        401: birthDateErrorSchema,
+        403: birthDateErrorSchema,
+        409: birthDateErrorSchema,
+        422: birthDateErrorSchema,
+      },
+      summary:
+        'Enter the date of birth once (TZ §3.8); afterwards only staff correct it. Needs the account phone',
     },
   },
   delivery: {
@@ -980,6 +1003,21 @@ const adminCore = c.router({
         404: adminCustomersErrorSchema,
       },
       summary: 'Owner and manager: one customer with all their orders, newest first',
+    },
+    setBirthDate: {
+      method: 'PUT',
+      path: '/admin/customers/:id/birth-date',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: adminSetBirthDateBodySchema,
+      responses: {
+        200: adminCustomerDetailSchema,
+        401: adminCustomersErrorSchema,
+        403: adminCustomersErrorSchema,
+        404: adminCustomersErrorSchema,
+        422: adminCustomersErrorSchema,
+      },
+      summary:
+        'Owner only: correct the date of birth (the customer enters it once); needs the account phone; audited as the fact',
     },
   },
   onHand: {

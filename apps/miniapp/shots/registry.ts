@@ -193,8 +193,12 @@ async function sharePhone(api: ApiClient, userId = SHOT_USER.id, phone = '+99890
 async function clearOrders(db: ShotDb, { consent }: { consent?: 'given' | 'none' } = {}) {
   const ids = [SHOT_USER.id, NO_PHONE_USER.id, FOREIGN_PHONE_USER.id];
   const theirs = `select id from orders where customer_id in (select id from customers where telegram_id = any($1))`;
-  // a receipt keeps its order (no cascade): it goes first
+  // a receipt keeps its order (no cascade): it goes first; a held birthday coupon lets go (#30)
   await db.query(`delete from receipts where order_id in (${theirs})`, [ids]);
+  await db.query(
+    `update birthday_coupons set used_by_order_id = null where used_by_order_id in (${theirs})`,
+    [ids],
+  );
   await db.query(`delete from orders where id in (${theirs})`, [ids]);
   if (consent)
     await db.query(`update customers set data_consent_at = $2 where telegram_id = any($1)`, [
@@ -3291,4 +3295,164 @@ export const screens: ScreenDef[] = [
   ...shortcutScreens,
   ...polishScreens,
   ...worstShortcutScreens,
+  ...birthdayScreens(),
 ];
+
+/**
+ * Birthday coupons (#30): «Мои скидки» in Profile, the one-time date of birth (Profile sheet and
+ * checkout's optional field), and the coupon as the cart's one discount, also when an entered
+ * promo code wins. The coupon is written straight to the dev DB, as the 10:00 job would issue it
+ * (shots cannot wait for 10:00): birthday in two days, so it opened yesterday and has 9 days left.
+ */
+function birthdayScreens(): ScreenDef[] {
+  const today = `(now() at time zone 'Asia/Tashkent')::date`;
+  const forgetBirthday = async (db: ShotDb) => {
+    await db.query(
+      `delete from birthday_coupons where customer_id in (select id from customers where telegram_id = $1)`,
+      [SHOT_USER.id],
+    );
+    await db.query(
+      `update customers set birth_date = null, birth_date_set_at = null where telegram_id = $1`,
+      [SHOT_USER.id],
+    );
+  };
+  /** Born 30 years ago the day after tomorrow, entered two months ago; this year's coupon is out. */
+  const withCoupon = async (db: ShotDb) => {
+    await forgetBirthday(db);
+    await db.query(
+      `update customers set birth_date = (${today} + 2 - interval '30 years')::date,
+         birth_date_set_at = now() - interval '60 days' where telegram_id = $1`,
+      [SHOT_USER.id],
+    );
+    await db.query(
+      `insert into birthday_coupons (customer_id, birthday_year, birthday, percent, max_amount, issued_at, expires_at)
+       select id, extract(year from ${today} + 2)::int, ${today} + 2, 20, 100000,
+         now() - interval '1 day', ((${today} + 10)::timestamp at time zone 'Asia/Tashkent')
+       from customers where telegram_id = $1`,
+      [SHOT_USER.id],
+    );
+  };
+  const done = async (ctx: { api: ApiClient; db: ShotDb }) => {
+    await forgetPromo(ctx);
+    await clearOrders(ctx.db);
+    await forgetBirthday(ctx.db);
+    await emptyCart(ctx);
+  };
+  const twoBottles: [string, 30][] = [
+    ['symphony', 30],
+    ['tygar', 30],
+  ];
+  return [
+    {
+      id: 'profile-discounts-coupon',
+      path: '/profile',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await sharePhone(api);
+        await withCoupon(db);
+      },
+      act: async ({ page }) => void (await page.getByTestId('birthday-coupon').waitFor()),
+      teardown: done,
+    },
+    {
+      // a date entered, no coupon yet: when the next one opens, and whom to ask about a wrong date
+      id: 'profile-discounts-upcoming',
+      path: '/profile',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await sharePhone(api);
+        await forgetBirthday(db);
+        await db.query(
+          `update customers set birth_date = '1996-03-14', birth_date_set_at = now() - interval '60 days'
+           where telegram_id = $1`,
+          [SHOT_USER.id],
+        );
+      },
+      act: async ({ page }) => void (await page.getByTestId('birthday-card').waitFor()),
+      teardown: done,
+    },
+    {
+      // no date yet and no consent: the sheet asks both, entered once
+      id: 'profile-birth-date-sheet',
+      path: '/profile',
+      setup: async ({ api, db }) => {
+        await sharePhone(api);
+        await forgetBirthday(db);
+        await clearOrders(db, { consent: 'none' });
+      },
+      act: async ({ page }) => {
+        await page.getByTestId('birth-date-enter').click();
+        await sheet(page).waitFor();
+        await page.getByTestId('birth-date-field').pressSequentially('14031996');
+      },
+      teardown: async (ctx) => {
+        await clearOrders(ctx.db, { consent: 'given' });
+        await done(ctx);
+      },
+    },
+    {
+      // checkout's optional field while there is no date, typed in
+      id: 'checkout-birth-date',
+      path: '/checkout',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await forgetBirthday(db);
+        await checkoutReady(api, db, 'none');
+      },
+      act: async ({ page }) => {
+        await pickFirstPoint(page);
+        await page.getByTestId('birth-date-field').pressSequentially('14031996');
+        await page.getByTestId('birth-date-field').blur();
+      },
+      teardown: async (ctx) => {
+        await clearOrders(ctx.db, { consent: 'given' });
+        await done(ctx);
+      },
+    },
+    {
+      // the coupon applies by itself: 20 % of 298 000, delivery paid under the "after" base
+      id: 'cart-birthday',
+      path: '/cart',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await sharePhone(api);
+        await forgetPromo({ api, db });
+        await chooseCity(api);
+        await withCoupon(db);
+        await fillCart(api, twoBottles);
+      },
+      act: async ({ page }) => void (await page.getByTestId('discount-row').waitFor()),
+      teardown: done,
+    },
+    {
+      // an entered promo code wins over the cheaper coupon (ADR 0002), which waits in Profile
+      id: 'cart-birthday-promo-wins',
+      path: '/cart',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await sharePhone(api);
+        await shotPromo(db);
+        await forgetPromo({ api, db });
+        await chooseCity(api);
+        await withCoupon(db);
+        await fillCart(api, twoBottles);
+        const res = await api.cart.applyPromoCode({ body: { code: 'bloger10' } });
+        if (res.status !== 200) throw new Error(`apply: HTTP ${res.status}`);
+      },
+      act: async ({ page }) => void (await page.getByTestId('discount-row').waitFor()),
+      teardown: done,
+    },
+    {
+      // the checkout's summary with the coupon, the date already known (no field)
+      id: 'checkout-birthday',
+      path: '/checkout',
+      fullPage: true,
+      setup: async ({ api, db }) => {
+        await checkoutReady(api, db, 'given');
+        await withCoupon(db);
+      },
+      act: async ({ page }) => pickFirstPoint(page),
+      teardown: done,
+    },
+  ];
+}

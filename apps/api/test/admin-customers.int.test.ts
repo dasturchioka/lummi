@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OrderStatus } from '@lummi/contracts';
-import { customers, eq, orders } from '@lummi/db';
+import { auditLog, customers, eq, orders } from '@lummi/db';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -278,5 +278,134 @@ describe('the customer page', () => {
 
   it('answers 404 for an unknown customer', async () => {
     expect((await manager.client.admin.customers.get({ params: { id: 99999 } })).status).toBe(404);
+  });
+});
+
+/** TZ §3.8: the customer enters the date of birth once; only staff correct it (#30). */
+describe('the date of birth', () => {
+  async function aliId() {
+    await shopper(t, ali, '998901110001');
+    const [c] = await t.db.select().from(customers).where(eq(customers.telegramId, ali.id));
+    return c!.id;
+  }
+
+  it('shows on the customer page, null until entered', async () => {
+    const id = await aliId();
+    expect((await manager.client.admin.customers.get({ params: { id } })).body).toMatchObject({
+      birthDate: null,
+    });
+    await t.db
+      .update(customers)
+      .set({ birthDate: '1996-03-14', birthDateSetAt: t.edges.clock.now() })
+      .where(eq(customers.id, id));
+    expect((await manager.client.admin.customers.get({ params: { id } })).body).toMatchObject({
+      birthDate: '1996-03-14',
+    });
+  });
+
+  it('the owner corrects it, audited without the date itself; the abuse guard keeps counting from the first entry', async () => {
+    const id = await aliId();
+    const entered = new Date('2026-11-01T10:00:00Z');
+    await t.db
+      .update(customers)
+      .set({ birthDate: '1996-03-14', birthDateSetAt: entered })
+      .where(eq(customers.id, id));
+    const res = await owner.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '1996-04-14' },
+    });
+    expect(res).toMatchObject({ status: 200, body: { birthDate: '1996-04-14' } });
+    const [c] = await t.db.select().from(customers).where(eq(customers.id, id));
+    expect(c!.birthDateSetAt?.toISOString()).toBe(entered.toISOString());
+    const audit = await t.db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, 'customer.birth_date_corrected'));
+    expect(audit).toMatchObject([
+      {
+        actorType: 'staff',
+        actorId: owner.staff.id,
+        targetId: String(id),
+        payload: { changed: true },
+      },
+    ]);
+    // the date of birth is personal data: the audit, which staff read, records only the fact
+    expect(JSON.stringify(audit[0]!.payload)).not.toContain('1996');
+  });
+
+  it('a manager may not correct it (403): TZ «изменить может только админ»', async () => {
+    const id = await aliId();
+    const res = await manager.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '1996-04-14' },
+    });
+    expect(res.status).toBe(403);
+    const [c] = await t.db.select().from(customers).where(eq(customers.id, id));
+    expect(c!.birthDate).toBeNull();
+  });
+
+  it('needs the account phone (422): a record without one is merged away at relink', async () => {
+    const { client } = await t.signIn(vali);
+    expect((await client.me.get()).status).toBe(200);
+    const [c] = await t.db.select().from(customers).where(eq(customers.telegramId, vali.id));
+    expect(
+      await owner.client.admin.customers.setBirthDate({
+        params: { id: c!.id },
+        body: { birthDate: '1996-03-14' },
+      }),
+    ).toMatchObject({ status: 422, body: { code: 'phone_required' } });
+  });
+
+  it('the owner may set it for a customer who has none; it counts as entered now', async () => {
+    const id = await aliId();
+    const res = await owner.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '2000-02-29' },
+    });
+    expect(res).toMatchObject({ status: 200, body: { birthDate: '2000-02-29' } });
+    const [c] = await t.db.select().from(customers).where(eq(customers.id, id));
+    expect(c!.birthDateSetAt?.toISOString()).toBe('2026-11-11T10:00:00.000Z');
+  });
+
+  it('refuses a day after today in Tashkent (422) and an unknown customer (404); a save that changes nothing writes nothing', async () => {
+    const id = await aliId();
+    expect(
+      await owner.client.admin.customers.setBirthDate({
+        params: { id },
+        body: { birthDate: '2026-11-12' },
+      }),
+    ).toMatchObject({ status: 422, body: { code: 'invalid_birth_date' } });
+    expect(
+      (
+        await owner.client.admin.customers.setBirthDate({
+          params: { id: 99999 },
+          body: { birthDate: '1996-03-14' },
+        })
+      ).status,
+    ).toBe(404);
+    await owner.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '1996-03-14' },
+    });
+    await owner.client.admin.customers.setBirthDate({
+      params: { id },
+      body: { birthDate: '1996-03-14' },
+    });
+    expect(
+      await t.db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.action, 'customer.birth_date_corrected')),
+    ).toHaveLength(1);
+  });
+
+  it('is closed to a signed-out caller', async () => {
+    const id = await aliId();
+    const res = await fetch(`${t.baseUrl}/admin/customers/${id}/birth-date`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ birthDate: '1996-03-14' }),
+    });
+    expect(res.status).toBe(401);
   });
 });

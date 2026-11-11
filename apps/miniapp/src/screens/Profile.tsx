@@ -1,6 +1,7 @@
 import { formatPhone } from '@lummi/i18n';
 import { useRouter } from '@tanstack/react-router';
 import { useInfoPages } from '../content/queries';
+import { DiscountsSection } from '../discounts/DiscountsSection';
 import { SavedPointsSection } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
 import { useRegistration } from '../lib/registration';
@@ -116,6 +117,7 @@ export function Profile() {
           }
         />
       </CardList>
+      {customer ? <DiscountsSection /> : null}
       {customer?.phone ? <SavedPointsSection /> : null}
       {pages && pages.length > 0 ? (
         // The info pages close the screen as one plain card of rows (mockup 08-profile): the

@@ -120,6 +120,7 @@ export async function createTestApp(
     BOT_RECEIPTS_QUEUE: `bq_${dbName}`,
     RECEIPT_CHECK_BACKOFF_MS: '200',
     BROADCAST_QUEUE: `b_${dbName}`,
+    BIRTHDAY_QUEUE: `d_${dbName}`,
     ADMIN_DEV_LOGIN: 'true',
     INTERNAL_API_SECRET: TEST_INTERNAL_SECRET,
     ...envOverrides,

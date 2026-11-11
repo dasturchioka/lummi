@@ -1124,6 +1124,38 @@ describe('quote(): one discount per order, chosen by ADR 0002', () => {
       },
     },
     {
+      name: 'an entered code wins over a cheaper birthday coupon, which is offered with its total (#30)',
+      given: {
+        lines: lines368k,
+        entitlements: [birthday(5, 20, 100_000)],
+        promoCode: percentPromo('BLOGGER5', 5),
+      },
+      expected: {
+        discount: { type: 'promo_code', code: 'BLOGGER5', amount: 18_400 },
+        deliveryFee: 0,
+        total: 349_600,
+        alternatives: [
+          {
+            discount: { type: 'birthday_coupon', id: 5, amount: 73_600 },
+            deliveryFee: 0,
+            total: 294_400,
+            cheaperBy: 55_200,
+          },
+        ],
+      },
+    },
+    {
+      name: 'without a code the birthday coupon is picked by itself when it lowers the total (#30)',
+      given: { lines: lines368k, entitlements: [birthday(5, 20, 100_000)] },
+      expected: {
+        discount: { type: 'birthday_coupon', id: 5, amount: 73_600 },
+        deliveryFee: 0,
+        total: 294_400,
+        alternatives: [],
+        staleChoice: false,
+      },
+    },
+    {
       name: 'an entered valid code stays applied even when it costs more than no discount',
       given: { lines: lines260k, promoCode: fixedPromo('MINUS13', 13_000) },
       expected: {

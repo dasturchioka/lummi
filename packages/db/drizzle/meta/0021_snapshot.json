@@ -1,5 +1,5 @@
 {
-  "id": "e253e9fa-3fd7-4eb0-8fc5-11b41f171c91",
+  "id": "1a125eb6-d43f-4f3f-8e3c-6b24abc67681",
   "prevId": "fdda5eea-1429-4d31-98df-f3c5705146fd",
   "version": "7",
   "dialect": "postgresql",
@@ -114,6 +114,167 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.birthday_coupons": {
+      "name": "birthday_coupons",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "birthday_coupons_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "birthday_year": {
+          "name": "birthday_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "birthday": {
+          "name": "birthday",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "percent": {
+          "name": "percent",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_amount": {
+          "name": "max_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "issued_at": {
+          "name": "issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used_by_order_id": {
+          "name": "used_by_order_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outbox_id": {
+          "name": "outbox_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "birthday_coupons_customer_year_idx": {
+          "name": "birthday_coupons_customer_year_idx",
+          "columns": [
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "birthday_year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "birthday_coupons_used_by_order_idx": {
+          "name": "birthday_coupons_used_by_order_idx",
+          "columns": [
+            {
+              "expression": "used_by_order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"birthday_coupons\".\"used_by_order_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "birthday_coupons_customer_id_customers_id_fk": {
+          "name": "birthday_coupons_customer_id_customers_id_fk",
+          "tableFrom": "birthday_coupons",
+          "tableTo": "customers",
+          "columnsFrom": [
+            "customer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "birthday_coupons_used_by_order_id_orders_id_fk": {
+          "name": "birthday_coupons_used_by_order_id_orders_id_fk",
+          "tableFrom": "birthday_coupons",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "used_by_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "birthday_coupons_terms_check": {
+          "name": "birthday_coupons_terms_check",
+          "value": "\"birthday_coupons\".\"percent\" between 1 and 100 and \"birthday_coupons\".\"max_amount\" >= 0 and \"birthday_coupons\".\"expires_at\" > \"birthday_coupons\".\"issued_at\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.bot_pending_receipts": {
@@ -1336,6 +1497,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "birth_date": {
+          "name": "birth_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birth_date_set_at": {
+          "name": "birth_date_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1398,7 +1571,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "customers_birth_date_check": {
+          "name": "customers_birth_date_check",
+          "value": "(\"customers\".\"birth_date\" is null) = (\"customers\".\"birth_date_set_at\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.discovery_set": {
@@ -3146,77 +3324,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.payment_pauses": {
-      "name": "payment_pauses",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "payment_pauses_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "cause": {
-          "name": "cause",
-          "type": "payment_pause_cause",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ended_at": {
-          "name": "ended_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "payment_pauses_one_open_idx": {
-          "name": "payment_pauses_one_open_idx",
-          "columns": [
-            {
-              "expression": "(\"ended_at\" is null)",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"payment_pauses\".\"ended_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "payment_pauses_ends_after_start": {
-          "name": "payment_pauses_ends_after_start",
-          "value": "\"payment_pauses\".\"ended_at\" >= \"payment_pauses\".\"started_at\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.processed_updates": {
       "name": "processed_updates",
       "schema": "",
@@ -3853,18 +3960,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "duplicate_of": {
-          "name": "duplicate_of",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unchecked_alert_at": {
-          "name": "unchecked_alert_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3949,19 +4044,6 @@
           "tableTo": "orders",
           "columnsFrom": [
             "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "receipts_duplicate_of_receipts_id_fk": {
-          "name": "receipts_duplicate_of_receipts_id_fk",
-          "tableFrom": "receipts",
-          "tableTo": "receipts",
-          "columnsFrom": [
-            "duplicate_of"
           ],
           "columnsTo": [
             "id"
@@ -4772,14 +4854,6 @@
         "delivered",
         "returned",
         "cancelled"
-      ]
-    },
-    "public.payment_pause_cause": {
-      "name": "payment_pause_cause",
-      "schema": "public",
-      "values": [
-        "heartbeat",
-        "silence"
       ]
     },
     "public.promo_kind": {
