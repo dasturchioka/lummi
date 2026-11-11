@@ -1395,17 +1395,20 @@ describe('link a credit and confirm the payment (#32 PaymentConfirmation, actor:
     const image = await uniqueReceiptImage();
     const a = await unpaidOrder(0);
     const b = await unpaidOrder(1);
-    await sendReceipt(a.number, image);
-    const duplicate = await sendReceipt(b.number, image);
+    const duplicate = await sendReceipt(a.number, image);
+    // the later copy takes the payment-not-found path at once (#36); the first waits for a person
+    const repeat = await sendReceipt(b.number, image);
     const [held] = await t.db.select().from(receipts).where(eq(receipts.id, duplicate));
     expect([held!.verdict, held!.reviewReason]).toEqual(['manual_review', 'duplicate']);
+    const [decided] = await t.db.select().from(receipts).where(eq(receipts.id, repeat));
+    expect([decided!.verdict, decided!.duplicateOf]).toEqual(['payment_not_found', duplicate]);
     t.edges.clock.advance(2 * MIN);
-    const creditId = await recordCredit(t, { som: b.amountDue });
+    const creditId = await recordCredit(t, { som: a.amountDue });
     const { client } = await t.managerSession();
-    const page = await client.admin.orders.get({ params: { number: b.number } });
+    const page = await client.admin.orders.get({ params: { number: a.number } });
     expect(page.status === 200 && page.body.receipts[0]!.reviewReason).toBe('duplicate');
     const res = await client.admin.orders.confirmPayment({
-      params: { number: b.number },
+      params: { number: a.number },
       body: { creditId, receiptId: duplicate },
     });
     expect(res.status).toBe(200);
