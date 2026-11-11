@@ -1410,6 +1410,76 @@ describe('quote(): one discount per order, chosen by ADR 0002', () => {
       expected: { discount: { type: 'upgrade_right', id: 1 }, promoCode: null, staleChoice: true },
     },
     {
+      name: '«не применять» (#39): no discount, every option offered with its total, the entitlement kept',
+      given: {
+        lines: lines260k,
+        entitlements: [birthday(5, 15, 100_000), setRight(1, [GUIDANCE])],
+        choice: { type: 'none' },
+      },
+      expected: {
+        discount: null,
+        thresholdBase: 'before',
+        deliveryFee: 0,
+        total: 260_000,
+        alternatives: [
+          { discount: { type: 'upgrade_right', id: 1 }, total: 234_000, cheaperBy: 26_000 },
+          {
+            discount: { type: 'birthday_coupon', id: 5 },
+            deliveryFee: 25_000,
+            total: 246_000,
+            cheaperBy: 14_000,
+          },
+        ],
+        withoutDiscount: { deliveryFee: 0, total: 260_000 },
+        staleChoice: false,
+      },
+    },
+    {
+      name: '«не применять» keeps an entered valid code out too; it stays offered and is not refused',
+      given: {
+        lines: lines368k,
+        entitlements: [setRight(1, [GUIDANCE])],
+        promoCode: percentPromo('BLOGGER5', 5),
+        choice: { type: 'none' },
+      },
+      expected: {
+        discount: null,
+        total: 368_000,
+        alternatives: [
+          { discount: { type: 'upgrade_right', id: 1 }, total: 324_200, cheaperBy: 43_800 },
+          { discount: { type: 'promo_code', code: 'BLOGGER5' }, total: 349_600, cheaperBy: 18_400 },
+        ],
+        promoCode: { code: 'BLOGGER5', invalid: null },
+        staleChoice: false,
+      },
+    },
+    {
+      name: '«не применять» with nothing to keep is no discount, and nothing is stale',
+      given: { lines: lines260k, choice: { type: 'none' } },
+      expected: { discount: null, total: 260_000, alternatives: [], staleChoice: false },
+    },
+    {
+      name: 'the total without any discount comes with every quote, for «не применять» (#39)',
+      given: {
+        lines: lines368k,
+        entitlements: [setRight(1, [GUIDANCE])],
+        promoCode: percentPromo('BLOGGER5', 5),
+      },
+      expected: {
+        discount: { type: 'promo_code' },
+        total: 349_600,
+        withoutDiscount: { deliveryFee: 0, total: 368_000 },
+      },
+    },
+    {
+      name: 'without a discount delivery may come back: the code that brought it costs more than none',
+      given: { lines: lines260k, promoCode: fixedPromo('MINUS13', 13_000) },
+      expected: {
+        total: 272_000,
+        withoutDiscount: { deliveryFee: 0, total: 260_000 },
+      },
+    },
+    {
       name: 'choosing a code that is now below its minimum falls back and says why',
       given: {
         lines: [volume('g50', GUIDANCE, 50, 219_000)],

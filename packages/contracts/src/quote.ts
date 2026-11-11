@@ -98,6 +98,8 @@ export const quoteSchema = z.object({
   /** «Итого»: items − discount + delivery. */
   total: som,
   alternatives: z.array(discountAlternativeSchema),
+  /** What the cart costs with no discount at all: the «Не применять» choice (#39). */
+  withoutDiscount: z.object({ deliveryFee: som, total: som }),
   /** The entered promo code and, when it is not applied for a pricing reason, why. */
   promoCode: z.object({ code: z.string(), invalid: promoCodeInvalidSchema.nullable() }).nullable(),
   /** The customer's chosen discount no longer applies, so the automatic choice was used. */
