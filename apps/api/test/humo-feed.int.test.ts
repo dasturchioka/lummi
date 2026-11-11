@@ -307,6 +307,40 @@ describe('catch-up and heartbeat', () => {
   });
 });
 
+describe('where the userbot forwards ➕ notifications (#19)', () => {
+  it('is the orders group and its «Поступления» topic, read from the settings each time', async () => {
+    expect(await feed().userbotForwardTarget()).toMatchObject({
+      status: 200,
+      body: { chatId: null, topicId: null },
+    });
+
+    const settings = t.app.get(SettingsService);
+    await settings.set('bot.groupChatId', -1001234567890, { type: 'system' });
+    expect((await feed().userbotForwardTarget()).body).toEqual({
+      chatId: -1001234567890,
+      topicId: null,
+    });
+
+    await settings.set(
+      'bot.topics',
+      { orders: 2, payments: 3, reviews: 4, system: 5 },
+      { type: 'system' },
+    );
+    expect((await feed().userbotForwardTarget()).body).toEqual({
+      chatId: -1001234567890,
+      topicId: 3,
+    });
+  });
+
+  it('answers only the internal caller with the secret', async () => {
+    expect((await feed(t.baseUrl, 'wrong').userbotForwardTarget()).status).toBe(401);
+    const relayed = await feed().userbotForwardTarget({
+      extraHeaders: { 'x-forwarded-for': '203.0.113.7' },
+    });
+    expect(relayed.status).toBe(403);
+  });
+});
+
 /** Raw POST, for answers the contract does not declare (400, 500). */
 const postRaw = (body: unknown) =>
   fetch(`${t.baseUrl}/internal/humo/messages`, {

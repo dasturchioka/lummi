@@ -689,7 +689,8 @@ export const settingDefinitions = {
     },
     fields: {
       orders: { ru: 'Заказы', uz: 'Buyurtmalar' },
-      payments: { ru: 'Оплаты', uz: 'Toʻlovlar' },
+      // The «Поступления» topic (spec Changes 2026-11-07): the userbot forwards Humo ➕ there (#19).
+      payments: { ru: 'Поступления', uz: 'Tushumlar' },
       reviews: { ru: 'Отзывы', uz: 'Sharhlar' },
       system: { ru: 'Системные', uz: 'Tizim' },
     },
@@ -991,6 +992,45 @@ export const settingDefinitions = {
       ru: 'Фоновая проверка предупредит владельца один раз после стольких неудач подряд.',
       uz: 'Fon tekshiruvi shuncha ketma-ket muvaffaqiyatsizlikdan keyin egasini bir marta ogohlantiradi.',
     },
+  },
+  /** Seconds without a worker tick before the API alerts (ADR 0036). */
+  'ops.workerSilentSeconds': {
+    schema: z.number().int().min(60).max(3600),
+    default: 180,
+    area: 'worker',
+    unit: 'seconds',
+    label: {
+      ru: 'Тишина фонового сервиса до тревоги',
+      uz: 'Fon xizmati jim turganda ogohlantirish',
+    },
+    hint: {
+      ru: 'Фоновый сервис отмечается каждую минуту. Если его нет дольше этого срока, владелец и разработчик получают сообщение один раз, и ещё одно, когда сервис вернётся.',
+      uz: 'Fon xizmati har daqiqada belgi qoldiradi. Bundan uzoq jim tursa, egasi va dasturchi bir marta xabar oladi, xizmat qaytganda yana bir marta.',
+    },
+  },
+  /** Seconds without a successful backup report before the API alerts (ADR 0036): 26 h covers a daily run plus slack. */
+  'ops.backupStaleSeconds': {
+    schema: z.number().int().min(3600).max(604_800),
+    default: 93_600,
+    area: 'system',
+    unit: 'seconds',
+    label: { ru: 'Бэкапа нет дольше', uz: 'Zaxira nusxasi boʻlmagan muddat' },
+    hint: {
+      ru: 'Бэкап отчитывается раз в сутки. Если отчёта нет дольше этого срока, владелец и разработчик получают сообщение один раз.',
+      uz: 'Zaxira nusxasi kuniga bir marta hisobot beradi. Hisobot bundan uzoq boʻlmasa, egasi va dasturchi bir marta xabar oladi.',
+    },
+  },
+  /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0036). Null = nobody. */
+  'ops.developerChatId': {
+    schema: z.number().int().min(1).nullable(),
+    default: null,
+    area: 'system',
+    label: { ru: 'Telegram ID разработчика', uz: 'Dasturchining Telegram ID raqami' },
+    hint: {
+      ru: 'Сюда приходит сообщение о каждой новой ошибке сервера (без персональных данных) и тревога, если фоновый сервис замолчал. Пусто, пока не задан.',
+      uz: 'Serverning har bir yangi xatosi (shaxsiy maʼlumotlarsiz) va fon xizmati jim qolgani haqidagi ogohlantirish shu yerga keladi. Belgilanmaguncha boʻsh.',
+    },
+    hideBounds: true,
   },
   // ---- Messaging
   /** Broadcast sends per second. Telegram allows about 30 per second to different chats, so 25 is the ceiling (ADR 0021). Read when the worker starts. */

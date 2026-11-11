@@ -39,6 +39,8 @@ jobs:
           - { target: api, image: lummi-api }
           - { target: admin, image: lummi-admin }
           - { target: web, image: lummi-web }
+          # Built and pushed always; it runs only where COMPOSE_PROFILES=userbot (docs/run-guide.md).
+          - { target: userbot, image: lummi-userbot }
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

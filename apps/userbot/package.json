@@ -1,0 +1,29 @@
+{
+  "name": "@lummi/userbot",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/main.ts",
+    "login": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/login.ts",
+    "whois": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/whois.ts",
+    "humo:sample": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/send-sample.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@lummi/contracts": "*",
+    "@mtcute/node": "0.32.7",
+    "@ts-rest/core": "~3.52.1",
+    "pino": "^10.4.0",
+    "tsx": "^4.23.15",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@lummi/config": "*",
+    "@types/node": "^24.0.0",
+    "vitest": "^5.1.0"
+  }
+}

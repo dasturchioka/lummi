@@ -1,0 +1,7 @@
+[Unit]
+Description=Tell the owner and developer that the LUMMI backup failed
+
+[Service]
+Type=oneshot
+Environment=BACKUP_ENV_FILE=/opt/lummi/.env
+ExecStart=/opt/lummi/backup/failure-alert.sh

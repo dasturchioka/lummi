@@ -94,6 +94,12 @@ export interface AppDeps {
   botInfo?: UserFromGetMe;
 }
 
+import { ErrorTracker } from './ops/error-tracker.service';
+import { BackupWatch } from './ops/backup-watch.service';
+import { OpsNotifier } from './ops/ops-notifier.service';
+import { OpsController } from './ops/ops.controller';
+import { WorkerWatch } from './ops/worker-watch.service';
+
 @Module({})
 export class AppModule {
   /** Dependencies are injected, so tests build the same app with a test db and fake edges. */
@@ -129,6 +135,7 @@ export class AppModule {
         DeliveryController,
         BtsAdminController,
         HumoFeedController,
+        OpsController,
         BroadcastController,
         PromoAdminController,
         AdminOrdersController,
@@ -193,6 +200,10 @@ export class AppModule {
         CampaignsService,
         BirthdayService,
         BirthdayCouponJob,
+        ErrorTracker,
+        OpsNotifier,
+        WorkerWatch,
+        BackupWatch,
       ],
       exports: [
         CreditEvents,
@@ -209,6 +220,8 @@ export class AppModule {
         WorkerRuntime,
         StaffService,
         DeliveryService,
+        ErrorTracker,
+        WorkerWatch,
       ],
     };
   }
