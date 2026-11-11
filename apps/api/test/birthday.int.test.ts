@@ -517,7 +517,7 @@ describe('the coupon in the cart and the order', () => {
       total: 200_200,
     });
     // applied, so nothing waits behind a code
-    expect((await s.cart.get()).body).toMatchObject({ birthdayCouponWaiting: null });
+    expect((await s.cart.get()).body).toMatchObject({ entitlementWaiting: null });
   });
 
   it('keeps the percent and cap it was issued with when the settings change', async () => {
@@ -568,7 +568,12 @@ describe('the coupon in the cart and the order', () => {
     });
     // the cart says the coupon waits behind the code, with its terms and last day
     expect((await s.cart.get()).body).toMatchObject({
-      birthdayCouponWaiting: { id: coupon.id, percent: 20, lastDay: '2027-03-21' },
+      entitlementWaiting: {
+        type: 'birthday_coupon',
+        id: coupon.id,
+        percent: 20,
+        lastDay: '2027-03-21',
+      },
     });
     // the order takes the code, and the coupon stays the customer's
     const order = await placeOrder(s);
@@ -603,7 +608,7 @@ describe('the coupon in the cart and the order', () => {
       status: 200,
       body: {
         promoCode: null,
-        birthdayCouponWaiting: null,
+        entitlementWaiting: null,
         quote: { discount: { type: 'birthday_coupon', id: coupon.id } },
       },
     });
@@ -616,7 +621,7 @@ describe('the coupon in the cart and the order', () => {
     await s.cart.applyPromoCode({ body: { code: 'NOSUCHCODE' } });
     expect((await s.cart.get()).body).toMatchObject({
       quote: { discount: { type: 'birthday_coupon', id: coupon.id } },
-      birthdayCouponWaiting: null,
+      entitlementWaiting: null,
     });
   });
 

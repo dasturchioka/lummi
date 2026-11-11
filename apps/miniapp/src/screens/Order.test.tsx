@@ -92,6 +92,7 @@ const order = (over: Partial<OrderDto> = {}): OrderDto => ({
   thresholdBaseAmount: 69_000,
   total: 94_000,
   amountDue: 94_000,
+  trackingNumber: null,
   cancellation: null,
   ...over,
 });
@@ -133,6 +134,19 @@ describe('order detail', () => {
     expect(screen.getByTestId('gift-mark').textContent).toContain('«С днём рождения!»');
     expect(screen.getByTestId('order-delivery').textContent).toContain('Адрес указан вручную');
     expect(screen.getByTestId('order-delivery').textContent).toContain('Ургут, рядом с базаром');
+  });
+
+  it('shows the BTS tracking number under «Передан в BTS» once the parcel is handed over', () => {
+    renderView(<OrderView order={order({ status: 'assembling' })} />);
+    expect(screen.queryByTestId('tracking-number')).toBeNull();
+    cleanup();
+    for (const status of ['handed_to_bts', 'delivered'] as const) {
+      renderView(<OrderView order={order({ status, trackingNumber: 'BTS 4471 0098' })} />);
+      const timeline = screen.getByTestId('timeline');
+      expect(screen.getByTestId('tracking-number').textContent).toBe('Трек-номер: BTS 4471 0098');
+      expect(timeline.contains(screen.getByTestId('tracking-number'))).toBe(true);
+      cleanup();
+    }
   });
 });
 

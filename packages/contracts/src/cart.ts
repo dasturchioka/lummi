@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { deliveryCitySchema } from './delivery';
 import { CART_MAX_QTY } from './constants';
-import { quoteSchema } from './quote';
+import { quoteSchema, upgradeRightSourceSchema } from './quote';
 
 /**
  * The server-side cart (spec Changes 2026-11-10, cart). Every response carries a fresh Quote; the
@@ -83,17 +83,28 @@ export const cartSchema = z.object({
   /** The link-prefilled or entered promo code (the promo ticket reads and clears it). */
   promoCode: z.string().nullable(),
   /**
-   * An entered promo code is applied while the customer's birthday coupon would also discount this
-   * cart (ADR 0002: the code wins): the coupon waiting behind it, as the server judged it. Null
-   * otherwise. Taking the code out lets the server pick the coupon (#30; #39 builds the switch).
+   * An entered promo code is applied while one of the customer's Entitlements (a birthday coupon,
+   * #30; an upgrade right, #38) would also discount this cart (ADR 0002: the code wins): the one the
+   * server would pick without the code, as it judged it. Null otherwise. Taking the code out lets
+   * the server pick it (#39 builds the switch).
    */
-  birthdayCouponWaiting: z
-    .object({
-      id: z.number().int(),
-      percent: z.number().int(),
-      /** Its last day, Tashkent `YYYY-MM-DD`. */
-      lastDay: z.string(),
-    })
+  entitlementWaiting: z
+    .discriminatedUnion('type', [
+      z.object({
+        type: z.literal('birthday_coupon'),
+        id: z.number().int(),
+        percent: z.number().int(),
+        /** Its last day, Tashkent `YYYY-MM-DD`. */
+        lastDay: z.string(),
+      }),
+      z.object({
+        type: z.literal('upgrade_right'),
+        id: z.number().int(),
+        source: upgradeRightSourceSchema,
+        percent: z.number().int(),
+        lastDay: z.string(),
+      }),
+    ])
     .nullable(),
 });
 export type CartDto = z.infer<typeof cartSchema>;

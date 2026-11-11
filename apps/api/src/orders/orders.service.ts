@@ -675,6 +675,7 @@ export function toOrderDto(
     thresholdBaseAmount: o.thresholdBaseAmount,
     total: o.total,
     amountDue: o.amountDue,
+    trackingNumber: o.trackingNumber,
     cancellation,
   };
 }

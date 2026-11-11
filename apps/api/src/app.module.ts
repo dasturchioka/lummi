@@ -41,6 +41,7 @@ import { BirthdayCouponJob } from './birthday/birthday-job';
 import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
+import { UpgradeRightReminders } from './upgrade-rights/upgrade-right-reminders';
 import { CatalogController } from './catalog/catalog.controller';
 import { CatalogService } from './catalog/catalog.service';
 import { SetsAdminController } from './admin/sets-admin.controller';
@@ -67,6 +68,8 @@ import { AlertService } from './outbox/alert.service';
 import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { BotReceipts } from './bot/bot-receipts.service';
+import { OrderCards } from './orders-group/order-cards';
+import { OrdersGroupBot } from './orders-group/orders-group-bot';
 import { WebhookController } from './bot/webhook.controller';
 import { MeController } from './me/me.controller';
 import { CreditEvents } from './humo/credit-events';
@@ -158,8 +161,11 @@ export class AppModule {
         PaymentNotFound,
         PaymentPauses,
         OrderStatusService,
+        OrderCards,
+        OrdersGroupBot,
         DiscountSourceHooks,
         ReserveSweeps,
+        UpgradeRightReminders,
         CatalogAdminService,
         CatalogImportService,
         SetsAdminService,

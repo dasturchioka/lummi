@@ -45,6 +45,15 @@ export type TransitionActor =
   | { type: 'ai' }
   | { type: 'system' };
 
+/** A move just made, inside its transaction: what `afterMove` listeners are told. */
+export interface MadeMove {
+  action: OrderAction;
+  /** The order as it is now. */
+  order: OrderRow;
+  event: OrderEventRow;
+}
+export type MoveListener = (tx: DbOrTx, move: MadeMove) => Promise<void>;
+
 export type TransitionOutcome =
   | { kind: 'done'; order: OrderRow; event: OrderEventRow }
   /** No such order, or (for a shopper) not theirs. */
@@ -76,6 +85,7 @@ export class OrderStatusService {
     payment_not_found: Symbol('payment_not_found'),
   };
   private readonly issued = new Set<GuardedAction>();
+  private readonly listeners: MoveListener[] = [];
 
   constructor(
     @Inject(DB) private readonly db: Db,
@@ -97,6 +107,15 @@ export class OrderStatusService {
     if (this.issued.has(action)) throw new Error(`the ${action} capability was already issued`);
     this.issued.add(action);
     return this.doors[action];
+  }
+
+  /**
+   * Run `listener` after every move, inside the move's transaction (the orders group's card, #37):
+   * whatever made the move (the bot, the admin panel, the receipt AI, a sweep), the listener's
+   * writes commit or roll back with it. Register in a provider's constructor.
+   */
+  afterMove(listener: MoveListener): void {
+    this.listeners.push(listener);
   }
 
   /**
@@ -148,16 +167,30 @@ export class OrderStatusService {
     if (order.status !== expectedStatus) return { kind: 'conflict', order };
 
     const fx = EFFECTS[action] as Effects<A>;
-    const move: Move<A> = { order, lines: await linesOf(tx, order.id), payload: plan.payload };
+    const move: Move<A> = {
+      order,
+      lines: await linesOf(tx, order.id),
+      payload: plan.payload,
+      openedRights: [],
+    };
     if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 
     const now = this.edges.clock.now();
     const onHand: OnHandChange[] = fx.onHand
       ? await changeOnHand(tx, order.id, move.lines, fx.onHand(move))
       : [];
-    if (fx.discountSource) await this.discountSources.release(tx, order);
-    if (fx.discountSource === 'release_and_close_rights')
-      await this.discountSources.closeRightsOpenedBy(tx, order);
+    switch (fx.discountSource) {
+      case 'release':
+        await this.discountSources.release(tx, order);
+        break;
+      case 'release_and_close_rights':
+        await this.discountSources.release(tx, order);
+        await this.discountSources.closeRightsOpenedBy(tx, order);
+        break;
+      case 'open_rights':
+        move.openedRights = await this.discountSources.openRights(tx, order, move.lines);
+        break;
+    }
 
     const [updated] = await tx
       .update(orders)
@@ -218,6 +251,8 @@ export class OrderStatusService {
         }),
       );
     }
+    for (const listener of this.listeners)
+      await listener(tx, { action, order: updated, event: event! });
     return { kind: 'done', order: updated, event: event! };
   }
 

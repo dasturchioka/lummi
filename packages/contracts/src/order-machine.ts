@@ -147,6 +147,17 @@ export const CANCEL_REASON_ONLY_FROM: Partial<Record<CancelReason, OrderStatus>>
   not_collected_at_bts: 'handed_to_bts',
 };
 
+/**
+ * The reasons `actor` may cancel with from `from`: theirs, less any that fits only another status.
+ * The one rule the machine, the admin's cancel dialog and the orders group's buttons read.
+ */
+export function cancelReasonsFor(actor: OrderActorType, from: OrderStatus): CancelReason[] {
+  return CANCEL_REASONS_BY_ACTOR[actor].filter((r) => {
+    const only = CANCEL_REASON_ONLY_FROM[r];
+    return !only || only === from;
+  });
+}
+
 /** The longest note staff add to a cancel (kept in the history only); the dialog reads it too. */
 export const CANCEL_NOTE_MAX = 500;
 

@@ -9,8 +9,8 @@ import { EASE_OUT } from './photoDisc';
 
 /**
  * One volume, top-aligned so «10 мл / 30 мл / 50 мл» share one baseline whatever sits under them:
- * the volume, then (when any tile shows a markdown) the struck regular price or an empty slot of
- * the same height, then the price to pay, Sage Ink on an unselected tile during a markdown.
+ * the volume, then (when any tile shows a markdown or an upgrade right) the struck regular price or
+ * an empty slot of the same height, then the price to pay, Sage Ink on an unselected tile then.
  * Selected is the Graphite fill. Sold out is transparent with a faint outline and says so; a
  * sold-out volume can still be chosen (to see its photo), and then gets the selected fill at
  * reduced emphasis (Muted Ink), so it reads as chosen but never as buyable. Where there is no
@@ -18,6 +18,7 @@ import { EASE_OUT } from './photoDisc';
  */
 function VolumeTile({
   volume: v,
+  rightPrice,
   selected,
   strikeSlot,
   locked,
@@ -26,6 +27,8 @@ function VolumeTile({
   tileRef,
 }: {
   volume: VolumeCard;
+  /** The price with the customer's upgrade right on this volume, from the server (#38). */
+  rightPrice: number | undefined;
   selected: boolean;
   /** Some tile shows a struck regular price: every tile keeps a line for it. */
   strikeSlot: boolean;
@@ -37,7 +40,7 @@ function VolumeTile({
 }) {
   const { t } = usePrefs();
   const soldOut = v.available === 0;
-  const struck = !soldOut && v.salePrice !== null;
+  const struck = !soldOut && (v.salePrice !== null || rightPrice !== undefined);
   const look = soldOut
     ? selected
       ? 'bg-muted text-btn-ink'
@@ -75,7 +78,7 @@ function VolumeTile({
         <span className={`type-caption mt-1 ${quiet}`}>{t.card.soldOut}</span>
       ) : (
         <Money
-          amount={v.effectivePrice}
+          amount={rightPrice ?? v.effectivePrice}
           size="small"
           className={`${strikeSlot ? '' : 'mt-0.5'} ${
             struck && !selected ? 'text-sage-ink' : quiet
@@ -93,18 +96,23 @@ function VolumeTile({
  */
 export function VolumeTiles({
   volumes,
+  rightPrices = {},
   selected,
   onSelect,
   soldOutChoosable = true,
 }: {
   volumes: VolumeCard[];
+  /** Per volume, the price with the customer's upgrade right (the fragrance card, #38): struck like a markdown. */
+  rightPrices?: Partial<Record<VolumeCard['ml'], number>>;
   selected: VolumeCard['ml'];
   onSelect: (ml: VolumeCard['ml']) => void;
   soldOutChoosable?: boolean;
 }) {
   const { t } = usePrefs();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const strikeSlot = volumes.some((v) => v.available > 0 && v.salePrice !== null);
+  const strikeSlot = volumes.some(
+    (v) => v.available > 0 && (v.salePrice !== null || rightPrices[v.ml] !== undefined),
+  );
   const locked = (v: VolumeCard) => !soldOutChoosable && v.available === 0;
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     const dir =
@@ -130,6 +138,7 @@ export function VolumeTiles({
         <VolumeTile
           key={v.ml}
           volume={v}
+          rightPrice={rightPrices[v.ml]}
           selected={v.ml === selected}
           strikeSlot={strikeSlot}
           locked={locked(v)}

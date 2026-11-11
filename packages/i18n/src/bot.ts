@@ -21,6 +21,26 @@ export const botMessages = defineMessages(
       /** Before the reserve ends while the order still waits for a receipt (setting `orders.reserveReminderSeconds`). */
       reserveReminder:
         'Бронь заказа № {number} действует до {until} ⏳\nЗагрузите чек об оплате {amount}, и бронь сохранится до проверки.',
+      /**
+       * An unused upgrade right, some days before its last day (TZ §3.4: 7 and 1; #38). `{until}` is
+       * the last day, `{names}` the covered fragrances.
+       */
+      upgradeRightReminder: {
+        set: 'Напоминаем: скидка за набор −{percent}% действует до {until} включительно ⏳\nОна на один полный флакон любого аромата из набора: {names}.',
+        single_10ml:
+          'Напоминаем: скидка −{percent}% за флакон 10 мл действует до {until} включительно ⏳\nОна на один полный флакон аромата {names}.',
+      },
+      /** A fragrance in a bot message, always with its original (CLAUDE.md brand rule). */
+      fragranceNamed: '{name} (по мотивам {brand})',
+      /**
+       * The line «Доставлен» adds when the order opened an upgrade right (#38): no emoji, the
+       * message has one. `{until}` is its last day.
+       */
+      upgradeRightOpened: {
+        set: 'Вам открыта скидка −{percent}% на полный флакон одного из ароматов набора — до {until} включительно. Она уже в «Мои скидки» в профиле.',
+        single_10ml:
+          'Вам открыта скидка −{percent}% на полный флакон аромата из вашего флакона 10 мл — до {until} включительно. Она уже в «Мои скидки» в профиле.',
+      },
       /** One message per status change (spec Changes 2026-11-07, customer messages); none for «Принят» or a return. */
       receiptReceived:
         'Чек к заказу № {number} получен 🧾\nПроверяем оплату и напишем, как только она подтвердится.',
@@ -70,6 +90,60 @@ export const botMessages = defineMessages(
       /** The birthday coupon, 10:00 Tashkent a few days before (TZ §3.8, #30): `{max}` is money, `{until}` the last day. */
       birthdayCoupon:
         'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
+      /**
+       * The orders group (#37): the order's card in «Заказы», its buttons and the tracking-number
+       * question. Staff read it, so it goes out in Russian, like the owner alerts.
+       */
+      group: {
+        title: 'Заказ № {number}',
+        discount: 'Скидка ({source})',
+        delivery: 'Доставка',
+        free: 'бесплатно',
+        total: 'Итого',
+        point: 'Пункт BTS',
+        landmark: 'Ориентир',
+        typed: 'Адрес указан вручную',
+        typedNote: 'Подберите пункт BTS и свяжитесь с покупателем.',
+        recipient: 'Получатель',
+        customer: 'Покупатель',
+        comment: 'Комментарий',
+        gift: 'Это подарок',
+        greeting: 'Открытка: «{text}»',
+        noGreeting: 'Без открытки',
+        tracking: 'Трек-номер',
+        refundDue: 'Заказ был оплачен: верните деньги покупателю.',
+        history: 'История',
+        placed: 'Заказ оформлен',
+        moreLines: '… и ещё {n}: полный состав в админке',
+        moreHistory: '… и ещё {n} раньше',
+        cancelAsk: 'Отмена заказа: выберите причину.',
+        cancelConfirm: 'Отменить заказ? Причина: {reason}.',
+        step: {
+          accept: '✅ Принят',
+          start_assembly: '📦 Собирается',
+          hand_to_bts: '🚚 Передан в BTS',
+          deliver: '🏁 Доставлен',
+        },
+        cancel: 'Отменить',
+        confirmCancel: 'Да, отменить: {reason}',
+        back: '‹ Назад',
+        changed: 'Уже изменено',
+        noAccess: 'Нет доступа',
+        /** A button the bot never drew: forged data, or a step that does not exist. */
+        refused: 'Нельзя',
+        askTracking:
+          '{name}, введите трек-номер BTS для заказа № {number} ответом на это сообщение.',
+        trackingPlaceholder: 'Трек-номер BTS',
+        trackingAsked: 'Ответьте трек-номером на сообщение бота',
+        trackingInvalid:
+          'Трек-номер — от {min} до {max} символов. Ответьте на это сообщение ещё раз.',
+        trackingNotYours:
+          'Трек-номер для заказа № {number} ждём от {name}. Чтобы ввести его самим, нажмите «Передан в BTS» на карточке.',
+        trackingStale: 'Заказ № {number} уже изменён, трек-номер не сохранён.',
+        trackingSuperseded:
+          'Этот вопрос по заказу № {number} уже не действует: ответьте на последний вопрос бота.',
+        receiptCaption: 'Чек к заказу № {number}',
+      },
     },
   },
   {
@@ -85,6 +159,17 @@ export const botMessages = defineMessages(
       writeManager: 'Menejerga yozish',
       reserveReminder:
         '№ {number} buyurtma bandligi {until} gacha amal qiladi ⏳\n{amount} toʻlov chekini yuklang, shunda bandlik tekshiruvgacha saqlanadi.',
+      upgradeRightReminder: {
+        set: 'Eslatma: toʻplam uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU toʻplamdagi istalgan iforning bitta toʻliq flakoniga: {names}.',
+        single_10ml:
+          'Eslatma: 10 ml flakon uchun −{percent}% chegirma {until} kuni oxirigacha amal qiladi ⏳\nU {names} iforining bitta toʻliq flakoniga.',
+      },
+      fragranceNamed: '{name} ({brand} asosida)',
+      upgradeRightOpened: {
+        set: 'Sizga toʻplamdagi iforlardan birining toʻliq flakoniga −{percent}% chegirma ochildi — {until} kuni oxirigacha. U profildagi «Mening chegirmalarim» boʻlimida.',
+        single_10ml:
+          'Sizga 10 ml flakoningizdagi iforning toʻliq flakoniga −{percent}% chegirma ochildi — {until} kuni oxirigacha. U profildagi «Mening chegirmalarim» boʻlimida.',
+      },
       receiptReceived:
         '№ {number} buyurtma cheki qabul qilindi 🧾\nToʻlovni tekshiryapmiz, tasdiqlanishi bilan xabar beramiz.',
       paymentConfirmed:
@@ -124,6 +209,55 @@ export const botMessages = defineMessages(
       receiptExpired: 'Bu tanlov eskirgan. Chekni qayta yuboring.',
       birthdayCoupon:
         'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
+      group: {
+        title: '№ {number} buyurtma',
+        discount: 'Chegirma ({source})',
+        delivery: 'Yetkazish',
+        free: 'bepul',
+        total: 'Jami',
+        point: 'BTS punkti',
+        landmark: 'Moʻljal',
+        typed: 'Manzil qoʻlda kiritilgan',
+        typedNote: 'BTS punktini tanlang va xaridor bilan bogʻlaning.',
+        recipient: 'Qabul qiluvchi',
+        customer: 'Xaridor',
+        comment: 'Izoh',
+        gift: 'Bu sovgʻa',
+        greeting: 'Otkritka: «{text}»',
+        noGreeting: 'Otkritkasiz',
+        tracking: 'Trek-raqam',
+        refundDue: 'Buyurtma toʻlangan edi: pulni xaridorga qaytaring.',
+        history: 'Tarix',
+        placed: 'Buyurtma rasmiylashtirildi',
+        moreLines: '… yana {n} ta: toʻliq tarkib admin panelda',
+        moreHistory: '… oldinroq yana {n} ta',
+        cancelAsk: 'Buyurtmani bekor qilish: sababni tanlang.',
+        cancelConfirm: 'Buyurtma bekor qilinsinmi? Sabab: {reason}.',
+        step: {
+          accept: '✅ Qabul qilindi',
+          start_assembly: '📦 Yigʻilmoqda',
+          hand_to_bts: '🚚 BTSga topshirildi',
+          deliver: '🏁 Yetkazildi',
+        },
+        cancel: 'Bekor qilish',
+        confirmCancel: 'Ha, bekor qilish: {reason}',
+        back: '‹ Orqaga',
+        changed: 'Allaqachon oʻzgargan',
+        noAccess: 'Ruxsat yoʻq',
+        refused: 'Mumkin emas',
+        askTracking:
+          '{name}, № {number} buyurtmaning BTS trek-raqamini shu xabarga javob qilib yuboring.',
+        trackingPlaceholder: 'BTS trek-raqami',
+        trackingAsked: 'Bot xabariga trek-raqam bilan javob bering',
+        trackingInvalid:
+          'Trek-raqam {min} dan {max} tagacha belgidan iborat. Shu xabarga qayta javob bering.',
+        trackingNotYours:
+          '№ {number} buyurtmaning trek-raqamini {name} kiritadi. Oʻzingiz kiritish uchun kartochkadagi «BTSga topshirildi» tugmasini bosing.',
+        trackingStale: '№ {number} buyurtma allaqachon oʻzgargan, trek-raqam saqlanmadi.',
+        trackingSuperseded:
+          '№ {number} buyurtma boʻyicha bu savol endi amal qilmaydi: botning oxirgi savoliga javob bering.',
+        receiptCaption: '№ {number} buyurtma cheki',
+      },
     },
   },
 );

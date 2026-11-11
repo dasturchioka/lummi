@@ -49,7 +49,7 @@ export function PromoField({
   busy,
   pending,
   notice,
-  couponWaiting = null,
+  waiting = null,
   onApply,
   onRemove,
 }: {
@@ -60,14 +60,19 @@ export function PromoField({
   busy: boolean;
   pending?: 'apply' | 'remove';
   notice: PromoNotice;
-  /** The birthday coupon the applied code keeps out, as the server judged it (#30). */
-  couponWaiting?: CartDto['birthdayCouponWaiting'];
+  /** The entitlement the applied code keeps out (a birthday coupon, an upgrade right), as the server judged it. */
+  waiting?: CartDto['entitlementWaiting'];
   onApply: (code: string) => void;
   onRemove: () => void;
 }) {
   const { t, language } = usePrefs();
   const p = t.cart.promo;
   const d = useDiscountsText();
+  // what waits behind the code, in one place: its sentence, its button, its test id
+  const waits =
+    waiting?.type === 'upgrade_right'
+      ? { id: 'right', text: d.rightWaits[waiting.source], use: d.useRight }
+      : { id: 'coupon', text: d.couponWaits, use: d.useCoupon };
   const [draft, setDraft] = useState(stored ?? '');
   // The server's code wins whenever it changes (applied here, removed, taken by an order).
   const [seen, setSeen] = useState(stored);
@@ -223,24 +228,27 @@ export function PromoField({
             </span>
           </p>
         ) : null}
-        {applied && couponWaiting ? (
-          // ADR 0002: the entered code wins; the coupon waits, and taking the code out lets the
-          // server pick it (#39 builds the full switch)
-          <p className="type-small mt-1.5 px-1 text-pretty text-muted" data-testid="coupon-waiting">
-            {fill(d.couponWaits, {
-              percent: String(couponWaiting.percent),
-              date: formatCalendarDate(couponWaiting.lastDay, language),
+        {applied && waiting ? (
+          // ADR 0002: the entered code wins; the coupon or the right waits, and taking the code
+          // out lets the server pick it (#39 builds the full switch)
+          <p
+            className="type-small mt-1.5 px-1 text-pretty text-muted"
+            data-testid={`${waits.id}-waiting`}
+          >
+            {fill(waits.text, {
+              percent: String(waiting.percent),
+              date: formatCalendarDate(waiting.lastDay, language),
             })}{' '}
             <button
               type="button"
               aria-disabled={busy || undefined}
-              data-testid="coupon-use"
+              data-testid={`${waits.id}-use`}
               onClick={() => {
                 if (!busy) onRemove();
               }}
               className="-my-1 inline rounded-btn py-1 font-medium text-ink underline decoration-line-strong underline-offset-[3px] transition-[text-decoration-color,opacity] duration-150 hover:decoration-current active:opacity-60"
             >
-              {d.useCoupon}
+              {waits.use}
             </button>
           </p>
         ) : null}

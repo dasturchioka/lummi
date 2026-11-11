@@ -180,16 +180,39 @@ function currentStep(status: OrderStatus): number | null {
  * check joined by a 2 px Sage line, the current step a ringed dot, later ones hollow. Derived
  * from the one status (ADR 0011); only the creation carries a time until #24 adds the events.
  */
-export function Timeline({ status, createdAt }: { status: OrderStatus; createdAt: string }) {
+export function Timeline({
+  status,
+  createdAt,
+  trackingNumber = null,
+}: {
+  status: OrderStatus;
+  createdAt: string;
+  /** BTS's number, under «Передан в BTS» once the manager entered it (#37). */
+  trackingNumber?: string | null;
+}) {
   const { language } = usePrefs();
   const o = useOrdersText();
   const current = currentStep(status);
   if (current === null) return null;
-  const steps: { title: string; note?: string }[] = [
+  const [before = '', after = ''] = o.orders.tracking.split('{tracking}');
+  const steps: { title: string; note?: string; extra?: ReactNode }[] = [
     { title: o.orders.steps.created, note: formatDateTime(createdAt, language) },
     { title: o.orders.steps.payment },
     { title: o.orders.steps.assembling },
-    { title: o.orders.steps.handedToBts },
+    {
+      title: o.orders.steps.handedToBts,
+      // a long press takes the number whole, to look it up with BTS
+      extra: trackingNumber ? (
+        <p
+          className="type-small mt-0.5 break-words text-ink [overflow-wrap:anywhere]"
+          data-testid="tracking-number"
+        >
+          {before}
+          <span className="font-semibold tabular-nums select-all">{trackingNumber}</span>
+          {after}
+        </p>
+      ) : undefined,
+    },
     { title: o.orders.steps.delivered },
   ];
   return (
@@ -230,7 +253,9 @@ export function Timeline({ status, createdAt }: { status: OrderStatus; createdAt
               >
                 {step.title}
               </p>
-              {note && state !== 'later' ? (
+              {step.extra && state !== 'later' ? (
+                step.extra
+              ) : note && state !== 'later' ? (
                 <p className="type-small mt-0.5 text-muted">{note}</p>
               ) : null}
             </div>

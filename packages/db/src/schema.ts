@@ -9,6 +9,8 @@ import {
   RECEIPT_FILE_KINDS,
   RECEIPT_REVIEW_REASONS,
   RECEIPT_VERDICTS,
+  UPGRADE_RIGHT_SOURCES,
+  type CancelReason,
   type OrderStatus,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
@@ -200,6 +202,14 @@ export const processedUpdates = pgTable('processed_updates', {
 });
 
 /**
+ * What an outbox row does when delivered: send its message, or bring an order's card in the
+ * orders group up to date (`ref` = the order id; rendered from the order at delivery, #37).
+ */
+export const OUTBOX_KINDS = ['message', 'order_card'] as const;
+export type OutboxKind = (typeof OUTBOX_KINDS)[number];
+export const outboxKindEnum = pgEnum('outbox_kind', OUTBOX_KINDS);
+
+/**
  * Transactional outbox (ADR 0021): callers insert in the same transaction as the state change.
  * Pending = neither sent_at nor failed_at. queued_at is the marker stamped when the worker hands the
  * row to BullMQ; a row stuck queued past the requeue window is handed over again (jobId = id dedups).
@@ -209,6 +219,9 @@ export const outbox = pgTable(
   'outbox',
   {
     id: id(),
+    kind: outboxKindEnum('kind').notNull().default('message'),
+    /** What a task is about (the order id of an `order_card` row); null for a message. */
+    ref: bigint('ref', { mode: 'number' }),
     chatId: bigint('chat_id', { mode: 'number' }).notNull(),
     threadId: integer('thread_id'),
     text: text('text').notNull(),
@@ -226,6 +239,8 @@ export const outbox = pgTable(
     index('outbox_pending_idx')
       .on(t.createdAt)
       .where(sql`sent_at is null and failed_at is null`),
+    // a message has its text and no ref; a task (text '') always says what it is about
+    check('outbox_task_ref', sql`(${t.kind} = 'message') = (${t.ref} is null)`),
   ],
 );
 
@@ -901,6 +916,61 @@ export const orderEvents = pgTable(
   (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
 );
 
+export const upgradeRightSourceEnum = pgEnum('upgrade_right_source', UPGRADE_RIGHT_SOURCES);
+
+/**
+ * An Upgrade right (ADR 0003, ticket #38): opened when its source order reaches «Доставлен», one
+ * per set unit (covering the set's five fragrances as bought, ADR 0009) or, while that source is
+ * switched on, one per fragrance bought as a single 10 ml bottle. It discounts one Full size
+ * bottle of a covered fragrance once. Percent and the end are fixed when it opens. Its state is
+ * derived (ADR 0005): active while no order holds it (`used_by_order_id`), it is not closed and
+ * `expires_at` (00:00 Tashkent the day after its last day, exclusive) has not come. An order holds
+ * it with a conditional update; a cancel or return of that order clears the link while within
+ * validity. A returned source order closes it (`closed_at`); one already spent stays with the
+ * order that used it. The reminder markers are stamped once each, sent or not (a blocked bot).
+ */
+export const upgradeRights = pgTable(
+  'upgrade_rights',
+  {
+    id: id(),
+    customerId: bigint('customer_id', { mode: 'number' })
+      .notNull()
+      .references(() => customers.id),
+    source: upgradeRightSourceEnum('source').notNull(),
+    sourceOrderId: bigint('source_order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id),
+    /** The source order line, and which unit of it (a set line of qty 2 opens units 0 and 1). */
+    sourcePosition: smallint('source_position').notNull(),
+    sourceUnit: smallint('source_unit').notNull(),
+    /** The covered fragrances as bought: a set's five, or the one 10 ml bottle's. */
+    fragrances: jsonb('fragrances')
+      .$type<{ fragranceId: number; name: string; brand: string }[]>()
+      .notNull(),
+    percent: smallint('percent').notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedByOrderId: bigint('used_by_order_id', { mode: 'number' }).references(() => orders.id),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    firstReminderAt: timestamp('first_reminder_at', { withTimezone: true }),
+    lastReminderAt: timestamp('last_reminder_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('upgrade_rights_source_idx').on(t.sourceOrderId, t.sourcePosition, t.sourceUnit),
+    uniqueIndex('upgrade_rights_used_by_order_idx')
+      .on(t.usedByOrderId)
+      .where(sql`${t.usedByOrderId} is not null`),
+    index('upgrade_rights_customer_idx').on(t.customerId, t.expiresAt),
+    check(
+      'upgrade_rights_terms_check',
+      sql`${t.percent} between 1 and 100 and ${t.expiresAt} > ${t.openedAt} and jsonb_array_length(${t.fragrances}) between 1 and 5 and ${t.sourceUnit} >= 0`,
+    ),
+  ],
+);
+
+export type UpgradeRightRow = typeof upgradeRights.$inferSelect;
+
 /**
  * The shop card shoppers transfer to (spec §4, #28): one row, owner-only, every change audited
  * with the number masked. No row means no card: checkout is closed («Оплата временно недоступна»).
@@ -1119,6 +1189,71 @@ export const botPendingReceipts = pgTable(
   (t) => [index('bot_pending_receipts_created_idx').on(t.createdAt)],
 );
 export type BotPendingReceiptRow = typeof botPendingReceipts.$inferSelect;
+
+/** The keyboard under an order's card: the next step, the cancel reasons, or one reason to confirm. */
+export type OrderCardPanel =
+  { kind: 'steps' } | { kind: 'cancel' } | { kind: 'confirm_cancel'; reason: CancelReason };
+
+/**
+ * An order's one card in the orders group's «Заказы» topic (#37, spec Changes 2026-11-07),
+ * created in the transaction that confirms its payment; the primary key keeps it to one. The row
+ * is the card's state, and Telegram catches up with it: every change bumps `version` and queues
+ * an `order_card` outbox row, whose delivery renders the card from the order as it is then and
+ * posts it (no `message_id` yet) or edits it (only when `shown_hash` differs). `syncing_at` is the
+ * lease one delivery holds meanwhile, so two never race on one message; the holder goes round
+ * again while `version` moved. The receipt goes once, as a reply to the card.
+ */
+export const orderCards = pgTable('order_cards', {
+  orderId: bigint('order_id', { mode: 'number' })
+    .primaryKey()
+    .references(() => orders.id, { onDelete: 'cascade' }),
+  /** The orders group and its «Заказы» topic when the card was posted (settings `bot.*`). */
+  chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+  threadId: integer('thread_id'),
+  /** Telegram's id of the card message; null until it is posted. */
+  messageId: bigint('message_id', { mode: 'number' }),
+  /** The receipt the payment was confirmed with; null for a credit that came without one. */
+  receiptId: bigint('receipt_id', { mode: 'number' }).references(() => receipts.id),
+  /** When the receipt went as a reply to the card (or turned out to be gone from storage). */
+  receiptPostedAt: timestamp('receipt_posted_at', { withTimezone: true }),
+  panel: jsonb('panel').$type<OrderCardPanel>().notNull().default({ kind: 'steps' }),
+  version: integer('version').notNull().default(1),
+  /** A hash of the text and keyboard Telegram shows. */
+  shownHash: text('shown_hash'),
+  syncingAt: timestamp('syncing_at', { withTimezone: true }),
+  createdAt: createdAt(),
+});
+export type OrderCardRow = typeof orderCards.$inferSelect;
+
+/**
+ * «Передан в BTS» pressed on a card (#37): the bot asks the staff member who pressed it for the
+ * tracking number by ForceReply. Their reply to that message (found through the outbox row's
+ * Telegram message id) makes the handover from `expected_status`; a bad number asks again with
+ * a new prompt. At most one is open per order: answered, or replaced by a newer question (a
+ * re-ask, another press), it is closed; a reply to a closed one changes nothing.
+ */
+export const orderCardPrompts = pgTable(
+  'order_card_prompts',
+  {
+    id: id(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    staffId: bigint('staff_id', { mode: 'number' })
+      .notNull()
+      .references(() => staff.id, { onDelete: 'cascade' }),
+    expectedStatus: orderStatusEnum('expected_status').notNull(),
+    /** The question as sent: its row holds the chat and, once sent, the Telegram message id. */
+    outboxId: bigint('outbox_id', { mode: 'number' })
+      .notNull()
+      .unique()
+      .references(() => outbox.id, { onDelete: 'cascade' }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('order_card_prompts_order_idx').on(t.orderId)],
+);
+export type OrderCardPromptRow = typeof orderCardPrompts.$inferSelect;
 
 /**
  * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
