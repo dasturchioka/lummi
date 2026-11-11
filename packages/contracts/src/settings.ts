@@ -896,11 +896,7 @@ export const settingDefinitions = {
   },
   /** Developer's Telegram chat id: gets the first occurrence of every new error (ADR 0035). Null = nobody. */
   'ops.developerChatId': {
-    schema: z
-      .number()
-      .int()
-      .refine((n) => n !== 0)
-      .nullable(),
+    schema: z.number().int().min(1).nullable(),
     default: null,
     area: 'system',
     label: { ru: 'Telegram ID разработчика', uz: 'Dasturchining Telegram ID raqami' },
