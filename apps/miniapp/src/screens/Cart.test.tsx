@@ -165,10 +165,43 @@ describe('CartView: the discount switch (#39)', () => {
     expect(screen.queryByTestId('discount-row')).toBeNull();
   });
 
-  it('a chosen discount that went stale says so', () => {
+  it('a chosen discount that went stale says which, and what applies now', () => {
     render(<CartView cart={CART_FIXTURES['choice-stale']} />);
     expect(read(screen.getByTestId('choice-stale'))).toBe(
-      'Выбранная скидка больше не действует. Итог пересчитан.',
+      'Купон ко дню рождения больше не действует — применили скидку за набор.',
+    );
+    cleanup();
+
+    // nothing left to apply: the notice stands alone
+    render(
+      <CartView
+        cart={CART_FIXTURES.plain}
+        lapsed={{ what: { type: 'upgrade_right', source: 'set' } }}
+      />,
+    );
+    expect(screen.queryByTestId('discount-choice')).toBeNull();
+    expect(read(screen.getByTestId('choice-stale'))).toBe(
+      'Скидка за набор больше не действует — сейчас скидки нет.',
+    );
+    cleanup();
+
+    language = 'uz';
+    render(<CartView cart={CART_FIXTURES['choice-stale']} />);
+    expect(read(screen.getByTestId('choice-stale'))).toBe(
+      'Tugʻilgan kun kuponi endi amal qilmaydi — toʻplam chegirmasi qoʻllandi.',
+    );
+  });
+
+  it('a refused tap says the same: the code it named, or an unnamed discount', () => {
+    const auto = CART_FIXTURES['choice-auto'];
+    render(<CartView cart={auto} lapsed={{ what: { type: 'promo_code', code: 'BLOGER5' } }} />);
+    expect(read(screen.getByTestId('choice-stale'))).toBe(
+      'Промокод BLOGER5 больше не действует — применили скидку за набор.',
+    );
+    cleanup();
+    render(<CartView cart={CART_FIXTURES['choice-none']} lapsed={{ what: null }} />);
+    expect(read(screen.getByTestId('choice-stale'))).toBe(
+      'Выбранная скидка больше не действует — сейчас скидки нет.',
     );
   });
 

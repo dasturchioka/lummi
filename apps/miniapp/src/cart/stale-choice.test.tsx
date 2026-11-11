@@ -27,23 +27,33 @@ describe('the stale-choice notice', () => {
   it('is kept from any cart answer, past later answers that no longer report it, until cleared', () => {
     const qc = new QueryClient();
     const note = watchStaleChoice(qc);
-    expect(note.get()).toBe(false);
+    expect(note.get()).toBeNull();
     qc.setQueryData(CART_KEY, fresh);
-    expect(note.get()).toBe(false);
-    // the tab bar's read reported it; then an add from a fragrance card answered without it
+    expect(note.get()).toBeNull();
+    // the tab bar's read reported it, naming the lapsed coupon; then an add from a fragrance card
+    // answered without it
     qc.setQueryData(CART_KEY, stale);
     qc.setQueryData(CART_KEY, fresh);
-    expect(note.get()).toBe(true);
+    expect(note.get()).toEqual({ what: { type: 'birthday_coupon' } });
     // the shopper picked a discount
     note.clear();
-    expect(note.get()).toBe(false);
+    expect(note.get()).toBeNull();
+  });
+
+  it('a tap the server refused is reported the same way, naming what was tapped', () => {
+    const qc = new QueryClient();
+    const note = watchStaleChoice(qc);
+    note.report({ type: 'upgrade_right', source: 'single_10ml' });
+    expect(note.get()).toEqual({ what: { type: 'upgrade_right', source: 'single_10ml' } });
+    note.report(null);
+    expect(note.get()).toEqual({ what: null });
   });
 
   it('a fetched cart counts as much as a written one', async () => {
     const qc = new QueryClient();
     const note = watchStaleChoice(qc);
     await qc.fetchQuery({ queryKey: CART_KEY, queryFn: async () => stale });
-    expect(note.get()).toBe(true);
+    expect(note.get()).not.toBeNull();
   });
 
   it('an emptied (or ordered) cart forgets it: the choice went with its lines', () => {
@@ -51,14 +61,14 @@ describe('the stale-choice notice', () => {
     const note = watchStaleChoice(qc);
     qc.setQueryData(CART_KEY, stale);
     qc.setQueryData(CART_KEY, empty);
-    expect(note.get()).toBe(false);
+    expect(note.get()).toBeNull();
   });
 
   it('only the cart counts: a checkout or buy-now quote is not the cart’s choice', () => {
     const qc = new QueryClient();
     const note = watchStaleChoice(qc);
     qc.setQueryData(['checkout', 'volume:x:50'], { quote: { staleChoice: true }, lines: [{}] });
-    expect(note.get()).toBe(false);
+    expect(note.get()).toBeNull();
   });
 
   it('the cart screen reads it for the app’s client and re-renders when it changes', () => {
@@ -69,10 +79,12 @@ describe('the stale-choice notice', () => {
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
     const { result } = renderHook(() => useStaleChoice(), { wrapper });
-    expect(result.current.stale).toBe(true);
+    expect(result.current.lapsed).toEqual({ what: { type: 'birthday_coupon' } });
     act(() => result.current.clear());
-    expect(result.current.stale).toBe(false);
+    expect(result.current.lapsed).toBeNull();
     act(() => void qc.setQueryData(CART_KEY, { ...stale }));
-    expect(result.current.stale).toBe(true);
+    expect(result.current.lapsed).not.toBeNull();
+    act(() => result.current.report({ type: 'promo_code', code: 'BLOGER5' }));
+    expect(result.current.lapsed).toEqual({ what: { type: 'promo_code', code: 'BLOGER5' } });
   });
 });

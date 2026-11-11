@@ -366,7 +366,11 @@ type ChoiceRow = keyof typeof choiceRows;
 const choosing = (
   applied: ChoiceRow,
   rows: ChoiceRow[],
-  more: { promoCode?: string; staleChoice?: boolean; waiting?: CartDto['entitlementWaiting'] } = {},
+  more: {
+    promoCode?: string;
+    lapsed?: CartDto['lapsedDiscount'];
+    waiting?: CartDto['entitlementWaiting'];
+  } = {},
 ): CartDto => {
   const a = choiceRows[applied];
   const others = rows
@@ -383,7 +387,7 @@ const choosing = (
     suggestions: [],
     promoCode: more.promoCode ?? null,
     discountOptions,
-    lapsedDiscount: null,
+    lapsedDiscount: more.lapsed ?? null,
     entitlementWaiting: more.waiting ?? null,
     freeDeliveryProgress: 100,
     quote: {
@@ -407,7 +411,7 @@ const choosing = (
       ].map(({ terms: _terms, ...o }) => o),
       withoutDiscount: { deliveryFee: 0, total: 287_000 },
       promoCode: more.promoCode ? { code: more.promoCode, invalid: null } : null,
-      staleChoice: more.staleChoice ?? false,
+      staleChoice: Boolean(more.lapsed),
     },
   };
 };
@@ -441,7 +445,10 @@ export const CART_FIXTURES = {
     promoCode: 'BLOGER5',
   }),
   'choice-none': choosing('none', ['right', 'coupon', 'none']),
-  'choice-stale': choosing('right', ['right', 'none'], { staleChoice: true }),
+  // the costlier coupon chosen: its row carries the delivery the right leaves free
+  'choice-coupon': choosing('coupon', ['right', 'coupon', 'none']),
+  // the chosen coupon lapsed; the server fell back to the right
+  'choice-stale': choosing('right', ['right', 'none'], { lapsed: { type: 'birthday_coupon' } }),
 } satisfies Record<string, CartDto>;
 export type CartFixtureName = keyof typeof CART_FIXTURES;
 const NAMES = Object.keys(CART_FIXTURES) as CartFixtureName[];

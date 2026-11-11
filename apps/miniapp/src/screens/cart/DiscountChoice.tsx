@@ -4,9 +4,11 @@ import type {
   Discount,
   DiscountChoiceDto,
   DiscountOptionDto,
+  UpgradeRightSource,
 } from '@lummi/contracts';
 import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
 import { Fragment, type ReactNode } from 'react';
+import type { Lapsed, LapsedDiscount } from '../../cart/stale-choice';
 import { useDiscountsText } from '../../discounts/queries';
 import { usePrefs } from '../../lib/prefs';
 import { Button } from '../../ui/Button';
@@ -23,6 +25,22 @@ export function choiceOf(d: Discount | null): DiscountChoiceDto {
 
 /** One key per choice, for the row in flight. */
 export const choiceKey = (c: DiscountChoiceDto) => ('id' in c ? `${c.type}:${c.id}` : c.type);
+
+/** A tapped discount the server refused (409), as the lapsed-discount notice names it. */
+export function lapsedOf(d: Discount | null): LapsedDiscount | null {
+  if (d === null) return null;
+  if (d.type === 'promo_code') return { type: d.type, code: d.code };
+  return d.type === 'upgrade_right' ? { type: d.type, source: d.source } : { type: d.type };
+}
+
+/**
+ * An entitlement's source, as the switch's messages are keyed (a row, the hint, the lapsed notice):
+ * an upgrade right by where it came from, a set or a 10 ml bottle.
+ */
+type Source = UpgradeRightSource | 'birthday_coupon';
+const sourceOf = (
+  e: { type: 'birthday_coupon' } | { type: 'upgrade_right'; source: UpgradeRightSource },
+): Source => (e.type === 'upgrade_right' ? e.source : e.type);
 
 const EASE_OUT = 'ease-[cubic-bezier(0.23,1,0.32,1)]';
 
@@ -49,41 +67,47 @@ function Joined({ parts }: { parts: ReactNode[] }) {
  * Sage note «Скидка за набор выгоднее на … сум» with «Переключить»; then every choice as a radio
  * row with its total, in the server's order (cheapest first, «Не применять» last), so a row stays
  * put when tapped. Everything shown is the server's: the Mini App adds and compares nothing. A
- * chosen discount that went stale says so at the top, alone when nothing is left to choose.
+ * chosen discount that lapsed (or a tap the server refused) says which and what applies now, at
+ * the top, alone when nothing is left to choose.
  */
 export function DiscountChoice({
   cart,
-  stale,
+  lapsed,
   busy,
   pending,
   onChoose,
 }: {
   cart: CartDto;
-  /** The chosen discount no longer applied and the server fell back (#39). */
-  stale: boolean;
+  /** The shopper's discount stopped applying, or their tap was refused (#39). */
+  lapsed: Lapsed | null;
   busy: boolean;
   /** The key (`choiceKey`) of the choice in flight. */
   pending?: string;
   onChoose: (c: DiscountChoiceDto) => void;
 }) {
   const { t, language } = usePrefs();
-  const c = useDiscountsText().choice;
   const d = useDiscountsText();
+  const c = d.choice;
   const options = cart.discountOptions;
   const until = (lastDay: string) => fill(d.until, { date: formatCalendarDate(lastDay, language) });
-  const notice = stale ? (
+  const notice = lapsed ? (
     <p
-      className="type-small flex items-start gap-1.5 text-pretty font-medium text-ink"
+      className="type-small flex items-start gap-1.5 rounded-btn bg-sage-wash py-2.5 pr-3 pl-3 text-pretty text-ink shadow-[inset_0_0_0_1px_var(--c-sage)]"
       data-testid="choice-stale"
       role="status"
     >
-      <span aria-hidden="true" className="flex h-[18px] shrink-0 items-center">
+      <span aria-hidden="true" className="flex h-[18px] shrink-0 items-center text-sage-ink">
         <AlertIcon size={14} />
       </span>
-      <span className="min-w-0">{c.stale}</span>
+      <span className="min-w-0">
+        {fill(c.lapsed.text, {
+          what: lapsedName(lapsed.what, c.lapsed.what),
+          now: appliedNow(cart.quote.discount, c.lapsed.now),
+        })}
+      </span>
     </p>
   ) : null;
-  if (options.length === 0) return notice ? <div className="mt-3 px-1">{notice}</div> : null;
+  if (options.length === 0) return notice ? <div className="mt-3">{notice}</div> : null;
 
   const keeps = options.some((o) => o.terms !== null);
   const label = (o: DiscountOptionDto): ReactNode => {
@@ -100,7 +124,7 @@ export function DiscountChoice({
       );
     }
     const percent = String(o.terms?.percent ?? (x.type === 'upgrade_right' ? x.percent : ''));
-    return fill(x.type === 'upgrade_right' ? c.right[x.source] : c.coupon, { percent });
+    return fill(c.option[sourceOf(x)], { percent });
   };
   const detail = (o: DiscountOptionDto): ReactNode[] => {
     if (o.discount === null) return keeps ? [c.noneKeeps] : [];
@@ -109,9 +133,9 @@ export function DiscountChoice({
       <span key="amount" className="whitespace-nowrap text-sage-ink tabular-nums">
         −{formatMoney(o.discount.amount, language)}
       </span>,
-      ...(bottle ? [bottle] : []),
-      ...(o.terms ? [<span className="whitespace-nowrap">{until(o.terms.lastDay)}</span>] : []),
-    ];
+      bottle,
+      o.terms ? <span className="whitespace-nowrap">{until(o.terms.lastDay)}</span> : null,
+    ].filter((p) => p);
   };
 
   // ADR 0002: the entered code wins; the cheaper entitlement says by how much, one tap away
@@ -145,7 +169,7 @@ export function DiscountChoice({
                 className="type-small block font-semibold text-sage-ink"
                 data-testid="better-text"
               >
-                {fill(c.better[better.type === 'upgrade_right' ? better.source : better.type], {
+                {fill(c.better[sourceOf(better)], {
                   amount: formatMoney(better.cheaperBy, language),
                 })}
               </span>
@@ -242,4 +266,18 @@ export function DiscountChoice({
       </div>
     </Card>
   );
+}
+
+type ChoiceText = ReturnType<typeof useDiscountsText>['choice'];
+
+/** «Купон ко дню рождения», «Промокод BLOGER5», or «Выбранная скидка» when it is not named. */
+function lapsedName(what: LapsedDiscount | null, m: ChoiceText['lapsed']['what']): string {
+  if (what === null) return m.unknown;
+  return what.type === 'promo_code' ? fill(m.promo_code, { code: what.code }) : m[sourceOf(what)];
+}
+
+/** «применили скидку за набор», or «сейчас скидки нет»: what the cart's quote applies now. */
+function appliedNow(d: Discount | null, m: ChoiceText['lapsed']['now']): string {
+  if (d === null) return m.none;
+  return d.type === 'promo_code' ? fill(m.promo_code, { code: d.code }) : m[sourceOf(d)];
 }

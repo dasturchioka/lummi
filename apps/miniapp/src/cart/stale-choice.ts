@@ -8,10 +8,21 @@ import { useSyncExternalStore } from 'react';
  */
 const CART_KEY = ['cart'] as const;
 
-/** Whether the server reported the shopper's chosen discount as stale (#39). */
+/** The discount that stopped applying: the server names an entitlement, a refused tap what was tapped. */
+export type LapsedDiscount =
+  NonNullable<CartDto['lapsedDiscount']> | { type: 'promo_code'; code: string };
+
+/** The cart's notice that the shopper's discount lapsed (#39); `what` is null when it is not named. */
+export interface Lapsed {
+  what: LapsedDiscount | null;
+}
+
+/** What the server reported about the shopper's chosen discount (#39): null while all is well. */
 export interface StaleChoiceNote {
-  get(): boolean;
+  get(): Lapsed | null;
   subscribe(listener: () => void): () => void;
+  /** A tap the server refused (409, taken meanwhile): said the same way as a lapsed choice. */
+  report(what: LapsedDiscount | null): void;
   /** The shopper picked a discount (a row, «Переключить», a typed code). */
   clear(): void;
 }
@@ -29,9 +40,9 @@ const notes = new WeakMap<QueryClient, StaleChoiceNote>();
 export function watchStaleChoice(qc: QueryClient): StaleChoiceNote {
   const known = notes.get(qc);
   if (known) return known;
-  let stale = false;
+  let stale: Lapsed | null = null;
   const listeners = new Set<() => void>();
-  const set = (v: boolean) => {
+  const set = (v: Lapsed | null) => {
     if (stale === v) return;
     stale = v;
     for (const l of listeners) l();
@@ -42,8 +53,8 @@ export function watchStaleChoice(qc: QueryClient): StaleChoiceNote {
     if (key.length !== CART_KEY.length || key[0] !== CART_KEY[0]) return;
     const cart = e.query.state.data as CartDto | undefined;
     if (!cart) return;
-    if (cart.lines.length === 0) set(false);
-    else if (cart.quote.staleChoice) set(true);
+    if (cart.lines.length === 0) set(null);
+    else if (cart.quote.staleChoice) set({ what: cart.lapsedDiscount });
   });
   const note: StaleChoiceNote = {
     get: () => stale,
@@ -51,15 +62,18 @@ export function watchStaleChoice(qc: QueryClient): StaleChoiceNote {
       listeners.add(l);
       return () => void listeners.delete(l);
     },
-    clear: () => set(false),
+    report: (what) => set({ what }),
+    clear: () => set(null),
   };
   notes.set(qc, note);
   return note;
 }
 
 /** The cart screen's view of the note, for the app's query client. */
-export function useStaleChoice(): { stale: boolean; clear: () => void } {
+export function useStaleChoice(): Pick<StaleChoiceNote, 'report' | 'clear'> & {
+  lapsed: Lapsed | null;
+} {
   const note = watchStaleChoice(useQueryClient());
-  const stale = useSyncExternalStore(note.subscribe, note.get);
-  return { stale, clear: note.clear };
+  const lapsed = useSyncExternalStore(note.subscribe, note.get);
+  return { lapsed, report: note.report, clear: note.clear };
 }

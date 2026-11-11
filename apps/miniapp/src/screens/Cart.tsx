@@ -20,7 +20,7 @@ import {
   useSetQuantity,
 } from '../cart/queries';
 import { useChooseDiscount } from '../cart/choose';
-import { useStaleChoice } from '../cart/stale-choice';
+import { useStaleChoice, type Lapsed } from '../cart/stale-choice';
 import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
@@ -38,7 +38,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { EmptyState, ErrorState } from '../ui/States';
-import { choiceKey, DiscountChoice } from './cart/DiscountChoice';
+import { choiceKey, choiceOf, DiscountChoice, lapsedOf } from './cart/DiscountChoice';
 import { PromoField, type PromoNotice } from './cart/PromoField';
 
 /** What is in flight, so only the control that was tapped shows it. */
@@ -598,7 +598,7 @@ export function CartView({
   onApplyPromo = () => undefined,
   onRemovePromo = () => undefined,
   onChoose = () => undefined,
-  staleChoice = data.quote.staleChoice,
+  lapsed = data.quote.staleChoice ? { what: data.lapsedDiscount } : null,
 }: {
   cart: CartDto;
   busy?: boolean;
@@ -611,8 +611,11 @@ export function CartView({
   onApplyPromo?: (code: string) => void;
   onRemovePromo?: () => void;
   onChoose?: (choice: DiscountChoiceDto) => void;
-  /** The chosen discount went stale: the server says so once, the screen keeps saying it (#39). */
-  staleChoice?: boolean;
+  /**
+   * The chosen discount lapsed (the server says so once, the screen keeps saying it) or a tap was
+   * refused (#39).
+   */
+  lapsed?: Lapsed | null;
 }) {
   const rows = useRows(data);
   return (
@@ -658,7 +661,7 @@ export function CartView({
       />
       <DiscountChoice
         cart={data}
-        stale={staleChoice}
+        lapsed={lapsed}
         busy={busy}
         pending={pending.choice}
         onChoose={onChoose}
@@ -682,8 +685,9 @@ export function Cart() {
   const choose = useChooseDiscount();
   const busy = useIsMutating() > 0;
   // The server reports a stale choice once, in whichever cart answer came first (and then picks by
-  // itself): the notice stays until the shopper picks a discount themselves or types a code.
-  const { stale, clear: clearStale } = useStaleChoice();
+  // itself): the notice stays until the shopper picks a discount themselves or types a code. A tap
+  // the server refused (taken meanwhile) says the same.
+  const { lapsed, report: reportLapsed, clear: clearLapsed } = useStaleChoice();
 
   if (cart.isError && !cart.data)
     return (
@@ -744,14 +748,21 @@ export function Cart() {
       onCheckout={() => void router.navigate({ to: '/checkout' })}
       promoNotice={promoNotice}
       onApplyPromo={(code) => {
-        clearStale();
+        clearLapsed();
         applyPromo.mutate(code);
       }}
       onRemovePromo={() => removePromo.mutate()}
-      staleChoice={stale}
+      lapsed={lapsed}
       onChoose={(choice) => {
-        clearStale();
-        choose.mutate(choice);
+        clearLapsed();
+        const tapped = data.discountOptions.find(
+          (o) => choiceKey(choiceOf(o.discount)) === choiceKey(choice),
+        );
+        choose.mutate(choice, {
+          onSuccess: ({ refused }) => {
+            if (refused) reportLapsed(lapsedOf(tapped?.discount ?? null));
+          },
+        });
       }}
     />
   );

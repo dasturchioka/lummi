@@ -59,8 +59,12 @@ export const discountsMessages = defineMessages(
         hint: 'Одна скидка на заказ. Без промокода мы сами выбираем самую выгодную.',
         /** Over the right-hand column of the rows. */
         total: 'Итого',
-        coupon: 'Купон ко дню рождения −{percent}%',
-        right: { set: 'Скидка за набор −{percent}%', single_10ml: 'Скидка за 10 мл −{percent}%' },
+        /** A row, by its source: an upgrade right by where it came from. */
+        option: {
+          set: 'Скидка за набор −{percent}%',
+          single_10ml: 'Скидка за 10 мл −{percent}%',
+          birthday_coupon: 'Купон ко дню рождения −{percent}%',
+        },
         none: 'Не применять',
         /** Under «Не применять» while an entitlement is among the choices. */
         noneKeeps: 'Скидка сохранится на следующий заказ',
@@ -73,8 +77,27 @@ export const discountsMessages = defineMessages(
           birthday_coupon: 'Купон ко дню рождения выгоднее на {amount}',
         },
         switchTo: 'Переключить',
-        /** The chosen discount was used, ended or stopped covering the cart. */
-        stale: 'Выбранная скидка больше не действует. Итог пересчитан.',
+        /**
+         * The chosen discount was used, ended or stopped covering the cart, or a tapped one was no
+         * longer offered: which one, and what the cart applies now.
+         */
+        lapsed: {
+          text: '{what} больше не действует — {now}.',
+          what: {
+            set: 'Скидка за набор',
+            single_10ml: 'Скидка за 10 мл',
+            birthday_coupon: 'Купон ко дню рождения',
+            promo_code: 'Промокод {code}',
+            unknown: 'Выбранная скидка',
+          },
+          now: {
+            set: 'применили скидку за набор',
+            single_10ml: 'применили скидку за 10 мл',
+            birthday_coupon: 'применили купон ко дню рождения',
+            promo_code: 'применили промокод {code}',
+            none: 'сейчас скидки нет',
+          },
+        },
         /** Under the stored code while «Не применять» is chosen. */
         codeOff: 'Сейчас скидка не применяется',
       },
@@ -146,10 +169,10 @@ export const discountsMessages = defineMessages(
         title: 'Chegirma',
         hint: 'Bitta buyurtmaga bitta chegirma. Promokodsiz eng foydalisini oʻzimiz tanlaymiz.',
         total: 'Jami',
-        coupon: 'Tugʻilgan kun kuponi −{percent}%',
-        right: {
+        option: {
           set: 'Toʻplam chegirmasi −{percent}%',
           single_10ml: '10 ml uchun chegirma −{percent}%',
+          birthday_coupon: 'Tugʻilgan kun kuponi −{percent}%',
         },
         none: 'Qoʻllamaslik',
         noneKeeps: 'Chegirma keyingi buyurtmaga saqlanadi',
@@ -160,7 +183,23 @@ export const discountsMessages = defineMessages(
           birthday_coupon: 'Tugʻilgan kun kuponi {amount} foydaliroq',
         },
         switchTo: 'Almashtirish',
-        stale: 'Tanlangan chegirma endi amal qilmaydi. Jami qayta hisoblandi.',
+        lapsed: {
+          text: '{what} endi amal qilmaydi — {now}.',
+          what: {
+            set: 'Toʻplam chegirmasi',
+            single_10ml: '10 ml uchun chegirma',
+            birthday_coupon: 'Tugʻilgan kun kuponi',
+            promo_code: '{code} promokodi',
+            unknown: 'Tanlangan chegirma',
+          },
+          now: {
+            set: 'toʻplam chegirmasi qoʻllandi',
+            single_10ml: '10 ml uchun chegirma qoʻllandi',
+            birthday_coupon: 'tugʻilgan kun kuponi qoʻllandi',
+            promo_code: '{code} promokodi qoʻllandi',
+            none: 'hozir chegirma yoʻq',
+          },
+        },
         codeOff: 'Hozir chegirma qoʻllanmayapti',
       },
       cardDeal: {
