@@ -19,9 +19,10 @@ export const SHOT_ORDER = {
   assembling: 9010,
   returned: 9011,
   deliveredMany: 9012,
+  deliveredWorst: 9013,
 } as const;
 const FIRST = 9001;
-const LAST = 9012;
+const LAST = 9013;
 /** Shot Humo messages take reserved ids no other shot uses (the customers: 990000101-104). */
 const HUMO_FIRST = 990001;
 
@@ -215,7 +216,8 @@ function receiptHtml(amount: number, at: string, bank: string) {
  * totals, five receipts, a typed address and a long comment), with their history, audit entries
  * and receipt images, and a handful of Humo credits, none linked yet. A returned order carries a
  * partial Refund and a delivered one of three lines with a promo code waits for its return
- * dialog (#40). Replaced on every run.
+ * dialog (#40), as does a delivered worst case of twelve lines (the return dialog at its
+ * longest). Replaced on every run.
  */
 export async function seedShotOrders(db: Sql, filesDir: string) {
   await forgetShotOrders(db);
@@ -732,6 +734,34 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
         },
       ],
       steps: walk(at(7, 15, 40), 'delivered', muhammadjon, 'UZB 7704 1003 0078'),
+    },
+    {
+      // the return dialog at its worst (#40): twelve lines, a 60-character name, seven-digit money
+      number: 9013,
+      customer: long,
+      status: 'delivered',
+      at: at(4, 10, 15),
+      lines: [
+        { pick: 0, ml: 50, qty: 3, name: WORST_LINE_NAME },
+        ...Array.from({ length: 11 }, (_, i) => ({
+          pick: 21 + i * 3,
+          ml: [50, 30, 10][i % 3]!,
+          qty: (i % 4) + 1,
+        })),
+      ],
+      promo: { code: 'LUMMI10', amount: 0 },
+      tracking: 'UZB 7704 0412 0090',
+      receipts: [
+        {
+          at: at(4, 10, 31),
+          verdict: 'ai_confirmed',
+          file: 'IMG_4410.PNG',
+          source: 'miniapp',
+          amount: 0,
+          check: SURE,
+        },
+      ],
+      steps: walk(at(4, 10, 15), 'delivered', dilnoza, 'UZB 7704 0412 0090'),
     },
   ];
 
