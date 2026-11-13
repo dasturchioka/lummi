@@ -1,7 +1,7 @@
 import { settingDefinitions } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE } from './content-data';
@@ -17,6 +17,27 @@ import {
 } from './promo-data';
 import { SHOT_ORDER } from './orders-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
+
+/**
+ * The native `<select>` behind a dropdown (#47): the field itself on a touch pointer, the hidden
+ * source of truth next to the Radix trigger on a fine one. Picking through it fires the same
+ * `change` the popover does.
+ */
+function nativeSelect(loc: Locator) {
+  return loc.locator('xpath=self::select | self::button/parent::div/select').first();
+}
+/** Opens a dropdown's list; a click that lands before hydration is retried. */
+async function openList(page: Page, field: Locator) {
+  for (let i = 0; i < 4; i++) {
+    await field.click();
+    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
+    await page.waitForTimeout(400);
+  }
+  await page.getByRole('listbox').waitFor();
+}
+async function choose(loc: Locator, option: string | { label: string }) {
+  await nativeSelect(loc).selectOption(option, { force: true });
+}
 
 /**
  * Opens a fragrance from the catalog list: the nth visible row (the seed gives the list a stable
@@ -171,7 +192,7 @@ async function fillComposer(page: Page, t: AdminMessages) {
     .fill("LUMMI'da yangi atir bor. Katalogni oching va oʻz oqshomingizni tanlang.");
   await page.locator('[data-image] input[type=file]').setInputFiles(BROADCAST_IMAGE);
   await page.getByRole('button', { name: t.broadcasts.imageReplace }).waitFor();
-  await page.locator('#bc-target').selectOption('catalog');
+  await choose(page.locator('#bc-target'), 'catalog');
 }
 
 /** Opens a broadcast from the history: the nth row (newest first; the shot data makes the order stable). */
@@ -226,7 +247,7 @@ async function showBigAudience(page: Page) {
 
 /** Types a fragrance slug as the button target and waits for its name to be looked up. */
 async function typeFragranceTarget(page: Page, slug: string) {
-  await page.locator('#bc-target').selectOption('fragrance');
+  await choose(page.locator('#bc-target'), 'fragrance');
   const looked = page.waitForResponse((r) => r.url().includes('/api/admin/broadcasts/fragrance'));
   await page.locator('#bc-slug').fill(slug);
   await looked;
@@ -502,8 +523,8 @@ export const screens: Screen[] = [
     act: async ({ page, t, width }) => {
       // phones keep the fields behind «Фильтры»
       if (width < 640) await page.getByRole('button', { name: t.audit.filters.toggle }).click();
-      await page.getByLabel(t.audit.filters.actor).selectOption({ label: SHOT_STAFF[0]!.name });
-      await page.getByLabel(t.audit.filters.action).selectOption('setting.changed');
+      await choose(page.getByLabel(t.audit.filters.actor), { label: SHOT_STAFF[0]!.name });
+      await choose(page.getByLabel(t.audit.filters.action), 'setting.changed');
       await page.getByLabel(t.audit.filters.from).fill('2026-01-01');
       await page
         .getByLabel(t.audit.filters.to)
@@ -1076,8 +1097,8 @@ export const screens: Screen[] = [
     as: 'owner',
     act: async ({ page, t }) => {
       const first = page.locator('#set-pick-0');
-      const value = await first.inputValue();
-      await page.locator('#set-pick-1').selectOption(value);
+      const value = await nativeSelect(first).inputValue();
+      await choose(page.locator('#set-pick-1'), value);
       await page.getByText(t.sets.duplicate).waitFor();
     },
   },
@@ -1640,6 +1661,59 @@ export const screens: Screen[] = [
     act: async (ctx) => {
       const dialog = await worstReturnDialog(ctx);
       await dialog.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    },
+  },
+  // Designed dropdown (ticket #47): the open list on a fine pointer; a phone shows the native
+  // picker, so there the shot is the closed field. A disabled field is made by hand (no screen
+  // has one): the attribute is all the styles read.
+  {
+    id: 'select-audit-open',
+    path: '/audit',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, width }) => {
+      if (width < 640) await page.getByRole('button', { name: t.audit.filters.toggle }).click();
+      const field = page.getByLabel(t.audit.filters.action);
+      if (width >= 640) await openList(page, field);
+      else await field.scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: 'select-orders-open',
+    path: '/orders',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t, width }) => {
+      if (width < 640) await page.getByRole('button', { name: t.orders.filters.toggle }).click();
+      const field = page.getByLabel(t.orders.filters.status);
+      if (width >= 640) await openList(page, field);
+      else await field.scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: 'select-long-open',
+    path: '/bts-points',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t, width }) => {
+      if (width < 640) await page.getByRole('button', { name: t.btsPoints.filters }).click();
+      const field = page.getByLabel(t.btsPoints.region);
+      if (width >= 640) await openList(page, field);
+      else await field.scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    id: 'select-disabled',
+    path: '/orders',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page, t, width }) => {
+      if (width < 640) await page.getByRole('button', { name: t.orders.filters.toggle }).click();
+      const field = page.getByLabel(t.orders.filters.payment);
+      await nativeSelect(field).evaluate((el) => ((el as HTMLSelectElement).disabled = true));
+      await field.evaluate((el) => {
+        if (el instanceof HTMLButtonElement) el.disabled = true;
+      });
     },
   },
   ...stockScreens,

@@ -211,3 +211,37 @@
     animation: overlay-out 120ms var(--ease-out) forwards;
   }
 }
+
+/*
+ * Select popover: a quick fade and scale from the trigger (it has an anchor, unlike the dialog),
+ * the exit faster. The keyboard path needs no motion, so reduced motion keeps only a fade.
+ */
+@keyframes select-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes select-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+.motion-select {
+  transform-origin: var(--radix-select-content-transform-origin);
+}
+.motion-select[data-state='open'] {
+  animation: select-in 160ms var(--ease-out);
+}
+.motion-select[data-state='closed'] {
+  animation: select-out 100ms var(--ease-out) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-select[data-state='open'] {
+    animation: overlay-in 120ms var(--ease-out);
+  }
+  .motion-select[data-state='closed'] {
+    animation: overlay-out 80ms var(--ease-out) forwards;
+  }
+}
