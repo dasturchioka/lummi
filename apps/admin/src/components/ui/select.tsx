@@ -1,7 +1,7 @@
 'use client';
 
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
@@ -66,8 +66,12 @@ function useFinePointer() {
 const surface = cn(
   'h-11 w-full min-w-0 rounded-button bg-field text-base text-foreground pointer-fine:text-[15px]',
   'shadow-[inset_0_0_0_1px_var(--hairline-strong)] transition-shadow duration-150',
-  'hover:shadow-[inset_0_0_0_1px_var(--ink-faint)] aria-invalid:shadow-[inset_0_0_0_1.5px_var(--graphite)] disabled:text-muted-foreground',
+  'enabled:hover:shadow-[inset_0_0_0_1px_var(--ink-faint)] aria-invalid:shadow-[inset_0_0_0_1.5px_var(--graphite)]',
+  'disabled:cursor-not-allowed disabled:text-faint disabled:shadow-[inset_0_0_0_1px_var(--hairline)]',
 );
+
+const scrollBtn =
+  'flex h-6 cursor-default items-center justify-center bg-card text-muted-foreground';
 
 export function Select({
   className,
@@ -166,7 +170,7 @@ export function Select({
             </span>
             <SelectPrimitive.Icon asChild>
               <ChevronDown
-                className="size-[18px] shrink-0 text-muted-foreground transition-transform duration-150 [[data-state=open]>&]:rotate-180"
+                className="size-[18px] shrink-0 text-muted-foreground transition-transform duration-150 [[disabled]>&]:opacity-50 [[data-state=open]>&]:rotate-180"
                 strokeWidth={1.5}
                 aria-hidden
               />
@@ -178,11 +182,14 @@ export function Select({
               sideOffset={6}
               collisionPadding={12}
               className={cn(
-                'motion-select z-[70] max-h-[min(320px,var(--radix-select-content-available-height))] w-[max(var(--radix-select-trigger-width),180px)] max-w-[min(480px,calc(100vw-24px))]',
-                'overflow-hidden rounded-card border border-border-strong bg-card text-foreground',
+                'motion-select z-[70] max-h-[min(320px,var(--radix-select-content-available-height))] w-max min-w-[max(var(--radix-select-trigger-width),180px)] max-w-[min(480px,calc(100vw-24px))]',
+                'flex flex-col overflow-hidden rounded-card border border-border-strong bg-card text-foreground',
               )}
             >
-              <SelectPrimitive.Viewport className="max-h-[inherit] overflow-y-auto overscroll-contain p-1.5">
+              <SelectPrimitive.ScrollUpButton className={scrollBtn}>
+                <ChevronUp className="size-4" strokeWidth={1.5} aria-hidden />
+              </SelectPrimitive.ScrollUpButton>
+              <SelectPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
                 {options.map((o) => (
                   <SelectPrimitive.Item
                     key={o.value}
@@ -202,6 +209,9 @@ export function Select({
                   </SelectPrimitive.Item>
                 ))}
               </SelectPrimitive.Viewport>
+              <SelectPrimitive.ScrollDownButton className={scrollBtn}>
+                <ChevronDown className="size-4" strokeWidth={1.5} aria-hidden />
+              </SelectPrimitive.ScrollDownButton>
             </SelectPrimitive.Content>
           </SelectPrimitive.Portal>
         </SelectPrimitive.Root>
