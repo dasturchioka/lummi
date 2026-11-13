@@ -15,7 +15,7 @@ export interface SignOptions {
   authDate: number;
   /** Extra fields (signed too), e.g. query_id. */
   extra?: Record<string, string>;
-  /** Appended after signing, e.g. a `signature` field or a duplicate. */
+  /** Appended after signing (not covered by the hash), e.g. a duplicate or a forged field. */
   unsignedSuffix?: [string, string][];
 }
 

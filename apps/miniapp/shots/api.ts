@@ -24,6 +24,9 @@ export function signInitData(botToken: string, user: ShotUser, ageSeconds = 0): 
   const fields: Record<string, string> = {
     auth_date: String(Math.floor(Date.now() / 1000) - ageSeconds),
     user: JSON.stringify(user),
+    // Real clients send an Ed25519 `signature` (the SDK's parser requires it), and Telegram's hash
+    // covers it like every other field; only the third-party Ed25519 check leaves it out.
+    signature: 'dev-signature',
   };
   const check = Object.keys(fields)
     .sort()
@@ -31,8 +34,7 @@ export function signInitData(botToken: string, user: ShotUser, ageSeconds = 0): 
     .join('\n');
   const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
   const hash = createHmac('sha256', secret).update(check).digest('hex');
-  // Real initData also carries an Ed25519 `signature` (not part of the HMAC); the SDK's parser requires it.
-  return new URLSearchParams({ ...fields, hash, signature: 'dev-signature' }).toString();
+  return new URLSearchParams({ ...fields, hash }).toString();
 }
 
 export type ApiClient = ReturnType<typeof makeClient>;

@@ -24,9 +24,10 @@ export interface SignedPayload {
 
 /**
  * The check shared by Mini App initData and the `requestContact` payload (one scheme, ADR 0029/0032):
- * key = HMAC_SHA256(key "WebAppData", msg bot token); `hash` and `signature` are left out of the
- * check string; fields are sorted, joined by "\n"; then `auth_date` must be neither older than
- * `maxAgeSeconds` nor further in the future than `maxFutureSkewSeconds`.
+ * key = HMAC_SHA256(key "WebAppData", msg bot token); every received field except `hash` goes into
+ * the check string, the Ed25519 `signature` of real clients included (Telegram hashes it too; only
+ * the third-party Ed25519 check leaves it out); fields are sorted, joined by "\n"; then `auth_date`
+ * must be neither older than `maxAgeSeconds` nor further in the future than `maxFutureSkewSeconds`.
  */
 export function verifySignedPayload(raw: string, opts: VerifyOptions): SignedPayload {
   const fields = new Map<string, string>();
@@ -38,7 +39,6 @@ export function verifySignedPayload(raw: string, opts: VerifyOptions): SignedPay
   const received = fields.get('hash');
   if (!received || !/^[0-9a-f]{64}$/.test(received)) throw new SignedPayloadError('malformed');
   fields.delete('hash');
-  fields.delete('signature');
 
   const checkString = [...fields.keys()]
     .sort()
@@ -49,6 +49,9 @@ export function verifySignedPayload(raw: string, opts: VerifyOptions): SignedPay
   if (!timingSafeEqual(expected, Buffer.from(received, 'hex'))) {
     throw new SignedPayloadError('bad_signature');
   }
+
+  // Verified; the Ed25519 signature means nothing further to us (ADR 0029).
+  fields.delete('signature');
 
   const authDateRaw = fields.get('auth_date');
   if (!authDateRaw || !/^\d{1,12}$/.test(authDateRaw)) throw new SignedPayloadError('malformed');

@@ -25,14 +25,28 @@ describe('verifyInitData', () => {
     expect(verifyInitData(raw, opts).user).toEqual(user);
   });
 
-  it('accepts initData that carries a signature field (it is left out of the check)', () => {
+  it('accepts initData as real clients send it: the Ed25519 signature is one of the hashed fields', () => {
+    // Telegram's hash covers every received field except `hash` itself, `signature` included
+    // (core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app). Only the
+    // third-party Ed25519 check leaves `signature` out.
+    const raw = signInitData({
+      botToken: BOT,
+      user,
+      authDate: nowSec,
+      extra: { query_id: 'AAHdF6IQAAAAAN0XohDhrOrc', signature: 'abc-def_ghi' },
+    });
+    expect(reason(() => verifyInitData(raw, opts))).toBe('accepted');
+    expect(verifyInitData(raw, opts).user).toEqual(user);
+  });
+
+  it('refuses a signature field the hash does not cover', () => {
     const raw = signInitData({
       botToken: BOT,
       user,
       authDate: nowSec,
       unsignedSuffix: [['signature', 'abc-def_ghi']],
     });
-    expect(reason(() => verifyInitData(raw, opts))).toBe('accepted');
+    expect(reason(() => verifyInitData(raw, opts))).toBe('bad_signature');
   });
 
   it('refuses forged data: tampered user id, wrong bot token, wrong hash', () => {
