@@ -79,7 +79,7 @@ const T = {
       assemble: ['Собрать', 'заказ принят'],
       bts: ['Передать в BTS', 'собирается'],
       credits: ['Поступления без заказа', 'деньги пришли, чека нет'],
-      refunds: ['Возврат денег', 'оплачен и отменён'],
+      refunds: ['Возврат денег', 'оплачен, отменён или возвращён'],
       stock: ['Склад', 'нет в наличии · заканчивается'],
       reviews: ['Отзывы', 'ждут публикации'],
     },
@@ -143,7 +143,7 @@ const T = {
       assemble: ['Yigʻish', 'buyurtma qabul qilingan'],
       bts: ['BTSga topshirish', 'yigʻilmoqda'],
       credits: ['Buyurtmasiz tushumlar', 'pul tushgan, chek yoʻq'],
-      refunds: ['Pulni qaytarish', 'toʻlangan va bekor qilingan'],
+      refunds: ['Pulni qaytarish', 'toʻlangan, bekor qilingan yoki qaytarilgan'],
       stock: ['Ombor', 'tugagan · kam qolgan'],
       reviews: ['Sharhlar', 'nashrni kutmoqda'],
     },
@@ -237,9 +237,14 @@ function queue(t, d) {
   const lifted = { receipt: 'receipts', accept: 'accept', humo: 'receipts' }[d.now];
   const html = rows.map(([k, n, age]) => {
     const [label, sub] = t.rows[k];
-    const count = k === 'stock' && n ? `${q.out}<small>${t.out}</small> ${q.low}<small>${t.low}</small>` : String(n);
+    /* Stock shows each half only above zero («1 нет», «2 мало», both when both). */
+    const halves = [['out', q.out], ['low', q.low]].filter(([, v]) => v > 0);
+    const count = k === 'stock' && n ? halves.map(([h, v]) => `${v}<small>${t[h]}</small>`).join(' ') : String(n);
+    /* A stock item's name may be long: one line on desktop, two on a phone, the whole name on hover. */
+    const long = k === 'stock' && n;
+    const ageAttrs = long ? `class="a clamp" title="${age}"` : 'class="a"';
     return `<a href="#" class="row${n ? '' : ' zero'}${k === lifted ? ' lift' : ''}"><span><div class="t">${label}</div><div class="s">${sub}</div></span>
-      <span class="c tnum" data-k="q-${k}">${count}</span><span class="a" data-k="a-${k}">${age}</span><span class="chev">${I('chevron-right')}</span></a>`;
+      <span class="c tnum" data-k="q-${k}">${count}</span><span ${ageAttrs} data-k="a-${k}">${age}</span><span class="chev">${I('chevron-right')}</span></a>`;
   }).join('');
   return `<section class="card" aria-labelledby="q-h"><div class="q-h"><h2 class="h3" id="q-h">${t.queue}</h2></div>${html}</section>`;
 }

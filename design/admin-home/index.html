@@ -113,6 +113,7 @@ main{flex:1;min-width:0;padding:44px 56px 64px}
 .row .c small{font-size:12.5px;font-weight:500;color:var(--muted);margin-left:4px}
 .row .a{font-size:12.5px;color:var(--muted)}
 .row .chev{color:var(--muted)}
+.row .a.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
 .row .chev svg.i{width:18px;height:18px}
 .row.zero .t,.row.zero .c{color:var(--muted)}
 .row.zero .c{font-weight:500}
@@ -166,6 +167,7 @@ main{flex:1;min-width:0;padding:44px 56px 64px}
   .row.zero .s{display:block}
   .row.zero .a{display:none}
   .row .a{grid-column:1;grid-row:2;margin-top:-10px}
+  .row .a.clamp{-webkit-line-clamp:2}
   .row.zero .c,.row.zero .chev{grid-row:1}
   .rep-b{display:block}
   .figs{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px}
