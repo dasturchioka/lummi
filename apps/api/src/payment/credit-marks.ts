@@ -1,25 +1,23 @@
 import { charCount } from '@lummi/contracts';
 import { credits, eq, orders, type CreditRow, type Db } from '@lummi/db';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
-import { describeError } from '../logging/describe-error';
-import { DISPATCH_TIMEOUT_MS } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
-import { withTimeout } from '../util/with-timeout';
 import { PaymentMatching } from './payment-matching';
 
-/** What a mark or an unmark answers: the credit as it is now, or why not. */
-export type CreditMarkOutcome =
+/** What an unmark answers: the credit as it is now, or why not. */
+export type CreditUnmarkOutcome =
   | { kind: 'done'; credit: CreditRow }
   | { kind: 'not_found' }
   /** An order holds the credit: a credit that paid an order is never marked. */
   | { kind: 'credit_taken'; credit: CreditRow }
   /** Already marked (a mark), or not marked (an unmark): a stale screen. Nothing changed. */
-  | { kind: 'credit_changed'; credit: CreditRow }
-  /** The note is longer than the setting `payments.creditMarkNoteMaxLength`. */
-  | { kind: 'note_too_long'; max: number };
+  | { kind: 'credit_changed'; credit: CreditRow };
+
+/** What a mark answers: as an unmark, or the note is longer than `payments.creditMarkNoteMaxLength`. */
+export type CreditMarkOutcome = CreditUnmarkOutcome | { kind: 'note_too_long'; max: number };
 
 /**
  * «Не для заказа» (GLOSSARY: Not for an order; #49). Staff (owner or manager) mark an unlinked
@@ -35,8 +33,6 @@ export type CreditMarkOutcome =
  */
 @Injectable()
 export class CreditMarks {
-  private readonly log = new Logger('CreditMarks');
-
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
@@ -89,8 +85,8 @@ export class CreditMarks {
   }
 
   /** «Вернуть в поступления»: the mark comes off, and matching looks at the credit again. */
-  async unmark(staffId: number, creditId: number): Promise<CreditMarkOutcome> {
-    const out = await this.db.transaction(async (tx): Promise<CreditMarkOutcome> => {
+  async unmark(staffId: number, creditId: number): Promise<CreditUnmarkOutcome> {
+    const out = await this.db.transaction(async (tx): Promise<CreditUnmarkOutcome> => {
       const [credit] = await tx
         .select()
         .from(credits)
@@ -105,7 +101,7 @@ export class CreditMarks {
         .returning();
       await this.audit.record(tx, {
         actor: { type: 'staff', id: staffId },
-        action: 'credit.unmarked',
+        action: 'credit.unmarked_not_for_order',
         targetType: 'credit',
         targetId: credit.id,
         payload: {
@@ -117,21 +113,9 @@ export class CreditMarks {
       });
       return { kind: 'done', credit: free! };
     });
-    if (out.kind === 'done') await this.reoffer(creditId);
+    // the re-check a new credit gets, after the commit (best effort; the sweep catches up)
+    if (out.kind === 'done') await this.matching.queueForCredit(creditId);
     return out;
-  }
-
-  /**
-   * The re-check a new credit gets (`PaymentMatching.queueChecks`, as on "credit recorded"), right
-   * after the commit. Never throws: if Redis is down, the `receipt-matching` sweep queues the same
-   * checks within a minute.
-   */
-  private async reoffer(creditId: number): Promise<void> {
-    try {
-      await withTimeout(this.matching.queueChecks({ creditId }), DISPATCH_TIMEOUT_MS);
-    } catch (e) {
-      this.log.warn(`credit ${creditId}: re-check not queued, the sweep will: ${describeError(e)}`);
-    }
   }
 }
 

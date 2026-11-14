@@ -33,7 +33,7 @@ import { PaymentConfirmation } from './payment-confirmation';
 import { PaymentNotFound } from './payment-not-found';
 import {
   ACCEPTED_VERDICTS,
-  candidatesOf,
+  creditsFor,
   duplicateImageDistance,
   hasCandidate,
   isDuplicate,
@@ -83,8 +83,8 @@ class JudgeUnavailable extends Error {
  * Automatic payment matching (ADR 0012, 0013): a receipt under check is confirmed by the AI once
  * the money is on the shop card, without a person.
  *
- * - **Candidate credits** (GLOSSARY) of an order: not linked to any order and not marked «Не для
- *   заказа» (#49), `amount_som` equal to its Amount due (a credit with tiyin never is), on the shop
+ * - **Candidate credits** (GLOSSARY) of an order: free (not linked to any order and not marked «Не
+ *   для заказа», #49), `amount_som` equal to its Amount due (a credit with tiyin never is), on the shop
  *   card (same last 4), and no earlier than the minute the order was created (Humo keeps only the
  *   minute). The rule is `rules.ts`'s.
  * - A receipt is **checked** when it has a candidate it was never shown: right after the upload
@@ -101,7 +101,8 @@ class JudgeUnavailable extends Error {
  *   acted on, so the same event, job or retry asks nothing the second time. A judge that could
  *   not answer is not an answer: the job's attempts retry it, and only the last one sends the
  *   receipt to manual review. Whoever loses a race for a credit (two receipts, one credit) hears
- *   `credit_taken` from the door and keeps waiting for its own money.
+ *   `credit_taken` from the door and keeps waiting for its own money; a credit staff marked «Не
+ *   для заказа» while the AI answered (#49) sends the receipt to a person (`credit_marked`).
  * - A duplicate receipt (`isDuplicate`) is never asked about: a repeat receipt takes the
  *   payment-not-found path at once (#36), the first receipt goes to manual review.
  */
@@ -141,16 +142,27 @@ export class PaymentMatching implements OnApplicationShutdown {
 
   /** Right after a receipt's upload commits. Never throws: if Redis is down, the sweep queues it. */
   async queueAfterCommit(receiptId: number): Promise<void> {
+    await this.bestEffort(`receipt ${receiptId}`, async () => {
+      await this.holdDuplicates({ receiptId });
+      await this.queueChecks({ receiptId });
+    });
+  }
+
+  /**
+   * Right after a credit became free again (#49: its «Не для заказа» mark came off): the re-check
+   * a new credit gets on "credit recorded", for the waiting receipts it could pay. Never throws:
+   * if Redis is down, the sweep queues the same checks within a minute.
+   */
+  async queueForCredit(creditId: number): Promise<void> {
+    await this.bestEffort(`credit ${creditId}`, () => this.queueChecks({ creditId }));
+  }
+
+  /** Queue work after a commit within the dispatch timeout; a failure is logged for the sweep. */
+  private async bestEffort(what: string, work: () => Promise<unknown>): Promise<void> {
     try {
-      await withTimeout(
-        (async () => {
-          await this.holdDuplicates({ receiptId });
-          await this.queueChecks({ receiptId });
-        })(),
-        DISPATCH_TIMEOUT_MS,
-      );
+      await withTimeout(work(), DISPATCH_TIMEOUT_MS);
     } catch (e) {
-      this.log.warn(`receipt ${receiptId}: check not queued, the sweep will: ${describeError(e)}`);
+      this.log.warn(`${what}: check not queued, the sweep will: ${describeError(e)}`);
     }
   }
 
@@ -307,7 +319,7 @@ export class PaymentMatching implements OnApplicationShutdown {
     return db
       .select({ id: credits.id, occurredAt: credits.occurredAt })
       .from(credits)
-      .where(sql`${credits.id} in (${candidatesOf(order.id)})`)
+      .where(sql`${credits.id} in (${creditsFor(order.id)})`)
       .orderBy(asc(credits.occurredAt), asc(credits.id));
   }
 
@@ -340,11 +352,7 @@ export class PaymentMatching implements OnApplicationShutdown {
           )
           or (
             not ${isDuplicate(maxDistance)}
-            and ${hasCandidate(sql`not exists (
-                select 1 from ${receiptChecks} k
-                where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
-              )
-              ${only.creditId !== undefined ? sql`and c.id = ${only.creditId}` : sql``}`)}
+            and ${hasCandidate({ unshownTo: sql`r.id`, creditId: only.creditId })}
           )
         )
       order by r.id`);
@@ -418,7 +426,9 @@ export class PaymentMatching implements OnApplicationShutdown {
 
     const { judgement } = check;
     const chosen = judgement.chosenCreditId;
-    let why: ReceiptRow['reviewReason'] = answered(judgement) ? 'not_confirmed' : 'judge_failed';
+    let why: NonNullable<ReceiptRow['reviewReason']> = answered(judgement)
+      ? 'not_confirmed'
+      : 'judge_failed';
     if (judgement.confirmed && chosen !== null && check.candidateCreditIds.includes(chosen)) {
       const out = await this.payments.confirmPaymentWithCredit(tx, {
         orderId: order.id,
@@ -427,15 +437,17 @@ export class PaymentMatching implements OnApplicationShutdown {
         actor: { type: 'ai' },
       });
       if (out.kind === 'confirmed') return record('confirmed');
-      // another receipt's check took this credit first: wait for this shopper's own money
-      if (out.kind === 'credit_taken') return record('credit_taken');
+      if (out.kind === 'credit_taken') {
+        // another receipt's check took this credit first: wait for this shopper's own money.
+        // Staff marked it «Не для заказа» while the AI answered (#49, no order holds it): the AI
+        // confirmed a receipt with money staff say is not for an order, so a person decides.
+        if (out.orderId === null) await holdForPerson(tx, receipt.id, 'credit_marked');
+        return record('credit_taken');
+      }
       if (out.kind === 'duplicate_receipt') why = 'duplicate';
       else this.log.warn(`receipt ${receipt.id}: the AI's credit was refused (${out.kind})`);
     }
-    await tx
-      .update(receipts)
-      .set({ verdict: 'manual_review', reviewReason: why })
-      .where(and(eq(receipts.id, receipt.id), eq(receipts.verdict, 'pending')));
+    await holdForPerson(tx, receipt.id, why);
     return record('manual_review');
   }
 
@@ -452,6 +464,21 @@ export class PaymentMatching implements OnApplicationShutdown {
     await this.queue?.close();
     this.connection?.disconnect();
   }
+}
+
+/**
+ * A pending receipt goes to a person with `why` (the shopper still reads «Чек на проверке»); one
+ * already held keeps the reason it was first held for.
+ */
+async function holdForPerson(
+  tx: DbOrTx,
+  receiptId: number,
+  why: NonNullable<ReceiptRow['reviewReason']>,
+): Promise<void> {
+  await tx
+    .update(receipts)
+    .set({ verdict: 'manual_review', reviewReason: why })
+    .where(and(eq(receipts.id, receiptId), eq(receipts.verdict, 'pending')));
 }
 
 /** The judge's answer as `receipt_checks` keeps it. */

@@ -3,6 +3,7 @@ import {
   alias,
   credits,
   orders,
+  receiptChecks,
   receipts,
   shopCard,
   sql,
@@ -29,7 +30,7 @@ export const sqlList = (values: readonly string[]) =>
  * THE Candidate credit rule (GLOSSARY; ADR 0012, 0013), in one place, as SQL over `o` (the
  * order), `c` (a credit) and `sc` (the shop card). Matching selects candidates with `CANDIDATE`;
  * `PaymentConfirmation` asks the same pieces about the one credit it is given, so it can tell
- * staff which one does not fit. Every reader takes its credits through `candidatesOf`,
+ * staff which one does not fit. Every reader takes its credits through `creditsFor`,
  * `hasCandidate` or `FREE_CREDIT` below, never through joins of its own.
  */
 /** The credit is the order's Amount due to the so'm (a credit with tiyin has no `amount_som`). */
@@ -53,20 +54,35 @@ export const CANDIDATE = sql`(${AMOUNT_FITS}) and (${IN_ORDER_TIME}) and (${ON_S
 export const creditC = alias(credits, 'c');
 
 /**
- * The ids of the credits `rule` (default `CANDIDATE`) holds for the order `orderId`, as a subquery
- * for `<credit id> in (…)`. With no shop card `sc` is null, so no credit is on it.
+ * The credits the link dialog offers an order besides its candidates («Показать другие», #33):
+ * free, from the order's minute on, and not a Candidate credit (another amount or card).
  */
-export function candidatesOf(orderId: number, rule: SQL = CANDIDATE): SQL {
+const OTHER_FREE = sql`(${FREE_CREDIT}) and (${IN_ORDER_TIME}) and not coalesce((${CANDIDATE}), false)`;
+
+/**
+ * The ids of the order's credits, as a subquery for `<credit id> in (…)`: its Candidate credits,
+ * or the `others` the link dialog offers after them. With no shop card `sc` is null, so no credit
+ * is on it.
+ */
+export function creditsFor(orderId: number, which: 'candidates' | 'others' = 'candidates'): SQL {
+  const rule = which === 'candidates' ? CANDIDATE : OTHER_FREE;
   return sql`select c.id from ${orders} o join ${credits} c on true left join ${shopCard} sc on true
     where o.id = ${orderId} and (${rule})`;
 }
 
 /**
- * The outer query's order `o` has a Candidate credit (and `extra` holds for it, when given). No
+ * The outer query's order `o` has a Candidate credit. `unshownTo`: one the AI was never shown
+ * for that receipt (its id, e.g. `r.id` of the outer query); `creditId`: that credit only. No
  * shop card, no candidates.
  */
-export function hasCandidate(extra?: SQL): SQL {
-  return sql`exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE} ${extra ? sql`where ${extra}` : sql``})`;
+export function hasCandidate(opts: { unshownTo?: SQL; creditId?: number } = {}): SQL {
+  const unshown = opts.unshownTo
+    ? sql`and not exists (
+        select 1 from ${receiptChecks} k
+        where k.receipt_id = ${opts.unshownTo} and c.id = any(k.candidate_credit_ids))`
+    : sql``;
+  const only = opts.creditId !== undefined ? sql`and c.id = ${opts.creditId}` : sql``;
+  return sql`exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE} where true ${unshown} ${only})`;
 }
 
 /**

@@ -46,7 +46,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { customerName, paymentState } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
 import type { Edges } from '../edges';
-import { candidatesOf, creditC, FREE_CREDIT } from '../payment/rules';
+import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
 import { lastFour, readShopCard } from '../payment/shop-card.service';
 import { orderMoney, refundOwed } from '../refunds/order-money';
 import { lastTashkentDays, roundedAverage, salesSummary } from '../reports/sales-summary';
@@ -340,7 +340,7 @@ export class HomeService {
       this.db
         .select()
         .from(credits)
-        .where(sql`${credits.id} in (${candidatesOf(order.id)})`)
+        .where(sql`${credits.id} in (${creditsFor(order.id)})`)
         .orderBy(asc(credits.occurredAt), asc(credits.id))
         .limit(1),
     ]);

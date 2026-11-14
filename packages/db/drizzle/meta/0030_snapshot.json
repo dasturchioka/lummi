@@ -1,5 +1,5 @@
 {
-  "id": "b43f1890-2afa-48d6-ab7c-47734b720268",
+  "id": "20194b07-dadb-4ef7-a8e6-60d596d7b27f",
   "prevId": "2ac33041-f177-493b-a3d1-980e7123264e",
   "version": "7",
   "dialect": "postgresql",
@@ -6323,7 +6323,8 @@
       "values": [
         "duplicate",
         "not_confirmed",
-        "judge_failed"
+        "judge_failed",
+        "credit_marked"
       ]
     },
     "public.receipt_source": {

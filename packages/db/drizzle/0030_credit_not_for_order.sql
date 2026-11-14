@@ -1,3 +1,4 @@
+ALTER TYPE "public"."receipt_review_reason" ADD VALUE 'credit_marked';--> statement-breakpoint
 ALTER TABLE "credits" ADD COLUMN "not_for_order_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "credits" ADD COLUMN "not_for_order_by" bigint;--> statement-breakpoint
 ALTER TABLE "credits" ADD COLUMN "not_for_order_note" text;--> statement-breakpoint

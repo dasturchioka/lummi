@@ -6,6 +6,7 @@ import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
 import {
   AdminOrdersService,
   type CreditMarkAnswer,
+  type CreditUnmarkAnswer,
   type MoveOutcome,
 } from './admin-orders.service';
 
@@ -133,17 +134,14 @@ export class AdminOrdersController {
 
   @TsRestHandler(adminContract.credits.unmarkNotForOrder)
   unmarkNotForOrder(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.credits.unmarkNotForOrder, async ({ params }) => {
-      const out = await this.orders.unmarkNotForOrder(actor.id, params.id);
-      // an unmark has no note to refuse
-      if (out.kind === 'note_too_long') throw new Error('unmark answered note_too_long');
-      return markResponse(out);
-    });
+    return tsRestHandler(adminContract.credits.unmarkNotForOrder, async ({ params }) =>
+      unmarkResponse(await this.orders.unmarkNotForOrder(actor.id, params.id)),
+    );
   }
 }
 
-/** A «Не для заказа» mark or unmark as HTTP (#49): the credit now, 404, or 409 with the credit as it is. */
-function markResponse(out: CreditMarkAnswer) {
+/** A «Не для заказа» unmark as HTTP (#49): the credit now, 404, or 409 with the credit as it is. */
+function unmarkResponse(out: CreditUnmarkAnswer) {
   switch (out.kind) {
     case 'done':
       return { status: 200 as const, body: out.credit };
@@ -152,7 +150,12 @@ function markResponse(out: CreditMarkAnswer) {
     case 'credit_taken':
     case 'credit_changed':
       return { status: 409 as const, body: { code: out.kind, credit: out.credit } };
-    case 'note_too_long':
-      return { status: 422 as const, body: { code: out.kind, max: out.max } };
   }
+}
+
+/** A mark as HTTP: as an unmark, or 422 for a note over the setting (`max`). */
+function markResponse(out: CreditMarkAnswer) {
+  return out.kind === 'note_too_long'
+    ? { status: 422 as const, body: { code: out.kind, max: out.max } }
+    : unmarkResponse(out);
 }

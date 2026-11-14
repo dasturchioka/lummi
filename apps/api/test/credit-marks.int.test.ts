@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, asc, auditLog, credits, eq, orders, receipts } from '@lummi/db';
+import { and, asc, auditLog, credits, eq, orders, receiptChecks, receipts } from '@lummi/db';
+import pg from 'pg';
 import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -11,7 +12,7 @@ import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { PaymentMatching } from '../src/payment/payment-matching';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { placeOrder } from './harness/fulfilment';
-import { shopper, slugs, whileLockedUntil } from './harness/orders';
+import { shopper, slugs, untilWaitingOnLocks, whileLockedUntil } from './harness/orders';
 import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
@@ -154,7 +155,7 @@ describe('marking a credit «Не для заказа»', () => {
         expect.objectContaining({ note: NOTE, amountTiyin: 15_000_000 }),
       ],
       [
-        'credit.unmarked',
+        'credit.unmarked_not_for_order',
         'staff',
         owner.staff.id,
         expect.objectContaining({ note: NOTE, markedBy: manager.staff.id }),
@@ -256,18 +257,25 @@ describe('marking a credit «Не для заказа»', () => {
   });
 });
 
-describe('a marked credit pays no order', () => {
-  /** The judge confirms the latest candidate it is shown (the shopper's own transfer). */
-  const pickLatest = (input: ReceiptJudgeInput) => ({
-    isReceipt: 0.97,
-    amountMatches: 0.95,
-    recipientMatches: 0.93,
-    chosenCreditId: input.candidates.at(-1)!.creditId,
-    choiceConfidence: 0.81,
-    confirmed: true,
-    provider: 'typesafe' as const,
-  });
+/** The judge confirms the latest candidate it is shown (the shopper's own transfer). */
+const pickLatest = (input: ReceiptJudgeInput) => ({
+  isReceipt: 0.97,
+  amountMatches: 0.95,
+  recipientMatches: 0.93,
+  chosenCreditId: input.candidates.at(-1)!.creditId,
+  choiceConfidence: 0.81,
+  confirmed: true,
+  provider: 'typesafe' as const,
+});
 
+/** A promise and its resolver: holds the judge mid-answer until the test lets it go. */
+function hold() {
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  return { held, release };
+}
+
+describe('a marked credit pays no order', () => {
   it('a receipt waiting with only a marked credit never gets it; unmarking offers it to matching again', async () => {
     const order = await unpaidOrder();
     t.edges.receiptJudge.respond = pickLatest;
@@ -337,6 +345,90 @@ describe('a marked credit pays no order', () => {
     expect([o!.status, o!.creditId]).toEqual(['receipt_review', null]);
   });
 
+  it('a credit marked while the AI answers: the AI is refused and the receipt goes to a person (credit_marked), never left waiting', async () => {
+    const order = await unpaidOrder();
+    const receiptId = await sendReceipt(order);
+    const answering = hold();
+    t.edges.receiptJudge.respond = async (input) => {
+      await answering.held;
+      return pickLatest(input);
+    };
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: order.amountDue });
+    // the judge has the credit in front of it and is answering
+    await vi.waitFor(() => expect(t.edges.receiptJudge.calls).toHaveLength(1), {
+      timeout: 15_000,
+    });
+    const manager = await t.managerSession();
+    expect((await mark(manager, creditId, NOTE)).status).toBe(200);
+
+    answering.release();
+    await vi.waitFor(
+      async () => {
+        const [r] = await t.db.select().from(receipts).where(eq(receipts.id, receiptId));
+        expect([r!.verdict, r!.reviewReason]).toEqual(['manual_review', 'credit_marked']);
+      },
+      { timeout: 15_000 },
+    );
+    const [o] = await t.db.select().from(orders).where(eq(orders.id, order.id));
+    expect([o!.status, o!.creditId]).toEqual(['receipt_review', null]);
+    const checks = await t.db
+      .select()
+      .from(receiptChecks)
+      .where(eq(receiptChecks.receiptId, receiptId));
+    expect(checks.map((c) => c.outcome)).toEqual(['credit_taken']);
+
+    // a person sees it: the Home's held receipts and the order page say why
+    const home = await manager.client.admin.home();
+    expect(home.status === 200 && home.body.queues.receipts.count).toBe(1);
+    expect(home.status === 200 && home.body.now).toMatchObject({
+      kind: 'receipt',
+      number: order.number,
+      reviewReason: 'credit_marked',
+    });
+    const page = await manager.client.admin.orders.get({ params: { number: order.number } });
+    expect(page.status === 200 && page.body.payment).toBe('manual_review');
+    expect(page.status === 200 && page.body.receipts[0]).toMatchObject({
+      id: receiptId,
+      reviewReason: 'credit_marked',
+      checks: [{ outcome: 'credit_taken' }],
+    });
+  });
+
+  it('the mark takes the credit first: the link that comes after is refused with credit_taken', async () => {
+    const order = await unpaidOrder();
+    t.edges.clock.advance(2 * MIN);
+    const creditId = await recordCredit(t, { som: order.amountDue });
+    const manager = await t.managerSession();
+    // hold the order's row: the link waits at its first lock, before the credit's
+    const locker = new pg.Client({ connectionString: t.env.DATABASE_URL });
+    await locker.connect();
+    try {
+      await locker.query('begin');
+      await locker.query('select id from orders where id = $1 for update', [order.id]);
+      const link = manager.client.admin.orders.confirmPayment({
+        params: { number: order.number },
+        body: { creditId, receiptId: null },
+      });
+      await untilWaitingOnLocks(locker, 1);
+      // the mark takes the credit's lock and commits while the link waits
+      expect((await mark(manager, creditId, NOTE)).status).toBe(200);
+      await locker.query('commit');
+      const refused = await link;
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({
+        code: 'credit_taken',
+        order: { order: { status: 'awaiting_payment' } },
+      });
+    } finally {
+      await locker.end();
+    }
+    const [credit] = await t.db.select().from(credits).where(eq(credits.id, creditId));
+    expect(credit!.notForOrderAt).not.toBeNull();
+    const [o] = await t.db.select().from(orders).where(eq(orders.id, order.id));
+    expect(o!.creditId).toBeNull();
+  });
+
   it('mark and link at once: exactly one wins, the other hears 409 credit_taken', async () => {
     for (let round = 0; round < 4; round++) {
       const order = await unpaidOrder(round % 2 ? vali : ali, `99890111223${round}`);
@@ -366,7 +458,7 @@ describe('a marked credit pays no order', () => {
 });
 
 describe('the Home queue «Поступления без заказа»', () => {
-  it('leaves marked credits out; its count equals the filtered credits list', async () => {
+  it('leaves linked and marked credits out; its count equals the filtered credits list', async () => {
     const a = await recordCredit(t, { som: 10_000, at: new Date('2026-11-14T04:10:00Z') });
     const b = await recordCredit(t, { som: 20_000, at: new Date('2026-11-14T04:20:00Z') });
     await recordCredit(t, { som: 30_000, at: new Date('2026-11-14T04:30:00Z') });
@@ -390,9 +482,15 @@ describe('the Home queue «Поступления без заказа»', () => 
     expect((await listed(manager, 'unlinked')).total).toBe(after.queues.credits.count);
 
     expect((await mark(manager, b)).status).toBe(200);
+    // a credit that paid an order is not in the queue either
+    const paid = await unpaidOrder();
+    t.edges.clock.advance(MIN);
+    await payWithCredit(t, paid, await sendReceipt(paid));
+    expect((await listed(manager, 'linked')).total).toBe(1);
     const last = await home();
     expect(last.queues.credits.count).toBe(1);
     expect((await listed(manager, 'unlinked')).total).toBe(1);
     expect((await listed(manager, 'not_for_order')).total).toBe(2);
+    expect((await listed(manager, 'all')).total).toBe(4);
   });
 });

@@ -60,11 +60,9 @@ import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-
 import { CreditMarks, type CreditMarkOutcome } from '../payment/credit-marks';
 import {
   ACCEPTED_VERDICTS,
-  CANDIDATE,
-  candidatesOf,
   creditC,
+  creditsFor,
   FREE_CREDIT,
-  IN_ORDER_TIME,
   NOT_FOR_ORDER,
   UNLINKED,
 } from '../payment/rules';
@@ -115,11 +113,12 @@ export type MoveOutcome =
     }
   | { kind: 'try_again' };
 
-/** What a «Не для заказа» mark or unmark answers (#49): the credit as it is now, or why not. */
-export type CreditMarkAnswer =
+/** What a «Не для заказа» unmark answers (#49): the credit as it is now, or why not. */
+export type CreditUnmarkAnswer =
   | { kind: 'done' | 'credit_taken' | 'credit_changed'; credit: AdminCreditDto }
-  | { kind: 'not_found' }
-  | { kind: 'note_too_long'; max: number };
+  | { kind: 'not_found' };
+/** What a «Не для заказа» mark answers (#49): as an unmark, or a note over the setting. */
+export type CreditMarkAnswer = CreditUnmarkAnswer | { kind: 'note_too_long'; max: number };
 
 /** The digits of a phone as stored (E.164 with `+`), for a search by part of the number. */
 const digitsOf = (column: unknown) =>
@@ -453,24 +452,20 @@ export class AdminOrdersService {
 
   /** «Не для заказа» (#49) through `CreditMarks`, by this staff member: the credit as it is now. */
   async markNotForOrder(staffId: number, id: number, note?: string): Promise<CreditMarkAnswer> {
-    return this.creditAnswer(await this.marks.mark(staffId, id, note));
+    const out = await this.marks.mark(staffId, id, note);
+    return out.kind === 'not_found' || out.kind === 'note_too_long' ? out : this.creditAnswer(out);
   }
 
   /** «Вернуть в поступления» (#49): the mark comes off; the credit as it is now. */
-  async unmarkNotForOrder(staffId: number, id: number): Promise<CreditMarkAnswer> {
-    return this.creditAnswer(await this.marks.unmark(staffId, id));
+  async unmarkNotForOrder(staffId: number, id: number): Promise<CreditUnmarkAnswer> {
+    const out = await this.marks.unmark(staffId, id);
+    return out.kind === 'not_found' ? out : this.creditAnswer(out);
   }
 
-  private async creditAnswer(out: CreditMarkOutcome): Promise<CreditMarkAnswer> {
-    switch (out.kind) {
-      case 'not_found':
-      case 'note_too_long':
-        return out;
-      case 'done':
-      case 'credit_taken':
-      case 'credit_changed':
-        return { kind: out.kind, credit: await this.creditDto(out.credit) };
-    }
+  private async creditAnswer(
+    out: Exclude<CreditMarkOutcome, { kind: 'not_found' | 'note_too_long' }>,
+  ): Promise<CreditUnmarkAnswer> {
+    return { kind: out.kind, credit: await this.creditDto(out.credit) };
   }
 
   /** One credit as the list shows it: the order it paid, or its mark with who set it. */
@@ -495,25 +490,25 @@ export class AdminOrdersService {
     if (!knownNumber(number)) return null;
     const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
     if (!o) return null;
-    const over = (rule: SQL) => sql`${credits.id} in (${candidatesOf(o.id, rule)})`;
-    const other = sql`(${FREE_CREDIT}) and (${IN_ORDER_TIME}) and not coalesce((${CANDIDATE}), false)`;
+    const over = (which: 'candidates' | 'others') =>
+      sql`${credits.id} in (${creditsFor(o.id, which)})`;
     const [candidates, others, [{ total } = { total: 0 }], card] = await Promise.all([
       this.db
         .select()
         .from(credits)
-        .where(over(CANDIDATE))
+        .where(over('candidates'))
         .orderBy(asc(credits.occurredAt), asc(credits.id))
         .limit(CREDIT_OPTIONS_LIMIT),
       this.db
         .select()
         .from(credits)
-        .where(over(other))
+        .where(over('others'))
         .orderBy(desc(credits.occurredAt), desc(credits.id))
         .limit(CREDIT_OPTIONS_LIMIT),
       this.db
         .select({ total: sql<number>`count(*)::int` })
         .from(credits)
-        .where(over(other)),
+        .where(over('others')),
       readShopCard(this.db),
     ]);
     const last4 = card?.number.slice(-4) ?? null;
