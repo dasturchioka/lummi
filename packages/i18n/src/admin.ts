@@ -1773,7 +1773,7 @@ export const adminMessages = defineMessages(
         title: 'Отчёты',
         sales: 'Продажи',
         description:
-          'Доставленные заказы без возврата, в день доставки по Ташкенту. Возвраты денег вычитаются в день перевода.',
+          'Доставленные заказы без возврата, в день доставки по Ташкенту. Возвраты денег вычитаются в день перевода, но не раньше дня доставки заказа.',
         export: 'Скачать в Excel',
         from: 'С даты',
         to: 'По дату',
@@ -1789,7 +1789,8 @@ export const adminMessages = defineMessages(
           net: 'Чистые продажи',
           averageCheck: 'Средний чек',
         },
-        netHint: 'Товары до скидки минус скидки и возвраты денег. Доставка в продажи не входит.',
+        netHint:
+          'Товары до скидки минус скидки и возвраты денег. Средний чек — без возвратов: товары до скидки минус скидки на один заказ. Доставка в продажи не входит.',
         byDay: 'По дням',
         inSom: 'Суммы в сумах',
         day: 'День',
@@ -3611,7 +3612,7 @@ export const adminMessages = defineMessages(
         title: 'Hisobotlar',
         sales: 'Savdo',
         description:
-          'Qaytarilmagan yetkazilgan buyurtmalar, Toshkent vaqti bilan yetkazilgan kunida. Qaytarilgan pullar oʻtkazilgan kunida ayriladi.',
+          'Qaytarilmagan yetkazilgan buyurtmalar, Toshkent vaqti bilan yetkazilgan kunida. Qaytarilgan pullar oʻtkazilgan kunida ayriladi, lekin buyurtma yetkazilgan kundan oldin emas.',
         export: 'Excelda yuklab olish',
         from: 'Sanadan',
         to: 'Sanagacha',
@@ -3628,7 +3629,7 @@ export const adminMessages = defineMessages(
           averageCheck: 'Oʻrtacha chek',
         },
         netHint:
-          'Chegirmagacha tovarlardan chegirmalar va qaytarilgan pullar ayirilgan. Yetkazib berish savdoga kirmaydi.',
+          'Chegirmagacha tovarlardan chegirmalar va qaytarilgan pullar ayirilgan. Oʻrtacha chek qaytarilgan pullarsiz: bitta buyurtmaga chegirmagacha tovarlar minus chegirmalar. Yetkazib berish savdoga kirmaydi.',
         byDay: 'Kunlar boʻyicha',
         inSom: 'Summalar soʻmda',
         day: 'Kun',

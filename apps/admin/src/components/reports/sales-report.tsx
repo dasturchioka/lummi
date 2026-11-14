@@ -113,7 +113,7 @@ export function SalesReportView({
               title={r.fragrances}
               r={r}
               language={language}
-              rows={ranked(data.fragrances, top)}
+              rows={sortTop(data.fragrances, top)}
               name={(row) => row.name[language]}
               money={money}
             />
@@ -121,7 +121,7 @@ export function SalesReportView({
               title={r.volumes}
               r={r}
               language={language}
-              rows={ranked(data.volumes, top)}
+              rows={sortTop(data.volumes, top)}
               name={(row: VolumeSales) =>
                 `${row.name[language]}, ${fill(r.ml, { ml: String(row.ml) })}`
               }
@@ -214,6 +214,18 @@ function dayLabel(r: Copy, day: string, language: Language) {
 
 const quiet = (d: SalesFigures) => d.orders === 0 && d.refunds === 0;
 
+/** The day table's columns after the day, in order. */
+const COLUMNS = [
+  'orders',
+  'itemsBeforeDiscount',
+  'discount',
+  'delivery',
+  'refunds',
+  'net',
+  'averageCheck',
+] as const satisfies readonly (keyof SalesFigures)[];
+type Column = (typeof COLUMNS)[number];
+
 /** Every day of the range, newest first: a table on wide screens, one block per day on phones. */
 function Days({
   r,
@@ -228,26 +240,10 @@ function Days({
 }) {
   const f = r.figures;
   const days = [...data.days].reverse();
-  // the table shows plain numbers (seven money columns with «сум» each would be noise); the
-  // caption above it names the currency
-  const cells = (d: SalesFigures) => [
-    num(d.orders),
-    num(d.itemsBeforeDiscount),
-    num(d.discount),
-    num(d.delivery),
-    num(d.refunds),
-    num(d.net),
-    d.averageCheck === null ? '—' : num(d.averageCheck),
-  ];
-  const heads = [
-    f.orders,
-    f.itemsBeforeDiscount,
-    f.discount,
-    f.delivery,
-    f.refunds,
-    f.net,
-    f.averageCheck,
-  ];
+  // a dense money table: bare tabular numbers, the caption above names the currency (DESIGN.md,
+  // admin notes); seven columns with «сум» in every cell would be noise
+  const cell = (d: SalesFigures, key: Column) =>
+    key === 'averageCheck' ? (d.averageCheck === null ? '—' : num(d.averageCheck)) : num(d[key]);
   const th = 'h-auto py-2 align-bottom leading-tight whitespace-normal px-3';
   const td = 'px-3 text-right whitespace-nowrap';
   return (
@@ -268,9 +264,9 @@ function Days({
           <THead>
             <TR>
               <TH className={th}>{r.day}</TH>
-              {heads.map((h) => (
-                <TH key={h} className={cn(th, 'text-right')}>
-                  {h}
+              {COLUMNS.map((key) => (
+                <TH key={key} className={cn(th, 'text-right')}>
+                  {f[key]}
                 </TH>
               ))}
             </TR>
@@ -280,16 +276,16 @@ function Days({
               quiet(d) ? (
                 <TR key={d.day} data-testid={`day-${d.day}`} className="text-muted-foreground">
                   <TD className="h-9 px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
-                  <TD colSpan={heads.length} className="h-9 px-3">
+                  <TD colSpan={COLUMNS.length} className="h-9 px-3">
                     {r.noSales}
                   </TD>
                 </TR>
               ) : (
                 <TR key={d.day} data-testid={`day-${d.day}`}>
                   <TD className="px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
-                  {cells(d).map((c, i) => (
-                    <TD key={i} className={cn(td, i === 5 && 'font-semibold')}>
-                      {c}
+                  {COLUMNS.map((key) => (
+                    <TD key={key} className={cn(td, key === 'net' && 'font-semibold')}>
+                      {cell(d, key)}
                     </TD>
                   ))}
                 </TR>
@@ -299,9 +295,9 @@ function Days({
           <tfoot>
             <tr className="border-t border-border-strong font-semibold">
               <TD className="px-3">{r.total}</TD>
-              {cells(data.totals).map((c, i) => (
-                <TD key={i} className={td}>
-                  {c}
+              {COLUMNS.map((key) => (
+                <TD key={key} className={td}>
+                  {cell(data.totals, key)}
                 </TD>
               ))}
             </tr>
@@ -367,9 +363,9 @@ function DayBlock({
   );
 }
 
-/** Most net first, units on a tie; or the API's order (most units first). */
-function ranked<R extends FragranceSales>(rows: R[], top: TopOrder): R[] {
-  return top === 'units' ? rows : [...rows].sort((a, b) => b.net - a.net || b.units - a.units);
+/** The top list in the chosen order: the API's (most units, then net), or most net, then units. */
+function sortTop<R extends FragranceSales>(rows: R[], by: TopOrder): R[] {
+  return by === 'units' ? rows : [...rows].sort((a, b) => b.net - a.net || b.units - a.units);
 }
 
 /** «По штукам · По сумме»: links, so the choice lives in the URL with the range. */
