@@ -2,57 +2,18 @@ import {
   addDays,
   formatLocalDate,
   parseLocalDate,
-  SALES_REPORT_DEFAULT_DAYS,
-  SALES_REPORT_MAX_DAYS,
   tashkentDay,
-  tashkentDaySchema,
   type FragranceSales,
   type SalesDay,
   type SalesFigures,
   type SalesReport,
-  type SalesReportQuery,
   type SetSales,
   type VolumeSales,
 } from '@lummi/contracts';
 import { asc, inArray, orderLines, type Db, type DbOrTx } from '@lummi/db';
 import { discountShares } from './discount-shares';
-import { countedRefunds, deliveredIn, type TashkentRange } from './report-orders';
-
-export type { TashkentRange } from './report-orders';
-
-/**
- * A range a report takes: two real Tashkent days written `YYYY-MM-DD`, `from` not after `to`,
- * at most `SALES_REPORT_MAX_DAYS` days.
- */
-export function isSalesRange(range: TashkentRange): boolean {
-  const real = (day: string) => tashkentDaySchema.safeParse(day).success;
-  if (!real(range.from) || !real(range.to) || range.from > range.to) return false;
-  const last = formatLocalDate(addDays(parseLocalDate(range.from), SALES_REPORT_MAX_DAYS - 1));
-  return range.to <= last;
-}
-
-/** The `days` Tashkent days that end with `to`, `to` included. */
-export function daysEnding(to: string, days: number): TashkentRange {
-  return { from: formatLocalDate(addDays(parseLocalDate(to), 1 - days)), to };
-}
-
-/** The last `days` Tashkent days up to `now`'s Tashkent day, that day included. */
-export function lastTashkentDays(days: number, now: Date): TashkentRange {
-  return daysEnding(formatLocalDate(tashkentDay(now)), days);
-}
-
-/**
- * The range a report URL asked for, a missing end filled in: no `to` is today (Tashkent), no
- * `from` is 30 days up to `to`. Null when it is no report range (`isSalesRange`): backwards, or
- * over a year. Every report takes its range this way (#42, #43).
- */
-export function askedRange(query: SalesReportQuery, now: Date): TashkentRange | null {
-  const fallback = query.to
-    ? daysEnding(query.to, SALES_REPORT_DEFAULT_DAYS)
-    : lastTashkentDays(SALES_REPORT_DEFAULT_DAYS, now);
-  const range = { from: query.from ?? fallback.from, to: query.to ?? fallback.to };
-  return isSalesRange(range) ? range : null;
-}
+import { countedRefunds, deliveredIn } from './report-orders';
+import { isReportRange, roundedAverage, type TashkentRange } from './report-range';
 
 /**
  * Sales over a range of Tashkent days (TZ §7 «Отчёты», #42): the one computation behind the
@@ -74,10 +35,10 @@ export function askedRange(query: SalesReportQuery, now: Date): TashkentRange | 
  *
  * Amounts are integer so'm. Refunds are summed in SQL as `bigint` (per order and day); the order
  * figures and the rest are exact integer sums in code, far below 2^53. Every read happens in one
- * read-only snapshot. A range that is not `isSalesRange` is a `RangeError`.
+ * read-only snapshot. A range that is not `isReportRange` is a `RangeError`.
  */
 export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesReport> {
-  if (!isSalesRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
+  if (!isReportRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
   // one snapshot for every read, so a refund or a delivery landing meanwhile never makes the
   // days and the top lists disagree
   return db.transaction((tx) => summarise(tx, range), {
@@ -231,14 +192,6 @@ const blank = (): Sums => ({
 function settle(s: Sums): SalesFigures {
   const sold = s.itemsBeforeDiscount - s.discount;
   return { ...s, net: sold - s.refunds, averageCheck: roundedAverage(sold, s.orders) };
-}
-
-/**
- * `total ÷ count` to the nearest so'm, halves up; null for no count. The reports' average check
- * and the admin Home's average payment (#48) round alike. For a total of zero or more.
- */
-export function roundedAverage(total: number, count: number): number | null {
-  return count === 0 ? null : Math.floor((2 * total + count) / (2 * count));
 }
 
 /** Adds a line to a row; the row keeps the name and brand of the latest order that sold it. */

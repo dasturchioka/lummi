@@ -1,10 +1,11 @@
-import type { SalesReport, SalesReportQuery } from '@lummi/contracts';
+import type { ReportQuery, SalesReport } from '@lummi/contracts';
 import type { Db } from '@lummi/db';
 import type { Language } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
-import { askedRange, salesSummary } from './sales-summary';
+import { askedRange } from './report-range';
+import { salesSummary } from './sales-summary';
 import { salesWorkbook } from './sales-workbook';
 
 /**
@@ -18,12 +19,12 @@ export class SalesReports {
     @Inject(EDGES) private readonly edges: Edges,
   ) {}
 
-  async report(query: SalesReportQuery): Promise<SalesReport | 'invalid_range'> {
+  async report(query: ReportQuery): Promise<SalesReport | 'invalid_range'> {
     const range = askedRange(query, this.edges.clock.now());
     return range ? salesSummary(this.db, range) : 'invalid_range';
   }
 
-  async workbook(query: SalesReportQuery, language: Language): Promise<Buffer | 'invalid_range'> {
+  async workbook(query: ReportQuery, language: Language): Promise<Buffer | 'invalid_range'> {
     const report = await this.report(query);
     return report === 'invalid_range' ? report : salesWorkbook(report, language);
   }
