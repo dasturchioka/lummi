@@ -2,27 +2,28 @@ import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
 import { CAMPAIGN_SOURCES, UPGRADE_RIGHT_SOURCES } from './constants';
+import { promoCodeTextSchema } from './promo';
 
 /*
- * Sales reports (TZ §7 «Отчёты», ticket #42): computed live from order snapshots and Refunds,
+ * Reports (TZ §7 «Отчёты», tickets #42, #43): computed live from order snapshots and Refunds,
  * over Fulfilled orders only. The rules (which day an order counts on, what net is, how a
  * discount is shared over lines, how sets count) are in docs/spec.md → Changes 2026-11-14.
  */
 
 /** The most days one report covers: a year, leap day included. */
-export const SALES_REPORT_MAX_DAYS = 366;
-/** Without a range the report covers the last 30 Tashkent days, today included. */
-export const SALES_REPORT_DEFAULT_DAYS = 30;
+export const REPORT_MAX_DAYS = 366;
+/** Without a range a report covers the last 30 Tashkent days, today included. */
+export const REPORT_DEFAULT_DAYS = 30;
 
 /** First and last Tashkent day, both inclusive; either missing takes the default range. */
-export const salesReportQuerySchema = z.object({
+export const reportQuerySchema = z.object({
   from: tashkentDaySchema.optional(),
   to: tashkentDaySchema.optional(),
 });
-export type SalesReportQuery = z.input<typeof salesReportQuerySchema>;
+export type ReportQuery = z.input<typeof reportQuerySchema>;
 
-/** The Excel export takes the same range and the language of its headers. */
-export const salesReportExportQuerySchema = salesReportQuerySchema.extend({
+/** A report's Excel export takes the same query and the language of its headers. */
+export const reportExportQuerySchema = reportQuerySchema.extend({
   lang: languageSchema.default('ru'),
 });
 
@@ -103,11 +104,11 @@ export const salesReportSchema = z.object({
 });
 export type SalesReport = z.infer<typeof salesReportSchema>;
 
-export const salesReportErrorSchema = z.object({
+export const reportErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'invalid_range']),
 });
 
-export const SALES_REPORT_EXPORT_MIME =
+export const REPORT_EXPORT_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /*
@@ -124,8 +125,11 @@ export const marketingFiguresSchema = z.object({
   orders: count,
   /** Distinct customers of those orders. */
   customers: count,
-  /** Of them, those for whom one of the row's orders is their first Fulfilled order ever. */
-  newCustomers: count,
+  /**
+   * First-time buyers (GLOSSARY): of them, those for whom one of the row's orders is their first
+   * Fulfilled order ever. The TZ promo report's «новые покупатели».
+   */
+  firstTimeBuyers: count,
   itemsBeforeDiscount: som,
   discount: som,
   /** Refunds of the row's Fulfilled orders counted in the range, by the sales report's rule. */
@@ -153,6 +157,31 @@ export const reportLinkSchema = z.object({
   promoCode: z.string().nullable(),
 });
 export type ReportLink = z.infer<typeof reportLinkSchema>;
+
+/** «Без ссылки» in the Source filter: orders that took no campaign link. */
+export const NO_SOURCE = 'none';
+/** «Без промокода» in the code filter: orders that took no promo code. */
+export const NO_PROMO_CODE = 'none';
+/** What the Source filter takes. */
+export const SOURCE_FILTERS = [...CAMPAIGN_SOURCES, NO_SOURCE] as const;
+
+/**
+ * The marketing reports' filters (TZ §7 «Фильтры: период, источник, код»), besides the range.
+ * Both narrow the orders every table counts (and their Refunds). The Source also narrows the
+ * opens and the customers acquired to its own links; with `none`, there are none.
+ */
+export const marketingReportQuerySchema = reportQuerySchema.extend({
+  /** A campaign Source, or `none`: the orders that took no campaign link. */
+  source: z.enum(SOURCE_FILTERS).optional(),
+  /** A promo code, or `none`: the orders that took no code. */
+  code: z.union([z.literal(NO_PROMO_CODE), promoCodeTextSchema]).optional(),
+});
+export type MarketingReportQuery = z.input<typeof marketingReportQuerySchema>;
+export type MarketingFilters = Pick<z.output<typeof marketingReportQuerySchema>, 'source' | 'code'>;
+
+export const marketingReportExportQuerySchema = marketingReportQuerySchema.extend({
+  lang: languageSchema.default('ru'),
+});
 
 /** One promo code (TZ §7 promo report), keyed on the code the order took. */
 export const promoCodeReportRowSchema = marketingFiguresSchema.extend({
@@ -192,7 +221,10 @@ export type SourceRow = z.infer<typeof sourceRowSchema>;
 /** One link under its Source, by the customers whose first link it is. */
 export const acquisitionLinkRowSchema = marketingFiguresSchema.extend({
   link: reportLinkSchema,
-  /** Customers whose first campaign link it is, first opened in the range. */
+  /**
+   * Customers it acquired in the range: their first campaign link, first opened in the range,
+   * while they were still a New customer (no order that was not cancelled).
+   */
   acquired: count,
 });
 export type AcquisitionLinkRow = z.infer<typeof acquisitionLinkRowSchema>;
@@ -216,16 +248,29 @@ export type UpgradeRightReportRow = z.infer<typeof upgradeRightReportRowSchema>;
 export const marketingReportSchema = z.object({
   from: tashkentDaySchema,
   to: tashkentDaySchema,
+  /** The filters the figures are narrowed by, as the API read them; null for «Все». */
+  filters: z.object({
+    source: z.enum(SOURCE_FILTERS).nullable(),
+    code: z.string().nullable(),
+  }),
   /** Codes with an order, a refund or an open in the range; most orders first. */
   promoCodes: z.array(promoCodeReportRowSchema),
-  /** By the order's campaign link (ADR 0022: the last one opened within N days): every Source. */
+  /**
+   * By the order's campaign link (ADR 0022: the last one opened within N days): every Source,
+   * or only the one the Source filter names (none for `none`).
+   */
   sources: z.array(sourceRowSchema),
   /** Orders that took no campaign link. */
   withoutLink: marketingFiguresSchema,
-  /** By the customer's first campaign link, for orders placed since they first opened it. */
+  /**
+   * By the link that acquired the customer: their first campaign link, when they opened it as a
+   * New customer. Every Source.
+   */
   acquisition: z.array(acquisitionRowSchema),
-  /** Orders of customers without a first link, or placed before they first opened it. */
-  withoutAcquisition: marketingFiguresSchema,
+  /** Orders of customers who had an order (not cancelled) before they first opened a link. */
+  earlierCustomers: marketingFiguresSchema,
+  /** Orders of customers who never opened a campaign link. */
+  withoutFirstLink: marketingFiguresSchema,
   /** The set first, then the single 10 ml bottle. */
   upgradeRights: z.array(upgradeRightReportRowSchema),
 });
