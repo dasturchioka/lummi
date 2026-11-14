@@ -7,7 +7,6 @@ import {
   orders,
   receiptChecks,
   receipts,
-  shopCard,
   sql,
   type Db,
   type DbOrTx,

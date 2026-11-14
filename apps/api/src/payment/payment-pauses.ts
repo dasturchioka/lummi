@@ -9,7 +9,6 @@ import {
   orders,
   paymentPauses,
   receipts,
-  shopCard,
   sql,
   userbotHeartbeat,
   type DbOrTx,
