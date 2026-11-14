@@ -20,6 +20,8 @@ export const SHOT_ORDER = {
   returned: 9011,
   deliveredMany: 9012,
   deliveredWorst: 9013,
+  /** Not seeded here: the marketing report's shot adds and removes it (`shotMarketing`, #43). */
+  usedRight: 9014,
 } as const;
 const FIRST = 9001;
 const LAST = 9013;
@@ -1123,6 +1125,13 @@ export async function forgetShotOrders(db: Sql) {
   );
   await db.query(`delete from receipts where order_id = any($1::bigint[])`, [ids]);
   await db.query(`delete from refunds where order_id = any($1::bigint[])`, [ids]);
+  // a marketing shot stopped before its teardown leaves rights on 9006 and the order 9014 (#43)
+  await db.query(
+    `delete from upgrade_rights where source_order_id = any($1::bigint[])
+       or used_by_order_id in (select id from orders where number = $2)`,
+    [ids, SHOT_ORDER.usedRight],
+  );
+  await db.query(`delete from orders where number = $1`, [SHOT_ORDER.usedRight]);
   await db.query(`delete from orders where number between $1 and $2`, [FIRST, LAST]);
   await db.query(
     `delete from credits where humo_message_id >= $1 and humo_message_id < $1 + 1000`,

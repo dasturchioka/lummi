@@ -2068,11 +2068,15 @@ export const adminMessages = defineMessages(
           description:
             'Те же заказы, что в продажах: доставленные без возврата, в день доставки по Ташкенту, с возвратами денег по тем же правилам. Здесь видно, что принесли промокоды, ссылки кампаний и скидка за набор.',
           title: 'Маркетинг',
+          empty: 'За этот период нечего показать',
+          emptyText:
+            'Здесь появятся заказы с промокодами и по ссылкам кампаний, открытия ссылок и скидки за набор. Выберите другой период.',
           figures: {
             opens: 'Открыли (чел.)',
             orders: 'Заказов',
             customers: 'Покупателей',
             newCustomers: 'Из них новых',
+            customersNew: 'Покупателей (новых)',
             itemsBeforeDiscount: 'Товары до скидки',
             discount: 'Скидки',
             refunds: 'Возвраты денег',
@@ -2089,6 +2093,7 @@ export const adminMessages = defineMessages(
             code: 'Промокод',
             links: 'Ссылки',
             noLink: 'нет ссылки',
+            ownLink: 'своя ссылка',
             hint: 'Заказы, где применён код. «Открыли» — клиенты, открывшие ссылки кода за период. Конверсия — заказы с кодом, пришедшие по его ссылкам, к открывшим; у кода без ссылки её нет. Новые — у кого это первый доставленный заказ.',
             empty: 'В этом периоде промокоды не применялись и их ссылки не открывали.',
           },
@@ -2098,6 +2103,7 @@ export const adminMessages = defineMessages(
             link: 'Ссылка',
             allLinks: 'Все ссылки',
             withoutLink: 'Без ссылки',
+            quiet: 'Ничего за период',
             hint: 'Заказ берёт ссылку кампании, которую клиент открыл последней перед заказом (в пределах окна из настроек). Конверсия — заказы к открывшим за период.',
           },
           acquisition: {
@@ -4195,11 +4201,15 @@ export const adminMessages = defineMessages(
           description:
             'Savdodagi buyurtmalarning oʻzi: qaytarilmagan yetkazilganlari, Toshkent vaqti bilan yetkazilgan kunida, qaytarilgan pullar shu qoidalar boʻyicha. Bu yerda promokodlar, kampaniya havolalari va toʻplam chegirmasi nima bergani koʻrinadi.',
           title: 'Marketing',
+          empty: 'Bu davrda koʻrsatadigan narsa yoʻq',
+          emptyText:
+            'Bu yerda promokodli va kampaniya havolalari orqali kelgan buyurtmalar, havolalarni ochishlar va toʻplam chegirmalari koʻrinadi. Boshqa davrni tanlang.',
           figures: {
             opens: 'Ochganlar (kishi)',
             orders: 'Buyurtmalar',
             customers: 'Xaridorlar',
             newCustomers: 'Ulardan yangilari',
+            customersNew: 'Xaridorlar (yangilari)',
             itemsBeforeDiscount: 'Chegirmagacha tovarlar',
             discount: 'Chegirmalar',
             refunds: 'Qaytarilgan pullar',
@@ -4216,6 +4226,7 @@ export const adminMessages = defineMessages(
             code: 'Promokod',
             links: 'Havolalar',
             noLink: 'havola yoʻq',
+            ownLink: 'oʻz havolasi',
             hint: 'Kod qoʻllangan buyurtmalar. «Ochganlar» — davr ichida kod havolalarini ochgan mijozlar. Konversiya — kod havolalari orqali kelgan kodli buyurtmalarning ochganlarga nisbati; havolasiz kodda u yoʻq. Yangilar — bu birinchi yetkazilgan buyurtmasi boʻlganlar.',
             empty: 'Bu davrda promokodlar qoʻllanmagan va ularning havolalari ochilmagan.',
           },
@@ -4225,6 +4236,7 @@ export const adminMessages = defineMessages(
             link: 'Havola',
             allLinks: 'Barcha havolalar',
             withoutLink: 'Havolasiz',
+            quiet: 'Davr ichida hech narsa yoʻq',
             hint: 'Buyurtma mijoz undan oldin oxirgi ochgan kampaniya havolasini oladi (sozlamalardagi muddat ichida). Konversiya — buyurtmalarning davr ichida ochganlarga nisbati.',
           },
           acquisition: {
