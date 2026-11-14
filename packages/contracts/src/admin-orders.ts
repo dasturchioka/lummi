@@ -5,6 +5,7 @@ import { languageSchema } from './auth';
 import { bilingualSchema } from './catalog';
 import { ORDER_ACTIONS, ORDER_ACTOR_TYPES } from './order-machine';
 import {
+  charCount,
   rejectReceiptChoiceSchema,
   transitionPayloadSchemas,
   typedReason,
@@ -103,7 +104,7 @@ const confirmerSchema = z.discriminatedUnion('type', [
 /**
  * A Credit as the admin shows it (GLOSSARY): the exact amount in tiyin, the whole so'm matching
  * compares (null when it has tiyin, so it never pays an order to the so'm), the card it came to,
- * and the order it paid, if any («Не привязано» when none).
+ * and the order it paid, if any («Не привязано» when none), or staff's «Не для заказа» mark (#49).
  */
 export const adminCreditSchema = z.object({
   id,
@@ -116,6 +117,11 @@ export const adminCreditSchema = z.object({
   onShopCard: z.boolean(),
   counterparty: z.string().nullable(),
   order: z.object({ number: z.number().int() }).nullable(),
+  /**
+   * Not for an order (#49): who marked it, when, and their note. Never on a linked credit; a
+   * marked credit is never a Candidate credit and is offered to no order until the mark is off.
+   */
+  notForOrder: z.object({ at, by: staffRefSchema, note: z.string().nullable() }).nullable(),
 });
 export type AdminCreditDto = z.infer<typeof adminCreditSchema>;
 
@@ -144,13 +150,18 @@ export const creditOptionsSchema = z.object({
 });
 export type CreditOptionsDto = z.infer<typeof creditOptionsSchema>;
 
-export const CREDIT_LINK_FILTERS = ['all', 'unlinked', 'linked'] as const;
+/**
+ * The credits list's «Привязка» filter: `unlinked` («Не привязано») is a credit no order holds and
+ * nobody marked not for an order, the admin Home's «Поступления без заказа»; `not_for_order` is a
+ * marked one (#49).
+ */
+export const CREDIT_LINK_FILTERS = ['all', 'unlinked', 'linked', 'not_for_order'] as const;
+export type CreditLinkFilter = (typeof CREDIT_LINK_FILTERS)[number];
 
 /** `GET /admin/credits`: newest first. */
 export const adminCreditsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(ADMIN_ORDERS_PAGE_SIZE),
-  /** `unlinked` is «Не привязано»: credits no order holds. */
   linked: z.enum(CREDIT_LINK_FILTERS).default('all'),
   /** Whole so'm, as an order's amount due reads. */
   amount: z.coerce.number().int().positive().optional(),
@@ -164,8 +175,54 @@ export const adminCreditsPageSchema = z.object({
   total: z.number().int(),
   page: z.number().int(),
   pageSize: z.number().int(),
+  /** The «Не для заказа» note's limit: the setting `payments.creditMarkNoteMaxLength`. */
+  limits: z.object({ markNoteMax: z.number().int().positive() }),
 });
 export type AdminCreditsPageDto = z.infer<typeof adminCreditsPageSchema>;
+
+/** The technical bound of a «Не для заказа» note; the setting `payments.creditMarkNoteMaxLength` is at most this. */
+export const CREDIT_MARK_NOTE_MAX = 1000;
+
+/** `/admin/credits/:id/not-for-order`: the credit's row id; past the safe integers is a 400. */
+export const creditIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+});
+
+/**
+ * `POST /admin/credits/:id/not-for-order` (#49): mark an unlinked credit as not for an order, with
+ * an optional note in the staff member's words (trimmed; empty is none). The server holds it to
+ * the setting `payments.creditMarkNoteMaxLength` (`note_too_long` with `max`).
+ */
+export const creditMarkBodySchema = z
+  .object({
+    note: z
+      .string()
+      .trim()
+      .refine(
+        (v) => charCount(v) <= CREDIT_MARK_NOTE_MAX,
+        `at most ${CREDIT_MARK_NOTE_MAX} characters`,
+      )
+      .optional(),
+  })
+  .strict();
+export type CreditMarkBody = z.input<typeof creditMarkBodySchema>;
+
+/**
+ * 409 on a mark or unmark: the credit moved on meanwhile, and comes along as it is now.
+ * `credit_taken`: an order holds it (a credit that paid an order is never marked). `credit_changed`:
+ * it is already marked (a mark), or no longer marked (an unmark).
+ */
+export const creditMarkConflictSchema = z.object({
+  code: z.enum(['credit_taken', 'credit_changed']),
+  credit: adminCreditSchema,
+});
+export type CreditMarkConflict = z.infer<typeof creditMarkConflictSchema>;
+
+/** 422 on a mark: the note is longer than the setting allows (`max`). */
+export const creditMarkInvalidSchema = z.object({
+  code: z.literal('note_too_long'),
+  max: z.number().int().positive(),
+});
 
 /** One answer of the receipt AI about a receipt (`receipt_checks`, #32): read-only, for staff. */
 export const receiptCheckSchema = z.object({

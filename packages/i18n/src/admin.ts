@@ -135,6 +135,8 @@ export const adminMessages = defineMessages(
                 'Такой же чек уже был у другого заказа. Сверьте его с поступлением, прежде чем подтвердить оплату.',
               judge_failed:
                 'ИИ не смог проверить чек. Сверьте его с поступлением и подтвердите оплату или отклоните чек.',
+              credit_marked:
+                'ИИ подтвердил чек поступлением, которое отметили «Не для заказа». Сверьте чек с поступлениями и подтвердите оплату или отклоните чек.',
               none: 'Сверьте чек с поступлением и подтвердите оплату или отклоните чек.',
             },
             wait: 'ждёт {age}',
@@ -606,6 +608,8 @@ export const adminMessages = defineMessages(
           'order.delivered': 'Заказ доставлен',
           'review.published': 'Отзыв опубликован',
           'review.hidden': 'Отзыв скрыт',
+          'credit.marked_not_for_order': 'Поступление отмечено «Не для заказа»',
+          'credit.unmarked_not_for_order': 'Отметка «Не для заказа» снята',
           'order.returned': 'Заказ возвращён',
           'order.refunded': 'Заказ: записан возврат денег',
           'order.cancelled': 'Заказ отменён',
@@ -654,6 +658,7 @@ export const adminMessages = defineMessages(
           fragrance: 'Аромат',
           order: 'Заказ',
           review: 'Отзыв',
+          credit: 'Поступление',
           shop_card: 'Карта для оплаты',
           volume: 'Объём',
           family: 'Семейство',
@@ -1441,6 +1446,8 @@ export const adminMessages = defineMessages(
             duplicate: 'Повторный чек: такой же файл уже был у другого заказа.',
             not_confirmed: 'ИИ не смог подтвердить чек.',
             judge_failed: 'ИИ не ответил, сколько бы раз его ни спрашивали.',
+            credit_marked:
+              'ИИ подтвердил чек поступлением, которое тем временем отметили «Не для заказа».',
           },
           checks: 'Ответы ИИ',
           checkMeta: 'поступлений: {n}',
@@ -1454,7 +1461,7 @@ export const adminMessages = defineMessages(
           checkOutcome: {
             confirmed: 'Подтвердил оплату',
             manual_review: 'Передал менеджеру',
-            credit_taken: 'Поступление уже оплатило другой заказ',
+            credit_taken: 'Поступление уже оплатило другой заказ или отмечено «Не для заказа»',
             stale: 'Ответил, когда чек уже был решён',
             waiting: 'Ответ ещё не учтён',
           },
@@ -1593,7 +1600,7 @@ export const adminMessages = defineMessages(
         notAllowed: 'Этот шаг сейчас недоступен. Обновите страницу.',
         tryAgain: 'Не получилось сохранить. Попробуйте ещё раз.',
         creditTaken:
-          'Это поступление уже оплатило другой заказ. Показываем заказ как есть: выберите другое.',
+          'Это поступление уже оплатило другой заказ или отмечено «Не для заказа». Показываем заказ как есть: выберите другое.',
         confirmTitle: 'Подтвердить оплату заказа № {number}',
         confirmText:
           'Выберите поступление, которым оплачен заказ. Покупатель получит сообщение, что оплата подтверждена.',
@@ -1719,10 +1726,10 @@ export const adminMessages = defineMessages(
       credits: {
         title: 'Поступления',
         description:
-          'Переводы на карту из уведомлений Humo. «Не привязано» — поступление, которым не оплачен ни один заказ. Сумма с тийинами не совпадёт ни с одним заказом.',
+          'Переводы на карту из уведомлений Humo. «Не привязано» — поступление, которым не оплачен ни один заказ. «Не для заказа» — деньги не за заказ, например личный перевод. Сумма с тийинами не совпадёт ни с одним заказом.',
         toOrders: 'Заказы',
         filters: {
-          linked: 'Привязка',
+          linked: 'Состояние',
           amount: 'Сумма, сум',
           from: 'С даты',
           to: 'По дату',
@@ -1731,8 +1738,33 @@ export const adminMessages = defineMessages(
           reset: 'Сбросить',
           toggle: 'Фильтры',
         },
-        link: { all: 'Все', unlinked: 'Не привязано', linked: 'Привязано' },
+        link: {
+          all: 'Все',
+          unlinked: 'Не привязано',
+          linked: 'Привязано',
+          not_for_order: 'Не для заказа',
+        },
         unlinked: 'Не привязано',
+        notForOrder: 'Не для заказа',
+        markedBy: 'Отметка: {name}, {at}',
+        markAction: 'Не для заказа',
+        markTitle: 'Поступление не для заказа',
+        markText:
+          'Например, личный перевод на эту карту. Поступление уйдёт из «Не привязано» и из очереди на главной, и ни автоматическая проверка оплат, ни привязка к заказу его не предложат. Отметку можно снять.',
+        markNote: 'Комментарий',
+        markNoteOptional: 'необязательно',
+        markNoteHint: 'Видят только сотрудники.',
+        markNoteTooLong: 'Не больше {max} символов.',
+        markSubmit: 'Отметить',
+        unmarkAction: 'Вернуть в поступления',
+        unmarkTitle: 'Вернуть в поступления?',
+        unmarkText:
+          'Поступление снова станет «Не привязано»: его можно будет привязать к заказу, и автоматическая проверка оплат снова его учтёт. Если чек на эту сумму уже ждёт, оплата может подтвердиться сама.',
+        unmarkSubmit: 'Вернуть',
+        marked: 'Поступление отмечено «Не для заказа».',
+        unmarked: 'Поступление снова «Не привязано».',
+        markTaken: 'Это поступление уже оплатило заказ: отметить его нельзя. Список обновлён.',
+        markChanged: 'Поступление уже изменилось: его отметили или вернули. Список обновлён.',
         order: 'Заказ № {number}',
         linkAction: 'Привязать к заказу',
         linkTitle: 'Привязать поступление к заказу',
@@ -2161,6 +2193,8 @@ export const adminMessages = defineMessages(
                 'Xuddi shu chek boshqa buyurtmada boʻlgan. Toʻlovni tasdiqlashdan oldin chekni tushum bilan solishtiring.',
               judge_failed:
                 'AI chekni tekshira olmadi. Chekni tushum bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
+              credit_marked:
+                'AI chekni «Buyurtma uchun emas» deb belgilangan tushum bilan tasdiqladi. Chekni tushumlar bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
               none: 'Chekni tushum bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
             },
             wait: '{age}dan beri kutmoqda',
@@ -2641,6 +2675,8 @@ export const adminMessages = defineMessages(
           'order.delivered': 'Buyurtma yetkazildi',
           'review.published': 'Sharh eʼlon qilindi',
           'review.hidden': 'Sharh yashirildi',
+          'credit.marked_not_for_order': 'Tushum «Buyurtma uchun emas» deb belgilandi',
+          'credit.unmarked_not_for_order': '«Buyurtma uchun emas» belgisi olib tashlandi',
           'order.returned': 'Buyurtma qaytarildi',
           'order.refunded': 'Buyurtma: pul qaytarilgani yozildi',
           'order.cancelled': 'Buyurtma bekor qilindi',
@@ -2688,6 +2724,7 @@ export const adminMessages = defineMessages(
           region: 'Viloyat',
           fragrance: 'Atir',
           order: 'Buyurtma',
+          credit: 'Tushum',
           review: 'Sharh',
           shop_card: 'Toʻlov kartasi',
           volume: 'Hajm',
@@ -3481,6 +3518,8 @@ export const adminMessages = defineMessages(
             duplicate: 'Takroriy chek: xuddi shu fayl boshqa buyurtmada bor edi.',
             not_confirmed: 'AI chekni tasdiqlay olmadi.',
             judge_failed: 'AI necha marta soʻralmasin, javob bermadi.',
+            credit_marked:
+              'AI chekni tushum bilan tasdiqladi, lekin u tushum shu orada «Buyurtma uchun emas» deb belgilandi.',
           },
           checks: 'AI javoblari',
           checkMeta: 'tushumlar: {n}',
@@ -3494,7 +3533,8 @@ export const adminMessages = defineMessages(
           checkOutcome: {
             confirmed: 'Toʻlovni tasdiqladi',
             manual_review: 'Menejerga topshirdi',
-            credit_taken: 'Tushum boshqa buyurtmani toʻlagan',
+            credit_taken:
+              'Tushum boshqa buyurtmani toʻlagan yoki «Buyurtma uchun emas» deb belgilangan',
             stale: 'Chek hal boʻlganidan keyin javob berdi',
             waiting: 'Javob hali hisobga olinmagan',
           },
@@ -3635,7 +3675,7 @@ export const adminMessages = defineMessages(
         notAllowed: 'Bu qadam hozir mavjud emas. Sahifani yangilang.',
         tryAgain: 'Saqlab boʻlmadi. Qayta urinib koʻring.',
         creditTaken:
-          'Bu tushum boshqa buyurtmani toʻlagan. Buyurtmani hozirgi holatida koʻrsatyapmiz: boshqasini tanlang.',
+          'Bu tushum boshqa buyurtmani toʻlagan yoki «Buyurtma uchun emas» deb belgilangan. Buyurtmani hozirgi holatida koʻrsatyapmiz: boshqasini tanlang.',
         confirmTitle: '№ {number} buyurtma toʻlovini tasdiqlash',
         confirmText:
           'Buyurtma toʻlangan tushumni tanlang. Mijoz toʻlov tasdiqlangani haqida xabar oladi.',
@@ -3761,10 +3801,10 @@ export const adminMessages = defineMessages(
       credits: {
         title: 'Tushumlar',
         description:
-          'Humo xabarnomalaridan kartaga oʻtkazmalar. «Bogʻlanmagan» — hech bir buyurtma toʻlanmagan tushum. Tiyinli summa hech bir buyurtmaga mos kelmaydi.',
+          'Humo xabarnomalaridan kartaga oʻtkazmalar. «Bogʻlanmagan» — hech bir buyurtma toʻlanmagan tushum. «Buyurtma uchun emas» — buyurtma uchun boʻlmagan pul, masalan shaxsiy oʻtkazma. Tiyinli summa hech bir buyurtmaga mos kelmaydi.',
         toOrders: 'Buyurtmalar',
         filters: {
-          linked: 'Bogʻlanish',
+          linked: 'Holati',
           amount: 'Summa, soʻm',
           from: 'Sanadan',
           to: 'Sanagacha',
@@ -3773,8 +3813,34 @@ export const adminMessages = defineMessages(
           reset: 'Tozalash',
           toggle: 'Filtrlar',
         },
-        link: { all: 'Hammasi', unlinked: 'Bogʻlanmagan', linked: 'Bogʻlangan' },
+        link: {
+          all: 'Hammasi',
+          unlinked: 'Bogʻlanmagan',
+          linked: 'Bogʻlangan',
+          not_for_order: 'Buyurtma uchun emas',
+        },
         unlinked: 'Bogʻlanmagan',
+        notForOrder: 'Buyurtma uchun emas',
+        markedBy: 'Belgiladi: {name}, {at}',
+        markAction: 'Buyurtma uchun emas',
+        markTitle: 'Buyurtma uchun boʻlmagan tushum',
+        markText:
+          'Masalan, shu kartaga shaxsiy oʻtkazma. Tushum «Bogʻlanmagan» roʻyxatidan va bosh sahifadagi navbatdan chiqadi, uni na toʻlovlarni avtomatik tekshirish, na buyurtmaga bogʻlash taklif qiladi. Belgini olib tashlash mumkin.',
+        markNote: 'Izoh',
+        markNoteOptional: 'ixtiyoriy',
+        markNoteHint: 'Faqat xodimlar koʻradi.',
+        markNoteTooLong: '{max} belgidan oshmasin.',
+        markSubmit: 'Belgilash',
+        unmarkAction: 'Tushumlarga qaytarish',
+        unmarkTitle: 'Tushumlarga qaytarilsinmi?',
+        unmarkText:
+          'Tushum yana «Bogʻlanmagan» boʻladi: uni buyurtmaga bogʻlash mumkin boʻladi va toʻlovlarni avtomatik tekshirish uni yana hisobga oladi. Shu summaga chek kutayotgan boʻlsa, toʻlov oʻzi tasdiqlanishi mumkin.',
+        unmarkSubmit: 'Qaytarish',
+        marked: 'Tushum «Buyurtma uchun emas» deb belgilandi.',
+        unmarked: 'Tushum yana «Bogʻlanmagan».',
+        markTaken: 'Bu tushum buyurtmani toʻlagan: uni belgilab boʻlmaydi. Roʻyxat yangilandi.',
+        markChanged:
+          'Tushum allaqachon oʻzgargan: uni belgilashgan yoki qaytarishgan. Roʻyxat yangilandi.',
         order: '№ {number} buyurtma',
         linkAction: 'Buyurtmaga bogʻlash',
         linkTitle: 'Tushumni buyurtmaga bogʻlash',

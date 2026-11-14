@@ -330,6 +330,31 @@ describe('payment not found (the wait window, ADR 0012)', () => {
     expect((await receiptNow(receiptId)).verdict).toBe('manual_review');
     expect(await systemPosts()).not.toContainEqual(expect.stringContaining('Оплата не найдена'));
   });
+
+  it('a fitting credit marked «Не для заказа» (#49) is no candidate: the receipt ends «not found» with the window', async () => {
+    const placed = await placeOrder();
+    await feedAlive();
+    t.edges.clock.advance(MINUTE);
+    const creditId = await recordCredit(t, { som: placed.order.amountDue });
+    await settled();
+    const { client } = await t.managerSession();
+    const marked = await client.admin.credits.markNotForOrder({
+      params: { id: creditId },
+      body: { note: 'Личный перевод' },
+    });
+    expect(marked.status).toBe(200);
+    const receiptId = await upload(placed);
+    await settled();
+    expect(t.edges.receiptJudge.calls).toEqual([]);
+
+    await minuteLater(2 * HOUR - MINUTE);
+    expect((await receiptNow(receiptId)).verdict).toBe('pending');
+    await minuteLater(2 * MINUTE);
+    expect(await statusOf(placed)).toBe('awaiting_payment');
+    expect((await receiptNow(receiptId)).verdict).toBe('payment_not_found');
+    expect((await orderNow(placed.order.id)).creditId).toBeNull();
+    expect(t.edges.receiptJudge.calls).toEqual([]);
+  });
 });
 
 describe('after payment not found, the newest receipt is the only waiting one (#33 carry-over)', () => {

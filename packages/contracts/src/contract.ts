@@ -183,8 +183,13 @@ import {
 } from './internal';
 
 import {
+  adminCreditSchema,
   adminCreditsPageSchema,
   adminCreditsQuerySchema,
+  creditIdParamsSchema,
+  creditMarkBodySchema,
+  creditMarkConflictSchema,
+  creditMarkInvalidSchema,
   adminOrderConflictSchema,
   adminOrderErrorSchema,
   adminOrderRefusalSchema,
@@ -1459,7 +1464,37 @@ const adminOrders = c.router({
       path: '/admin/credits',
       query: adminCreditsQuerySchema,
       responses: { 200: adminCreditsPageSchema, 401: adminOrderErrorSchema },
-      summary: 'Staff: Humo credits newest first; `linked=unlinked` is «Не привязано»',
+      summary:
+        'Staff: Humo credits newest first; `linked=unlinked` is «Не привязано» (no order holds it, not marked), `linked=not_for_order` the marked ones',
+    },
+    markNotForOrder: {
+      method: 'POST',
+      path: '/admin/credits/:id/not-for-order',
+      pathParams: creditIdParamsSchema,
+      body: creditMarkBodySchema,
+      responses: {
+        200: adminCreditSchema,
+        401: adminOrderErrorSchema,
+        404: adminOrderErrorSchema,
+        409: creditMarkConflictSchema,
+        422: creditMarkInvalidSchema,
+      },
+      summary:
+        'Staff: mark an unlinked credit «Не для заказа» with an optional note: it is then never a Candidate credit and leaves «Поступления без заказа»; audited. A linked credit is 409 credit_taken',
+    },
+    unmarkNotForOrder: {
+      method: 'DELETE',
+      path: '/admin/credits/:id/not-for-order',
+      pathParams: creditIdParamsSchema,
+      body: c.noBody(),
+      responses: {
+        200: adminCreditSchema,
+        401: adminOrderErrorSchema,
+        404: adminOrderErrorSchema,
+        409: creditMarkConflictSchema,
+      },
+      summary:
+        'Staff: take the «Не для заказа» mark off («Вернуть в поступления»): the credit is offered to payment matching again; audited',
     },
   },
 });

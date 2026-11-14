@@ -28,6 +28,7 @@ import { DB } from '../tokens';
 import { retryTransientOnce, TryAgainError, uniqueViolation } from '../util/transient';
 import {
   AMOUNT_FITS,
+  FREE_CREDIT,
   IN_ORDER_TIME,
   isDuplicateReceipt,
   ON_SHOP_CARD,
@@ -77,7 +78,10 @@ export type ConfirmPaymentOutcome =
    * «Ожидает оплаты» without): a stale screen or a second press. Nothing changed.
    */
   | { kind: 'conflict'; order: OrderRow }
-  /** The credit already paid an order; a credit pays one order only. */
+  /**
+   * The credit already paid an order (a credit pays one order only), or staff marked it «Не для
+   * заказа» (#49; `orderId` null): either way it is not free to pay this one.
+   */
   | { kind: 'credit_taken'; orderId: number | null }
   /** The receipt was decided meanwhile (confirmed, rejected, payment not found). */
   | { kind: 'receipt_not_waiting'; verdict: ReceiptVerdict }
@@ -131,7 +135,8 @@ export function confirmPaymentHttpStatus(out: ConfirmPaymentOutcome): number {
  * «подтвердить чек») both come here; nothing else makes the `confirm_payment` move.
  *
  * Under locks taken in a fixed order (the order row, then the credit row, then the receipt) it
- * checks that the credit is unlinked and arrived no earlier than the order's minute, and asks the
+ * checks that the credit is unlinked and not marked «Не для заказа» (#49, `CreditMarks` takes the
+ * same credit lock) and arrived no earlier than the order's minute, and asks the
  * Candidate rule's own pieces (`rules.ts`) whether it is the Amount due to the so'm and on the
  * shop card. The AI takes only an exact credit on the shop card; staff may take another amount or
  * another card with a typed reason. Then, in the caller's transaction, it links the credit, moves
@@ -205,14 +210,18 @@ export class PaymentConfirmation {
     if (payer) return { kind: 'credit_taken', orderId: payer.id };
 
     const { rows } = await tx.execute<{
+      free: boolean;
       amount: boolean | null;
       in_time: boolean;
       on_card: boolean | null;
     }>(sql`
-      select ${AMOUNT_FITS} as amount, ${IN_ORDER_TIME} as in_time, ${ON_SHOP_CARD} as on_card
+      select ${FREE_CREDIT} as free, ${AMOUNT_FITS} as amount, ${IN_ORDER_TIME} as in_time,
+        ${ON_SHOP_CARD} as on_card
       from ${orders} o join ${credits} c on c.id = ${credit.id} left join ${shopCard} sc on true
       where o.id = ${order.id}`);
     const fit = rows[0]!;
+    // marked «Не для заказа» (#49), read under the credit's lock: a mark that won the race is in
+    if (!fit.free) return { kind: 'credit_taken', orderId: null };
     if (!fit.in_time) return { kind: 'credit_mismatch', what: 'before_order' };
     const misfits: CreditMisfit[] = [];
     if (!fit.amount) misfits.push('amount');

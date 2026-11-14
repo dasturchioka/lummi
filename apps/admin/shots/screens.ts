@@ -307,6 +307,33 @@ async function shotRefund(db: ShotSql, what: 'add' | 'remove') {
   );
 }
 
+/**
+ * Order 9003's receipt held for a person as if the AI had confirmed it with a credit staff marked
+ * «Не для заказа» while it answered (#49), or back to the seed's «ИИ не смог подтвердить».
+ */
+async function creditMarkedReceipt(db: ShotSql, on: boolean) {
+  const held = `select r.id from receipts r join orders o on o.id = r.order_id
+    where o.number = $1 and r.verdict = 'manual_review'`;
+  await db.query(`update receipts set review_reason = $2 where id in (${held})`, [
+    SHOT_ORDER.review,
+    on ? 'credit_marked' : 'not_confirmed',
+  ]);
+  // the AI's answer: sure, choosing the first credit it was shown; or the seed's unsure one
+  const answer = on
+    ? { isReceipt: 0.98, amountMatches: 0.96, recipientMatches: 0.95, choiceConfidence: 0.78 }
+    : { isReceipt: 0.97, amountMatches: 0.55, recipientMatches: 0.91, choiceConfidence: 0.42 };
+  await db.query(
+    `update receipt_checks set outcome = $2,
+       judgement = $3::jsonb || jsonb_build_object(
+         'confirmed', $4::boolean,
+         'chosenCreditId', case when $4::boolean then candidate_credit_ids[1] end,
+         'provider', 'typesafe')
+         || case when $4::boolean then '{}'::jsonb else '{"reason": "below threshold"}'::jsonb end
+     where receipt_id in (${held})`,
+    [SHOT_ORDER.review, on ? 'credit_taken' : 'manual_review', JSON.stringify(answer), on],
+  );
+}
+
 /** The Home's shot day, plus a state that takes the Now slot; undone in reverse after each shot. */
 function homeOn(extra?: 'humo' | 'noCard'): Pick<Screen, 'setup' | 'teardown'> {
   return {
@@ -1687,6 +1714,47 @@ export const screens: Screen[] = [
   },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
+  // ---- «Не для заказа» (#49): an unlinked credit's actions, the mark dialog, the marked credits
+  {
+    id: 'credits-unlinked-menu',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-mark-credit]:visible').first().hover();
+    },
+  },
+  {
+    id: 'credits-mark',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-mark-credit]:visible').first().click();
+      const dialog = page.getByRole('dialog');
+      await dialog.locator('textarea').fill('Мама перевела на продукты, к заказам не относится');
+    },
+  },
+  { id: 'credits-not-for-order', path: '/credits?linked=not_for_order', as: 'manager' },
+  {
+    id: 'credits-unmark',
+    path: '/credits?linked=not_for_order',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-unmark-credit]:visible').first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    // the AI confirmed the held receipt with a credit staff marked «Не для заказа» meanwhile
+    id: 'order-credit-marked',
+    path: `/orders/${SHOT_ORDER.review}`,
+    as: 'manager',
+    setup: ({ db }) => creditMarkedReceipt(db, true),
+    teardown: ({ db }) => creditMarkedReceipt(db, false),
+    act: imagesLoaded,
+  },
   // ---- Refunds and returns (#40): a returned order with a refund, and the two dialogs
   {
     id: 'order-returned',
