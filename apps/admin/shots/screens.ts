@@ -1687,6 +1687,38 @@ export const screens: Screen[] = [
   },
   { id: 'credits', path: '/credits', as: 'manager' },
   { id: 'credits-unlinked', path: '/credits?linked=unlinked', as: 'manager' },
+  // ---- «Не для заказа» (#49): an unlinked credit's actions, the mark dialog, the marked credits
+  {
+    id: 'credits-unlinked-menu',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-mark-credit]:visible').first().hover();
+    },
+  },
+  {
+    id: 'credits-mark',
+    path: '/credits?linked=unlinked',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-mark-credit]:visible').first().click();
+      const dialog = page.getByRole('dialog');
+      await dialog.locator('textarea').fill('Мама перевела на продукты, к заказам не относится');
+    },
+  },
+  { id: 'credits-not-for-order', path: '/credits?linked=not_for_order', as: 'manager' },
+  {
+    id: 'credits-unmark',
+    path: '/credits?linked=not_for_order',
+    as: 'manager',
+    fullPage: false,
+    act: async ({ page }) => {
+      await page.locator('[data-unmark-credit]:visible').first().click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
   // ---- Refunds and returns (#40): a returned order with a refund, and the two dialogs
   {
     id: 'order-returned',

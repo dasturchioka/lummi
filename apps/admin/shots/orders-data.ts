@@ -214,7 +214,8 @@ function receiptHtml(amount: number, at: string, bank: string) {
  * Shot data for the orders panel (#33): four customers and twelve orders, one in each state the
  * order page has to show, plus the worst case (twelve lines, a 60-character name, seven-digit
  * totals, five receipts, a typed address and a long comment), with their history, audit entries
- * and receipt images, and a handful of Humo credits, none linked yet. A returned order carries a
+ * and receipt images, and a handful of Humo credits, none linked yet, two marked «Не для заказа»
+ * (#49). A returned order carries a
  * partial Refund and a delivered one of three lines with a promo code waits for its return
  * dialog (#40), as does a delivered worst case of twelve lines (the return dialog at its
  * longest). Replaced on every run.
@@ -1072,6 +1073,24 @@ export async function seedShotOrders(db: Sql, filesDir: string) {
     ['2026-11-09T09:00:00Z', 9_900_000, SHOP_LAST4, null],
   ] as const)
     await credit(occurred, tiyin, last4, from);
+
+  // a personal transfer staff marked «Не для заказа» (#49), and one marked with no note
+  for (const [occurred, tiyin, from, markedAt, note] of [
+    [
+      '2026-11-10T13:25:00Z',
+      50_000_000,
+      'CLICK P2P HUMO2UZCAR',
+      '2026-11-10T13:40:00Z',
+      'Личный перевод от брата владельца, к заказам отношения не имеет',
+    ],
+    ['2026-11-08T06:05:00Z', 2_000_000, 'PAYNET P2P', '2026-11-08T07:15:00Z', null],
+  ] as const) {
+    const id = await credit(occurred, tiyin, SHOP_LAST4, from);
+    await db.query(
+      `update credits set not_for_order_at = $2, not_for_order_by = $3, not_for_order_note = $4 where id = $1`,
+      [id, markedAt, dilnoza, note],
+    );
+  }
 }
 
 async function audit(

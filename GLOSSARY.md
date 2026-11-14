@@ -173,8 +173,12 @@ An incoming transfer to the shop card, as reported by the official Humo bot. Can
 _Avoid_: Payment, transaction, поступление (in code), notification
 
 **Candidate credit**:
-A credit that could pay a given order: on the shop card (same last 4 digits), not linked to any order, same amount as the order's amount due, arrived after the order was created.
+A credit that could pay a given order: on the shop card (same last 4 digits), not linked to any order, not marked not for an order, same amount as the order's amount due, arrived after the order was created.
 _Avoid_: Possible match, suggestion
+
+**Not for an order**:
+A mark staff put on an unlinked credit that is not shop money, such as a personal transfer to the shop card («Не для заказа»), with an optional note. A marked credit is never a candidate credit, is offered for no order, and leaves «Поступления без заказа». The mark is never put on a linked credit; to link a marked credit, staff first take the mark off («Вернуть в поступления»). Every mark and unmark is audited with the actor.
+_Avoid_: Ignored credit, personal credit, hidden credit
 
 **Payment not found**:
 A receipt verdict: no fitting credit arrived within the wait window. The order goes back to «Ожидает оплаты»; it is not a rejection.
