@@ -85,10 +85,17 @@ import {
   settingErrorSchema,
   settingStateSchema,
   updateSettingBodySchema,
+  changePasswordBodySchema,
   createManagerBodySchema,
   devLoginBodySchema,
+  lockedErrorSchema,
   loginWidgetBodySchema,
+  passwordErrorSchema,
+  passwordLoginBodySchema,
+  passwordPolicySchema,
+  resetPasswordBodySchema,
   staffSchema,
+  telegramLinkSchema,
   updateStaffBodySchema,
 } from './admin';
 import {
@@ -640,6 +647,19 @@ const adminCore = c.router({
     responses: { 200: staffSchema, 401: adminErrorSchema, 403: adminErrorSchema },
     summary: 'Telegram Login Widget sign-in; sets the httpOnly staff session cookie (ADR 0017)',
   },
+  passwordLogin: {
+    method: 'POST',
+    path: '/admin/auth/password',
+    body: passwordLoginBodySchema,
+    responses: {
+      200: staffSchema,
+      401: adminErrorSchema,
+      403: adminErrorSchema,
+      429: lockedErrorSchema,
+    },
+    summary:
+      'Sign in with login and password (ADR 0038): one generic 401 for a wrong login or password, 429 with `retryAt` while the login or the address is locked; sets the same cookie as the widget',
+  },
   devLogin: {
     method: 'POST',
     path: '/admin/auth/dev',
@@ -660,6 +680,34 @@ const adminCore = c.router({
     responses: { 200: staffSchema, 401: adminErrorSchema },
     summary: 'The signed-in staff member, identified only by the session cookie',
   },
+  passwordPolicy: {
+    method: 'GET',
+    path: '/admin/me/password-policy',
+    responses: { 200: passwordPolicySchema, 401: adminErrorSchema },
+    summary: 'The shortest password taken (`auth.passwordMinLength`), for the password forms',
+  },
+  changePassword: {
+    method: 'POST',
+    path: '/admin/me/password',
+    body: changePasswordBodySchema,
+    responses: {
+      200: staffSchema,
+      401: adminErrorSchema,
+      409: adminErrorSchema,
+      422: passwordErrorSchema,
+      429: lockedErrorSchema,
+    },
+    summary:
+      '«Сменить пароль» (and the forced change after a temporary one): ends every other session of the member; this one stays. 409 login_required for a Telegram-only record',
+  },
+  telegramLink: {
+    method: 'POST',
+    path: '/admin/me/telegram-link',
+    body: c.noBody(),
+    responses: { 201: telegramLinkSchema, 401: adminErrorSchema, 409: adminErrorSchema },
+    summary:
+      '«Привязать Telegram»: a one-time `t.me/<bot>?start=staff_<token>` link (TTL `auth.telegramLinkTtlSeconds`); 409 already_linked when a Telegram account is bound',
+  },
   staff: {
     list: {
       method: 'GET',
@@ -676,8 +724,10 @@ const adminCore = c.router({
         401: adminErrorSchema,
         403: adminErrorSchema,
         409: adminErrorSchema,
+        422: passwordErrorSchema,
       },
-      summary: 'Owner only: add a manager by Telegram id',
+      summary:
+        'Owner only: add a manager with a login and a temporary password (changed at the first sign-in); 409 login_taken, 422 weak_password',
     },
     update: {
       method: 'PATCH',
@@ -706,6 +756,37 @@ const adminCore = c.router({
         409: adminErrorSchema,
       },
       summary: 'Owner only: remove a manager',
+    },
+    resetPassword: {
+      method: 'POST',
+      path: '/admin/staff/:id/password',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: resetPasswordBodySchema,
+      responses: {
+        200: staffSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+        409: adminErrorSchema,
+        422: z.union([passwordErrorSchema, adminErrorSchema]),
+      },
+      summary:
+        'Owner only: «Сбросить пароль», a new temporary password for a manager (with a login when they have none, 422 login_required); every session of that manager ends',
+    },
+    unlinkTelegram: {
+      method: 'DELETE',
+      path: '/admin/staff/:id/telegram',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: c.noBody(),
+      responses: {
+        200: staffSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+        409: adminErrorSchema,
+      },
+      summary:
+        "Owner only: unbind a manager's Telegram; 409 telegram_only when it is their only way in (no password)",
     },
   },
   settings: {
@@ -1273,10 +1354,12 @@ const adminBroadcasts = c.router({
         200: testSendResultSchema,
         401: broadcastErrorSchema,
         403: broadcastErrorSchema,
+        409: broadcastErrorSchema,
         422: broadcastErrorSchema,
         502: broadcastErrorSchema,
       },
-      summary: "«Отправить себе»: both language versions to the owner's own Telegram id",
+      summary:
+        "«Отправить себе»: both language versions to the owner's own Telegram id; 409 test_unlinked while none is linked",
     },
   },
 });

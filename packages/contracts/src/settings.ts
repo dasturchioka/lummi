@@ -826,6 +826,85 @@ export const settingDefinitions = {
     unit: 'seconds',
     label: { ru: 'Срок сессии сотрудника', uz: 'Xodim seansi muddati' },
   },
+  // Staff sign-in by login and password (ADR 0038, #50)
+  'auth.passwordMinLength': {
+    schema: z.number().int().min(8).max(64),
+    default: 8,
+    area: 'auth',
+    unit: 'count',
+    label: { ru: 'Минимальная длина пароля сотрудника', uz: 'Xodim parolining eng kam uzunligi' },
+    hint: {
+      ru: 'В символах. Действует для новых паролей; уже заданные не меняются.',
+      uz: 'Belgilarda. Yangi parollarga taʼsir qiladi; oldin oʻrnatilganlari oʻzgarmaydi.',
+    },
+  },
+  'auth.passwordAttemptsPerLogin': {
+    schema: z.number().int().min(3).max(100),
+    default: 5,
+    area: 'auth',
+    unit: 'count',
+    label: {
+      ru: 'Неудачных попыток входа на один логин',
+      uz: 'Bitta login uchun muvaffaqiyatsiz kirishlar',
+    },
+    hint: {
+      ru: 'Столько неверных паролей подряд за окно ниже, и вход по этому логину закрывается на время блокировки.',
+      uz: 'Quyidagi oyna ichida shuncha notoʻgʻri parol kiritilsa, bu login bilan kirish bloklash muddatiga yopiladi.',
+    },
+  },
+  'auth.passwordAttemptsPerIp': {
+    schema: z.number().int().min(3).max(1000),
+    default: 20,
+    area: 'auth',
+    unit: 'count',
+    label: {
+      ru: 'Неудачных попыток входа с одного адреса',
+      uz: 'Bitta manzildan muvaffaqiyatsiz kirishlar',
+    },
+    hint: {
+      ru: 'С любых логинов вместе. Столько неверных паролей за окно ниже, и вход с этого IP-адреса закрывается на время блокировки.',
+      uz: 'Barcha loginlar birga. Quyidagi oyna ichida shuncha notoʻgʻri parol kiritilsa, bu IP-manzildan kirish bloklash muddatiga yopiladi.',
+    },
+  },
+  'auth.passwordAttemptWindowSeconds': {
+    schema: z.number().int().min(60).max(86_400),
+    default: 15 * 60,
+    area: 'auth',
+    unit: 'seconds',
+    label: {
+      ru: 'Окно подсчёта неудачных попыток',
+      uz: 'Muvaffaqiyatsiz urinishlarni sanash oynasi',
+    },
+    hint: {
+      ru: 'Ошибки старше этого срока не считаются. 900 секунд = 15 минут.',
+      uz: 'Bu muddatdan eski xatolar hisobga olinmaydi. 900 soniya = 15 daqiqa.',
+    },
+  },
+  'auth.passwordLockSeconds': {
+    schema: z.number().int().min(60).max(86_400),
+    default: 15 * 60,
+    area: 'auth',
+    unit: 'seconds',
+    label: { ru: 'Блокировка входа после ошибок', uz: 'Xatolardan keyin kirishni bloklash' },
+    hint: {
+      ru: 'Сколько ждать, когда попытки кончились. Верный пароль в это время тоже не принимается.',
+      uz: 'Urinishlar tugaganda qancha kutish kerak. Bu vaqtda toʻgʻri parol ham qabul qilinmaydi.',
+    },
+  },
+  'auth.telegramLinkTtlSeconds': {
+    schema: z.number().int().min(60).max(86_400),
+    default: 10 * 60,
+    area: 'auth',
+    unit: 'seconds',
+    label: {
+      ru: 'Срок ссылки «Привязать Telegram»',
+      uz: '«Telegramni bogʻlash» havolasining muddati',
+    },
+    hint: {
+      ru: 'Ссылка из профиля сотрудника работает один раз и только этот срок. 600 секунд = 10 минут.',
+      uz: 'Xodim profilidagi havola bir marta va faqat shu muddat ishlaydi. 600 soniya = 10 daqiqa.',
+    },
+  },
   // ---- Receipt AI (ADR 0013). Defaults tuned later on 20-30 real receipts with the eval script.
   /** Every predicate (is a receipt, amount, recipient) must reach this probability to confirm. */
   'ai.receipt.probabilityThreshold': {
