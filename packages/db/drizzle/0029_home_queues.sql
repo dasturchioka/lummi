@@ -1,0 +1,2 @@
+CREATE INDEX "order_events_confirmed_idx" ON "order_events" USING btree ("created_at") WHERE "order_events"."action" = 'confirm_payment';--> statement-breakpoint
+CREATE INDEX "receipts_held_idx" ON "receipts" USING btree ("created_at") WHERE "receipts"."verdict" = 'manual_review';

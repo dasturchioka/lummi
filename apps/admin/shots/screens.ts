@@ -1,4 +1,4 @@
-import { settingDefinitions } from '@lummi/contracts';
+import { settingDefinitions, type AdminHome } from '@lummi/contracts';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
@@ -16,6 +16,7 @@ import {
   WORST_FIXED_PROMO,
 } from './promo-data';
 import { SHOT_ORDER } from './orders-data';
+import { cardBack, homeDay, homeDayBack, humoBack, humoSilent, noCard } from './home-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
 /**
@@ -306,6 +307,27 @@ async function shotRefund(db: ShotSql, what: 'add' | 'remove') {
   );
 }
 
+/** The Home's shot day, plus a state that takes the Now slot; undone in reverse after each shot. */
+function homeOn(extra?: 'humo' | 'noCard'): Pick<Screen, 'setup' | 'teardown'> {
+  return {
+    setup: async ({ db }) => {
+      await homeDay(db);
+      if (extra === 'humo') await humoSilent(db);
+      if (extra === 'noCard') await noCard(db);
+    },
+    teardown: async ({ db }) => {
+      if (extra === 'humo') await humoBack(db);
+      if (extra === 'noCard') await cardBack(db);
+      await homeDayBack(db);
+    },
+  };
+}
+
+/** The Home has answered: its Now block is drawn. */
+async function homeLoaded({ page }: ScreenContext) {
+  await page.locator('[data-now]').waitFor();
+}
+
 /** A Telegram account that is not on staff: signs in to the «Нет доступа» state. */
 export const OUTSIDER_ID = 990000099;
 
@@ -400,8 +422,68 @@ export const screens: Screen[] = [
       await page.getByText(t.errors.noAccess, { exact: true }).waitFor();
     },
   },
-  { id: 'home', path: '/', as: 'owner' },
-  { id: 'home-manager', path: '/', as: 'manager' },
+  // ---- Home (#48): the work queue over a normal shot day, then each state that takes the Now slot
+  { id: 'home', path: '/', as: 'owner', ...homeOn(), act: homeLoaded },
+  { id: 'home-manager', path: '/', as: 'manager', ...homeOn(), act: homeLoaded },
+  { id: 'home-humo', path: '/', as: 'owner', ...homeOn('humo'), act: homeLoaded },
+  { id: 'home-no-card', path: '/', as: 'owner', ...homeOn('noCard'), act: homeLoaded },
+  { id: 'home-no-card-manager', path: '/', as: 'manager', ...homeOn('noCard'), act: homeLoaded },
+  {
+    id: 'home-clear',
+    path: '/',
+    as: 'owner',
+    ...homeOn(),
+    // nothing waits: the day's answer with every queue empty (the shot orders stay for other screens)
+    act: async ({ page, t }) => {
+      await page.route('**/api/admin/home', async (route) => {
+        const res = await route.fetch();
+        const body = (await res.json()) as AdminHome;
+        const empty = { count: 0, since: null, waitedSeconds: null };
+        await route.fulfill({
+          response: res,
+          json: {
+            ...body,
+            now: { kind: 'clear' },
+            queues: {
+              receipts: empty,
+              accept: empty,
+              assemble: empty,
+              bts: empty,
+              credits: { ...empty, oldestAmountTiyin: null },
+              refunds: empty,
+              stock: { count: 0, out: 0, low: 0, first: null },
+              reviews: empty,
+            },
+          },
+        });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.getByText(t.home.now.clear.title, { exact: true }).waitFor();
+    },
+  },
+  {
+    id: 'home-loading',
+    path: '/',
+    as: 'owner',
+    // the first answer never comes: the skeleton
+    act: async ({ page }) => {
+      await page.route('**/api/admin/home', () => undefined);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator('[aria-busy="true"] .skeleton').first().waitFor();
+    },
+  },
+  {
+    id: 'home-error',
+    path: '/',
+    as: 'owner',
+    act: async ({ page, t }) => {
+      await page.route('**/api/admin/home', (route) =>
+        route.fulfill({ status: 500, json: { code: 'internal' } }),
+      );
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.getByText(t.home.error.title, { exact: true }).waitFor();
+    },
+  },
   {
     id: 'menu',
     path: '/',

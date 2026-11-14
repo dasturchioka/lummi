@@ -1109,6 +1109,21 @@ export const settingDefinitions = {
       uz: 'Xaridor sharhga nechta rasm qoʻsha oladi. 0 rasmlarni oʻchiradi. Fayl hajmi «Chek faylining hajmi» sozlamasi bilan cheklanadi.',
     },
   },
+  /**
+   * The admin Home counts a finished review that nobody published or hid as waiting for this many
+   * days after the customer finished it; one staff choose not to publish drops out after it (#48).
+   */
+  'reviews.homeQueueDays': {
+    schema: z.number().int().min(1).max(60),
+    default: 7,
+    area: 'shop',
+    unit: 'days',
+    label: { ru: 'Отзыв ждёт решения на главной', uz: 'Sharh bosh sahifada qaror kutadi' },
+    hint: {
+      ru: 'Сколько дней после того, как покупатель закончил отзыв, он стоит в строке «Отзывы» на главной панели, пока его не опубликуют или не скроют. Неопубликованный отзыв после этого срока остаётся в разделе «Отзывы».',
+      uz: 'Xaridor sharhni tugatgandan keyin u necha kun panel bosh sahifasidagi «Sharhlar» qatorida turadi, toki uni eʼlon qilishmaguncha yoki yashirishmaguncha. Bu muddatdan keyin eʼlon qilinmagan sharh «Sharhlar» boʻlimida qoladi.',
+    },
+  },
   'reviews.commentMaxLength': {
     schema: z.number().int().min(50).max(3000),
     default: 1000,

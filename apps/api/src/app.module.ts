@@ -91,6 +91,8 @@ import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
 import { ReportsController } from './reports/reports.controller';
+import { HomeController } from './home/home.controller';
+import { HomeService } from './home/home.service';
 import { SalesReports } from './reports/sales-reports.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
@@ -155,6 +157,7 @@ export class AppModule {
         CampaignsAdminController,
         DiscountsController,
         ReportsController,
+        HomeController,
       ],
       providers: [
         { provide: ENV, useValue: deps.env },
@@ -217,6 +220,7 @@ export class AppModule {
         Refunds,
         CampaignsService,
         SalesReports,
+        HomeService,
         BirthdayService,
         BirthdayCouponJob,
         ErrorTracker,

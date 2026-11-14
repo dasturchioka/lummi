@@ -31,3 +31,4 @@ export * from './upgrade-rights';
 export * from './favourites';
 export * from './reviews';
 export * from './reports';
+export * from './home';

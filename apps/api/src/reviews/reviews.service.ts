@@ -10,10 +10,12 @@ import {
 import {
   and,
   asc,
+  auditLog,
   customers,
   desc,
   eq,
   fragrances,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -25,6 +27,7 @@ import {
   reviews,
   sql,
   type Db,
+  type DbOrTx,
   type SQL,
 } from '@lummi/db';
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -68,6 +71,25 @@ type Target = { kind: 'fragrance'; id: number } | { kind: 'discovery' } | { kind
  * the «Отзывы» post. A review is private until staff publish it; everything a customer can reach
  * here reads `published = true` and nothing else.
  */
+/**
+ * A review waiting for a decision (the admin Home's «Отзывы», #48, and the list's `waiting`
+ * filter): the customer finished it (`step = done`, so it can be published), nobody ever decided
+ * it (not published, no `published_at`, and no publish or hide in the audit trail: hiding a
+ * published review clears its `published_at`), and it was finished (`step_at`) within the setting
+ * `reviews.homeQueueDays`. One staff choose not to publish drops out after that window; there is
+ * no «decline» mark.
+ */
+export async function awaitingDecision(db: DbOrTx, now: Date): Promise<SQL> {
+  const { 'reviews.homeQueueDays': days } = await readSettings(db, ['reviews.homeQueueDays']);
+  return and(
+    eq(reviews.step, 'done'),
+    eq(reviews.published, false),
+    isNull(reviews.publishedAt),
+    gte(reviews.stepAt, new Date(now.getTime() - days * 86_400_000)),
+    sql`not exists (select 1 from ${auditLog} decided where decided.target_type = 'review' and decided.target_id = "reviews"."id"::text and decided.action in ('review.published', 'review.hidden'))`,
+  )!;
+}
+
 @Injectable()
 export class ReviewsService {
   private readonly log = new Logger('Reviews');
@@ -178,13 +200,15 @@ export class ReviewsService {
 
   // ---- The admin panel
 
-  private filters(q: AdminReviewsQuery): SQL | undefined {
+  private async filters(q: AdminReviewsQuery): Promise<SQL | undefined> {
     const parsed = adminReviewsQuerySchema.parse(q);
     const where: SQL[] = [];
     if (parsed.rating) where.push(eq(reviews.rating, parsed.rating));
     if (parsed.order)
       where.push(sql`${reviews.orderId} in (select id from orders where number = ${parsed.order})`);
-    if (parsed.state) where.push(eq(reviews.published, parsed.state === 'published'));
+    if (parsed.state === 'waiting')
+      where.push(await awaitingDecision(this.db, this.edges.clock.now()));
+    else if (parsed.state) where.push(eq(reviews.published, parsed.state === 'published'));
     if (parsed.from)
       where.push(sql`${reviews.createdAt} >= ${tashkentDayStart(parsed.from).toISOString()}`);
     if (parsed.to)
@@ -194,7 +218,7 @@ export class ReviewsService {
 
   async list(q: AdminReviewsQuery): Promise<AdminReviewsPageDto> {
     const query = adminReviewsQuerySchema.parse(q);
-    const where = this.filters(query);
+    const where = await this.filters(query);
     const [stats] = await this.db
       .select({
         total: sql<number>`count(*)`.mapWith(Number),
@@ -320,7 +344,7 @@ export class ReviewsService {
 
   /** The filtered list as an Excel file (RU headers, Tashkent times). */
   async exportWorkbook(q: AdminReviewsQuery): Promise<Buffer> {
-    const items = await this.rows(this.filters(q));
+    const items = await this.rows(await this.filters(q));
     const wb = new ExcelJS.Workbook();
     const sheet = wb.addWorksheet('Отзывы');
     sheet.columns = [

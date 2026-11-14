@@ -1,35 +1,25 @@
-import { ArrowRight } from 'lucide-react';
-import Link from 'next/link';
-import { EmptyState } from '@/components/empty-state';
-import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { formatLocalDate, tashkentDay } from '@lummi/contracts';
+import { HomeView } from '@/components/home/home-view';
 import { getAdminMessages } from '@/lib/i18n';
 import { getMe } from '@/lib/server-api';
 
+/**
+ * The admin root (#48): the work-queue Home for both roles. The browser loads it from one call
+ * (`GET /admin/home`) and refreshes it; the server only names who is signed in (the skeleton has
+ * the owner's sales strip or not) and today's Tashkent day for the date line.
+ */
 export default async function HomePage() {
-  const { t } = await getAdminMessages();
+  const { language, t } = await getAdminMessages();
   const me = await getMe();
-  const owner = me.status === 200 && me.body.role === 'owner';
+  const role = me.status === 200 ? me.body.role : 'manager';
   return (
-    <>
-      <PageHeader title={t.nav.home} />
-      <EmptyState
-        title={t.home.emptyTitle}
-        icon="monogram"
-        action={
-          owner && (
-            <Button asChild variant="outline">
-              <Link href="/staff">
-                {t.home.toStaff}
-                <ArrowRight strokeWidth={1.5} aria-hidden />
-              </Link>
-            </Button>
-          )
-        }
-      >
-        <p>{t.home.empty}</p>
-        {owner && <p className="mt-1">{t.home.ownerHint}</p>}
-      </EmptyState>
-    </>
+    <HomeView
+      copy={t.home}
+      title={t.nav.home}
+      retry={t.actions.retry}
+      language={language}
+      role={role}
+      today={formatLocalDate(tashkentDay(new Date()))}
+    />
   );
 }

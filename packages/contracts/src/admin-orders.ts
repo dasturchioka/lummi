@@ -34,6 +34,13 @@ export const PAYMENT_STATES = ['unpaid', 'checking', 'manual_review', 'paid'] as
 export type PaymentState = (typeof PAYMENT_STATES)[number];
 export const paymentStateSchema = z.enum(PAYMENT_STATES);
 
+/**
+ * What the orders list's «Оплата» filter takes: a payment state, or `refund_owed`, a paid order
+ * that ended (cancelled or returned) whose Refunds do not yet cover what paid it (#40, #48).
+ */
+export const ORDER_PAYMENT_FILTERS = [...PAYMENT_STATES, 'refund_owed'] as const;
+export type OrderPaymentFilter = (typeof ORDER_PAYMENT_FILTERS)[number];
+
 export const ADMIN_ORDERS_PAGE_SIZE = 25;
 /** The largest order number the panel looks up (nine digits, like the search): beyond it, 404. */
 export const ORDER_NUMBER_MAX = 999_999_999;
@@ -43,7 +50,7 @@ export const adminOrdersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(ADMIN_ORDERS_PAGE_SIZE),
   status: orderStatusSchema.optional(),
-  payment: paymentStateSchema.optional(),
+  payment: z.enum(ORDER_PAYMENT_FILTERS).optional(),
   /** First day, Tashkent, inclusive. */
   from: tashkentDaySchema.optional(),
   /** Last day, Tashkent, inclusive. */

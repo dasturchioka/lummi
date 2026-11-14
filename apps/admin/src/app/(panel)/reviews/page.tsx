@@ -5,7 +5,8 @@ import { getAdminMessages } from '@/lib/i18n';
 import { clampPage, readFilters, readPage, type Search } from '@/lib/list-page';
 import { serverApi } from '@/lib/server-api';
 
-const KEYS = ['rating', 'state', 'from', 'to'] as const;
+/** `order` opens one order's review (the order page, the admin Home's «Открыть отзыв»). */
+const KEYS = ['rating', 'state', 'from', 'to', 'order'] as const;
 
 export default async function ReviewsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
