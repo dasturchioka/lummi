@@ -76,7 +76,7 @@ export function nowKey(now: HomeNow): string {
     case 'review':
       return `${now.kind}:${now.number}`;
     case 'credit':
-      return `credit:${now.at.day}:${now.at.time}:${now.amountTiyin}`;
+      return `credit:${now.id}`;
     case 'stock':
       return `stock:${now.item.kind}:${now.item.name ?? ''}:${now.item.ml ?? ''}`;
     default:
@@ -93,5 +93,15 @@ export const QUEUE_HREF: Record<HomeQueue, string> = {
   credits: '/credits?linked=unlinked',
   refunds: '/orders?payment=refund_owed',
   stock: '/stock?filter=low&visibility=visible',
-  reviews: '/reviews?state=hidden',
+  reviews: '/reviews?state=waiting',
 };
+
+/** The weekday of a Tashkent day `YYYY-MM-DD`, Sunday first (the copy's `weekdays` order). */
+export function weekdayOf(day: string): number {
+  return new Date(`${day}T00:00:00Z`).getUTCDay();
+}
+
+/** «нет 1 · мало 2»: each half of the stock count only when it is above zero. */
+export function stockHalves(stock: { out: number; low: number }): ('out' | 'low')[] {
+  return (['out', 'low'] as const).filter((k) => stock[k] > 0);
+}

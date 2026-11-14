@@ -1,6 +1,16 @@
 import { adminMessages } from '@lummi/i18n/admin';
 import { describe, expect, it } from 'vitest';
-import { age, change, countChange, moment, nowKey, QUEUE_HREF, threadShare } from './home-format';
+import {
+  age,
+  change,
+  countChange,
+  moment,
+  nowKey,
+  QUEUE_HREF,
+  stockHalves,
+  threadShare,
+  weekdayOf,
+} from './home-format';
 
 const ru = adminMessages.ru.admin.home;
 const uz = adminMessages.uz.admin.home;
@@ -88,6 +98,34 @@ describe('nowKey', () => {
     });
     expect(a).toBe(b);
     expect(nowKey({ kind: 'clear' })).not.toBe(a);
+    const credit = (id: number) =>
+      nowKey({
+        kind: 'credit',
+        id,
+        amountTiyin: 6_000_000,
+        at: { day: '2026-11-14', time: '09:49' },
+        waitedSeconds: 60,
+        cardLast4: '7364',
+        onShopCard: true,
+        counterparty: null,
+      });
+    // two credits of one amount in one minute are two items
+    expect(credit(7)).not.toBe(credit(8));
+  });
+});
+
+describe('the stock count', () => {
+  it('shows only the halves above zero', () => {
+    expect(stockHalves({ out: 1, low: 0 })).toEqual(['out']);
+    expect(stockHalves({ out: 0, low: 2 })).toEqual(['low']);
+    expect(stockHalves({ out: 1, low: 2 })).toEqual(['out', 'low']);
+  });
+});
+
+describe('weekdayOf', () => {
+  it('reads the day as a calendar day, whatever the browser’s zone', () => {
+    expect(weekdayOf('2026-11-14')).toBe(6); // a Saturday
+    expect(weekdayOf('2026-11-15')).toBe(0);
   });
 });
 
@@ -101,7 +139,7 @@ describe('queue links', () => {
       credits: '/credits?linked=unlinked',
       refunds: '/orders?payment=refund_owed',
       stock: '/stock?filter=low&visibility=visible',
-      reviews: '/reviews?state=hidden',
+      reviews: '/reviews?state=waiting',
     });
   });
 });

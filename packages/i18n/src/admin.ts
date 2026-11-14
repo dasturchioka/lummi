@@ -184,7 +184,9 @@ export const adminMessages = defineMessages(
           stock: {
             zero: '{item} — нет в наличии',
             low: '{item} — осталось {n}',
-            facts: 'нет в наличии: {out} · заканчивается: {low}',
+            /** Each half only when it is above zero. */
+            factsOut: 'нет в наличии: {n}',
+            factsLow: 'заканчивается: {n}',
             why: 'Когда придёт поставка, обновите остаток на складе.',
             open: 'Открыть склад',
           },
@@ -193,6 +195,7 @@ export const adminMessages = defineMessages(
             rating: '{n}\u00a0из 5',
             why: 'Опубликованный отзыв появится в карточках ароматов этого заказа.',
             all: 'Все отзывы ·\u00a0{n}',
+            open: 'Открыть отзыв',
           },
           humo: {
             title: 'Humo молчит {age} — чеки не подтверждаются сами',
@@ -210,7 +213,14 @@ export const adminMessages = defineMessages(
           },
           clear: {
             title: 'Всё сделано',
-            why: 'Новые чеки и заказы появятся здесь сами: страница обновляется каждые 30\u00a0секунд.',
+            /** `{every}` is the refresh period (`REFRESH_MS`), from `every`. */
+            why: 'Новые чеки и заказы появятся здесь сами: страница обновляется {every}.',
+            every: {
+              one: 'каждую {n}\u00a0секунду',
+              few: 'каждые {n}\u00a0секунды',
+              many: 'каждые {n}\u00a0секунд',
+              other: 'каждые {n}\u00a0секунды',
+            },
           },
           open: 'Открыть заказ',
         },
@@ -221,7 +231,7 @@ export const adminMessages = defineMessages(
           assemble: { label: 'Собрать', hint: 'заказ принят' },
           bts: { label: 'Передать в BTS', hint: 'собирается' },
           credits: { label: 'Поступления без заказа', hint: 'деньги пришли, чека нет' },
-          refunds: { label: 'Возврат денег', hint: 'оплачен и отменён' },
+          refunds: { label: 'Возврат денег', hint: 'оплачен, отменён или возвращён' },
           stock: { label: 'Склад', hint: 'нет в наличии · заканчивается' },
           reviews: { label: 'Отзывы', hint: 'ждут публикации' },
         },
@@ -1867,6 +1877,7 @@ export const adminMessages = defineMessages(
           all: 'Все',
           published: 'Опубликованные',
           hidden: 'Не опубликованные',
+          waiting: 'Ждут решения',
           from: 'С даты',
           to: 'По дату',
           apply: 'Показать',
@@ -2200,7 +2211,8 @@ export const adminMessages = defineMessages(
           stock: {
             zero: '{item} — tugagan',
             low: '{item} — {n}\u00a0ta qoldi',
-            facts: 'tugagan: {out} · kam qolgan: {low}',
+            factsOut: 'tugagan: {n}',
+            factsLow: 'kam qolgan: {n}',
             why: 'Yetkazib berish kelganda ombordagi qoldiqni yangilang.',
             open: 'Omborni ochish',
           },
@@ -2209,6 +2221,7 @@ export const adminMessages = defineMessages(
             rating: '5 dan\u00a0{n}',
             why: 'Nashr qilingan sharh shu buyurtmadagi atirlar kartalarida chiqadi.',
             all: 'Barcha sharhlar ·\u00a0{n}',
+            open: 'Sharhni ochish',
           },
           humo: {
             title: 'Humo {age}dan beri jim — cheklar oʻzi tasdiqlanmayapti',
@@ -2228,7 +2241,13 @@ export const adminMessages = defineMessages(
           },
           clear: {
             title: 'Hammasi bajarildi',
-            why: 'Yangi cheklar va buyurtmalar shu yerda oʻzi paydo boʻladi: sahifa har 30\u00a0soniyada yangilanadi.',
+            why: 'Yangi cheklar va buyurtmalar shu yerda oʻzi paydo boʻladi: sahifa {every} yangilanadi.',
+            every: {
+              one: 'har {n}\u00a0soniyada',
+              few: 'har {n}\u00a0soniyada',
+              many: 'har {n}\u00a0soniyada',
+              other: 'har {n}\u00a0soniyada',
+            },
           },
           open: 'Buyurtmani ochish',
         },
@@ -2242,7 +2261,7 @@ export const adminMessages = defineMessages(
           assemble: { label: 'Yigʻish', hint: 'buyurtma qabul qilingan' },
           bts: { label: 'BTSga topshirish', hint: 'yigʻilmoqda' },
           credits: { label: 'Buyurtmasiz tushumlar', hint: 'pul tushgan, chek yoʻq' },
-          refunds: { label: 'Pulni qaytarish', hint: 'toʻlangan va bekor qilingan' },
+          refunds: { label: 'Pulni qaytarish', hint: 'toʻlangan, bekor qilingan yoki qaytarilgan' },
           stock: { label: 'Ombor', hint: 'tugagan · kam qolgan' },
           reviews: { label: 'Sharhlar', hint: 'nashrni kutmoqda' },
         },
@@ -3900,6 +3919,7 @@ export const adminMessages = defineMessages(
           all: 'Hammasi',
           published: 'Eʼlon qilinganlar',
           hidden: 'Eʼlon qilinmaganlar',
+          waiting: 'Qaror kutmoqda',
           from: 'Sanadan',
           to: 'Sanagacha',
           apply: 'Koʻrsatish',

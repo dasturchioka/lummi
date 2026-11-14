@@ -11,7 +11,15 @@ import { formatMoney, formatTiyin, plural, type Language } from '@lummi/i18n';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useState, type ReactNode } from 'react';
-import { age, change, countChange, moment, QUEUE_HREF } from '@/lib/home-format';
+import {
+  age,
+  change,
+  countChange,
+  moment,
+  QUEUE_HREF,
+  stockHalves,
+  weekdayOf,
+} from '@/lib/home-format';
 import type { AdminMessages } from '@/lib/i18n';
 import { cn, fill } from '@/lib/utils';
 
@@ -29,7 +37,7 @@ export function Settle({ value, children }: { value: string; children?: ReactNod
     setMoved(true);
   }
   return (
-    <span key={value} className={moved ? 'motion-settle inline-block' : undefined}>
+    <span key={value} className={moved ? 'motion-settle' : undefined}>
       {children ?? value}
     </span>
   );
@@ -73,7 +81,7 @@ export function SalesStrip({
   const s = copy.sales;
   const { paidToday: now, paidWeekAgo: before, week, previousWeek, days } = data.sales;
   const money = (n: number) => formatMoney(n, language);
-  const weekday = new Date(`${data.at.day}T00:00:00Z`).getUTCDay();
+  const weekday = weekdayOf(data.at.day);
   const weekChange = change(week.net, previousWeek.net);
   const figs: { key: string; label: string; value: string; delta: string }[] = [
     {
@@ -259,22 +267,26 @@ export function QueueCard({
             >
               {key === 'stock' && !zero ? (
                 <Settle value={`${queues.stock.out}/${queues.stock.low}`}>
-                  {queues.stock.out}
-                  <small className="ml-1 text-small font-medium text-muted-foreground">
-                    {copy.out}
-                  </small>{' '}
-                  {queues.stock.low}
-                  <small className="ml-1 text-small font-medium text-muted-foreground">
-                    {copy.low}
-                  </small>
+                  {stockHalves(queues.stock).map((half, i) => (
+                    <Fragment key={half}>
+                      {i > 0 && ' '}
+                      {queues.stock[half]}
+                      <small className="ml-1 text-small font-medium text-muted-foreground">
+                        {copy[half]}
+                      </small>
+                    </Fragment>
+                  ))}
                 </Settle>
               ) : (
                 <Settle value={String(n)} />
               )}
             </span>
             <span
+              // a stock item's name may be long: one line on desktop, two on phones, all of it on hover
+              title={key === 'stock' && !zero ? when : undefined}
               className={cn(
                 'col-start-1 row-start-2 -mt-0.5 text-small text-muted-foreground sm:col-start-3 sm:row-start-1 sm:mt-0',
+                key === 'stock' && 'line-clamp-2 break-words sm:line-clamp-1',
                 zero && 'max-sm:hidden',
               )}
             >

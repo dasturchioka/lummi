@@ -6,7 +6,7 @@ import { ArrowRight, Check, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { age, moment, QUEUE_HREF, threadShare } from '@/lib/home-format';
+import { age, moment, QUEUE_HREF, stockHalves, threadShare } from '@/lib/home-format';
 import { cn, fill } from '@/lib/utils';
 import { joined, rich, Settle, stockLabel, type HomeCopy } from './home-parts';
 
@@ -199,7 +199,13 @@ export function nowContent(data: AdminHome, copy: HomeCopy, language: Language):
           now.item.level === 'zero'
             ? fill(c.stock.zero, { item })
             : fill(c.stock.low, { item, n: String(now.item.available) }),
-        facts: fill(c.stock.facts, { out: String(q.stock.out), low: String(q.stock.low) }),
+        facts: joined(
+          stockHalves(q.stock).map((half) =>
+            fill(half === 'out' ? c.stock.factsOut : c.stock.factsLow, {
+              n: String(q.stock[half]),
+            }),
+          ),
+        ),
         why: c.stock.why,
         primary: { href: QUEUE_HREF.stock, label: c.stock.open, icon: 'arrow' },
       };
@@ -217,7 +223,8 @@ export function nowContent(data: AdminHome, copy: HomeCopy, language: Language):
           href: QUEUE_HREF.reviews,
           label: fill(c.review.all, { n: String(q.reviews.count) }),
         },
-        primary: order(now.number),
+        // the review itself, where it is published
+        primary: { href: `/reviews?order=${now.number}`, label: c.review.open, icon: 'arrow' },
       };
   }
 }
@@ -248,11 +255,14 @@ export function NowBlock({
   copy,
   language,
   arrive,
+  refreshSeconds,
 }: {
   data: AdminHome;
   copy: HomeCopy;
   language: Language;
   arrive: boolean;
+  /** How often the page refreshes (`REFRESH_MS`), for «Всё сделано». */
+  refreshSeconds: number;
 }) {
   const content = nowContent(data, copy, language);
   if (!content) {
@@ -271,7 +281,11 @@ export function NowBlock({
           <h2 className="text-[17px] leading-[1.35] font-semibold text-balance">
             {copy.now.clear.title}
           </h2>
-          <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">{copy.now.clear.why}</p>
+          <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">
+            {fill(copy.now.clear.why, {
+              every: plural(language, refreshSeconds, copy.now.clear.every),
+            })}
+          </p>
         </div>
       </section>
     );

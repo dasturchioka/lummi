@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { browserApi } from '@/lib/api';
-import { nowKey } from '@/lib/home-format';
+import { nowKey, weekdayOf } from '@/lib/home-format';
 import { fill } from '@/lib/utils';
 import { QueueCard, SalesStrip, SystemLine, type HomeCopy } from './home-parts';
 import { LIFTED, NoCardLine, NowBlock, nowAnnouncement } from './now-block';
@@ -48,13 +48,17 @@ export function HomeView({
   const [retrying, setRetrying] = useState(false);
   const inFlight = useRef(false);
   const lastFetch = useRef(0);
+  /** Aborted when the view goes: a late answer then changes no state and redirects nowhere. */
+  const gone = useRef<AbortController | null>(null);
 
   const fetchHome = useCallback(async () => {
-    if (inFlight.current) return;
+    const view = gone.current;
+    if (inFlight.current || !view || view.signal.aborted) return;
     inFlight.current = true;
     lastFetch.current = Date.now();
     try {
-      const res = await browserApi.home();
+      const res = await browserApi.home({ fetchOptions: { signal: view.signal } });
+      if (view.signal.aborted) return;
       if (res.status === 401) {
         router.replace('/login');
         return;
@@ -62,35 +66,42 @@ export function HomeView({
       if (res.status !== 200) throw new Error(`home ${res.status}`);
       setLoad({ data: res.body, failed: false });
     } catch {
+      if (view.signal.aborted) return;
       setLoad((was) => (was.data ? was : { data: null, failed: true }));
     } finally {
       inFlight.current = false;
-      setRetrying(false);
+      if (!view.signal.aborted) setRetrying(false);
     }
   }, [router]);
 
   useEffect(() => {
+    const view = new AbortController();
+    gone.current = view;
     let timer: ReturnType<typeof setInterval> | undefined;
+    /** Polls every `REFRESH_MS` from now: a fetch out of turn restarts the count. */
     const tick = () => {
       clearInterval(timer);
       timer = setInterval(() => void fetchHome(), REFRESH_MS);
     };
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return clearInterval(timer);
-      if (Date.now() - lastFetch.current > FOCUS_GAP_MS) void fetchHome();
+    const refetch = () => {
+      if (Date.now() - lastFetch.current <= FOCUS_GAP_MS) return;
+      void fetchHome();
       tick();
     };
-    const onFocus = () => {
-      if (Date.now() - lastFetch.current > FOCUS_GAP_MS) void fetchHome();
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return clearInterval(timer);
+      refetch();
+      tick();
     };
     void fetchHome();
     if (document.visibilityState === 'visible') tick();
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('focus', refetch);
     return () => {
+      view.abort();
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('focus', refetch);
     };
   }, [fetchHome]);
 
@@ -109,7 +120,7 @@ export function HomeView({
   }
 
   const day = data?.at.day ?? today;
-  const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+  const weekday = weekdayOf(day);
   const date = fill(copy.date, {
     weekday: copy.weekdays[weekday] ?? '',
     date: formatCalendarDate(day, language),
@@ -122,7 +133,14 @@ export function HomeView({
       <>
         {owner && <SalesStrip copy={copy} language={language} data={owner} />}
         {data.cardMissing && data.role === 'manager' && <NoCardLine copy={copy} />}
-        <NowBlock key={key} data={data} copy={copy} language={language} arrive={arrive} />
+        <NowBlock
+          key={key}
+          data={data}
+          copy={copy}
+          language={language}
+          arrive={arrive}
+          refreshSeconds={REFRESH_MS / 1000}
+        />
         <QueueCard
           copy={copy}
           language={language}
