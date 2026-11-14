@@ -6,6 +6,7 @@ import {
   broadcasts,
   customers,
   eq,
+  staff,
   type CustomerRow,
 } from '@lummi/db';
 import type { Job } from 'bullmq';
@@ -394,6 +395,17 @@ describe('«Отправить себе»', () => {
     const res = await owner.client.admin.broadcasts.test({ body: body() });
     expect(res.status).toBe(502);
     expect(res.body).toEqual({ code: 'test_blocked' });
+  });
+
+  it('asks the owner to bind Telegram first when none is bound (ADR 0038)', async () => {
+    await t.db
+      .update(staff)
+      .set({ telegramId: null, login: 'owner' })
+      .where(eq(staff.id, owner.staff.id));
+    const res = await owner.client.admin.broadcasts.test({ body: body() });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ code: 'test_unlinked' });
+    expect(t.edges.telegram.sent).toHaveLength(0);
   });
 });
 

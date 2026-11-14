@@ -1,4 +1,4 @@
-import { and, gt, inArray, loginThrottles, lt, or, sql, type Db, type DbOrTx } from '@lummi/db';
+import { and, gt, inArray, loginThrottles, sql, type Db, type DbOrTx } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { readSettings } from '../settings/settings.service';
@@ -50,18 +50,23 @@ export class LoginThrottle {
     ]);
     const windowStart = new Date(now.getTime() - s['auth.passwordAttemptWindowSeconds'] * 1000);
     const until = new Date(now.getTime() + s['auth.passwordLockSeconds'] * 1000);
+    // Rows nobody needs any more (window over, no lock running) go, so the table stays small.
+    // Apart from the count and skipping rows another failure holds: two prunes never wait on each
+    // other, so they cannot deadlock.
+    await this.db.execute(sql`
+      delete from ${loginThrottles} where ctid in (
+        select ctid from ${loginThrottles}
+        where ${loginThrottles.windowStartedAt} < ${windowStart}
+          and (${loginThrottles.lockedUntil} is null or ${loginThrottles.lockedUntil} < ${now})
+        for update skip locked
+      )`);
+    // the keys in one fixed order (login, then address), so two failures lock rows alike
     return this.db.transaction(async (tx) => {
-      // rows nobody needs any more (window over, no lock running) go, so the table stays small
-      await tx
-        .delete(loginThrottles)
-        .where(
-          and(
-            lt(loginThrottles.windowStartedAt, windowStart),
-            or(sql`${loginThrottles.lockedUntil} is null`, lt(loginThrottles.lockedUntil, now)),
-          ),
-        );
       const locked: { key: ThrottleKey; until: Date }[] = [];
-      for (const key of keys) {
+      const ordered = [...keys].sort((a, b) =>
+        a.scope === b.scope ? 0 : a.scope === 'login' ? -1 : 1,
+      );
+      for (const key of ordered) {
         const limit =
           key.scope === 'login'
             ? s['auth.passwordAttemptsPerLogin']
