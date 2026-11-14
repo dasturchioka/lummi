@@ -275,8 +275,15 @@ const blank = (): Sums => ({
  */
 function settle(s: Sums): SalesFigures {
   const sold = s.itemsBeforeDiscount - s.discount;
-  const averageCheck = s.orders === 0 ? null : Math.floor((2 * sold + s.orders) / (2 * s.orders));
-  return { ...s, net: sold - s.refunds, averageCheck };
+  return { ...s, net: sold - s.refunds, averageCheck: roundedAverage(sold, s.orders) };
+}
+
+/**
+ * `total ÷ count` to the nearest so'm, halves up; null for no count. The reports' average check
+ * and the admin Home's average payment (#48) round alike. For a total of zero or more.
+ */
+export function roundedAverage(total: number, count: number): number | null {
+  return count === 0 ? null : Math.floor((2 * total + count) / (2 * count));
 }
 
 /** Adds a line to a row; the row keeps the name and brand of the latest order that sold it. */

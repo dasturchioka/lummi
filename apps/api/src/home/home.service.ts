@@ -1,8 +1,6 @@
 import {
-  addDays,
   formatLocalDate,
   HOME_QUEUES,
-  parseLocalDate,
   tashkentDay,
   tashkentDayStart,
   utcToTashkent,
@@ -38,19 +36,21 @@ import {
   sql,
   staff,
   userbotHeartbeat,
+  type CreditRow,
   type Db,
   type OrderRow,
   type PaymentPauseRow,
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { customerName, paymentState } from '../admin-orders/admin-orders.service';
+import { customerName, paymentState } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
 import type { Edges } from '../edges';
 import { CANDIDATE } from '../payment/rules';
-import { readShopCard } from '../payment/shop-card.service';
+import { lastFour, readShopCard } from '../payment/shop-card.service';
 import { orderMoney, refundOwed } from '../refunds/order-money';
-import { daysEnding, lastTashkentDays, salesSummary } from '../reports/sales-summary';
+import { lastTashkentDays, roundedAverage, salesSummary } from '../reports/sales-summary';
+import { awaitingDecision } from '../reviews/reviews.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { pickNow } from './now-picker';
@@ -65,16 +65,42 @@ export function moment(at: Date): TashkentMoment {
 const secondsBetween = (from: Date, to: Date) =>
   Math.max(0, Math.floor((to.getTime() - from.getTime()) / 1000));
 
-/** `received ÷ orders` to the so'm, halves up (as the sales report's average check); null without orders. */
-const averageOf = (received: number, n: number) =>
-  n === 0 ? null : Math.floor((2 * received + n) / (2 * n));
+/** A queue's oldest item: its row id and since when it waits. */
+type Oldest = { id: number; since: Date };
 
-/** One queue's items, oldest first: the row id and since when it waits. */
-type Waiting = { id: number; since: Date };
+/** A queue as the Home reads it: how many wait, and the oldest of them (null when none). */
+type Waiting<T = Oldest> = { count: number; oldest: T | null };
 
-type WaitingQueues = Record<Exclude<HomeQueue, 'stock' | 'credits'>, Waiting[]> & {
-  credits: (Waiting & { amountTiyin: number })[];
+type WaitingQueues = Record<Exclude<HomeQueue, 'stock' | 'credits'>, Waiting> & {
+  /** The oldest unlinked credit's whole row: the Now item is built from it. */
+  credits: Waiting<CreditRow>;
 };
+
+/** The oldest unlinked credit as the Now item, from the row the queue read already. */
+function creditItem(c: CreditRow, now: Date, card: { number: string } | null): HomeNow {
+  return {
+    kind: 'credit',
+    id: c.id,
+    amountTiyin: c.amountTiyin,
+    at: moment(c.occurredAt),
+    waitedSeconds: secondsBetween(c.occurredAt, now),
+    cardLast4: c.cardLast4,
+    onShopCard: card !== null && lastFour(card) === c.cardLast4,
+    counterparty: c.counterparty,
+  };
+}
+
+/**
+ * One query per queue: the oldest row (`order by … limit 1`) with the count of all of them
+ * (`count(*) over ()`, taken before the limit). An empty queue answers no row.
+ */
+const total = sql<number>`count(*) over ()`.mapWith(Number);
+function waitingOf<T extends { n: number }>(rows: T[]): Waiting<Omit<T, 'n'>> {
+  const [first] = rows;
+  if (!first) return { count: 0, oldest: null };
+  const { n, ...oldest } = first;
+  return { count: n, oldest };
+}
 
 /** The status an order waits in for each fulfilment queue. */
 const STATUS_QUEUES = {
@@ -89,17 +115,15 @@ const enteredStatus =
     orders.createdAt,
   );
 
-/** The order's first payment confirmation. */
-const confirmedAt = sql`(select min(pe.created_at) from ${orderEvents} pe where pe.order_id = "orders"."id" and pe.action = 'confirm_payment')`;
-
 /**
  * The admin Home (#48): the work queue in its fixed order (`HOME_QUEUES`), each queue's count and
  * oldest item, the Now item with its facts (`pickNow`), the pause and card state; for the owner,
  * money in today and #42's net sales (`salesSummary`, the one net-sales computation), and the
  * system line. Each queue counts exactly what its list shows behind its link: the receipts the
  * orders list calls `manual_review`, the orders in a status, unlinked credits, `refund_owed`,
- * stock `low` among visible fragrances, unpublished reviews. A manager's answer is built without
- * reading any owner data.
+ * stock `low` among visible fragrances, reviews waiting for a decision. Both roles read the shop
+ * card (a manager's answer carries only whether one is set); the sales and the system line are
+ * read for the owner only.
  */
 @Injectable()
 export class HomeService {
@@ -113,7 +137,7 @@ export class HomeService {
     const [card, [pause], waiting, stock] = await Promise.all([
       readShopCard(this.db),
       this.db.select().from(paymentPauses).where(isNull(paymentPauses.endedAt)),
-      this.waiting(),
+      this.waiting(now),
       this.stock(),
     ]);
     const queues = this.queues(waiting, stock, now);
@@ -132,58 +156,63 @@ export class HomeService {
 
   // ---- the queues
 
-  private async waiting(): Promise<WaitingQueues> {
+  private async waiting(now: Date): Promise<WaitingQueues> {
     const byStatus = (status: OrderStatus) =>
       this.db
-        .select({ id: orders.id, since: enteredStatus })
+        .select({ id: orders.id, since: enteredStatus, n: total })
         .from(orders)
         .where(eq(orders.status, status))
-        .orderBy(asc(enteredStatus), asc(orders.number));
-    const [receiptsHeld, accept, assemble, bts, creditsFree, refunds, reviewsHidden] =
+        .orderBy(asc(enteredStatus), asc(orders.number))
+        .limit(1);
+    const held = sql<Date>`min(${receipts.createdAt})`.mapWith(receipts.createdAt);
+    const [receiptsHeld, accept, assemble, bts, creditsFree, refunds, reviewsWaiting] =
       await Promise.all([
         // the orders list's `manual_review`: the oldest receipt held for a person dates it
         this.db
-          .select({
-            id: orders.id,
-            since: sql<Date>`min(${receipts.createdAt})`.mapWith(receipts.createdAt),
-          })
-          .from(orders)
-          .innerJoin(
-            receipts,
-            and(eq(receipts.orderId, orders.id), eq(receipts.verdict, 'manual_review')),
+          .select({ id: orders.id, since: held, n: total })
+          .from(receipts)
+          .innerJoin(orders, eq(orders.id, receipts.orderId))
+          .where(
+            and(eq(receipts.verdict, 'manual_review'), sql`(${paymentState}) = 'manual_review'`),
           )
-          .where(sql`(${paymentState}) = 'manual_review'`)
           .groupBy(orders.id)
-          .orderBy(asc(sql`min(${receipts.createdAt})`), asc(orders.id)),
+          .orderBy(asc(held), asc(orders.id))
+          .limit(1),
         byStatus(STATUS_QUEUES.accept),
         byStatus(STATUS_QUEUES.assemble),
         byStatus(STATUS_QUEUES.bts),
         // «Не привязано», as the credits list reads it: no order holds it
         this.db
-          .select({ id: credits.id, since: credits.occurredAt, amountTiyin: credits.amountTiyin })
+          .select({ credit: credits, n: total })
           .from(credits)
           .leftJoin(orders, eq(orders.creditId, credits.id))
           .where(isNull(orders.id))
-          .orderBy(asc(credits.occurredAt), asc(credits.id)),
+          .orderBy(asc(credits.occurredAt), asc(credits.id))
+          .limit(1),
         this.db
-          .select({ id: orders.id, since: enteredStatus })
+          .select({ id: orders.id, since: enteredStatus, n: total })
           .from(orders)
           .where(refundOwed())
-          .orderBy(asc(enteredStatus), asc(orders.number)),
-        this.db
-          .select({ id: reviews.id, since: reviews.createdAt })
-          .from(reviews)
-          .where(eq(reviews.published, false))
-          .orderBy(asc(reviews.createdAt), asc(reviews.id)),
+          .orderBy(asc(enteredStatus), asc(orders.number))
+          .limit(1),
+        awaitingDecision(this.db, now).then((waiting) =>
+          this.db
+            .select({ id: reviews.id, since: reviews.stepAt, n: total })
+            .from(reviews)
+            .where(waiting)
+            .orderBy(asc(reviews.stepAt), asc(reviews.id))
+            .limit(1),
+        ),
       ]);
+    const [credit] = creditsFree;
     return {
-      receipts: receiptsHeld,
-      accept,
-      assemble,
-      bts,
-      credits: creditsFree,
-      refunds,
-      reviews: reviewsHidden,
+      receipts: waitingOf(receiptsHeld),
+      accept: waitingOf(accept),
+      assemble: waitingOf(assemble),
+      bts: waitingOf(bts),
+      credits: credit ? { count: credit.n, oldest: credit.credit } : { count: 0, oldest: null },
+      refunds: waitingOf(refunds),
+      reviews: waitingOf(reviewsWaiting),
     };
   }
 
@@ -213,22 +242,22 @@ export class HomeService {
   }
 
   private queues(waiting: WaitingQueues, stock: HomeStockItem[], now: Date): HomeQueues {
-    const head = (items: Waiting[]): HomeQueueHead => {
-      const first = items[0];
-      return {
-        count: items.length,
-        since: first ? moment(first.since) : null,
-        waitedSeconds: first ? secondsBetween(first.since, now) : null,
-      };
-    };
+    const head = ({ count, oldest }: Waiting<{ since: Date }>): HomeQueueHead => ({
+      count,
+      since: oldest ? moment(oldest.since) : null,
+      waitedSeconds: oldest ? secondsBetween(oldest.since, now) : null,
+    });
     return {
       receipts: head(waiting.receipts),
       accept: head(waiting.accept),
       assemble: head(waiting.assemble),
       bts: head(waiting.bts),
       credits: {
-        ...head(waiting.credits),
-        oldestAmountTiyin: waiting.credits[0]?.amountTiyin ?? null,
+        ...head({
+          count: waiting.credits.count,
+          oldest: waiting.credits.oldest && { since: waiting.credits.oldest.occurredAt },
+        }),
+        oldestAmountTiyin: waiting.credits.oldest?.amountTiyin ?? null,
       },
       refunds: head(waiting.refunds),
       stock: {
@@ -264,17 +293,17 @@ export class HomeService {
       case 'stock':
         return { kind: 'stock', item: ctx.stock[0]! };
       case 'receipts':
-        return this.receiptItem(waiting.receipts[0]!, now);
+        return this.receiptItem(waiting.receipts.oldest!, now);
       case 'accept':
       case 'assemble':
       case 'bts':
-        return this.orderItem(pick, waiting[pick][0]!, now);
+        return this.orderItem(pick, waiting[pick].oldest!, now);
       case 'credits':
-        return this.creditItem(waiting.credits[0]!.id, now, ctx.card);
+        return creditItem(waiting.credits.oldest!, now, ctx.card);
       case 'refunds':
-        return this.refundItem(waiting.refunds[0]!, now);
+        return this.refundItem(waiting.refunds.oldest!, now);
       case 'reviews':
-        return this.reviewItem(waiting.reviews[0]!, now);
+        return this.reviewItem(waiting.reviews.oldest!, now);
     }
   }
 
@@ -296,7 +325,7 @@ export class HomeService {
     };
   }
 
-  private async receiptItem(head: Waiting, now: Date): Promise<HomeNow> {
+  private async receiptItem(head: Oldest, now: Date): Promise<HomeNow> {
     const order = await this.order(head.id);
     const [[held], [customer], settings, [credit]] = await Promise.all([
       this.db
@@ -337,7 +366,7 @@ export class HomeService {
 
   private async orderItem(
     kind: 'accept' | 'assemble' | 'bts',
-    head: Waiting,
+    head: Oldest,
     now: Date,
   ): Promise<HomeNow> {
     const order = await this.order(head.id);
@@ -368,25 +397,7 @@ export class HomeService {
     };
   }
 
-  private async creditItem(
-    id: number,
-    now: Date,
-    card: { number: string } | null,
-  ): Promise<HomeNow> {
-    const [c] = await this.db.select().from(credits).where(eq(credits.id, id));
-    if (!c) throw new Error(`credit ${id} is gone`);
-    return {
-      kind: 'credit',
-      amountTiyin: c.amountTiyin,
-      at: moment(c.occurredAt),
-      waitedSeconds: secondsBetween(c.occurredAt, now),
-      cardLast4: c.cardLast4,
-      onShopCard: card !== null && card.number.slice(-4) === c.cardLast4,
-      counterparty: c.counterparty,
-    };
-  }
-
-  private async refundItem(head: Waiting, now: Date): Promise<HomeNow> {
+  private async refundItem(head: Oldest, now: Date): Promise<HomeNow> {
     const order = await this.order(head.id);
     const [[customer], money] = await Promise.all([
       this.db.select().from(customers).where(eq(customers.id, order.customerId)),
@@ -403,7 +414,7 @@ export class HomeService {
     };
   }
 
-  private async reviewItem(head: Waiting, now: Date): Promise<HomeNow> {
+  private async reviewItem(head: Oldest, now: Date): Promise<HomeNow> {
     const [row] = await this.db
       .select({ review: reviews, number: orders.number, customer: customers })
       .from(reviews)
@@ -455,51 +466,56 @@ export class HomeService {
   /**
    * Money in today: payments confirmed since Tashkent midnight up to now, and their linked credits
    * in whole so'm (the money on the card), against the same weekday a week ago up to the same time
-   * of day. Net sales: #42's `salesSummary` over the last 7 days and the 7 before, whose 14 days
-   * are the bars.
+   * of day. Net sales: one #42 `salesSummary` over the last 14 days (today included); its days are
+   * the bars, and its last 7 and first 7 days are «Чистые продажи, 7 дней» and the week before.
    */
   private async sales(now: Date): Promise<HomeSales> {
     const today = formatLocalDate(tashkentDay(now));
     const midnight = tashkentDayStart(today);
     const WEEK_MS = 7 * 86_400_000;
-    const week = lastTashkentDays(7, now);
-    const previous = daysEnding(formatLocalDate(addDays(parseLocalDate(week.from), -1)), 7);
-    const [paidToday, paidWeekAgo, current, before] = await Promise.all([
+    const [paidToday, paidWeekAgo, fortnight] = await Promise.all([
       this.paidBetween(midnight, now),
       this.paidBetween(new Date(midnight.getTime() - WEEK_MS), new Date(now.getTime() - WEEK_MS)),
-      salesSummary(this.db, week),
-      salesSummary(this.db, previous),
+      salesSummary(this.db, lastTashkentDays(14, now)),
     ]);
+    const days = fortnight.days.map((d) => ({ day: d.day, net: d.net }));
+    const week = (part: typeof days) => ({
+      from: part[0]!.day,
+      to: part.at(-1)!.day,
+      net: part.reduce((sum, d) => sum + d.net, 0),
+    });
     return {
       paidToday,
       paidWeekAgo,
-      week: { from: current.from, to: current.to, net: current.totals.net },
-      previousWeek: { from: before.from, to: before.to, net: before.totals.net },
-      days: [...before.days, ...current.days].map((d) => ({ day: d.day, net: d.net })),
+      week: week(days.slice(7)),
+      previousWeek: week(days.slice(0, 7)),
+      days,
     };
   }
 
-  /** Orders whose payment was first confirmed within [from, to], and the credits that paid them. */
+  /**
+   * Orders whose payment was first confirmed within [from, to], and the credits that paid them.
+   * It reads the confirmations in that stretch (`order_events_confirmed_idx`) and keeps each
+   * order's first one only.
+   */
   async paidBetween(from: Date, to: Date): Promise<PaidFigures> {
-    const [row] = await this.db
-      .select({
-        orders: sql<number>`count(*)::int`.mapWith(Number),
-        // a credit with tiyin counts in whole so'm, as an order's money does (`orderMoney`)
-        received: sql<number>`coalesce(sum(${credits.amountTiyin} / 100), 0)::bigint`.mapWith(
-          Number,
-        ),
-      })
-      .from(orders)
-      .innerJoin(credits, eq(credits.id, orders.creditId))
-      .where(
-        and(
-          sql`${confirmedAt} >= ${from.toISOString()}::timestamptz`,
-          sql`${confirmedAt} <= ${to.toISOString()}::timestamptz`,
-        ),
-      );
-    const n = row?.orders ?? 0;
-    const received = row?.received ?? 0;
-    return { orders: n, received, average: averageOf(received, n) };
+    const { rows } = await this.db.execute<{ orders: number; received: string }>(sql`
+      select count(*)::int as orders, coalesce(sum(c.amount_tiyin / 100), 0)::bigint as received
+      from ${orderEvents} e
+      join ${orders} o on o.id = e.order_id
+      join ${credits} c on c.id = o.credit_id
+      where e.action = 'confirm_payment'
+        and e.created_at >= ${from.toISOString()}::timestamptz
+        and e.created_at <= ${to.toISOString()}::timestamptz
+        and not exists (
+          select 1 from ${orderEvents} earlier
+          where earlier.order_id = e.order_id and earlier.action = 'confirm_payment'
+            and (earlier.created_at, earlier.id) < (e.created_at, e.id)
+        )`);
+    const n = Number(rows[0]?.orders ?? 0);
+    // a credit with tiyin counts in whole so'm, as an order's money does (`orderMoney`)
+    const received = Number(rows[0]?.received ?? 0);
+    return { orders: n, received, average: roundedAverage(received, n) };
   }
 
   private async system(now: Date, paused: boolean): Promise<HomeSystem> {

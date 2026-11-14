@@ -200,7 +200,7 @@ describe('the work queue', () => {
       .update(fragrances)
       .set({ hidden: true })
       .where(eq(fragrances.id, hidden.fragranceId));
-    // a review waiting to be published since 08:05, another published
+    // a review finished at 08:05 waits for a decision; another is published
     const delivered = await orderRow(t, acc);
     t.edges.clock.set(tashkent('2026-11-14 08:05'));
     await t.db.insert(reviews).values([
@@ -210,13 +210,15 @@ describe('the work queue', () => {
         rating: 5,
         comment: 'Очень стойкий',
         step: 'done',
-        createdAt: tashkent('2026-11-14 08:05'),
+        stepAt: tashkent('2026-11-14 08:05'),
+        createdAt: tashkent('2026-11-14 08:01'),
       },
       {
         orderId: (await orderRow(t, asm)).id,
         customerId: delivered.customerId,
         rating: 4,
         step: 'done',
+        stepAt: tashkent('2026-11-14 08:02'),
         published: true,
         publishedAt: tashkent('2026-11-14 08:06'),
         createdAt: tashkent('2026-11-14 08:01'),
@@ -285,7 +287,7 @@ describe('the work queue', () => {
       },
       refunds: () => orders({ payment: 'refund_owed' }),
       reviews: async () => {
-        const res = await manager.reviews.list({ query: { state: 'hidden' } });
+        const res = await manager.reviews.list({ query: { state: 'waiting' } });
         return res.status === 200 ? res.body.total : -1;
       },
     };
@@ -322,6 +324,67 @@ describe('the work queue', () => {
     home = await homeAs('manager');
     expect(home.queues.refunds.count).toBe(0);
     expect(home.now).toEqual({ kind: 'clear' });
+  });
+});
+
+describe('reviews waiting for a decision', () => {
+  /** A review of a fresh order, as the bot leaves it: `step` and when it got there. */
+  async function review(at: string, step: 'comment' | 'photos' | 'done', rating = 5) {
+    const n = await orderAt(at);
+    const o = await orderRow(t, n);
+    const [r] = await t.db
+      .insert(reviews)
+      .values({
+        orderId: o.id,
+        customerId: o.customerId,
+        rating,
+        step,
+        stepAt: tashkent(at),
+        createdAt: tashkent(at),
+      })
+      .returning();
+    return { id: r!.id, number: n };
+  }
+
+  it('counts finished reviews nobody decided, within reviews.homeQueueDays', async () => {
+    const old = await review('2026-11-06 12:00', 'done'); // 8 days before: past the 7-day default
+    await review('2026-11-14 08:30', 'comment'); // the customer is still writing
+    const decided = await review('2026-11-12 10:00', 'done');
+    const hidden = await review('2026-11-12 11:00', 'done');
+    const waiting = await review('2026-11-13 09:00', 'done', 2);
+    const owner = await t.ownerSession();
+    // published, then hidden again: decided, so it never comes back
+    for (const published of [true, false])
+      await owner.client.admin.reviews.setPublished({
+        params: { id: hidden.id },
+        body: { published },
+      });
+    await owner.client.admin.reviews.setPublished({
+      params: { id: decided.id },
+      body: { published: true },
+    });
+
+    let home = await homeAs('manager', '2026-11-14 09:00');
+    expect(home.queues.reviews).toEqual({
+      count: 1,
+      since: { day: '2026-11-13', time: '09:00' },
+      waitedSeconds: 24 * 60 * MIN,
+    });
+    expect(home.now).toMatchObject({ kind: 'review', number: waiting.number, rating: 2 });
+    const manager = (await t.managerSession()).client.admin;
+    const listed = await manager.reviews.list({ query: { state: 'waiting' } });
+    expect(listed.status === 200 && listed.body.items.map((r) => r.id)).toEqual([waiting.id]);
+
+    // a longer window brings the older one back, in the Home and in its list alike
+    await owner.client.admin.settings.update({
+      params: { key: 'reviews.homeQueueDays' },
+      body: { value: 10 },
+    });
+    home = await homeAs('manager');
+    expect(home.queues.reviews.count).toBe(2);
+    expect(home.now).toMatchObject({ kind: 'review', number: old.number });
+    const longer = await manager.reviews.list({ query: { state: 'waiting' } });
+    expect(longer.status === 200 && longer.body.total).toBe(2);
   });
 });
 

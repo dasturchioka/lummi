@@ -19,10 +19,7 @@ import {
   type ReceiptCheckDto,
   type StaffConfirmBody,
   type FulfilBody,
-  type OrderAction,
-  type OrderStatus,
   type PaymentState,
-  type ReceiptVerdict,
   type ReceiptRejectReason,
   type RefundBody,
   type RejectReceiptBody,
@@ -54,6 +51,7 @@ import { AuditQueryService } from '../audit/audit-query.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
+import { customerName, PAID_BY, paymentState } from '../orders/order-read';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
@@ -105,39 +103,12 @@ export type MoveOutcome =
     }
   | { kind: 'try_again' };
 
-/** The words of the one payment-state rule, typed against their enums. */
-const PAID_BY: OrderAction = 'confirm_payment';
-const UNDER_CHECK: OrderStatus = 'receipt_review';
-const HELD: ReceiptVerdict = 'manual_review';
-const STATE = {
-  paid: 'paid',
-  manual_review: 'manual_review',
-  checking: 'checking',
-  unpaid: 'unpaid',
-} as const satisfies Record<PaymentState, PaymentState>;
-
-/**
- * Where an order's money stands (contracts `PAYMENT_STATES`, the one definition): paid once a
- * payment was confirmed, whatever came after; otherwise what its receipt under check waits for.
- * The columns are named with their table: in a one-table select Drizzle leaves the table out, and
- * a bare `id` inside the subqueries would be theirs.
- */
-export const paymentState = sql<PaymentState>`case
-  when exists (select 1 from order_events pe where pe.order_id = "orders"."id" and pe.action = ${PAID_BY}) then ${STATE.paid}
-  when "orders"."status" = ${UNDER_CHECK} and exists (select 1 from receipts pr where pr.order_id = "orders"."id" and pr.verdict = ${HELD}) then ${STATE.manual_review}
-  when "orders"."status" = ${UNDER_CHECK} then ${STATE.checking}
-  else ${STATE.unpaid}
-end`;
-
 /** The digits of a phone as stored (E.164 with `+`), for a search by part of the number. */
 const digitsOf = (column: unknown) =>
   sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g')`;
 
 /** A number the column can hold: anything longer is no order, so 404 rather than a DB error. */
 const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
-
-export const customerName = (c: { firstName: string; lastName: string | null }) =>
-  c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName;
 
 /**
  * The admin orders panel (#33): the list and the order page staff resolve any question from, the
