@@ -1,0 +1,467 @@
+import type { FragranceSales, SalesFigures, SalesReport, VolumeSales } from '@lummi/contracts';
+import { formatCalendarDate, formatMoney, plural, type Language } from '@lummi/i18n';
+import { Download } from 'lucide-react';
+import Link from 'next/link';
+import { EmptyState } from '@/components/empty-state';
+import { PageHeader } from '@/components/page-header';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
+import { Notice } from '@/components/ui/notice';
+import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
+import type { AdminMessages } from '@/lib/i18n';
+import { num } from '@/lib/setting-copy';
+import { cn, fill } from '@/lib/utils';
+
+/** How the top lists rank: most units (the API's order) or most net. */
+export type TopOrder = 'units' | 'net';
+/** Rows each top list shows; the Excel export has them all. */
+const TOP_ROWS = 10;
+
+const HEADING = 'font-display text-[13px] leading-[1.35] tracking-[0.2em] uppercase';
+
+type Copy = AdminMessages['reports'];
+
+/**
+ * The owner's sales report (#42): the range (a GET form, so a view survives a reload and the
+ * Excel export takes the same range), the range's figures, every day newest first, then the top
+ * fragrances, Volumes and sets. It only lays out what the API computed (`salesSummary`).
+ */
+export function SalesReportView({
+  t,
+  language,
+  data,
+  asked,
+  top,
+  invalid,
+}: {
+  t: AdminMessages;
+  language: Language;
+  data: SalesReport;
+  /** The range the URL asked for, empty for the default one. */
+  asked: { from?: string; to?: string };
+  top: TopOrder;
+  /** The asked range was refused; `data` is the default range. */
+  invalid: boolean;
+}) {
+  const r = t.reports;
+  const money = (n: number) => formatMoney(n, language);
+  const exportHref = `/api/admin/reports/sales/export?${new URLSearchParams({
+    from: data.from,
+    to: data.to,
+    lang: language,
+  })}`;
+  const sold = data.totals.orders > 0 || data.totals.refunds > 0;
+  const custom = Boolean(asked.from || asked.to);
+
+  return (
+    <>
+      <PageHeader
+        title={r.title}
+        description={r.description}
+        actions={
+          <Button asChild variant="outline">
+            <a href={exportHref} download>
+              <Download strokeWidth={1.5} aria-hidden />
+              {r.export}
+            </a>
+          </Button>
+        }
+      />
+
+      <Card className="mb-4 p-4 lg:p-5">
+        <form
+          method="get"
+          action="/reports"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(2,minmax(0,12rem))_auto] sm:items-end"
+        >
+          <Field id="r-from" label={r.from}>
+            <Input type="date" name="from" defaultValue={data.from} required />
+          </Field>
+          <Field id="r-to" label={r.to}>
+            <Input type="date" name="to" defaultValue={data.to} required />
+          </Field>
+          {top === 'net' && <input type="hidden" name="top" value="net" />}
+          <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1">
+            <Button type="submit" className="max-sm:flex-1">
+              {r.apply}
+            </Button>
+            {custom && (
+              <Button asChild variant="outline" className="max-sm:flex-1">
+                <Link href={top === 'net' ? '/reports?top=net' : '/reports'}>{r.reset}</Link>
+              </Button>
+            )}
+          </div>
+        </form>
+        {invalid && <Notice title={r.invalidRange} className="mt-3" />}
+      </Card>
+
+      {!sold ? (
+        <EmptyState title={r.empty}>{r.emptyText}</EmptyState>
+      ) : (
+        <div className="grid gap-4 lg:gap-6">
+          <Totals r={r} totals={data.totals} money={money} />
+          <Days r={r} language={language} data={data} money={money} />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className={HEADING}>{r.topTitle}</h2>
+            <TopSwitch r={r} data={data} top={top} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+            <TopList
+              title={r.fragrances}
+              r={r}
+              language={language}
+              rows={ranked(data.fragrances, top)}
+              name={(row) => row.name[language]}
+              money={money}
+            />
+            <TopList
+              title={r.volumes}
+              r={r}
+              language={language}
+              rows={ranked(data.volumes, top)}
+              name={(row: VolumeSales) =>
+                `${row.name[language]}, ${fill(r.ml, { ml: String(row.ml) })}`
+              }
+              money={money}
+            />
+          </div>
+          <p className="-mt-1 max-w-[80ch] text-small text-muted-foreground lg:-mt-3">
+            {r.linesHint}
+          </p>
+          <Card className="p-4 sm:p-5">
+            <h2 className={HEADING}>{r.sets}</h2>
+            <ul className="mt-3 divide-y divide-border">
+              {data.sets.map((s) => (
+                <li
+                  key={s.kind}
+                  className={cn(
+                    'flex items-baseline justify-between gap-3 py-2.5',
+                    s.units === 0 && 'text-muted-foreground',
+                  )}
+                >
+                  <span className="min-w-0 font-semibold">{r.setKinds[s.kind]}</span>
+                  <span className="text-right tabular-nums">
+                    <span className="mr-3 text-small text-muted-foreground">
+                      {fill(r.unitsCount, { n: num(s.units) })}
+                    </span>
+                    <span className="font-semibold whitespace-nowrap">{money(s.net)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-small text-muted-foreground">{r.setsHint}</p>
+          </Card>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The range at a glance: net, orders, average check, refunds; the parts of net under them. */
+function Totals({
+  r,
+  totals,
+  money,
+}: {
+  r: Copy;
+  totals: SalesFigures;
+  money: (n: number) => string;
+}) {
+  const f = r.figures;
+  const tiles: [string, string][] = [
+    [f.net, money(totals.net)],
+    [f.orders, num(totals.orders)],
+    [f.averageCheck, totals.averageCheck === null ? '—' : money(totals.averageCheck)],
+    [f.refunds, money(totals.refunds)],
+  ];
+  return (
+    <Card className="p-4 sm:p-5">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-4">
+        {tiles.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-small text-muted-foreground">{label}</dt>
+            <dd className="mt-0.5 text-lg font-semibold whitespace-nowrap tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="mt-4 grid gap-1 border-t border-border pt-3 text-small sm:flex sm:flex-wrap sm:gap-x-6">
+        {(
+          [
+            [f.itemsBeforeDiscount, totals.itemsBeforeDiscount],
+            [f.discount, totals.discount],
+            [f.delivery, totals.delivery],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3 sm:justify-start">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="font-medium whitespace-nowrap tabular-nums">{money(value)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-small text-muted-foreground">{r.netHint}</p>
+    </Card>
+  );
+}
+
+/** `14 ноября, пт` / `14-noyabr, Ju`. */
+function dayLabel(r: Copy, day: string, language: Language) {
+  const weekday = r.weekdays[new Date(`${day}T00:00:00Z`).getUTCDay()];
+  return `${formatCalendarDate(day, language)}, ${weekday}`;
+}
+
+const quiet = (d: SalesFigures) => d.orders === 0 && d.refunds === 0;
+
+/** Every day of the range, newest first: a table on wide screens, one block per day on phones. */
+function Days({
+  r,
+  language,
+  data,
+  money,
+}: {
+  r: Copy;
+  language: Language;
+  data: SalesReport;
+  money: (n: number) => string;
+}) {
+  const f = r.figures;
+  const days = [...data.days].reverse();
+  // the table shows plain numbers (seven money columns with «сум» each would be noise); the
+  // caption above it names the currency
+  const cells = (d: SalesFigures) => [
+    num(d.orders),
+    num(d.itemsBeforeDiscount),
+    num(d.discount),
+    num(d.delivery),
+    num(d.refunds),
+    num(d.net),
+    d.averageCheck === null ? '—' : num(d.averageCheck),
+  ];
+  const heads = [
+    f.orders,
+    f.itemsBeforeDiscount,
+    f.discount,
+    f.delivery,
+    f.refunds,
+    f.net,
+    f.averageCheck,
+  ];
+  const th = 'h-auto py-2 align-bottom leading-tight whitespace-normal px-3';
+  const td = 'px-3 text-right whitespace-nowrap';
+  return (
+    <Card className="@container">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pt-4 pb-1 @2xl:px-5 @2xl:pt-5">
+        <h2 className={HEADING}>{r.byDay}</h2>
+        <p className="hidden text-small text-muted-foreground @2xl:block">{r.inSom}</p>
+      </div>
+      {/* narrow: one block per day, net first */}
+      <ul className="divide-y divide-border @2xl:hidden">
+        {days.map((d) => (
+          <DayBlock key={d.day} r={r} d={d} label={dayLabel(r, d.day, language)} money={money} />
+        ))}
+        <DayBlock r={r} d={data.totals} label={r.total} money={money} total />
+      </ul>
+      <div className="hidden @2xl:block">
+        <Table className="text-[13px]">
+          <THead>
+            <TR>
+              <TH className={th}>{r.day}</TH>
+              {heads.map((h) => (
+                <TH key={h} className={cn(th, 'text-right')}>
+                  {h}
+                </TH>
+              ))}
+            </TR>
+          </THead>
+          <TBody>
+            {days.map((d) =>
+              quiet(d) ? (
+                <TR key={d.day} data-testid={`day-${d.day}`} className="text-muted-foreground">
+                  <TD className="h-9 px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
+                  <TD colSpan={heads.length} className="h-9 px-3">
+                    {r.noSales}
+                  </TD>
+                </TR>
+              ) : (
+                <TR key={d.day} data-testid={`day-${d.day}`}>
+                  <TD className="px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
+                  {cells(d).map((c, i) => (
+                    <TD key={i} className={cn(td, i === 5 && 'font-semibold')}>
+                      {c}
+                    </TD>
+                  ))}
+                </TR>
+              ),
+            )}
+          </TBody>
+          <tfoot>
+            <tr className="border-t border-border-strong font-semibold">
+              <TD className="px-3">{r.total}</TD>
+              {cells(data.totals).map((c, i) => (
+                <TD key={i} className={td}>
+                  {c}
+                </TD>
+              ))}
+            </tr>
+          </tfoot>
+        </Table>
+      </div>
+    </Card>
+  );
+}
+
+function DayBlock({
+  r,
+  d,
+  label,
+  money,
+  total,
+}: {
+  r: Copy;
+  d: SalesFigures;
+  label: string;
+  money: (n: number) => string;
+  total?: boolean;
+}) {
+  const f = r.figures;
+  if (quiet(d) && !total)
+    return (
+      <li className="flex justify-between gap-3 px-4 py-3 text-small text-muted-foreground">
+        <span>{label}</span>
+        <span>{r.noSales}</span>
+      </li>
+    );
+  const part = (name: string, value: string) => (
+    <span key={name} className="whitespace-nowrap">
+      {name} <span className="text-foreground tabular-nums">{value}</span>
+    </span>
+  );
+  return (
+    <li className={cn('grid gap-1 px-4 py-3.5', total && 'bg-milk/60')}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold">{label}</span>
+        <span className="text-right">
+          <span className="sr-only">{f.net}: </span>
+          <span className="font-semibold whitespace-nowrap tabular-nums">{money(d.net)}</span>
+        </span>
+      </div>
+      <MetaLine
+        className="text-small text-muted-foreground"
+        parts={[
+          part(f.orders, num(d.orders)),
+          part(f.averageCheck, d.averageCheck === null ? '—' : money(d.averageCheck)),
+        ]}
+      />
+      <MetaLine
+        className="text-small text-muted-foreground"
+        parts={[
+          part(f.itemsBeforeDiscount, money(d.itemsBeforeDiscount)),
+          part(f.discount, money(d.discount)),
+          part(f.delivery, money(d.delivery)),
+          part(f.refunds, money(d.refunds)),
+        ]}
+      />
+    </li>
+  );
+}
+
+/** Most net first, units on a tie; or the API's order (most units first). */
+function ranked<R extends FragranceSales>(rows: R[], top: TopOrder): R[] {
+  return top === 'units' ? rows : [...rows].sort((a, b) => b.net - a.net || b.units - a.units);
+}
+
+/** «По штукам · По сумме»: links, so the choice lives in the URL with the range. */
+function TopSwitch({ r, data, top }: { r: Copy; data: SalesReport; top: TopOrder }) {
+  const href = (o: TopOrder) =>
+    `/reports?${new URLSearchParams({
+      from: data.from,
+      to: data.to,
+      ...(o === 'net' ? { top: 'net' } : {}),
+    })}`;
+  return (
+    <div
+      role="group"
+      aria-label={r.sort}
+      className="inline-flex h-9 shrink-0 items-center rounded-full bg-field p-[3px]"
+    >
+      {(
+        [
+          ['units', r.byUnits],
+          ['net', r.byNet],
+        ] as const
+      ).map(([o, label]) => (
+        <Link
+          key={o}
+          href={href(o)}
+          scroll={false}
+          aria-current={top === o ? 'true' : undefined}
+          className={cn(
+            'grid h-full place-items-center rounded-full px-3 text-[13px] whitespace-nowrap transition-[color,background-color] duration-150 ease-out',
+            top === o
+              ? 'bg-card font-semibold text-foreground'
+              : 'font-medium text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function TopList<R extends FragranceSales>({
+  title,
+  r,
+  language,
+  rows,
+  name,
+  money,
+}: {
+  title: string;
+  r: Copy;
+  language: Language;
+  rows: R[];
+  name: (row: R) => string;
+  money: (n: number) => string;
+}) {
+  const shown = rows.slice(0, TOP_ROWS);
+  const more = rows.length - shown.length;
+  return (
+    <Card className="p-4 sm:p-5">
+      <h3 className={HEADING}>{title}</h3>
+      {shown.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">{r.noneSold}</p>
+      ) : (
+        <ol className="mt-2 divide-y divide-border">
+          {shown.map((row, i) => (
+            <li
+              key={'volumeId' in row ? `v${row.volumeId}` : `f${row.fragranceId}`}
+              className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-baseline gap-x-2 py-2.5"
+            >
+              <span className="text-small text-muted-foreground tabular-nums">{i + 1}</span>
+              <span className="min-w-0">
+                <span className="block font-semibold break-words">{name(row)}</span>
+                {row.brand && (
+                  <span className="block text-small break-words text-muted-foreground">
+                    {fill(r.attribution, { brand: row.brand })}
+                  </span>
+                )}
+              </span>
+              <span className="text-right tabular-nums">
+                <span className="block font-semibold whitespace-nowrap">{money(row.net)}</span>
+                <span className="block text-small whitespace-nowrap text-muted-foreground">
+                  {fill(r.unitsCount, { n: num(row.units) })}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {more > 0 && (
+        <p className="mt-2 text-small text-muted-foreground">{plural(language, more, r.more)}</p>
+      )}
+    </Card>
+  );
+}
