@@ -46,15 +46,16 @@ export function HomeView({
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ data: null, failed: false });
   const [retrying, setRetrying] = useState(false);
-  const inFlight = useRef(false);
+  /** The view whose request is running: a request of a view that is gone never blocks a new one. */
+  const inFlight = useRef<AbortController | null>(null);
   const lastFetch = useRef(0);
   /** Aborted when the view goes: a late answer then changes no state and redirects nowhere. */
   const gone = useRef<AbortController | null>(null);
 
   const fetchHome = useCallback(async () => {
     const view = gone.current;
-    if (inFlight.current || !view || view.signal.aborted) return;
-    inFlight.current = true;
+    if (!view || view.signal.aborted || inFlight.current === view) return;
+    inFlight.current = view;
     lastFetch.current = Date.now();
     try {
       const res = await browserApi.home({ fetchOptions: { signal: view.signal } });
@@ -69,7 +70,7 @@ export function HomeView({
       if (view.signal.aborted) return;
       setLoad((was) => (was.data ? was : { data: null, failed: true }));
     } finally {
-      inFlight.current = false;
+      if (inFlight.current === view) inFlight.current = null;
       if (!view.signal.aborted) setRetrying(false);
     }
   }, [router]);
