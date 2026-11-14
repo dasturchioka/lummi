@@ -1,10 +1,9 @@
 import {
   adminContract,
-  SALES_REPORT_EXPORT_MIME,
-  salesReportExportQuerySchema,
-  type SalesReportQuery,
+  marketingReportExportQuerySchema,
+  REPORT_EXPORT_MIME,
+  reportExportQuerySchema,
 } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
 import { Controller, Get, HttpException, Inject, Query, Res, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Response } from 'express';
@@ -42,37 +41,31 @@ export class ReportsController {
   /** The same report as an Excel file; a file, so it is outside the ts-rest contract. */
   @Get('admin/reports/sales/export')
   async salesExport(@Query() query: Record<string, string>, @Res() res: Response): Promise<void> {
-    await sendWorkbook(query, res, 'LUMMI_Prodazhi.xlsx', (range, lang) =>
-      this.sales.workbook(range, lang),
-    );
+    const parsed = reportExportQuerySchema.safeParse(query);
+    if (!parsed.success) throw new HttpException({ code: 'invalid' }, 422);
+    const { lang, ...rest } = parsed.data;
+    send(res, 'LUMMI_Prodazhi.xlsx', await this.sales.workbook(rest, lang));
   }
 
+  /** The marketing report as an Excel file, with the same range and filters as the page. */
   @Get('admin/reports/marketing/export')
   async marketingExport(
     @Query() query: Record<string, string>,
     @Res() res: Response,
   ): Promise<void> {
-    await sendWorkbook(query, res, 'LUMMI_Marketing.xlsx', (range, lang) =>
-      this.marketing.workbook(range, lang),
-    );
+    const parsed = marketingReportExportQuerySchema.safeParse(query);
+    if (!parsed.success) throw new HttpException({ code: 'invalid' }, 422);
+    const { lang, ...rest } = parsed.data;
+    send(res, 'LUMMI_Marketing.xlsx', await this.marketing.workbook(rest, lang));
   }
 }
 
-/** A report's Excel file for the asked range, headers in the asked language. */
-async function sendWorkbook(
-  query: Record<string, string>,
-  res: Response,
-  filename: string,
-  workbook: (range: SalesReportQuery, lang: Language) => Promise<Buffer | 'invalid_range'>,
-): Promise<void> {
-  const parsed = salesReportExportQuerySchema.safeParse(query);
-  if (!parsed.success) throw new HttpException({ code: 'invalid' }, 422);
-  const { lang, ...range } = parsed.data;
-  const bytes = await workbook(range, lang);
+/** A report's Excel file, or 422 for a range that is no report range. */
+function send(res: Response, filename: string, bytes: Buffer | 'invalid_range'): void {
   if (bytes === 'invalid_range') throw new HttpException(invalidRange.body, 422);
   res
     .status(200)
-    .type(SALES_REPORT_EXPORT_MIME)
+    .type(REPORT_EXPORT_MIME)
     .setHeader('content-disposition', `attachment; filename="${filename}"`)
     .setHeader('cache-control', 'no-store')
     .send(bytes);

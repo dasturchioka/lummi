@@ -2178,6 +2178,14 @@ export const adminMessages = defineMessages(
           description:
             'Те же заказы, что в продажах: доставленные без возврата, в день доставки по Ташкенту, с возвратами денег по тем же правилам. Здесь видно, что принесли промокоды, ссылки кампаний и скидка за набор.',
           title: 'Маркетинг',
+          filters: {
+            source: 'Источник',
+            code: 'Промокод',
+            all: 'Все',
+            noSource: 'Без ссылки',
+            noCode: 'Без промокода',
+            hint: 'Источник и промокод сужают заказы во всех таблицах. «Открыли» и «Привлечено» считаются только по ссылкам выбранного источника.',
+          },
           empty: 'За этот период нечего показать',
           emptyText:
             'Здесь появятся заказы с промокодами и по ссылкам кампаний, открытия ссылок и скидки за набор. Выберите другой период.',
@@ -2185,8 +2193,8 @@ export const adminMessages = defineMessages(
             opens: 'Открыли (чел.)',
             orders: 'Заказов',
             customers: 'Покупателей',
-            newCustomers: 'Из них новых',
-            customersNew: 'Покупателей (новых)',
+            firstTimeBuyers: 'Из них новых',
+            customersFirstTime: 'Покупателей (новых)',
             itemsBeforeDiscount: 'Товары до скидки',
             discount: 'Скидки',
             refunds: 'Возвраты денег',
@@ -2206,6 +2214,7 @@ export const adminMessages = defineMessages(
             ownLink: 'своя ссылка',
             hint: 'Заказы, где применён код. «Открыли» — клиенты, открывшие ссылки кода за период. Конверсия — заказы с кодом, пришедшие по его ссылкам, к открывшим; у кода без ссылки её нет. Новые — у кого это первый доставленный заказ.',
             empty: 'В этом периоде промокоды не применялись и их ссылки не открывали.',
+            noCodeChosen: 'Выбраны заказы без промокода.',
           },
           sources: {
             title: 'Источники заказов',
@@ -2214,12 +2223,13 @@ export const adminMessages = defineMessages(
             allLinks: 'Все ссылки',
             withoutLink: 'Без ссылки',
             quiet: 'Ничего за период',
-            hint: 'Заказ берёт ссылку кампании, которую клиент открыл последней перед заказом (в пределах окна из настроек). Конверсия — заказы к открывшим за период.',
+            hint: 'Заказ берёт ссылку кампании, которую клиент открыл последней перед заказом (в пределах окна из настроек). Конверсия сравнивает заказы и открытия за один и тот же период: в счёт идёт и заказ по ссылке, открытой ещё до периода, поэтому конверсия может быть больше 100 %.',
           },
           acquisition: {
             title: 'Привлечение клиентов',
-            withoutLink: 'Без первой ссылки',
-            hint: 'По первой ссылке, которую клиент открыл в жизни, — заказы с того момента. «Привлечено» — клиенты, впервые открывшие ссылку за период.',
+            earlierCustomers: 'Уже были клиентами',
+            withoutFirstLink: 'Не открывали ссылок',
+            hint: 'Ссылка привлекла клиента, если это первая ссылка, которую он открыл, и до неё у него не было заказов (отменённые не в счёт). «Привлечено» — такие клиенты, впервые открывшие ссылку за период. Кто заказывал раньше, — в «Уже были клиентами».',
           },
           rights: {
             title: 'Скидка за набор',
@@ -4421,6 +4431,14 @@ export const adminMessages = defineMessages(
           description:
             'Savdodagi buyurtmalarning oʻzi: qaytarilmagan yetkazilganlari, Toshkent vaqti bilan yetkazilgan kunida, qaytarilgan pullar shu qoidalar boʻyicha. Bu yerda promokodlar, kampaniya havolalari va toʻplam chegirmasi nima bergani koʻrinadi.',
           title: 'Marketing',
+          filters: {
+            source: 'Manba',
+            code: 'Promokod',
+            all: 'Hammasi',
+            noSource: 'Havolasiz',
+            noCode: 'Promokodsiz',
+            hint: 'Manba va promokod barcha jadvallarda buyurtmalarni toraytiradi. «Ochganlar» va «Jalb qilingan» faqat tanlangan manba havolalari boʻyicha sanaladi.',
+          },
           empty: 'Bu davrda koʻrsatadigan narsa yoʻq',
           emptyText:
             'Bu yerda promokodli va kampaniya havolalari orqali kelgan buyurtmalar, havolalarni ochishlar va toʻplam chegirmalari koʻrinadi. Boshqa davrni tanlang.',
@@ -4428,8 +4446,8 @@ export const adminMessages = defineMessages(
             opens: 'Ochganlar (kishi)',
             orders: 'Buyurtmalar',
             customers: 'Xaridorlar',
-            newCustomers: 'Ulardan yangilari',
-            customersNew: 'Xaridorlar (yangilari)',
+            firstTimeBuyers: 'Ulardan yangilari',
+            customersFirstTime: 'Xaridorlar (yangilari)',
             itemsBeforeDiscount: 'Chegirmagacha tovarlar',
             discount: 'Chegirmalar',
             refunds: 'Qaytarilgan pullar',
@@ -4449,6 +4467,7 @@ export const adminMessages = defineMessages(
             ownLink: 'oʻz havolasi',
             hint: 'Kod qoʻllangan buyurtmalar. «Ochganlar» — davr ichida kod havolalarini ochgan mijozlar. Konversiya — kod havolalari orqali kelgan kodli buyurtmalarning ochganlarga nisbati; havolasiz kodda u yoʻq. Yangilar — bu birinchi yetkazilgan buyurtmasi boʻlganlar.',
             empty: 'Bu davrda promokodlar qoʻllanmagan va ularning havolalari ochilmagan.',
+            noCodeChosen: 'Promokodsiz buyurtmalar tanlangan.',
           },
           sources: {
             title: 'Buyurtma manbalari',
@@ -4457,12 +4476,13 @@ export const adminMessages = defineMessages(
             allLinks: 'Barcha havolalar',
             withoutLink: 'Havolasiz',
             quiet: 'Davr ichida hech narsa yoʻq',
-            hint: 'Buyurtma mijoz undan oldin oxirgi ochgan kampaniya havolasini oladi (sozlamalardagi muddat ichida). Konversiya — buyurtmalarning davr ichida ochganlarga nisbati.',
+            hint: 'Buyurtma mijoz undan oldin oxirgi ochgan kampaniya havolasini oladi (sozlamalardagi muddat ichida). Konversiya bir davrdagi buyurtmalar va ochishlarni solishtiradi: davrdan oldin ochilgan havola orqali kelgan buyurtma ham hisobga kiradi, shuning uchun konversiya 100 % dan oshishi mumkin.',
           },
           acquisition: {
             title: 'Mijozlarni jalb qilish',
-            withoutLink: 'Birinchi havolasiz',
-            hint: 'Mijoz hayotida birinchi ochgan havola boʻyicha — oʻsha paytdan keyingi buyurtmalar. «Jalb qilingan» — davr ichida havolani birinchi marta ochgan mijozlar.',
+            earlierCustomers: 'Avvaldan mijoz boʻlganlar',
+            withoutFirstLink: 'Havola ochmaganlar',
+            hint: 'Agar mijoz ochgan birinchi havola shu boʻlsa va undan oldin uning buyurtmalari boʻlmagan boʻlsa (bekor qilinganlar hisobga olinmaydi), havola mijozni jalb qilgan. «Jalb qilingan» — davr ichida havolani birinchi marta ochgan shunday mijozlar. Avval buyurtma berganlar — «Avvaldan mijoz boʻlganlar»da.',
           },
           rights: {
             title: 'Toʻplam chegirmasi',
