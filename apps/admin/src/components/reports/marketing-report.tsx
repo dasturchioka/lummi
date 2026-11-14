@@ -1,8 +1,11 @@
-import type {
-  CampaignSource,
-  MarketingFigures,
-  MarketingReport,
-  ReportLink,
+import {
+  CAMPAIGN_SOURCES,
+  NO_PROMO_CODE,
+  NO_SOURCE,
+  type CampaignSource,
+  type MarketingFigures,
+  type MarketingReport,
+  type ReportLink,
 } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Download } from 'lucide-react';
@@ -11,7 +14,9 @@ import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Field } from '@/components/ui/field';
 import { MetaLine } from '@/components/ui/meta-line';
+import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
@@ -33,6 +38,7 @@ export function MarketingReportView({
   language,
   data,
   asked,
+  codes,
   invalid,
 }: {
   t: AdminMessages;
@@ -40,6 +46,8 @@ export function MarketingReportView({
   data: MarketingReport;
   /** The range the URL asked for, empty for the default one. */
   asked: { from?: string; to?: string };
+  /** Every promo code, for the code filter. */
+  codes: string[];
   /** The asked range was refused; `data` is the default range. */
   invalid: boolean;
 }) {
@@ -47,9 +55,14 @@ export function MarketingReportView({
   const m = r.marketing;
   const money = (n: number) => formatMoney(n, language);
   const sourceName = t.campaigns.sources;
+  // the filters as the API read them ride in the URL, the export and the reset
+  const filters = Object.fromEntries(
+    Object.entries(data.filters).filter((e): e is [string, string] => e[1] !== null),
+  );
   const exportHref = `/api/admin/reports/marketing/export?${new URLSearchParams({
     from: data.from,
     to: data.to,
+    ...filters,
     lang: language,
   })}`;
 
@@ -68,7 +81,41 @@ export function MarketingReportView({
         }
       />
       <ReportTabs r={r} current="marketing" asked={asked} />
-      <ReportRange r={r} page="marketing" range={data} asked={asked} invalid={invalid} />
+      <ReportRange
+        r={r}
+        page="marketing"
+        range={data}
+        asked={asked}
+        invalid={invalid}
+        resetKeep={filters}
+        note={Object.keys(filters).length > 0 ? m.filters.hint : undefined}
+        fields={
+          <>
+            <Field id="r-source" label={m.filters.source}>
+              <Select name="source" defaultValue={data.filters.source ?? ''}>
+                <option value="">{m.filters.all}</option>
+                {CAMPAIGN_SOURCES.map((s) => (
+                  <option key={s} value={s}>
+                    {sourceName[s]}
+                  </option>
+                ))}
+                <option value={NO_SOURCE}>{m.filters.noSource}</option>
+              </Select>
+            </Field>
+            <Field id="r-code" label={m.filters.code}>
+              <Select name="code" defaultValue={data.filters.code ?? ''}>
+                <option value="">{m.filters.all}</option>
+                {codes.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+                <option value={NO_PROMO_CODE}>{m.filters.noCode}</option>
+              </Select>
+            </Field>
+          </>
+        }
+      />
 
       {nothingIn(data) ? (
         <EmptyState title={m.empty}>{m.emptyText}</EmptyState>
@@ -92,6 +139,8 @@ function nothingIn(d: MarketingReport) {
     d.promoCodes.length === 0 &&
     d.sources.every((s) => quiet(s) && s.opens === 0) &&
     quiet(d.withoutLink) &&
+    quiet(d.earlierCustomers) &&
+    quiet(d.withoutFirstLink) &&
     d.acquisition.every((a) => quiet(a) && a.acquired === 0) &&
     d.upgradeRights.every((u) => quiet(u) && u.issued === 0)
   );
@@ -155,8 +204,8 @@ function figureColumns<R extends MarketingFigures>(r: Copy): Column<R>[] {
 function customersColumn<R extends MarketingFigures>(r: Copy): Column<R> {
   return {
     key: 'customers',
-    label: r.marketing.figures.customersNew,
-    cell: (x) => `${num(x.customers)} (${num(x.newCustomers)})`,
+    label: r.marketing.figures.customersFirstTime,
+    cell: (x) => `${num(x.customers)} (${num(x.firstTimeBuyers)})`,
   };
 }
 
@@ -357,7 +406,7 @@ function PromoCodes({ r, data, money, sourceName }: SectionProps) {
       columns={columns}
       money={money}
       hint={m.promo.hint}
-      empty={m.promo.empty}
+      empty={data.filters.code === NO_PROMO_CODE ? m.promo.noCodeChosen : m.promo.empty}
       lines={data.promoCodes.map((p) => ({
         key: String(p.promoCodeId),
         name: <span className={CODE}>{p.code}</span>,
@@ -430,12 +479,14 @@ function Sources({ r, data, money, sourceName }: SectionProps) {
     m.sources.quiet,
     (x): Omit<S, keyof MarketingFigures> => ({ opens: x.opens, conversion: x.conversion }),
   );
-  lines.push({
-    key: 'without',
-    name: m.sources.withoutLink,
-    muted: quiet(data.withoutLink),
-    data: { ...data.withoutLink, opens: null, conversion: null },
-  });
+  // orders without a link are their own row, unless the Source filter names a Source
+  if (!data.filters.source || data.filters.source === NO_SOURCE)
+    lines.push({
+      key: 'without',
+      name: m.sources.withoutLink,
+      muted: quiet(data.withoutLink),
+      data: { ...data.withoutLink, opens: null, conversion: null },
+    });
   return (
     <FiguresTable
       r={r}
@@ -468,12 +519,11 @@ function Acquisition({ r, data, money, sourceName }: SectionProps) {
     m.sources.quiet,
     (x): Omit<A, keyof MarketingFigures> => ({ acquired: x.acquired }),
   );
-  lines.push({
-    key: 'without',
-    name: m.acquisition.withoutLink,
-    muted: quiet(data.withoutAcquisition),
-    data: { ...data.withoutAcquisition, acquired: null },
-  });
+  for (const [key, name, figures] of [
+    ['earlier', m.acquisition.earlierCustomers, data.earlierCustomers],
+    ['without', m.acquisition.withoutFirstLink, data.withoutFirstLink],
+  ] as const)
+    lines.push({ key, name, muted: quiet(figures), data: { ...figures, acquired: null } });
   return (
     <FiguresTable
       r={r}

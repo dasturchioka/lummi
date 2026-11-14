@@ -1,4 +1,4 @@
-import { salesReportQuerySchema } from '@lummi/contracts';
+import { reportQuerySchema } from '@lummi/contracts';
 import { redirect } from 'next/navigation';
 import { SalesReportView, type TopOrder } from '@/components/reports/sales-report';
 import { getAdminMessages } from '@/lib/i18n';
@@ -9,7 +9,7 @@ const KEYS = ['from', 'to'] as const;
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
-  const range = readFilters(sp, salesReportQuerySchema.shape, KEYS);
+  const range = readFilters(sp, reportQuerySchema.shape, KEYS);
   const top: TopOrder = sp.top === 'net' ? 'net' : 'units';
 
   const api = await serverApi();

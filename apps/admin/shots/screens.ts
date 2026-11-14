@@ -2100,6 +2100,20 @@ export const screens: Screen[] = [
     teardown: ({ db }) => shotMarketing(db, 'remove'),
   },
   {
+    id: 'reports-marketing-source',
+    path: '/reports/marketing?source=store_qr',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
+    id: 'reports-marketing-code',
+    path: '/reports/marketing?code=LUMMI10',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
     id: 'reports-marketing-invalid',
     path: '/reports/marketing?from=2026-11-14&to=2026-11-01',
     as: 'owner',
