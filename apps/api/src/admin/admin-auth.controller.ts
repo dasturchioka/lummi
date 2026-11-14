@@ -4,8 +4,9 @@ import { Controller, Inject, Req, Res, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request, Response } from 'express';
 import type { Env } from '../env';
+import { clientAddress } from '../staff/client-address';
 import { readCookie } from '../staff/cookie';
-import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
+import { AllowedDuringPasswordChange, CurrentStaff, StaffGuard } from '../staff/staff.guard';
 import { STAFF_COOKIE, StaffSessionService } from '../staff/staff-session.service';
 import { ENV } from '../tokens';
 import { AdminLoginService, type LoginResult } from './admin-login.service';
@@ -23,6 +24,14 @@ export class AdminAuthController {
   loginWidget(@Res({ passthrough: true }) res: Response) {
     return tsRestHandler(adminContract.loginWidget, async ({ body }) =>
       this.reply(res, await this.login.withWidget(body)),
+    );
+  }
+
+  /** Login and password (ADR 0038): the panel's main way in. */
+  @TsRestHandler(adminContract.passwordLogin)
+  passwordLogin(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return tsRestHandler(adminContract.passwordLogin, async ({ body }) =>
+      this.reply(res, await this.login.withPassword(body, clientAddress(req))),
     );
   }
 
@@ -49,6 +58,7 @@ export class AdminAuthController {
 
   @TsRestHandler(adminContract.me)
   @UseGuards(StaffGuard)
+  @AllowedDuringPasswordChange()
   me(@CurrentStaff() member: StaffRow) {
     return tsRestHandler(adminContract.me, async () => ({
       status: 200 as const,
@@ -58,9 +68,17 @@ export class AdminAuthController {
 
   private reply(res: Response, result: LoginResult) {
     if (!result.ok) {
-      return result.status === 401
-        ? { status: 401 as const, body: { code: result.code } }
-        : { status: 403 as const, body: { code: result.code } };
+      switch (result.status) {
+        case 401:
+          return { status: 401 as const, body: { code: result.code } };
+        case 403:
+          return { status: 403 as const, body: { code: result.code } };
+        case 429:
+          return {
+            status: 429 as const,
+            body: { code: result.code, retryAt: result.retryAt.toISOString() },
+          };
+      }
     }
     res.cookie(STAFF_COOKIE, result.token, {
       ...this.cookieOptions(),

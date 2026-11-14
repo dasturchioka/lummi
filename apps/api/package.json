@@ -17,7 +17,8 @@
     "bts:import": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/bts-import.ts",
     "seed:catalog": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-catalog.ts",
     "seed:workbook": "node --import tsx src/cli/build-seed-workbook.ts",
-    "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts"
+    "seed:owner": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/seed-owner.ts",
+    "set-owner-password": "node --env-file-if-exists=../../.env --env-file-if-exists=../../.env.local --import tsx src/cli/set-owner-password.ts"
   },
   "dependencies": {
     "@grammyjs/auto-retry": "^2.0.2",

@@ -207,6 +207,8 @@ export const adminMessages = defineMessages(
         testSent: 'Отправили вам в Telegram две версии: русскую и узбекскую.',
         testBlocked: 'Telegram не принял сообщение. Откройте бота, нажмите «Старт» и повторите.',
         testFailed: 'Не удалось отправить себе. Попробуйте ещё раз.',
+        testUnlinked:
+          'Пробная рассылка приходит в ваш Telegram. Сначала привяжите его: Профиль → «Привязать Telegram».',
         send: 'Отправить клиентам',
         sendNobody: 'Некому отправить',
         sendTitle: {
@@ -2041,6 +2043,8 @@ export const adminMessages = defineMessages(
         testBlocked:
           'Telegram xabarni qabul qilmadi. Botni oching, «Start» tugmasini bosing va qayta urining.',
         testFailed: 'Oʻzingizga yuborib boʻlmadi. Qayta urinib koʻring.',
+        testUnlinked:
+          'Sinov xabari Telegramingizga keladi. Avval uni bogʻlang: Profil → «Telegramni bogʻlash».',
         send: 'Mijozlarga yuborish',
         sendNobody: 'Yuboradigan mijoz yoʻq',
         sendTitle: {

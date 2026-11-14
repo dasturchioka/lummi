@@ -103,17 +103,21 @@ describe('staff management (owner only)', () => {
   it('lists, adds a manager and audits it with the owner as actor', async () => {
     const owner = await t.ownerSession();
     const created = await owner.client.admin.staff.create({
-      body: { telegramId: 777, name: ' Dilnoza ' },
+      body: { name: ' Dilnoza ', login: 'dilnoza', password: 'Temp-pass-0001' },
     });
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({
-      telegramId: 777,
+      telegramId: null,
+      login: 'dilnoza',
       name: 'Dilnoza',
       role: 'manager',
       active: true,
     });
     const list = await owner.client.admin.staff.list();
-    expect(list.status === 200 && list.body.map((s) => s.telegramId).sort()).toEqual([777, 900001]);
+    expect(list.status === 200 && list.body.map((s) => s.login ?? s.telegramId)).toEqual([
+      900001,
+      'dilnoza',
+    ]);
     const audit = await t.db.select().from(auditLog).where(eq(auditLog.action, 'staff.created'));
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({
@@ -121,14 +125,20 @@ describe('staff management (owner only)', () => {
       actorId: owner.staff.id,
       targetType: 'staff',
     });
-    const dup = await owner.client.admin.staff.create({ body: { telegramId: 777, name: 'Again' } });
+    const dup = await owner.client.admin.staff.create({
+      body: { name: 'Again', login: 'dilnoza', password: 'Temp-pass-0001' },
+    });
     expect(dup.status).toBe(409);
   });
 
   it('a new manager can sign in right away', async () => {
     const owner = await t.ownerSession();
-    await owner.client.admin.staff.create({ body: { telegramId: 777, name: 'Dilnoza' } });
-    const res = await login(t.widgetPayload({ id: 777, first_name: 'Dilnoza' }));
+    await owner.client.admin.staff.create({
+      body: { name: 'Dilnoza', login: 'dilnoza', password: 'Temp-pass-0001' },
+    });
+    const res = await t.client.admin.passwordLogin({
+      body: { login: 'dilnoza', password: 'Temp-pass-0001' },
+    });
     expect(res.status).toBe(200);
   });
 
@@ -192,7 +202,7 @@ describe('staff management (owner only)', () => {
     const c = manager.client.admin.staff;
     const results = await Promise.all([
       c.list(),
-      c.create({ body: { telegramId: 1, name: 'x' } }),
+      c.create({ body: { name: 'x', login: 'xxx', password: 'Temp-pass-0001' } }),
       c.update({ params: { id: 1 }, body: { active: false } }),
       c.remove({ params: { id: 1 } }),
     ]);
@@ -207,7 +217,7 @@ describe('staff management (owner only)', () => {
 describe('POST /admin/auth/dev (dev-only sign-in)', () => {
   it('signs in an active staff member when enabled, and still says «Нет доступа» to others', async () => {
     const owner = await t.ownerSession();
-    const ok = await t.client.admin.devLogin({ body: { telegramId: owner.staff.telegramId } });
+    const ok = await t.client.admin.devLogin({ body: { telegramId: owner.staff.telegramId! } });
     expect(ok.status).toBe(200);
     expect(ok.headers.get('set-cookie') ?? '').toMatch(/^lummi_admin=/);
     expect((await t.client.admin.devLogin({ body: { telegramId: 31337 } })).status).toBe(403);

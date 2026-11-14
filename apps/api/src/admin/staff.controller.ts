@@ -3,17 +3,22 @@ import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
-import { StaffService } from '../staff/staff.service';
+import { StaffService, type PasswordRefusal, type StaffRefusal } from '../staff/staff.service';
 import { toStaffDto } from './staff.dto';
 
 /** One mapping for service failures: unknown id is 404, a refused change is 409. */
-const conflict = () => ({ status: 409 as const, body: { code: 'conflict' as const } });
-
-function failure(reason: 'not_found' | 'conflict') {
+function failure(reason: StaffRefusal) {
   return reason === 'not_found'
     ? { status: 404 as const, body: { code: 'not_found' as const } }
-    : { status: 409 as const, body: { code: 'conflict' as const } };
+    : reason === 'login_required'
+      ? { status: 422 as const, body: { code: 'login_required' as const } }
+      : { status: 409 as const, body: { code: reason } };
 }
+
+const passwordFailure = (res: PasswordRefusal) => ({
+  status: 422 as const,
+  body: { code: res.reason, minLength: res.minLength },
+});
 
 /** Everything here is owner-only; later owner-only endpoints use the same two guards. */
 @Controller()
@@ -33,7 +38,27 @@ export class StaffController {
   create(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.staff.create, async ({ body }) => {
       const res = await this.staff.addManager(actor, body);
-      return res.ok ? { status: 201 as const, body: toStaffDto(res.staff) } : conflict();
+      if (res.ok) return { status: 201 as const, body: toStaffDto(res.staff) };
+      if ('minLength' in res) return passwordFailure(res);
+      return { status: 409 as const, body: { code: 'login_taken' as const } };
+    });
+  }
+
+  @TsRestHandler(adminContract.staff.resetPassword)
+  resetPassword(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.staff.resetPassword, async ({ params, body }) => {
+      const res = await this.staff.resetPassword(actor, params.id, body);
+      if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
+      return 'minLength' in res ? passwordFailure(res) : failure(res.reason);
+    });
+  }
+
+  @TsRestHandler(adminContract.staff.unlinkTelegram)
+  unlinkTelegram(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.staff.unlinkTelegram, async ({ params }) => {
+      const res = await this.staff.unlinkTelegram(actor, params.id);
+      if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
+      return failure(res.reason);
     });
   }
 

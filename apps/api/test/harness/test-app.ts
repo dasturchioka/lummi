@@ -72,6 +72,8 @@ export interface TestApp {
   ownerSession(): Promise<StaffSession>;
   /** Shortcut for `signInStaff('manager')` with a stable test user. */
   managerSession(): Promise<StaffSession>;
+  /** A typed client that sends this staff session cookie (`lummi_admin=...`). */
+  withCookie(cookie: string): ReturnType<typeof makeClient>;
   /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions and the shop card. Call in beforeEach. */
   reset(): Promise<void>;
   close(): Promise<void>;
@@ -233,6 +235,7 @@ export async function createTestApp(
     signInStaff,
     ownerSession: () => signInStaff('owner'),
     managerSession: () => signInStaff('manager'),
+    withCookie: (cookie) => makeClient(baseUrl, undefined, cookie),
     async signIn(user) {
       const res = await client.auth.telegram({ body: { initData: initData(user) } });
       if (res.status !== 200) throw new Error(`test sign-in failed: ${res.status}`);
