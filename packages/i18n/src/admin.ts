@@ -115,7 +115,7 @@ export const adminMessages = defineMessages(
           received: 'Поступило',
           average: 'Средний платёж',
           week: 'Чистые продажи, 7\u00a0дней',
-          weekVs: '{delta} к прошлым 7 дням',
+          weekVs: '{delta} к прошлым 7\u00a0дням',
           noBase: 'не с чем сравнить',
           reports: 'Отчёты',
           barsFrom: '14\u00a0дней',
