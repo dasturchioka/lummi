@@ -89,7 +89,8 @@ describe('the 20-order report gate (TZ §10)', () => {
   });
 
   it('counts an order on its delivery day, so the days around the range hold the rest', async () => {
-    // order 1 (delivered 9 Nov): C30 120 000 + B10 60 000, delivery 25 000; its refund is 11 Nov
+    // order 1 (delivered 9 Nov): C30 120 000 + B10 60 000, delivery 25 000; its refund is 11 Nov,
+    // and order 2's refund sent on 9 Nov counts on 10 Nov, when 2 was delivered
     expect((await report({ from: '2026-11-09', to: '2026-11-09' })).totals).toEqual({
       orders: 1,
       itemsBeforeDiscount: 180_000,
@@ -99,14 +100,15 @@ describe('the 20-order report gate (TZ §10)', () => {
       net: 180_000,
       averageCheck: 180_000,
     });
-    // order 19 (delivered 15 Nov): C10 50 000, delivery 25 000
+    // order 19 (delivered 15 Nov): C10 50 000, delivery 25 000; order 5's refund of 20 000 sent
+    // 15 Nov (5 was delivered 10 Nov): net 50 000 − 20 000; the average leaves refunds out
     expect((await report({ from: '2026-11-15', to: '2026-11-15' })).totals).toEqual({
       orders: 1,
       itemsBeforeDiscount: 50_000,
       discount: 0,
       delivery: 25_000,
-      refunds: 0,
-      net: 50_000,
+      refunds: 20_000,
+      net: 30_000,
       averageCheck: 50_000,
     });
   });

@@ -38,12 +38,18 @@ export const salesFiguresSchema = z.object({
   discount: som,
   /** Their delivery fees: shown, never part of net. */
   delivery: som,
-  /** Refunds sent that day (`refunded_on`) for orders that are Fulfilled. */
+  /**
+   * Refunds of orders that are Fulfilled, on the day they were sent (`refunded_on`), or on the
+   * order's delivery day when the money went back before it.
+   */
   refunds: som,
   /** Items − discount − refunds; below zero on a day whose refunds pass its sales. */
   net: z.number().int(),
-  /** Net ÷ orders, to the nearest so'm (halves up); null on a day without orders. */
-  averageCheck: z.number().int().nullable(),
+  /**
+   * (Items − discount) ÷ orders, the TZ's «Чистые продажи / выданные заказы» before refunds, to
+   * the nearest so'm (halves up); null on a day without orders.
+   */
+  averageCheck: som.nullable(),
 });
 export type SalesFigures = z.infer<typeof salesFiguresSchema>;
 

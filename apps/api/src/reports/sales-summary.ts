@@ -2,8 +2,10 @@ import {
   addDays,
   formatLocalDate,
   parseLocalDate,
+  SALES_REPORT_MAX_DAYS,
   tashkentDay,
   tashkentDayStart,
+  tashkentDaySchema,
   type FragranceSales,
   type SalesDay,
   type SalesFigures,
@@ -18,6 +20,7 @@ import {
   gte,
   inArray,
   lte,
+  or,
   orderLines,
   orders,
   refunds,
@@ -28,10 +31,31 @@ import {
 import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
 import { discountShares } from './discount-shares';
 
-/** Tashkent days `YYYY-MM-DD`, both inclusive, `from` not after `to`. */
+/** Tashkent days `YYYY-MM-DD`, both inclusive. */
 export interface TashkentRange {
   from: string;
   to: string;
+}
+
+/**
+ * A range a report takes: two real Tashkent days written `YYYY-MM-DD`, `from` not after `to`,
+ * at most `SALES_REPORT_MAX_DAYS` days.
+ */
+export function isSalesRange(range: TashkentRange): boolean {
+  const real = (day: string) => tashkentDaySchema.safeParse(day).success;
+  if (!real(range.from) || !real(range.to) || range.from > range.to) return false;
+  const last = formatLocalDate(addDays(parseLocalDate(range.from), SALES_REPORT_MAX_DAYS - 1));
+  return range.to <= last;
+}
+
+/** The `days` Tashkent days that end with `to`, `to` included. */
+export function daysEnding(to: string, days: number): TashkentRange {
+  return { from: formatLocalDate(addDays(parseLocalDate(to), 1 - days)), to };
+}
+
+/** The last `days` Tashkent days up to `now`'s Tashkent day, that day included. */
+export function lastTashkentDays(days: number, now: Date): TashkentRange {
+  return daysEnding(formatLocalDate(tashkentDay(now)), days);
 }
 
 /**
@@ -42,18 +66,22 @@ export interface TashkentRange {
  * - **Which orders:** Fulfilled ones (`FULFILLED_STATUSES`: «Доставлен», not returned), each
  *   counted on the Tashkent day it reached «Доставлен» (`fulfilledAt`). A return drops the order
  *   out by its status, on every day.
- * - **Refunds** count on the day they were sent (`refunded_on`), and only for orders that are
- *   Fulfilled: a cancelled or returned order's sale is not counted, so neither is its money back.
+ * - **Refunds** count only for orders that are Fulfilled (a cancelled or returned order's sale is
+ *   not counted, so neither is its money back), on the day they were sent (`refunded_on`) or, for
+ *   money sent back before delivery, on the delivery day: never on a day before the order counts.
  * - **Net** = items before discount − discount − refunds; delivery is shown beside it, never in
- *   it. **Average check** = net ÷ orders, to the nearest so'm, halves up.
+ *   it. **Average check** = (items before discount − discount) ÷ orders, the TZ's «Чистые
+ *   продажи / выданные заказы» before refunds, to the nearest so'm, halves up.
  * - **Fragrances and Volumes** take volume lines; a set counts per set, as its own row. A line's
  *   net is its total less its share of the order's discount (`discountShares`); refunds name no
  *   line, so they stay out of these lists.
  *
- * Amounts are integer so'm; the database sums them as `bigint`, and the sums here stay exact
- * integers far below 2^53. Every read happens in one read-only snapshot.
+ * Amounts are integer so'm. Refunds are summed in SQL as `bigint` (per order and day); the order
+ * figures and the rest are exact integer sums in code, far below 2^53. Every read happens in one
+ * read-only snapshot. A range that is not `isSalesRange` is a `RangeError`.
  */
 export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesReport> {
+  if (!isSalesRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
   // one snapshot for every read, so a refund or a delivery landing meanwhile never makes the
   // days and the top lists disagree
   return db.transaction((tx) => summarise(tx, range), {
@@ -85,17 +113,25 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
       ),
     );
 
-  const refundsByDay = await db
+  // a refund counts on greatest(its day, its order's delivery day), so the range takes those
+  // sent by its end for orders delivered by its end, and sent or delivered on or after its start
+  const refunded = await db
     .select({
-      day: refunds.refundedOn,
+      on: refunds.refundedOn,
+      delivered: fulfilledAt,
       amount: sql<number>`sum(${refunds.amount})::bigint`.mapWith(Number),
     })
     .from(refunds)
     .innerJoin(orders, eq(orders.id, refunds.orderId))
     .where(
-      and(fulfilledOrder, gte(refunds.refundedOn, range.from), lte(refunds.refundedOn, range.to)),
+      and(
+        fulfilledOrder,
+        lte(refunds.refundedOn, range.to),
+        sql`${fulfilledAt} < ${end.toISOString()}`,
+        or(gte(refunds.refundedOn, range.from), sql`${fulfilledAt} >= ${start.toISOString()}`),
+      ),
     )
-    .groupBy(refunds.refundedOn);
+    .groupBy(refunds.refundedOn, orders.id);
 
   const lines = sold.length
     ? await db
@@ -132,7 +168,10 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
     f.discount += o.discountAmount;
     f.delivery += o.delivery;
   }
-  for (const r of refundsByDay) byDay.get(r.day)!.refunds += r.amount;
+  for (const r of refunded) {
+    const delivered = formatLocalDate(tashkentDay(r.delivered!));
+    byDay.get(r.on > delivered ? r.on : delivered)!.refunds += r.amount;
+  }
   const daily: SalesDay[] = days.map((day) => ({ day, ...settle(byDay.get(day)!) }));
   const totals = settle(
     [...byDay.values()].reduce((sum, f) => {
@@ -214,13 +253,10 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
 
 /** Every day of the range, oldest first. */
 function daysOf(range: TashkentRange): string[] {
-  if (range.from > range.to) throw new RangeError(`${range.from} is after ${range.to}`);
   const out: string[] = [];
-  for (let d = parseLocalDate(range.from); ; d = addDays(d, 1)) {
-    const day = formatLocalDate(d);
-    out.push(day);
-    if (day === range.to) return out;
-  }
+  for (let d = parseLocalDate(range.from); formatLocalDate(d) <= range.to; d = addDays(d, 1))
+    out.push(formatLocalDate(d));
+  return out;
 }
 
 type Sums = Omit<SalesFigures, 'net' | 'averageCheck'>;
@@ -233,11 +269,14 @@ const blank = (): Sums => ({
   refunds: 0,
 });
 
-/** Net and the average check from the sums: net ÷ orders, rounded to the so'm, halves up. */
+/**
+ * Net and the average check from the sums. Net takes the refunds off; the average does not (TZ:
+ * net sales before refunds ÷ orders), rounded to the so'm, halves up, so it is never below zero.
+ */
 function settle(s: Sums): SalesFigures {
-  const net = s.itemsBeforeDiscount - s.discount - s.refunds;
-  const averageCheck = s.orders === 0 ? null : Math.floor((2 * net + s.orders) / (2 * s.orders));
-  return { ...s, net, averageCheck };
+  const sold = s.itemsBeforeDiscount - s.discount;
+  const averageCheck = s.orders === 0 ? null : Math.floor((2 * sold + s.orders) / (2 * s.orders));
+  return { ...s, net: sold - s.refunds, averageCheck };
 }
 
 /** Adds a line to a row; the row keeps the name and brand of the latest order that sold it. */

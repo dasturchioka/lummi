@@ -17,7 +17,11 @@ export interface ShareLine {
  *   marked down (ADR 0008), or every line when all are. Each gets `amount × lineTotal ÷ base`
  *   rounded down, and the so'm left over go one each to the largest remainders, the earlier line
  *   first on a tie (the largest remainder method). The snapshot does not record whether a code
- *   or the setting let the discount reach marked-down lines, so they are left out.
+ *   or the setting let the discount reach marked-down lines, so they are left out: when one did,
+ *   a fragrance's net may take a share that was another line's; the totals stay exact.
+ *
+ * A snapshot that cannot hold (a right naming no line, a discount on lines that cost nothing)
+ * throws rather than guess.
  */
 export function discountShares(
   lines: readonly ShareLine[],
@@ -29,10 +33,9 @@ export function discountShares(
 
   if (discount?.type === 'upgrade_right') {
     const at = lines.findIndex((l) => String(l.position) === discount.lineKey);
-    if (at >= 0) {
-      shares[at] = amount;
-      return shares;
-    }
+    if (at < 0) throw new Error(`an upgrade right on line ${discount.lineKey}, which is not there`);
+    shares[at] = amount;
+    return shares;
   }
 
   const eligible = lines.some((l) => !l.markedDown && l.lineTotal > 0)

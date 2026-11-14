@@ -1,10 +1,5 @@
 import {
-  addDays,
-  formatLocalDate,
-  parseLocalDate,
   SALES_REPORT_DEFAULT_DAYS,
-  SALES_REPORT_MAX_DAYS,
-  tashkentDay,
   type SalesReport,
   type SalesReportQuery,
 } from '@lummi/contracts';
@@ -13,7 +8,13 @@ import type { Language } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
-import { salesSummary, type TashkentRange } from './sales-summary';
+import {
+  daysEnding,
+  isSalesRange,
+  lastTashkentDays,
+  salesSummary,
+  type TashkentRange,
+} from './sales-summary';
 import { salesWorkbook } from './sales-workbook';
 
 /**
@@ -39,14 +40,13 @@ export class SalesReports {
 
   /**
    * The asked range, a missing end filled in: no `to` is today (Tashkent), no `from` is 30 days
-   * up to `to`. Null when `from` is after `to` or the range passes `SALES_REPORT_MAX_DAYS`.
+   * up to `to`. Null when it is no report range (`isSalesRange`): backwards, or over a year.
    */
   private rangeOf(query: SalesReportQuery): TashkentRange | null {
-    const to = query.to ?? formatLocalDate(tashkentDay(this.edges.clock.now()));
-    const from =
-      query.from ?? formatLocalDate(addDays(parseLocalDate(to), 1 - SALES_REPORT_DEFAULT_DAYS));
-    if (from > to) return null;
-    const last = formatLocalDate(addDays(parseLocalDate(from), SALES_REPORT_MAX_DAYS - 1));
-    return to > last ? null : { from, to };
+    const fallback = query.to
+      ? daysEnding(query.to, SALES_REPORT_DEFAULT_DAYS)
+      : lastTashkentDays(SALES_REPORT_DEFAULT_DAYS, this.edges.clock.now());
+    const range = { from: query.from ?? fallback.from, to: query.to ?? fallback.to };
+    return isSalesRange(range) ? range : null;
   }
 }

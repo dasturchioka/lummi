@@ -5,6 +5,7 @@ import { and, eq, fragrances, volumes } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
+import { lastTashkentDays, salesSummary } from '../src/reports/sales-summary';
 import { fulfilTo, pay, placeOrder, tashkent } from './harness/fulfilment';
 import { shopper, slugs } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
@@ -125,6 +126,19 @@ describe('the sales report: owner only', () => {
     expect((await ask('2025-11-14', '2026-11-15')).status).toBe(422); // 367 days
     expect((await ask('2025-11-15', '2026-11-15')).status).toBe(200); // 366 days
     expect((await ask('2026-02-30', '2026-03-01')).status).toBe(400); // not a calendar day
+  });
+
+  it('salesSummary, called directly (the admin Home), refuses what is not a report range', async () => {
+    const refused = (from: string, to: string) =>
+      expect(salesSummary(t.db, { from, to })).rejects.toThrow(RangeError);
+    await refused('2026-11-12', '2026-11-11'); // backwards
+    await refused('2025-11-14', '2026-11-15'); // 367 days
+    await refused('2026-11-01', '2026-02-30'); // not a calendar day
+    await refused('2026-11-01', '2026-11-1'); // not written YYYY-MM-DD
+    // the last 7 days up to 00:30 on 15 November in Tashkent (19:30 UTC on the 14th)
+    const week = lastTashkentDays(7, tashkent('2026-11-15 00:30'));
+    expect(week).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+    expect((await salesSummary(t.db, week)).days).toHaveLength(7);
   });
 
   it('is refused to a manager (403) and to anyone without a staff session (401)', async () => {

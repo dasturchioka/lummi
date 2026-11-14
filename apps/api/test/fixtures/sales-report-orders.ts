@@ -33,9 +33,11 @@ import type { TestApp } from '../harness/test-app';
  * The rules the hand calculation follows (docs/spec.md → Changes 2026-11-14):
  * - an order counts only while it is Fulfilled («Доставлен», not returned), on the Tashkent day it
  *   was delivered, whenever it was placed;
- * - a Refund counts on the day it was sent, and only for an order that is Fulfilled;
+ * - a Refund counts only for an order that is Fulfilled, on the day it was sent or, when it was
+ *   sent before the order was delivered, on the delivery day;
  * - net = items before discount − discount − refunds; delivery is never in net;
- * - average check = net ÷ orders, to the nearest so'm, halves up; none on a day without orders;
+ * - average check = (items before discount − discount) ÷ orders, refunds left out (TZ «Чистые
+ *   продажи / выданные заказы»), to the nearest so'm, halves up; none on a day without orders;
  * - a line's net = its total − its share of the order's discount: an upgrade right's sits on its
  *   line; a coupon's or promo code's is shared over the lines not marked down in proportion to
  *   their totals, rounded down, the so'm left over going to the largest remainders;
@@ -108,12 +110,14 @@ type Step =
  *  1 bobur   C30 120 000 + B10 60 000 = 180 000; < 250 000, delivery 25 000; total 205 000.
  *            Delivered 9 Nov (before the range). Refund 40 000 sent 11 Nov.
  *  2 ali     Discovery set 300 000; free delivery; total 300 000. Placed 8 Nov, delivered 10 Nov:
- *            opens Ali's 20 % upgrade right on A–E.
+ *            opens Ali's 20 % upgrade right on A–E. Refund 15 000 sent 9 Nov, before delivery
+ *            (on its way to BTS): it counts on 10 Nov, the day the order enters the report.
  *  3 vali    A50 210 000; delivery 25 000; total 235 000. Delivered 10 Nov, RETURNED 12 Nov,
  *            refunded in full (235 000) on 12 Nov: neither its sale nor its refund counts.
  *  4 jasur   A10 70 000; delivery 25 000; total 95 000. Delivered 10 Nov; refund 25 000 sent
  *            10 Nov (the delivery, say).
  *  5 vali    A10 70 000 + B10 60 000 = 130 000; delivery 25 000; total 155 000. Delivered 10 Nov.
+ *            Refund 20 000 sent 15 Nov: after the range, so not in it.
  *  6 dilnoza B30 130 000, never paid, CANCELLED 11 Nov.
  *  7 ali     A30 150 000 + C10 50 000 = 200 000. Ali's upgrade right: 20 % of one A30 =
  *            30 000, on the A30 line. Base before: 200 000 < 250 000, delivery 25 000;
@@ -143,7 +147,8 @@ type Step =
  * 15 bobur   Builder set ×1 = 300 000; free delivery; total 300 000. Delivered 13 Nov 23:50
  *            Tashkent (18:50 UTC): Tashkent's 13 Nov.
  * 16 vali    D30 125 000 + C10 50 000 = 175 000; delivery 25 000; total 200 000. Delivered
- *            14 Nov 00:10 Tashkent (19:10 UTC on 13 Nov): Tashkent's 14 Nov.
+ *            14 Nov 00:10 Tashkent (19:10 UTC on 13 Nov): Tashkent's 14 Nov. Refund 10 000 sent
+ *            13 Nov, before delivery: it counts on 14 Nov.
  * 17 dilnoza B30 marked down 99 900 + A50 210 000 + C10 50 000 = 359 900. Promo BLOGER10 on the
  *            items not marked down: 10 % of 260 000 = 26 000; base after: 333 900, free delivery;
  *            total 333 900. Delivered 14 Nov. Shares over A50 and C10 only:
@@ -166,6 +171,7 @@ const STEPS: Step[] = [
   { at: '2026-11-08 10:00', order: 2, who: 'ali', items: [{ set: 'discovery' }] },
   { at: '2026-11-09 10:00', order: 3, who: 'vali', items: [{ f: 'A', ml: 50 }] },
   { at: '2026-11-09 12:00', order: 4, who: 'jasur', items: [{ f: 'A', ml: 10 }] },
+  { at: '2026-11-09 13:00', refund: 2, amount: 15_000, date: '2026-11-09' },
   { at: '2026-11-09 16:00', deliver: 1 },
   {
     at: '2026-11-10 09:00',
@@ -270,6 +276,7 @@ const STEPS: Step[] = [
     ],
   },
   { at: '2026-11-13 12:30', refund: 12, amount: 215_000, date: '2026-11-13' },
+  { at: '2026-11-13 13:00', refund: 16, amount: 10_000, date: '2026-11-13' },
   { at: '2026-11-13 13:55', markdown: 'B30', price: B30_MARKDOWN, until: '2026-11-13 23:59' },
   {
     at: '2026-11-13 14:00',
@@ -300,6 +307,7 @@ const STEPS: Step[] = [
   { at: '2026-11-14 18:00', deliver: 18 },
   { at: '2026-11-14 20:00', order: 20, who: 'malika', items: [{ f: 'A', ml: 10 }], then: 'unpaid' },
   { at: '2026-11-15 11:00', deliver: 19 },
+  { at: '2026-11-15 11:30', refund: 5, amount: 20_000, date: '2026-11-15' },
 ];
 
 /** Figures for one day or the range, as the report must show them. */
@@ -307,19 +315,20 @@ export type Expected = SalesFigures;
 
 /*
  * Day by day over 10–14 November (Tashkent). Orders delivered that day and still «Доставлен»;
- * refunds sent that day for such orders.
+ * refunds of such orders sent that day, or sent earlier for an order delivered that day.
  */
 export const EXPECTED_DAYS: (Expected & { day: string })[] = [
   {
-    // orders 4, 2, 5 (3 was delivered today but returned). Refund of 4: 25 000.
+    // orders 4, 2, 5 (3 was delivered today but returned). Refunds: 25 000 of 4, sent today, and
+    // 15 000 of 2, sent 9 Nov before it was delivered today.
     day: '2026-11-10',
     orders: 3,
     itemsBeforeDiscount: 500_000, // 70 000 + 300 000 + 130 000
     discount: 0,
     delivery: 50_000, // 25 000 (4) + 0 (2) + 25 000 (5)
-    refunds: 25_000,
-    net: 475_000, // 500 000 − 0 − 25 000
-    averageCheck: 158_333, // 475 000 ÷ 3 = 158 333.33…
+    refunds: 40_000, // 25 000 + 15 000
+    net: 460_000, // 500 000 − 0 − 40 000
+    averageCheck: 166_667, // (500 000 − 0) ÷ 3 = 166 666.66…
   },
   {
     // no delivery; the refund of order 1 (delivered 9 Nov, outside the range): 40 000
@@ -341,10 +350,11 @@ export const EXPECTED_DAYS: (Expected & { day: string })[] = [
     delivery: 50_000, // 25 000 + 0 + 25 000
     refunds: 0,
     net: 702_000, // 765 000 − 63 000
-    averageCheck: 234_000, // 702 000 ÷ 3
+    averageCheck: 234_000, // (765 000 − 63 000) ÷ 3
   },
   {
     // orders 10, 13, 14, 15 (23:50 Tashkent). Order 12's refund today does not count: cancelled.
+    // Order 16's refund sent today counts tomorrow, the day 16 is delivered.
     day: '2026-11-13',
     orders: 4,
     itemsBeforeDiscount: 1_780_000, // 700 000 + 180 000 + 600 000 + 300 000
@@ -352,18 +362,19 @@ export const EXPECTED_DAYS: (Expected & { day: string })[] = [
     delivery: 25_000, // 0 + 25 000 + 0 + 0
     refunds: 0,
     net: 1_570_000, // 1 780 000 − 210 000
-    averageCheck: 392_500, // 1 570 000 ÷ 4
+    averageCheck: 392_500, // (1 780 000 − 210 000) ÷ 4
   },
   {
-    // orders 16 (00:10 Tashkent), 17, 18. Refund of order 9 (delivered 12 Nov): 55 000.
+    // orders 16 (00:10 Tashkent), 17, 18. Refunds: 55 000 of order 9 (delivered 12 Nov), sent
+    // today, and 10 000 of order 16, sent yesterday before it was delivered today.
     day: '2026-11-14',
     orders: 3,
     itemsBeforeDiscount: 839_900, // 175 000 + 359 900 + 305 000
     discount: 26_000, // 0 + 26 000 + 0
     delivery: 25_000, // 25 000 + 0 + 0
-    refunds: 55_000,
-    net: 758_900, // 839 900 − 26 000 − 55 000
-    averageCheck: 252_967, // 758 900 ÷ 3 = 252 966.66…
+    refunds: 65_000, // 55 000 + 10 000
+    net: 748_900, // 839 900 − 26 000 − 65 000
+    averageCheck: 271_300, // (839 900 − 26 000) ÷ 3 = 813 900 ÷ 3
   },
 ];
 
@@ -372,9 +383,9 @@ export const EXPECTED_TOTALS: Expected = {
   itemsBeforeDiscount: 3_884_900, // 500 000 + 765 000 + 1 780 000 + 839 900
   discount: 299_000, // 63 000 + 210 000 + 26 000
   delivery: 150_000, // 50 000 + 50 000 + 25 000 + 25 000
-  refunds: 120_000, // 25 000 + 40 000 + 55 000
-  net: 3_465_900, // 3 884 900 − 299 000 − 120 000
-  averageCheck: 266_608, // 3 465 900 ÷ 13 = 266 607.69…
+  refunds: 145_000, // 40 000 + 40 000 + 0 + 0 + 65 000 (not 5's 20 000, sent 15 Nov)
+  net: 3_440_900, // 3 884 900 − 299 000 − 145 000
+  averageCheck: 275_838, // (3 884 900 − 299 000) ÷ 13 = 3 585 900 ÷ 13 = 275 838.46…
 };
 
 /*
