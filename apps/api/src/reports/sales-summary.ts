@@ -2,40 +2,23 @@ import {
   addDays,
   formatLocalDate,
   parseLocalDate,
+  SALES_REPORT_DEFAULT_DAYS,
   SALES_REPORT_MAX_DAYS,
   tashkentDay,
-  tashkentDayStart,
   tashkentDaySchema,
   type FragranceSales,
   type SalesDay,
   type SalesFigures,
   type SalesReport,
+  type SalesReportQuery,
   type SetSales,
   type VolumeSales,
 } from '@lummi/contracts';
-import {
-  and,
-  asc,
-  eq,
-  gte,
-  inArray,
-  lte,
-  or,
-  orderLines,
-  orders,
-  refunds,
-  sql,
-  type Db,
-  type DbOrTx,
-} from '@lummi/db';
-import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
+import { asc, inArray, orderLines, type Db, type DbOrTx } from '@lummi/db';
 import { discountShares } from './discount-shares';
+import { countedRefunds, deliveredIn, type TashkentRange } from './report-orders';
 
-/** Tashkent days `YYYY-MM-DD`, both inclusive. */
-export interface TashkentRange {
-  from: string;
-  to: string;
-}
+export type { TashkentRange } from './report-orders';
 
 /**
  * A range a report takes: two real Tashkent days written `YYYY-MM-DD`, `from` not after `to`,
@@ -56,6 +39,19 @@ export function daysEnding(to: string, days: number): TashkentRange {
 /** The last `days` Tashkent days up to `now`'s Tashkent day, that day included. */
 export function lastTashkentDays(days: number, now: Date): TashkentRange {
   return daysEnding(formatLocalDate(tashkentDay(now)), days);
+}
+
+/**
+ * The range a report URL asked for, a missing end filled in: no `to` is today (Tashkent), no
+ * `from` is 30 days up to `to`. Null when it is no report range (`isSalesRange`): backwards, or
+ * over a year. Every report takes its range this way (#42, #43).
+ */
+export function askedRange(query: SalesReportQuery, now: Date): TashkentRange | null {
+  const fallback = query.to
+    ? daysEnding(query.to, SALES_REPORT_DEFAULT_DAYS)
+    : lastTashkentDays(SALES_REPORT_DEFAULT_DAYS, now);
+  const range = { from: query.from ?? fallback.from, to: query.to ?? fallback.to };
+  return isSalesRange(range) ? range : null;
 }
 
 /**
@@ -92,46 +88,8 @@ export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesR
 
 async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport> {
   const days = daysOf(range);
-  const start = tashkentDayStart(range.from);
-  const end = tashkentDayStart(range.to, 1);
-
-  const sold = await db
-    .select({
-      id: orders.id,
-      at: fulfilledAt,
-      items: orders.itemsSubtotal,
-      discount: orders.discount,
-      discountAmount: orders.discountAmount,
-      delivery: orders.deliveryFee,
-    })
-    .from(orders)
-    .where(
-      and(
-        fulfilledOrder,
-        sql`${fulfilledAt} >= ${start.toISOString()}`,
-        sql`${fulfilledAt} < ${end.toISOString()}`,
-      ),
-    );
-
-  // a refund counts on greatest(its day, its order's delivery day), so the range takes those
-  // sent by its end for orders delivered by its end, and sent or delivered on or after its start
-  const refunded = await db
-    .select({
-      on: refunds.refundedOn,
-      delivered: fulfilledAt,
-      amount: sql<number>`sum(${refunds.amount})::bigint`.mapWith(Number),
-    })
-    .from(refunds)
-    .innerJoin(orders, eq(orders.id, refunds.orderId))
-    .where(
-      and(
-        fulfilledOrder,
-        lte(refunds.refundedOn, range.to),
-        sql`${fulfilledAt} < ${end.toISOString()}`,
-        or(gte(refunds.refundedOn, range.from), sql`${fulfilledAt} >= ${start.toISOString()}`),
-      ),
-    )
-    .groupBy(refunds.refundedOn, orders.id);
+  const sold = await deliveredIn(db, range);
+  const refunded = await countedRefunds(db, range);
 
   const lines = sold.length
     ? await db
@@ -162,16 +120,13 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   // ---- by day
   const byDay = new Map(days.map((day) => [day, blank()]));
   for (const o of sold) {
-    const f = byDay.get(formatLocalDate(tashkentDay(o.at!)))!;
+    const f = byDay.get(formatLocalDate(tashkentDay(o.deliveredAt)))!;
     f.orders += 1;
     f.itemsBeforeDiscount += o.items;
     f.discount += o.discountAmount;
     f.delivery += o.delivery;
   }
-  for (const r of refunded) {
-    const delivered = formatLocalDate(tashkentDay(r.delivered!));
-    byDay.get(r.on > delivered ? r.on : delivered)!.refunds += r.amount;
-  }
+  for (const r of refunded) byDay.get(r.day)!.refunds += r.amount;
   const daily: SalesDay[] = days.map((day) => ({ day, ...settle(byDay.get(day)!) }));
   const totals = settle(
     [...byDay.values()].reduce((sum, f) => {
@@ -200,7 +155,7 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   ]);
   for (const [orderId, its] of linesOf) {
     const o = order.get(orderId)!;
-    const at = o.at!.getTime();
+    const at = o.deliveredAt.getTime();
     const shares = discountShares(its, o.discount, o.discountAmount);
     its.forEach((l, i) => {
       const net = l.lineTotal - shares[i]!;
