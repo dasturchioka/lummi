@@ -23,7 +23,15 @@ Hosts, all from `DOMAIN`: `<DOMAIN>` (Mini App; `/api/*` is the API with the pre
 
 ## Staging layout (Sardor's shared VPS 185.209.228.62)
 
-- Host nginx owns 80/443 and terminates TLS (one certbot cert for the four hosts), proxying all of them to `127.0.0.1:4180` with `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`. Our Caddy runs `CADDY_SCHEME=http://` (plain HTTP, no ACME) and trusts forwarded headers from private ranges only. The admin cookie is `Secure` because the API runs with `NODE_ENV=production`.
+- Host nginx owns 80/443 and terminates TLS (one certbot cert for the four hosts), proxying all of them to `127.0.0.1:4180` with `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`. Our Caddy runs `CADDY_SCHEME=http://` (plain HTTP, no ACME) and trusts forwarded headers from `TRUSTED_PROXIES` only. The admin cookie is `Secure` because the API runs with `NODE_ENV=production`.
+- **The client address** (the sign-in lock per address, ADR 0038). Caddy reads it from the right of `X-Forwarded-For`, skipping only trusted hops (`trusted_proxies_strict`), and passes it to the API as `X-Real-IP` on every host. A proxy in front should send exactly the address it saw, not append to what the client sent:
+
+  ```nginx
+  proxy_set_header X-Forwarded-For $remote_addr;
+  ```
+
+  (`$proxy_add_x_forwarded_for` also works with the strict mode, which takes its last entry, but `$remote_addr` leaves nothing to get wrong.)
+- **IPv6.** If a host has an AAAA record but Docker has no IPv6, every IPv6 client reaches Caddy as the one Docker gateway address and shares one per-address count: twenty wrong passwords from anyone would lock sign-in for all IPv6 clients. Publish no AAAA record for the four hosts, or enable IPv6 in Docker (`"ipv6": true` with a `fixed-cidr-v6` in `daemon.json`, and `enable_ipv6` on the Compose network).
 - Deploy dir `/opt/lummi-staging` (owner `lummi-deploy`, mode 700): `.env` (written by Sardor, mode 600; `deploy/staging.env.example` lists the keys), `docker-compose.yml` (copied by CI), `.deploy.env` and `.deploy.env.prev` (written by CI after a successful deploy: `IMAGE_TAG`, `GHCR_OWNER`; no secrets).
 - Compose project `lummi-staging`. Manual commands (after one CI deploy has written `.deploy.env`): `cd /opt/lummi-staging && alias dc='docker compose --env-file .env --env-file .deploy.env'`.
 - Compose >= 2.27 is needed (volume `subpath`).
@@ -82,7 +90,7 @@ $dc run --rm -T api node --import tsx src/cli/seed-owner.ts --login <login> --na
 $dc run --rm -T api node --import tsx src/cli/set-owner-password.ts --login <login>
 ```
 
-`set-owner-password` prints a generated temporary password **once**, in this terminal only (the database keeps only its argon2id hash; it never reaches a log). Hand it to the owner in person or over a channel you trust, not in the project chat. At the first sign-in the panel asks for a new password and opens nothing else until it is set. `seed:owner` is idempotent: run again with `--login` for an owner seeded by Telegram id only, and it adds the login to that record.
+`set-owner-password` prints a generated temporary password **once**, in this terminal only (the database keeps only its argon2id hash; it never reaches a log). Hand it to the owner in person or over a channel you trust, not in the project chat. At the first sign-in the panel asks for a new password and opens nothing else until it is set. `seed:owner` is idempotent. To add a login to an owner seeded by Telegram id only, pass **the same `--telegram-id`** with the `--login` (`seed:owner --telegram-id <id> --login <login> --name "<name>"`): the record is found by its Telegram id and gains the login. A `--login`-only run that finds an owner without a login refuses and prints that command, so it never adds a second owner by mistake; `--new-owner` adds another owner on purpose (a developer account during development). `set-owner-password` also lifts a lock on that login.
 
 **The owner lost the password.** Run `set-owner-password --login <login>` again (the line above). It replaces the password with a new temporary one, ends every session the owner had, and is written to the audit log («Выдан временный пароль», actor «Система»). A manager's password is reset by the owner in the panel: Сотрудники → «Сбросить пароль». If the owner also forgot the login, read it from the database: `$dc exec postgres psql -U lummi -d lummi -c "select login, name from staff where role = 'owner'"`.
 
@@ -141,7 +149,7 @@ Then add `COMPOSE_PROFILES=userbot` to `.env` and `$dc up -d userbot`. Deploys k
 
 ## Production (customer's dedicated VPS)
 
-Same Compose file: `CADDY_SCHEME` empty (Caddy then also sends HSTS), no `CADDY_*_PUBLISH` or `TRUSTED_PROXIES` lines, DNS for the four hosts pointing at the server, ports 80/443 free. Caddy gets certificates itself. Deploys come from `v*` tags only (not wired yet; it needs the customer's SSH secrets).
+Same Compose file: `CADDY_SCHEME` empty (Caddy then also sends HSTS), no `CADDY_*_PUBLISH` or `TRUSTED_PROXIES` lines, DNS for the four hosts pointing at the server (A records; an AAAA record only with Docker IPv6, see the IPv6 note under Staging), ports 80/443 free. Caddy gets certificates itself. Deploys come from `v*` tags only (not wired yet; it needs the customer's SSH secrets).
 
 Host setup, Ubuntu 24.04 LTS, as root, in this order:
 
