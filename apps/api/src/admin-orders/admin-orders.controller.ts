@@ -3,7 +3,7 @@ import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
-import { AdminOrdersService, type MoveOutcome } from './admin-orders.service';
+import { AdminOrdersService, type CreditMarkAnswer, type MoveOutcome } from './admin-orders.service';
 
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 
@@ -118,5 +118,37 @@ export class AdminOrdersController {
       status: 200 as const,
       body: await this.orders.credits(query),
     }));
+  }
+
+  @TsRestHandler(adminContract.credits.markNotForOrder)
+  markNotForOrder(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.credits.markNotForOrder, async ({ params, body }) =>
+      markResponse(await this.orders.markNotForOrder(actor.id, params.id, body.note)),
+    );
+  }
+
+  @TsRestHandler(adminContract.credits.unmarkNotForOrder)
+  unmarkNotForOrder(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.credits.unmarkNotForOrder, async ({ params }) => {
+      const out = await this.orders.unmarkNotForOrder(actor.id, params.id);
+      // an unmark has no note to refuse
+      if (out.kind === 'note_too_long') throw new Error('unmark answered note_too_long');
+      return markResponse(out);
+    });
+  }
+}
+
+/** A «Не для заказа» mark or unmark as HTTP (#49): the credit now, 404, or 409 with the credit as it is. */
+function markResponse(out: CreditMarkAnswer) {
+  switch (out.kind) {
+    case 'done':
+      return { status: 200 as const, body: out.credit };
+    case 'not_found':
+      return notFound;
+    case 'credit_taken':
+    case 'credit_changed':
+      return { status: 409 as const, body: { code: out.kind, credit: out.credit } };
+    case 'note_too_long':
+      return { status: 422 as const, body: { code: out.kind, max: out.max } };
   }
 }

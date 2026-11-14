@@ -34,8 +34,9 @@ import { PaymentConfirmation } from './payment-confirmation';
 import { PaymentNotFound } from './payment-not-found';
 import {
   ACCEPTED_VERDICTS,
-  CANDIDATE,
+  candidatesOf,
   duplicateImageDistance,
+  hasCandidate,
   isDuplicate,
   isDuplicateReceipt,
   isRepeat,
@@ -83,9 +84,10 @@ class JudgeUnavailable extends Error {
  * Automatic payment matching (ADR 0012, 0013): a receipt under check is confirmed by the AI once
  * the money is on the shop card, without a person.
  *
- * - **Candidate credits** (GLOSSARY) of an order: not linked to any order, `amount_som` equal to
- *   its Amount due (a credit with tiyin never is), on the shop card (same last 4), and no earlier
- *   than the minute the order was created (Humo keeps only the minute).
+ * - **Candidate credits** (GLOSSARY) of an order: not linked to any order and not marked «Не для
+ *   заказа» (#49), `amount_som` equal to its Amount due (a credit with tiyin never is), on the shop
+ *   card (same last 4), and no earlier than the minute the order was created (Humo keeps only the
+ *   minute). The rule is `rules.ts`'s.
  * - A receipt is **checked** when it has a candidate it was never shown: right after the upload
  *   commits, on every "credit recorded" event, and by the `receipt-matching` sweep (the safety
  *   net for a lost queue entry). With none, nothing is asked and the receipt keeps waiting.
@@ -302,13 +304,12 @@ export class PaymentMatching implements OnApplicationShutdown {
   }
 
   /** Candidate credits of an order, oldest first. */
-  private async candidates(db: DbOrTx, order: OrderRow): Promise<Candidate[]> {
-    const { rows } = await db.execute<{ id: string; occurred_at: string | Date }>(sql`
-      select c.id, c.occurred_at
-      from ${orders} o join ${shopCard} sc on true join ${credits} c on ${CANDIDATE}
-      where o.id = ${order.id}
-      order by c.occurred_at, c.id`);
-    return rows.map((r) => ({ id: Number(r.id), occurredAt: new Date(r.occurred_at) }));
+  private candidates(db: DbOrTx, order: OrderRow): Promise<Candidate[]> {
+    return db
+      .select({ id: credits.id, occurredAt: credits.occurredAt })
+      .from(credits)
+      .where(sql`${credits.id} in (${candidatesOf(order.id)})`)
+      .orderBy(asc(credits.occurredAt), asc(credits.id));
   }
 
   /** Every credit the judge was already shown for this receipt. */
@@ -340,14 +341,11 @@ export class PaymentMatching implements OnApplicationShutdown {
           )
           or (
             not ${isDuplicate(maxDistance)}
-            and exists (
-              select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE}
-              where not exists (
+            and ${hasCandidate(sql`not exists (
                 select 1 from ${receiptChecks} k
                 where k.receipt_id = r.id and c.id = any(k.candidate_credit_ids)
               )
-              ${only.creditId !== undefined ? sql`and c.id = ${only.creditId}` : sql``}
-            )
+              ${only.creditId !== undefined ? sql`and c.id = ${only.creditId}` : sql``}`)}
           )
         )
       order by r.id`);

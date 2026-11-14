@@ -1,5 +1,15 @@
 import { ACCEPTED_RECEIPT_VERDICTS, WAITING_RECEIPT_VERDICTS } from '@lummi/contracts';
-import { orders, receipts, sql, type DbOrTx, type ReceiptRow, type SQL } from '@lummi/db';
+import {
+  alias,
+  credits,
+  orders,
+  receipts,
+  shopCard,
+  sql,
+  type DbOrTx,
+  type ReceiptRow,
+  type SQL,
+} from '@lummi/db';
 import { readSettings } from '../settings/settings.service';
 
 type ReceiptVerdict = ReceiptRow['verdict'];
@@ -19,7 +29,8 @@ export const sqlList = (values: readonly string[]) =>
  * THE Candidate credit rule (GLOSSARY; ADR 0012, 0013), in one place, as SQL over `o` (the
  * order), `c` (a credit) and `sc` (the shop card). Matching selects candidates with `CANDIDATE`;
  * `PaymentConfirmation` asks the same pieces about the one credit it is given, so it can tell
- * staff which one does not fit.
+ * staff which one does not fit. Every reader takes its credits through `candidatesOf`,
+ * `hasCandidate` or `FREE_CREDIT` below, never through joins of its own.
  */
 /** The credit is the order's Amount due to the so'm (a credit with tiyin has no `amount_som`). */
 export const AMOUNT_FITS = sql`c.amount_som = o.amount_due`;
@@ -29,7 +40,34 @@ export const IN_ORDER_TIME = sql`c.occurred_at >= date_trunc('minute', o.created
 export const ON_SHOP_CARD = sql`c.card_last4 = right(sc.number, 4)`;
 /** It paid no order yet. */
 export const UNLINKED = sql`not exists (select 1 from ${orders} paid where paid.credit_id = c.id)`;
-export const CANDIDATE = sql`(${AMOUNT_FITS}) and (${IN_ORDER_TIME}) and (${ON_SHOP_CARD}) and (${UNLINKED})`;
+/** Staff marked it «Не для заказа» (#49): money on the card that is not for an order. */
+export const NOT_FOR_ORDER = sql`c.not_for_order_at is not null`;
+/**
+ * It may still pay an order: no order holds it and nobody marked it not for an order. These are
+ * the admin Home's «Поступления без заказа» and the credits list's «Не привязано».
+ */
+export const FREE_CREDIT = sql`(${UNLINKED}) and not (${NOT_FOR_ORDER})`;
+export const CANDIDATE = sql`(${AMOUNT_FITS}) and (${IN_ORDER_TIME}) and (${ON_SHOP_CARD}) and (${FREE_CREDIT})`;
+
+/** The `credits` table as `c`, the alias every piece above names, for drizzle queries. */
+export const creditC = alias(credits, 'c');
+
+/**
+ * The ids of the credits `rule` (default `CANDIDATE`) holds for the order `orderId`, as a subquery
+ * for `<credit id> in (…)`. With no shop card `sc` is null, so no credit is on it.
+ */
+export function candidatesOf(orderId: number, rule: SQL = CANDIDATE): SQL {
+  return sql`select c.id from ${orders} o join ${credits} c on true left join ${shopCard} sc on true
+    where o.id = ${orderId} and (${rule})`;
+}
+
+/**
+ * The outer query's order `o` has a Candidate credit (and `extra` holds for it, when given). No
+ * shop card, no candidates.
+ */
+export function hasCandidate(extra?: SQL): SQL {
+  return sql`exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE} ${extra ? sql`where ${extra}` : sql``})`;
+}
 
 /**
  * Receipts `a` and `b` (SQL aliases) are the same receipt: the same file (SHA-256), or, while the

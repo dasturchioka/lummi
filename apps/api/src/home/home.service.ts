@@ -46,7 +46,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { customerName, paymentState } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
 import type { Edges } from '../edges';
-import { CANDIDATE } from '../payment/rules';
+import { candidatesOf, creditC, FREE_CREDIT } from '../payment/rules';
 import { lastFour, readShopCard } from '../payment/shop-card.service';
 import { orderMoney, refundOwed } from '../refunds/order-money';
 import { lastTashkentDays, roundedAverage, salesSummary } from '../reports/sales-summary';
@@ -72,7 +72,7 @@ type Oldest = { id: number; since: Date };
 type Waiting<T = Oldest> = { count: number; oldest: T | null };
 
 type WaitingQueues = Record<Exclude<HomeQueue, 'stock' | 'credits'>, Waiting> & {
-  /** The oldest unlinked credit's whole row: the Now item is built from it. */
+  /** The oldest free credit's whole row: the Now item is built from it. */
   credits: Waiting<CreditRow>;
 };
 
@@ -120,7 +120,8 @@ const enteredStatus =
  * oldest item, the Now item with its facts (`pickNow`), the pause and card state; for the owner,
  * money in today and #42's net sales (`salesSummary`, the one net-sales computation), and the
  * system line. Each queue counts exactly what its list shows behind its link: the receipts the
- * orders list calls `manual_review`, the orders in a status, unlinked credits, `refund_owed`,
+ * orders list calls `manual_review`, the orders in a status, free credits (`FREE_CREDIT`: no order
+ * holds them, nobody marked them «Не для заказа»), `refund_owed`,
  * stock `low` among visible fragrances, reviews waiting for a decision. Both roles read the shop
  * card (a manager's answer carries only whether one is set); the sales and the system line are
  * read for the owner only.
@@ -181,13 +182,12 @@ export class HomeService {
         byStatus(STATUS_QUEUES.accept),
         byStatus(STATUS_QUEUES.assemble),
         byStatus(STATUS_QUEUES.bts),
-        // «Не привязано», as the credits list reads it: no order holds it
+        // «Не привязано», as the credits list reads it: no order holds it, not marked (#49)
         this.db
-          .select({ credit: credits, n: total })
-          .from(credits)
-          .leftJoin(orders, eq(orders.creditId, credits.id))
-          .where(isNull(orders.id))
-          .orderBy(asc(credits.occurredAt), asc(credits.id))
+          .select({ credit: creditC, n: total })
+          .from(creditC)
+          .where(FREE_CREDIT)
+          .orderBy(asc(creditC.occurredAt), asc(creditC.id))
           .limit(1),
         this.db
           .select({ id: orders.id, since: enteredStatus, n: total })
@@ -338,12 +338,11 @@ export class HomeService {
       readSettings(this.db, ['payments.uncheckedReceiptAlertSeconds']),
       // the first Candidate credit (#32's rule): what the manager compares the receipt with
       this.db
-        .execute<{ amount_tiyin: string; occurred_at: string | Date; card_last4: string }>(
-          sql`select c.amount_tiyin, c.occurred_at, c.card_last4 from ${credits} c
-            join ${orders} o on o.id = ${order.id} left join shop_card sc on true
-            where ${CANDIDATE} order by c.occurred_at asc, c.id asc limit 1`,
-        )
-        .then((r) => r.rows),
+        .select()
+        .from(credits)
+        .where(sql`${credits.id} in (${candidatesOf(order.id)})`)
+        .orderBy(asc(credits.occurredAt), asc(credits.id))
+        .limit(1),
     ]);
     return {
       kind: 'receipt',
@@ -356,9 +355,9 @@ export class HomeService {
       reviewReason: held?.reviewReason ?? null,
       credit: credit
         ? {
-            amountTiyin: Number(credit.amount_tiyin),
-            at: moment(new Date(credit.occurred_at)),
-            cardLast4: credit.card_last4,
+            amountTiyin: credit.amountTiyin,
+            at: moment(credit.occurredAt),
+            cardLast4: credit.cardLast4,
           }
         : null,
     };

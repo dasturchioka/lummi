@@ -22,7 +22,7 @@ import { forEachSettled } from '../util/for-each-settled';
 import { retryTransientOnce } from '../util/transient';
 import { WorkerRuntime } from '../worker/runtime';
 import { PAUSED, PaymentPauses, pausedSecondsAfter, sqlInstant } from './payment-pauses';
-import { CANDIDATE, sqlList, WAITING_VERDICTS } from './rules';
+import { hasCandidate, sqlList, WAITING_VERDICTS } from './rules';
 import { paymentNotFoundPost, repeatedReceiptPost, uncheckedReceiptAlert } from './staff-posts';
 
 /** How many receipts one tick decides at most; the next tick takes the rest. */
@@ -263,6 +263,6 @@ function due(windowSeconds: number, now: Date) {
     and ${windowEnd} <= ${sqlInstant(now)}
     and exists (select 1 from ${userbotHeartbeat} h where h.seen_at >= ${windowEnd})
     and exists (select 1 from ${shopCard})
-    and not exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE})
+    and not ${hasCandidate()}
   )`;
 }

@@ -15,6 +15,7 @@ import {
   type AdminOrdersPageDto,
   type AdminOrdersQuery,
   type AdminReceiptDto,
+  type CreditLinkFilter,
   type CreditOptionsDto,
   type ReceiptCheckDto,
   type StaffConfirmBody,
@@ -31,7 +32,6 @@ import {
   and,
   asc,
   credits,
-  isNull,
   customers,
   desc,
   eq,
@@ -43,8 +43,10 @@ import {
   receipts,
   sql,
   staff,
+  type CreditRow,
   type Db,
   type OrderRow,
+  type SQL,
 } from '@lummi/db';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuditQueryService } from '../audit/audit-query.service';
@@ -55,7 +57,17 @@ import { customerName, PAID_BY, paymentState } from '../orders/order-read';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
-import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
+import { CreditMarks, type CreditMarkOutcome } from '../payment/credit-marks';
+import {
+  ACCEPTED_VERDICTS,
+  CANDIDATE,
+  candidatesOf,
+  creditC,
+  FREE_CREDIT,
+  IN_ORDER_TIME,
+  NOT_FOR_ORDER,
+  UNLINKED,
+} from '../payment/rules';
 import { heldEntitlement } from '../entitlements/entitlements';
 import { readShopCard } from '../payment/shop-card.service';
 import { orderMoney, refundOwed, refundedSum, refundsOf } from '../refunds/order-money';
@@ -69,7 +81,7 @@ type ListQuery = { page: number; pageSize: number } & Omit<AdminOrdersQuery, 'pa
 type CreditsQuery = {
   page: number;
   pageSize: number;
-  linked: 'all' | 'unlinked' | 'linked';
+  linked: CreditLinkFilter;
 } & Omit<AdminCreditsQuery, 'page' | 'pageSize' | 'linked'>;
 
 /** What a staff move on an order answers (#33): the order page now, or why not. */
@@ -103,6 +115,12 @@ export type MoveOutcome =
     }
   | { kind: 'try_again' };
 
+/** What a «Не для заказа» mark or unmark answers (#49): the credit as it is now, or why not. */
+export type CreditMarkAnswer =
+  | { kind: 'done' | 'credit_taken' | 'credit_changed'; credit: AdminCreditDto }
+  | { kind: 'not_found' }
+  | { kind: 'note_too_long'; max: number };
+
 /** The digits of a phone as stored (E.164 with `+`), for a search by part of the number. */
 const digitsOf = (column: unknown) =>
   sql`regexp_replace(coalesce(${column}, ''), '[^0-9]', '', 'g')`;
@@ -127,6 +145,7 @@ export class AdminOrdersService {
     @Inject(AuditQueryService) private readonly auditQuery: AuditQueryService,
     @Inject(Refunds) private readonly refunds: Refunds,
     @Inject(ReviewsService) private readonly reviews: ReviewsService,
+    @Inject(CreditMarks) private readonly marks: CreditMarks,
   ) {}
 
   /** Newest first. A search puts the order with that number first, then phone matches. */
@@ -389,52 +408,100 @@ export class AdminOrdersService {
     });
   }
 
-  /** Credits newest first; «Не привязано» are those no order holds. */
+  /**
+   * Credits newest first: the order each paid, or «Не привязано» (no order holds it and nobody
+   * marked it, `FREE_CREDIT`), or «Не для заказа» with who marked it, when and why (#49).
+   */
   async credits(q: CreditsQuery): Promise<AdminCreditsPageDto> {
-    const conditions = [];
-    if (q.linked === 'linked') conditions.push(sql`${orders.id} is not null`);
-    if (q.linked === 'unlinked') conditions.push(isNull(orders.id));
-    if (q.amount !== undefined) conditions.push(eq(credits.amountSom, q.amount));
-    if (q.from) conditions.push(sql`${credits.occurredAt} >= ${dayStart(q.from).toISOString()}`);
-    if (q.to) conditions.push(sql`${credits.occurredAt} < ${dayStart(q.to, 1).toISOString()}`);
+    const c = creditC;
+    const conditions: SQL[] = [];
+    if (q.linked === 'linked') conditions.push(sql`not (${UNLINKED})`);
+    if (q.linked === 'unlinked') conditions.push(FREE_CREDIT);
+    if (q.linked === 'not_for_order') conditions.push(NOT_FOR_ORDER);
+    if (q.amount !== undefined) conditions.push(eq(c.amountSom, q.amount));
+    if (q.from) conditions.push(sql`${c.occurredAt} >= ${dayStart(q.from).toISOString()}`);
+    if (q.to) conditions.push(sql`${c.occurredAt} < ${dayStart(q.to, 1).toISOString()}`);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
-    const [{ total } = { total: 0 }] = await this.db
-      .select({ total: sql<number>`count(*)::int` })
-      .from(credits)
-      .leftJoin(orders, eq(orders.creditId, credits.id))
-      .where(where);
-    const rows = await this.db
-      .select({ credit: credits, number: orders.number })
-      .from(credits)
-      .leftJoin(orders, eq(orders.creditId, credits.id))
-      .where(where)
-      .orderBy(desc(credits.occurredAt), desc(credits.id))
-      .limit(q.pageSize)
-      .offset((q.page - 1) * q.pageSize);
-    const card = await readShopCard(this.db);
+    const [[{ total } = { total: 0 }], rows, card, limits] = await Promise.all([
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(c)
+        .where(where),
+      this.db
+        .select({ credit: c, number: orders.number, markedBy: staff.name })
+        .from(c)
+        .leftJoin(orders, eq(orders.creditId, c.id))
+        .leftJoin(staff, eq(staff.id, c.notForOrderBy))
+        .where(where)
+        .orderBy(desc(c.occurredAt), desc(c.id))
+        .limit(q.pageSize)
+        .offset((q.page - 1) * q.pageSize),
+      readShopCard(this.db),
+      readSettings(this.db, ['payments.creditMarkNoteMaxLength']),
+    ]);
     const last4 = card?.number.slice(-4) ?? null;
     return {
       items: rows.map((r) =>
-        toCreditDto(r.credit, last4, r.number === null ? null : { number: r.number }),
+        toCreditDto(
+          r.credit,
+          last4,
+          r.number === null ? null : { number: r.number },
+          r.markedBy,
+        ),
       ),
       total,
       page: q.page,
       pageSize: q.pageSize,
+      limits: { markNoteMax: limits['payments.creditMarkNoteMaxLength'] },
     };
+  }
+
+  /** «Не для заказа» (#49) through `CreditMarks`, by this staff member: the credit as it is now. */
+  async markNotForOrder(staffId: number, id: number, note?: string): Promise<CreditMarkAnswer> {
+    return this.creditAnswer(await this.marks.mark(staffId, id, note));
+  }
+
+  /** «Вернуть в поступления» (#49): the mark comes off; the credit as it is now. */
+  async unmarkNotForOrder(staffId: number, id: number): Promise<CreditMarkAnswer> {
+    return this.creditAnswer(await this.marks.unmark(staffId, id));
+  }
+
+  private async creditAnswer(out: CreditMarkOutcome): Promise<CreditMarkAnswer> {
+    switch (out.kind) {
+      case 'not_found':
+      case 'note_too_long':
+        return out;
+      case 'done':
+      case 'credit_taken':
+      case 'credit_changed':
+        return { kind: out.kind, credit: await this.creditDto(out.credit) };
+    }
+  }
+
+  /** One credit as the list shows it: the order it paid, or its mark with who set it. */
+  private async creditDto(c: CreditRow): Promise<AdminCreditDto> {
+    const [[payer], [marker], card] = await Promise.all([
+      this.db.select({ number: orders.number }).from(orders).where(eq(orders.creditId, c.id)),
+      c.notForOrderBy === null
+        ? Promise.resolve([])
+        : this.db.select({ name: staff.name }).from(staff).where(eq(staff.id, c.notForOrderBy)),
+      readShopCard(this.db),
+    ]);
+    return toCreditDto(c, card?.number.slice(-4) ?? null, payer ?? null, marker?.name ?? null);
   }
 
   /**
    * The credits a manager may link to the order: its Candidate credits (#32's rule, `rules.ts`),
-   * oldest first, then the other unlinked credits from the order's minute on, newest first. One
-   * from before the order never pays it, so it is not offered.
+   * oldest first, then the other free credits from the order's minute on, newest first. One from
+   * before the order never pays it, and one marked «Не для заказа» pays none (#49): neither is
+   * offered.
    */
   async creditOptions(number: number): Promise<CreditOptionsDto | null> {
     if (!knownNumber(number)) return null;
     const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
     if (!o) return null;
-    const over = (cond: ReturnType<typeof sql>) =>
-      sql`${credits.id} in (select c.id from ${credits} c join ${orders} o on o.id = ${o.id} left join shop_card sc on true where ${cond})`;
-    const other = sql`(${UNLINKED}) and (${IN_ORDER_TIME}) and not coalesce((${CANDIDATE}), false)`;
+    const over = (rule: SQL) => sql`${credits.id} in (${candidatesOf(o.id, rule)})`;
+    const other = sql`(${FREE_CREDIT}) and (${IN_ORDER_TIME}) and not coalesce((${CANDIDATE}), false)`;
     const [candidates, others, [{ total } = { total: 0 }], card] = await Promise.all([
       this.db
         .select()
@@ -686,6 +753,8 @@ export function toCreditDto(
   c: typeof credits.$inferSelect,
   shopCardLast4: string | null,
   order: { number: number } | null,
+  /** The name of the staff member who marked it «Не для заказа»; null once they were removed. */
+  markedBy: string | null = null,
 ): AdminCreditDto {
   return {
     id: c.id,
@@ -697,6 +766,14 @@ export function toCreditDto(
     onShopCard: shopCardLast4 !== null && c.cardLast4 === shopCardLast4,
     counterparty: c.counterparty,
     order,
+    notForOrder:
+      c.notForOrderAt !== null && c.notForOrderBy !== null
+        ? {
+            at: c.notForOrderAt.toISOString(),
+            by: { id: c.notForOrderBy, name: markedBy },
+            note: c.notForOrderNote,
+          }
+        : null,
   };
 }
 
