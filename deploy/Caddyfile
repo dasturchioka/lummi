@@ -97,7 +97,11 @@
 	}
 	handle /api/* {
 		uri strip_prefix /api
-		reverse_proxy api:4000
+		# the client's address for the sign-in locks (ADR 0038): resolved through trusted_proxies,
+		# and it overwrites whatever X-Real-IP a client sent
+		reverse_proxy api:4000 {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 	handle {
 		reverse_proxy admin:3000
