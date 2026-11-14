@@ -442,12 +442,7 @@ export class AdminOrdersService {
     const last4 = card?.number.slice(-4) ?? null;
     return {
       items: rows.map((r) =>
-        toCreditDto(
-          r.credit,
-          last4,
-          r.number === null ? null : { number: r.number },
-          r.markedBy,
-        ),
+        toCreditDto(r.credit, last4, r.number === null ? null : { number: r.number }, r.markedBy),
       ),
       total,
       page: q.page,

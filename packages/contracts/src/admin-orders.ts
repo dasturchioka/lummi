@@ -198,7 +198,10 @@ export const creditMarkBodySchema = z
     note: z
       .string()
       .trim()
-      .refine((v) => charCount(v) <= CREDIT_MARK_NOTE_MAX, `at most ${CREDIT_MARK_NOTE_MAX} characters`)
+      .refine(
+        (v) => charCount(v) <= CREDIT_MARK_NOTE_MAX,
+        `at most ${CREDIT_MARK_NOTE_MAX} characters`,
+      )
       .optional(),
   })
   .strict();

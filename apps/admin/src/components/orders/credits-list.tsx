@@ -23,6 +23,7 @@ import { formatTashkent, num } from '@/lib/setting-copy';
 import { TEXT_LINK } from '@/lib/ui-classes';
 import { listHref } from '@/lib/list-page';
 import { cn, fill } from '@/lib/utils';
+import { MarkCreditDialog, UnmarkCreditDialog, type MarkResult } from './credit-mark-dialogs';
 import { LinkCreditDialog } from './link-credit-dialog';
 
 export type CreditFilters = { linked?: string; amount?: string; from?: string; to?: string };
@@ -35,19 +36,34 @@ type Props = {
   page: number;
   pageSize: number;
   filters: CreditFilters;
+  /** The «Не для заказа» note's limit (the setting `payments.creditMarkNoteMaxLength`). */
+  noteMax: number;
 };
 
 /**
- * «Поступления» (#33): every Humo credit, newest first, with the order it paid or «Не
- * привязано». The amount is exact to the tiyin; a credit with tiyin, or one to another card, says
- * why it can never pay an order on its own.
+ * «Поступления» (#33): every Humo credit, newest first, with the order it paid, «Не привязано»,
+ * or «Не для заказа» with who marked it, when and their note (#49). The amount is exact to the
+ * tiyin; a credit with tiyin, or one to another card, says why it can never pay an order on its
+ * own. A free credit offers «Привязать к заказу» and «Не для заказа»; a marked one «Вернуть в
+ * поступления».
  */
-export function CreditsList({ t, language, items, total, page, pageSize, filters }: Props) {
+export function CreditsList({
+  t,
+  language,
+  items,
+  total,
+  page,
+  pageSize,
+  filters,
+  noteMax,
+}: Props) {
   const c = t.credits;
   const f = c.filters;
   const router = useRouter();
   const [linking, setLinking] = useState<AdminCreditDto | null>(null);
-  const [linked, setLinked] = useState<number | null>(null);
+  const [marking, setMarking] = useState<AdminCreditDto | null>(null);
+  const [unmarking, setUnmarking] = useState<AdminCreditDto | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const active = [filters.linked, filters.amount, filters.from, filters.to].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
   const hidden = !open && 'max-sm:hidden';
@@ -65,31 +81,82 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
     [!it.onShopCard && c.otherCard, it.amountSom === null && c.withTiyin].filter((x): x is string =>
       Boolean(x),
     );
-  /** The order it paid, or «Не привязано». */
+  /** The order it paid, «Не для заказа», or «Не привязано». */
   const status = (it: AdminCreditDto) =>
     it.order ? (
       <Link href={`/orders/${it.order.number}`} className={cn(TEXT_LINK, 'whitespace-nowrap')}>
         {fill(c.order, { number: String(it.order.number) })}
       </Link>
+    ) : it.notForOrder ? (
+      <Badge>{c.notForOrder}</Badge>
     ) : (
       <Badge>{c.unlinked}</Badge>
     );
-  /** «Привязать к заказу», left-aligned with the row's content. */
-  const linkAction = (it: AdminCreditDto) =>
-    it.order ? null : (
-      <Button
-        variant="outline"
-        size="sm"
-        className="justify-self-start"
-        onClick={() => {
-          setLinked(null);
-          setLinking(it);
-        }}
-        data-link-credit={it.id}
-      >
-        {c.linkAction}
-      </Button>
+  /** Who marked it «Не для заказа» and when, then their note. */
+  const markInfo = (it: AdminCreditDto) =>
+    it.notForOrder && (
+      <div className="grid gap-0.5 text-small" data-credit-mark={it.id}>
+        <p className="text-muted-foreground tabular-nums">
+          {fill(c.markedBy, {
+            name: it.notForOrder.by.name ?? t.audit.actors.unknownStaff,
+            at: formatTashkent(it.notForOrder.at),
+          })}
+        </p>
+        {it.notForOrder.note && (
+          <p className="[overflow-wrap:anywhere] whitespace-pre-line">{it.notForOrder.note}</p>
+        )}
+      </div>
     );
+  /**
+   * A free credit: «Привязать к заказу» (outline) and the quieter «Не для заказа». A marked one:
+   * «Вернуть в поступления». Left-aligned with the row's content; they wrap on a narrow row.
+   */
+  const actions = (it: AdminCreditDto) => {
+    if (it.order) return null;
+    const start = (dialog: (credit: AdminCreditDto) => void) => () => {
+      setNotice(null);
+      dialog(it);
+    };
+    return (
+      <div className="flex flex-wrap gap-2 justify-self-start">
+        {it.notForOrder ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={start(setUnmarking)}
+            data-unmark-credit={it.id}
+          >
+            {c.unmarkAction}
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={start(setLinking)}
+              data-link-credit={it.id}
+            >
+              {c.linkAction}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={start(setMarking)} data-mark-credit={it.id}>
+              {c.markAction}
+            </Button>
+          </>
+        )}
+      </div>
+    );
+  };
+  /** A mark or an unmark ended: say how, and reload the list either way. */
+  const marked = (result: MarkResult) => {
+    setMarking(null);
+    setUnmarking(null);
+    setNotice(
+      { marked: c.marked, unmarked: c.unmarked, taken: c.markTaken, changed: c.markChanged }[
+        result
+      ],
+    );
+    router.refresh();
+  };
   /** Why it cannot pay an order by itself, as chips: another card, tiyin in the amount. */
   const chips = (it: AdminCreditDto) => {
     const why = caveat(it);
@@ -181,9 +248,7 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
         {badRange && <Notice title={t.orders.badRange} className="mt-3" />}
       </Card>
 
-      {linked !== null && (
-        <Notice title={fill(c.linked, { number: String(linked) })} className="mb-4" />
-      )}
+      {notice !== null && <Notice title={notice} className="mb-4" />}
 
       {items.length === 0 ? (
         <EmptyState
@@ -227,7 +292,8 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
                   ]}
                 />
                 {chips(it)}
-                {linkAction(it)}
+                {markInfo(it)}
+                {actions(it)}
               </li>
             ))}
           </ul>
@@ -268,9 +334,15 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
                       {it.counterparty}
                     </TD>
                     <TD>
-                      <div className="grid justify-items-start gap-1.5">
+                      <div
+                        className={cn(
+                          'grid justify-items-start gap-1.5',
+                          !it.order && 'min-w-[17rem] max-w-[22rem]',
+                        )}
+                      >
                         {status(it)}
-                        {linkAction(it)}
+                        {markInfo(it)}
+                        {actions(it)}
                       </div>
                     </TD>
                   </TR>
@@ -290,9 +362,32 @@ export function CreditsList({ t, language, items, total, page, pageSize, filters
           onOpenChange={(open) => !open && setLinking(null)}
           onLinked={(number) => {
             setLinking(null);
-            setLinked(number);
+            setNotice(fill(c.linked, { number: String(number) }));
             router.refresh();
           }}
+        />
+      )}
+
+      {marking && (
+        <MarkCreditDialog
+          key={marking.id}
+          credit={marking}
+          noteMax={noteMax}
+          t={t}
+          language={language}
+          onOpenChange={(open) => !open && setMarking(null)}
+          onDone={marked}
+        />
+      )}
+
+      {unmarking && (
+        <UnmarkCreditDialog
+          key={unmarking.id}
+          credit={unmarking}
+          t={t}
+          language={language}
+          onOpenChange={(open) => !open && setUnmarking(null)}
+          onDone={marked}
         />
       )}
 
