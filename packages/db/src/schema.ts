@@ -143,16 +143,71 @@ export const btsPoints = pgTable(
   (t) => [index('bts_points_region_city_idx').on(t.regionId, t.city)],
 );
 
-/** Staff (ADR 0017): gates the admin panel and the orders-group buttons; audit entries point here. */
-export const staff = pgTable('staff', {
-  id: id(),
-  telegramId: bigint('telegram_id', { mode: 'number' }).notNull().unique(),
-  name: text('name').notNull(),
-  role: staffRoleEnum('role').notNull(),
-  active: boolean('active').notNull().default(true),
-  createdAt: createdAt(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+/**
+ * Staff (ADR 0017, 0038): gates the admin panel and the orders-group buttons; audit entries point
+ * here. A member signs in with a login and password, or with the Telegram account bound to the
+ * record (the group buttons know them only by that). Every record keeps at least one way in.
+ */
+export const staff = pgTable(
+  'staff',
+  {
+    id: id(),
+    /** Bound through the bot's one-time link (ADR 0038); null until the member links it. */
+    telegramId: bigint('telegram_id', { mode: 'number' }).unique(),
+    /** Stored lower-case, so unique case-insensitively; null for a Telegram-only record. */
+    login: text('login').unique(),
+    /** argon2id as a PHC string; never logged or returned. Null until a password is set. */
+    passwordHash: text('password_hash'),
+    /** A temporary password (set by the owner or the CLI): nothing else works until it is changed. */
+    mustChangePassword: boolean('must_change_password').notNull().default(false),
+    name: text('name').notNull(),
+    role: staffRoleEnum('role').notNull(),
+    active: boolean('active').notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('staff_login_format', sql`${t.login} ~ '^[a-z0-9._-]{3,32}$'`),
+    check('staff_password_needs_login', sql`${t.passwordHash} is null or ${t.login} is not null`),
+    check('staff_has_way_in', sql`${t.telegramId} is not null or ${t.login} is not null`),
+  ],
+);
+
+/**
+ * Failed password sign-ins (ADR 0038), one row per login and one per client address: the count
+ * in the current window, and the lock it led to. The numbers are settings (`auth.password*`).
+ */
+export const loginThrottleScopeEnum = pgEnum('login_throttle_scope', ['login', 'ip']);
+export const loginThrottles = pgTable(
+  'login_throttles',
+  {
+    scope: loginThrottleScopeEnum('scope').notNull(),
+    key: text('key').notNull(),
+    failures: integer('failures').notNull(),
+    windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull(),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.scope, t.key] })],
+);
+
+/**
+ * «Привязать Telegram» (ADR 0038): a one-time token behind `t.me/<bot>?start=staff_<token>`; only
+ * its SHA-256 is stored. Opening it in Telegram binds that account to the staff record once.
+ */
+export const staffTelegramLinks = pgTable(
+  'staff_telegram_links',
+  {
+    id: id(),
+    staffId: bigint('staff_id', { mode: 'number' })
+      .notNull()
+      .references(() => staff.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('staff_telegram_links_staff_idx').on(t.staffId)],
+);
 
 /** Admin panel sessions: the cookie holds a random token, only its SHA-256 is stored; revocable. */
 export const staffSessions = pgTable(

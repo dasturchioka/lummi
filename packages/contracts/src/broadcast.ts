@@ -85,6 +85,8 @@ export const broadcastErrorSchema = z.object({
     'invalid',
     'test_blocked',
     'test_failed',
+    /** «Отправить себе» needs the owner's Telegram linked (ADR 0038). */
+    'test_unlinked',
   ]),
   fields: z.array(z.string()).optional(),
 });

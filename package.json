@@ -20,6 +20,7 @@
     "dev:admin": "npm run dev -w @lummi/admin",
     "seed:catalog": "npm run seed:catalog -w @lummi/api",
     "seed:owner": "npm run seed:owner -w @lummi/api --",
+    "set-owner-password": "npm run set-owner-password -w @lummi/api --",
     "db:up": "docker compose -f docker-compose.dev.yml up -d --wait",
     "db:down": "docker compose -f docker-compose.dev.yml down",
     "db:generate": "npm run generate -w @lummi/db",

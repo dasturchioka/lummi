@@ -1,5 +1,6 @@
+import { STAFF_LINK_START } from '@lummi/contracts';
 import { processedUpdates, type DbOrTx } from '@lummi/db';
-import type { Language } from '@lummi/i18n';
+import { fill, languageFromTelegram, type Language } from '@lummi/i18n';
 import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable, Logger, type OnApplicationShutdown } from '@nestjs/common';
 import { Bot, type Context } from 'grammy';
@@ -16,6 +17,7 @@ import { REVIEW_CALLBACK, ReviewsBot } from '../reviews/reviews-bot';
 import { CARD_CALLBACK } from '../orders-group/card-view';
 import { OrderCards } from '../orders-group/order-cards';
 import { OrdersGroupBot } from '../orders-group/orders-group-bot';
+import { StaffTelegramLinks, type BindResult } from '../staff/telegram-link.service';
 
 export const BOT_INFO = Symbol('BOT_INFO');
 
@@ -45,6 +47,7 @@ export class BotService implements OnApplicationShutdown {
     @Inject(ReviewsBot) private readonly reviewsBot: ReviewsBot,
     @Inject(OrdersGroupBot) private readonly ordersGroup: OrdersGroupBot,
     @Inject(OrderCards) private readonly orderCards: OrderCards,
+    @Inject(StaffTelegramLinks) private readonly staffLinks: StaffTelegramLinks,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(BOT_INFO) botInfo: UserFromGetMe | undefined,
   ) {
@@ -150,6 +153,8 @@ export class BotService implements OnApplicationShutdown {
 
   private async onStart(ctx: BotContext): Promise<void> {
     if (ctx.chat?.type !== 'private' || !ctx.from || ctx.from.is_bot) return;
+    const payload = typeof ctx.match === 'string' ? ctx.match.trim() : '';
+    if (payload.startsWith('staff_')) return this.onStaffLink(ctx, payload);
     const customer = await this.customers.signIn(ctx.from, ctx.tx);
     await this.customers.markStarted(ctx.from.id, ctx.tx);
     ctx.afterCommit.push(() => this.setMenuButton(ctx.from!.id, customer.language));
@@ -162,6 +167,22 @@ export class BotService implements OnApplicationShutdown {
         ? { reply_markup: { inline_keyboard: [[{ text: t.openShop, web_app: { url } }]] } }
         : {},
     });
+  }
+
+  /**
+   * «Привязать Telegram» (ADR 0038): `/start staff_<token>` from the link in a staff member's
+   * admin profile binds this Telegram account to them. Not a shopper's /start: no customer record,
+   * no greeting; the answer is in the language of this Telegram.
+   */
+  private async onStaffLink(ctx: BotContext, payload: string): Promise<void> {
+    const from = ctx.from!;
+    const token = STAFF_LINK_START.exec(payload)?.[1];
+    const res: BindResult = token
+      ? await this.staffLinks.bind(ctx.tx, token, from.id)
+      : { result: 'invalid' };
+    const t = dictionaries[languageFromTelegram(from.language_code)].bot.staffLink;
+    const text = res.result === 'linked' ? fill(t.linked, { name: res.staff.name }) : t[res.result];
+    await this.outbox.enqueue(ctx.tx, { chatId: from.id, text });
   }
 
   /** A photo or document in a private chat is a receipt (#31). */

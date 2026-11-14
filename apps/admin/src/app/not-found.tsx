@@ -13,7 +13,8 @@ import { getMe } from '@/lib/server-api';
 export default async function NotFound() {
   const { language, t } = await getAdminMessages();
   const me = await getMe().catch(() => null);
-  if (me?.status === 200) {
+  // a member on a temporary password sees no menu until it is changed (ADR 0038)
+  if (me?.status === 200 && !me.body.mustChangePassword) {
     return (
       <PanelShell member={me.body} language={language} t={t}>
         <NotFoundState t={t} />

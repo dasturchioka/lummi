@@ -68,8 +68,9 @@ export class OrdersGroupBot {
    * drew (forged data, a step that does not exist) answers «Нельзя» and changes nothing.
    */
   async onTap(tx: DbOrTx, tap: CardTap): Promise<string | undefined> {
-    const member = await this.activeStaff(tx, tap.fromId);
-    if (!member) return g.noAccess;
+    const presser = await this.activeStaff(tx, tap.fromId);
+    if (!presser.ok) return presser.refusal;
+    const member = presser.member;
     const press = decodePress(tap.data);
     if (!press) return g.refused;
     const actor: TransitionActor = { type: 'staff', id: member.id };
@@ -154,11 +155,12 @@ export class OrdersGroupBot {
       });
     const number = String(prompt.number);
 
-    const member = await this.activeStaff(tx, m.fromId);
-    if (!member) {
-      await say(g.noAccess);
+    const replier = await this.activeStaff(tx, m.fromId);
+    if (!replier.ok) {
+      await say(replier.refusal);
       return true;
     }
+    const member = replier.member;
     if (prompt.closedAt) {
       // answered already, or a newer question replaced it while the order still waits for one
       await say(
@@ -279,10 +281,17 @@ export class OrdersGroupBot {
       .where(and(eq(orderCardPrompts.orderId, orderId), isNull(orderCardPrompts.closedAt)));
   }
 
-  /** Staff by Telegram id, only while active (ADR 0017). */
-  private async activeStaff(tx: DbOrTx, telegramId: number): Promise<StaffRow | null> {
+  /**
+   * Staff by Telegram id, only while active (ADR 0017). A Telegram account bound to nobody hears
+   * how a staff member binds theirs (ADR 0038); a switched-off member, only «Нет доступа».
+   */
+  private async activeStaff(
+    tx: DbOrTx,
+    telegramId: number,
+  ): Promise<{ ok: true; member: StaffRow } | { ok: false; refusal: string }> {
     const member = await this.staff.findByTelegramId(telegramId, tx);
-    return member?.active ? member : null;
+    if (!member) return { ok: false, refusal: g.noAccessUnlinked };
+    return member.active ? { ok: true, member } : { ok: false, refusal: g.noAccess };
   }
 
   /** The card moved on since it was drawn: say so, and draw it again as it is now. */

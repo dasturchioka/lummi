@@ -4,26 +4,52 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  SetMetadata,
   UnauthorizedException,
   createParamDecorator,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { readCookie } from './cookie';
 import { STAFF_COOKIE, StaffSessionService } from './staff-session.service';
 
-export type StaffRequest = Request & { staff?: StaffRow };
+export type StaffRequest = Request & { staff?: StaffRow; staffToken?: string };
 
-/** Any active staff member with a live session cookie. */
+const DURING_PASSWORD_CHANGE = 'lummi:allowedDuringPasswordChange';
+
+/**
+ * Marks an endpoint a member signed in with a temporary password may still call (who am I, the
+ * password policy, the change itself). Everything else answers 403 `password_change_required`.
+ */
+export const AllowedDuringPasswordChange = () => SetMetadata(DURING_PASSWORD_CHANGE, true);
+
+/**
+ * Any active staff member with a live session cookie. A member whose password is temporary
+ * (ADR 0038) reaches only the endpoints marked `@AllowedDuringPasswordChange()`.
+ */
 @Injectable()
 export class StaffGuard implements CanActivate {
-  constructor(@Inject(StaffSessionService) private readonly sessions: StaffSessionService) {}
+  constructor(
+    @Inject(StaffSessionService) private readonly sessions: StaffSessionService,
+    @Inject(Reflector) private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<StaffRequest>();
     const token = readCookie(req.headers.cookie, STAFF_COOKIE);
     const member = token ? await this.sessions.resolve(token) : null;
-    if (!member) throw new UnauthorizedException({ code: 'unauthorized' });
+    if (!member || !token) throw new UnauthorizedException({ code: 'unauthorized' });
+    if (
+      member.mustChangePassword &&
+      !this.reflector.getAllAndOverride<boolean>(DURING_PASSWORD_CHANGE, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      throw new ForbiddenException({ code: 'password_change_required' });
+    }
     req.staff = member;
+    req.staffToken = token;
     return true;
   }
 }
@@ -46,5 +72,12 @@ export class OwnerGuard implements CanActivate {
 export const CurrentStaff = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): StaffRow => {
     return ctx.switchToHttp().getRequest<StaffRequest>().staff as StaffRow;
+  },
+);
+
+/** The session token StaffGuard verified (a password change keeps this session alive). */
+export const CurrentStaffToken = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): string => {
+    return ctx.switchToHttp().getRequest<StaffRequest>().staffToken as string;
   },
 );

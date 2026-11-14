@@ -71,8 +71,9 @@ export class BroadcastController {
       const prepared = await this.broadcasts.prepare(body as BroadcastBody);
       if (!prepared.ok) return invalid(prepared);
       const res = await this.broadcasts.sendTest(actor, prepared.value);
-      return res.ok
-        ? { status: 200 as const, body: { sent: res.sent } }
+      if (res.ok) return { status: 200 as const, body: { sent: res.sent } };
+      return res.reason === 'test_unlinked'
+        ? { status: 409 as const, body: { code: res.reason } }
         : { status: 502 as const, body: { code: res.reason } };
     });
   }

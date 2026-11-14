@@ -14,9 +14,12 @@ import { BroadcastController } from './broadcast/broadcast.controller';
 import { BroadcastService } from './broadcast/broadcast.service';
 import { SettingsController } from './admin/settings.controller';
 import { StaffController } from './admin/staff.controller';
+import { ProfileController } from './admin/profile.controller';
 import { AuditQueryService } from './audit/audit-query.service';
 import { OwnerGuard, StaffGuard } from './staff/staff.guard';
 import { StaffSessionService } from './staff/staff-session.service';
+import { LoginThrottle } from './staff/login-throttle';
+import { StaffTelegramLinks } from './staff/telegram-link.service';
 import { StaffService } from './staff/staff.service';
 import { BtsAdminController } from './delivery/bts-admin.controller';
 import { BtsAdminService } from './delivery/bts-admin.service';
@@ -134,6 +137,7 @@ export class AppModule {
         WebhookController,
         AdminAuthController,
         StaffController,
+        ProfileController,
         SettingsController,
         AuditController,
         CatalogAdminController,
@@ -205,6 +209,8 @@ export class AppModule {
         StaffService,
         AdminLoginService,
         StaffSessionService,
+        LoginThrottle,
+        StaffTelegramLinks,
         StaffGuard,
         OwnerGuard,
         InternalGuard,

@@ -110,6 +110,19 @@ export const botMessages = defineMessages(
       birthdayCoupon:
         'С наступающим днём рождения! 🎁\nДарим вам купон −{percent}% на ароматы LUMMI, скидка до {max}. Он действует до {until} включительно и сам применится в корзине.',
       /**
+       * «Привязать Telegram» (ADR 0038): the staff member opened the one-time link from the admin
+       * profile. In the language of their Telegram.
+       */
+      staffLink: {
+        linked:
+          'Готово: этот Telegram привязан к сотруднику {name} в админке LUMMI. Теперь кнопки в группе заказов узнают вас.',
+        invalid:
+          'Ссылка не работает: она уже использована или устарела. Откройте Профиль в админке и нажмите «Привязать Telegram» ещё раз.',
+        taken:
+          'Этот Telegram уже привязан к другому сотруднику. Откройте ссылку из того аккаунта Telegram, который хотите привязать, или попросите владельца отвязать этот.',
+        inactive: 'Доступ этого сотрудника отключён. Обратитесь к владельцу.',
+      },
+      /**
        * The orders group (#37): the order's card in «Заказы», its buttons and the tracking-number
        * question. Staff read it, so it goes out in Russian, like the owner alerts.
        */
@@ -157,6 +170,12 @@ export const botMessages = defineMessages(
         back: '‹ Назад',
         changed: 'Уже изменено',
         noAccess: 'Нет доступа',
+        /**
+         * A Telegram account bound to no staff record (ADR 0038): a manager who has not linked
+         * theirs yet reads what to do; anyone else, only that there is no access.
+         */
+        noAccessUnlinked:
+          'Нет доступа. Если вы сотрудник, привяжите Telegram в админке: Профиль → «Привязать Telegram».',
         /** A button the bot never drew: forged data, or a step that does not exist. */
         refused: 'Нельзя',
         askTracking:
@@ -256,6 +275,15 @@ export const botMessages = defineMessages(
       reviewAlready: 'Siz bu buyurtmani allaqachon baholagansiz. Rahmat!',
       birthdayCoupon:
         'Yaqinlashayotgan tugʻilgan kuningiz bilan tabriklaymiz! 🎁\nSizga LUMMI iforlariga −{percent}% kupon sovgʻa qilamiz, chegirma {max}gacha. Kupon {until} kuni oxirigacha amal qiladi va savatda oʻzi qoʻllanadi.',
+      staffLink: {
+        linked:
+          'Tayyor: bu Telegram LUMMI admin panelidagi {name} xodimiga bogʻlandi. Endi buyurtmalar guruhidagi tugmalar sizni taniydi.',
+        invalid:
+          'Havola ishlamaydi: u allaqachon ishlatilgan yoki muddati oʻtgan. Admin paneldagi Profilni oching va «Telegramni bogʻlash»ni yana bosing.',
+        taken:
+          'Bu Telegram boshqa xodimga bogʻlangan. Havolani bogʻlamoqchi boʻlgan Telegram akkauntingizdan oching yoki egasidan buni uzishni soʻrang.',
+        inactive: 'Bu xodimning ruxsati oʻchirilgan. Egasiga murojaat qiling.',
+      },
       group: {
         title: '№ {number} buyurtma',
         reviewTitle: 'Sharh {rating}/5 · № {number} buyurtma',
@@ -300,6 +328,8 @@ export const botMessages = defineMessages(
         back: '‹ Orqaga',
         changed: 'Allaqachon oʻzgargan',
         noAccess: 'Ruxsat yoʻq',
+        noAccessUnlinked:
+          'Ruxsat yoʻq. Xodim boʻlsangiz, admin panelda Telegramni bogʻlang: Profil → «Telegramni bogʻlash».',
         refused: 'Mumkin emas',
         askTracking:
           '{name}, № {number} buyurtmaning BTS trek-raqamini shu xabarga javob qilib yuboring.',

@@ -25,7 +25,15 @@ import { seedShotReviews } from './reviews-data';
 import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';
 import { seedShotShopCard } from './shop-card-data';
-import { OUTSIDER_ID, SHOT_STAFF, screens, type ShotSql, type ShotStaff } from './screens';
+import {
+  OUTSIDER_ID,
+  SHOT_PASSWORD,
+  SHOT_STAFF,
+  screens,
+  shotMember,
+  type ShotSql,
+  type ShotStaff,
+} from './screens';
 
 const LANGS = ['ru', 'uz'] as const;
 const WIDTHS = [390, 1280] as const;
@@ -164,17 +172,34 @@ async function apiSession(telegramId: number) {
   return (res.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
 }
 
-/** Puts the shot staff in place (idempotent): the owner via the CLI, managers via the API. */
+/**
+ * Puts the shot staff in place (idempotent): the owner via the CLI, managers with a login and
+ * the shot password via the API. Their Telegram ids (and who is still on a temporary password)
+ * are written straight to the database: in real use the member binds Telegram through the bot.
+ */
 async function seedStaff() {
   const owner = SHOT_STAFF.find((s) => s.role === 'owner') as ShotStaff;
+  const ownerId = String(owner.telegramId);
   run(
     'npm',
-    ['run', 'seed:owner', '--', '--telegram-id', String(owner.telegramId), '--name', owner.name],
-    {
-      DATABASE_URL: databaseUrl,
-    },
+    [
+      'run',
+      'seed:owner',
+      '--',
+      '--telegram-id',
+      ownerId,
+      '--login',
+      owner.login,
+      '--name',
+      owner.name,
+    ],
+    { DATABASE_URL: databaseUrl },
   );
-  const cookie = await apiSession(owner.telegramId);
+  const sql = new pg.Client({ connectionString: databaseUrl });
+  await sql.connect();
+  // locks a broken earlier run left behind would refuse the password sign-ins
+  await sql.query('delete from login_throttles');
+  const cookie = await apiSession(owner.telegramId!);
   const call = (path: string, method: string, body?: unknown) =>
     fetch(`${apiUrl}${path}`, {
       method,
@@ -183,7 +208,8 @@ async function seedStaff() {
     });
   const list = (await (await call('/admin/staff', 'GET')).json()) as {
     id: number;
-    telegramId: number;
+    telegramId: number | null;
+    login: string | null;
     active: boolean;
   }[];
   // a few audited changes, so the audit page and the settings page have something to show
@@ -195,30 +221,54 @@ async function seedStaff() {
     if (res.status !== 200) throw new Error(`could not set ${key}: ${res.status}`);
   }
   for (const member of SHOT_STAFF.filter((s) => s.role === 'manager')) {
-    let row = list.find((s) => s.telegramId === member.telegramId);
+    let row =
+      list.find((s) => s.login === member.login) ??
+      list.find((s) => member.telegramId !== null && s.telegramId === member.telegramId);
     if (!row) {
       const res = await call('/admin/staff', 'POST', {
-        telegramId: member.telegramId,
         name: member.name,
+        login: member.login,
+        password: SHOT_PASSWORD,
       });
       if (res.status !== 201) throw new Error(`could not add ${member.name}: ${res.status}`);
       row = (await res.json()) as typeof row & object;
+    } else if (row.login === null) {
+      // a shot manager from before logins (#50): give it the login and the shot password
+      const res = await call(`/admin/staff/${row.id}/password`, 'POST', {
+        login: member.login,
+        password: SHOT_PASSWORD,
+      });
+      if (res.status !== 200) throw new Error(`could not reset ${member.name}: ${res.status}`);
     }
+    await sql.query('update staff set telegram_id = $1, must_change_password = $2 where id = $3', [
+      member.telegramId,
+      member.temporary ?? false,
+      row.id,
+    ]);
     if (row.active !== member.active) {
       const res = await call(`/admin/staff/${row.id}`, 'PATCH', { active: member.active });
       if (res.status !== 200) throw new Error(`could not update ${member.name}: ${res.status}`);
     }
   }
+  await sql.end();
   return call;
 }
 
-/** Signs the browser in through the same dev path the login form uses (same-origin cookie). */
-async function signIn(context: BrowserContext, telegramId: number) {
-  const res = await context.request.post(`${adminUrl}/api/admin/auth/dev`, {
-    data: { telegramId },
-  });
+/**
+ * Signs the browser in (same-origin cookie): through the dev path the login form offers, or with
+ * the login and the shot password for a member who has no Telegram linked.
+ */
+async function signIn(context: BrowserContext, member: ShotStaff) {
+  const res =
+    member.telegramId === null
+      ? await context.request.post(`${adminUrl}/api/admin/auth/password`, {
+          data: { login: member.login, password: SHOT_PASSWORD },
+        })
+      : await context.request.post(`${adminUrl}/api/admin/auth/dev`, {
+          data: { telegramId: member.telegramId },
+        });
   if (res.status() !== 200)
-    throw new Error(`browser dev sign-in as ${telegramId} failed: ${res.status()}`);
+    throw new Error(`browser sign-in as ${member.login} failed: ${res.status()}`);
 }
 
 let client: pg.Client | undefined;
@@ -237,7 +287,7 @@ async function main() {
   await seedShotOpens(databaseUrl);
   await seedShotShopCard(ownerCall);
   await seedShotBroadcasts(databaseUrl);
-  await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId), repoRoot);
+  await seedShotContent(apiUrl, await apiSession(SHOT_STAFF[0]!.telegramId!), repoRoot);
   mkdirSync(outDir, { recursive: true });
   // a screen's own database state (setup / teardown), on one connection for the run
   client = new pg.Client({ connectionString: databaseUrl });
@@ -271,9 +321,7 @@ async function main() {
             timezoneId: 'Asia/Tashkent',
           });
           await context.addCookies([{ name: 'lummi_lang', value: lang, url: adminUrl }]);
-          const as =
-            screen.as === 'owner' ? SHOT_STAFF[0] : SHOT_STAFF.find((s) => s.role === screen.as);
-          if (as) await signIn(context, as.telegramId);
+          if (screen.as) await signIn(context, shotMember(screen.as));
           // Next's dev-mode indicator is not part of the design, on any page a screen opens
           // (a string, not a function: tsx's name helpers do not exist in the page)
           await context.addInitScript({
