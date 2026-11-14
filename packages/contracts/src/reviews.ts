@@ -39,7 +39,12 @@ export const reviewsErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_
 
 export const ADMIN_REVIEWS_PAGE_SIZE = 20;
 
-export const REVIEW_PUBLISHED_FILTERS = ['published', 'hidden'] as const;
+/**
+ * The admin list's state filter: published, not published, or `waiting`, those the admin Home
+ * counts as waiting for a decision (#48): finished by the customer, never published or hidden,
+ * within `reviews.homeQueueDays` of being finished.
+ */
+export const REVIEW_PUBLISHED_FILTERS = ['published', 'hidden', 'waiting'] as const;
 
 /** `GET /admin/reviews` and its Excel export: newest first, every filter optional, dates are Tashkent days. */
 export const adminReviewsQuerySchema = z.object({

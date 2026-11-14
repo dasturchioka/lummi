@@ -28,7 +28,10 @@ export const HOME_QUEUES = [
   'refunds',
   /** Volumes and the Discovery set with nothing available, or at most `stock.lowAvailableThreshold`. */
   'stock',
-  /** Reviews not published. */
+  /**
+   * Reviews waiting for a decision: finished by the customer, never published or hidden, within
+   * `reviews.homeQueueDays` of being finished.
+   */
   'reviews',
 ] as const;
 export type HomeQueue = (typeof HOME_QUEUES)[number];
@@ -146,6 +149,8 @@ export const homeNowSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('credit'),
+    /** The credit's id: the Now item stays the same while this credit waits. */
+    id: number,
     amountTiyin: z.number().int().positive(),
     at: tashkentMomentSchema,
     waitedSeconds: seconds,
