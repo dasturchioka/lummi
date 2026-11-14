@@ -357,7 +357,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 **The Italic Is Sacred Rule.** Cormorant Italic is for fragrance and set names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
 
-**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals.
+**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals. **Admin panel only (deviation, 2026-11-14, #42):** admin dense money tables (reports): one caption names the currency («Суммы в сумах» / «Summalar soʻmda»); cells are bare tabular numbers. Every other money display, in the admin too, keeps «сум» / «soʻm».
 
 **The Unbroken Date Rule.** UZ date phrases such as "2-dekabrgacha" are wrapped in no-wrap and never break across lines.
 

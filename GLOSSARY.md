@@ -101,7 +101,7 @@ An order that reached «Доставлен» and was not returned. Reports count
 _Avoid_: Completed, closed, successful order
 
 **Net sales**:
-«Чистые продажи»: the items before discount of Fulfilled orders, less their discounts and the Refunds sent for them. Delivery is never part of it. The average check is net sales per Fulfilled order.
+«Чистые продажи»: the items before discount of Fulfilled orders, less their discounts and the Refunds sent for them. Delivery is never part of it. The average check leaves the Refunds out: items before discount less discounts, per Fulfilled order.
 _Avoid_: Revenue, turnover, profit (there is no cost data), выручка
 
 **Upgrade right**:
