@@ -11,6 +11,7 @@ import {
   setReviewPublishedBodySchema,
 } from './reviews';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
+import { salesReportErrorSchema, salesReportQuerySchema, salesReportSchema } from './reports';
 import {
   addCartLineBodySchema,
   cartErrorSchema,
@@ -1495,6 +1496,31 @@ const adminReviews = c.router({
   },
 });
 
+/**
+ * Reports (ticket #42): owner only, computed live from order snapshots and Refunds. The Excel
+ * export is a file, not in the contract: `GET /admin/reports/sales/export` with the same range and
+ * `lang`.
+ */
+const adminReports = c.router({
+  reports: {
+    sales: {
+      method: 'GET',
+      path: '/admin/reports/sales',
+      query: salesReportQuerySchema,
+      responses: {
+        200: salesReportSchema,
+        // a day that is not a calendar day (`2026-02-30`)
+        400: z.unknown(),
+        401: salesReportErrorSchema,
+        403: salesReportErrorSchema,
+        422: salesReportErrorSchema,
+      },
+      summary:
+        'Owner only: sales by Tashkent day over Fulfilled orders (the day each reached «Доставлен»), Refunds by the day they were sent, the top fragrances, Volumes and sets. Without a range, the last 30 days; 422 invalid_range when `from` is after `to` or the range passes 366 days',
+    },
+  },
+});
+
 /** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
 const adminCampaigns = c.router({
   campaignLinks: {
@@ -1577,6 +1603,7 @@ export const adminContract = c.router({
   ...adminPromo,
   ...adminCampaigns,
   ...adminReviews,
+  ...adminReports,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
