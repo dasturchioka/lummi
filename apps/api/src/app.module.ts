@@ -91,6 +91,7 @@ import { PromoAdminService } from './promo/promo-admin.service';
 import { ReportsController } from './reports/reports.controller';
 import { HomeController } from './home/home.controller';
 import { HomeService } from './home/home.service';
+import { MarketingReports } from './reports/marketing-reports.service';
 import { SalesReports } from './reports/sales-reports.service';
 import { SettingsService } from './settings/settings.service';
 import { DB, EDGES, ENV } from './tokens';
@@ -216,6 +217,7 @@ export class AppModule {
         Refunds,
         CampaignsService,
         SalesReports,
+        MarketingReports,
         HomeService,
         BirthdayService,
         BirthdayCouponJob,
