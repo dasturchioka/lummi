@@ -245,3 +245,37 @@
     animation: overlay-out 80ms var(--ease-out) forwards;
   }
 }
+
+/*
+ * Admin Home (#48): only what changed moves. A value that changed on a refresh settles out of a
+ * 2 px blur; a new Now item arrives (opacity, blur, 6 px). Nothing animates on first load (the
+ * components add these classes only on a change). Reduced motion keeps the fades.
+ */
+@keyframes settle {
+  from {
+    opacity: 0.25;
+    filter: blur(2px);
+  }
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(6px);
+  }
+}
+.motion-settle {
+  animation: settle 320ms var(--ease-out);
+}
+.motion-arrive > * {
+  animation: arrive 320ms var(--ease-out) both;
+}
+.motion-arrive > :nth-child(2) {
+  animation-delay: 40ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-settle,
+  .motion-arrive > * {
+    animation: overlay-in 200ms ease both;
+  }
+}

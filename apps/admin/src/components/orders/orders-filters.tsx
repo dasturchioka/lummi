@@ -1,6 +1,6 @@
 'use client';
 
-import { ORDER_STATUSES, PAYMENT_STATES } from '@lummi/contracts';
+import { ORDER_PAYMENT_FILTERS, ORDER_STATUSES } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { SlidersHorizontal } from 'lucide-react';
@@ -96,7 +96,7 @@ export function OrdersFiltersForm({
         <Field id="f-payment" label={f.payment} className={cn(hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
-            {PAYMENT_STATES.map((p) => (
+            {ORDER_PAYMENT_FILTERS.map((p) => (
               <option key={p} value={p}>
                 {t.orders.payment[p]}
               </option>
