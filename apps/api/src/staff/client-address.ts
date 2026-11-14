@@ -1,10 +1,11 @@
 import type { Request } from 'express';
 
 /**
- * The address a sign-in came from, for the per-address lock (ADR 0038). In a deploy only Caddy
- * reaches the API, and it sets `X-Real-IP` to the client it resolved through its trusted proxies
- * (deploy/Caddyfile), overwriting whatever the client sent. In development the Next proxy adds
- * `X-Forwarded-For`, whose last entry is the hop next to us. Otherwise, the socket's peer.
+ * The address a sign-in came from, for the per-address lock (ADR 0038). In a deploy the API's
+ * port is published to nobody; Caddy reaches it from every host through one snippet
+ * (deploy/Caddyfile, `(api)`) that sets `X-Real-IP` to `{client_ip}`, the client resolved through
+ * its strict trusted proxies, overwriting whatever a client sent. In development the Next proxy
+ * adds `X-Forwarded-For`, whose last entry is the hop next to us. Otherwise, the socket's peer.
  */
 export function clientAddress(req: Request): string {
   const real = req.headers['x-real-ip'];
