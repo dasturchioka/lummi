@@ -22,6 +22,7 @@ import {
   orders,
   refunds,
   sql,
+  type Db,
   type DbOrTx,
 } from '@lummi/db';
 import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
@@ -50,9 +51,18 @@ export interface TashkentRange {
  *   line, so they stay out of these lists.
  *
  * Amounts are integer so'm; the database sums them as `bigint`, and the sums here stay exact
- * integers far below 2^53.
+ * integers far below 2^53. Every read happens in one read-only snapshot.
  */
-export async function salesSummary(db: DbOrTx, range: TashkentRange): Promise<SalesReport> {
+export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesReport> {
+  // one snapshot for every read, so a refund or a delivery landing meanwhile never makes the
+  // days and the top lists disagree
+  return db.transaction((tx) => summarise(tx, range), {
+    isolationLevel: 'repeatable read',
+    accessMode: 'read only',
+  });
+}
+
+async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport> {
   const days = daysOf(range);
   const start = tashkentDayStart(range.from);
   const end = tashkentDayStart(range.to, 1);
