@@ -1,28 +1,37 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { SalesReport } from '@lummi/contracts';
+import type { MarketingFigures, MarketingReport, SalesReport } from '@lummi/contracts';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import {
+  EXPECTED_ACQUISITION,
   EXPECTED_DAYS,
   EXPECTED_FRAGRANCES,
+  EXPECTED_PROMO_CODES,
   EXPECTED_SETS,
+  EXPECTED_SOURCES,
   EXPECTED_TOTALS,
+  EXPECTED_UPGRADE_RIGHTS,
   EXPECTED_VOLUMES,
+  EXPECTED_WITHOUT_ACQUISITION,
+  EXPECTED_WITHOUT_LINK,
   placeTwentyOrders,
   RANGE,
   type FixtureCatalog,
+  type LinkKey,
 } from './fixtures/sales-report-orders';
+import { returnWhole } from './harness/fulfilment';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
  * The TZ §10 acceptance gate (ADR 0028): «цифры отчёта совпадают с ручным расчётом» over 20 test
  * orders. The orders go through the real doors (checkout, payment, fulfilment, cancel, return,
  * refund); the expected figures are the hand calculation in `fixtures/sales-report-orders.ts`.
- * Any mismatch fails CI.
+ * Any mismatch fails CI. The marketing reports (#43) are checked over the same orders, with the
+ * fixture's campaign link opens.
  */
 
 const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
@@ -32,6 +41,7 @@ const snapshot = JSON.parse(
 
 let t: TestApp;
 let catalog: FixtureCatalog;
+let numberOf: (n: number) => number;
 let owner: StaffSession;
 
 beforeAll(async () => {
@@ -39,7 +49,7 @@ beforeAll(async () => {
   await t.reset();
   await seedCatalog(t.db, { materialsDir });
   await importBtsPoints(t.db, snapshot);
-  ({ catalog } = await placeTwentyOrders(t));
+  ({ catalog, numberOf } = await placeTwentyOrders(t));
   owner = await t.ownerSession();
 }, 300_000);
 afterAll(() => t?.close());
@@ -180,5 +190,235 @@ describe('the 20-order report gate (TZ §10)', () => {
       'Toʻplamlar',
     ]);
     expect(wb.worksheets[0]!.getRow(1).getCell(7).value).toBe('Sof savdo');
+  });
+});
+
+async function marketing(query: { from: string; to: string }): Promise<MarketingReport> {
+  const res = await owner.client.admin.reports.marketing({ query });
+  if (res.status !== 200) throw new Error(`marketing report ${res.status}`);
+  return res.body;
+}
+
+/** The figures of a row, without what names it. */
+const figuresOf = (r: MarketingFigures): MarketingFigures => ({
+  orders: r.orders,
+  customers: r.customers,
+  newCustomers: r.newCustomers,
+  itemsBeforeDiscount: r.itemsBeforeDiscount,
+  discount: r.discount,
+  refunds: r.refunds,
+  net: r.net,
+  averageCheck: r.averageCheck,
+});
+
+describe('the marketing reports over the same 20 orders (#43)', () => {
+  const code = (key: LinkKey) => catalog.link[key].code;
+
+  it('splits them by promo code, with opens and conversion through its links', async () => {
+    const r = await marketing(RANGE);
+    expect(
+      r.promoCodes.map((p) => ({
+        code: p.code,
+        links: p.links.map((l) => l.code),
+        ...figuresOf(p),
+        opens: p.opens,
+        linkOrders: p.linkOrders,
+        conversion: p.conversion,
+      })),
+    ).toEqual(EXPECTED_PROMO_CODES.map((e) => ({ ...e, links: e.links.map(code) })));
+    expect(r.promoCodes[0]!.promoCodeId).toBe(catalog.promoCodeId.BLOGER10);
+  });
+
+  it("splits them by the Source of the order's campaign link, the rest without a link", async () => {
+    const r = await marketing(RANGE);
+    expect(
+      r.sources.map((s) => ({
+        source: s.source,
+        ...figuresOf(s),
+        opens: s.opens,
+        conversion: s.conversion,
+        links: s.links.map((l) => ({
+          code: l.link.code,
+          ...figuresOf(l),
+          opens: l.opens,
+          conversion: l.conversion,
+        })),
+      })),
+    ).toEqual(
+      EXPECTED_SOURCES.map(({ link, ...e }) => ({
+        ...e,
+        // each Source has one link in the fixture: its row is the Source's figures
+        links: link
+          ? [{ code: code(link), ...figuresOf(e), opens: e.opens, conversion: e.conversion }]
+          : [],
+      })),
+    );
+    expect(r.withoutLink).toEqual(EXPECTED_WITHOUT_LINK);
+  });
+
+  it("splits them by the customer's first link", async () => {
+    const r = await marketing(RANGE);
+    expect(
+      r.acquisition.map((a) => ({
+        source: a.source,
+        acquired: a.acquired,
+        ...figuresOf(a),
+        links: a.links.map((l) => ({ code: l.link.code, acquired: l.acquired, ...figuresOf(l) })),
+      })),
+    ).toEqual(
+      EXPECTED_ACQUISITION.map(({ link, ...e }) => ({
+        ...e,
+        links: link ? [{ code: code(link), acquired: e.acquired, ...figuresOf(e) }] : [],
+      })),
+    );
+    expect(r.withoutAcquisition).toEqual(EXPECTED_WITHOUT_ACQUISITION);
+  });
+
+  it('counts the set discount: rights issued, used, and the orders that used them', async () => {
+    const r = await marketing(RANGE);
+    expect(r.upgradeRights).toEqual(EXPECTED_UPGRADE_RIGHTS);
+  });
+
+  it('agrees with the sales report: the Sources and the first links each add up to it', async () => {
+    const sales = (await report(RANGE)).totals;
+    const r = await marketing(RANGE);
+    for (const rows of [
+      [...r.sources, r.withoutLink],
+      [...r.acquisition, r.withoutAcquisition],
+    ]) {
+      const sum = (key: 'orders' | 'itemsBeforeDiscount' | 'discount' | 'refunds' | 'net') =>
+        rows.reduce((n, row) => n + row[key], 0);
+      expect({
+        orders: sum('orders'),
+        itemsBeforeDiscount: sum('itemsBeforeDiscount'),
+        discount: sum('discount'),
+        refunds: sum('refunds'),
+        net: sum('net'),
+      }).toEqual({
+        orders: sales.orders,
+        itemsBeforeDiscount: sales.itemsBeforeDiscount,
+        discount: sales.discount,
+        refunds: sales.refunds,
+        net: sales.net,
+      });
+    }
+  });
+
+  it('counts a single day: opens, orders and conversion of that day only', async () => {
+    // 14 Nov: BLOGER10's order 17 (through malika); bobur opened malika that day, nobody else
+    // opened one of its links: conversion 1 ÷ 1. MINUS50 had nothing that day.
+    const r = await marketing({ from: '2026-11-14', to: '2026-11-14' });
+    expect(
+      r.promoCodes.map((p) => [p.code, p.orders, p.net, p.opens, p.linkOrders, p.conversion]),
+    ).toEqual([['BLOGER10', 1, 333_900, 1, 1, 100]]);
+
+    // 11 Nov: no delivery; dilnoza opened BLOGER10's own link (her order 8 is delivered the
+    // next day), so the code shows with its open and 0 % conversion; order 1's refund has no link
+    const eleventh = await marketing({ from: '2026-11-11', to: '2026-11-11' });
+    expect(
+      eleventh.promoCodes.map((p) => [p.code, p.orders, p.opens, p.linkOrders, p.conversion]),
+    ).toEqual([['BLOGER10', 0, 1, 0, 0]]);
+    const automatic = eleventh.sources.find((s) => s.source === 'promo_code')!;
+    expect([automatic.opens, automatic.orders, automatic.conversion]).toEqual([1, 0, 0]);
+    expect(automatic.links.map((l) => l.link.code)).toEqual([code('bloger10')]);
+    expect(eleventh.withoutLink).toMatchObject({ orders: 0, refunds: 40_000, net: -40_000 });
+  });
+
+  it("is the owner's: a manager gets 403, a backwards range 422", async () => {
+    const manager = await t.managerSession();
+    expect((await manager.client.admin.reports.marketing({ query: RANGE })).status).toBe(403);
+    const backwards = await owner.client.admin.reports.marketing({
+      query: { from: RANGE.to, to: RANGE.from },
+    });
+    expect(backwards.status).toBe(422);
+    const res = await fetch(`${t.baseUrl}/admin/reports/marketing/export`, {
+      headers: { cookie: manager.cookie },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('exports the same figures to Excel', async () => {
+    const res = await fetch(
+      `${t.baseUrl}/admin/reports/marketing/export?from=${RANGE.from}&to=${RANGE.to}`,
+      { headers: { cookie: owner.cookie } },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('spreadsheetml');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await res.arrayBuffer());
+    expect(wb.worksheets.map((s) => s.name)).toEqual([
+      'Промокоды',
+      'Источники',
+      'Привлечение',
+      'Скидка за набор',
+    ]);
+    const [promo, sources, acquisition, rights] = wb.worksheets;
+    const rows = (ws: ExcelJS.Worksheet) =>
+      ws
+        .getSheetValues()
+        .slice(2)
+        .map((row) => (row as unknown[]).slice(1));
+    const money = (e: MarketingFigures) => [
+      e.orders,
+      e.customers,
+      e.newCustomers,
+      e.itemsBeforeDiscount,
+      e.discount,
+      e.refunds,
+      e.net,
+      e.averageCheck ?? '',
+    ];
+    expect(promo!.getRow(1).getCell(1).value).toBe('Промокод');
+    expect(rows(promo!).map((r) => [r[0], ...r.slice(2)])).toEqual(
+      EXPECTED_PROMO_CODES.map((e) => [
+        e.code,
+        e.opens ?? '',
+        ...money(e),
+        e.linkOrders,
+        e.conversion === null ? '' : e.conversion / 100,
+      ]),
+    );
+    // a Source's row, then its links; then the orders without a link
+    expect(rows(sources!).map((r) => r.slice(2))).toEqual([
+      ...EXPECTED_SOURCES.flatMap((e) => {
+        const row = [e.opens, ...money(e), e.conversion === null ? '' : e.conversion / 100];
+        return e.link ? [row, row] : [row];
+      }),
+      ['', ...money(EXPECTED_WITHOUT_LINK), ''],
+    ]);
+    expect(rows(acquisition!).map((r) => r.slice(2))).toEqual([
+      ...EXPECTED_ACQUISITION.flatMap((e) => {
+        const row = [e.acquired, ...money(e)];
+        return e.link ? [row, row] : [row];
+      }),
+      ['', ...money(EXPECTED_WITHOUT_ACQUISITION)],
+    ]);
+    expect(rows(rights!).map((r) => r.slice(1))).toEqual(
+      EXPECTED_UPGRADE_RIGHTS.map((e) => [e.issued, ...money(e)]),
+    );
+  });
+});
+
+// Runs last: it changes the fixture.
+describe('a returned set after the fact (#43)', () => {
+  it('takes its rights out of «issued»; the right already used stays with order 7', async () => {
+    await returnWhole(t, numberOf(2), 'Покупатель вернул набор');
+    const r = await marketing(RANGE);
+    // 2 no longer counts: issued 10 (1) + 14 (2) + 15 (1) = 4. Order 7 keeps its discount, and
+    // is now ali's first Fulfilled order, so he is new there
+    const ali7 = {
+      orders: 1,
+      customers: 1,
+      newCustomers: 1,
+      itemsBeforeDiscount: 200_000,
+      discount: 30_000,
+      refunds: 0,
+      net: 170_000,
+      averageCheck: 170_000,
+    };
+    expect(r.upgradeRights[0]).toEqual({ source: 'set', issued: 4, ...ali7 });
+    // instagram loses 2 and its 15 000 refund (a returned order's money back is not counted)
+    const instagram = r.sources.find((s) => s.source === 'instagram')!;
+    expect(figuresOf(instagram)).toEqual(ali7);
   });
 });
