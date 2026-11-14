@@ -9,7 +9,6 @@ import {
   orders,
   paymentPauses,
   receipts,
-  shopCard,
   sql,
   userbotHeartbeat,
   type DbOrTx,
@@ -19,7 +18,7 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { AlertService } from '../outbox/alert.service';
 import { readSettings } from '../settings/settings.service';
-import { CANDIDATE, WAITING_VERDICTS } from './rules';
+import { hasCandidate, WAITING_VERDICTS } from './rules';
 import { pauseEndedAlert, pauseStartedAlert } from './staff-posts';
 
 /** An instant as a bound `timestamptz`. */
@@ -190,7 +189,7 @@ export class PaymentPauses {
       select min(r.created_at) as oldest
       from ${receipts} r join ${orders} o on o.id = r.order_id
       where o.status = 'receipt_review' and r.verdict = 'pending'
-        and not exists (select 1 from ${shopCard} sc join ${credits} c on ${CANDIDATE})`);
+        and not ${hasCandidate()}`);
     const oldestUnpaid = unpaid[0]?.oldest ? new Date(unpaid[0].oldest) : null;
     const [last] = await tx
       .select({ at: sql`max(${humoMessages.receivedAt})`.mapWith(humoMessages.receivedAt) })

@@ -20,15 +20,23 @@ export type ReceiptVerdict = (typeof RECEIPT_VERDICTS)[number];
 
 /**
  * Why a receipt last went to manual review (#32): the same file as another receipt
- * (`duplicate`), the AI's answer did not confirm it (`not_confirmed`), or the AI could not be
- * asked, attempt after attempt (`judge_failed`). The `receipt_review_reason` enum has these values.
+ * (`duplicate`), the AI's answer did not confirm it (`not_confirmed`), the AI could not be
+ * asked, attempt after attempt (`judge_failed`), or the AI confirmed it with a credit staff marked
+ * «Не для заказа» while it was answering (`credit_marked`, #49). The `receipt_review_reason` enum
+ * has these values.
  */
-export const RECEIPT_REVIEW_REASONS = ['duplicate', 'not_confirmed', 'judge_failed'] as const;
+export const RECEIPT_REVIEW_REASONS = [
+  'duplicate',
+  'not_confirmed',
+  'judge_failed',
+  'credit_marked',
+] as const;
 export type ReceiptReviewReason = (typeof RECEIPT_REVIEW_REASONS)[number];
 
 /**
  * What became of one answer of the receipt AI (#32): it paid the order, sent the receipt to a
- * person, found its credit taken, or came after the receipt was decided (`receipt_check_outcome`).
+ * person, found its credit taken (by another order, or marked «Не для заказа», #49), or came after
+ * the receipt was decided (`receipt_check_outcome`).
  */
 export const RECEIPT_CHECK_OUTCOMES = [
   'confirmed',

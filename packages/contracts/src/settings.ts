@@ -5,6 +5,7 @@ import { thresholdBaseSchema, type UpgradeRightSource } from './quote';
 import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
+import { CREDIT_MARK_NOTE_MAX } from './admin-orders';
 
 /** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
 export const BOT_CHOICE_MAX_SECONDS = 86_400;
@@ -310,6 +311,24 @@ export const settingDefinitions = {
     hint: {
       ru: 'Сколько символов сотрудник может написать, привязывая к заказу поступление с другой суммой или на другую карту.',
       uz: 'Xodim buyurtmaga boshqa summadagi yoki boshqa kartaga tushgan toʻlovni bogʻlaganda yozishi mumkin boʻlgan belgilar soni.',
+    },
+  },
+  /**
+   * The longest note staff may add when they mark a credit «Не для заказа» (#49): money on the shop
+   * card that is not for an order, up to the technical bound `CREDIT_MARK_NOTE_MAX`.
+   */
+  'payments.creditMarkNoteMaxLength': {
+    schema: z.number().int().min(20).max(CREDIT_MARK_NOTE_MAX),
+    default: 500,
+    area: 'shop',
+    unit: 'count',
+    label: {
+      ru: 'Длина комментария к поступлению «Не для заказа»',
+      uz: '«Buyurtma uchun emas» tushumiga izoh uzunligi',
+    },
+    hint: {
+      ru: 'Сколько символов сотрудник может написать, отмечая поступление, которое не относится к заказу (например, личный перевод).',
+      uz: 'Xodim buyurtmaga tegishli boʻlmagan tushumni (masalan, shaxsiy oʻtkazma) belgilaganda yozishi mumkin boʻlgan belgilar soni.',
     },
   },
   /**

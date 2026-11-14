@@ -36,6 +36,7 @@ export default async function CreditsPage({ searchParams }: { searchParams: Prom
       page={list.body.page}
       pageSize={list.body.pageSize}
       filters={filters}
+      noteMax={list.body.limits.markNoteMax}
     />
   );
 }

@@ -1,3 +1,4 @@
+import type { ReceiptReviewReason } from '@lummi/contracts';
 import { formatDateTime, formatDuration, formatMoney } from '@lummi/i18n';
 
 /*
@@ -81,10 +82,12 @@ export function pauseEndedAlert(o: { startedAt: Date; endedAt: Date }) {
 }
 
 /** Why a waiting receipt waits, as staff read it. */
-const WAITS_FOR: Record<'duplicate' | 'not_confirmed' | 'judge_failed', string> = {
+const WAITS_FOR: Record<ReceiptReviewReason, string> = {
   duplicate: 'ждёт решения менеджера (повторный чек)',
   not_confirmed: 'ждёт решения менеджера (ИИ не подтвердил чек)',
   judge_failed: 'ждёт решения менеджера (ИИ не смог проверить чек)',
+  credit_marked:
+    'ждёт решения менеджера (ИИ подтвердил чек поступлением, которое отметили «Не для заказа»)',
 };
 
 /** Owner alert, once per receipt: it has waited longer than the setting (TZ §6). */

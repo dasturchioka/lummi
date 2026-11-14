@@ -347,6 +347,17 @@ export const credits = pgTable(
      */
     eventQueuedAt: timestamp('event_queued_at', { withTimezone: true }),
     eventHandledAt: timestamp('event_handled_at', { withTimezone: true }),
+    /**
+     * Not for an order (GLOSSARY, #49): staff marked this unlinked credit as money that is not
+     * shop money (a personal transfer to the shop card). It is then never a Candidate credit and
+     * leaves «Поступления без заказа»; linking it needs the mark taken off first. Set and cleared
+     * under the credit's row lock (`CreditMarks`), so it never sits on a linked credit. Who set it
+     * has no FK, like `refunds.staff_id`: a removed staff member's marks stay.
+     */
+    notForOrderAt: timestamp('not_for_order_at', { withTimezone: true }),
+    notForOrderBy: bigint('not_for_order_by', { mode: 'number' }),
+    /** The staff member's optional note, at most `payments.creditMarkNoteMaxLength` characters. */
+    notForOrderNote: text('not_for_order_note'),
   },
   (t) => [
     index('credits_event_pending_idx')
@@ -354,6 +365,11 @@ export const credits = pgTable(
       .where(sql`event_handled_at is null`),
     check('credits_amount_positive', sql`${t.amountTiyin} > 0`),
     check('credits_card_last4', sql`${t.cardLast4} ~ '^[0-9]{4}$'`),
+    // a mark has its time and its author; a note only with a mark
+    check(
+      'credits_not_for_order',
+      sql`(${t.notForOrderAt} is null) = (${t.notForOrderBy} is null) and (${t.notForOrderNote} is null or ${t.notForOrderAt} is not null)`,
+    ),
   ],
 );
 
