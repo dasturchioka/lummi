@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
+import { CAMPAIGN_SOURCES, UPGRADE_RIGHT_SOURCES } from './constants';
 
 /*
  * Sales reports (TZ §7 «Отчёты», ticket #42): computed live from order snapshots and Refunds,
@@ -108,3 +109,124 @@ export const salesReportErrorSchema = z.object({
 
 export const SALES_REPORT_EXPORT_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/*
+ * Marketing reports (TZ §7 «Промокоды и источники», «Скидка за набор»; ticket #43, ADR 0022):
+ * the same orders as the sales report (Fulfilled, on their delivery day) and the same Refunds
+ * (on greatest(the day sent, the delivery day)), split by promo code, by the order's campaign
+ * link (its Source), by the customer's first link, and by the upgrade right an order used. The
+ * rules are in docs/spec.md → Changes 2026-11-14 (#43).
+ */
+
+/** What one row of a marketing report sums: the sales figures, less delivery, plus who bought. */
+export const marketingFiguresSchema = z.object({
+  /** Fulfilled orders of the row that reached «Доставлен» in the range. */
+  orders: count,
+  /** Distinct customers of those orders. */
+  customers: count,
+  /** Of them, those for whom one of the row's orders is their first Fulfilled order ever. */
+  newCustomers: count,
+  itemsBeforeDiscount: som,
+  discount: som,
+  /** Refunds of the row's Fulfilled orders counted in the range, by the sales report's rule. */
+  refunds: som,
+  /** Items − discount − refunds. */
+  net: z.number().int(),
+  /** (Items − discount) ÷ orders, to the nearest so'm (halves up); null without orders. */
+  averageCheck: som.nullable(),
+});
+export type MarketingFigures = z.infer<typeof marketingFiguresSchema>;
+
+/**
+ * Orders ÷ opens as a percentage with one decimal (halves up), worked out by the API; null
+ * when there is nothing to divide by.
+ */
+const percent = z.number().nonnegative().nullable();
+
+/** A campaign link as a report names it. */
+export const reportLinkSchema = z.object({
+  id: z.number().int(),
+  code: z.string(),
+  source: z.enum(CAMPAIGN_SOURCES),
+  sourceLabel: z.string().nullable(),
+  /** The promo code the link prefills, as the code reads now. */
+  promoCode: z.string().nullable(),
+});
+export type ReportLink = z.infer<typeof reportLinkSchema>;
+
+/** One promo code (TZ §7 promo report), keyed on the code the order took. */
+export const promoCodeReportRowSchema = marketingFiguresSchema.extend({
+  promoCodeId: z.number().int(),
+  code: z.string(),
+  /** The campaign links that prefill it now: its automatic one and any the owner made. */
+  links: z.array(reportLinkSchema),
+  /** Customers who opened one of its links in the range; null when it has no link. */
+  opens: count.nullable(),
+  /** Its orders that came through one of its links (the order's campaign link is one of them). */
+  linkOrders: count,
+  /** Link orders ÷ opens; null without a link or without opens. */
+  conversion: percent,
+});
+export type PromoCodeReportRow = z.infer<typeof promoCodeReportRowSchema>;
+
+/** One link under its Source, by the orders that took it as their campaign link. */
+export const sourceLinkRowSchema = marketingFiguresSchema.extend({
+  link: reportLinkSchema,
+  /** Customers who opened it in the range. */
+  opens: count,
+  /** Orders ÷ opens. */
+  conversion: percent,
+});
+export type SourceLinkRow = z.infer<typeof sourceLinkRowSchema>;
+
+/** One Source (Instagram, the channel, ...): its links together, a customer counted once. */
+export const sourceRowSchema = marketingFiguresSchema.extend({
+  source: z.enum(CAMPAIGN_SOURCES),
+  opens: count,
+  conversion: percent,
+  /** Its links with anything in the range, most orders first. */
+  links: z.array(sourceLinkRowSchema),
+});
+export type SourceRow = z.infer<typeof sourceRowSchema>;
+
+/** One link under its Source, by the customers whose first link it is. */
+export const acquisitionLinkRowSchema = marketingFiguresSchema.extend({
+  link: reportLinkSchema,
+  /** Customers whose first campaign link it is, first opened in the range. */
+  acquired: count,
+});
+export type AcquisitionLinkRow = z.infer<typeof acquisitionLinkRowSchema>;
+
+export const acquisitionRowSchema = marketingFiguresSchema.extend({
+  source: z.enum(CAMPAIGN_SOURCES),
+  acquired: count,
+  links: z.array(acquisitionLinkRowSchema),
+});
+export type AcquisitionRow = z.infer<typeof acquisitionRowSchema>;
+
+/** The set discount (TZ §7): Upgrade rights by what opened them. */
+export const upgradeRightReportRowSchema = marketingFiguresSchema.extend({
+  source: z.enum(UPGRADE_RIGHT_SOURCES),
+  /** Rights opened in the range by orders still Fulfilled (a returned set's rights drop out). */
+  issued: count,
+  // `orders` are the rights used: one right per order, by Fulfilled orders delivered in the range
+});
+export type UpgradeRightReportRow = z.infer<typeof upgradeRightReportRowSchema>;
+
+export const marketingReportSchema = z.object({
+  from: tashkentDaySchema,
+  to: tashkentDaySchema,
+  /** Codes with an order, a refund or an open in the range; most orders first. */
+  promoCodes: z.array(promoCodeReportRowSchema),
+  /** By the order's campaign link (ADR 0022: the last one opened within N days): every Source. */
+  sources: z.array(sourceRowSchema),
+  /** Orders that took no campaign link. */
+  withoutLink: marketingFiguresSchema,
+  /** By the customer's first campaign link, for orders placed since they first opened it. */
+  acquisition: z.array(acquisitionRowSchema),
+  /** Orders of customers without a first link, or placed before they first opened it. */
+  withoutAcquisition: marketingFiguresSchema,
+  /** The set first, then the single 10 ml bottle. */
+  upgradeRights: z.array(upgradeRightReportRowSchema),
+});
+export type MarketingReport = z.infer<typeof marketingReportSchema>;
