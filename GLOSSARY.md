@@ -100,6 +100,10 @@ _Avoid_: First-time buyer (that is the report metric: first fulfilled order)
 An order that reached «Доставлен» and was not returned. Reports count only these.
 _Avoid_: Completed, closed, successful order
 
+**Net sales**:
+«Чистые продажи»: the items before discount of Fulfilled orders, less their discounts and the Refunds sent for them. Delivery is never part of it. The average check leaves the Refunds out: items before discount less discounts, per Fulfilled order.
+_Avoid_: Revenue, turnover, profit (there is no cost data), выручка
+
 **Upgrade right**:
 A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances) or a delivered single 10 ml bottle (covers that fragrance).
 _Avoid_: Set discount right, loyalty discount, repeat-purchase discount

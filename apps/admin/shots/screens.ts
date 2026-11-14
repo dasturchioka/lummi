@@ -294,6 +294,18 @@ export const SHOT_STAFF: ShotStaff[] = [
   },
   { telegramId: 990000004, name: 'Jasur Toshmatov', role: 'manager', active: false },
 ];
+const SHOT_REFUND_REASON = 'shot: reports';
+/** A 30 000 refund of the delivered shot order 9012, sent on 10 November (the sales report). */
+async function shotRefund(db: ShotSql, what: 'add' | 'remove') {
+  await db.query(`delete from refunds where reason = $1`, [SHOT_REFUND_REASON]);
+  if (what === 'remove') return;
+  await db.query(
+    `insert into refunds (order_id, amount, refunded_on, reason, staff_id)
+     select o.id, 30000, '2026-11-10', $1, (select min(id) from staff) from orders o where o.number = $2`,
+    [SHOT_REFUND_REASON, SHOT_ORDER.deliveredMany],
+  );
+}
+
 /** A Telegram account that is not on staff: signs in to the «Нет доступа» state. */
 export const OUTSIDER_ID = 990000099;
 
@@ -1718,6 +1730,24 @@ export const screens: Screen[] = [
   },
   ...stockScreens,
   ...customerScreens,
+  // ---- Reports (#42): the owner's sales report over the delivered shot orders (9006, 9012,
+  // 9013; the returned 9011 drops out), with a partial refund of 9012 sent on 10 November
+  {
+    id: 'reports',
+    path: '/reports',
+    as: 'owner',
+    setup: ({ db }) => shotRefund(db, 'add'),
+    teardown: ({ db }) => shotRefund(db, 'remove'),
+  },
+  {
+    id: 'reports-by-net',
+    path: '/reports?from=2026-11-01&to=2026-11-14&top=net',
+    as: 'owner',
+    setup: ({ db }) => shotRefund(db, 'add'),
+    teardown: ({ db }) => shotRefund(db, 'remove'),
+  },
+  { id: 'reports-invalid', path: '/reports?from=2026-11-14&to=2026-11-01', as: 'owner' },
+  { id: 'reports-empty', path: '/reports?from=2026-01-01&to=2026-01-31', as: 'owner' },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];
