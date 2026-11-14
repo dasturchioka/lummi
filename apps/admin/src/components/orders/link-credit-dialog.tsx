@@ -20,6 +20,32 @@ import { formatTashkent } from '@/lib/setting-copy';
 import { Frame, LinkReasonField, Mark, ReferenceLine, reasonFits } from './order-dialogs';
 
 /**
+ * The credit a dialog from the credits list is about: its exact amount, then when and to which
+ * card. The link dialog and the «Не для заказа» dialogs (#49) open with it.
+ */
+export function CreditHeader({
+  credit,
+  t,
+  language,
+}: {
+  credit: AdminCreditDto;
+  t: AdminMessages;
+  language: Language;
+}) {
+  return (
+    <div className="-mt-1 grid gap-1">
+      <p className="font-semibold tabular-nums">
+        {fill(t.credits.thisCredit, { amount: formatTiyin(credit.amountTiyin, language) })}
+      </p>
+      <p className="text-small text-muted-foreground tabular-nums">
+        {formatTashkent(credit.occurredAt)} ·{' '}
+        {fill(t.orders.cardShort, { last4: credit.cardLast4 })}
+      </p>
+    </div>
+  );
+}
+
+/**
  * «Привязать к заказу» from the credits list: find the order by its number, then confirm its
  * payment with this credit through the same door as the order page (#32's `PaymentConfirmation`,
  * the manager as actor): with the receipt under check, or none while the order waits for payment.
@@ -148,14 +174,7 @@ export function LinkCreditDialog({
       cancel={t.actions.cancel}
       summary={summary ? <Mark>{summary}</Mark> : undefined}
     >
-      <div className="-mt-1 grid gap-1">
-        <p className="font-semibold tabular-nums">
-          {fill(c.thisCredit, { amount: formatTiyin(credit.amountTiyin, language) })}
-        </p>
-        <p className="text-small text-muted-foreground tabular-nums">
-          {formatTashkent(credit.occurredAt)} · {fill(o.cardShort, { last4: credit.cardLast4 })}
-        </p>
-      </div>
+      <CreditHeader credit={credit} t={t} language={language} />
       {/* the dialog's own button reads «Найти» until the order is found */}
       <Field id="link-order" label={c.orderNumber} error={missing ? c.notFound : undefined}>
         <Input

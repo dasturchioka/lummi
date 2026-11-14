@@ -146,8 +146,8 @@ export function CreditsList({
       </div>
     );
   };
-  /** A mark or an unmark ended: say how, and reload the list either way. */
-  const marked = (result: MarkResult) => {
+  /** A mark or an unmark ended: close its dialog, say how it went, and reload the list. */
+  const closeAndReload = (result: MarkResult) => {
     setMarking(null);
     setUnmarking(null);
     setNotice(
@@ -376,7 +376,7 @@ export function CreditsList({
           t={t}
           language={language}
           onOpenChange={(open) => !open && setMarking(null)}
-          onDone={marked}
+          onDone={closeAndReload}
         />
       )}
 
@@ -387,7 +387,7 @@ export function CreditsList({
           t={t}
           language={language}
           onOpenChange={(open) => !open && setUnmarking(null)}
-          onDone={marked}
+          onDone={closeAndReload}
         />
       )}
 

@@ -135,6 +135,8 @@ export const adminMessages = defineMessages(
                 'Такой же чек уже был у другого заказа. Сверьте его с поступлением, прежде чем подтвердить оплату.',
               judge_failed:
                 'ИИ не смог проверить чек. Сверьте его с поступлением и подтвердите оплату или отклоните чек.',
+              credit_marked:
+                'ИИ подтвердил чек поступлением, которое отметили «Не для заказа». Сверьте чек с поступлениями и подтвердите оплату или отклоните чек.',
               none: 'Сверьте чек с поступлением и подтвердите оплату или отклоните чек.',
             },
             wait: 'ждёт {age}',
@@ -607,7 +609,7 @@ export const adminMessages = defineMessages(
           'review.published': 'Отзыв опубликован',
           'review.hidden': 'Отзыв скрыт',
           'credit.marked_not_for_order': 'Поступление отмечено «Не для заказа»',
-          'credit.unmarked': 'Поступление возвращено в поступления',
+          'credit.unmarked_not_for_order': 'Отметка «Не для заказа» снята',
           'order.returned': 'Заказ возвращён',
           'order.refunded': 'Заказ: записан возврат денег',
           'order.cancelled': 'Заказ отменён',
@@ -1444,6 +1446,8 @@ export const adminMessages = defineMessages(
             duplicate: 'Повторный чек: такой же файл уже был у другого заказа.',
             not_confirmed: 'ИИ не смог подтвердить чек.',
             judge_failed: 'ИИ не ответил, сколько бы раз его ни спрашивали.',
+            credit_marked:
+              'ИИ подтвердил чек поступлением, которое тем временем отметили «Не для заказа».',
           },
           checks: 'Ответы ИИ',
           checkMeta: 'поступлений: {n}',
@@ -1457,7 +1461,7 @@ export const adminMessages = defineMessages(
           checkOutcome: {
             confirmed: 'Подтвердил оплату',
             manual_review: 'Передал менеджеру',
-            credit_taken: 'Поступление уже оплатило другой заказ',
+            credit_taken: 'Поступление уже оплатило другой заказ или отмечено «Не для заказа»',
             stale: 'Ответил, когда чек уже был решён',
             waiting: 'Ответ ещё не учтён',
           },
@@ -2189,6 +2193,8 @@ export const adminMessages = defineMessages(
                 'Xuddi shu chek boshqa buyurtmada boʻlgan. Toʻlovni tasdiqlashdan oldin chekni tushum bilan solishtiring.',
               judge_failed:
                 'AI chekni tekshira olmadi. Chekni tushum bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
+              credit_marked:
+                'AI chekni «Buyurtma uchun emas» deb belgilangan tushum bilan tasdiqladi. Chekni tushumlar bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
               none: 'Chekni tushum bilan solishtirib, toʻlovni tasdiqlang yoki chekni rad eting.',
             },
             wait: '{age}dan beri kutmoqda',
@@ -2670,7 +2676,7 @@ export const adminMessages = defineMessages(
           'review.published': 'Sharh eʼlon qilindi',
           'review.hidden': 'Sharh yashirildi',
           'credit.marked_not_for_order': 'Tushum «Buyurtma uchun emas» deb belgilandi',
-          'credit.unmarked': 'Tushum tushumlarga qaytarildi',
+          'credit.unmarked_not_for_order': '«Buyurtma uchun emas» belgisi olib tashlandi',
           'order.returned': 'Buyurtma qaytarildi',
           'order.refunded': 'Buyurtma: pul qaytarilgani yozildi',
           'order.cancelled': 'Buyurtma bekor qilindi',
@@ -3512,6 +3518,8 @@ export const adminMessages = defineMessages(
             duplicate: 'Takroriy chek: xuddi shu fayl boshqa buyurtmada bor edi.',
             not_confirmed: 'AI chekni tasdiqlay olmadi.',
             judge_failed: 'AI necha marta soʻralmasin, javob bermadi.',
+            credit_marked:
+              'AI chekni tushum bilan tasdiqladi, lekin u tushum shu orada «Buyurtma uchun emas» deb belgilandi.',
           },
           checks: 'AI javoblari',
           checkMeta: 'tushumlar: {n}',
@@ -3525,7 +3533,8 @@ export const adminMessages = defineMessages(
           checkOutcome: {
             confirmed: 'Toʻlovni tasdiqladi',
             manual_review: 'Menejerga topshirdi',
-            credit_taken: 'Tushum boshqa buyurtmani toʻlagan',
+            credit_taken:
+              'Tushum boshqa buyurtmani toʻlagan yoki «Buyurtma uchun emas» deb belgilangan',
             stale: 'Chek hal boʻlganidan keyin javob berdi',
             waiting: 'Javob hali hisobga olinmagan',
           },
