@@ -60,7 +60,7 @@ import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-
 import { ACCEPTED_VERDICTS, CANDIDATE, IN_ORDER_TIME, UNLINKED } from '../payment/rules';
 import { heldEntitlement } from '../entitlements/entitlements';
 import { readShopCard } from '../payment/shop-card.service';
-import { orderMoney, refundedSum, refundsOf } from '../refunds/order-money';
+import { orderMoney, refundOwed, refundedSum, refundsOf } from '../refunds/order-money';
 import { Refunds } from '../refunds/refunds';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
@@ -122,7 +122,7 @@ const STATE = {
  * The columns are named with their table: in a one-table select Drizzle leaves the table out, and
  * a bare `id` inside the subqueries would be theirs.
  */
-const paymentState = sql<PaymentState>`case
+export const paymentState = sql<PaymentState>`case
   when exists (select 1 from order_events pe where pe.order_id = "orders"."id" and pe.action = ${PAID_BY}) then ${STATE.paid}
   when "orders"."status" = ${UNDER_CHECK} and exists (select 1 from receipts pr where pr.order_id = "orders"."id" and pr.verdict = ${HELD}) then ${STATE.manual_review}
   when "orders"."status" = ${UNDER_CHECK} then ${STATE.checking}
@@ -136,7 +136,7 @@ const digitsOf = (column: unknown) =>
 /** A number the column can hold: anything longer is no order, so 404 rather than a DB error. */
 const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
 
-const customerName = (c: { firstName: string; lastName: string | null }) =>
+export const customerName = (c: { firstName: string; lastName: string | null }) =>
   c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName;
 
 /**
@@ -162,7 +162,8 @@ export class AdminOrdersService {
   async list(q: ListQuery): Promise<AdminOrdersPageDto> {
     const conditions = [];
     if (q.status) conditions.push(eq(orders.status, q.status));
-    if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
+    if (q.payment === 'refund_owed') conditions.push(refundOwed());
+    else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
     if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
     if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
     const digits = q.q?.replace(/\D/g, '') ?? null;
