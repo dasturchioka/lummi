@@ -45,6 +45,7 @@ export function PasswordChangeForm({
 
   const submit = async () => {
     const found: Errors = {};
+    if (requireCurrent && !current) found.current = t.errors.wrongPassword;
     if (next.length < minLength) found.next = weak;
     else if (repeat !== next) found.repeat = t.password.mismatch;
     setErrors(found);
@@ -76,6 +77,7 @@ export function PasswordChangeForm({
 
   return (
     <form
+      noValidate
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault();

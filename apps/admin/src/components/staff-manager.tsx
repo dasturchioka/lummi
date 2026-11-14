@@ -94,68 +94,41 @@ export function StaffManager({
     else setRowError(res ? errorText(res.status) : t.errors.generic);
   };
 
-  // Row actions are quiet text buttons; the switch button is as wide as the longer of its two
-  // labels, so the buttons after it start at the same x in every row. Outline and primary
-  // buttons are kept for the page header and dialogs.
-  const toggleWidth = {
-    minWidth: `calc(${Math.max(t.staff.deactivate.length, t.staff.activate.length)}ch + 1.5rem)`,
-  };
-  const actions = (s: StaffDto) =>
-    s.role === 'manager' && s.id !== meId ? (
+  // Row actions are quiet text buttons. In the list they wrap after one another; in the table
+  // they sit in two fixed columns (reset, switch | unlink, remove), each as wide as its longest
+  // label, so every row's buttons line up. Outline and primary buttons are kept for the page
+  // header and dialogs.
+  const width = (...labels: string[]) =>
+    `calc(${Math.max(...labels.map((l) => l.length))}ch + 1.5rem)`;
+  const columns = `${width(t.staff.resetPassword, t.staff.deactivate, t.staff.activate)} ${width(t.staff.unlink, t.staff.remove)}`;
+  const action = (label: string, onClick: () => void, loading = false) => (
+    <Button variant="ghost" size="sm" className="justify-start" loading={loading} onClick={onClick}>
+      {label}
+    </Button>
+  );
+  const actions = (s: StaffDto, table = false) => {
+    if (s.role !== 'manager' || s.id === meId) return null;
+    const reset = action(t.staff.resetPassword, () => {
+      setRowError(null);
+      setResetting(s);
+    });
+    const unlink =
+      s.telegramId !== null && s.hasPassword
+        ? action(t.staff.unlink, () => ask('unlink', s))
+        : table && <span aria-hidden />;
+    const toggle = s.active
+      ? action(t.staff.deactivate, () => ask('deactivate', s))
+      : action(t.staff.activate, () => activate(s), busyId === s.id);
+    const remove = action(t.staff.remove, () => ask('remove', s));
+    return (
       <>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="justify-start"
-          onClick={() => {
-            setRowError(null);
-            setResetting(s);
-          }}
-        >
-          {t.staff.resetPassword}
-        </Button>
-        {s.telegramId !== null && s.hasPassword && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start"
-            onClick={() => ask('unlink', s)}
-          >
-            {t.staff.unlink}
-          </Button>
-        )}
-        {s.active ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start"
-            style={toggleWidth}
-            onClick={() => ask('deactivate', s)}
-          >
-            {t.staff.deactivate}
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="justify-start"
-            style={toggleWidth}
-            loading={busyId === s.id}
-            onClick={() => activate(s)}
-          >
-            {t.staff.activate}
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="justify-start"
-          onClick={() => ask('remove', s)}
-        >
-          {t.staff.remove}
-        </Button>
+        {reset}
+        {unlink}
+        {toggle}
+        {remove}
       </>
-    ) : null;
+    );
+  };
 
   const status = (s: StaffDto) => (
     <Badge tone={s.active ? 'sage' : 'neutral'}>
@@ -173,11 +146,9 @@ export function StaffManager({
       </>
     );
   const telegram = (s: StaffDto) =>
-    s.telegramId === null ? (
-      <span className="text-muted-foreground">{t.staff.telegramNone}</span>
-    ) : (
-      <span className="tabular-nums">{s.telegramId}</span>
-    );
+    s.telegramId === null
+      ? `${t.staff.telegram} ${t.staff.telegramNone}`
+      : `${t.staff.telegram} ${s.telegramId}`;
   const pending = (s: StaffDto) =>
     s.mustChangePassword && (
       <span className="text-[12.5px] text-muted-foreground">{t.staff.pendingPassword}</span>
@@ -229,13 +200,7 @@ export function StaffManager({
                       </p>
                       <MetaLine
                         className="mt-0.5 text-[13px] text-muted-foreground"
-                        parts={[
-                          t.roles[s.role],
-                          s.login ?? t.staff.noLogin,
-                          s.telegramId === null
-                            ? `${t.staff.telegram} ${t.staff.telegramNone}`
-                            : `${t.staff.telegram} ${s.telegramId}`,
-                        ]}
+                        parts={[t.roles[s.role], s.login ?? t.staff.noLogin, telegram(s)]}
                       />
                       {pending(s) && <p className="mt-0.5">{pending(s)}</p>}
                     </div>
@@ -252,9 +217,7 @@ export function StaffManager({
                 <THead>
                   <TR>
                     <TH>{t.staff.name}</TH>
-                    <TH>{t.staff.login}</TH>
-                    <TH>{t.staff.telegram}</TH>
-                    <TH>{t.staff.role}</TH>
+                    <TH>{t.staff.signIn}</TH>
                     <TH>{t.staff.status}</TH>
                     <TH>
                       <span className="sr-only">{t.staff.actions}</span>
@@ -264,22 +227,30 @@ export function StaffManager({
                 <TBody>
                   {initial.map((s) => (
                     <TR key={s.id}>
-                      <TD className="font-semibold [overflow-wrap:anywhere]">
-                        {s.name}
-                        {you(s)}
+                      <TD className="[overflow-wrap:anywhere]">
+                        <p className="font-semibold">
+                          {s.name}
+                          {you(s)}
+                        </p>
+                        <p className="mt-0.5 text-[13px] text-muted-foreground">
+                          {t.roles[s.role]}
+                        </p>
                       </TD>
                       <TD className="[overflow-wrap:anywhere]">
-                        {s.login ?? (
-                          <span className="text-muted-foreground">{t.staff.noLogin}</span>
-                        )}
-                        {pending(s) && <div>{pending(s)}</div>}
+                        <p>
+                          {s.login ?? (
+                            <span className="text-muted-foreground">{t.staff.noLogin}</span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-[13px] whitespace-nowrap text-muted-foreground tabular-nums">
+                          {telegram(s)}
+                        </p>
+                        {pending(s) && <p>{pending(s)}</p>}
                       </TD>
-                      <TD className="whitespace-nowrap">{telegram(s)}</TD>
-                      <TD className="whitespace-nowrap">{t.roles[s.role]}</TD>
                       <TD>{status(s)}</TD>
                       <TD className="w-px">
-                        <div className="flex max-w-[22rem] flex-wrap justify-end gap-x-1.5">
-                          {actions(s)}
+                        <div className="grid gap-x-1.5" style={{ gridTemplateColumns: columns }}>
+                          {actions(s, true)}
                         </div>
                       </TD>
                     </TR>
