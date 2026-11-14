@@ -1,6 +1,12 @@
 'use client';
 
-import type { HomeQueue, HomeQueues, HomeSystem, OwnerHome } from '@lummi/contracts';
+import {
+  HOME_QUEUES,
+  type HomeQueue,
+  type HomeQueues,
+  type HomeSystem,
+  type OwnerHome,
+} from '@lummi/contracts';
 import { formatMoney, formatTiyin, plural, type Language } from '@lummi/i18n';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -160,17 +166,6 @@ export function SalesStrip({
 
 // ---- the queue
 
-const QUEUE_ORDER: HomeQueue[] = [
-  'receipts',
-  'accept',
-  'assemble',
-  'bts',
-  'credits',
-  'refunds',
-  'stock',
-  'reviews',
-];
-
 /** A stock row's name: «Blue Sapphire 30 мл», or the Discovery set. */
 export function stockLabel(
   item: { kind: 'volume' | 'discovery'; name: string | null; ml: number | null },
@@ -226,7 +221,7 @@ export function QueueCard({
           {copy.queue}
         </h2>
       </div>
-      {QUEUE_ORDER.map((key) => {
+      {HOME_QUEUES.map((key) => {
         const n = queues[key].count;
         const zero = n === 0;
         const row = copy.rows[key];
