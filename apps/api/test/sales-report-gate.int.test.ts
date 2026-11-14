@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { MarketingFigures, MarketingReport, SalesReport } from '@lummi/contracts';
+import type {
+  MarketingFigures,
+  MarketingReport,
+  MarketingReportQuery,
+  SalesReport,
+} from '@lummi/contracts';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
 import {
+  BLOGGER_FILTER,
   EXPECTED_ACQUISITION,
   EXPECTED_DAYS,
   EXPECTED_FRAGRANCES,
@@ -16,8 +22,10 @@ import {
   EXPECTED_TOTALS,
   EXPECTED_UPGRADE_RIGHTS,
   EXPECTED_VOLUMES,
-  EXPECTED_WITHOUT_ACQUISITION,
+  EXPECTED_EARLIER_CUSTOMERS,
+  EXPECTED_WITHOUT_FIRST_LINK,
   EXPECTED_WITHOUT_LINK,
+  NO_CODE_FILTER,
   placeTwentyOrders,
   RANGE,
   type FixtureCatalog,
@@ -193,7 +201,7 @@ describe('the 20-order report gate (TZ §10)', () => {
   });
 });
 
-async function marketing(query: { from: string; to: string }): Promise<MarketingReport> {
+async function marketing(query: MarketingReportQuery): Promise<MarketingReport> {
   const res = await owner.client.admin.reports.marketing({ query });
   if (res.status !== 200) throw new Error(`marketing report ${res.status}`);
   return res.body;
@@ -203,7 +211,7 @@ async function marketing(query: { from: string; to: string }): Promise<Marketing
 const figuresOf = (r: MarketingFigures): MarketingFigures => ({
   orders: r.orders,
   customers: r.customers,
-  newCustomers: r.newCustomers,
+  firstTimeBuyers: r.firstTimeBuyers,
   itemsBeforeDiscount: r.itemsBeforeDiscount,
   discount: r.discount,
   refunds: r.refunds,
@@ -256,7 +264,7 @@ describe('the marketing reports over the same 20 orders (#43)', () => {
     expect(r.withoutLink).toEqual(EXPECTED_WITHOUT_LINK);
   });
 
-  it("splits them by the customer's first link", async () => {
+  it('splits them by the link that acquired the customer, earlier customers apart', async () => {
     const r = await marketing(RANGE);
     expect(
       r.acquisition.map((a) => ({
@@ -271,7 +279,8 @@ describe('the marketing reports over the same 20 orders (#43)', () => {
         links: link ? [{ code: code(link), acquired: e.acquired, ...figuresOf(e) }] : [],
       })),
     );
-    expect(r.withoutAcquisition).toEqual(EXPECTED_WITHOUT_ACQUISITION);
+    expect(r.earlierCustomers).toEqual(EXPECTED_EARLIER_CUSTOMERS);
+    expect(r.withoutFirstLink).toEqual(EXPECTED_WITHOUT_FIRST_LINK);
   });
 
   it('counts the set discount: rights issued, used, and the orders that used them', async () => {
@@ -279,29 +288,110 @@ describe('the marketing reports over the same 20 orders (#43)', () => {
     expect(r.upgradeRights).toEqual(EXPECTED_UPGRADE_RIGHTS);
   });
 
-  it('agrees with the sales report: the Sources and the first links each add up to it', async () => {
+  it('agrees with the sales report: the Sources and the acquisition each add up to it', async () => {
     const sales = (await report(RANGE)).totals;
-    const r = await marketing(RANGE);
-    for (const rows of [
-      [...r.sources, r.withoutLink],
-      [...r.acquisition, r.withoutAcquisition],
-    ]) {
-      const sum = (key: 'orders' | 'itemsBeforeDiscount' | 'discount' | 'refunds' | 'net') =>
-        rows.reduce((n, row) => n + row[key], 0);
-      expect({
-        orders: sum('orders'),
-        itemsBeforeDiscount: sum('itemsBeforeDiscount'),
-        discount: sum('discount'),
-        refunds: sum('refunds'),
-        net: sum('net'),
-      }).toEqual({
-        orders: sales.orders,
-        itemsBeforeDiscount: sales.itemsBeforeDiscount,
-        discount: sales.discount,
-        refunds: sales.refunds,
-        net: sales.net,
-      });
-    }
+    expectSplitsAddUpTo(await marketing(RANGE), {
+      orders: sales.orders,
+      itemsBeforeDiscount: sales.itemsBeforeDiscount,
+      discount: sales.discount,
+      refunds: sales.refunds,
+      net: sales.net,
+    });
+  });
+
+  it('narrows every table to a Source: opens and acquisitions on its links only', async () => {
+    const r = await marketing({ ...RANGE, source: 'blogger' });
+    expect(r.filters).toEqual({ source: 'blogger', code: null });
+    expect(
+      r.promoCodes.map((p) => ({
+        code: p.code,
+        links: p.links.map((l) => l.code),
+        ...figuresOf(p),
+        opens: p.opens,
+        linkOrders: p.linkOrders,
+        conversion: p.conversion,
+      })),
+    ).toEqual(BLOGGER_FILTER.promoCodes.map((e) => ({ ...e, links: e.links.map(code) })));
+    // the blogger row as unfiltered, and nothing else
+    const blogger = EXPECTED_SOURCES.find((e) => e.source === 'blogger')!;
+    expect(
+      r.sources.map((s) => ({
+        source: s.source,
+        ...figuresOf(s),
+        opens: s.opens,
+        conversion: s.conversion,
+      })),
+    ).toEqual([
+      {
+        source: 'blogger',
+        ...figuresOf(blogger),
+        opens: blogger.opens,
+        conversion: blogger.conversion,
+      },
+    ]);
+    expect(r.withoutLink).toEqual(NO_SALES);
+    const promoCode = r.acquisition.find((a) => a.source === 'promo_code')!;
+    expect({ acquired: promoCode.acquired, ...figuresOf(promoCode) }).toEqual(
+      BLOGGER_FILTER.acquisitionPromoCode,
+    );
+    expect(
+      r.acquisition.filter((a) => a.source !== 'promo_code').map((a) => a.orders + a.acquired),
+    ).toEqual([0, 0, 0, 0, 0]);
+    expect(r.earlierCustomers).toEqual(BLOGGER_FILTER.earlierCustomers);
+    expect(r.withoutFirstLink).toEqual(NO_SALES);
+    expect(r.upgradeRights.map((u) => [u.source, u.issued, u.orders])).toEqual([
+      ['set', BLOGGER_FILTER.setRightsIssued, 0],
+      ['single_10ml', 0, 0],
+    ]);
+    expectSplitsAddUpTo(r, BLOGGER_FILTER.totals);
+  });
+
+  it('narrows every table to the orders without a promo code', async () => {
+    const r = await marketing({ ...RANGE, code: 'none' });
+    expect(r.filters).toEqual({ source: null, code: 'none' });
+    expect(r.promoCodes).toEqual([]);
+    const row = (source: string) => {
+      const s = r.sources.find((x) => x.source === source)!;
+      return { ...figuresOf(s), opens: s.opens, conversion: s.conversion };
+    };
+    // instagram, the channel and the store QR took no code: as unfiltered
+    for (const e of EXPECTED_SOURCES.filter((x) =>
+      ['instagram', 'telegram_channel', 'store_qr', 'other'].includes(x.source),
+    ))
+      expect(row(e.source)).toEqual({ ...figuresOf(e), opens: e.opens, conversion: e.conversion });
+    expect(row('blogger')).toEqual(NO_CODE_FILTER.blogger);
+    expect(row('promo_code')).toEqual(NO_CODE_FILTER.promoCode);
+    expect(r.withoutLink).toEqual(NO_CODE_FILTER.withoutLink);
+    expectSplitsAddUpTo(r, NO_CODE_FILTER.totals);
+  });
+
+  it('narrows to one promo code, whatever case the URL has', async () => {
+    const r = await marketing({ ...RANGE, code: 'bloger10' });
+    expect(r.filters.code).toBe('BLOGER10');
+    expect(r.promoCodes.map((p) => [p.code, p.orders, p.net, p.opens, p.conversion])).toEqual([
+      ['BLOGER10', 3, 1_170_900, 4, 75],
+    ]);
+    // 8, 14, 17 all came through a link; 1 170 900 + their discount 119 000 = 1 289 900 of items
+    expect(r.withoutLink).toEqual(NO_SALES);
+    expectSplitsAddUpTo(r, {
+      orders: 3,
+      itemsBeforeDiscount: 1_289_900,
+      discount: 119_000,
+      refunds: 0,
+      net: 1_170_900,
+    });
+  });
+
+  it('refuses a filter it does not know, on the page and in the export', async () => {
+    const res = await owner.client.admin.reports.marketing({
+      query: { ...RANGE, source: 'tiktok' as 'blogger' },
+    });
+    expect(res.status).toBe(400);
+    const file = await fetch(
+      `${t.baseUrl}/admin/reports/marketing/export?from=${RANGE.from}&to=${RANGE.to}&code=%21%21`,
+      { headers: { cookie: owner.cookie } },
+    );
+    expect(file.status).toBe(422);
   });
 
   it('counts a single day: opens, orders and conversion of that day only', async () => {
@@ -361,7 +451,7 @@ describe('the marketing reports over the same 20 orders (#43)', () => {
     const money = (e: MarketingFigures) => [
       e.orders,
       e.customers,
-      e.newCustomers,
+      e.firstTimeBuyers,
       e.itemsBeforeDiscount,
       e.discount,
       e.refunds,
@@ -391,11 +481,28 @@ describe('the marketing reports over the same 20 orders (#43)', () => {
         const row = [e.acquired, ...money(e)];
         return e.link ? [row, row] : [row];
       }),
-      ['', ...money(EXPECTED_WITHOUT_ACQUISITION)],
+      ['', ...money(EXPECTED_EARLIER_CUSTOMERS)],
+      ['', ...money(EXPECTED_WITHOUT_FIRST_LINK)],
     ]);
     expect(rows(rights!).map((r) => r.slice(1))).toEqual(
       EXPECTED_UPGRADE_RIGHTS.map((e) => [e.issued, ...money(e)]),
     );
+  });
+
+  it('exports what the filters show', async () => {
+    const res = await fetch(
+      `${t.baseUrl}/admin/reports/marketing/export?from=${RANGE.from}&to=${RANGE.to}&source=blogger`,
+      { headers: { cookie: owner.cookie } },
+    );
+    expect(res.status).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await res.arrayBuffer());
+    expect(wb.title).toContain('Источник: Блогер');
+    const [promo, sources] = wb.worksheets;
+    expect(promo!.getRow(2).getCell(1).value).toBe('BLOGER10');
+    expect(promo!.rowCount).toBe(2);
+    // the blogger row and its link, and no «Без ссылки» row
+    expect(sources!.getColumn(1).values.slice(2)).toEqual(['Блогер', 'Блогер']);
   });
 });
 
@@ -409,7 +516,7 @@ describe('a returned set after the fact (#43)', () => {
     const ali7 = {
       orders: 1,
       customers: 1,
-      newCustomers: 1,
+      firstTimeBuyers: 1,
       itemsBeforeDiscount: 200_000,
       discount: 30_000,
       refunds: 0,
@@ -422,3 +529,34 @@ describe('a returned set after the fact (#43)', () => {
     expect(figuresOf(instagram)).toEqual(ali7);
   });
 });
+
+/** The Sources with «Без ссылки», and the acquisition with its two other rows, each sum to `totals`. */
+function expectSplitsAddUpTo(
+  r: MarketingReport,
+  totals: Pick<MarketingFigures, 'orders' | 'itemsBeforeDiscount' | 'discount' | 'refunds' | 'net'>,
+) {
+  for (const rows of [
+    [...r.sources, r.withoutLink],
+    [...r.acquisition, r.earlierCustomers, r.withoutFirstLink],
+  ]) {
+    const sum = (key: keyof typeof totals) => rows.reduce((n, row) => n + row[key], 0);
+    expect({
+      orders: sum('orders'),
+      itemsBeforeDiscount: sum('itemsBeforeDiscount'),
+      discount: sum('discount'),
+      refunds: sum('refunds'),
+      net: sum('net'),
+    }).toEqual(totals);
+  }
+}
+
+const NO_SALES: MarketingFigures = {
+  orders: 0,
+  customers: 0,
+  firstTimeBuyers: 0,
+  itemsBeforeDiscount: 0,
+  discount: 0,
+  refunds: 0,
+  net: 0,
+  averageCheck: null,
+};

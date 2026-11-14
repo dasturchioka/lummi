@@ -212,7 +212,8 @@ export type LinkKey = keyof typeof LINKS | 'bloger10';
  *  10 Nov 08:30 jasur stand (his first)         13 Nov 13:50 dilnoza malika (prefills BLOGER10)
  *  11 Nov 11:50 dilnoza bloger10 (her first;    13 Nov 20:00 ali kanal
  *               prefills BLOGER10)              14 Nov 12:00 bobur malika (his first; no order after)
- *  12 Nov 15:55 vali malika (prefills BLOGER10) 15 Nov 10:00 malika insta (her first; after the range)
+ *  12 Nov 15:55 vali malika (prefills BLOGER10)
+ * Malika never opens a link.
  * A prefilled code is the one the next order types anyway (orders 8, 14, 17), or no order follows.
  * Each order takes the last link its customer opened within 7 days before it was placed:
  *   2 → insta, 7 → insta, 18 → kanal (opened after insta), 5 → kanal, 10 → stand, 8 → bloger10,
@@ -377,7 +378,6 @@ const STEPS: Step[] = [
   { at: '2026-11-14 16:00', refund: 9, amount: 55_000, date: '2026-11-14' },
   { at: '2026-11-14 18:00', deliver: 18 },
   { at: '2026-11-14 20:00', order: 20, who: 'vali', items: [{ f: 'A', ml: 30 }], then: 'unpaid' },
-  { at: '2026-11-15 10:00', open: 'malika', link: 'insta' },
   { at: '2026-11-15 11:00', deliver: 19 },
   { at: '2026-11-15 11:30', refund: 5, amount: 20_000, date: '2026-11-15' },
 ];
@@ -528,28 +528,35 @@ export const EXPECTED_SETS = [
  * ---- Marketing reports (#43) over the same range, by the same orders and refunds ----
  *
  * The 13 orders the sales report counts, with what the marketing reports split them by (C = the
- * order's campaign link; first = the customer's first Fulfilled order ever; acq = the customer's
- * first link and whether the order was placed at or after its first open), and the refunds counted
- * in the range (order 1, delivered 9 Nov outside the range, adds only its refund):
+ * order's campaign link; first = the customer's first Fulfilled order ever; acq = the link that
+ * acquired the customer), and the refunds counted in the range (order 1, delivered 9 Nov outside
+ * the range, adds only its refund):
  *
  *   #  who      items      discount            refund (day)   C         first acq
  *   2  ali        300 000   0                  15 000 (10)    insta     yes   insta
- *   4  jasur       70 000   0                  25 000 (10)    none      yes   none (placed 9 Nov 12:00, before 10 Nov 08:30)
- *   5  vali       130 000   0                  — (15 Nov)     kanal     yes   kanal
+ *   4  jasur       70 000   0                  25 000 (10)    none      yes   earlier
+ *   5  vali       130 000   0                  — (15 Nov)     kanal     yes   earlier
  *   7  ali        200 000   30 000 right (set) —              insta     no    insta
  *   8  dilnoza    330 000   33 000 BLOGER10    —              bloger10  yes   bloger10
- *   9  malika     235 000   0                  55 000 (14)    none      yes   none (her first open is 15 Nov)
- *  10  jasur      700 000   100 000 coupon     —              stand     no    stand
- *  13  malika     180 000   50 000 MINUS50     —              none      no    none
- *  14  vali       600 000   60 000 BLOGER10    —              malika    no    kanal
- *  15  bobur      300 000   0                  —              none      no    none (his first open is 14 Nov 12:00)
- *  16  vali       175 000   0                  10 000 (14)    malika    no    kanal
+ *   9  malika     235 000   0                  55 000 (14)    none      yes   never
+ *  10  jasur      700 000   100 000 coupon     —              stand     no    earlier
+ *  13  malika     180 000   50 000 MINUS50     —              none      no    never
+ *  14  vali       600 000   60 000 BLOGER10    —              malika    no    earlier
+ *  15  bobur      300 000   0                  —              none      no    earlier
+ *  16  vali       175 000   0                  10 000 (14)    malika    no    earlier
  *  17  dilnoza    359 900   26 000 BLOGER10    —              malika    no    bloger10
  *  18  ali        305 000   0                  —              kanal     no    insta
- *   1  bobur     (refund only)                 40 000 (11)    none      –     none (placed 7 Nov)
+ *   1  bobur     (refund only)                 40 000 (11)    none      –     earlier
+ *
+ * A link acquires a customer when it is the first they open and they are still a New customer
+ * then: no order placed before it that is not cancelled. Ali (insta, 7 Nov 10:30; no order yet),
+ * dilnoza (bloger10, 11 Nov 11:50; her order 6 of that morning was cancelled, so it does not
+ * count) and sevara (bloger10, 12 Nov 18:00; never orders) were acquired. Jasur (order 4, 9 Nov,
+ * before his first open on 10 Nov), vali (order 3, 9 Nov, returned, which is not cancelled) and
+ * bobur (orders 1, 12 and 15 before 14 Nov) were earlier customers; malika never opened a link.
  *
  * First Fulfilled orders (by delivery): bobur 1 (9 Nov), jasur 4, ali 2, vali 5 (3 was returned),
- * dilnoza 8, malika 9. Figures per row: orders, customers, new customers (the row holds their
+ * dilnoza 8, malika 9. Figures per row: orders, customers, first-time buyers (the row holds their
  * first), items, discount, refunds, net = items − discount − refunds, average check = (items −
  * discount) ÷ orders to the so'm, halves up. Opens: customers who opened the link(s) in the range.
  */
@@ -557,7 +564,7 @@ export const EXPECTED_SETS = [
 const NO_SALES: MarketingFigures = {
   orders: 0,
   customers: 0,
-  newCustomers: 0,
+  firstTimeBuyers: 0,
   itemsBeforeDiscount: 0,
   discount: 0,
   refunds: 0,
@@ -584,7 +591,7 @@ export const EXPECTED_PROMO_CODES = [
     links: ['bloger10', 'malika'] as LinkKey[],
     orders: 3,
     customers: 2,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 1_289_900,
     discount: 119_000,
     refunds: 0,
@@ -599,7 +606,7 @@ export const EXPECTED_PROMO_CODES = [
     links: [] as LinkKey[],
     orders: 1,
     customers: 1,
-    newCustomers: 0,
+    firstTimeBuyers: 0,
     itemsBeforeDiscount: 180_000,
     discount: 50_000,
     refunds: 0,
@@ -616,7 +623,7 @@ export const EXPECTED_PROMO_CODES = [
  * same figures):
  *   instagram (insta): 2, 7 (ali; 2 is his first): items 500 000, discount 30 000, refunds 15 000
  *     (2's), net 455 000, average 470 000 ÷ 2 = 235 000. Opens in the range: none (ali opened it
- *     7 Nov, malika 15 Nov), so no conversion.
+ *     7 Nov), so no conversion.
  *   telegram_channel (kanal): 5 (vali, his first), 18 (ali): items 435 000, net 435 000, average
  *     217 500. Opens: vali 10 Nov, ali 13 Nov = 2; conversion 2 ÷ 2 = 100.0 %.
  *   store_qr (stand): 10 (jasur): items 700 000, discount 100 000, net 600 000. Opens: jasur = 1;
@@ -641,7 +648,7 @@ export const EXPECTED_SOURCES = [
     link: 'insta' as LinkKey,
     orders: 2,
     customers: 1,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 500_000,
     discount: 30_000,
     refunds: 15_000,
@@ -655,7 +662,7 @@ export const EXPECTED_SOURCES = [
     link: 'kanal' as LinkKey,
     orders: 2,
     customers: 2,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 435_000,
     discount: 0,
     refunds: 0,
@@ -669,7 +676,7 @@ export const EXPECTED_SOURCES = [
     link: 'stand' as LinkKey,
     orders: 1,
     customers: 1,
-    newCustomers: 0,
+    firstTimeBuyers: 0,
     itemsBeforeDiscount: 700_000,
     discount: 100_000,
     refunds: 0,
@@ -683,7 +690,7 @@ export const EXPECTED_SOURCES = [
     link: 'malika' as LinkKey,
     orders: 3,
     customers: 2,
-    newCustomers: 0,
+    firstTimeBuyers: 0,
     itemsBeforeDiscount: 1_134_900,
     discount: 86_000,
     refunds: 10_000,
@@ -697,7 +704,7 @@ export const EXPECTED_SOURCES = [
     link: 'bloger10' as LinkKey,
     orders: 1,
     customers: 1,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 330_000,
     discount: 33_000,
     refunds: 0,
@@ -712,7 +719,7 @@ export const EXPECTED_SOURCES = [
 export const EXPECTED_WITHOUT_LINK: MarketingFigures = {
   orders: 4,
   customers: 3,
-  newCustomers: 2,
+  firstTimeBuyers: 2,
   itemsBeforeDiscount: 785_000,
   discount: 50_000,
   refunds: 120_000,
@@ -721,23 +728,24 @@ export const EXPECTED_WITHOUT_LINK: MarketingFigures = {
 };
 
 /*
- * Acquisition: by the customer's first link, for orders placed at or after their first open of it.
- *   instagram (insta): ali's 2, 7, 18 (first opened 7 Nov, before the range: acquired 0 here;
- *     malika's first open, 15 Nov, is after it): items 805 000, discount 30 000, refunds 15 000,
- *     net 760 000, average 775 000 ÷ 3 = 258 333.33… → 258 333; new: ali.
- *   telegram_channel (kanal): vali, acquired 10 Nov; his 5, 14, 16: items 130 000 + 600 000 +
- *     175 000 = 905 000, discount 60 000, refunds 10 000, net 835 000, average 845 000 ÷ 3 =
- *     281 666.67 → 281 667; new: vali (5).
- *   store_qr (stand): jasur, acquired 10 Nov 08:30; only 10 (4 was placed before): items 700 000,
- *     discount 100 000, net 600 000; not new (his first is 4).
- *   blogger (malika): bobur, acquired 14 Nov 12:00, after his last order: acquired 1, no orders.
+ * Acquisition: by the link that acquired the customer (see above).
+ *   instagram (insta): ali, acquired 7 Nov, before the range: acquired 0 here; his 2, 7, 18:
+ *     items 300 000 + 200 000 + 305 000 = 805 000, discount 30 000, refunds 15 000 (2's), net
+ *     760 000, average 775 000 ÷ 3 = 258 333.33… → 258 333; first-time buyer: ali (2).
  *   promo_code (bloger10): dilnoza (11 Nov) and sevara (12 Nov) acquired = 2; dilnoza's 8, 17:
- *     items 689 900, discount 59 000, net 630 900, average 315 450; new: dilnoza.
- *   other: nothing.
- * Without one: 4, 9, 13, 15 and order 1's refund, as without a link above.
- * Check: orders 3 + 3 + 1 + 2 + 4 = 13; items 805 000 + 905 000 + 700 000 + 689 900 + 785 000 =
- *   3 884 900; discount 30 000 + 60 000 + 100 000 + 59 000 + 50 000 = 299 000; refunds 15 000 +
- *   10 000 + 120 000 = 145 000.
+ *     items 330 000 + 359 900 = 689 900, discount 33 000 + 26 000 = 59 000, net 630 900, average
+ *     315 450; first-time buyer: dilnoza (8).
+ *   telegram_channel, store_qr, blogger: their only openers (vali, jasur, bobur) were earlier
+ *     customers, so nothing; other: nothing.
+ * Earlier customers: jasur's 4, 10; vali's 5, 14, 16; bobur's 15 and order 1's refund:
+ *   items 70 000 + 700 000 + 130 000 + 600 000 + 175 000 + 300 000 = 1 975 000, discount 100 000
+ *   + 60 000 = 160 000, refunds 25 000 + 10 000 + 40 000 = 75 000, net 1 740 000, average
+ *   1 815 000 ÷ 6 = 302 500; customers jasur, vali, bobur; first-time buyers jasur (4), vali (5).
+ * Without a first link: malika's 9, 13: items 235 000 + 180 000 = 415 000, discount 50 000,
+ *   refunds 55 000, net 310 000, average 365 000 ÷ 2 = 182 500; first-time buyer malika (9).
+ * Check: orders 3 + 2 + 6 + 2 = 13; items 805 000 + 689 900 + 1 975 000 + 415 000 = 3 884 900;
+ *   discount 30 000 + 59 000 + 160 000 + 50 000 = 299 000; refunds 15 000 + 75 000 + 55 000 =
+ *   145 000; net 760 000 + 630 900 + 1 740 000 + 310 000 = 3 440 900.
  */
 export const EXPECTED_ACQUISITION = [
   {
@@ -746,47 +754,23 @@ export const EXPECTED_ACQUISITION = [
     acquired: 0,
     orders: 3,
     customers: 1,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 805_000,
     discount: 30_000,
     refunds: 15_000,
     net: 760_000,
     averageCheck: 258_333,
   },
-  {
-    source: 'telegram_channel',
-    link: 'kanal' as LinkKey,
-    acquired: 1,
-    orders: 3,
-    customers: 1,
-    newCustomers: 1,
-    itemsBeforeDiscount: 905_000,
-    discount: 60_000,
-    refunds: 10_000,
-    net: 835_000,
-    averageCheck: 281_667,
-  },
-  {
-    source: 'store_qr',
-    link: 'stand' as LinkKey,
-    acquired: 1,
-    orders: 1,
-    customers: 1,
-    newCustomers: 0,
-    itemsBeforeDiscount: 700_000,
-    discount: 100_000,
-    refunds: 0,
-    net: 600_000,
-    averageCheck: 600_000,
-  },
-  { source: 'blogger', link: 'malika' as LinkKey, acquired: 1, ...NO_SALES },
+  { source: 'telegram_channel', link: null, acquired: 0, ...NO_SALES },
+  { source: 'store_qr', link: null, acquired: 0, ...NO_SALES },
+  { source: 'blogger', link: null, acquired: 0, ...NO_SALES },
   {
     source: 'promo_code',
     link: 'bloger10' as LinkKey,
     acquired: 2,
     orders: 2,
     customers: 1,
-    newCustomers: 1,
+    firstTimeBuyers: 1,
     itemsBeforeDiscount: 689_900,
     discount: 59_000,
     refunds: 0,
@@ -796,7 +780,27 @@ export const EXPECTED_ACQUISITION = [
   { source: 'other', link: null, acquired: 0, ...NO_SALES },
 ];
 
-export const EXPECTED_WITHOUT_ACQUISITION: MarketingFigures = EXPECTED_WITHOUT_LINK;
+export const EXPECTED_EARLIER_CUSTOMERS: MarketingFigures = {
+  orders: 6,
+  customers: 3,
+  firstTimeBuyers: 2,
+  itemsBeforeDiscount: 1_975_000,
+  discount: 160_000,
+  refunds: 75_000,
+  net: 1_740_000,
+  averageCheck: 302_500,
+};
+
+export const EXPECTED_WITHOUT_FIRST_LINK: MarketingFigures = {
+  orders: 2,
+  customers: 1,
+  firstTimeBuyers: 1,
+  itemsBeforeDiscount: 415_000,
+  discount: 50_000,
+  refunds: 55_000,
+  net: 310_000,
+  averageCheck: 182_500,
+};
 
 /*
  * The set discount: rights opened in the range by orders still Fulfilled, one per set unit:
@@ -811,7 +815,7 @@ export const EXPECTED_UPGRADE_RIGHTS = [
     issued: 5,
     orders: 1,
     customers: 1,
-    newCustomers: 0,
+    firstTimeBuyers: 0,
     itemsBeforeDiscount: 200_000,
     discount: 30_000,
     refunds: 0,
@@ -820,6 +824,118 @@ export const EXPECTED_UPGRADE_RIGHTS = [
   },
   { source: 'single_10ml', issued: 0, ...NO_SALES },
 ];
+
+/*
+ * ---- The filters (#43), over the same range ----
+ *
+ * Source «Блогер»: the orders that took a blogger link, 14, 16, 17 (all through malika); opens
+ * and acquisitions count on blogger links only.
+ *   BLOGER10: 14 (vali) and 17 (dilnoza), neither their first: items 600 000 + 359 900 = 959 900,
+ *     discount 60 000 + 26 000 = 86 000, net 873 900, average 873 900 ÷ 2 = 436 950. Its blogger
+ *     link malika was opened by vali, sevara, dilnoza, bobur = 4; both orders came through it:
+ *     2 ÷ 4 = 50.0 %. (MINUS50 had no blogger order and has no link: no row.)
+ *   Sources: blogger alone, as unfiltered (3 orders, net 1 038 900, opens 4, 75.0 %); no order
+ *     without a link.
+ *   Acquisition: 17 under bloger10 (dilnoza's link; acquired 0 here, it is not a blogger link):
+ *     items 359 900, discount 26 000, net 333 900, average 333 900, not her first. Earlier
+ *     customers: vali's 14, 16: items 775 000, discount 60 000, refunds 10 000, net 705 000,
+ *     average 715 000 ÷ 2 = 357 500. Malika (blogger link) acquired no one: bobur was a customer.
+ *   Set discount: 14 opened two builder-set rights and came through malika: issued 2; none of
+ *     14, 16, 17 used a right.
+ *
+ * Code «Без промокода»: every order without a code, 2, 4, 5, 7, 9, 10, 15, 16, 18, and the refunds
+ *   of 1, 2, 4, 9, 16. No promo code rows. Opens count as unfiltered (no Source filter).
+ *   instagram, telegram_channel, store_qr: as unfiltered (none of their orders took a code).
+ *   blogger: 16 alone: items 175 000, refunds 10 000, net 165 000, average 175 000; opens 4:
+ *     1 ÷ 4 = 25.0 %. promo_code: its order 8 took a code; opens 2: 0 ÷ 2 = 0.0 %.
+ *   Without a link: 4, 9, 15 and order 1's refund: items 70 000 + 235 000 + 300 000 = 605 000,
+ *     refunds 25 000 + 55 000 + 40 000 = 120 000, net 485 000, average 605 000 ÷ 3 =
+ *     201 666.67 → 201 667; customers jasur, malika, bobur; first-time buyers jasur, malika.
+ *   Totals: orders 9; items 3 884 900 − (330 000 + 180 000 + 600 000 + 359 900) = 2 415 000;
+ *     discount 299 000 − (33 000 + 50 000 + 60 000 + 26 000) = 130 000; refunds 145 000 (no
+ *     coded order was refunded); net 2 415 000 − 130 000 − 145 000 = 2 140 000.
+ */
+export const BLOGGER_FILTER = {
+  promoCodes: [
+    {
+      code: 'BLOGER10',
+      links: ['malika'] as LinkKey[],
+      orders: 2,
+      customers: 2,
+      firstTimeBuyers: 0,
+      itemsBeforeDiscount: 959_900,
+      discount: 86_000,
+      refunds: 0,
+      net: 873_900,
+      averageCheck: 436_950,
+      opens: 4,
+      linkOrders: 2,
+      conversion: 50,
+    },
+  ],
+  totals: {
+    orders: 3,
+    itemsBeforeDiscount: 1_134_900,
+    discount: 86_000,
+    refunds: 10_000,
+    net: 1_038_900,
+  },
+  acquisitionPromoCode: {
+    acquired: 0,
+    orders: 1,
+    customers: 1,
+    firstTimeBuyers: 0,
+    itemsBeforeDiscount: 359_900,
+    discount: 26_000,
+    refunds: 0,
+    net: 333_900,
+    averageCheck: 333_900,
+  },
+  earlierCustomers: {
+    orders: 2,
+    customers: 1,
+    firstTimeBuyers: 0,
+    itemsBeforeDiscount: 775_000,
+    discount: 60_000,
+    refunds: 10_000,
+    net: 705_000,
+    averageCheck: 357_500,
+  } satisfies MarketingFigures,
+  setRightsIssued: 2,
+};
+
+export const NO_CODE_FILTER = {
+  blogger: {
+    orders: 1,
+    customers: 1,
+    firstTimeBuyers: 0,
+    itemsBeforeDiscount: 175_000,
+    discount: 0,
+    refunds: 10_000,
+    net: 165_000,
+    averageCheck: 175_000,
+    opens: 4,
+    conversion: 25,
+  },
+  promoCode: { ...NO_SALES, opens: 2, conversion: 0 },
+  withoutLink: {
+    orders: 3,
+    customers: 3,
+    firstTimeBuyers: 2,
+    itemsBeforeDiscount: 605_000,
+    discount: 0,
+    refunds: 120_000,
+    net: 485_000,
+    averageCheck: 201_667,
+  } satisfies MarketingFigures,
+  totals: {
+    orders: 9,
+    itemsBeforeDiscount: 2_415_000,
+    discount: 130_000,
+    refunds: 145_000,
+    net: 2_140_000,
+  },
+};
 
 /** The fixture's own catalog: A–E by slug with their ids, as the report names them. */
 export interface FixtureCatalog {
