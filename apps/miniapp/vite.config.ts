@@ -45,5 +45,10 @@ export default defineConfig({
   server: { port: Number(process.env.MINIAPP_PORT ?? 5173), strictPort: true, proxy },
   preview: { port: Number(process.env.MINIAPP_PORT ?? 5173), strictPort: true, proxy },
   build: { manifest: true, target: 'es2022', sourcemap: false },
-  test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'], globals: false },
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    globals: false,
+    setupFiles: ['src/test/setup.ts'],
+  },
 });
