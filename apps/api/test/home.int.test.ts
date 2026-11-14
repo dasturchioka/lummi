@@ -387,7 +387,6 @@ describe('the Now item', () => {
         kind: 'humo_pause',
         silentSeconds: 34 * MIN,
         lastSignal: { day: '2026-11-14', time: '09:20' },
-        underCheck: 1,
       });
       expect(home.queues.receipts.count).toBe(1);
     }

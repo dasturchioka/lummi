@@ -279,16 +279,12 @@ export class HomeService {
   }
 
   private async pauseItem(pause: PaymentPauseRow, now: Date): Promise<HomeNow> {
-    const [[beat], [lastCredit], [underCheck]] = await Promise.all([
+    const [[beat], [lastCredit]] = await Promise.all([
       this.db.select({ at: userbotHeartbeat.seenAt }).from(userbotHeartbeat),
       this.db
         .select({ at: sql`max(${humoMessages.receivedAt})`.mapWith(humoMessages.receivedAt) })
         .from(credits)
         .innerJoin(humoMessages, eq(humoMessages.messageId, credits.humoMessageId)),
-      this.db
-        .select({ n: sql<number>`count(*)::int`.mapWith(Number) })
-        .from(orders)
-        .where(eq(orders.status, 'receipt_review')),
     ]);
     // the last sign of life the pause is about: the userbot's heartbeat, or Humo's last credit
     const signal = pause.cause === 'heartbeat' ? (beat?.at ?? null) : (lastCredit?.at ?? null);
@@ -297,7 +293,6 @@ export class HomeService {
       kind: 'humo_pause',
       silentSeconds: secondsBetween(since, now),
       lastSignal: signal ? moment(signal) : null,
-      underCheck: underCheck?.n ?? 0,
     };
   }
 

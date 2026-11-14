@@ -104,8 +104,6 @@ export const homeNowSchema = z.discriminatedUnion('kind', [
     /** Since Humo's last sign of life (its last heartbeat or credit, by the pause's cause). */
     silentSeconds: seconds,
     lastSignal: tashkentMomentSchema.nullable(),
-    /** Orders whose receipt is under check: a person checks them meanwhile. */
-    underCheck: count,
   }),
   z.object({
     kind: z.literal('receipt'),
