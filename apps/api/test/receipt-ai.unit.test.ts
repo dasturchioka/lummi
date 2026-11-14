@@ -179,9 +179,35 @@ describe('FallbackReceiptJudge', () => {
 describe('candidate text', () => {
   it("carries each candidate's own amount and time, and the amount due is asked separately", () => {
     const q = new TypeSafeJudge({ apiKey: 'k' }).buildRequest(input).questions;
-    expect(q.time.criteria.c1).toBe("Credit of 120000 so'm at 2026-11-09 14:30");
-    expect(q.time.criteria.c2).toBe("Credit of 119500 so'm at 2026-11-09 14:41");
+    expect(q.time.criteria.c1).toBe(
+      "Credit of 120000 so'm at 2026-11-09 14:30 (9 November 2026, 14:30)",
+    );
+    expect(q.time.criteria.c2).toBe(
+      "Credit of 119500 so'm at 2026-11-09 14:41 (9 November 2026, 14:41)",
+    );
     expect(q.amountMatches.instructions).toContain('exactly 120000');
+  });
+
+  it('dates the candidate by Tashkent day, also after midnight when UTC is still on the day before', () => {
+    const late = {
+      ...input,
+      candidates: [{ creditId: 7, amount: 1000, at: new Date('2026-11-13T21:14:00Z') }],
+    };
+    const q = new TypeSafeJudge({ apiKey: 'k' }).buildRequest(late).questions;
+    expect(q.time.criteria.c1).toBe(
+      "Credit of 1000 so'm at 2026-11-14 02:14 (14 November 2026, 02:14)",
+    );
+  });
+
+  it('accepts a receipt date without a year, and ignores the phone clock (owner, 2026-11-14)', () => {
+    // A Click success screen reads «14 ноя 2:14»: no year, short month, no leading zero. The
+    // AI matched it at 0.48 before this wording, 0.72 after; decoys an hour, a day or ten
+    // minutes off still went to «none» (live eval on two real receipts, 2026-11-14).
+    const { instructions } = new TypeSafeJudge({ apiKey: 'k' }).buildRequest(input).questions.time;
+    expect(instructions).toMatch(/without a year matches/);
+    expect(instructions).toMatch(/«14 ноя 2:14»/);
+    expect(instructions).toMatch(/not the phone's status-bar clock or a notification banner/);
+    expect(instructions).toMatch(/Pick "none"/);
   });
 });
 

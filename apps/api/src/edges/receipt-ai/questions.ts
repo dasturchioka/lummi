@@ -25,6 +25,28 @@ export function formatTashkent(at: Date): string {
   return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
 }
 
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** The same Tashkent minute in words, `14 November 2026, 02:14`: receipts write dates many ways. */
+export function formatTashkentWords(at: Date): string {
+  const t = new Date(at.getTime() + 5 * 3_600_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${t.getUTCDate()} ${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}, ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+}
+
 export function candidateKey(index: number): string {
   return `c${index + 1}`;
 }
@@ -39,12 +61,18 @@ export function buildQuestions(input: ReceiptJudgeInput) {
     amountMatches: `The amount transferred is exactly ${input.amountDue} so'm.`,
     recipientMatches: `The recipient's card number ends in ${input.cardLast4}, or the recipient is ${input.holderName}.`,
     time: {
+      // Owner, 2026-11-14: a receipt without a year still counts (bank apps' success screens
+      // show «14 ноя 2:14»); see the eval note in test/receipt-ai.unit.test.ts.
       instructions:
-        'Which of the options is the date and time of the transfer shown on the receipt? Times are Tashkent local time. Pick "none" if the receipt shows none of them.',
+        'Which of the options is the date and time of the transfer shown on the receipt? Times are Tashkent local time. ' +
+        'Receipts often leave out the year and write the date and time in a short local form, such as «14 ноя 2:14», ' +
+        '«14-noyabr 02:14» or «14.11 02:14»: a date without a year matches an option when its day, month, hour and ' +
+        "minute match. Read the transfer's own date and time, not the phone's status-bar clock or a notification " +
+        'banner. Pick "none" if the receipt shows none of them.',
       options: [
         ...input.candidates.map((c, i) => ({
           key: candidateKey(i),
-          description: `Credit of ${c.amount} so'm at ${formatTashkent(c.at)}`,
+          description: `Credit of ${c.amount} so'm at ${formatTashkent(c.at)} (${formatTashkentWords(c.at)})`,
         })),
         { key: NONE_OPTION, description: 'The receipt shows none of these date-times.' },
       ],
