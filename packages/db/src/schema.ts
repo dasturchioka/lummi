@@ -929,7 +929,13 @@ export const orderEvents = pgTable(
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
     createdAt: createdAt(),
   },
-  (t) => [index('order_events_order_idx').on(t.orderId, t.id)],
+  (t) => [
+    index('order_events_order_idx').on(t.orderId, t.id),
+    // the admin Home's money in today reads payment confirmations by time (#48)
+    index('order_events_confirmed_idx')
+      .on(t.createdAt)
+      .where(sql`${t.action} = 'confirm_payment'`),
+  ],
 );
 
 export const upgradeRightSourceEnum = pgEnum('upgrade_right_source', UPGRADE_RIGHT_SOURCES);
@@ -1106,6 +1112,10 @@ export const receipts = pgTable(
     index('receipts_order_idx').on(t.orderId, t.id),
     index('receipts_sha256_idx').on(t.sha256),
     index('receipts_phash_idx').on(t.phash),
+    // the admin Home's «Чеки на проверке» reads the receipts held for a person, oldest first (#48)
+    index('receipts_held_idx')
+      .on(t.createdAt)
+      .where(sql`${t.verdict} = 'manual_review'`),
     // an order may hold several receipts, but at most one is accepted (ADR 0011)
     uniqueIndex('receipts_one_accepted_idx')
       .on(t.orderId)

@@ -33,6 +33,18 @@ export const refundedSum = () =>
     Number,
   );
 
+/**
+ * The order owes money back (`orderMoney`'s `owed` above 0): it ended cancelled or returned, a
+ * Credit paid it, and its Refunds sent back less than that Credit in whole so'm. A condition for
+ * a select over `orders` (not aliased): the orders list's `refund_owed` filter and the admin
+ * Home's «Возврат денег» queue (#48) read it.
+ */
+export const refundOwed = () =>
+  sql`("orders"."status" in (${sql.join(
+    ENDED.map((s) => sql`${s}`),
+    sql`, `,
+  )}) and "orders"."credit_id" is not null and (select c.amount_tiyin / 100 from ${credits} c where c.id = "orders"."credit_id") > ${refundedSum()})`;
+
 /** Where an order's money stands against its Refunds (the page's `money`). */
 export type OrderMoney = AdminOrderDto['money'];
 
