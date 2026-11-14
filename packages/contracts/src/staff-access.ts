@@ -5,7 +5,13 @@ import { z } from 'zod';
  * digits, `.`, `_` and `-`; letters fold to lower case, so it is unique case-insensitively.
  */
 export const STAFF_LOGIN_PATTERN = /^[a-z0-9._-]{3,32}$/;
-export const staffLoginSchema = z.string().trim().toLowerCase().regex(STAFF_LOGIN_PATTERN);
+/** The one place a typed login is folded: the schema, the sign-in, the CLI and the panel use it. */
+export const normalizeLogin = (raw: string): string => raw.trim().toLowerCase();
+export const staffLoginSchema = z
+  .string()
+  .max(64)
+  .transform(normalizeLogin)
+  .pipe(z.string().regex(STAFF_LOGIN_PATTERN));
 
 /**
  * The longest password taken: a hard ceiling against hashing megabytes, not a rule (the shortest

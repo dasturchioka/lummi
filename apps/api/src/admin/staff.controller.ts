@@ -3,22 +3,16 @@ import type { StaffRow } from '@lummi/db';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
-import { StaffService, type PasswordRefusal, type StaffRefusal } from '../staff/staff.service';
+import { StaffService, type StaffRefusal } from '../staff/staff.service';
+import { passwordRefused } from './password-responses';
 import { toStaffDto } from './staff.dto';
 
 /** One mapping for service failures: unknown id is 404, a refused change is 409. */
 function failure(reason: StaffRefusal) {
   return reason === 'not_found'
     ? { status: 404 as const, body: { code: 'not_found' as const } }
-    : reason === 'login_required'
-      ? { status: 422 as const, body: { code: 'login_required' as const } }
-      : { status: 409 as const, body: { code: reason } };
+    : { status: 409 as const, body: { code: reason } };
 }
-
-const passwordFailure = (res: PasswordRefusal) => ({
-  status: 422 as const,
-  body: { code: res.reason, minLength: res.minLength },
-});
 
 /** Everything here is owner-only; later owner-only endpoints use the same two guards. */
 @Controller()
@@ -39,7 +33,7 @@ export class StaffController {
     return tsRestHandler(adminContract.staff.create, async ({ body }) => {
       const res = await this.staff.addManager(actor, body);
       if (res.ok) return { status: 201 as const, body: toStaffDto(res.staff) };
-      if ('minLength' in res) return passwordFailure(res);
+      if ('minLength' in res) return passwordRefused(res);
       return { status: 409 as const, body: { code: 'login_taken' as const } };
     });
   }
@@ -49,7 +43,7 @@ export class StaffController {
     return tsRestHandler(adminContract.staff.resetPassword, async ({ params, body }) => {
       const res = await this.staff.resetPassword(actor, params.id, body);
       if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
-      return 'minLength' in res ? passwordFailure(res) : failure(res.reason);
+      return 'minLength' in res ? passwordRefused(res) : failure(res.reason);
     });
   }
 

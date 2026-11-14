@@ -101,10 +101,39 @@ describe('seed owner CLI', () => {
     expect((await signIn('fayzali', second.password)).status).toBe(200);
   });
 
+  it('a login-only run never adds a second owner beside one without a login: it names the command', async () => {
+    await seedOwner(t.db, now(), { telegramId: 900001, name: 'Owner' });
+    await expect(seedOwner(t.db, now(), { login: 'fayzali', name: 'Fayzali' })).rejects.toThrow(
+      'seed:owner --telegram-id 900001 --login fayzali --name "Fayzali"',
+    );
+    expect(await t.db.select().from(staff)).toHaveLength(1);
+    // on purpose, it does
+    const second = await seedOwner(t.db, now(), {
+      login: 'developer',
+      name: 'Developer',
+      newOwner: true,
+    });
+    expect(second).toMatchObject({ role: 'owner', login: 'developer', telegramId: null });
+    expect(parseSeedOwnerArgs(['--login', 'x.y', '--name', 'X', '--new-owner'])).toEqual({
+      login: 'x.y',
+      name: 'X',
+      newOwner: true,
+    });
+  });
+
+  it('a new owner password lifts that login’s lock', async () => {
+    await seedOwner(t.db, now(), { login: 'fayzali', name: 'Fayzali' });
+    const { password: first } = await setOwnerPassword(t.db, now(), 'fayzali');
+    for (let i = 1; i <= 5; i++) await signIn('fayzali', `wrong-${i}`);
+    expect((await signIn('fayzali', first)).status).toBe(429);
+    const { password } = await setOwnerPassword(t.db, now(), 'fayzali');
+    expect((await signIn('fayzali', password)).status).toBe(200);
+  });
+
   it('refuses a login that is not an owner’s, and a Telegram id and login of two records', async () => {
     await expect(setOwnerPassword(t.db, now(), 'nobody')).rejects.toThrow(/No owner/);
     await seedOwner(t.db, now(), { telegramId: 900001, name: 'Owner' });
-    await seedOwner(t.db, now(), { login: 'second', name: 'Second' });
+    await seedOwner(t.db, now(), { login: 'second', name: 'Second', newOwner: true });
     await expect(
       seedOwner(t.db, now(), { telegramId: 900001, login: 'second', name: 'X' }),
     ).rejects.toThrow(/two different staff records/);

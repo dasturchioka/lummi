@@ -25,7 +25,7 @@ export type PasswordChangeOutcome =
   | { ok: true; staff: StaffRow }
   | PasswordRefusal
   | { ok: false; reason: 'locked'; retryAt: Date }
-  | { ok: false; reason: 'login_required' };
+  | { ok: false; reason: 'login_required' | 'conflict' };
 
 @Injectable()
 export class StaffService {
@@ -133,37 +133,48 @@ export class StaffService {
 
   /**
    * «Сменить пароль» and the forced change after a temporary password. The current password is
-   * asked for unless the one in place is temporary (or there is none yet); wrong guesses count
-   * toward the login's lock. Every other session of the member ends; `keepToken`'s stays.
+   * asked for unless the one in place is temporary (or there is none yet); each try counts toward
+   * the login's lock before it is checked. The change commits only if the row is still as it was
+   * checked (locked `FOR UPDATE`): an owner's reset in between wins and this change is refused.
+   * Every other session of the member ends; `keepToken`'s stays.
    */
   async changePassword(
     member: StaffRow,
     input: { currentPassword?: string; newPassword: string },
     keepToken: string,
   ): Promise<PasswordChangeOutcome> {
-    if (!member.login) return { ok: false, reason: 'login_required' };
+    const [checked] = await this.db.select().from(staff).where(eq(staff.id, member.id));
+    if (!checked?.login) return { ok: false, reason: 'login_required' };
     const minLength = await this.minPasswordLength();
-    const key = { scope: 'login', key: member.login } as const;
-    if (member.passwordHash && !member.mustChangePassword) {
-      const until = await this.throttle.lockedUntil([key]);
-      if (until) return { ok: false, reason: 'locked', retryAt: until };
+    const key = { scope: 'login', key: checked.login } as const;
+    if (checked.passwordHash && !checked.mustChangePassword) {
+      const admission = await this.throttle.admit([key]);
+      if (!admission.ok) return { ok: false, reason: 'locked', retryAt: admission.retryAt };
       const current = input.currentPassword ?? '';
-      if (!current || !(await verifyPassword(current, member.passwordHash))) {
-        const [lock] = await this.throttle.fail([key]);
-        if (lock) {
-          await this.recordLock(this.db, member, lock.until);
-          return { ok: false, reason: 'locked', retryAt: lock.until };
-        }
+      const currentMatches =
+        current !== '' && (await verifyPassword(current, checked.passwordHash));
+      if (!currentMatches) {
+        const lockedUntil = await this.throttle.fail([key]);
+        if (lockedUntil) return { ok: false, reason: 'locked', retryAt: lockedUntil };
         return { ok: false, reason: 'wrong_password', minLength };
       }
+      await this.throttle.succeed([key]);
     }
-    if (member.passwordHash && (await verifyPassword(input.newPassword, member.passwordHash))) {
+    if (checked.passwordHash && (await verifyPassword(input.newPassword, checked.passwordHash))) {
       return { ok: false, reason: 'same_password', minLength };
     }
     if (input.newPassword.length < minLength)
       return { ok: false, reason: 'weak_password', minLength };
     const passwordHash = await hashPassword(input.newPassword);
     return this.db.transaction(async (tx) => {
+      const [row] = await tx.select().from(staff).where(eq(staff.id, member.id)).for('update');
+      if (
+        !row ||
+        row.passwordHash !== checked.passwordHash ||
+        row.mustChangePassword !== checked.mustChangePassword
+      ) {
+        return { ok: false, reason: 'conflict' } as const;
+      }
       const [updated] = await tx
         .update(staff)
         .set({ passwordHash, mustChangePassword: false, updatedAt: this.edges.clock.now() })
@@ -175,7 +186,7 @@ export class StaffService {
         action: 'staff.password_changed',
         targetType: 'staff',
         targetId: member.id,
-        payload: { forced: member.mustChangePassword },
+        payload: { forced: row.mustChangePassword },
       });
       return { ok: true, staff: updated as StaffRow } as const;
     });
@@ -248,17 +259,6 @@ export class StaffService {
         },
       });
       return { ok: true, staff: target } as const;
-    });
-  }
-
-  /** `staff.locked`: too many wrong passwords for this member's login (ADR 0038). */
-  async recordLock(db: DbOrTx, member: StaffRow, until: Date): Promise<void> {
-    await this.audit.record(db, {
-      actor: { type: 'system' },
-      action: 'staff.locked',
-      targetType: 'staff',
-      targetId: member.id,
-      payload: { until: until.toISOString(), by: 'login' },
     });
   }
 

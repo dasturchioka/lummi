@@ -3,6 +3,7 @@ import {
   and,
   eq,
   isNull,
+  loginThrottles,
   staff,
   staffSessions,
   type Db,
@@ -20,12 +21,14 @@ const find = async (tx: DbOrTx, where: ReturnType<typeof eq>) =>
 /**
  * CLI: create the first owner, or promote/reactivate an existing record found by Telegram id or
  * login, adding whichever of the two it lacks. Idempotent. The password is set separately
- * (`setOwnerPassword`), so a seed never prints or changes one.
+ * (`setOwnerPassword`), so a seed never prints or changes one. A `--login`-only run that finds an
+ * owner without a login refuses rather than add a second owner (it names the command that gives
+ * that owner the login); `newOwner` adds another owner on purpose.
  */
 export async function seedOwner(
   db: Db,
   now: Date,
-  input: { telegramId?: number; login?: string; name: string },
+  input: { telegramId?: number; login?: string; name: string; newOwner?: boolean },
 ): Promise<StaffRow> {
   return db.transaction(async (tx) => {
     const byTelegram =
@@ -40,6 +43,19 @@ export async function seedOwner(
       );
     }
     const existing = byTelegram ?? byLogin;
+    if (!existing && input.telegramId === undefined && !input.newOwner) {
+      const [withoutLogin] = await tx
+        .select()
+        .from(staff)
+        .where(and(eq(staff.role, 'owner'), isNull(staff.login)));
+      if (withoutLogin) {
+        throw new Error(
+          `An owner without a login exists: ${withoutLogin.name} (telegram id ${withoutLogin.telegramId}, staff id ${withoutLogin.id}). ` +
+            `To give that owner the login, run: seed:owner --telegram-id ${withoutLogin.telegramId} --login ${input.login} --name "${input.name}". ` +
+            'To add another owner instead, add --new-owner.',
+        );
+      }
+    }
     const values = {
       telegramId: input.telegramId ?? existing?.telegramId ?? null,
       login: input.login ?? existing?.login ?? null,
@@ -76,8 +92,10 @@ export async function setOwnerPassword(
   now: Date,
   login: string,
 ): Promise<{ staff: StaffRow; password: string }> {
-  const s = await readSettings(db, ['auth.passwordMinLength']);
-  const password = generatePassword(s['auth.passwordMinLength'], (n) => randomBytes(n));
+  const { 'auth.passwordMinLength': minLength } = await readSettings(db, [
+    'auth.passwordMinLength',
+  ]);
+  const password = generatePassword(minLength, (n) => randomBytes(n));
   const passwordHash = await hashPassword(password);
   const row = await db.transaction(async (tx) => {
     const owner = await find(tx, eq(staff.login, login));
@@ -95,6 +113,10 @@ export async function setOwnerPassword(
       .update(staffSessions)
       .set({ revokedAt: now })
       .where(and(eq(staffSessions.staffId, owner.id), isNull(staffSessions.revokedAt)));
+    // a lost password usually comes with a locked login: the new one works at once
+    await tx
+      .delete(loginThrottles)
+      .where(and(eq(loginThrottles.scope, 'login'), eq(loginThrottles.key, login)));
     await new AuditService().record(tx, {
       actor: { type: 'system' },
       action: 'staff.password_reset',

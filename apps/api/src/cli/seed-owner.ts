@@ -6,7 +6,8 @@ import { parseSeedOwnerArgs } from './seed-owner-args';
 /**
  * Seed (or re-activate) an owner, by login and/or Telegram id:
  *   npm run seed:owner -w @lummi/api -- --login fayzali --name "Fayzali" [--telegram-id 123456789]
- * Idempotent. Needs DATABASE_URL (from .env / .env.local like the API). The password comes from
+ * Idempotent. To add a login to an owner seeded by Telegram id, pass that same --telegram-id.
+ * Needs DATABASE_URL (from .env / .env.local like the API). The password comes from
  * `set-owner-password`.
  */
 const args = parseSeedOwnerArgs(process.argv.slice(2));

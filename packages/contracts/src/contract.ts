@@ -704,7 +704,7 @@ const adminCore = c.router({
       429: lockedErrorSchema,
     },
     summary:
-      '«Сменить пароль» (and the forced change after a temporary one): ends every other session of the member; this one stays. 409 login_required for a Telegram-only record',
+      '«Сменить пароль» (and the forced change after a temporary one): ends every other session of the member; this one stays. 409 login_required for a Telegram-only record, 409 conflict when the owner reset it meanwhile',
   },
   telegramLink: {
     method: 'POST',
@@ -774,10 +774,10 @@ const adminCore = c.router({
         403: adminErrorSchema,
         404: adminErrorSchema,
         409: adminErrorSchema,
-        422: z.union([passwordErrorSchema, adminErrorSchema]),
+        422: passwordErrorSchema,
       },
       summary:
-        'Owner only: «Сбросить пароль», a new temporary password for a manager (with a login when they have none, 422 login_required); every session of that manager ends',
+        'Owner only: «Сбросить пароль», a new temporary password for a manager (with a login when they have none, else 409 login_required); every session of that manager ends',
     },
     unlinkTelegram: {
       method: 'DELETE',

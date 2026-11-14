@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { auditLog, eq, staff } from '@lummi/db';
+import { argon2Derivations } from '../src/staff/password';
 import { captureLogs } from './harness/logs';
 import {
   MANAGER_WIDGET_USER,
@@ -195,6 +196,29 @@ describe('sign-in with login and password', () => {
     });
   });
 
+  it('counts each attempt before checking it: of ten parallel guesses, no more than the limit reach argon2', async () => {
+    const owner = await t.ownerSession();
+    await addManager(owner);
+    const limit = 5; // `auth.passwordAttemptsPerLogin` by default
+    const before = argon2Derivations();
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => signIn('dilnoza', `wrong-${i}`)),
+    );
+    const checked = argon2Derivations() - before;
+    const wrong = results.filter((r) => r.status === 401).length;
+    const locked = results.filter((r) => r.status === 429);
+    expect(checked).toBeLessThanOrEqual(limit);
+    expect(wrong).toBeLessThanOrEqual(limit);
+    expect(wrong + locked.length).toBe(10);
+    expect(locked.length).toBeGreaterThanOrEqual(10 - limit);
+    for (const r of locked) expect(r.body).toMatchObject({ code: 'locked' });
+    // the lock holds for the right password too, without checking it
+    const derivationsNow = argon2Derivations();
+    expect((await signIn('dilnoza', TEMP)).status).toBe(429);
+    expect(argon2Derivations()).toBe(derivationsNow);
+    expect(await audits('staff.locked')).toHaveLength(1);
+  });
+
   it('failures older than the window no longer count', async () => {
     const owner = await t.ownerSession();
     await addManager(owner);
@@ -331,7 +355,7 @@ describe('password changes and resets end sessions', () => {
     const reset = (body: { password: string; login?: string }) =>
       owner.client.admin.staff.resetPassword({ params: { id: legacy.staff.id }, body });
     expect(await reset({ password: RESET })).toMatchObject({
-      status: 422,
+      status: 409,
       body: { code: 'login_required' },
     });
     await addManager(owner, 'dilnoza');

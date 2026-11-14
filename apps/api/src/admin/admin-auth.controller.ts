@@ -10,6 +10,7 @@ import { AllowedDuringPasswordChange, CurrentStaff, StaffGuard } from '../staff/
 import { STAFF_COOKIE, StaffSessionService } from '../staff/staff-session.service';
 import { ENV } from '../tokens';
 import { AdminLoginService, type LoginResult } from './admin-login.service';
+import { lockedOut } from './password-responses';
 import { toStaffDto } from './staff.dto';
 
 @Controller()
@@ -74,10 +75,7 @@ export class AdminAuthController {
         case 403:
           return { status: 403 as const, body: { code: result.code } };
         case 429:
-          return {
-            status: 429 as const,
-            body: { code: result.code, retryAt: result.retryAt.toISOString() },
-          };
+          return lockedOut(result.retryAt);
       }
     }
     res.cookie(STAFF_COOKIE, result.token, {

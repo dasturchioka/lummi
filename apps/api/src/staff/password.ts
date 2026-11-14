@@ -13,7 +13,12 @@ const TAG_BYTES = 32;
 
 const b64 = (buf: Buffer) => buf.toString('base64').replace(/=+$/, '');
 
+let derivations = 0;
+/** How many argon2 derivations this process has run: the lock test counts the guesses checked. */
+export const argon2Derivations = () => derivations;
+
 function derive(password: string, salt: Buffer, cost: Cost, tagLength: number) {
+  derivations++;
   const params: Argon2Parameters = { message: password, nonce: salt, tagLength, ...cost };
   return new Promise<Buffer>((ok, fail) =>
     argon2('argon2id', params, (err, key) => (err ? fail(err) : ok(key))),
