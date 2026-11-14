@@ -1,3 +1,4 @@
+import { settingDefinitions } from '@lummi/contracts';
 import { redirect } from 'next/navigation';
 import { StaffManager } from '@/components/staff-manager';
 import { getAdminMessages } from '@/lib/i18n';
@@ -9,6 +10,18 @@ export default async function StaffPage() {
   if (list.status === 401) redirect('/login');
   if (list.status !== 200) redirect('/'); // 403: managers have no staff page
   const me = await getMe();
+  const policy = await api.passwordPolicy();
   const { t } = await getAdminMessages();
-  return <StaffManager initial={list.body} meId={me.status === 200 ? me.body.id : 0} t={t} />;
+  return (
+    <StaffManager
+      initial={list.body}
+      meId={me.status === 200 ? me.body.id : 0}
+      minLength={
+        policy.status === 200
+          ? policy.body.minLength
+          : settingDefinitions['auth.passwordMinLength'].default
+      }
+      t={t}
+    />
+  );
 }

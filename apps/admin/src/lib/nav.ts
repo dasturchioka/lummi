@@ -2,6 +2,7 @@ import type { StaffDto } from '@lummi/contracts';
 import {
   BanknoteArrowDown,
   ChartColumn,
+  CircleUserRound,
   CreditCard,
   Droplet,
   FileText,
@@ -83,6 +84,11 @@ export const NAV: NavGroup[] = [
       { key: 'audit', icon: ScrollText, href: '/audit', roles: OWNER },
       { key: 'staff', icon: UserCog, href: '/staff', roles: OWNER },
     ],
+  },
+  // every member's own account: password and «Привязать Telegram» (ADR 0038)
+  {
+    key: 'account',
+    items: [{ key: 'profile', icon: CircleUserRound, href: '/profile', roles: ALL }],
   },
 ];
 

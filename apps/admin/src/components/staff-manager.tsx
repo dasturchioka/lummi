@@ -1,11 +1,16 @@
 'use client';
 
-import type { StaffDto } from '@lummi/contracts';
+import { STAFF_LOGIN_PATTERN, type StaffDto } from '@lummi/contracts';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import {
+  newTemporaryPassword,
+  OneTimeCredentials,
+  TemporaryPasswordField,
+} from '@/components/password-fields';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -24,37 +29,53 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
-import { cn, fill } from '@/lib/utils';
+import { fill } from '@/lib/utils';
 
-type Confirm = { kind: 'deactivate' | 'remove'; member: StaffDto };
+type Confirm = { kind: 'deactivate' | 'remove' | 'unlink'; member: StaffDto };
+type ErrorText = (status: number, code?: string) => string;
 
 /**
- * Owner-only staff page: the list (a table on wide cards, a list below that), «Добавить
- * менеджера» in a dialog, and a confirmation before a manager is switched off or removed.
- * Switching a manager back on needs no confirmation.
+ * Owner-only staff page (ADR 0017, 0038): the list (a table on wide cards, a list below that),
+ * «Добавить менеджера» and «Сбросить пароль» in dialogs that end on the login and temporary
+ * password shown once, and a confirmation before a manager is switched off, removed or loses
+ * their Telegram. Switching a manager back on needs no confirmation.
  */
 export function StaffManager({
   initial,
   meId,
+  minLength,
   t,
 }: {
   initial: StaffDto[];
   meId: number;
+  minLength: number;
   t: AdminMessages;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
+  // each opening starts a fresh form (and a fresh password); nothing is generated before the first
+  const [addKey, setAddKey] = useState(0);
+  const [resetting, setResetting] = useState<StaffDto | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
-  const errorText = (status: number) =>
-    status === 409 ? t.errors.conflict : status === 403 ? t.errors.forbidden : t.errors.generic;
+  const errorText: ErrorText = (status, code) =>
+    code === 'telegram_only'
+      ? t.errors.telegramOnly
+      : code === 'login_taken'
+        ? t.errors.loginTaken
+        : status === 409
+          ? t.errors.conflict
+          : status === 403
+            ? t.errors.forbidden
+            : t.errors.generic;
 
   const ask = (kind: Confirm['kind'], member: StaffDto) => {
     setRowError(null);
@@ -74,14 +95,35 @@ export function StaffManager({
   };
 
   // Row actions are quiet text buttons; the switch button is as wide as the longer of its two
-  // labels, so «Удалить» starts at the same x in every row. Outline and primary buttons are kept
-  // for the page header and dialogs.
+  // labels, so the buttons after it start at the same x in every row. Outline and primary
+  // buttons are kept for the page header and dialogs.
   const toggleWidth = {
     minWidth: `calc(${Math.max(t.staff.deactivate.length, t.staff.activate.length)}ch + 1.5rem)`,
   };
   const actions = (s: StaffDto) =>
     s.role === 'manager' && s.id !== meId ? (
       <>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start"
+          onClick={() => {
+            setRowError(null);
+            setResetting(s);
+          }}
+        >
+          {t.staff.resetPassword}
+        </Button>
+        {s.telegramId !== null && s.hasPassword && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            onClick={() => ask('unlink', s)}
+          >
+            {t.staff.unlink}
+          </Button>
+        )}
         {s.active ? (
           <Button
             variant="ghost"
@@ -130,6 +172,16 @@ export function StaffManager({
         </span>
       </>
     );
+  const telegram = (s: StaffDto) =>
+    s.telegramId === null ? (
+      <span className="text-muted-foreground">{t.staff.telegramNone}</span>
+    ) : (
+      <span className="tabular-nums">{s.telegramId}</span>
+    );
+  const pending = (s: StaffDto) =>
+    s.mustChangePassword && (
+      <span className="text-[12.5px] text-muted-foreground">{t.staff.pendingPassword}</span>
+    );
 
   return (
     <>
@@ -137,7 +189,13 @@ export function StaffManager({
         title={t.staff.title}
         description={t.staff.description}
         actions={
-          <Button onClick={() => setAdding(true)} className="max-sm:w-full">
+          <Button
+            onClick={() => {
+              setAddKey((k) => k + 1);
+              setAdding(true);
+            }}
+            className="max-sm:w-full"
+          >
             <Plus strokeWidth={1.5} aria-hidden />
             {t.staff.add}
           </Button>
@@ -148,8 +206,8 @@ export function StaffManager({
 
       {/*
         The layout follows the card's width, not the viewport (the sidebar takes 280 px from
-        1024 up): a stacked list when narrow, one line per person from 576 px, a table from
-        896 px, where every column has room.
+        1024 up): a stacked list, actions on their own line, until the card reaches 896 px; a
+        table from there, where every column has room.
       */}
       <Card className="@container">
         {initial.length === 0 ? (
@@ -162,27 +220,29 @@ export function StaffManager({
                 return (
                   <li
                     key={s.id}
-                    className="flex flex-wrap items-start gap-3 px-4 py-4 @xl:flex-nowrap @xl:items-center @xl:gap-4 @xl:px-5"
+                    className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-4 @xl:px-5"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold [overflow-wrap:anywhere]">
                         {s.name}
                         {you(s)}
                       </p>
-                      <p className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
-                        {t.roles[s.role]} · {s.telegramId}
-                      </p>
+                      <MetaLine
+                        className="mt-0.5 text-[13px] text-muted-foreground"
+                        parts={[
+                          t.roles[s.role],
+                          s.login ?? t.staff.noLogin,
+                          s.telegramId === null
+                            ? `${t.staff.telegram} ${t.staff.telegramNone}`
+                            : `${t.staff.telegram} ${s.telegramId}`,
+                        ]}
+                      />
+                      {pending(s) && <p className="mt-0.5">{pending(s)}</p>}
                     </div>
                     <div className="shrink-0">{status(s)}</div>
-                    {/* a fixed slot from 576 px keeps the status pills in one column */}
-                    <div
-                      className={cn(
-                        '-ml-3 flex basis-full flex-wrap gap-1.5 @xl:ml-0 @xl:w-[16rem] @xl:shrink-0 @xl:basis-auto',
-                        !rowActions && '@max-xl:hidden',
-                      )}
-                    >
-                      {rowActions}
-                    </div>
+                    {rowActions && (
+                      <div className="-ml-3 flex basis-full flex-wrap gap-x-1.5">{rowActions}</div>
+                    )}
                   </li>
                 );
               })}
@@ -192,7 +252,8 @@ export function StaffManager({
                 <THead>
                   <TR>
                     <TH>{t.staff.name}</TH>
-                    <TH>{t.staff.telegramId}</TH>
+                    <TH>{t.staff.login}</TH>
+                    <TH>{t.staff.telegram}</TH>
                     <TH>{t.staff.role}</TH>
                     <TH>{t.staff.status}</TH>
                     <TH>
@@ -207,11 +268,19 @@ export function StaffManager({
                         {s.name}
                         {you(s)}
                       </TD>
-                      <TD className="whitespace-nowrap">{s.telegramId}</TD>
+                      <TD className="[overflow-wrap:anywhere]">
+                        {s.login ?? (
+                          <span className="text-muted-foreground">{t.staff.noLogin}</span>
+                        )}
+                        {pending(s) && <div>{pending(s)}</div>}
+                      </TD>
+                      <TD className="whitespace-nowrap">{telegram(s)}</TD>
                       <TD className="whitespace-nowrap">{t.roles[s.role]}</TD>
                       <TD>{status(s)}</TD>
                       <TD className="w-px">
-                        <div className="flex gap-1.5">{actions(s)}</div>
+                        <div className="flex max-w-[22rem] flex-wrap justify-end gap-x-1.5">
+                          {actions(s)}
+                        </div>
                       </TD>
                     </TR>
                   ))}
@@ -222,13 +291,30 @@ export function StaffManager({
         )}
       </Card>
 
-      <AddManagerDialog
-        open={adding}
-        onOpenChange={setAdding}
-        t={t}
-        errorText={errorText}
-        onAdded={() => router.refresh()}
-      />
+      <Dialog open={adding} onOpenChange={setAdding}>
+        {addKey > 0 && (
+          <AddManagerContent
+            key={addKey}
+            t={t}
+            minLength={minLength}
+            errorText={errorText}
+            onAdded={() => router.refresh()}
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={resetting !== null} onOpenChange={(open) => !open && setResetting(null)}>
+        {resetting && (
+          <ResetPasswordContent
+            key={resetting.id}
+            member={resetting}
+            t={t}
+            minLength={minLength}
+            errorText={errorText}
+            onReset={() => router.refresh()}
+          />
+        )}
+      </Dialog>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         {confirm && (
@@ -256,31 +342,38 @@ function ConfirmContent({
 }: {
   confirm: Confirm;
   t: AdminMessages;
-  errorText: (status: number) => string;
+  errorText: ErrorText;
   onDone: () => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const copy =
-    kind === 'remove'
-      ? { title: t.staff.removeTitle, text: t.staff.removeText, action: t.staff.remove }
-      : {
-          title: t.staff.deactivateTitle,
-          text: t.staff.deactivateText,
-          action: t.staff.deactivate,
-        };
+  const copy = {
+    remove: { title: t.staff.removeTitle, text: t.staff.removeText, action: t.staff.remove },
+    deactivate: {
+      title: t.staff.deactivateTitle,
+      text: t.staff.deactivateText,
+      action: t.staff.deactivate,
+    },
+    unlink: { title: t.staff.unlinkTitle, text: t.staff.unlinkText, action: t.staff.unlink },
+  }[kind];
 
   const run = async () => {
     setPending(true);
     setError(null);
+    const params = { id: member.id };
     const call =
       kind === 'remove'
-        ? browserApi.staff.remove({ params: { id: member.id } })
-        : browserApi.staff.update({ params: { id: member.id }, body: { active: false } });
+        ? browserApi.staff.remove({ params })
+        : kind === 'unlink'
+          ? browserApi.staff.unlinkTelegram({ params })
+          : browserApi.staff.update({ params, body: { active: false } });
     const res = await call.catch(() => null);
     setPending(false);
     if (res?.status === 200) onDone();
-    else setError(res ? errorText(res.status) : t.errors.generic);
+    else
+      setError(
+        res ? errorText(res.status, (res.body as { code?: string }).code) : t.errors.generic,
+      );
   };
 
   return (
@@ -300,86 +393,272 @@ function ConfirmContent({
   );
 }
 
-function AddManagerDialog({
-  open,
-  onOpenChange,
+/** The handed-over login and password, then «Готово». */
+function Handover({
+  title,
+  text,
+  login,
+  password,
   t,
+}: {
+  title: string;
+  text: string;
+  login: string;
+  password: string;
+  t: AdminMessages;
+}) {
+  return (
+    <>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogDescription>{text}</DialogDescription>
+      <div className="mt-5">
+        <OneTimeCredentials login={login} password={password} t={t} />
+      </div>
+      <DialogFooter>
+        <DialogClose asChild>
+          <Button>{t.staff.done}</Button>
+        </DialogClose>
+      </DialogFooter>
+    </>
+  );
+}
+
+const normalLogin = (raw: string) => raw.trim().toLowerCase();
+
+/** «Добавить менеджера»: the form with a password already generated, then the handover. */
+function AddManagerContent({
+  t,
+  minLength,
   errorText,
   onAdded,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   t: AdminMessages;
-  errorText: (status: number) => string;
+  minLength: number;
+  errorText: ErrorText;
   onAdded: () => void;
 }) {
-  const [telegramId, setTelegramId] = useState('');
   const [name, setName] = useState('');
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState(() => newTemporaryPassword(minLength));
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<{ login?: string; password?: string; form?: string }>({});
+  const [added, setAdded] = useState<{ name: string; login: string; password: string } | null>(
+    null,
+  );
 
-  const change = (next: boolean) => {
-    if (!next) setError(null);
-    onOpenChange(next);
+  const submit = async () => {
+    const found: typeof errors = {};
+    if (!STAFF_LOGIN_PATTERN.test(normalLogin(login))) found.login = t.staff.loginHint;
+    if (password.length < minLength)
+      found.password = fill(t.errors.weakPassword, { min: String(minLength) });
+    setErrors(found);
+    if (Object.keys(found).length) return;
+    setPending(true);
+    const res = await browserApi.staff
+      .create({ body: { name, login: normalLogin(login), password } })
+      .catch(() => null);
+    setPending(false);
+    if (res?.status === 201) {
+      setAdded({ name: res.body.name, login: res.body.login ?? '', password });
+      onAdded();
+    } else if (res?.status === 409) setErrors({ login: t.errors.loginTaken });
+    else if (res?.status === 422) {
+      setErrors({ password: fill(t.errors.weakPassword, { min: String(res.body.minLength) }) });
+    } else setErrors({ form: res ? errorText(res.status) : t.errors.generic });
   };
 
   return (
-    <Dialog open={open} onOpenChange={change}>
-      <DialogContent>
-        <DialogTitle>{t.staff.addTitle}</DialogTitle>
-        <DialogDescription className="sr-only">{t.staff.description}</DialogDescription>
-        <form
-          className="mt-5 grid gap-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setPending(true);
-            setError(null);
-            const res = await browserApi.staff
-              .create({ body: { telegramId: Number(telegramId), name } })
-              .catch(() => null);
-            setPending(false);
-            if (res?.status === 201) {
-              setTelegramId('');
-              setName('');
-              onOpenChange(false);
-              onAdded();
-            } else {
-              setError(res ? errorText(res.status) : t.errors.generic);
-            }
-          }}
-        >
-          <Field id="staff-telegram-id" label={t.staff.telegramId} hint={t.staff.telegramIdHint}>
-            <Input
-              inputMode="numeric"
-              pattern="[0-9]+"
-              autoComplete="off"
-              required
-              value={telegramId}
-              onChange={(e) => setTelegramId(e.target.value)}
+    <DialogContent>
+      {added ? (
+        <Handover
+          title={t.staff.addedTitle}
+          text={fill(t.staff.addedText, { name: added.name })}
+          login={added.login}
+          password={added.password}
+          t={t}
+        />
+      ) : (
+        <>
+          <DialogTitle>{t.staff.addTitle}</DialogTitle>
+          <DialogDescription className="sr-only">{t.staff.description}</DialogDescription>
+          <form
+            noValidate
+            className="mt-5 grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            <Field id="staff-name" label={t.staff.name} hint={t.staff.nameHint}>
+              <Input
+                required
+                maxLength={120}
+                autoComplete="off"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field
+              id="staff-login"
+              label={t.staff.login}
+              hint={t.staff.loginHint}
+              error={errors.login}
+            >
+              <Input
+                required
+                maxLength={32}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+              />
+            </Field>
+            <TemporaryPasswordField
+              id="staff-password"
+              value={password}
+              onChange={setPassword}
+              minLength={minLength}
+              t={t}
+              error={errors.password}
             />
-          </Field>
-          <Field id="staff-name" label={t.staff.name} hint={t.staff.nameHint}>
-            <Input
-              required
-              maxLength={120}
-              autoComplete="off"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </Field>
-          {error && <Notice title={error} />}
-          <DialogFooter className="mt-2">
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                {t.actions.cancel}
+            {errors.form && <Notice title={errors.form} />}
+            <DialogFooter className="mt-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  {t.actions.cancel}
+                </Button>
+              </DialogClose>
+              <Button type="submit" loading={pending} disabled={!name.trim()}>
+                {t.staff.addSubmit}
               </Button>
-            </DialogClose>
-            <Button type="submit" loading={pending}>
-              {t.staff.addSubmit}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            </DialogFooter>
+          </form>
+        </>
+      )}
+    </DialogContent>
+  );
+}
+
+function ResetPasswordContent({
+  member,
+  t,
+  minLength,
+  errorText,
+  onReset,
+}: {
+  member: StaffDto;
+  t: AdminMessages;
+  minLength: number;
+  errorText: ErrorText;
+  onReset: () => void;
+}) {
+  const needsLogin = member.login === null;
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState(() => newTemporaryPassword(minLength));
+  const [pending, setPending] = useState(false);
+  const [errors, setErrors] = useState<{ login?: string; password?: string; form?: string }>({});
+  const [done, setDone] = useState<{ login: string; password: string } | null>(null);
+
+  const submit = async () => {
+    const found: typeof errors = {};
+    if (needsLogin && !STAFF_LOGIN_PATTERN.test(normalLogin(login)))
+      found.login = t.staff.loginHint;
+    if (password.length < minLength)
+      found.password = fill(t.errors.weakPassword, { min: String(minLength) });
+    setErrors(found);
+    if (Object.keys(found).length) return;
+    setPending(true);
+    const res = await browserApi.staff
+      .resetPassword({
+        params: { id: member.id },
+        body: { password, ...(needsLogin ? { login: normalLogin(login) } : {}) },
+      })
+      .catch(() => null);
+    setPending(false);
+    if (res?.status === 200) {
+      setDone({ login: res.body.login ?? '', password });
+      onReset();
+      return;
+    }
+    const code = res ? (res.body as { code?: string }).code : undefined;
+    if (code === 'login_taken') setErrors({ login: t.errors.loginTaken });
+    else if (code === 'weak_password' && res?.status === 422 && 'minLength' in res.body) {
+      setErrors({ password: fill(t.errors.weakPassword, { min: String(res.body.minLength) }) });
+    } else setErrors({ form: res ? errorText(res.status, code) : t.errors.generic });
+  };
+
+  return (
+    <DialogContent>
+      {done ? (
+        <Handover
+          title={t.staff.resetDoneTitle}
+          text={fill(t.staff.resetDoneText, { name: member.name })}
+          login={done.login}
+          password={done.password}
+          t={t}
+        />
+      ) : (
+        <>
+          <DialogTitle>{t.staff.resetTitle}</DialogTitle>
+          <DialogDescription>
+            {fill(t.staff.resetText, { name: member.name })}
+            {needsLogin && (
+              <span className="mt-1.5 block">
+                {fill(t.staff.resetLoginText, { name: member.name })}
+              </span>
+            )}
+          </DialogDescription>
+          <form
+            noValidate
+            className="mt-5 grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            {needsLogin && (
+              <Field
+                id="reset-login"
+                label={t.staff.login}
+                hint={t.staff.loginHint}
+                error={errors.login}
+              >
+                <Input
+                  required
+                  maxLength={32}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                />
+              </Field>
+            )}
+            <TemporaryPasswordField
+              id="reset-password"
+              value={password}
+              onChange={setPassword}
+              minLength={minLength}
+              t={t}
+              error={errors.password}
+            />
+            {errors.form && <Notice title={errors.form} />}
+            <DialogFooter className="mt-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  {t.actions.cancel}
+                </Button>
+              </DialogClose>
+              <Button type="submit" loading={pending}>
+                {t.staff.resetSubmit}
+              </Button>
+            </DialogFooter>
+          </form>
+        </>
+      )}
+    </DialogContent>
   );
 }
