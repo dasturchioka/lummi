@@ -1,4 +1,5 @@
 import { settingDefinitions, type AdminHome } from '@lummi/contracts';
+import { fill } from '@lummi/i18n';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
@@ -277,24 +278,68 @@ async function patchRunningBroadcast(
   await page.waitForTimeout(150);
 }
 
-/** Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. */
+/**
+ * Shot staff live under reserved Telegram ids, so they never collide with real dev accounts. A
+ * member without a Telegram id has not linked one yet and signs in with the password (#50);
+ * `temporary` is still on the owner's temporary password.
+ */
 export type ShotStaff = {
-  telegramId: number;
+  telegramId: number | null;
+  login: string;
   name: string;
   role: 'owner' | 'manager';
   active: boolean;
+  temporary?: boolean;
 };
+/** Every shot member's password: dev data for the throwaway shots database, not a secret. */
+export const SHOT_PASSWORD = 'Shot-pass-2026';
 export const SHOT_STAFF: ShotStaff[] = [
-  { telegramId: 990000001, name: 'Fayzali Joʻramaxamadov', role: 'owner', active: true },
-  { telegramId: 990000002, name: 'Dilnoza Karimova', role: 'manager', active: true },
+  {
+    telegramId: 990000001,
+    login: 'fayzali',
+    name: 'Fayzali Joʻramaxamadov',
+    role: 'owner',
+    active: true,
+  },
+  {
+    telegramId: 990000002,
+    login: 'dilnoza',
+    name: 'Dilnoza Karimova',
+    role: 'manager',
+    active: true,
+  },
   {
     telegramId: 990000003,
+    login: 'muhammadjon.abdurahmonov',
     name: 'Abdurahmonov Muhammadjon Saidakbar oʻgʻli',
     role: 'manager',
     active: true,
   },
-  { telegramId: 990000004, name: 'Jasur Toshmatov', role: 'manager', active: false },
+  {
+    telegramId: 990000004,
+    login: 'jasur',
+    name: 'Jasur Toshmatov',
+    role: 'manager',
+    active: false,
+  },
+  { telegramId: null, login: 'malika', name: 'Malika Yusupova', role: 'manager', active: true },
+  {
+    telegramId: null,
+    login: 'bekzod',
+    name: 'Bekzod Rahimov',
+    role: 'manager',
+    active: true,
+    temporary: true,
+  },
 ];
+/** Who a screen signs in as (`Screen.as`). */
+export function shotMember(as: NonNullable<Screen['as']>): ShotStaff {
+  const pick = (f: (s: ShotStaff) => boolean) => SHOT_STAFF.find(f) as ShotStaff;
+  if (as === 'owner') return pick((s) => s.role === 'owner');
+  if (as === 'unlinked') return pick((s) => s.telegramId === null && !s.temporary);
+  if (as === 'temporary') return pick((s) => !!s.temporary);
+  return pick((s) => s.role === 'manager' && s.telegramId !== null && s.active);
+}
 const SHOT_REFUND_REASON = 'shot: reports';
 /** A 30 000 refund of the delivered shot order 9012, sent on 10 November (the sales report). */
 async function shotRefund(db: ShotSql, what: 'add' | 'remove') {
@@ -381,8 +426,11 @@ export type Screen = {
   setup?: (ctx: { db: ShotSql }) => Promise<void>;
   /** …and back again after it, so the next screen (and the next run) starts from the seed. */
   teardown?: (ctx: { db: ShotSql }) => Promise<void>;
-  /** Who is signed in; omitted = nobody. */
-  as?: 'owner' | 'manager';
+  /**
+   * Who is signed in; omitted = nobody. `unlinked`: a manager without Telegram (signs in with the
+   * password); `temporary`: one still on a temporary password.
+   */
+  as?: 'owner' | 'manager' | 'unlinked' | 'temporary';
   /** Defaults to 390 and 1280. */
   widths?: readonly number[];
   /** Interaction after load (open a dialog, submit a form). */
@@ -438,6 +486,32 @@ const setsWorst: Pick<Screen, 'setup' | 'teardown'> = {
   },
 };
 
+/** Fills the sign-in form and presses «Войти» (the dev form's button has its own label). */
+async function passwordSignIn(page: Page, t: AdminMessages, login: string, password: string) {
+  await page.getByLabel(t.login.login, { exact: true }).fill(login);
+  await page.getByLabel(t.login.password, { exact: true }).fill(password);
+  await page.getByRole('button', { name: t.login.submit, exact: true }).click();
+}
+/** Wrong passwords and locks the sign-in screens leave behind. */
+async function clearThrottles({ db }: { db: ShotSql }) {
+  await db.query('delete from login_throttles');
+}
+/** A temporary password typed in for the shots (the dialogs generate a random one). */
+const SHOT_TEMPORARY = 'k7Pm4QxR2vNa9sTe';
+/** The manager «Добавить менеджера» adds in its shot, removed again around it. */
+const SHOT_NEWCOMER = { name: 'Sevara Aliyeva', login: 'sevara.aliyeva' };
+async function removeShotNewcomer({ db }: { db: ShotSql }) {
+  await db.query('delete from staff where login = $1', [SHOT_NEWCOMER.login]);
+}
+/** «Сбросить пароль» on the long-named manager, in whichever layout the width shows. */
+const RESET_TARGET = SHOT_STAFF[2]!;
+function resetButton(page: Page, t: AdminMessages) {
+  return page
+    .locator('main li:visible, main tr:visible')
+    .filter({ hasText: RESET_TARGET.name })
+    .getByRole('button', { name: t.staff.resetPassword, exact: true });
+}
+
 export const screens: Screen[] = [
   { id: 'login', path: '/login' },
   {
@@ -445,7 +519,7 @@ export const screens: Screen[] = [
     path: '/login',
     act: async ({ page, t, outsiderId }) => {
       await page.getByLabel(t.login.devTelegramId).fill(String(outsiderId));
-      await page.getByRole('button', { name: t.login.devSubmit }).click();
+      await page.getByRole('button', { name: t.login.devSubmit, exact: true }).click();
       await page.getByText(t.errors.noAccess, { exact: true }).waitFor();
     },
   },
@@ -522,6 +596,59 @@ export const screens: Screen[] = [
       await page.getByRole('dialog').waitFor();
     },
   },
+  // Sign-in by login and password, staff accounts, the profile (#50, ADR 0038)
+  {
+    id: 'login-wrong',
+    path: '/login',
+    teardown: clearThrottles,
+    act: async ({ page, t }) => {
+      await passwordSignIn(page, t, 'dilnoza', 'not-the-password');
+      await page.getByText(t.errors.invalidCredentials, { exact: true }).waitFor();
+    },
+  },
+  {
+    id: 'login-locked',
+    path: '/login',
+    setup: async ({ db }) => {
+      await db.query(
+        `insert into login_throttles (scope, key, failures, window_started_at, locked_until)
+         values ('login', 'dilnoza', 0, now(), now() + interval '15 minutes')
+         on conflict (scope, key) do update set locked_until = excluded.locked_until`,
+      );
+    },
+    teardown: clearThrottles,
+    act: async ({ page, t }) => {
+      await passwordSignIn(page, t, 'dilnoza', SHOT_PASSWORD);
+      await page.getByText(t.errors.locked, { exact: true }).waitFor();
+    },
+  },
+  { id: 'change-password', path: '/', as: 'temporary' },
+  {
+    id: 'change-password-errors',
+    path: '/',
+    as: 'temporary',
+    act: async ({ page, t }) => {
+      await page.getByLabel(t.changePassword.newPassword, { exact: true }).fill('short');
+      await page.getByRole('button', { name: t.changePassword.submit }).click();
+      await page.getByText(fill(t.errors.weakPassword, { min: '8' })).waitFor();
+    },
+  },
+  { id: 'profile', path: '/profile', as: 'unlinked' },
+  {
+    id: 'profile-link',
+    path: '/profile',
+    as: 'unlinked',
+    teardown: async ({ db }) => {
+      await db.query(
+        `delete from staff_telegram_links where staff_id = (select id from staff where login = 'malika')`,
+      );
+    },
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.profile.link, exact: true }).click();
+      await page.getByText(t.profile.linkWaiting).waitFor();
+    },
+  },
+  { id: 'profile-linked', path: '/profile', as: 'manager' },
   { id: 'staff', path: '/staff', as: 'owner' },
   {
     id: 'staff-add',
@@ -531,6 +658,62 @@ export const screens: Screen[] = [
     act: async ({ page, t }) => {
       await page.getByRole('button', { name: t.staff.add }).click();
       await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    id: 'staff-added',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    setup: removeShotNewcomer,
+    teardown: removeShotNewcomer,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.staff.add }).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel(t.staff.name).fill(SHOT_NEWCOMER.name);
+      await dialog.getByLabel(t.staff.login).fill(SHOT_NEWCOMER.login);
+      await dialog.getByLabel(t.staff.password).fill(SHOT_TEMPORARY);
+      await dialog.getByRole('button', { name: t.staff.addSubmit, exact: true }).click();
+      await dialog.getByText(t.staff.addedTitle, { exact: true }).waitFor();
+    },
+  },
+  {
+    id: 'staff-reset',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await resetButton(page, t).click();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    id: 'staff-reset-done',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    // the reset left that manager on a temporary password: put them back
+    teardown: async ({ db }) => {
+      await db.query(`update staff set must_change_password = false where login = $1`, [
+        RESET_TARGET.login,
+      ]);
+    },
+    act: async ({ page, t }) => {
+      await resetButton(page, t).click();
+      const dialog = page.getByRole('dialog');
+      await dialog.getByLabel(t.staff.password).fill(SHOT_TEMPORARY);
+      await dialog.getByRole('button', { name: t.staff.resetSubmit, exact: true }).click();
+      await dialog.getByText(t.staff.resetDoneTitle, { exact: true }).waitFor();
+    },
+  },
+  {
+    id: 'staff-unlink',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await page.getByRole('button', { name: t.staff.unlink, exact: true }).first().click();
+      await page.getByRole('alertdialog').waitFor();
     },
   },
   {

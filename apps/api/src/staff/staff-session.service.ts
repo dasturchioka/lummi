@@ -3,6 +3,7 @@ import {
   eq,
   gt,
   isNull,
+  ne,
   staff,
   staffSessions,
   type DbOrTx,
@@ -66,5 +67,19 @@ export class StaffSessionService {
       .update(staffSessions)
       .set({ revokedAt: this.edges.clock.now() })
       .where(and(eq(staffSessions.staffId, staffId), isNull(staffSessions.revokedAt)));
+  }
+
+  /** A password change: every session of the member but the one it was made in ends. */
+  async revokeOthers(tx: DbOrTx, staffId: number, keepToken: string): Promise<void> {
+    await tx
+      .update(staffSessions)
+      .set({ revokedAt: this.edges.clock.now() })
+      .where(
+        and(
+          eq(staffSessions.staffId, staffId),
+          isNull(staffSessions.revokedAt),
+          ne(staffSessions.tokenHash, hash(keepToken)),
+        ),
+      );
   }
 }

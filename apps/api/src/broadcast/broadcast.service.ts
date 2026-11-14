@@ -60,7 +60,8 @@ const MAX_RATIO = 20;
 export type Failure = { ok: false; reason: 'invalid' | 'not_found'; fields?: string[] };
 export type Result<T> = { ok: true; value: T } | Failure;
 export type TestResult =
-  { ok: true; sent: Language[] } | { ok: false; reason: 'test_blocked' | 'test_failed' };
+  | { ok: true; sent: Language[] }
+  | { ok: false; reason: 'test_blocked' | 'test_failed' | 'test_unlinked' };
 
 type DeliveryOutcome = 'sent' | 'blocked' | 'skipped';
 
@@ -172,11 +173,13 @@ export class BroadcastService implements OnApplicationShutdown {
 
   /** «Отправить себе»: both versions to the owner's own Telegram id, outside the queue. */
   async sendTest(actor: StaffRow, body: BroadcastBody): Promise<TestResult> {
+    const chatId = actor.telegramId;
+    if (chatId === null) return { ok: false, reason: 'test_unlinked' };
     const sent: Language[] = [];
     try {
       for (const lang of ['ru', 'uz'] as const) {
         await this.edges.telegram.send(
-          await this.message({ ...body, photoFileId: null }, lang, actor.telegramId),
+          await this.message({ ...body, photoFileId: null }, lang, chatId),
         );
         sent.push(lang);
       }

@@ -431,18 +431,63 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     expect(buttons(c).map((b) => b.text)).toEqual(['📦 Собирается', 'Отменить']);
   });
 
-  it('anyone not on staff, or no longer active, gets «Нет доступа»', async () => {
+  it('a Telegram bound to no staff member hears how to link it; one no longer active gets «Нет доступа»', async () => {
     await addStaff(bekzod, false);
     const order = await paidOrder();
     const c = await card(order.number);
 
-    for (const user of [outsider, bekzod]) {
-      expect((await press(user, '✅ Принят', c)).toast()?.text).toBe('Нет доступа');
-      expect((await press(user, 'Отменить', c)).toast()?.text).toBe('Нет доступа');
+    for (const [user, toast] of [
+      [
+        outsider,
+        'Нет доступа. Если вы сотрудник, привяжите Telegram в админке: Профиль → «Привязать Telegram».',
+      ],
+      [bekzod, 'Нет доступа'],
+    ] as const) {
+      expect((await press(user, '✅ Принят', c)).toast()?.text).toBe(toast);
+      expect((await press(user, 'Отменить', c)).toast()?.text).toBe(toast);
     }
     expect(await statusOf(order.number)).toBe('payment_confirmed');
     await t.app.get(WorkerRuntime).tick();
     expect(cardOf(order.number)!.edits).toBe(0);
+  });
+
+  it('a manager added with a login, who linked Telegram through the bot, moves the order; unlinked again, they hear how to link', async () => {
+    const owner = await t.ownerSession();
+    const created = await owner.client.admin.staff.create({
+      body: { name: 'Bekzod', login: 'bekzod', password: 'Temp-pass-0001' },
+    });
+    if (created.status !== 201) throw new Error(`add: ${created.status}`);
+    const signedIn = await t.client.admin.passwordLogin({
+      body: { login: 'bekzod', password: 'Temp-pass-0001' },
+    });
+    const manager = t.withCookie((signedIn.headers.get('set-cookie') ?? '').split(';')[0] ?? '');
+    await manager.admin.changePassword({ body: { newPassword: 'Final-pass-0002' } });
+    const link = await manager.admin.telegramLink();
+    if (link.status !== 201) throw new Error(`link: ${link.status}`);
+    const id = ++updateId;
+    await t.postUpdate({
+      update_id: id,
+      message: {
+        message_id: id,
+        date: Math.floor(t.edges.clock.now().getTime() / 1000),
+        chat: { id: bekzod.id, type: 'private', first_name: bekzod.first_name },
+        from: from(bekzod),
+        text: `/start ${new URL(link.body.url).searchParams.get('start')}`,
+        entities: [{ type: 'bot_command', offset: 0, length: 6 }],
+      },
+    });
+
+    const order = await paidOrder();
+    const p = await press(bekzod, '✅ Принят', await card(order.number));
+    expect(p.toast()).toEqual({ id: p.callbackId });
+    expect(await statusOf(order.number)).toBe('accepted');
+    const c = await card(order.number, (text) => text.includes('✅ Принят — Bekzod'));
+
+    await owner.client.admin.staff.unlinkTelegram({ params: { id: created.body.id } });
+    expect((await press(bekzod, '📦 Собирается', c)).toast()?.text).toBe(
+      'Нет доступа. Если вы сотрудник, привяжите Telegram в админке: Профиль → «Привязать Telegram».',
+    );
+    expect(await statusOf(order.number)).toBe('accepted');
   });
 
   it('«Передан в BTS» asks the presser for the tracking number; only their valid answer hands the order over', async () => {

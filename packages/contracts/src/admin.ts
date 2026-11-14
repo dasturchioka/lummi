@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { settingIssueSchema } from './setting-issues';
+import { passwordSchema, staffLoginSchema } from './staff-access';
 import { tashkentToUtc } from './tashkent';
 
 export const staffRoleSchema = z.enum(['owner', 'manager']);
@@ -22,9 +23,23 @@ export type LoginWidgetBody = z.infer<typeof loginWidgetBodySchema>;
 /** Dev-only sign-in (disabled by the env schema in production). */
 export const devLoginBodySchema = z.object({ telegramId: z.number().int().positive() });
 
+/** Sign-in by login and password (ADR 0038); the login is matched case-insensitively. */
+export const passwordLoginBodySchema = z.object({
+  login: z.string().max(64),
+  password: passwordSchema,
+});
+
+/** A staff member as the panel sees them: never a password or its hash (ADR 0038). */
 export const staffSchema = z.object({
   id: z.number().int(),
-  telegramId: z.number().int(),
+  /** Null until the member binds a Telegram account through the bot. */
+  telegramId: z.number().int().nullable(),
+  /** Null for a Telegram-only record (one added before #50). */
+  login: z.string().nullable(),
+  /** Whether a password is set; the hash itself never leaves the API. */
+  hasPassword: z.boolean(),
+  /** Signed in with a temporary password: only «Смените пароль» works until it is changed. */
+  mustChangePassword: z.boolean(),
   name: z.string(),
   role: staffRoleSchema,
   active: z.boolean(),
@@ -35,20 +50,65 @@ export const adminErrorSchema = z.object({
   code: z.enum([
     'invalid_login',
     'expired_login',
+    'invalid_credentials',
     'no_access',
     'unauthorized',
     'forbidden',
+    'password_change_required',
     'not_found',
     'conflict',
     'not_available',
+    'login_taken',
+    'login_required',
+    'already_linked',
+    'telegram_only',
   ]),
 });
 
+/** Too many wrong passwords for this login or from this address: try again at `retryAt`. */
+export const lockedErrorSchema = z.object({
+  code: z.literal('locked'),
+  retryAt: z.string().datetime(),
+});
+
+/** A new password refused: shorter than the setting, or the same as the one it replaces. */
+export const passwordErrorSchema = z.object({
+  code: z.enum(['weak_password', 'same_password', 'wrong_password']),
+  /** `auth.passwordMinLength`, for the message. */
+  minLength: z.number().int(),
+});
+
+/** The owner adds a manager with a temporary password (generated in the panel, or typed). */
 export const createManagerBodySchema = z.object({
-  telegramId: z.number().int().positive(),
   name: z.string().trim().min(1).max(120),
+  login: staffLoginSchema,
+  password: passwordSchema,
 });
 export const updateStaffBodySchema = z.object({ active: z.boolean() });
+
+/** «Сбросить пароль»: a new temporary password; a manager without a login gets one with it. */
+export const resetPasswordBodySchema = z.object({
+  password: passwordSchema,
+  login: staffLoginSchema.optional(),
+});
+
+/**
+ * «Сменить пароль». `currentPassword` is required while the account has a password that is not
+ * temporary; a forced change (or a first password) needs only the new one.
+ */
+export const changePasswordBodySchema = z.object({
+  currentPassword: passwordSchema.optional(),
+  newPassword: passwordSchema,
+});
+
+export const passwordPolicySchema = z.object({ minLength: z.number().int() });
+
+/** «Привязать Telegram»: the one-time bot link and when it stops working. */
+export const telegramLinkSchema = z.object({
+  url: z.string().url(),
+  expiresAt: z.string().datetime(),
+});
+export type TelegramLinkDto = z.infer<typeof telegramLinkSchema>;
 
 /** A setting as the page shows it: the effective value (default when nothing is stored). */
 export const settingStateSchema = z.object({

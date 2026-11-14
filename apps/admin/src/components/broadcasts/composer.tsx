@@ -272,6 +272,7 @@ export function BroadcastComposer({
     if (res?.status === 200) setBanner({ kind: 'ok', text: b.testSent });
     else if (res?.status === 502 && res.body.code === 'test_blocked')
       setBanner({ kind: 'error', text: b.testBlocked });
+    else if (res?.status === 409) setBanner({ kind: 'error', text: b.testUnlinked });
     else setBanner({ kind: 'error', text: b.testFailed });
   };
 
