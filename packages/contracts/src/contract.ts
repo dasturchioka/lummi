@@ -12,6 +12,7 @@ import {
 } from './reviews';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
 import { salesReportErrorSchema, salesReportQuerySchema, salesReportSchema } from './reports';
+import { adminHomeSchema } from './home';
 import {
   addCartLineBodySchema,
   cartErrorSchema,
@@ -1521,6 +1522,20 @@ const adminReports = c.router({
   },
 });
 
+/**
+ * The admin Home (ticket #48): owner and manager alike, the owner's answer adding the sales strip
+ * and the system line. One call per refresh.
+ */
+const adminHome = c.router({
+  home: {
+    method: 'GET',
+    path: '/admin/home',
+    responses: { 200: adminHomeSchema, 401: adminErrorSchema },
+    summary:
+      "The work queue (fixed order, counts and oldest ages), the Now item and its facts, the pause and card state; for the owner also money in today, net sales over 7 and 14 days (`salesSummary`) and the system line. Tashkent times, integer so'm",
+  },
+});
+
 /** Campaign links (ticket #35): owner only, every change audited. The QR is a file: `GET /admin/campaign-links/:id/qr?format=png|svg` (not in the contract). */
 const adminCampaigns = c.router({
   campaignLinks: {
@@ -1604,6 +1619,7 @@ export const adminContract = c.router({
   ...adminCampaigns,
   ...adminReviews,
   ...adminReports,
+  ...adminHome,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */
