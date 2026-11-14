@@ -1,6 +1,6 @@
 'use client';
 
-import { STAFF_LOGIN_PATTERN, type StaffDto } from '@lummi/contracts';
+import { normalizeLogin, STAFF_LOGIN_PATTERN, type StaffDto } from '@lummi/contracts';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -394,8 +394,6 @@ function Handover({
   );
 }
 
-const normalLogin = (raw: string) => raw.trim().toLowerCase();
-
 /** «Добавить менеджера»: the form with a password already generated, then the handover. */
 function AddManagerContent({
   t,
@@ -419,14 +417,14 @@ function AddManagerContent({
 
   const submit = async () => {
     const found: typeof errors = {};
-    if (!STAFF_LOGIN_PATTERN.test(normalLogin(login))) found.login = t.staff.loginHint;
+    if (!STAFF_LOGIN_PATTERN.test(normalizeLogin(login))) found.login = t.staff.loginHint;
     if (password.length < minLength)
       found.password = fill(t.errors.weakPassword, { min: String(minLength) });
     setErrors(found);
     if (Object.keys(found).length) return;
     setPending(true);
     const res = await browserApi.staff
-      .create({ body: { name, login: normalLogin(login), password } })
+      .create({ body: { name, login: normalizeLogin(login), password } })
       .catch(() => null);
     setPending(false);
     if (res?.status === 201) {
@@ -453,6 +451,7 @@ function AddManagerContent({
           <DialogTitle>{t.staff.addTitle}</DialogTitle>
           <DialogDescription className="sr-only">{t.staff.description}</DialogDescription>
           <form
+            method="post"
             noValidate
             className="mt-5 grid gap-4"
             onSubmit={(e) => {
@@ -534,7 +533,7 @@ function ResetPasswordContent({
 
   const submit = async () => {
     const found: typeof errors = {};
-    if (needsLogin && !STAFF_LOGIN_PATTERN.test(normalLogin(login)))
+    if (needsLogin && !STAFF_LOGIN_PATTERN.test(normalizeLogin(login)))
       found.login = t.staff.loginHint;
     if (password.length < minLength)
       found.password = fill(t.errors.weakPassword, { min: String(minLength) });
@@ -544,7 +543,7 @@ function ResetPasswordContent({
     const res = await browserApi.staff
       .resetPassword({
         params: { id: member.id },
-        body: { password, ...(needsLogin ? { login: normalLogin(login) } : {}) },
+        body: { password, ...(needsLogin ? { login: normalizeLogin(login) } : {}) },
       })
       .catch(() => null);
     setPending(false);
@@ -582,6 +581,7 @@ function ResetPasswordContent({
             )}
           </DialogDescription>
           <form
+            method="post"
             noValidate
             className="mt-5 grid gap-4"
             onSubmit={(e) => {

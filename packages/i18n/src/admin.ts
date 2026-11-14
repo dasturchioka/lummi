@@ -361,7 +361,8 @@ export const adminMessages = defineMessages(
         passwordHint: 'Не короче {min} символов. При первом входе менеджер сменит его на свой.',
         pendingPassword: 'ждёт смены пароля',
         addedTitle: 'Менеджер добавлен',
-        addedText: 'Передайте {name} логин и временный пароль. При первом входе он задаст свой.',
+        addedText:
+          'Передайте {name} логин и временный пароль. Сотрудник задаст свой пароль при первом входе.',
         done: 'Готово',
         resetPassword: 'Сбросить пароль',
         resetTitle: 'Сбросить пароль?',
@@ -2533,7 +2534,7 @@ export const adminMessages = defineMessages(
         pendingPassword: 'parol almashtirilishi kutilmoqda',
         addedTitle: 'Menejer qoʻshildi',
         addedText:
-          '{name} uchun login va vaqtinchalik parol tayyor. Ularni menejerga bering: birinchi kirishda u oʻz parolini oʻrnatadi.',
+          '{name} uchun login va vaqtinchalik parol tayyor. Ularni menejerga bering: xodim birinchi kirishda oʻz parolini oʻrnatadi.',
         done: 'Tayyor',
         resetPassword: 'Parolni tiklash',
         resetTitle: 'Parol tiklansinmi?',

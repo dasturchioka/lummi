@@ -129,7 +129,9 @@ export function LoginForm({
           {problem.hint}
         </Notice>
       )}
+      {/* POST, so a submit before hydration never puts the password in a URL or a log */}
       <form
+        method="post"
         className="grid gap-4"
         onSubmit={(e) => {
           e.preventDefault();

@@ -76,7 +76,9 @@ export function PasswordChangeForm({
   };
 
   return (
+    // POST, so a submit before hydration never puts a password in a URL or a log
     <form
+      method="post"
       noValidate
       className="grid gap-4"
       onSubmit={(e) => {
