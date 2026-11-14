@@ -1779,7 +1779,8 @@ export const adminMessages = defineMessages(
         to: 'По дату',
         apply: 'Показать',
         reset: 'Последние 30 дней',
-        invalidRange: 'Дата «с» должна быть не позже даты «по», а период — не длиннее года.',
+        invalidRange:
+          'Дата «с» должна быть не позже даты «по», а период — не длиннее года. Показаны последние 30 дней.',
         figures: {
           orders: 'Заказов',
           itemsBeforeDiscount: 'Товары до скидки',
@@ -3618,7 +3619,8 @@ export const adminMessages = defineMessages(
         to: 'Sanagacha',
         apply: 'Koʻrsatish',
         reset: 'Soʻnggi 30 kun',
-        invalidRange: '«Sanadan» «Sanagacha»dan keyin boʻlmasin, davr esa bir yildan oshmasin.',
+        invalidRange:
+          '«Sanadan» «Sanagacha»dan keyin boʻlmasin, davr esa bir yildan oshmasin. Soʻnggi 30 kun koʻrsatilgan.',
         figures: {
           orders: 'Buyurtmalar',
           itemsBeforeDiscount: 'Chegirmagacha tovarlar',

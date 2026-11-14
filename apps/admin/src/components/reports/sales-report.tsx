@@ -1,4 +1,10 @@
-import type { FragranceSales, SalesFigures, SalesReport, VolumeSales } from '@lummi/contracts';
+import type {
+  FragranceSales,
+  SalesDay,
+  SalesFigures,
+  SalesReport,
+  VolumeSales,
+} from '@lummi/contracts';
 import { formatCalendarDate, formatMoney, plural, type Language } from '@lummi/i18n';
 import { Download } from 'lucide-react';
 import Link from 'next/link';
@@ -88,7 +94,7 @@ export function SalesReportView({
             <Button type="submit" className="max-sm:flex-1">
               {r.apply}
             </Button>
-            {custom && (
+            {custom && !invalid && (
               <Button asChild variant="outline" className="max-sm:flex-1">
                 <Link href={top === 'net' ? '/reports?top=net' : '/reports'}>{r.reset}</Link>
               </Button>
@@ -114,6 +120,7 @@ export function SalesReportView({
               r={r}
               language={language}
               rows={sortTop(data.fragrances, top)}
+              by={top}
               name={(row) => row.name[language]}
               money={money}
             />
@@ -122,6 +129,7 @@ export function SalesReportView({
               r={r}
               language={language}
               rows={sortTop(data.volumes, top)}
+              by={top}
               name={(row: VolumeSales) =>
                 `${row.name[language]}, ${fill(r.ml, { ml: String(row.ml) })}`
               }
@@ -214,6 +222,33 @@ function dayLabel(r: Copy, day: string, language: Language) {
 
 const quiet = (d: SalesFigures) => d.orders === 0 && d.refunds === 0;
 
+/** A day with sales, or a run of days without (newest first, so `to` comes before `from`). */
+type DayRow = { day: SalesDay } | { from: string; to: string };
+
+/** The days newest first, each run of two or more quiet days folded into one row. */
+function dayRows(days: SalesDay[]): DayRow[] {
+  const rows: DayRow[] = [];
+  for (const d of [...days].reverse()) {
+    const last = rows.at(-1);
+    if (!quiet(d)) rows.push({ day: d });
+    else if (last && 'from' in last) last.from = d.day;
+    else rows.push({ from: d.day, to: d.day });
+  }
+  return rows;
+}
+
+/** A quiet row's label: the day as the day rows read, or «16 октября – 4 ноября», unbroken dates. */
+function QuietLabel({ r, row, language }: { r: Copy; row: DayRow; language: Language }) {
+  if ('day' in row) return null;
+  if (row.from === row.to) return <>{dayLabel(r, row.from, language)}</>;
+  return (
+    <>
+      <span className="whitespace-nowrap">{formatCalendarDate(row.from, language)}</span> –{' '}
+      <span className="whitespace-nowrap">{formatCalendarDate(row.to, language)}</span>
+    </>
+  );
+}
+
 /** The day table's columns after the day, in order. */
 const COLUMNS = [
   'orders',
@@ -226,7 +261,10 @@ const COLUMNS = [
 ] as const satisfies readonly (keyof SalesFigures)[];
 type Column = (typeof COLUMNS)[number];
 
-/** Every day of the range, newest first: a table on wide screens, one block per day on phones. */
+/**
+ * Every day of the range, newest first: a table on wide screens, one block per day on phones. A run
+ * of two or more days without sales is one muted row (the Excel keeps every day).
+ */
 function Days({
   r,
   language,
@@ -239,7 +277,7 @@ function Days({
   money: (n: number) => string;
 }) {
   const f = r.figures;
-  const days = [...data.days].reverse();
+  const rows = dayRows(data.days);
   // a dense money table: bare tabular numbers, the caption above names the currency (DESIGN.md,
   // admin notes); seven columns with «сум» in every cell would be noise
   const cell = (d: SalesFigures, key: Column) =>
@@ -252,11 +290,29 @@ function Days({
         <h2 className={HEADING}>{r.byDay}</h2>
         <p className="hidden text-small text-muted-foreground @2xl:block">{r.inSom}</p>
       </div>
-      {/* narrow: one block per day, net first */}
+      {/* narrow: one block per day with sales, net first; a quiet run is one muted line */}
       <ul className="divide-y divide-border @2xl:hidden">
-        {days.map((d) => (
-          <DayBlock key={d.day} r={r} d={d} label={dayLabel(r, d.day, language)} money={money} />
-        ))}
+        {rows.map((row) =>
+          'day' in row ? (
+            <DayBlock
+              key={row.day.day}
+              r={r}
+              d={row.day}
+              label={dayLabel(r, row.day.day, language)}
+              money={money}
+            />
+          ) : (
+            <li
+              key={row.to}
+              className="flex justify-between gap-3 px-4 py-3 text-small text-muted-foreground"
+            >
+              <span>
+                <QuietLabel r={r} row={row} language={language} />
+              </span>
+              <span className="shrink-0">{r.noSales}</span>
+            </li>
+          ),
+        )}
         <DayBlock r={r} d={data.totals} label={r.total} money={money} total />
       </ul>
       <div className="hidden @2xl:block">
@@ -272,22 +328,28 @@ function Days({
             </TR>
           </THead>
           <TBody>
-            {days.map((d) =>
-              quiet(d) ? (
-                <TR key={d.day} data-testid={`day-${d.day}`} className="text-muted-foreground">
-                  <TD className="h-9 px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
-                  <TD colSpan={COLUMNS.length} className="h-9 px-3">
-                    {r.noSales}
-                  </TD>
-                </TR>
-              ) : (
-                <TR key={d.day} data-testid={`day-${d.day}`}>
-                  <TD className="px-3 whitespace-nowrap">{dayLabel(r, d.day, language)}</TD>
+            {rows.map((row) =>
+              'day' in row ? (
+                <TR key={row.day.day} data-testid={`day-${row.day.day}`}>
+                  <TD className="px-3 whitespace-nowrap">{dayLabel(r, row.day.day, language)}</TD>
                   {COLUMNS.map((key) => (
                     <TD key={key} className={cn(td, key === 'net' && 'font-semibold')}>
-                      {cell(d, key)}
+                      {cell(row.day, key)}
                     </TD>
                   ))}
+                </TR>
+              ) : (
+                <TR
+                  key={row.to}
+                  data-testid={`quiet-${row.from}`}
+                  className="text-muted-foreground"
+                >
+                  <TD className="px-3">
+                    <QuietLabel r={r} row={row} language={language} />
+                  </TD>
+                  <TD colSpan={COLUMNS.length} className="px-3">
+                    {r.noSales}
+                  </TD>
                 </TR>
               ),
             )}
@@ -322,13 +384,6 @@ function DayBlock({
   total?: boolean;
 }) {
   const f = r.figures;
-  if (quiet(d) && !total)
-    return (
-      <li className="flex justify-between gap-3 px-4 py-3 text-small text-muted-foreground">
-        <span>{label}</span>
-        <span>{r.noSales}</span>
-      </li>
-    );
   const part = (name: string, value: string) => (
     <span key={name} className="whitespace-nowrap">
       {name} <span className="text-foreground tabular-nums">{value}</span>
@@ -412,6 +467,7 @@ function TopList<R extends FragranceSales>({
   r,
   language,
   rows,
+  by,
   name,
   money,
 }: {
@@ -419,6 +475,8 @@ function TopList<R extends FragranceSales>({
   r: Copy;
   language: Language;
   rows: R[];
+  /** The figure the list is sorted by leads, in weight; the other follows, muted. */
+  by: TopOrder;
   name: (row: R) => string;
   money: (n: number) => string;
 }) {
@@ -446,10 +504,20 @@ function TopList<R extends FragranceSales>({
                 )}
               </span>
               <span className="text-right tabular-nums">
-                <span className="block font-semibold whitespace-nowrap">{money(row.net)}</span>
-                <span className="block text-small whitespace-nowrap text-muted-foreground">
-                  {fill(r.unitsCount, { n: num(row.units) })}
-                </span>
+                {(by === 'net'
+                  ? [money(row.net), fill(r.unitsCount, { n: num(row.units) })]
+                  : [fill(r.unitsCount, { n: num(row.units) }), money(row.net)]
+                ).map((text, k) => (
+                  <span
+                    key={k}
+                    className={cn(
+                      'block whitespace-nowrap',
+                      k === 0 ? 'font-semibold' : 'text-small text-muted-foreground',
+                    )}
+                  >
+                    {text}
+                  </span>
+                ))}
               </span>
             </li>
           ))}
