@@ -74,12 +74,19 @@ Human steps first, in this order:
 1. On the VPS, as root: `install -d -o lummi-deploy -g lummi-deploy -m 700 /opt/lummi-staging`.
 2. As `lummi-deploy`, write `/opt/lummi-staging/.env` from `deploy/staging.env.example` and `chmod 600` it.
 3. Push to `stage-1` (or run the workflow on `stage-1`/`main`). CI copies `docker-compose.yml`, pulls, migrates, seeds, starts, and writes `.deploy.env`. The API sets the Telegram webhook and the default menu button itself when it boots (`BOT_MODE=webhook`; `drop_pending_updates` is false).
-4. Add the owner once, by hand (the customer's real Telegram id; the 990000001 in the dev seed is a placeholder):
+4. Add the owner once, by hand, then give them a password (ADR 0038). The login is what the owner types on the sign-in page (3–32 of `a-z 0-9 . _ -`); the Telegram id (the customer's real one; the 990000001 in the dev seed is a placeholder) is optional and lets the owner use «Войти через Telegram» and the orders-group buttons. Without it the owner binds Telegram later in the panel: Профиль → «Привязать Telegram».
 
 ```sh
 cd /opt/lummi-staging && dc='docker compose --env-file .env --env-file .deploy.env'
-$dc run --rm -T api node --import tsx src/cli/seed-owner.ts --telegram-id <the customer's id> --name "<name>"
+$dc run --rm -T api node --import tsx src/cli/seed-owner.ts --login <login> --name "<name>" [--telegram-id <the customer's id>]
+$dc run --rm -T api node --import tsx src/cli/set-owner-password.ts --login <login>
 ```
+
+`set-owner-password` prints a generated temporary password **once**, in this terminal only (the database keeps only its argon2id hash; it never reaches a log). Hand it to the owner in person or over a channel you trust, not in the project chat. At the first sign-in the panel asks for a new password and opens nothing else until it is set. `seed:owner` is idempotent: run again with `--login` for an owner seeded by Telegram id only, and it adds the login to that record.
+
+**The owner lost the password.** Run `set-owner-password --login <login>` again (the line above). It replaces the password with a new temporary one, ends every session the owner had, and is written to the audit log («Выдан временный пароль», actor «Система»). A manager's password is reset by the owner in the panel: Сотрудники → «Сбросить пароль». If the owner also forgot the login, read it from the database: `$dc exec postgres psql -U lummi -d lummi -c "select login, name from staff where role = 'owner'"`.
+
+**Sign-in locks.** Five wrong passwords for one login within 15 minutes, or twenty from one address, close sign-in for that login or address for 15 minutes (Настройки → «Вход и сессии»: every number is a setting). To lift a lock at once, `$dc exec postgres psql -U lummi -d lummi -c "delete from login_throttles"`.
 
 The seed step (`src/cli/seed-staging.ts`) loads the 67-fragrance catalog (placeholder prices, photos, Discovery set) only while the catalog is empty, and adds missing BTS points; a second run changes nothing.
 
