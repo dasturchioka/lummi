@@ -207,12 +207,17 @@ export const botMessages = defineMessages(
             duplicate: 'повторный чек (такой же чек уже был у другого заказа)',
             not_confirmed: 'ИИ не уверен',
             several: 'несколько поступлений, ИИ не уверен',
+            amount: 'сумма не совпала',
             judge_failed: 'ИИ не уверен (ИИ не смог проверить чек)',
             credit_marked: 'ИИ подтвердил чек поступлением, которое отметили «Не для заказа»',
           },
           due: 'К оплате: {amount}',
           receiptAt: 'Чек от {at}: ответом на это сообщение',
           candidates: 'Найденные поступления:',
+          aiChoice: '(выбор ИИ)',
+          markedChoice:
+            'ИИ выбрал поступление {credit}, но его отметили «Не для заказа»: {name}, {at}.',
+          noOtherCandidates: 'Других подходящих поступлений нет.',
           noCandidates:
             'Нет поступления: {amount} на карту магазина после оформления заказа не приходило.',
           moreCandidates: '… и ещё {n}: в админке',
@@ -220,9 +225,9 @@ export const botMessages = defineMessages(
           askNoCredit:
             'Подтвердить оплату другим поступлением можно в админке, с причиной. Или нажмите «Чек не принят».',
           confirm: '✅ Оплата подтверждена',
-          confirmWith: '✅ Оплата подтверждена: {at}',
+          confirmWith: '✅ {credit}',
           reject: '⛔ Чек не принят',
-          confirmAsk: 'Подтвердить оплату поступлением {amount} от {at} ({card})?',
+          confirmAsk: 'Подтвердить оплату этим поступлением?\n{credit}',
           confirmYes: 'Да, оплата подтверждена',
           rejectAsk:
             'Чек не принят: выберите причину. Покупатель получит её и сможет загрузить чек заново.',
@@ -396,6 +401,7 @@ export const botMessages = defineMessages(
             duplicate: 'takroriy chek (xuddi shunday chek boshqa buyurtmada boʻlgan)',
             not_confirmed: 'AI ishonchi komil emas',
             several: 'bir nechta tushum, AI ishonchi komil emas',
+            amount: 'summa mos kelmadi',
             judge_failed: 'AI ishonchi komil emas (AI chekni tekshira olmadi)',
             credit_marked:
               'AI chekni «Buyurtma uchun emas» deb belgilangan tushum bilan tasdiqladi',
@@ -403,6 +409,10 @@ export const botMessages = defineMessages(
           due: 'Toʻlov summasi: {amount}',
           receiptAt: '{at} dagi chek: shu xabarga javob sifatida',
           candidates: 'Topilgan tushumlar:',
+          aiChoice: '(AI tanlovi)',
+          markedChoice:
+            'AI {credit} tushumini tanladi, lekin u «Buyurtma uchun emas» deb belgilandi: {name}, {at}.',
+          noOtherCandidates: 'Boshqa mos tushum yoʻq.',
           noCandidates:
             'Tushum yoʻq: buyurtma rasmiylashtirilgandan keyin doʻkon kartasiga {amount} kelmagan.',
           moreCandidates: '… yana {n} ta: admin panelda',
@@ -410,9 +420,9 @@ export const botMessages = defineMessages(
           askNoCredit:
             'Toʻlovni boshqa tushum bilan admin panelda, sababini yozib tasdiqlash mumkin. Yoki «Chek qabul qilinmadi» tugmasini bosing.',
           confirm: '✅ Toʻlov tasdiqlandi',
-          confirmWith: '✅ Toʻlov tasdiqlandi: {at}',
+          confirmWith: '✅ {credit}',
           reject: '⛔ Chek qabul qilinmadi',
-          confirmAsk: 'Toʻlov {at} dagi {amount} tushum ({card}) bilan tasdiqlansinmi?',
+          confirmAsk: 'Toʻlov shu tushum bilan tasdiqlansinmi?\n{credit}',
           confirmYes: 'Ha, toʻlov tasdiqlandi',
           rejectAsk:
             'Chek qabul qilinmadi: sababni tanlang. Xaridor uni oladi va chekni qayta yuklay oladi.',

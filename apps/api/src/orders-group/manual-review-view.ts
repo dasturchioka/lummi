@@ -117,6 +117,19 @@ export interface ManualReviewData {
   };
   /** How many credits the AI was last shown for this receipt (several: «несколько поступлений»). */
   lastShown: number;
+  /**
+   * The AI's last answer said the amount on the receipt is not the Amount due (its amount score
+   * under the setting `ai.receipt.probabilityThreshold`): «сумма не совпала».
+   */
+  amountMismatch: boolean;
+  /**
+   * The credit the AI chose in its last answer, if any; with who marked it «Не для заказа» and
+   * when, when staff did (#49: the AI confirmed with it while it was being marked).
+   */
+  aiChoice: {
+    credit: ManualReviewCredit;
+    marked: { by: string | null; at: Date } | null;
+  } | null;
   customer: CardData['customer'];
   /** The order's Candidate credits now, oldest first (`creditsFor`, the one rule). */
   candidates: readonly ManualReviewCredit[];
@@ -129,6 +142,13 @@ export interface ManualReviewData {
 
 /** «9 ноября, 15:01», Tashkent time. */
 const when = (at: Date, language: Language) => `${formatDayMonth(at, language)}, ${formatTime(at)}`;
+
+/** «CLICK P2P» of «CLICK P2P U2H ER>TAS»: the first two words of who sent it, for a button. */
+export function shortSource(counterparty: string | null): string | null {
+  if (!counterparty) return null;
+  const words = counterparty.trim().split(/\s+/).slice(0, 2).join(' ');
+  return [...words].length > 16 ? `${[...words].slice(0, 15).join('')}…` : words;
+}
 
 /**
  * The manual-review post as staff read it in «Заказы» (#51; TZ §4 L292-293, §6 L349-350): the
@@ -146,10 +166,19 @@ export function renderManualReview(d: ManualReviewData, language: Language = 'ru
     when(c.occurredAt, language),
     escapeHtml(c.cardMask),
   ];
+  /** amount · time · card · source: a credit as the post lists it. */
+  const listed = (c: ManualReviewCredit) =>
+    [...credit(c), ...(c.counterparty ? [escapeHtml(c.counterparty)] : [])].join(' · ');
 
-  const reason = d.receipt.reviewReason;
+  const reason = d.receipt.reviewReason ?? 'not_confirmed';
   const reasonKey =
-    reason === 'not_confirmed' && d.lastShown > 1 ? 'several' : (reason ?? 'not_confirmed');
+    reason !== 'not_confirmed'
+      ? reason
+      : d.amountMismatch
+        ? 'amount'
+        : d.lastShown > 1
+          ? 'several'
+          : 'not_confirmed';
   const out = [
     `<b>${fill(r.title, { number: String(d.order.number) })}</b>`,
     fill(r.reason, { reason: r.reasons[reasonKey] }),
@@ -167,15 +196,30 @@ export function renderManualReview(d: ManualReviewData, language: Language = 'ru
   }
 
   const shown = d.candidates.slice(0, CANDIDATES_SHOWN);
+  const choice = d.aiChoice;
   out.push('');
+  // the AI's credit that staff marked «Не для заказа»: it did arrive, so never «нет поступления»
+  if (choice?.marked) {
+    out.push(
+      fill(r.markedChoice, {
+        credit: listed(choice.credit),
+        name: escapeHtml(
+          choice.marked.by ?? dictionaries[language].admin.orders.detail.actor.removed,
+        ),
+        at: when(choice.marked.at, language),
+      }),
+    );
+  }
   if (shown.length === 0) {
-    out.push(fill(r.noCandidates, { amount: money(d.order.amountDue) }));
+    out.push(
+      choice?.marked
+        ? r.noOtherCandidates
+        : fill(r.noCandidates, { amount: money(d.order.amountDue) }),
+    );
   } else {
     out.push(r.candidates);
-    for (const c of shown) {
-      const source = c.counterparty ? [escapeHtml(c.counterparty)] : [];
-      out.push(`• ${[...credit(c), ...source].join(' · ')}`);
-    }
+    for (const c of shown)
+      out.push(`• ${listed(c)}${choice?.credit.id === c.id ? ` ${r.aiChoice}` : ''}`);
     if (d.candidates.length > shown.length)
       out.push(fill(r.moreCandidates, { n: String(d.candidates.length - shown.length) }));
   }
@@ -192,7 +236,8 @@ export function renderManualReview(d: ManualReviewData, language: Language = 'ru
 
   if (picked) {
     const [amount, at, card] = credit(picked);
-    out.push('', fill(r.confirmAsk, { amount: amount!, at: at!, card: card! }));
+    const source = picked.counterparty ? [`📍 ${escapeHtml(picked.counterparty)}`] : [];
+    out.push('', fill(r.confirmAsk, { credit: [amount, at, ...source, card].join(' · ') }));
     return {
       text: out.join('\n'),
       keyboard: [[button(r.confirmYes, { verb: 'confirm', receiptId, creditId: picked.id })], back],
@@ -229,8 +274,19 @@ export function renderManualReview(d: ManualReviewData, language: Language = 'ru
   }
 
   out.push('', shown.length === 0 ? r.askNoCredit : r.ask);
+  // several: each button says what tells its credit apart (amount, time, who sent it); the day
+  // too when it is not the receipt's
+  const receiptDay = formatDayMonth(d.receipt.createdAt, language);
+  const label = (c: ManualReviewCredit) => {
+    const day = formatDayMonth(c.occurredAt, language);
+    const at = day === receiptDay ? formatTime(c.occurredAt) : when(c.occurredAt, language);
+    const source = shortSource(c.counterparty);
+    return fill(r.confirmWith, {
+      credit: [formatTiyin(c.amountTiyin, language), at, ...(source ? [source] : [])].join(' · '),
+    });
+  };
   const confirms = shown.map((c) => [
-    button(shown.length === 1 ? r.confirm : fill(r.confirmWith, { at: formatTime(c.occurredAt) }), {
+    button(shown.length === 1 ? r.confirm : label(c), {
       verb: 'pick',
       receiptId,
       creditId: c.id,

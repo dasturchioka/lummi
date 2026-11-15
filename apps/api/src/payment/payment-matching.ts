@@ -156,7 +156,10 @@ export class PaymentMatching implements OnApplicationShutdown {
    * if Redis is down, the sweep queues the same checks within a minute.
    */
   async queueForCredit(creditId: number): Promise<void> {
-    await this.bestEffort(`credit ${creditId}`, () => this.queueChecks({ creditId }));
+    await this.bestEffort(`credit ${creditId}`, async () => {
+      await this.queueChecks({ creditId });
+      await this.posts.redrawForCredit(creditId);
+    });
   }
 
   /** Queue work after a commit within the dispatch timeout; a failure is logged for the sweep. */
@@ -168,10 +171,14 @@ export class PaymentMatching implements OnApplicationShutdown {
     }
   }
 
-  /** "Credit recorded" (worker, at least once): check every waiting receipt this credit could pay. */
+  /**
+   * "Credit recorded" (worker, at least once): check every waiting receipt this credit could pay,
+   * and show it on the manual-review posts it is a candidate for (a duplicate's too, #51).
+   */
   async onCreditRecorded(event: CreditRecorded): Promise<void> {
     if (event.amountSom === null) return; // tiyin: never a candidate, a manager links it by hand
     await this.queueChecks({ creditId: event.creditId });
+    await this.posts.redrawForCredit(event.creditId);
   }
 
   /**

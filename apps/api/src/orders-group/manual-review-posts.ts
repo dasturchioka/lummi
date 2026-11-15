@@ -24,7 +24,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { OrderStatusService, type MadeMove } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
-import { creditsFor } from '../payment/rules';
+import { creditsFor, hasCandidate } from '../payment/rules';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import type { CardEvent } from './card-view';
@@ -132,6 +132,30 @@ export class ManualReviewPosts {
     return true;
   }
 
+  /**
+   * A credit may have become a Candidate credit of orders whose receipts wait for a person (it was
+   * recorded, or its «Не для заказа» mark came off): redraw their open posts, in a transaction of
+   * its own. The AI re-check redraws the others too, but a duplicate is never re-checked (#51).
+   */
+  async redrawForCredit(creditId: number): Promise<void> {
+    await this.outbox.withTx(async (tx) => {
+      const posts = await tx
+        .update(manualReviewPosts)
+        .set({ version: sql`${manualReviewPosts.version} + 1` })
+        .where(
+          and(
+            isNull(manualReviewPosts.decidedAt),
+            sql`${manualReviewPosts.orderId} in (
+              select o.id from ${orders} o
+              where o.status = 'receipt_review' and ${hasCandidate({ creditId })})`,
+          ),
+        )
+        .returning({ receiptId: manualReviewPosts.receiptId, chatId: manualReviewPosts.chatId });
+      for (const p of posts)
+        await this.outbox.enqueueTask(tx, 'manual_review_post', p.receiptId, p.chatId);
+    });
+  }
+
   /** The post of a receipt, for a press on it. */
   async find(tx: DbOrTx, receiptId: number): Promise<ManualReviewPostRow | undefined> {
     const [post] = await tx
@@ -188,11 +212,12 @@ export class ManualReviewPosts {
       .from(customers)
       .where(eq(customers.id, order.customerId));
     const [lastCheck] = await this.db
-      .select({ shown: receiptChecks.candidateCreditIds })
+      .select({ shown: receiptChecks.candidateCreditIds, judgement: receiptChecks.judgement })
       .from(receiptChecks)
       .where(eq(receiptChecks.receiptId, receipt.id))
       .orderBy(desc(receiptChecks.id))
       .limit(1);
+    const threshold = await this.settings.get('ai.receipt.probabilityThreshold');
     const creditFields = {
       id: credits.id,
       amountTiyin: credits.amountTiyin,
@@ -200,6 +225,19 @@ export class ManualReviewPosts {
       cardMask: credits.cardMask,
       counterparty: credits.counterparty,
     };
+    const chosenId = lastCheck?.judgement.chosenCreditId ?? null;
+    const [chosen] =
+      chosenId === null
+        ? []
+        : await this.db
+            .select({
+              credit: creditFields,
+              markedAt: credits.notForOrderAt,
+              markedBy: staff.name,
+            })
+            .from(credits)
+            .leftJoin(staff, eq(staff.id, credits.notForOrderBy))
+            .where(eq(credits.id, chosenId));
     const candidates = await this.db
       .select(creditFields)
       .from(credits)
@@ -226,6 +264,19 @@ export class ManualReviewPosts {
         reviewReason: receipt.reviewReason,
       },
       lastShown: lastCheck?.shown.length ?? 0,
+      // only an answer that did not confirm names a reason; a provider that never answered has
+      // no scores to read (`judge_failed` says so)
+      amountMismatch:
+        !!lastCheck &&
+        !lastCheck.judgement.confirmed &&
+        lastCheck.judgement.provider !== 'none' &&
+        lastCheck.judgement.amountMatches < threshold,
+      aiChoice: chosen
+        ? {
+            credit: chosen.credit,
+            marked: chosen.markedAt ? { by: chosen.markedBy, at: chosen.markedAt } : null,
+          }
+        : null,
       customer: customer!,
       candidates,
       decision,
