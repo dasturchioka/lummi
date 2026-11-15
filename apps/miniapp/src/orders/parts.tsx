@@ -34,8 +34,9 @@ export function StatusPill({ status }: { status: OrderStatus }) {
       : 'bg-field text-ink';
   return (
     <span
+      key={status}
       data-testid="status"
-      className={`type-small inline-flex h-7 shrink-0 items-center gap-1.5 rounded-pill px-2.5 font-medium whitespace-nowrap ${tone}`}
+      className={`type-small inline-flex animate-[fade-in_0.2s_ease-out] h-7 shrink-0 items-center gap-1.5 rounded-pill px-2.5 font-medium whitespace-nowrap ${tone}`}
     >
       <span aria-hidden="true" className="size-1.5 rounded-pill bg-current" />
       {o.orders.status[status]}
