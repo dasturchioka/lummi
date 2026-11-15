@@ -2,8 +2,8 @@ import { parseLocalDate, type SalesFigures, type SalesReport } from '@lummi/cont
 import type { Language } from '@lummi/i18n';
 import { adminMessages } from '@lummi/i18n/admin';
 import ExcelJS from 'exceljs';
+import { MONEY, sheet } from './report-workbook';
 
-const MONEY = '#,##0';
 const DAY = 'dd.mm.yyyy';
 
 /**
@@ -65,16 +65,6 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
     sets.addRow({ kind: t.setKinds[r.kind], units: r.units, net: r.net });
 
   return Buffer.from(await wb.xlsx.writeBuffer());
-}
-
-type Column = { header: string; key: string; width: number; numFmt?: string };
-
-function sheet(wb: ExcelJS.Workbook, name: string, columns: Column[]) {
-  const ws = wb.addWorksheet(name);
-  ws.columns = columns.map(({ numFmt, ...c }) => ({ ...c, style: numFmt ? { numFmt } : {} }));
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: 'frozen', ySplit: 1 }];
-  return ws;
 }
 
 /** A Tashkent day as an Excel date: the calendar day itself, no time and no zone. */

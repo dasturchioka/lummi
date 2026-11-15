@@ -16,6 +16,7 @@ import {
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
+import { shotMarketing } from './marketing-data';
 import { SHOT_ORDER } from './orders-data';
 import { cardBack, homeDay, homeDayBack, humoBack, humoSilent, noCard } from './home-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
@@ -2081,6 +2082,48 @@ export const screens: Screen[] = [
   },
   { id: 'reports-invalid', path: '/reports?from=2026-11-14&to=2026-11-01', as: 'owner' },
   { id: 'reports-empty', path: '/reports?from=2026-01-01&to=2026-01-31', as: 'owner' },
+  // ---- Marketing reports (#43): the same delivered shot orders by promo code (LUMMI10 on 9012
+  // and 9013), by campaign link and first link, and the set discount (three rights 9006 opened,
+  // one used by Ali's 9014); the openers of «Ссылки кампаний» count as opens and first links
+  {
+    id: 'reports-marketing',
+    path: '/reports/marketing',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
+    id: 'reports-marketing-range',
+    path: '/reports/marketing?from=2026-11-01&to=2026-11-14',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
+    id: 'reports-marketing-source',
+    path: '/reports/marketing?source=store_qr',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
+    id: 'reports-marketing-code',
+    path: '/reports/marketing?code=LUMMI10',
+    as: 'owner',
+    setup: ({ db }) => shotMarketing(db, 'add'),
+    teardown: ({ db }) => shotMarketing(db, 'remove'),
+  },
+  {
+    id: 'reports-marketing-invalid',
+    path: '/reports/marketing?from=2026-11-14&to=2026-11-01',
+    as: 'owner',
+    fullPage: false,
+  },
+  {
+    id: 'reports-marketing-empty',
+    path: '/reports/marketing?from=2026-01-01&to=2026-01-31',
+    as: 'owner',
+  },
   { id: 'not-found', path: '/no-such-page', as: 'owner' },
   { id: 'not-found-guest', path: '/no-such-page' },
 ];

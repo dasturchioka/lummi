@@ -96,6 +96,10 @@ _Avoid_: Sale discount, уценка-скидка
 For promo-code eligibility: a customer with no non-cancelled order other than the current one.
 _Avoid_: First-time buyer (that is the report metric: first fulfilled order)
 
+**First-time buyer**:
+The report metric «новые покупатели»: a customer for whom one of a report row's orders is their first Fulfilled order ever, by the day it was delivered. A returned first order makes the next one their first.
+_Avoid_: New customer (that is promo-code eligibility), new client
+
 **Fulfilled order**:
 An order that reached «Доставлен» and was not returned. Reports count only these.
 _Avoid_: Completed, closed, successful order
@@ -235,3 +239,7 @@ _Avoid_: Deep link (generic), UTM, referral link
 **Source**:
 The marketing channel a campaign link belongs to: Instagram, the Telegram channel, a store QR stand, a blogger.
 _Avoid_: Channel (clashes with the Telegram channel), referrer, utm_source
+
+**Acquiring link**:
+The campaign link that brought a customer to the shop: the first one they opened, while they were still a New customer. A customer who had already ordered (an order not cancelled) before opening any link has none.
+_Avoid_: First touch, referral link

@@ -12,14 +12,12 @@ import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
 import { MetaLine } from '@/components/ui/meta-line';
-import { Notice } from '@/components/ui/notice';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
 import { cn, fill } from '@/lib/utils';
+import { ReportRange, ReportTabs } from './report-chrome';
 
 /** How the top lists rank: most units (the API's order) or most net. */
 export type TopOrder = 'units' | 'net';
@@ -31,9 +29,9 @@ const HEADING = 'font-display text-[13px] leading-[1.35] tracking-[0.2em] upperc
 type Copy = AdminMessages['reports'];
 
 /**
- * The owner's sales report (#42): the range (a GET form, so a view survives a reload and the
- * Excel export takes the same range), the range's figures, every day newest first, then the top
- * fragrances, Volumes and sets. It only lays out what the API computed (`salesSummary`).
+ * The owner's sales report (#42): the report tabs, the range (`ReportRange`), the range's
+ * figures, every day newest first, then the top fragrances, Volumes and sets. It only lays out
+ * what the API computed (`salesSummary`).
  */
 export function SalesReportView({
   t,
@@ -60,7 +58,6 @@ export function SalesReportView({
     lang: language,
   })}`;
   const sold = data.totals.orders > 0 || data.totals.refunds > 0;
-  const custom = Boolean(asked.from || asked.to);
 
   return (
     <>
@@ -77,32 +74,15 @@ export function SalesReportView({
         }
       />
 
-      <Card className="mb-4 p-4 lg:p-5">
-        <form
-          method="get"
-          action="/reports"
-          className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(2,minmax(0,12rem))_auto] sm:items-end"
-        >
-          <Field id="r-from" label={r.from}>
-            <Input type="date" name="from" defaultValue={data.from} required />
-          </Field>
-          <Field id="r-to" label={r.to}>
-            <Input type="date" name="to" defaultValue={data.to} required />
-          </Field>
-          {top === 'net' && <input type="hidden" name="top" value="net" />}
-          <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1">
-            <Button type="submit" className="max-sm:flex-1">
-              {r.apply}
-            </Button>
-            {custom && !invalid && (
-              <Button asChild variant="outline" className="max-sm:flex-1">
-                <Link href={top === 'net' ? '/reports?top=net' : '/reports'}>{r.reset}</Link>
-              </Button>
-            )}
-          </div>
-        </form>
-        {invalid && <Notice title={r.invalidRange} className="mt-3" />}
-      </Card>
+      <ReportTabs r={r} current="sales" asked={asked} />
+      <ReportRange
+        r={r}
+        page="sales"
+        range={data}
+        asked={asked}
+        invalid={invalid}
+        keep={top === 'net' ? { top: 'net' } : undefined}
+      />
 
       {!sold ? (
         <EmptyState title={r.empty}>{r.emptyText}</EmptyState>

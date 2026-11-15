@@ -11,7 +11,13 @@ import {
   setReviewPublishedBodySchema,
 } from './reviews';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
-import { salesReportErrorSchema, salesReportQuerySchema, salesReportSchema } from './reports';
+import {
+  marketingReportQuerySchema,
+  marketingReportSchema,
+  reportErrorSchema,
+  reportQuerySchema,
+  salesReportSchema,
+} from './reports';
 import { adminHomeSchema } from './home';
 import {
   addCartLineBodySchema,
@@ -1616,26 +1622,40 @@ const adminReviews = c.router({
 });
 
 /**
- * Reports (ticket #42): owner only, computed live from order snapshots and Refunds. The Excel
- * export is a file, not in the contract: `GET /admin/reports/sales/export` with the same range and
- * `lang`.
+ * Reports (tickets #42, #43): owner only, computed live from order snapshots and Refunds. The Excel
+ * exports are files, not in the contract: `GET /admin/reports/sales/export` and
+ * `GET /admin/reports/marketing/export` with the same range and `lang`.
  */
 const adminReports = c.router({
   reports: {
     sales: {
       method: 'GET',
       path: '/admin/reports/sales',
-      query: salesReportQuerySchema,
+      query: reportQuerySchema,
       responses: {
         200: salesReportSchema,
         // a day that is not a calendar day (`2026-02-30`)
         400: z.unknown(),
-        401: salesReportErrorSchema,
-        403: salesReportErrorSchema,
-        422: salesReportErrorSchema,
+        401: reportErrorSchema,
+        403: reportErrorSchema,
+        422: reportErrorSchema,
       },
       summary:
         'Owner only: sales by Tashkent day over Fulfilled orders (the day each reached «Доставлен»), Refunds by the day they were sent, the top fragrances, Volumes and sets. Without a range, the last 30 days; 422 invalid_range when `from` is after `to` or the range passes 366 days',
+    },
+    marketing: {
+      method: 'GET',
+      path: '/admin/reports/marketing',
+      query: marketingReportQuerySchema,
+      responses: {
+        200: marketingReportSchema,
+        400: z.unknown(),
+        401: reportErrorSchema,
+        403: reportErrorSchema,
+        422: reportErrorSchema,
+      },
+      summary:
+        "Owner only: the sales report's orders and Refunds by promo code (opens, conversion through its links), by the order's campaign link Source, by the link that acquired the customer, and the upgrade rights issued and used; filtered by Source and promo code. The same range rules as the sales report",
     },
   },
 });

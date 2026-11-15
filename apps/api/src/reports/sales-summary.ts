@@ -2,10 +2,7 @@ import {
   addDays,
   formatLocalDate,
   parseLocalDate,
-  SALES_REPORT_MAX_DAYS,
   tashkentDay,
-  tashkentDayStart,
-  tashkentDaySchema,
   type FragranceSales,
   type SalesDay,
   type SalesFigures,
@@ -13,50 +10,10 @@ import {
   type SetSales,
   type VolumeSales,
 } from '@lummi/contracts';
-import {
-  and,
-  asc,
-  eq,
-  gte,
-  inArray,
-  lte,
-  or,
-  orderLines,
-  orders,
-  refunds,
-  sql,
-  type Db,
-  type DbOrTx,
-} from '@lummi/db';
-import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
+import { asc, inArray, orderLines, type Db, type DbOrTx } from '@lummi/db';
 import { discountShares } from './discount-shares';
-
-/** Tashkent days `YYYY-MM-DD`, both inclusive. */
-export interface TashkentRange {
-  from: string;
-  to: string;
-}
-
-/**
- * A range a report takes: two real Tashkent days written `YYYY-MM-DD`, `from` not after `to`,
- * at most `SALES_REPORT_MAX_DAYS` days.
- */
-export function isSalesRange(range: TashkentRange): boolean {
-  const real = (day: string) => tashkentDaySchema.safeParse(day).success;
-  if (!real(range.from) || !real(range.to) || range.from > range.to) return false;
-  const last = formatLocalDate(addDays(parseLocalDate(range.from), SALES_REPORT_MAX_DAYS - 1));
-  return range.to <= last;
-}
-
-/** The `days` Tashkent days that end with `to`, `to` included. */
-export function daysEnding(to: string, days: number): TashkentRange {
-  return { from: formatLocalDate(addDays(parseLocalDate(to), 1 - days)), to };
-}
-
-/** The last `days` Tashkent days up to `now`'s Tashkent day, that day included. */
-export function lastTashkentDays(days: number, now: Date): TashkentRange {
-  return daysEnding(formatLocalDate(tashkentDay(now)), days);
-}
+import { countedRefunds, deliveredIn } from './report-orders';
+import { isReportRange, roundedAverage, type TashkentRange } from './report-range';
 
 /**
  * Sales over a range of Tashkent days (TZ §7 «Отчёты», #42): the one computation behind the
@@ -78,10 +35,10 @@ export function lastTashkentDays(days: number, now: Date): TashkentRange {
  *
  * Amounts are integer so'm. Refunds are summed in SQL as `bigint` (per order and day); the order
  * figures and the rest are exact integer sums in code, far below 2^53. Every read happens in one
- * read-only snapshot. A range that is not `isSalesRange` is a `RangeError`.
+ * read-only snapshot. A range that is not `isReportRange` is a `RangeError`.
  */
 export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesReport> {
-  if (!isSalesRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
+  if (!isReportRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
   // one snapshot for every read, so a refund or a delivery landing meanwhile never makes the
   // days and the top lists disagree
   return db.transaction((tx) => summarise(tx, range), {
@@ -92,46 +49,8 @@ export async function salesSummary(db: Db, range: TashkentRange): Promise<SalesR
 
 async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport> {
   const days = daysOf(range);
-  const start = tashkentDayStart(range.from);
-  const end = tashkentDayStart(range.to, 1);
-
-  const sold = await db
-    .select({
-      id: orders.id,
-      at: fulfilledAt,
-      items: orders.itemsSubtotal,
-      discount: orders.discount,
-      discountAmount: orders.discountAmount,
-      delivery: orders.deliveryFee,
-    })
-    .from(orders)
-    .where(
-      and(
-        fulfilledOrder,
-        sql`${fulfilledAt} >= ${start.toISOString()}`,
-        sql`${fulfilledAt} < ${end.toISOString()}`,
-      ),
-    );
-
-  // a refund counts on greatest(its day, its order's delivery day), so the range takes those
-  // sent by its end for orders delivered by its end, and sent or delivered on or after its start
-  const refunded = await db
-    .select({
-      on: refunds.refundedOn,
-      delivered: fulfilledAt,
-      amount: sql<number>`sum(${refunds.amount})::bigint`.mapWith(Number),
-    })
-    .from(refunds)
-    .innerJoin(orders, eq(orders.id, refunds.orderId))
-    .where(
-      and(
-        fulfilledOrder,
-        lte(refunds.refundedOn, range.to),
-        sql`${fulfilledAt} < ${end.toISOString()}`,
-        or(gte(refunds.refundedOn, range.from), sql`${fulfilledAt} >= ${start.toISOString()}`),
-      ),
-    )
-    .groupBy(refunds.refundedOn, orders.id);
+  const sold = await deliveredIn(db, range);
+  const refunded = await countedRefunds(db, range);
 
   const lines = sold.length
     ? await db
@@ -162,16 +81,13 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   // ---- by day
   const byDay = new Map(days.map((day) => [day, blank()]));
   for (const o of sold) {
-    const f = byDay.get(formatLocalDate(tashkentDay(o.at!)))!;
+    const f = byDay.get(formatLocalDate(tashkentDay(o.deliveredAt)))!;
     f.orders += 1;
     f.itemsBeforeDiscount += o.items;
     f.discount += o.discountAmount;
     f.delivery += o.delivery;
   }
-  for (const r of refunded) {
-    const delivered = formatLocalDate(tashkentDay(r.delivered!));
-    byDay.get(r.on > delivered ? r.on : delivered)!.refunds += r.amount;
-  }
+  for (const r of refunded) byDay.get(r.day)!.refunds += r.amount;
   const daily: SalesDay[] = days.map((day) => ({ day, ...settle(byDay.get(day)!) }));
   const totals = settle(
     [...byDay.values()].reduce((sum, f) => {
@@ -200,7 +116,7 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   ]);
   for (const [orderId, its] of linesOf) {
     const o = order.get(orderId)!;
-    const at = o.at!.getTime();
+    const at = o.deliveredAt.getTime();
     const shares = discountShares(its, o.discount, o.discountAmount);
     its.forEach((l, i) => {
       const net = l.lineTotal - shares[i]!;
@@ -276,14 +192,6 @@ const blank = (): Sums => ({
 function settle(s: Sums): SalesFigures {
   const sold = s.itemsBeforeDiscount - s.discount;
   return { ...s, net: sold - s.refunds, averageCheck: roundedAverage(sold, s.orders) };
-}
-
-/**
- * `total ÷ count` to the nearest so'm, halves up; null for no count. The reports' average check
- * and the admin Home's average payment (#48) round alike. For a total of zero or more.
- */
-export function roundedAverage(total: number, count: number): number | null {
-  return count === 0 ? null : Math.floor((2 * total + count) / (2 * count));
 }
 
 /** Adds a line to a row; the row keeps the name and brand of the latest order that sold it. */
