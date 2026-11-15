@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseHumoMessage } from '../src/humo/humo-parser';
-import { recordedHumoMessages } from './fixtures/humo-messages';
+import {
+  recordedHumoMessages,
+  recordedOperations,
+  recordedServiceMessages,
+} from './fixtures/humo-messages';
 
 /**
  * Humo notifications built from the documented format (spec Changes 2026-11-07, «Humo credit
@@ -99,9 +103,37 @@ describe('an amount that does not fit is refused, never guessed', () => {
     });
   });
 
-  it('a message with no ➕ or ➖ line reports no card operation', () => {
-    for (const text of ['Kartangiz vaqtincha bloklandi', '', humoMessage({ amount: null })]) {
-      expect(parseHumoMessage(text)).toEqual({ kind: 'unparseable', reason: 'not_an_operation' });
+  it('a message with no ➕ or ➖ line that still looks like an operation (a card mask or an amount) is refused', () => {
+    for (const text of [
+      humoMessage({ amount: null }),
+      humoMessage({ amount: null, balance: null }), // the card mask alone
+      humoMessage({ amount: '75.750,00 UZS', card: null, balance: null }), // the amount alone
+      'HUMOCARD *1234',
+      '60.000,00 UZS',
+      "To'lov: 99 000 UZS",
+      "To'ldirish 60.000,00", // grouped, with tiyin, no currency
+      'Hisobingizga 1 000 000 tushdi', // grouped by spaces, no currency
+      "Sizga 150 so'm keshbek", // a currency word, any case
+      'Поступление 99000 сум',
+      'Popolnenie 99000 uzs',
+      'Summa: 5,00',
+      // the security re-verify's drifts (#51): a sign inside a line, a currency word with a
+      // suffix, dot decimals, the currency first, a mask without a star
+      "🎉 To'ldirish ➕60000",
+      "To'lov ➖ 59000",
+      "Kartangiz 60000 so'mga to'ldirildi",
+      'Зачисление 60000 сумов',
+      'Summa: 60000.00',
+      'UZS 60000',
+      'Сумма: сум 60000',
+      'HUMOCARD ••1234',
+      'Karta ···1234',
+      'Karta XX1234',
+    ]) {
+      expect([text, parseHumoMessage(text)]).toEqual([
+        text,
+        { kind: 'unparseable', reason: 'not_an_operation' },
+      ]);
     }
   });
 
@@ -217,4 +249,47 @@ describe('recorded real notifications (test/fixtures/humo-messages.ts)', () => {
   if (!recordedHumoMessages.some((n) => n.expected.kind === 'credit')) {
     it.todo('a real ➕ credit: waiting for the first transfer to the shop card');
   }
+});
+
+describe('a Humo service message: no ➕/➖, no card mask, nothing amount-shaped (#51, F16)', () => {
+  it.each(recordedServiceMessages)('the real one: $name', ({ text }) => {
+    expect(parseHumoMessage(text)).toEqual({ kind: 'service' });
+  });
+
+  it.each([
+    ['empty', ''],
+    ['the main menu', "Asosiy menyu\nKerakli bo'limni tanlang 👇"],
+    ['a language answer', '🇷🇺 Язык изменён на русский'],
+    ['a promo with a percent', "🎁 HUMO kartasi bilan to'lovlarda 5% keshbek!"],
+    ['a verification code (no grouping)', 'Tasdiqlash kodi: 123456. Uni hech kimga bermang!'],
+    ['a date is no dot decimal', 'Karta amal qilish muddati: 14.11.2026'],
+  ])('%s', (_name, text) => {
+    expect(parseHumoMessage(text)).toEqual({ kind: 'service' });
+  });
+
+  it('every real ➕ and ➖ is an operation, and stays one with its sign line or its fields gone', () => {
+    for (const { text } of recordedOperations) {
+      const lines = text.split('\n');
+      const variants = [
+        text,
+        ...lines.map((_, i) => lines.filter((__, j) => j !== i).join('\n')),
+        lines.filter((l) => !/^[➕➖]/u.test(l) && !l.startsWith('💳')).join('\n'),
+        lines.filter((l) => !/^[➕➖]/u.test(l) && !l.startsWith('💰')).join('\n'),
+      ];
+      for (const v of variants) expect([v, parseHumoMessage(v).kind]).not.toEqual([v, 'service']);
+    }
+  });
+});
+
+describe('a Humo message about the card itself is never quiet (#51)', () => {
+  it.each([
+    ['blocked, UZ', 'Kartangiz vaqtincha bloklandi'],
+    ['unblocked, UZ', 'Kartangiz blokdan chiqarildi'],
+    ['blocked, RU', 'Ваша карта заблокирована'],
+    ['a limit, UZ', "Kunlik limit o'zgartirildi"],
+    ['a limit, RU', 'Лимит по карте исчерпан'],
+    ['blocked, with the card mask', '💳 HUMOCARD *1234 bloklandi'],
+  ])('%s', (_name, text) => {
+    expect(parseHumoMessage(text)).toEqual({ kind: 'card_notice' });
+  });
 });

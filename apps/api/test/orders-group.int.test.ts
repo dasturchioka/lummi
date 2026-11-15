@@ -251,10 +251,13 @@ async function press(user: { id: number; first_name: string }, text: string, on:
   };
 }
 
-/** A message in the group replying to `to` (a ForceReply question), as the webhook gets it. */
+/**
+ * A message in the group replying to `to` (a ForceReply question), as the webhook gets it: text,
+ * or other content (a photo, a sticker) as Telegram names its fields.
+ */
 async function reply(
   user: { id: number; first_name: string },
-  text: string,
+  content: string | Record<string, unknown>,
   to: SentMessage,
   chatId = GROUP,
 ) {
@@ -281,7 +284,7 @@ async function reply(
       date: 1_700_000_000,
       chat,
       from: from(user),
-      text,
+      ...(typeof content === 'string' ? { text: content } : content),
       reply_to_message: {
         message_id: to.messageId,
         message_thread_id: ORDERS_TOPIC,
@@ -539,8 +542,15 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
     // the good number, to the new question: trimmed, saved, and the bottle leaves the shelf
     t.edges.clock.advance(30 * MIN);
-    await reply(dilnoza, '  BTS 4471 0098  ', again);
+    const good = await reply(dilnoza, '  BTS 4471 0098  ', again);
     expect(await statusOf(order.number)).toBe('handed_to_bts');
+    // the bot says so, under the answer (F8)
+    const saved = await groupMessage(repliesTo(good));
+    expect(saved.plain).toBe(
+      `Трек-номер BTS 4471 0098 сохранён, заказ № ${order.number} передан в BTS.`,
+    );
+    expect(saved.threadId).toBe(ORDERS_TOPIC);
+    expect(saved.options?.reply_markup).toBeUndefined();
     expect((await orderRow(order.number)).trackingNumber).toBe('BTS 4471 0098');
     expect(await onHandOf(order.id)).toBe(onHand - 1);
 
@@ -575,6 +585,52 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
       `Заказ № ${order.number} уже изменён, трек-номер не сохранён.`,
     );
     expect((await orderRow(order.number)).trackingNumber).toBe('BTS 4471 0098');
+  });
+
+  it('a photo or sticker in answer to the tracking question is asked again for text, not told the length (F17)', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await press(dilnoza, '📦 Собирается', await cardWith(order.number, '📦 Собирается'));
+    await press(dilnoza, '🚚 Передан в BTS', await cardWith(order.number, '🚚 Передан в BTS'));
+    const question = await groupMessage((m) => m.plain.includes('введите трек-номер BTS'));
+
+    const sticker = await reply(
+      dilnoza,
+      {
+        sticker: {
+          file_id: 'sticker-1',
+          file_unique_id: 's1',
+          type: 'regular',
+          width: 512,
+          height: 512,
+          is_animated: false,
+          is_video: false,
+        },
+      },
+      question,
+    );
+    const askText = await groupMessage(repliesTo(sticker));
+    expect(askText.plain).toBe(
+      `Ответьте текстом: трек-номер BTS для заказа № ${order.number}, от 6 до 64 символов.`,
+    );
+    expect(askText.options?.reply_markup).toMatchObject({ force_reply: true, selective: true });
+    expect(await statusOf(order.number)).toBe('assembling');
+
+    // a photo with a caption is no answer either; the text reply to the newest question is
+    const photo = await reply(
+      dilnoza,
+      {
+        photo: [{ file_id: 'p1', file_unique_id: 'p1', width: 90, height: 90 }],
+        caption: 'BTS 4471 0098',
+      },
+      askText,
+    );
+    const askAgain = await groupMessage(repliesTo(photo));
+    expect(askAgain.plain).toBe(askText.plain);
+    expect(await statusOf(order.number)).toBe('assembling');
+    await reply(dilnoza, 'BTS 4471 0098', askAgain);
+    expect(await statusOf(order.number)).toBe('handed_to_bts');
   });
 
   it('walks Принят → Собирается → Передан в BTS → Доставлен: the card edited each time, history added, the shopper told in their language', async () => {
