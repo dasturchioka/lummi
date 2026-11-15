@@ -21,8 +21,9 @@ export type Carry =
 
 /**
  * While a card is carried, a column it may go to becomes one drop slot over its cards: the set
- * box's empty compartment (a dashed hairline on Milk Field) naming the move in full, on as many
- * lines as the words need. Held above, the slot takes the ink outline of the box's next slot.
+ * box's empty compartment (Milk Field with a dashed hairline). Held above, the slot takes the ink
+ * outline of the box's next slot. The move's words are in the column's head, where the carried
+ * card never covers them.
  */
 function DropSlot({ carry }: { carry: Carry | null }) {
   if (carry?.role !== 'target') return null;
@@ -30,16 +31,14 @@ function DropSlot({ carry }: { carry: Carry | null }) {
     <div
       aria-hidden
       className={cn(
-        'motion-swap pointer-events-none absolute inset-x-1.5 top-0 bottom-1.5 z-10 grid place-items-center rounded-button bg-field/90 px-3 text-center',
-        'text-[13.5px] leading-snug text-pretty transition-[box-shadow,color] duration-150 ease-out',
+        'motion-swap pointer-events-none absolute inset-x-1.5 top-0 bottom-1.5 z-10 rounded-button bg-field/85',
+        'transition-[box-shadow] duration-150 ease-out',
         carry.over
-          ? 'font-semibold text-foreground shadow-[inset_0_0_0_1.5px_var(--graphite)]'
-          : 'font-medium text-muted-foreground outline-[1.5px] outline-offset-[-1.5px] outline-border-strong outline-dashed',
+          ? 'shadow-[inset_0_0_0_1.5px_var(--graphite)]'
+          : 'outline-[1.5px] outline-offset-[-1.5px] outline-border-strong outline-dashed',
       )}
       data-drop-slot
-    >
-      {carry.action}
-    </div>
+    />
   );
 }
 
@@ -102,33 +101,53 @@ export function BoardColumn({
       data-carry={carry?.role}
       data-over={carry?.role === 'target' && carry.over ? '' : undefined}
     >
-      <header className="px-2.5 pt-2 pb-1.5">
-        <div className="flex min-h-9 items-start justify-between gap-1.5">
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-1.5 px-2.5 pt-2 pb-1.5">
+        {/* at rest the status and its money; while a card is carried here, the move in full */}
+        <div className="min-h-[54px] min-w-0">
           <h2
             id={`board-${status}`}
-            className="line-clamp-2 min-w-0 text-[13px] leading-[18px] font-semibold text-balance"
+            className={cn(
+              'line-clamp-2 min-h-9 text-[13px] leading-[18px] font-semibold text-balance',
+              carry?.role === 'target' && 'sr-only',
+            )}
           >
             {name}
           </h2>
-          <span className="flex items-center gap-0.5">
-            <span className="text-[13px] leading-[18px] font-semibold text-muted-foreground tabular-nums">
-              <Settle value={String(column.count)} />
-            </span>
-            {onCollapse && (
-              <button
-                type="button"
-                onClick={onCollapse}
-                aria-label={fill(b.collapse, { status: name })}
-                className="relative -my-1 -mr-1 grid size-6 place-items-center rounded-[6px] text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out after:absolute after:-inset-2 hover:bg-card hover:text-foreground active:scale-[0.94]"
-              >
-                <ChevronRight className="size-4" strokeWidth={1.5} aria-hidden />
-              </button>
-            )}
-          </span>
+          {carry?.role === 'target' ? (
+            <p
+              key="move"
+              className={cn(
+                'motion-swap line-clamp-3 text-[13px] leading-[18px] text-balance',
+                carry.over ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground',
+              )}
+              data-move-label
+            >
+              {carry.action}
+            </p>
+          ) : (
+            <p
+              key="money"
+              className="h-[18px] truncate text-small leading-[18px] text-muted-foreground tabular-nums"
+            >
+              {column.count > 0 ? <Settle value={boardMoney(column.sum, language)} /> : null}
+            </p>
+          )}
         </div>
-        <p className="h-[18px] truncate text-small leading-[18px] text-muted-foreground tabular-nums">
-          {column.count > 0 ? <Settle value={boardMoney(column.sum, language)} /> : null}
-        </p>
+        <span className="flex h-[18px] items-center gap-0.5">
+          <span className="text-[13px] leading-[18px] font-semibold text-muted-foreground tabular-nums">
+            <Settle value={String(column.count)} />
+          </span>
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label={fill(b.collapse, { status: name })}
+              className="relative -mr-1 grid size-6 place-items-center rounded-[6px] text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out after:absolute after:-inset-2 hover:bg-card hover:text-foreground active:scale-[0.94]"
+            >
+              <ChevronRight className="size-4" strokeWidth={1.5} aria-hidden />
+            </button>
+          )}
+        </span>
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
         <ol className="board-list flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto overscroll-x-contain px-1.5 pb-1.5">

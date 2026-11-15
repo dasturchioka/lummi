@@ -539,24 +539,40 @@ async function boardCard(page: Page, number: number) {
 
 /**
  * Picks the order up with the mouse and carries it over `to`'s column, held there: the lifted
- * card, its empty slot, the target's ink outline and move, the columns it cannot go to dimmed.
+ * card, its empty slot, the target's drop slot naming the move, the columns it cannot go to
+ * dimmed. On a phone the target only peeks in: the card is held at the edge until the board has
+ * scrolled it into view, as a thumb would.
  */
 async function carry(page: Page, number: number, to: string) {
   const card = await boardCard(page, number);
   const from = await card.boundingBox();
-  const target = await page
-    .locator(`[data-column="${to}"], [data-rail="${to}"]`)
-    .first()
-    .boundingBox();
-  if (!from || !target) throw new Error(`no card ${number} or column ${to}`);
+  if (!from) throw new Error(`no card ${number}`);
   const x = from.x + from.width / 2;
   const y = from.y + 24;
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + 12, y + 4, { steps: 3 });
-  // a few pixels into the target, clear of the edge where the board scrolls by itself
-  await page.mouse.move(target.x + Math.min(24, target.width / 2), y + 40, { steps: 12 });
+  const target = page.locator(`[data-column="${to}"], [data-rail="${to}"]`).first();
+  const width = page.viewportSize()!.width;
+  let box = await target.boundingBox();
+  if (!box || box.x + box.width > width) {
+    await page.mouse.move(width - 4, y + 40, { steps: 8 });
+    await page
+      .waitForFunction(
+        ([selector, right]) => {
+          const r = document.querySelector(selector as string)?.getBoundingClientRect();
+          return Boolean(r && r.right <= (right as number));
+        },
+        [`[data-column="${to}"]`, width],
+        { timeout: 6000 },
+      )
+      .catch(() => undefined);
+    box = await target.boundingBox();
+  }
+  if (!box) throw new Error(`no column ${to}`);
+  await page.mouse.move(box.x + Math.min(box.width / 2, 72), y + 40, { steps: 10 });
   await page.locator('[data-over]').first().waitFor();
+  await page.waitForTimeout(250);
 }
 
 /** Every column empty, as a shop without orders sees it. */
@@ -567,6 +583,7 @@ async function emptyBoard({ page }: ScreenContext) {
         at: new Date().toISOString(),
         recentDays: 14,
         limit: 50,
+        shopHasOrders: false,
         columns: BOARD_STATUSES.map((status) => ({ status, count: 0, sum: 0, cards: [] })),
       },
     }),

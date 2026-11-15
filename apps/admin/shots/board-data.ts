@@ -310,6 +310,13 @@ export async function boardDay(db: ShotSql) {
     await shift(db, number, seconds);
     alsoMoved.push({ number, seconds });
   }
+  // a move stamps updated_at with its event's time (the board's history filter reads it first);
+  // the shot orders were written without moves, so stamp them as a move would have
+  await db.query(
+    `update orders o set updated_at = greatest(o.created_at,
+       (select max(e.created_at) from order_events e where e.order_id = o.id))
+     where o.number between 9001 and 9013`,
+  );
   await forget(db, DAY_FIRST, DAY.length);
   await addCustomers(db);
   await insertOrders(db, DAY);
