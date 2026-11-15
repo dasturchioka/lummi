@@ -12,6 +12,7 @@ import {
   UPGRADE_RIGHT_SOURCES,
   type CancelReason,
   type OrderStatus,
+  type ReceiptRejectReason,
 } from '@lummi/contracts/constants';
 import { LANGUAGES } from '@lummi/i18n';
 import { sql } from 'drizzle-orm';
@@ -258,9 +259,10 @@ export const processedUpdates = pgTable('processed_updates', {
 
 /**
  * What an outbox row does when delivered: send its message, or bring an order's card in the
- * orders group up to date (`ref` = the order id; rendered from the order at delivery, #37).
+ * orders group up to date (`ref` = the order id; rendered from the order at delivery, #37), or post
+ * a review (#41), or bring a manual-review post up to date (`ref` = the receipt id, #51).
  */
-export const OUTBOX_KINDS = ['message', 'order_card', 'review_post'] as const;
+export const OUTBOX_KINDS = ['message', 'order_card', 'review_post', 'manual_review_post'] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 export const outboxKindEnum = pgEnum('outbox_kind', OUTBOX_KINDS);
 
@@ -303,8 +305,9 @@ export const outbox = pgTable(
  * Every Humo bot message the userbot posted (ADR 0014), keyed by its Telegram message id so a repeat
  * post changes nothing; the highest id is where the userbot's catch-up resumes. Debits (➖) are never
  * stored. `parse_error` is null when the message became a credit; otherwise it names the field that
- * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted. The raw text stays
- * here either way.
+ * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted,
+ * or says the message was the Humo bot's own talk (#51): 'service' (no alert) or 'card_notice' (the
+ * card blocked or a limit; the owner was alerted). The raw text stays here either way.
  */
 export const humoMessages = pgTable('humo_messages', {
   messageId: bigint('message_id', { mode: 'number' }).primaryKey(),
@@ -1354,6 +1357,53 @@ export const orderCards = pgTable('order_cards', {
   createdAt: createdAt(),
 });
 export type OrderCardRow = typeof orderCards.$inferSelect;
+
+/**
+ * The keyboard under a manual-review post (#51): «Оплата подтверждена» (one per Candidate credit)
+ * and «Чек не принят»; one credit to confirm with; the reject reasons; or one reason to confirm.
+ */
+export type ManualReviewPanel =
+  | { kind: 'choices' }
+  | { kind: 'confirm'; creditId: number }
+  | { kind: 'reject' }
+  | { kind: 'confirm_reject'; reason: ReceiptRejectReason };
+
+/**
+ * A receipt held for a person (Manual review, GLOSSARY) and its post in the orders group's
+ * «Заказы» topic (#51, TZ §4): the receipt, the order, its Candidate credits and the reason, with
+ * «Оплата подтверждена» and «Чек не принят». Opened in the transaction that holds the receipt, so
+ * the primary key keeps it to one per hold. Telegram catches up with the row the way it does with
+ * the order card (ADR 0034): `version`, `shown_hash` and the `syncing_at` lease, the receipt once
+ * as a reply. `decided_at` is stamped by the move that takes the order out of «Чек на проверке»
+ * (whoever made it); the post then shows the decision without buttons, and later moves leave it.
+ */
+export const manualReviewPosts = pgTable(
+  'manual_review_posts',
+  {
+    receiptId: bigint('receipt_id', { mode: 'number' })
+      .primaryKey()
+      .references(() => receipts.id, { onDelete: 'cascade' }),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    /** The orders group and its «Заказы» topic when the post was opened (settings `bot.*`). */
+    chatId: bigint('chat_id', { mode: 'number' }).notNull(),
+    threadId: integer('thread_id'),
+    /** Telegram's id of the post; null until it is posted. */
+    messageId: bigint('message_id', { mode: 'number' }),
+    /** When the receipt went as a reply to the post (or turned out to be gone from storage). */
+    receiptPostedAt: timestamp('receipt_posted_at', { withTimezone: true }),
+    panel: jsonb('panel').$type<ManualReviewPanel>().notNull().default({ kind: 'choices' }),
+    version: integer('version').notNull().default(1),
+    /** A hash of the text and keyboard Telegram shows. */
+    shownHash: text('shown_hash'),
+    syncingAt: timestamp('syncing_at', { withTimezone: true }),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('manual_review_posts_order_idx').on(t.orderId)],
+);
+export type ManualReviewPostRow = typeof manualReviewPosts.$inferSelect;
 
 /**
  * «Передан в BTS» pressed on a card (#37): the bot asks the staff member who pressed it for the

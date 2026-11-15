@@ -75,6 +75,7 @@ import { AlertService } from './outbox/alert.service';
 import { OutboxService } from './outbox/outbox.service';
 import { BOT_INFO, BotService } from './bot/bot.service';
 import { BotReceipts } from './bot/bot-receipts.service';
+import { ManualReviewPosts } from './orders-group/manual-review-posts';
 import { OrderCards } from './orders-group/order-cards';
 import { Refunds } from './refunds/refunds';
 import { OrdersGroupBot } from './orders-group/orders-group-bot';
@@ -190,6 +191,7 @@ export class AppModule {
         PaymentPauses,
         OrderStatusService,
         OrderCards,
+        ManualReviewPosts,
         OrdersGroupBot,
         DiscountSourceHooks,
         ReserveSweeps,
