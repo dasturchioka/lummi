@@ -52,17 +52,23 @@ const AMOUNT = /^(\d{1,3}(?:([. \u00A0\u202F])\d{3}(?:\2\d{3})*)?|\d+)(?:,(\d{2}
 const TIME = /(?<![\d:])(\d{2}):(\d{2}) (\d{2})\.(\d{2})\.(\d{4})(?![\d.:])/;
 
 /**
- * What an operation notification carries whatever its layout (#51): a card mask («*1234») or
- * something amount-shaped: digits grouped by `.`, `,` or a space («60.000», «1 000 000»), with
- * tiyin («5,00»), or followed by a currency word (UZS, so'm, сум, any case). A message with any
- * of them but no ➕/➖ line may be a changed format, so it is refused and the owner alerted; only a
- * message with none is the bot's own talk. Money is never dropped on a guess.
+ * What an operation notification carries whatever its layout (#51): a ➕/➖ anywhere, a card mask
+ * («*1234», «••1234», «XX1234») or something amount-shaped: digits grouped by `.`, `,` or a space
+ * («60.000», «1 000 000»), with tiyin («5,00», «60000.00»), or next to a currency word (UZS,
+ * so'm, сум, before or after, any case, any suffix: «60000 so'mga», «UZS 60000»). A message with
+ * any of them but no line starting with ➕/➖ may be a changed format, so it is refused and the
+ * owner alerted; only a message with none is the bot's own talk. Money is never dropped on a
+ * guess: a false match costs one alert.
  */
 const OPERATION_LIKE = [
+  /[➕➖]/u,
   /\*\s?\d{4}(?!\d)/u,
+  /[•·xX]{2,}\s?\d{4}/u,
   /(?<!\d)\d{1,3}(?:[., \u00A0\u202F]\d{3})+(?!\d)/u,
   /(?<!\d)\d+,\d{2}(?!\d)/u,
-  /\d[\s\u00A0\u202F]*(?:uzs|so['ʻʼ’‘`]?m|sum|сум|сўм)(?![\p{L}])/iu,
+  /(?<![\d.])\d+\.\d{2}(?![\d.])/u,
+  /\d[\s\u00A0\u202F]*(?:uzs|so['ʻʼ’‘`]?m|sum|сум|сўм)/iu,
+  /(?:uzs|so['ʻʼ’‘`]?m|сум|сўм)[\s\u00A0\u202F]*\d/iu,
 ];
 /** Words of a notice about the card itself: blocked or unblocked, a limit. */
 const CARD_NOTICE = /blok|блок|limit|лимит/iu;
