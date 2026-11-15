@@ -206,15 +206,17 @@ describe('a receipt held for a person is posted to «Заказы»', () => {
     const receipt = await receiptNow(receiptId);
     expect(photo.photo).toEqual({ bytes: await t.edges.files.get(receipt.normalizedKey) });
 
-    // a second candidate: the AI is asked again and stays unsure; the same post shows both
+    // a second candidate: the AI is asked again and stays unsure; the same post shows both, each
+    // button with what tells them apart: the amount, the time and who sent it
     t.edges.clock.advance(MIN);
-    await recordCredit(t, { som: placed.order.amountDue });
+    await recordCredit(t, { som: placed.order.amountDue, source: 'PAYME P2P UZCARD NA' });
     const both = await post(placed.order.number, (m) => m.plain.includes('15:02'));
     expect(t.edges.receiptJudge.calls).toHaveLength(2);
     expect(both.plain).toContain('Причина: несколько поступлений, ИИ не уверен');
+    const due = money(placed.order.amountDue);
     expect(buttons(both).map((b) => b.text)).toEqual([
-      '✅ Оплата подтверждена: 15:01',
-      '✅ Оплата подтверждена: 15:02',
+      `✅ ${due} · 15:01 · CLICK P2P`,
+      `✅ ${due} · 15:02 · PAYME P2P`,
       '⛔ Чек не принят',
     ]);
     await settled();
@@ -299,9 +301,11 @@ describe('the buttons on the post', () => {
 
     expect(await press(dilnoza, '✅ Оплата подтверждена', held.post)).toBeUndefined();
     const asking = await post(number, hasButtons('Да, оплата подтверждена', '‹ Назад'));
-    expect(asking.plain).toContain(
-      `Подтвердить оплату поступлением ${money(held.order.amountDue)} от 9 ноября, 15:01 (HUMOCARD *1234)?`,
-    );
+    // the whole credit: amount, time, who sent it, card
+    expect(asking.plain.split('\n').slice(-2)).toEqual([
+      'Подтвердить оплату этим поступлением?',
+      `${money(held.order.amountDue)} · 9 ноября, 15:01 · 📍 CLICK P2P HUMO2UZCAR · HUMOCARD *1234`,
+    ]);
     // «Назад» brings the choices back; nothing was decided
     await press(dilnoza, '‹ Назад', asking);
     const again = await post(number, hasButtons('✅ Оплата подтверждена', '⛔ Чек не принят'));
@@ -346,6 +350,61 @@ describe('the buttons on the post', () => {
         ).toBe(true),
       { timeout: 15_000 },
     );
+  });
+
+  it('of several candidates, the one pressed is the one linked', async () => {
+    await addStaff(dilnoza);
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    t.edges.clock.advance(MIN);
+    const first = await recordCredit(t, { som: placed.order.amountDue });
+    t.edges.clock.advance(MIN);
+    const second = await recordCredit(t, {
+      som: placed.order.amountDue,
+      source: 'PAYME P2P UZCARD NA',
+    });
+    const due = money(placed.order.amountDue);
+    const p = await post(placed.order.number, (m) => buttons(m).length === 3);
+    await settled();
+
+    await press(dilnoza, `✅ ${due} · 15:02 · PAYME P2P`, p);
+    const sure = await post(placed.order.number, hasButtons('Да, оплата подтверждена', '‹ Назад'));
+    expect(sure.plain.split('\n').at(-1)).toBe(
+      `${due} · 9 ноября, 15:02 · 📍 PAYME P2P UZCARD NA · HUMOCARD *1234`,
+    );
+    await press(dilnoza, 'Да, оплата подтверждена', sure);
+
+    expect((await orderNow(placed.order.id)).creditId).toBe(second);
+    expect((await receiptNow(receiptId)).verdict).toBe('manager_confirmed');
+    const stillFree = await t.db.select().from(orders).where(eq(orders.creditId, first));
+    expect(stillFree).toEqual([]);
+  });
+
+  it('a forged «Да» from staff with a credit that is taken or does not fit changes nothing', async () => {
+    await addStaff(dilnoza);
+    const held = await heldOrder();
+    const other = await heldOrder(vali, '998907654321');
+    expect(other.order.amountDue).toBe(held.order.amountDue);
+    // another amount: never a candidate; the door wants a reason, which only the admin takes
+    const misfit = await recordCredit(t, { som: held.order.amountDue + 1000 });
+    expect(await tap(dilnoza, `mr:y:${held.receiptId}:${misfit}`, held.post)).toBe(
+      'Это поступление не подходит заказу: привяжите его в админке, с причиной',
+    );
+    // the other order took this one's candidate (the admin linked it there)
+    const manager = await t.managerSession();
+    const taken = await manager.client.admin.orders.confirmPayment({
+      params: { number: other.order.number },
+      body: { creditId: held.creditId, receiptId: other.receiptId },
+    });
+    expect(taken.status).toBe(200);
+    expect(await tap(dilnoza, `mr:y:${held.receiptId}:${held.creditId}`, held.post)).toBe(
+      'Это поступление уже не свободно: оно оплатило другой заказ или его отметили «Не для заказа»',
+    );
+    expect(await orderNow(held.order.id)).toMatchObject({
+      status: 'receipt_review',
+      creditId: null,
+    });
+    expect((await receiptNow(held.receiptId)).verdict).toBe('manual_review');
   });
 
   it("«Чек не принят» needs a reason: the admin dialog's presets, then a confirmation; the shopper reads why", async () => {
@@ -522,5 +581,88 @@ describe('a duplicate receipt held for a person', () => {
     // the repeat itself is «оплата не найдена» at once (#36): never a manual-review post
     await settled();
     expect(postsOf(second.order.number)).toEqual([]);
+
+    // the money arrives later: the AI is never asked about a duplicate, but the post shows the
+    // credit, and staff may confirm with it
+    await addStaff(dilnoza);
+    t.edges.clock.advance(MIN);
+    const creditId = await recordCredit(t, { som: first.order.amountDue });
+    const withCredit = await post(
+      first.order.number,
+      hasButtons('✅ Оплата подтверждена', '⛔ Чек не принят'),
+    );
+    expect(withCredit.plain).toContain(
+      `• ${money(first.order.amountDue)} · 9 ноября, 15:01 · HUMOCARD *1234 · CLICK P2P HUMO2UZCAR`,
+    );
+    expect(t.edges.receiptJudge.calls).toHaveLength(0);
+    await press(dilnoza, '✅ Оплата подтверждена', withCredit);
+    await press(
+      dilnoza,
+      'Да, оплата подтверждена',
+      await post(first.order.number, hasButtons('Да, оплата подтверждена', '‹ Назад')),
+    );
+    expect((await orderNow(first.order.id)).creditId).toBe(creditId);
+  });
+});
+
+describe('the reason and the credit the AI chose', () => {
+  it('«сумма не совпала» when the AI said the amount is not the one due; its choice is named', async () => {
+    t.edges.receiptJudge.respond = (input: ReceiptJudgeInput) => ({
+      ...unsure,
+      amountMatches: 0.31,
+      recipientMatches: 0.93,
+      chosenCreditId: input.candidates[0]!.creditId,
+    });
+    const held = await heldOrder();
+    expect(held.post.plain.split('\n')[1]).toBe('Причина: сумма не совпала');
+    expect(held.post.plain).toContain(
+      `• ${money(held.order.amountDue)} · 9 ноября, 15:01 · HUMOCARD *1234 · CLICK P2P HUMO2UZCAR (выбор ИИ)`,
+    );
+  });
+
+  it('a credit marked «Не для заказа» while the AI answered: the post names it and who marked it', async () => {
+    const placed = await placeOrder();
+    const receiptId = await upload(placed);
+    let release!: () => void;
+    const answering = new Promise<void>((r) => (release = r));
+    t.edges.receiptJudge.respond = async (input: ReceiptJudgeInput) => {
+      await answering;
+      return {
+        ...unsure,
+        recipientMatches: 0.93,
+        chosenCreditId: input.candidates.at(-1)!.creditId,
+        choiceConfidence: 0.8,
+        confirmed: true,
+        reason: undefined,
+      };
+    };
+    t.edges.clock.advance(MIN);
+    const creditId = await recordCredit(t, { som: placed.order.amountDue });
+    await vi.waitFor(() => expect(t.edges.receiptJudge.calls).toHaveLength(1), {
+      timeout: 15_000,
+    });
+    const manager = await t.managerSession();
+    t.edges.clock.advance(MIN);
+    const marked = await manager.client.admin.credits.markNotForOrder({
+      params: { id: creditId },
+      body: {},
+    });
+    expect(marked.status).toBe(200);
+    release();
+
+    await vi.waitFor(
+      async () => expect((await receiptNow(receiptId)).reviewReason).toBe('credit_marked'),
+      { timeout: 15_000 },
+    );
+    const p = await post(placed.order.number);
+    const lines = p.plain.split('\n');
+    expect(lines[1]).toBe(
+      'Причина: ИИ подтвердил чек поступлением, которое отметили «Не для заказа»',
+    );
+    expect(lines.slice(6, 8)).toEqual([
+      `ИИ выбрал поступление ${money(placed.order.amountDue)} · 9 ноября, 15:01 · HUMOCARD *1234 · CLICK P2P HUMO2UZCAR, но его отметили «Не для заказа»: Manager, 9 ноября, 15:02.`,
+      'Других подходящих поступлений нет.',
+    ]);
+    expect(p.plain).not.toContain('Нет поступления');
   });
 });
