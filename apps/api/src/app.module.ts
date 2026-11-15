@@ -42,6 +42,8 @@ import { OrdersService } from './orders/orders.service';
 import { DiscountSourceHooks } from './order-status/discount-sources';
 import { BirthdayService } from './birthday/birthday.service';
 import { BirthdayCouponJob } from './birthday/birthday-job';
+import { BirthdayAdminController } from './birthday/birthday-admin.controller';
+import { BirthdayAdminService } from './birthday/birthday-admin.service';
 import { DiscountsController } from './birthday/discounts.controller';
 import { OrderStatusService } from './order-status/order-status.service';
 import { ReserveSweeps } from './order-status/reserve-sweeps';
@@ -56,6 +58,7 @@ import { StockAdminService } from './admin/stock-admin.service';
 import { SetsAdminService } from './admin/sets-admin.service';
 import { ReviewsAdminController, ReviewsController } from './reviews/reviews.controller';
 import { ReviewsBot } from './reviews/reviews-bot';
+import { ReviewRequestsService } from './reviews/review-requests.service';
 import { ReviewsService } from './reviews/reviews.service';
 import { FavouritesController } from './favourites/favourites.controller';
 import { FavouritesService } from './favourites/favourites.service';
@@ -129,6 +132,7 @@ export class AppModule {
         FavouritesController,
         ReviewsController,
         ReviewsAdminController,
+        BirthdayAdminController,
         OrdersController,
         ReceiptsController,
         ReceiptsAdminController,
@@ -179,6 +183,8 @@ export class AppModule {
         SetsService,
         FavouritesService,
         ReviewsService,
+        ReviewRequestsService,
+        BirthdayAdminService,
         ReviewsBot,
         OrdersService,
         ReceiptsService,

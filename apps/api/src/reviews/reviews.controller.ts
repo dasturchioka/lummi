@@ -21,6 +21,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard';
 import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
+import { ReviewRequestsService } from './review-requests.service';
 import { ReviewsService } from './reviews.service';
 
 /** The reviews block on a fragrance or set card: published reviews only. */
@@ -59,7 +60,19 @@ export class ReviewsController {
 @Controller()
 @UseGuards(StaffGuard)
 export class ReviewsAdminController {
-  constructor(@Inject(ReviewsService) private readonly reviews: ReviewsService) {}
+  constructor(
+    @Inject(ReviewsService) private readonly reviews: ReviewsService,
+    @Inject(ReviewRequestsService) private readonly requests: ReviewRequestsService,
+  ) {}
+
+  /** The requests the bot made, with «не доставлено» (#55). */
+  @TsRestHandler(adminContract.reviews.requests)
+  requestList() {
+    return tsRestHandler(adminContract.reviews.requests, async ({ query }) => ({
+      status: 200 as const,
+      body: await this.requests.list(query),
+    }));
+  }
 
   @TsRestHandler(adminContract.reviews.list)
   list() {
