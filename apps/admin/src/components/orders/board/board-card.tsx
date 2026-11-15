@@ -98,7 +98,10 @@ export function CardBody({
           <span key="n" className="whitespace-nowrap">
             {items}
           </span>,
-          <span key="city">{card.city ?? card.region[language]}</span>,
+          // «р-н» never breaks at its hyphen
+          <span key="city">
+            {(card.city ?? card.region[language]).replace(/-(?=\S{1,3}(\s|$))/g, '\u2011')}
+          </span>,
           card.isGift && (
             <span key="gift" className="inline-flex items-center gap-1 whitespace-nowrap">
               <Gift className="size-3.5" strokeWidth={1.5} aria-hidden />
@@ -236,7 +239,7 @@ export function BoardCard({
       // a long press is a pick-up here, never the browser's link menu
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
-        'relative touch-manipulation rounded-card bg-card px-2.5 pt-1.5 pb-2.5 select-none [-webkit-touch-callout:none] hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
+        'relative touch-manipulation rounded-card bg-card px-2 pt-1.5 pb-2.5 select-none [-webkit-touch-callout:none] hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
         'transition-[opacity,box-shadow] duration-150 ease-out',
         // the place it was picked up from: an empty slot of the same size
         isDragging &&

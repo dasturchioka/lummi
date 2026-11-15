@@ -404,7 +404,7 @@ export function OrdersBoard({
           zIndex={60}
         >
           {carried && board ? (
-            <div className="motion-lift cursor-grabbing rounded-card bg-card px-2.5 pt-1.5 pb-2.5 shadow-[inset_0_0_0_1px_var(--hairline-strong)]">
+            <div className="motion-lift cursor-grabbing rounded-card bg-card px-2 pt-1.5 pb-2.5 shadow-[inset_0_0_0_1px_var(--hairline-strong)]">
               <CardBody card={carried} at={board.at} t={t} language={language} />
             </div>
           ) : null}

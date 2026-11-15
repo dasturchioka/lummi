@@ -28,17 +28,21 @@ export type Carry =
 function DropSlot({ carry }: { carry: Carry | null }) {
   if (carry?.role !== 'target') return null;
   return (
+    // the whole list area goes under Milk Field, so no card shows past the slot's edge
     <div
       aria-hidden
-      className={cn(
-        'motion-swap pointer-events-none absolute inset-x-1.5 top-0 bottom-1.5 z-10 rounded-button bg-field/85',
-        'transition-[box-shadow] duration-150 ease-out',
-        carry.over
-          ? 'shadow-[inset_0_0_0_1.5px_var(--graphite)]'
-          : 'outline-[1.5px] outline-offset-[-1.5px] outline-border-strong outline-dashed',
-      )}
+      className="motion-swap pointer-events-none absolute inset-0 z-10 rounded-b-card bg-field/85 p-1.5 pt-0"
       data-drop-slot
-    />
+    >
+      <div
+        className={cn(
+          'h-full rounded-button transition-[box-shadow] duration-150 ease-out',
+          carry.over
+            ? 'shadow-[inset_0_0_0_1.5px_var(--graphite)]'
+            : 'outline-[1.5px] outline-offset-[-1.5px] outline-border-strong outline-dashed',
+        )}
+      />
+    </div>
   );
 }
 
