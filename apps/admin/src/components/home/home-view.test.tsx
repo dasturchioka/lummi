@@ -76,6 +76,22 @@ describe('HomeView', () => {
     expect(await screen.findByText(ru.home.now.clear.title, {}, { timeout: 1000 })).toBeTruthy();
   });
 
+  it('polls every 10 s while visible', async () => {
+    vi.useFakeTimers();
+    try {
+      home.mockResolvedValue({ status: 200, body: ANSWER });
+      render(view);
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(home).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(9_000));
+      expect(home).toHaveBeenCalledTimes(1);
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+      expect(home).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('changes nothing after it is gone: no state, no redirect', async () => {
     home.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({ status: 401, body: {} }), 5)),

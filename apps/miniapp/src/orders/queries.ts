@@ -11,6 +11,7 @@ import type {
 import { ordersMessages } from '@lummi/i18n/orders';
 import {
   keepPreviousData,
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -83,13 +84,39 @@ export function useCreateOrder() {
   });
 }
 
+/**
+ * How often an open order screen re-reads while the app is visible (a UI constant, not a rule).
+ * It stops in the background (`refetchIntervalInBackground: false`, the default made explicit)
+ * and a return to the foreground re-reads at once (`refetchOnWindowFocus`, fed by
+ * `installLiveFocus`). Only a changed answer re-renders (structural sharing), so nothing jumps.
+ */
+export const LIVE_POLL_MS = 10_000;
+const liveQueryOptions = {
+  staleTime: 0,
+  refetchInterval: LIVE_POLL_MS,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
+
 export const ORDERS_KEY = ['orders'] as const;
 export const orderKey = (number: number) => ['orders', number] as const;
+
+/**
+ * Called before a write to the cache: a poll already in flight is dropped, so it cannot land
+ * after the write and put the old status back (covers the order, its payment and the list).
+ */
+export async function holdPolls(qc: QueryClient, number: number): Promise<void> {
+  await Promise.all([
+    qc.cancelQueries({ queryKey: orderKey(number) }),
+    qc.cancelQueries({ queryKey: [...ORDERS_KEY, 'list'] }),
+  ]);
+}
 
 /** The «Заказы» list, newest first, a page at a time; statuses come from the server, never the bot. */
 export function useOrders() {
   return useInfiniteQuery({
     queryKey: [...ORDERS_KEY, 'list'],
+    ...liveQueryOptions,
     refetchOnMount: 'always',
     initialPageParam: undefined as number | undefined,
     queryFn: async ({ pageParam }) =>
@@ -102,6 +129,7 @@ export function useOrders() {
 export function useOrder(number: number) {
   return useQuery({
     queryKey: orderKey(number),
+    ...liveQueryOptions,
     refetchOnMount: 'always',
     queryFn: async () => {
       const res = await api.orders.get({ params: { number } });
@@ -122,8 +150,8 @@ export function usePayment(number: number) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: paymentKey(number),
+    ...liveQueryOptions,
     refetchOnMount: 'always',
-    staleTime: 0,
     queryFn: async () => {
       const res = await api.orders.payment({ params: { number } });
       if (res.status === 404) return null;
@@ -164,8 +192,9 @@ export function useCancelOrder(number: number) {
       }
       throw new Error(`HTTP ${res.status}`);
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.kind === 'try_again') return;
+      await holdPolls(qc, number);
       qc.setQueryData(orderKey(number), result.order);
       void qc.invalidateQueries({ queryKey: [...ORDERS_KEY, 'list'] });
       void qc.invalidateQueries({ queryKey: paymentKey(number) });
