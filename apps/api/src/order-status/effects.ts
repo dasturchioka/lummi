@@ -6,7 +6,14 @@ import {
   type TransitionPayload,
 } from '@lummi/contracts';
 import type { OrderLineRow, OrderRow, orders, UpgradeRightRow } from '@lummi/db';
-import { fill, formatCalendarDate, formatDateTime, formatMoney, type Language } from '@lummi/i18n';
+import {
+  deliveryEta,
+  fill,
+  formatCalendarDate,
+  formatDateTime,
+  formatMoney,
+  type Language,
+} from '@lummi/i18n';
 import { botMessages, orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
 import type { OnHandMove } from './on-hand';
 
@@ -18,6 +25,8 @@ export interface Move<A extends OrderAction> {
   payload: TransitionPayload<A>;
   /** The upgrade rights this move opened (only «Доставлен» opens any, #38); empty otherwise. */
   openedRights: readonly Pick<UpgradeRightRow, 'source' | 'percent' | 'expiresAt'>[];
+  /** The setting `delivery.etaHours` as it stands, for the «Передан в BTS» message. */
+  etaHours: number;
 }
 
 /** The shopper's message text, and whether it carries «Написать менеджеру». */
@@ -155,6 +164,7 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
       text: fill(bot(lang).handedToBts, {
         number: number(m),
         tracking: m.payload.trackingNumber,
+        eta: deliveryEta(lang, m.etaHours),
       }),
     }),
   },

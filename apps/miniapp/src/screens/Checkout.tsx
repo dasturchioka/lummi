@@ -13,7 +13,7 @@ import {
   RECIPIENT_PHONE_INPUT_MAX,
   normalizeRecipientPhone,
 } from '@lummi/contracts/constants';
-import { fill, formatPhone } from '@lummi/i18n';
+import { deliveryEta, fill, formatPhone } from '@lummi/i18n';
 import { setsMessages } from '@lummi/i18n/sets';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearch } from '@tanstack/react-router';
@@ -702,7 +702,10 @@ export function Checkout() {
             <TruckIcon size={20} />
           </span>
           <span className="text-pretty">
-            <b className="font-semibold">{o.checkout.deliveryLead}</b> {o.checkout.deliveryInfo}
+            <b className="font-semibold">{o.checkout.deliveryLead}</b>{' '}
+            {fill(o.checkout.deliveryInfo, {
+              eta: deliveryEta(language, data.deliveryEtaHours),
+            })}
           </span>
         </Card>
         {dest?.kind === 'point' ? (

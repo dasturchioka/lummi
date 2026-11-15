@@ -33,7 +33,13 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
+    if (
+      await page
+        .getByRole('listbox')
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();
@@ -1395,6 +1401,20 @@ export const screens: Screen[] = [
   // Sets (#22): the Discovery set's stock, price, composition and photo.
   { id: 'sets', path: '/sets', as: 'owner' },
   { id: 'sets-manager', path: '/sets', as: 'manager' },
+  {
+    // The owner set the set's Uzum link (#54).
+    id: 'sets-uzum',
+    path: '/sets',
+    as: 'owner',
+    setup: async ({ db }) => {
+      await db.query(
+        "update discovery_set set uzum_url = 'https://uzum.uz/ru/product/lummi-discovery-set'",
+      );
+    },
+    teardown: async ({ db }) => {
+      await db.query('update discovery_set set uzum_url = null');
+    },
+  },
   {
     // The same fragrance picked twice: the second field says so and «Сохранить» stays off.
     id: 'sets-duplicate',

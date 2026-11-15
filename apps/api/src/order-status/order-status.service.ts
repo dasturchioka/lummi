@@ -172,6 +172,7 @@ export class OrderStatusService {
       lines: await linesOf(tx, order.id),
       payload: plan.payload,
       openedRights: [],
+      etaHours: (await readSettings(tx, ['delivery.etaHours']))['delivery.etaHours'],
     };
     if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 

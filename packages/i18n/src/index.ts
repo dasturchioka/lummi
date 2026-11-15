@@ -6,5 +6,6 @@ export { formatDuration } from './duration';
 export { plural, type PluralForms } from './plural';
 export { formatPhone } from './phone';
 export { fill } from './fill';
+export { deliveryEta } from './eta';
 export { APOSTROPHE_CLASS, normalizeUzbek, stripApostrophes } from './uzbek';
 export { formatCalendarDate, formatDateTime, formatDayMonth, formatTime } from './date';
