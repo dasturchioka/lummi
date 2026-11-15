@@ -117,6 +117,18 @@ describe('an amount that does not fit is refused, never guessed', () => {
       'Поступление 99000 сум',
       'Popolnenie 99000 uzs',
       'Summa: 5,00',
+      // the security re-verify's drifts (#51): a sign inside a line, a currency word with a
+      // suffix, dot decimals, the currency first, a mask without a star
+      "🎉 To'ldirish ➕60000",
+      "To'lov ➖ 59000",
+      "Kartangiz 60000 so'mga to'ldirildi",
+      'Зачисление 60000 сумов',
+      'Summa: 60000.00',
+      'UZS 60000',
+      'Сумма: сум 60000',
+      'HUMOCARD ••1234',
+      'Karta ···1234',
+      'Karta XX1234',
     ]) {
       expect([text, parseHumoMessage(text)]).toEqual([
         text,
@@ -250,6 +262,7 @@ describe('a Humo service message: no ➕/➖, no card mask, nothing amount-shape
     ['a language answer', '🇷🇺 Язык изменён на русский'],
     ['a promo with a percent', "🎁 HUMO kartasi bilan to'lovlarda 5% keshbek!"],
     ['a verification code (no grouping)', 'Tasdiqlash kodi: 123456. Uni hech kimga bermang!'],
+    ['a date is no dot decimal', 'Karta amal qilish muddati: 14.11.2026'],
   ])('%s', (_name, text) => {
     expect(parseHumoMessage(text)).toEqual({ kind: 'service' });
   });
