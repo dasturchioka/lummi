@@ -113,20 +113,18 @@ export function CardBody({
       <p className="mt-1 truncate text-[13.5px] leading-snug font-semibold whitespace-nowrap tabular-nums">
         {boardMoney(card.total, language)}
       </p>
-      <MetaLine
-        className="text-small leading-snug text-muted-foreground"
-        parts={[
-          <PaymentMarker key="marker" card={card} t={t} />,
-          <span
-            key="age"
-            className="whitespace-nowrap tabular-nums"
-            title={fill(o.board.inStatus, { age: waited })}
-          >
-            <span className="sr-only">{fill(o.board.inStatus, { age: '' })}</span>
-            {waited}
-          </span>,
-        ]}
-      />
+      {/* the marker and the time share a line where they fit; no dot slot, so the marker's
+          word has the card's whole width before it gives way */}
+      <div className="flex flex-wrap items-baseline gap-x-2 text-small leading-snug text-muted-foreground">
+        <PaymentMarker card={card} t={t} />
+        <span
+          className="whitespace-nowrap tabular-nums"
+          title={fill(o.board.inStatus, { age: waited })}
+        >
+          <span className="sr-only">{fill(o.board.inStatus, { age: '' })}</span>
+          {waited}
+        </span>
+      </div>
     </div>
   );
 }
