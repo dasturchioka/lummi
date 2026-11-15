@@ -14,7 +14,7 @@ import { ordersMessages } from '@lummi/i18n/orders';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent } from '@/lib/setting-copy';
 import { QUIET_ACTION } from '@/lib/ui-classes';
+import { useVisiblePoll } from '@/lib/use-visible-poll';
 import { fill } from '@/lib/utils';
 import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
 import {
@@ -118,6 +119,23 @@ export function OrderPage({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<FulfilAction | null>(null);
   const status = page.order.status;
+  const number = page.order.number;
+  /** Counts the page's own writes: a poll that began before one never overwrites it. */
+  const writes = useRef(0);
+  const idle = useRef(true);
+  useEffect(() => {
+    idle.current = dialog === null && busy === null;
+  });
+  // live: another manager's or the bot's move shows here within ~10 s and on return to the tab
+  useVisiblePoll(async (signal) => {
+    if (!idle.current) return;
+    const seen = writes.current;
+    const res = await browserApi.orders.get({ params: { number }, fetchOptions: { signal } });
+    if (signal.aborted || seen !== writes.current || !idle.current) return;
+    if (res.status === 401) return router.replace('/login');
+    if (res.status !== 200) return;
+    setPage((was) => (JSON.stringify(was) === JSON.stringify(res.body) ? was : res.body));
+  });
   const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
   /** Applies a move's answer; returns what failed for the dialog, or null when it is done. */
@@ -125,12 +143,14 @@ export function OrderPage({
     if (!res) return { text: t.errors.generic };
     switch (res.status) {
       case 200:
+        writes.current += 1;
         setPage(res.body);
         setNotice(null);
         setDialog(null);
         return null;
       case 409:
         if (res.body.code === 'try_again') return { text: o.tryAgain };
+        writes.current += 1;
         setPage(res.body.order);
         setDialog(null);
         setNotice(
@@ -152,7 +172,6 @@ export function OrderPage({
         return { text: t.errors.generic };
     }
   };
-  const number = page.order.number;
   const params = { number };
 
   const next = FULFIL_ACTIONS.find((a) => staffMay(status, a)) ?? null;
