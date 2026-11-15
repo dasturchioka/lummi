@@ -192,7 +192,6 @@ export function BirthdayList({
               <THead>
                 <TR>
                   <TH>{m.columns.customer}</TH>
-                  <TH>{m.columns.year}</TH>
                   <TH>{m.columns.discount}</TH>
                   <TH>{m.columns.issued}</TH>
                   <TH>{m.columns.delivery}</TH>
@@ -203,10 +202,16 @@ export function BirthdayList({
               <TBody>
                 {data.items.map((c) => (
                   <TR key={c.id} className="[&>td]:py-3 [&>td]:align-top">
-                    <TD className="min-w-[12rem]">{who(c)}</TD>
-                    <TD className="w-px">{c.birthdayYear}</TD>
+                    <TD className="min-w-[12rem]">
+                      {who(c)}
+                      <span className="mt-0.5 block text-small text-muted-foreground tabular-nums">
+                        {m.columns.year}: {c.birthdayYear}
+                      </span>
+                    </TD>
                     <TD className="whitespace-nowrap">{terms(c)}</TD>
-                    <TD className="text-muted-foreground">{issued(c)}</TD>
+                    <TD className="whitespace-nowrap text-muted-foreground">
+                      {formatTashkent(c.issuedAt).split('\u00a0')[0]}
+                    </TD>
                     <TD className="w-px">{delivery(c)}</TD>
                     <TD>{order(c)}</TD>
                     <TD>{expires(c)}</TD>
