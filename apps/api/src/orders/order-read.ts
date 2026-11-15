@@ -1,9 +1,9 @@
 import type { OrderAction, OrderStatus, PaymentState, ReceiptVerdict } from '@lummi/contracts';
-import { sql } from '@lummi/db';
+import { orderEvents, orders, sql } from '@lummi/db';
 
 /*
- * How staff read an order, shared by the orders panel (#33) and the admin Home (#48): where its
- * money stands, and who its customer is.
+ * How staff read an order, shared by the orders panel (#33), the admin Home (#48) and the orders
+ * board (#52): where its money stands, since when it is in its status, and who its customer is.
  */
 
 /** The words of the one payment-state rule, typed against their enums. */
@@ -33,3 +33,12 @@ end`;
 /** A customer as staff read them: first and last name, or the first alone. */
 export const customerName = (c: { firstName: string; lastName: string | null }) =>
   c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName;
+
+/**
+ * When the order last entered its current status (its history, ADR 0011); its creation if none.
+ * A select over `orders` (not aliased): the Home's queues and the board's «time in this status».
+ */
+export const enteredStatus =
+  sql<Date>`coalesce((select max(ev.created_at) from ${orderEvents} ev where ev.order_id = "orders"."id" and ev.to_status = "orders"."status"), "orders"."created_at")`.mapWith(
+    orders.createdAt,
+  );

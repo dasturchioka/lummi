@@ -59,6 +59,15 @@ export class AdminOrdersController {
     }));
   }
 
+  // declared before `get`, so `/admin/orders/board` is never read as an order number
+  @TsRestHandler(adminContract.orders.board)
+  board() {
+    return tsRestHandler(adminContract.orders.board, async ({ query }) => ({
+      status: 200 as const,
+      body: await this.orders.board(query),
+    }));
+  }
+
   @TsRestHandler(adminContract.orders.get)
   get() {
     return tsRestHandler(adminContract.orders.get, async ({ params }) => {

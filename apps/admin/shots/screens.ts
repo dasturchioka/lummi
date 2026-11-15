@@ -1,4 +1,4 @@
-import { settingDefinitions, type AdminHome } from '@lummi/contracts';
+import { BOARD_STATUSES, settingDefinitions, type AdminHome } from '@lummi/contracts';
 import { fill } from '@lummi/i18n';
 import type { AdminMessages } from '@lummi/i18n/admin';
 import { resolve } from 'node:path';
@@ -25,6 +25,7 @@ import {
 } from './not-delivered-data';
 import { shotMarketing } from './marketing-data';
 import { SHOT_ORDER } from './orders-data';
+import { boardCrowd, boardCrowdBack, boardDay, boardDayBack } from './board-data';
 import { cardBack, homeDay, homeDayBack, humoBack, humoSilent, noCard } from './home-data';
 import { EARLIER_CARD, SHOT_CARD } from './shop-card-data';
 
@@ -518,6 +519,84 @@ function resetButton(page: Page, t: AdminMessages) {
     .locator('main li:visible, main tr:visible')
     .filter({ hasText: RESET_TARGET.name })
     .getByRole('button', { name: t.staff.resetPassword, exact: true });
+}
+
+/** A normal day on the orders board (#52): the Home's day and a dozen fresh orders (board-data.ts). */
+const boardOn: Pick<Screen, 'setup' | 'teardown'> = {
+  setup: ({ db }) => boardDay(db),
+  teardown: ({ db }) => boardDayBack(db),
+};
+
+/** The board has answered: its columns hold cards. */
+async function boardLoaded({ page }: ScreenContext) {
+  await page.locator('[data-board]:not([aria-busy])').waitFor();
+  await page.locator('[data-order]').first().waitFor();
+}
+
+/** Scrolls the board so the order's column starts at the left edge, and returns the card. */
+async function boardCard(page: Page, number: number) {
+  const card = page.locator(`[data-order="${number}"]`);
+  await card.waitFor();
+  await card.evaluate((el) =>
+    el.closest('[data-column]')?.scrollIntoView({ inline: 'start', block: 'nearest' }),
+  );
+  await page.waitForTimeout(150);
+  return card;
+}
+
+/**
+ * Picks the order up with the mouse and carries it over `to`'s column, held there: the lifted
+ * card, its empty slot, the target's drop slot naming the move, the columns it cannot go to
+ * dimmed. On a phone the target only peeks in: the card is held at the edge until the board has
+ * scrolled it into view, as a thumb would.
+ */
+async function carry(page: Page, number: number, to: string) {
+  const card = await boardCard(page, number);
+  const from = await card.boundingBox();
+  if (!from) throw new Error(`no card ${number}`);
+  const x = from.x + from.width / 2;
+  const y = from.y + 24;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 12, y + 4, { steps: 3 });
+  const target = page.locator(`[data-column="${to}"], [data-rail="${to}"]`).first();
+  const width = page.viewportSize()!.width;
+  let box = await target.boundingBox();
+  if (!box || box.x + box.width > width) {
+    await page.mouse.move(width - 4, y + 40, { steps: 8 });
+    await page
+      .waitForFunction(
+        ([selector, right]) => {
+          const r = document.querySelector(selector as string)?.getBoundingClientRect();
+          return Boolean(r && r.right <= (right as number));
+        },
+        [`[data-column="${to}"]`, width],
+        { timeout: 6000 },
+      )
+      .catch(() => undefined);
+    box = await target.boundingBox();
+  }
+  if (!box) throw new Error(`no column ${to}`);
+  await page.mouse.move(box.x + Math.min(box.width / 2, 72), y + 40, { steps: 10 });
+  await page.locator('[data-over]').first().waitFor();
+  await page.waitForTimeout(250);
+}
+
+/** Every column empty, as a shop without orders sees it. */
+async function emptyBoard({ page }: ScreenContext) {
+  await page.route('**/api/admin/orders/board**', (route) =>
+    route.fulfill({
+      json: {
+        at: new Date().toISOString(),
+        recentDays: 14,
+        limit: 50,
+        shopHasOrders: false,
+        columns: BOARD_STATUSES.map((status) => ({ status, count: 0, sum: 0, cards: [] })),
+      },
+    }),
+  );
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.locator('[data-empty-slot]').waitFor();
 }
 
 export const screens: Screen[] = [
@@ -1804,11 +1883,94 @@ export const screens: Screen[] = [
     setup: ({ db }) => seedWorstCoupons(db),
     teardown: ({ db }) => forgetCoupons(db),
   },
-  // ---- Orders panel (#33): the list, every order state, the three dialogs, the credits
-  { id: 'orders', path: '/orders', as: 'manager' },
+  // ---- Orders board (#52): the funnel over a normal day, carrying a card, the move menu, the
+  // tracking dialog after a drop on «Передан в BTS», a closed column opened, empty, the worst case.
+  // Viewport captures: the board fills the screen, and a full-page capture paints a board scrolled
+  // sideways out of place
+  {
+    id: 'orders-board',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: boardLoaded,
+  },
+  {
+    id: 'orders-board-drag',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: async ({ page }) => {
+      await boardLoaded({ page } as ScreenContext);
+      await carry(page, SHOT_ORDER.assembling, 'handed_to_bts');
+    },
+  },
+  {
+    id: 'orders-board-menu',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: async ({ page }) => {
+      await boardLoaded({ page } as ScreenContext);
+      await boardCard(page, SHOT_ORDER.checking);
+      await page.locator(`[data-move-menu="${SHOT_ORDER.checking}"]`).click();
+      await page.getByRole('menu').waitFor();
+    },
+  },
+  {
+    id: 'orders-board-hand',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: async ({ page }) => {
+      await boardLoaded({ page } as ScreenContext);
+      await carry(page, SHOT_ORDER.assembling, 'handed_to_bts');
+      await page.mouse.up();
+      await page.getByRole('dialog').waitFor();
+    },
+  },
+  {
+    id: 'orders-board-closed',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: async ({ page }) => {
+      await boardLoaded({ page } as ScreenContext);
+      await page.locator('[data-rail="cancelled"]').click();
+      await page.locator('[data-column="cancelled"] [data-order]').first().waitFor();
+      await page.waitForTimeout(200);
+    },
+  },
+  { id: 'orders-board-empty', path: '/orders', as: 'manager', fullPage: false, act: emptyBoard },
+  {
+    id: 'orders-board-worst',
+    path: '/orders',
+    as: 'owner',
+    setup: ({ db }) => boardCrowd(db),
+    teardown: ({ db }) => boardCrowdBack(db),
+    fullPage: false,
+    act: async ({ page }) => {
+      await boardLoaded({ page } as ScreenContext);
+      await boardCard(page, 9301);
+    },
+  },
+  {
+    id: 'orders-board-search',
+    path: '/orders?q=93+555',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: boardLoaded,
+  },
+  // ---- Orders panel (#33): the list (behind «Список» since #52), every order state, the dialogs
+  { id: 'orders-list', path: '/orders?view=list', as: 'manager' },
   { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
-  { id: 'orders-search', path: '/orders?q=93+555', as: 'manager' },
-  { id: 'orders-empty', path: '/orders?q=7777777', as: 'manager' },
+  { id: 'orders-search', path: '/orders?view=list&q=93+555', as: 'manager' },
+  { id: 'orders-empty', path: '/orders?view=list&q=7777777', as: 'manager' },
   {
     id: 'order-awaiting',
     path: `/orders/${SHOT_ORDER.awaiting}`,
@@ -2088,7 +2250,7 @@ export const screens: Screen[] = [
   },
   {
     id: 'select-orders-open',
-    path: '/orders',
+    path: '/orders?view=list',
     as: 'manager',
     fullPage: false,
     act: async ({ page, t, width }) => {
@@ -2112,7 +2274,7 @@ export const screens: Screen[] = [
   },
   {
     id: 'select-disabled',
-    path: '/orders',
+    path: '/orders?view=list',
     as: 'manager',
     fullPage: false,
     act: async ({ page, t, width }) => {

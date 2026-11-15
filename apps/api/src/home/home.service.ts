@@ -43,7 +43,7 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { customerName, paymentState } from '../orders/order-read';
+import { customerName, enteredStatus, paymentState } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
 import type { Edges } from '../edges';
 import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
@@ -109,12 +109,6 @@ const STATUS_QUEUES = {
   assemble: 'accepted',
   bts: 'assembling',
 } as const satisfies Partial<Record<HomeQueue, OrderStatus>>;
-
-/** When the order last entered its current status (its history, ADR 0011); its creation if none. */
-const enteredStatus =
-  sql<Date>`coalesce((select max(ev.created_at) from ${orderEvents} ev where ev.order_id = "orders"."id" and ev.to_status = "orders"."status"), "orders"."created_at")`.mapWith(
-    orders.createdAt,
-  );
 
 /**
  * The admin Home (#48): the work queue in its fixed order (`HOME_QUEUES`), each queue's count and

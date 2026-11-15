@@ -1,6 +1,15 @@
 import {
+  addDays,
+  BOARD_COLUMN_LIMIT,
+  BOARD_HISTORY_STATUSES,
+  BOARD_RECENT_DAYS,
+  BOARD_STATUSES,
   CREDIT_OPTIONS_LIMIT,
   formatLocalDate,
+  tashkentDay,
+  type AdminBoardCardDto,
+  type AdminOrdersBoardDto,
+  type AdminOrdersBoardQuery,
   lastDayOf,
   ORDER_NUMBER_MAX,
   PAYMENT_LINK_REASON_MIN,
@@ -53,7 +62,7 @@ import { AuditQueryService } from '../audit/audit-query.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
-import { customerName, PAID_BY, paymentState } from '../orders/order-read';
+import { customerName, enteredStatus, PAID_BY, paymentState } from '../orders/order-read';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
@@ -128,6 +137,36 @@ const digitsOf = (column: unknown) =>
 const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
 
 /**
+ * The orders list's filters as conditions on `orders` joined with `customers` (the list and the
+ * board read them alike), and the order number the search names, which the list puts first.
+ */
+function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
+  conditions: SQL[];
+  byNumber: number | null;
+} {
+  const conditions: SQL[] = [];
+  if (q.status) conditions.push(eq(orders.status, q.status));
+  if (q.payment === 'refund_owed') conditions.push(refundOwed());
+  else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
+  if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
+  if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
+  const digits = q.q?.replace(/\D/g, '') ?? null;
+  // an order number fits in nine digits; a phone is searched by four digits or more
+  const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;
+  if (digits !== null) {
+    const matches = [];
+    if (byNumber !== null) matches.push(eq(orders.number, byNumber));
+    if (digits.length >= 4)
+      matches.push(
+        sql`${digitsOf(orders.recipientPhone)} like ${`%${digits}%`}`,
+        sql`${digitsOf(customers.phone)} like ${`%${digits}%`}`,
+      );
+    conditions.push(matches.length > 0 ? sql`(${sql.join(matches, sql` or `)})` : sql`false`);
+  }
+  return { conditions, byNumber };
+}
+
+/**
  * The admin orders panel (#33): the list and the order page staff resolve any question from, the
  * credits list, and the staff moves. Every move goes through `transition()` (ADR 0011) with the
  * staff member as the actor; a rejection goes through `ReceiptRejection`, which also gives the
@@ -149,25 +188,7 @@ export class AdminOrdersService {
 
   /** Newest first. A search puts the order with that number first, then phone matches. */
   async list(q: ListQuery): Promise<AdminOrdersPageDto> {
-    const conditions = [];
-    if (q.status) conditions.push(eq(orders.status, q.status));
-    if (q.payment === 'refund_owed') conditions.push(refundOwed());
-    else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
-    if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
-    if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
-    const digits = q.q?.replace(/\D/g, '') ?? null;
-    // an order number fits in nine digits; a phone is searched by four digits or more
-    const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;
-    if (digits !== null) {
-      const matches = [];
-      if (byNumber !== null) matches.push(eq(orders.number, byNumber));
-      if (digits.length >= 4)
-        matches.push(
-          sql`${digitsOf(orders.recipientPhone)} like ${`%${digits}%`}`,
-          sql`${digitsOf(customers.phone)} like ${`%${digits}%`}`,
-        );
-      conditions.push(matches.length > 0 ? sql`(${sql.join(matches, sql` or `)})` : sql`false`);
-    }
+    const { conditions, byNumber } = orderFilters(q);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [{ total } = { total: 0 }] = await this.db
@@ -224,6 +245,108 @@ export class AdminOrdersService {
       },
     );
     return { items, total, page: q.page, pageSize: q.pageSize };
+  }
+
+  /**
+   * The orders board (#52): for each status in the funnel's order, how many orders are in it and
+   * their totals, and its first `limit` cards: the work columns put the longest wait first, the
+   * history columns (delivered, cancelled, returned) hold only the last `BOARD_RECENT_DAYS`
+   * Tashkent days, newest first. The list's search, payment state and dates narrow every column.
+   */
+  async board(q: AdminOrdersBoardQuery, limit = BOARD_COLUMN_LIMIT): Promise<AdminOrdersBoardDto> {
+    const now = this.edges.clock.now();
+    const firstDay = dayStart(
+      formatLocalDate(addDays(tashkentDay(now), -(BOARD_RECENT_DAYS - 1))),
+    ).toISOString();
+    const history = sql`"orders"."status" in (${sql.join(
+      BOARD_HISTORY_STATUSES.map((s) => sql`${s}`),
+      sql`, `,
+    )})`;
+    // A move stamps `updated_at` with the time its event records, and nothing moves it back, so
+    // `updated_at` is never before the order entered its status: the plain column rules out the
+    // old history first, and only what is left asks the order's history (#52 review).
+    const recent = sql`(not ${history} or (${orders.updatedAt} >= ${firstDay} and ${enteredStatus} >= ${firstDay}))`;
+    const where = and(...orderFilters(q).conditions, recent);
+
+    // one rank per column: oldest in status first, or newest first in a history column
+    const rank = sql<number>`row_number() over (partition by "orders"."status" order by
+      case when ${history} then -extract(epoch from ${enteredStatus}) else extract(epoch from ${enteredStatus}) end,
+      case when ${history} then -"orders"."number" else "orders"."number" end)`;
+    const items =
+      sql<number>`(select coalesce(sum(l.qty), 0) from ${orderLines} l where l.order_id = "orders"."id")`.mapWith(
+        Number,
+      );
+
+    // one snapshot, so a count and its cards never disagree
+    const { totals, rows, shopHasOrders } = await this.db.transaction(
+      async (tx) => {
+        const totals = await tx
+          .select({
+            status: orders.status,
+            count: sql<number>`count(*)::int`.mapWith(Number),
+            sum: sql<number>`coalesce(sum(${orders.total}), 0)::bigint`.mapWith(Number),
+          })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .where(where)
+          .groupBy(orders.status);
+        const ranked = tx
+          .select({ id: orders.id, rank: rank.as('rank') })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .where(where)
+          .as('ranked');
+        const rows = await tx
+          .select({
+            order: orders,
+            customer: customers,
+            payment: paymentState,
+            owed: sql<boolean>`(${refundOwed()})`,
+            since: enteredStatus,
+            items,
+          })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .innerJoin(ranked, eq(ranked.id, orders.id))
+          .where(sql`${ranked.rank} <= ${limit}`)
+          .orderBy(ranked.rank);
+        const [any] = await tx
+          .select({ yes: sql<boolean>`exists (select 1 from ${orders})` })
+          .from(sql`(select 1) as one`);
+        return { totals, rows, shopHasOrders: Boolean(any?.yes) };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
+
+    return {
+      at: now.toISOString(),
+      recentDays: BOARD_RECENT_DAYS,
+      limit,
+      shopHasOrders,
+      columns: BOARD_STATUSES.map((status) => {
+        const total = totals.find((x) => x.status === status);
+        return {
+          status,
+          count: total?.count ?? 0,
+          sum: total?.sum ?? 0,
+          cards: rows
+            .filter((r) => r.order.status === status)
+            .map(({ order: o, customer: c, payment, owed, since, items }): AdminBoardCardDto => ({
+              number: o.number,
+              status: o.status,
+              payment,
+              refundOwed: owed,
+              statusSince: since.toISOString(),
+              total: o.total,
+              itemCount: items,
+              customer: { name: customerName(c) },
+              city: o.pointCity,
+              region: { ru: o.regionNameRu, uz: o.regionNameUz },
+              isGift: o.isGift,
+            })),
+        };
+      }),
+    };
   }
 
   /** The order page by its number; null when there is no such order. */

@@ -2,16 +2,13 @@
 
 import { OrderReviewSection } from '@/components/reviews/order-review';
 import {
-  charCount,
   FULFIL_ACTIONS,
-  findTransition,
+  staffMay,
   type AdminOrderDto,
   type AdminReceiptDto,
   type FulfilAction,
-  type OrderAction,
 } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
-import { ordersMessages } from '@lummi/i18n/orders';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,10 +26,12 @@ import { fill } from '@/lib/utils';
 import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
 import {
   CancelDialog,
+  conflictText,
   ConfirmPaymentDialog,
   HandToBtsDialog,
   RefundDialog,
   RejectDialog,
+  refusalFailure,
   ReturnDialog,
   type Failure,
 } from './order-dialogs';
@@ -47,10 +46,6 @@ import {
   PaymentSection,
   ReceiptsSection,
 } from './order-sections';
-
-/** Staff may make this move from that status (the contracts' table, ADR 0011). */
-const staffMay = (status: AdminOrderDto['order']['status'], action: OrderAction) =>
-  findTransition(status, action)?.actors.includes('staff') ?? false;
 
 type Dialog =
   | { kind: 'reject'; receipt: AdminReceiptDto; key: number }
@@ -136,7 +131,6 @@ export function OrderPage({
     if (res.status !== 200) return;
     setPage((was) => (JSON.stringify(was) === JSON.stringify(res.body) ? was : res.body));
   });
-  const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
   /** Applies a move's answer; returns what failed for the dialog, or null when it is done. */
   const apply = (res: MoveResponse | null, reason?: string): Failure | null => {
@@ -153,46 +147,10 @@ export function OrderPage({
         writes.current += 1;
         setPage(res.body.order);
         setDialog(null);
-        setNotice(
-          res.body.code === 'receipt_changed'
-            ? o.receiptChanged
-            : res.body.code === 'credit_taken'
-              ? o.creditTaken
-              : res.body.code === 'refunds_changed'
-                ? o.refund.changed
-                : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
-        );
+        setNotice(conflictText(res.body, t, language));
         return null;
       case 422:
-        switch (res.body.code) {
-          case 'note_too_long':
-            return { text: fill(o.rejectNoteTooLong, { max: String(res.body.max ?? '') }) };
-          case 'reason_required':
-            return { text: o.linkReasonRequired, mismatch: res.body.mismatch ?? [] };
-          case 'reason_invalid':
-            // the server gives the bounds; the reason the manager typed says which was crossed
-            return {
-              text:
-                charCount(reason?.trim() ?? '') < (res.body.min ?? 0)
-                  ? fill(o.linkReasonShort, { min: String(res.body.min ?? '') })
-                  : fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
-              mismatch: [],
-            };
-          case 'credit_mismatch':
-            return { text: res.body.what === 'before_order' ? o.beforeOrder : o.notAllowed };
-          case 'refund_too_large':
-            return {
-              text: fill(o.refund.amountTooLarge, {
-                max: formatMoney(res.body.max ?? 0, language),
-              }),
-            };
-          case 'invalid_date':
-            return { text: o.refund.dateInvalid };
-          case 'not_paid':
-            return { text: o.refund.notPaid };
-          default:
-            return { text: o.notAllowed };
-        }
+        return refusalFailure(res.body, t, language, reason);
       case 401:
         router.push('/login');
         return null;

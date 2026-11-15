@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
-import { and, btsPoints, eq, fragrances, regions, volumes } from '@lummi/db';
+import { and, asc, btsPoints, eq, fragrances, regions, volumes } from '@lummi/db';
 import pg from 'pg';
 import type { TestUser } from './sign-init-data';
 import { TEST_BOT_TOKEN, type TestApp } from './test-app';
@@ -39,13 +39,17 @@ export async function tenMl(t: TestApp, slug: string) {
   return v!;
 }
 
-/** An active BTS point in Samarkand. */
+/**
+ * An active BTS point in Samarkand: always the same one (the lowest code), so a test that places
+ * an order and later reads the point again compares like with like.
+ */
 export async function samarkandPoint(t: TestApp) {
   const [region] = (await t.db.select().from(regions)).filter((r) => r.nameRu.startsWith('Самарк'));
   const [point] = await t.db
     .select()
     .from(btsPoints)
     .where(and(eq(btsPoints.regionId, region!.id), eq(btsPoints.active, true)))
+    .orderBy(asc(btsPoints.code))
     .limit(1);
   return point!;
 }
