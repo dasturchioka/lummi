@@ -319,12 +319,13 @@ export class OrdersGroupBot {
     }
     const parsed = transitionPayloadSchemas.hand_to_bts.safeParse({ trackingNumber: m.text ?? '' });
     if (!parsed.success) {
-      // ask again, replying to the bad answer: ForceReply's `selective` targets its author
+      // ask again, replying to the bad answer: ForceReply's `selective` targets its author. A
+      // photo or sticker is asked for text, not told the length (F17)
+      const limits = { min: String(TRACKING_NUMBER_MIN), max: String(TRACKING_NUMBER_MAX) };
       const [asked] = await say(
-        fill(g.trackingInvalid, {
-          min: String(TRACKING_NUMBER_MIN),
-          max: String(TRACKING_NUMBER_MAX),
-        }),
+        m.text === undefined
+          ? fill(g.trackingTextOnly, { number, ...limits })
+          : fill(g.trackingInvalid, limits),
         { reply_markup: forceReply() },
       );
       await this.ask(tx, {
@@ -347,6 +348,9 @@ export class OrdersGroupBot {
     if (out.kind !== 'done') {
       await this.cards.touch(tx, prompt.orderId);
       await say(fill(g.trackingStale, { number }));
+    } else {
+      // the card says it too, but an edit up the topic is easy to miss (F8)
+      await say(fill(g.trackingSaved, { tracking: parsed.data.trackingNumber, number }));
     }
     return true;
   }
