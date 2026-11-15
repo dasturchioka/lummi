@@ -14,14 +14,14 @@ import { QueueCard, SalesStrip, SystemLine, type HomeCopy } from './home-parts';
 import { LIFTED, NoCardLine, NowBlock, nowAnnouncement } from './now-block';
 
 /** The Home refreshes this often while its tab is visible. */
-export const REFRESH_MS = 30_000;
+export const REFRESH_MS = 10_000;
 /** A focus right after a refresh does not fetch again. */
 const FOCUS_GAP_MS = 2_000;
 
 type Load = { data: AdminHome | null; failed: boolean };
 
 /**
- * The admin Home (#48): one call (`GET /admin/home`), again every 30 s while the tab is visible
+ * The admin Home (#48): one call (`GET /admin/home`), again every 10 s while the tab is visible
  * and when the window regains focus. The first load shows the skeleton; a failed first load the
  * error plate with «Повторить»; a failed refresh keeps what is shown (its «обновлено» time says
  * how old it is). The Now block animates only when its item changes, and one stable live region,

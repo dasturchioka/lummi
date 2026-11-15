@@ -83,6 +83,20 @@ export function useCreateOrder() {
   });
 }
 
+/**
+ * How often an open order screen re-reads while the app is visible (a UI constant, not a rule).
+ * It stops in the background (`refetchIntervalInBackground: false`, the default made explicit)
+ * and a return to the foreground re-reads at once (`refetchOnWindowFocus`, fed by
+ * `installLiveFocus`). Only a changed answer re-renders (structural sharing), so nothing jumps.
+ */
+export const LIVE_POLL_MS = 10_000;
+const LIVE = {
+  staleTime: 0,
+  refetchInterval: LIVE_POLL_MS,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
+
 export const ORDERS_KEY = ['orders'] as const;
 export const orderKey = (number: number) => ['orders', number] as const;
 
@@ -90,6 +104,7 @@ export const orderKey = (number: number) => ['orders', number] as const;
 export function useOrders() {
   return useInfiniteQuery({
     queryKey: [...ORDERS_KEY, 'list'],
+    ...LIVE,
     refetchOnMount: 'always',
     initialPageParam: undefined as number | undefined,
     queryFn: async ({ pageParam }) =>
@@ -102,6 +117,7 @@ export function useOrders() {
 export function useOrder(number: number) {
   return useQuery({
     queryKey: orderKey(number),
+    ...LIVE,
     refetchOnMount: 'always',
     queryFn: async () => {
       const res = await api.orders.get({ params: { number } });
@@ -122,8 +138,8 @@ export function usePayment(number: number) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: paymentKey(number),
+    ...LIVE,
     refetchOnMount: 'always',
-    staleTime: 0,
     queryFn: async () => {
       const res = await api.orders.payment({ params: { number } });
       if (res.status === 404) return null;
