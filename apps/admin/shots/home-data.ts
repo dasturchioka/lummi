@@ -36,7 +36,8 @@ let system: { beat: unknown; backup: unknown } | undefined;
 /** A reserved Humo message id (the orders shots take 990001 on): 9003's own credit. */
 const CANDIDATE_MESSAGE = 990_900;
 
-async function shift(db: ShotSql, number: number, seconds: number) {
+/** Moves a whole shot order in time: the order, its history, receipts and paying credit (the board shots too). */
+export async function shift(db: ShotSql, number: number, seconds: number) {
   const params = [number, seconds];
   const by = `make_interval(secs => $2)`;
   const order = `(select id from orders where number = $1)`;
