@@ -61,7 +61,7 @@ export const botMessages = defineMessages(
         'Этот чек уже отправляли к другому заказу, поэтому принять его к заказу № {number} мы не можем.\nЗагрузите чек перевода {amount} именно за этот заказ до {until}.',
       assembling: 'Собираем заказ № {number} 📦\nБережно упакуем ароматы и передадим в BTS.',
       handedToBts:
-        'Заказ № {number} передан в BTS 🚚\nТрек-номер: {tracking}\nДоставка до пункта BTS — до 48 часов.',
+        'Заказ № {number} передан в BTS 🚚\nТрек-номер: {tracking}\nДоставка до пункта BTS — {eta}.',
       delivered: 'Заказ № {number} доставлен ✨\nСпасибо, что выбрали LUMMI.',
       /** The reason is the shopper-facing sentence of `orders.cancelReason`. */
       orderCancelled: 'Заказ № {number} отменён.\n{reason}.',
@@ -233,7 +233,7 @@ export const botMessages = defineMessages(
       assembling:
         '№ {number} buyurtmani yigʻyapmiz 📦\nAtirlarni ehtiyotkorlik bilan qadoqlab, BTSga topshiramiz.',
       handedToBts:
-        '№ {number} buyurtma BTSga topshirildi 🚚\nTrek-raqam: {tracking}\nBTS punktigacha yetkazish 48 soatgacha.',
+        '№ {number} buyurtma BTSga topshirildi 🚚\nTrek-raqam: {tracking}\nBTS punktigacha yetkazish {eta}.',
       delivered: '№ {number} buyurtma yetkazildi ✨\nLUMMIni tanlaganingiz uchun rahmat.',
       orderCancelled: '№ {number} buyurtma bekor qilindi.\n{reason}.',
       refundNote: 'Pulni qaytarish uchun menejer siz bilan bogʻlanadi.',

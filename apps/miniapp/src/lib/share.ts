@@ -9,9 +9,16 @@ const botLink = (import.meta.env.VITE_BOT_LINK || 'https://t.me/lummi_dev_bot').
 /** `p_<slug>` is the Mini App deep link of a fragrance (ADR 0016). */
 export const fragranceLink = (slug: string) => `${botLink}?startapp=p_${slug}`;
 
+/** `set_discovery` is the deep link of the Discovery set screen (`STATIC_START_TARGETS`). */
+export const discoveryLink = () => `${botLink}?startapp=set_discovery`;
+
 /** Telegram's share sheet; outside Telegram the Web Share API, then the clipboard. */
-export async function shareFragrance(slug: string, text: string): Promise<void> {
-  const url = fragranceLink(slug);
+export const shareFragrance = (slug: string, text: string): Promise<void> =>
+  shareLink(fragranceLink(slug), text);
+
+export const shareDiscovery = (text: string): Promise<void> => shareLink(discoveryLink(), text);
+
+async function shareLink(url: string, text: string): Promise<void> {
   try {
     if (shareURL.isAvailable()) return void shareURL(url, text);
   } catch {

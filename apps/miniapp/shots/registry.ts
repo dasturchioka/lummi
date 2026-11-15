@@ -3116,6 +3116,17 @@ export const screens: ScreenDef[] = [
   { id: 'sets-catalog', path: '/catalog?type=sets' },
   { id: 'set-discovery', path: '/sets/discovery', fullPage: true },
   {
+    // The owner set an Uzum link (#54): «Купить на Uzum» under the composition, «Поделиться» beside the heart.
+    id: 'set-discovery-uzum',
+    path: '/sets/discovery',
+    fullPage: true,
+    setup: async ({ db }) =>
+      void (await db.query(
+        "update discovery_set set uzum_url = 'https://uzum.uz/ru/product/lummi-discovery-set'",
+      )),
+    teardown: async ({ db }) => void (await db.query('update discovery_set set uzum_url = null')),
+  },
+  {
     // Boxes ran out: the dock says so and the set stays on view.
     id: 'set-discovery-sold-out',
     path: '/sets/discovery',

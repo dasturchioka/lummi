@@ -238,7 +238,10 @@ export class OrderStatusService {
       .from(customers)
       .where(eq(customers.id, order.customerId));
     if (!customer) throw new Error(`order ${order.number} has no customer`);
-    const said = fx.message(move, customer.language);
+    const etaHours = fx.needsEta
+      ? (await readSettings(tx, ['delivery.etaHours']))['delivery.etaHours']
+      : undefined;
+    const said = fx.message(move, customer.language, { etaHours });
     if (said) {
       const managerUsername = said.manager
         ? (await readSettings(tx, ['shop.managerUsername']))['shop.managerUsername']

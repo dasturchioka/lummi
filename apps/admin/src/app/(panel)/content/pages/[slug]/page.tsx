@@ -23,6 +23,7 @@ export default async function EditInfoPage({ params }: { params: Promise<{ slug:
     tariff: num(value('delivery.defaultTariff')),
     manager: typeof manager === 'string' ? manager : undefined,
     reserveSeconds: num(value('orders.reserveTtlSeconds')),
+    etaHours: num(value('delivery.etaHours')),
   };
   const { t, language } = await getAdminMessages();
   return <PageEditor key={page.slug} page={page} fills={fills} t={t} language={language} />;

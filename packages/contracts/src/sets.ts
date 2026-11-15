@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CART_MAX_QTY, MAX_PRICE, SET_SIZE } from './constants';
 import { fragranceListItemSchema } from './catalog';
+import { uzumUrlSchema } from './uzum';
 
 /**
  * Sets (ADR 0009). The Discovery set is a product with its own price, photo and stock; a builder
@@ -23,6 +24,8 @@ export const discoverySetSchema = z.object({
   soldOut: z.boolean(),
   /** Content hash of the owner's photo; null = the box photo shipped with the app. */
   photo: z.string().nullable(),
+  /** The set's page on Uzum Market; null hides the button. */
+  uzumUrl: z.string().nullable(),
   /** The five fragrances in the owner's order (fewer while the owner has not picked them). */
   fragrances: z.array(setFragranceSchema),
 });
@@ -67,6 +70,7 @@ export const adminDiscoverySetSchema = z.object({
   /** On hand is under the reserve (ADR 0010): allowed, and shown as a warning. */
   belowReserve: z.boolean(),
   photo: z.string().nullable(),
+  uzumUrl: z.string().nullable(),
   isPlaceholder: z.boolean(),
   /** Ordered; its length is below five until the owner completes it. `hidden`: the catalog hides it (the box still sells). */
   composition: z.array(z.object({ id: z.number().int(), name: z.string(), hidden: z.boolean() })),
@@ -76,6 +80,8 @@ export type AdminDiscoverySet = z.infer<typeof adminDiscoverySetSchema>;
 /** The owner's edit: the shared price of both sets and the five fragrances, in order. */
 export const discoverySetInputSchema = z.object({
   price: z.number().int().min(0).max(MAX_PRICE),
+  /** Omitted keeps the link as it is; empty clears it. */
+  uzumUrl: uzumUrlSchema.optional(),
   composition: z
     .array(z.number().int().positive())
     .length(SET_SIZE)

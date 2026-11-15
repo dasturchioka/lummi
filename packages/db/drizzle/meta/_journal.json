@@ -225,6 +225,13 @@
       "when": 1794657311592,
       "tag": "0031_staff_passwords",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794772962213,
+      "tag": "0032_discovery_set_uzum_url",
+      "breakpoints": true
     }
   ]
 }

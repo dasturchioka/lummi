@@ -50,5 +50,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     globals: false,
     setupFiles: ['src/test/setup.ts'],
+    // a test may wait on several findBy* of asyncUtilTimeout (5 s) each; 5 s would end it first under load
+    testTimeout: 15_000,
   },
 });

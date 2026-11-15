@@ -37,6 +37,7 @@ export class SetsAdminService {
       available,
       belowReserve: belowReserve(row.onHand, reserved),
       photo: row.photoHash,
+      uzumUrl: row.uzumUrl,
       isPlaceholder: row.isPlaceholder,
       composition: composition.map((f) => ({ id: f.id, name: f.name, hidden: f.hidden })),
     };
@@ -62,6 +63,7 @@ export class SetsAdminService {
         .update(discoverySet)
         .set({
           price: input.price,
+          ...(input.uzumUrl === undefined ? {} : { uzumUrl: input.uzumUrl || null }),
           // any owner save of the price is a real decision, even confirming the seed value
           isPlaceholder: false,
           updatedAt: this.edges.clock.now(),
@@ -75,6 +77,7 @@ export class SetsAdminService {
         targetId: 'discovery',
         payload: {
           price: [old.price, input.price],
+          ...(input.uzumUrl === undefined ? {} : { uzumUrl: [old.uzumUrl, input.uzumUrl || null] }),
           composition: [before.map((f) => f.name), after.map((f) => f.name)],
         },
       });
