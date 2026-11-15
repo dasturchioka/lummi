@@ -20,7 +20,7 @@ export function OrdersExportButton({
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
   return (
     <Button asChild variant="outline">
-      <a href={`/api/admin/orders/export?${params}`} download>
+      <a href={`/api/admin/orders/export?${params}`} download title={t.orders.export.hint}>
         <Download strokeWidth={1.5} aria-hidden />
         {t.orders.export.button}
       </a>

@@ -13,7 +13,7 @@ import { ViewSwitch, type OrdersView } from '@/components/orders/view-switch';
 import { PageHeader } from '@/components/page-header';
 import { getAdminMessages } from '@/lib/i18n';
 import { clampPage, readFilters, readPage, type Search } from '@/lib/list-page';
-import { serverApi } from '@/lib/server-api';
+import { getMe, serverApi } from '@/lib/server-api';
 import { TEXT_LINK } from '@/lib/ui-classes';
 
 const LIST_KEYS = ['q', 'status', 'payment', 'from', 'to'] as const;
@@ -31,10 +31,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     asked === 'list' || (asked !== 'board' && sp.status !== undefined) ? 'list' : 'board';
   const { language, t } = await getAdminMessages();
   const o = t.orders;
-  const api = await serverApi();
   // the file holds personal data: its button is the owner's (the API refuses a manager anyway)
-  const me = await api.me();
-  if (me.status === 401) redirect('/login');
+  const me = await getMe();
   const isOwner = me.status === 200 && me.body.role === 'owner';
 
   const header = (filters: Record<string, string | undefined>) => (
@@ -68,6 +66,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const filters = readFilters(sp, adminOrdersQuerySchema.shape, LIST_KEYS);
   const page = readPage(sp);
+  const api = await serverApi();
   const query = adminOrdersQuerySchema.parse({
     ...filters,
     page,

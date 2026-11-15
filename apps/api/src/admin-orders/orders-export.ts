@@ -1,11 +1,14 @@
-import type { AdminOrdersExportFilters, AdminOrdersExportParams, Discount } from '@lummi/contracts';
+import {
+  utcToTashkent,
+  type AdminOrdersExportFilters,
+  type AdminOrdersExportParams,
+  type Discount,
+} from '@lummi/contracts';
 import {
   and,
   asc,
   customers,
-  desc,
   eq,
-  inArray,
   orderEvents,
   orderLines,
   orders,
@@ -14,20 +17,17 @@ import {
   type Db,
   type DbOrTx,
 } from '@lummi/db';
-import type { Language } from '@lummi/i18n';
+import { fill, type Language } from '@lummi/i18n';
 import { adminMessages } from '@lummi/i18n/admin';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { AuditService } from '../audit/audit.service';
-import { customerName, PAID_BY, paymentState } from '../orders/order-read';
-import { refundedSum } from '../refunds/order-money';
+import { customerName, PAID_BY } from '../orders/order-read';
 import { MONEY, sheet } from '../reports/report-workbook';
 import { DB } from '../tokens';
-import { orderFilters } from './admin-orders.service';
+import { listedOrders, orderFilters } from './admin-orders.service';
 
-/** Uzbekistan keeps UTC+05:00 all year: an instant shifted by it reads as the Tashkent wall clock. */
-const TASHKENT_MS = 5 * 3600_000;
 const WHEN = 'dd.mm.yyyy hh:mm';
 
 /** `GET /admin/orders/export` (#56): the orders the list's filters match, one row each. */
@@ -41,73 +41,76 @@ export class OrdersExport {
   /** The file, and the audit entry (the filters and the row count) in the same transaction. */
   async workbook(staffId: number, query: AdminOrdersExportParams) {
     const { lang, ...filters } = query;
-    return this.db.transaction(async (tx) => {
-      const rows = await rowsFor(tx, filters);
-      await this.audit.record(tx, {
-        actor: { type: 'staff', id: staffId },
-        action: 'orders.exported',
-        targetType: 'orders',
-        payload: { filters, count: rows.length },
-      });
-      return ordersWorkbook(rows, lang);
-    });
+    // one snapshot for every read: a payment confirmed meanwhile never shows «Не оплачен»
+    // beside the name of who confirmed it (the audit entry is written in it too)
+    return this.db.transaction(
+      async (tx) => {
+        const rows = await rowsFor(tx, filters);
+        await this.audit.record(tx, {
+          actor: { type: 'staff', id: staffId },
+          action: 'orders.exported',
+          targetType: 'orders',
+          payload: { filters, count: rows.length },
+        });
+        return ordersWorkbook(rows, lang);
+      },
+      { isolationLevel: 'repeatable read' },
+    );
   }
 }
 
 async function rowsFor(db: DbOrTx, filters: AdminOrdersExportFilters) {
-  const { conditions, byNumber } = orderFilters(filters);
-  const orderRows = await db
-    .select({ order: orders, customer: customers, payment: paymentState, refunded: refundedSum() })
-    .from(orders)
+  const orderRows = await listedOrders(db, filters);
+  // the lines and the confirmations of the same orders, read through the same conditions (no id
+  // list to bind), one read after the other: a transaction has one connection
+  const { conditions } = orderFilters(filters);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const lines = await db
+    .select({ line: orderLines })
+    .from(orderLines)
+    .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .innerJoin(customers, eq(customers.id, orders.customerId))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(
-      ...(byNumber !== null ? [sql`${orders.number} = ${byNumber} desc`] : []),
-      desc(orders.number),
-    );
-  const ids = orderRows.map((r) => r.order.id);
-  const [lines, confirmations] =
-    ids.length === 0
-      ? [[], []]
-      : await Promise.all([
-          db
-            .select()
-            .from(orderLines)
-            .where(inArray(orderLines.orderId, ids))
-            .orderBy(asc(orderLines.orderId), asc(orderLines.position)),
-          db
-            .select({
-              orderId: orderEvents.orderId,
-              actorType: orderEvents.actorType,
-              staffName: staff.name,
-            })
-            .from(orderEvents)
-            .leftJoin(
-              staff,
-              sql`${orderEvents.actorType} = 'staff' and ${orderEvents.actorId} = ${staff.id}`,
-            )
-            .where(and(inArray(orderEvents.orderId, ids), eq(orderEvents.action, PAID_BY)))
-            .orderBy(asc(orderEvents.id)),
-        ]);
+    .where(where)
+    .orderBy(asc(orderLines.orderId), asc(orderLines.position));
+  const confirmations = await db
+    .select({
+      orderId: orderEvents.orderId,
+      actorType: orderEvents.actorType,
+      staffName: staff.name,
+    })
+    .from(orderEvents)
+    .innerJoin(orders, eq(orders.id, orderEvents.orderId))
+    .innerJoin(customers, eq(customers.id, orders.customerId))
+    .leftJoin(
+      staff,
+      sql`${orderEvents.actorType} = 'staff' and ${orderEvents.actorId} = ${staff.id}`,
+    )
+    .where(and(eq(orderEvents.action, PAID_BY), ...(where ? [where] : [])))
+    .orderBy(asc(orderEvents.id));
+  const linesOf = new Map<number, (typeof lines)[number]['line'][]>();
+  for (const { line } of lines)
+    linesOf.set(line.orderId, [...(linesOf.get(line.orderId) ?? []), line]);
+  // the last confirmation, as the order page reads it
+  const confirmedBy = new Map<number, (typeof confirmations)[number]>();
+  for (const c of confirmations) confirmedBy.set(c.orderId, c);
   return orderRows.map((r) => ({
     ...r,
-    lines: lines.filter((l) => l.orderId === r.order.id),
-    // the first confirmation is the one that matched the money
-    confirmation: confirmations.find((c) => c.orderId === r.order.id) ?? null,
+    lines: linesOf.get(r.order.id) ?? [],
+    confirmation: confirmedBy.get(r.order.id) ?? null,
   }));
 }
 
-type Row = Awaited<ReturnType<typeof rowsFor>>[number];
+type ExportRow = Awaited<ReturnType<typeof rowsFor>>[number];
 
 /** The discount's source as the order page words it. */
 function discountSource(d: Discount | null, language: Language): string {
   if (!d) return '';
   const src = adminMessages[language].admin.orders.detail.discountSource;
-  return d.type === 'promo_code' ? src.promo_code.replace('{code}', d.code) : src[d.type];
+  return d.type === 'promo_code' ? fill(src.promo_code, { code: d.code }) : src[d.type];
 }
 
 /** The workbook: one sheet, in the admin's language; money cells are numbers in whole so'm. */
-export async function ordersWorkbook(rows: Row[], language: Language): Promise<Buffer> {
+async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Buffer> {
   const o = adminMessages[language].admin.orders;
   const x = o.export;
   const status = ordersMessages[language].orders.status;
@@ -142,13 +145,13 @@ export async function ordersWorkbook(rows: Row[], language: Language): Promise<B
       : (ord.typedAddress ?? '');
     ws.addRow({
       number: ord.number,
-      created: new Date(ord.createdAt.getTime() + TASHKENT_MS),
+      created: tashkentWallClock(ord.createdAt),
       status: status[ord.status],
       payment: o.payment[payment],
       confirmedBy: !confirmation
         ? ''
         : confirmation.actorType === 'ai'
-          ? x.byAi
+          ? o.detail.actor.ai
           : (confirmation.staffName ?? ''),
       customer: customerName(c),
       phone: c.phone ?? '',
@@ -175,4 +178,10 @@ export async function ordersWorkbook(rows: Row[], language: Language): Promise<B
   }
   ws.getColumn('items').alignment = { wrapText: true, vertical: 'top' };
   return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+/** An instant as the Tashkent wall clock in an Excel date cell (Excel dates carry no zone). */
+function tashkentWallClock(instant: Date): Date {
+  const t = utcToTashkent(instant);
+  return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }
