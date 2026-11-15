@@ -93,7 +93,7 @@ export function BirthdayList({
     });
   const expires = (c: AdminBirthdayCouponDto) => (
     <>
-      <span className="whitespace-nowrap">{until(c)}</span>
+      <span>{until(c)}</span>
       <span className="block text-small text-muted-foreground">{m.states[c.state]}</span>
     </>
   );
@@ -202,7 +202,7 @@ export function BirthdayList({
               <TBody>
                 {data.items.map((c) => (
                   <TR key={c.id} className="[&>td]:py-3 [&>td]:align-top">
-                    <TD className="min-w-[12rem]">
+                    <TD className="min-w-[10rem]">
                       {who(c)}
                       <span className="mt-0.5 block text-small text-muted-foreground tabular-nums">
                         {m.columns.year}: {c.birthdayYear}
@@ -214,7 +214,7 @@ export function BirthdayList({
                     </TD>
                     <TD className="w-px">{delivery(c)}</TD>
                     <TD>{order(c)}</TD>
-                    <TD>{expires(c)}</TD>
+                    <TD className="min-w-[9rem]">{expires(c)}</TD>
                   </TR>
                 ))}
               </TBody>
