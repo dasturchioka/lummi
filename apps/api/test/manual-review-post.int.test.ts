@@ -483,7 +483,8 @@ describe('the buttons on the post', () => {
     );
     // exactly one confirmation: either the group's (no toast, the admin 409) or the admin's
     expect([toast === undefined, admin.status === 200].filter(Boolean)).toHaveLength(1);
-    if (toast === undefined) expect(admin.status).toBe(409);
+    if (toast === undefined)
+      expect(admin).toMatchObject({ status: 409, body: { code: 'status_changed' } });
     else expect(toast).toBe('Уже изменено');
     expect((await orderNow(held.order.id)).creditId).toBe(held.creditId);
     const owner = await t.ownerSession();

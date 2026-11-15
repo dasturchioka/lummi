@@ -1,5 +1,6 @@
 import {
   RECEIPT_REJECT_REASONS,
+  WAITING_RECEIPT_VERDICTS,
   type OrderStatus,
   type ReceiptRejectReason,
   type ReceiptReviewReason,
@@ -158,8 +159,7 @@ export function renderManualReview(d: ManualReviewData, language: Language = 'ru
   ];
 
   const open =
-    d.order.status === 'receipt_review' &&
-    (d.receipt.verdict === 'pending' || d.receipt.verdict === 'manual_review');
+    d.order.status === 'receipt_review' && WAITING_RECEIPT_VERDICTS.includes(d.receipt.verdict);
   if (!open) {
     if (d.decision) out.push('', eventLine(d.decision, language, when(d.decision.at, language)));
     if (d.paidWith) out.push(fill(r.paidWith, joined(credit(d.paidWith))));
