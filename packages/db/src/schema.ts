@@ -305,8 +305,9 @@ export const outbox = pgTable(
  * Every Humo bot message the userbot posted (ADR 0014), keyed by its Telegram message id so a repeat
  * post changes nothing; the highest id is where the userbot's catch-up resumes. Debits (➖) are never
  * stored. `parse_error` is null when the message became a credit; otherwise it names the field that
- * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted. The raw text stays
- * here either way.
+ * did not fit the template ('not_an_operation', 'amount', 'time', 'card') and the owner was alerted,
+ * or says the message was the Humo bot's own talk (#51): 'service' (no alert) or 'card_notice' (the
+ * card blocked or a limit; the owner was alerted). The raw text stays here either way.
  */
 export const humoMessages = pgTable('humo_messages', {
   messageId: bigint('message_id', { mode: 'number' }).primaryKey(),

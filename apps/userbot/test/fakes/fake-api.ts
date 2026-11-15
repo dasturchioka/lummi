@@ -40,9 +40,11 @@ export class FakeFeedApi implements FeedApi {
     if (text.includes('➖')) return { outcome: 'debit', duplicate: false, creditId: null };
     const duplicate = this.stored.has(messageId);
     this.stored.set(messageId, text);
-    return text.includes('➕')
-      ? { outcome: 'credit', duplicate, creditId: messageId }
-      : { outcome: 'unparseable', duplicate, creditId: null };
+    if (text.includes('➕')) return { outcome: 'credit', duplicate, creditId: messageId };
+    // the API's rule (#51): no card mask and no digits is the Humo bot's own talk
+    return /\*\d{4}|\d/.test(text)
+      ? { outcome: 'unparseable', duplicate, creditId: null }
+      : { outcome: 'service', duplicate, creditId: null };
   }
 
   async heartbeat(): Promise<void> {
