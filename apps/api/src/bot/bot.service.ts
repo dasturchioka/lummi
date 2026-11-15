@@ -15,6 +15,8 @@ import { describeError } from '../logging/describe-error';
 import { BotReceipts, RECEIPT_CALLBACK, type IncomingReceipt } from './bot-receipts.service';
 import { REVIEW_CALLBACK, ReviewsBot } from '../reviews/reviews-bot';
 import { CARD_CALLBACK } from '../orders-group/card-view';
+import { ManualReviewPosts } from '../orders-group/manual-review-posts';
+import { MANUAL_REVIEW_CALLBACK } from '../orders-group/manual-review-view';
 import { OrderCards } from '../orders-group/order-cards';
 import { OrdersGroupBot } from '../orders-group/orders-group-bot';
 import { StaffTelegramLinks, type BindResult } from '../staff/telegram-link.service';
@@ -47,6 +49,7 @@ export class BotService implements OnApplicationShutdown {
     @Inject(ReviewsBot) private readonly reviewsBot: ReviewsBot,
     @Inject(OrdersGroupBot) private readonly ordersGroup: OrdersGroupBot,
     @Inject(OrderCards) private readonly orderCards: OrderCards,
+    @Inject(ManualReviewPosts) private readonly manualReviews: ManualReviewPosts,
     @Inject(StaffTelegramLinks) private readonly staffLinks: StaffTelegramLinks,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(BOT_INFO) botInfo: UserFromGetMe | undefined,
@@ -64,6 +67,7 @@ export class BotService implements OnApplicationShutdown {
     this.bot.callbackQuery(RECEIPT_CALLBACK, (ctx) => this.onReceiptChoice(ctx));
     this.bot.callbackQuery(REVIEW_CALLBACK, (ctx) => this.onReviewTap(ctx));
     this.bot.callbackQuery(CARD_CALLBACK, (ctx) => this.onCardTap(ctx));
+    this.bot.callbackQuery(MANUAL_REVIEW_CALLBACK, (ctx) => this.onManualReviewTap(ctx));
     this.bot.on('message:migrate_to_chat_id', (ctx) => this.onMigrate(ctx));
     this.bot.on('my_chat_member', (ctx) => this.onMyChatMember(ctx));
     this.bot.catch((err) =>
@@ -257,6 +261,18 @@ export class BotService implements OnApplicationShutdown {
     ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id, toast));
   }
 
+  /** A button under a manual-review post in the orders group (#51), answered right after the commit. */
+  private async onManualReviewTap(ctx: BotContext): Promise<void> {
+    const query = ctx.callbackQuery;
+    if (!query?.data || query.from.is_bot) return;
+    const id = query.id;
+    const toast = await this.ordersGroup.onManualReviewTap(ctx.tx, {
+      fromId: query.from.id,
+      data: query.data,
+    });
+    ctx.afterCommit.push(() => this.edges.telegram.answerCallback(id, toast));
+  }
+
   /** A reply to one of the bot's questions in a group (the tracking number, #37); the rest passes on. */
   private async onGroupMessage(ctx: BotContext, next: () => Promise<void>): Promise<void> {
     const m = ctx.message;
@@ -279,6 +295,7 @@ export class BotService implements OnApplicationShutdown {
     if (!to || !from) return;
     // its order cards and open questions move along, whatever the setting says by now (#37)
     await this.orderCards.moveGroup(ctx.tx, from, to);
+    await this.manualReviews.moveGroup(ctx.tx, from, to);
     if ((await this.settings.get('bot.groupChatId', ctx.tx)) !== from) return;
     await this.settings.set('bot.groupChatId', to, { type: 'system' }, ctx.tx);
     this.log.warn(`orders group migrated ${from} -> ${to}`);

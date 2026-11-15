@@ -12,12 +12,19 @@ const thousands = (som: number) => String(som).replace(/\B(?=(\d{3})+(?!\d))/g, 
 const two = (n: number) => String(n).padStart(2, '0');
 
 /** A ➕ Humo message as the official bot writes it (spec Changes 2026-11-07), at a Tashkent minute. */
-export function creditText(opts: { som: number; tiyin?: number; at: Date; last4?: string }) {
+export function creditText(opts: {
+  som: number;
+  tiyin?: number;
+  at: Date;
+  last4?: string;
+  /** The «📍» line: who sent it. */
+  source?: string;
+}) {
   const t = utcToTashkent(opts.at);
   return [
     "💸 To'lov",
     `➕ ${thousands(opts.som)},${two(opts.tiyin ?? 0)} UZS`,
-    '📍 CLICK P2P HUMO2UZCAR',
+    `📍 ${opts.source ?? 'CLICK P2P HUMO2UZCAR'}`,
     `💳 HUMOCARD *${opts.last4 ?? SHOP_LAST4}`,
     `🕓 ${two(t.hour)}:${two(t.minute)} ${two(t.day)}.${two(t.month)}.${t.year}`,
     '💰 1.234.567,89 UZS',
@@ -46,7 +53,14 @@ export async function userbotHeartbeat(t: TestApp): Promise<void> {
  */
 export async function recordCredit(
   t: TestApp,
-  opts: { som: number; tiyin?: number; at?: Date; last4?: string; messageId?: number },
+  opts: {
+    som: number;
+    tiyin?: number;
+    at?: Date;
+    last4?: string;
+    source?: string;
+    messageId?: number;
+  },
 ): Promise<number> {
   const res = await internalClient(t).humoMessage({
     body: {
