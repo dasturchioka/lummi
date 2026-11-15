@@ -1534,7 +1534,6 @@ export const adminMessages = defineMessages(
         view: { label: 'Вид', board: 'Воронка', list: 'Список' },
         /** The orders board (#52): the statuses as columns, cards are orders. */
         board: {
-          loading: 'Загружаем воронку',
           failed: 'Не удалось загрузить воронку',
           funnel: 'Заказы по статусам',
           recent: {
@@ -1547,6 +1546,13 @@ export const adminMessages = defineMessages(
           more: 'Ещё {n} — в списке',
           allInList: 'Все заказы — в списке',
           empty: 'Заказов пока нет',
+          /** The shop has orders, but none is open and none closed in the board's days. */
+          quiet: {
+            one: 'Открытых заказов нет, и за\u00a0{n}\u00a0день ни один не закрыт.',
+            few: 'Открытых заказов нет, и за\u00a0{n}\u00a0дня ни один не закрыт.',
+            many: 'Открытых заказов нет, и за\u00a0{n}\u00a0дней ни один не закрыт.',
+            other: 'Открытых заказов нет, и за\u00a0{n}\u00a0дня ни один не закрыт.',
+          },
           emptySlot: 'Новые заказы из приложения появятся здесь',
           expand: 'Показать «{status}»',
           collapse: 'Свернуть «{status}»',
@@ -3838,7 +3844,6 @@ export const adminMessages = defineMessages(
         next: 'Oldinga',
         view: { label: 'Koʻrinish', board: 'Voronka', list: 'Roʻyxat' },
         board: {
-          loading: 'Voronka yuklanmoqda',
           failed: 'Voronkani yuklab boʻlmadi',
           funnel: 'Holatlar boʻyicha buyurtmalar',
           recent: {
@@ -3851,6 +3856,12 @@ export const adminMessages = defineMessages(
           more: 'Yana {n} ta — roʻyxatda',
           allInList: 'Barcha buyurtmalar — roʻyxatda',
           empty: 'Hozircha buyurtmalar yoʻq',
+          quiet: {
+            one: 'Ochiq buyurtmalar yoʻq, soʻnggi\u00a0{n}\u00a0kunda birortasi ham yopilmagan.',
+            few: 'Ochiq buyurtmalar yoʻq, soʻnggi\u00a0{n}\u00a0kunda birortasi ham yopilmagan.',
+            many: 'Ochiq buyurtmalar yoʻq, soʻnggi\u00a0{n}\u00a0kunda birortasi ham yopilmagan.',
+            other: 'Ochiq buyurtmalar yoʻq, soʻnggi\u00a0{n}\u00a0kunda birortasi ham yopilmagan.',
+          },
           emptySlot: 'Ilovadagi yangi buyurtmalar shu yerda paydo boʻladi',
           expand: '«{status}» ni koʻrsatish',
           collapse: '«{status}» ni yigʻish',

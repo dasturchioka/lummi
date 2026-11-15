@@ -3,14 +3,12 @@
 import { OrderReviewSection } from '@/components/reviews/order-review';
 import {
   FULFIL_ACTIONS,
-  findTransition,
+  staffMay,
   type AdminOrderDto,
   type AdminReceiptDto,
   type FulfilAction,
-  type OrderAction,
 } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
-import { ordersMessages } from '@lummi/i18n/orders';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -28,6 +26,7 @@ import { fill } from '@/lib/utils';
 import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
 import {
   CancelDialog,
+  conflictText,
   ConfirmPaymentDialog,
   HandToBtsDialog,
   RefundDialog,
@@ -47,10 +46,6 @@ import {
   PaymentSection,
   ReceiptsSection,
 } from './order-sections';
-
-/** Staff may make this move from that status (the contracts' table, ADR 0011). */
-const staffMay = (status: AdminOrderDto['order']['status'], action: OrderAction) =>
-  findTransition(status, action)?.actors.includes('staff') ?? false;
 
 type Dialog =
   | { kind: 'reject'; receipt: AdminReceiptDto; key: number }
@@ -136,7 +131,6 @@ export function OrderPage({
     if (res.status !== 200) return;
     setPage((was) => (JSON.stringify(was) === JSON.stringify(res.body) ? was : res.body));
   });
-  const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
   /** Applies a move's answer; returns what failed for the dialog, or null when it is done. */
   const apply = (res: MoveResponse | null, reason?: string): Failure | null => {
@@ -153,15 +147,7 @@ export function OrderPage({
         writes.current += 1;
         setPage(res.body.order);
         setDialog(null);
-        setNotice(
-          res.body.code === 'receipt_changed'
-            ? o.receiptChanged
-            : res.body.code === 'credit_taken'
-              ? o.creditTaken
-              : res.body.code === 'refunds_changed'
-                ? o.refund.changed
-                : fill(o.conflict, { status: statusLabel(res.body.order.order.status) }),
-        );
+        setNotice(conflictText(res.body, t, language));
         return null;
       case 422:
         return refusalFailure(res.body, t, language, reason);

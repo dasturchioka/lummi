@@ -24,31 +24,22 @@ export type OrderFilters = {
 };
 
 /**
- * The orders filters: a plain GET form, so a filtered view survives a reload and can be shared.
- * The search (number or phone) is always in view; on phones the other fields open behind
- * «Фильтры» (open while any is set), as the catalog and the audit do. The board (#52) has no
- * status field: there the status is the column.
+ * The orders list's filters (#33; the board has its own, #52): a plain GET form, so a filtered
+ * view survives a reload and can be shared.
+ * The search (number or phone) is always in view; on phones the four selects open behind
+ * «Фильтры» (open while any is set), as the catalog and the audit do.
  */
 export function OrdersFiltersForm({
   t,
   language,
   filters,
-  view,
 }: {
   t: AdminMessages;
   language: Language;
   filters: OrderFilters;
-  view: 'board' | 'list';
 }) {
   const f = t.orders.filters;
-  const board = view === 'board';
-  const reset = board ? '/orders' : '/orders?view=list';
-  const active = [
-    board ? undefined : filters.status,
-    filters.payment,
-    filters.from,
-    filters.to,
-  ].filter(Boolean).length;
+  const active = [filters.status, filters.payment, filters.from, filters.to].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
   const any = active > 0 || Boolean(filters.q);
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
@@ -56,96 +47,55 @@ export function OrdersFiltersForm({
   const statuses = ordersMessages[language].orders.status;
 
   return (
-    // the board on phones: the search row sits on the page itself, so the board starts higher
-    <Card
-      className={cn('mb-4 p-4 lg:p-5', board && 'max-sm:mb-3 max-sm:bg-transparent max-sm:p-0')}
-    >
+    <Card className="mb-4 p-4 lg:p-5">
       <form
         method="get"
         action="/orders"
-        className={cn(
-          'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:items-end',
-          board
-            ? 'lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))_auto]'
-            : 'lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto]',
-        )}
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto] lg:items-end"
       >
-        {!board && <input type="hidden" name="view" value="list" />}
-        {/* the board on phones: the search and an icon toggle share one row, Enter searches */}
-        <div className={cn(board ? 'flex items-end gap-2 sm:contents' : 'contents')}>
-          <Field
-            id="f-q"
-            label={f.search}
-            className={cn(
-              'min-w-0 flex-1 sm:col-span-2 lg:col-span-1',
-              // the placeholder says what it searches; the label stays for screen readers
-              board && 'max-sm:gap-0 max-sm:[&>label]:sr-only',
-            )}
+        {/* the list sits behind «Список»; the board has its own filters (#52) */}
+        <input type="hidden" name="view" value="list" />
+        <Field id="f-q" label={f.search} className="sm:col-span-2 lg:col-span-1">
+          <Input
+            name="q"
+            type="search"
+            inputMode="tel"
+            enterKeyHint="search"
+            autoComplete="off"
+            defaultValue={filters.q ?? ''}
+            placeholder={f.searchPlaceholder}
+          />
+        </Field>
+        <div className="flex gap-2 sm:hidden">
+          <Button type="submit" className="flex-1">
+            {f.apply}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            aria-expanded={open}
+            aria-controls="f-status f-payment f-from f-to"
+            onClick={() => setOpen((v) => !v)}
           >
-            <Input
-              name="q"
-              type="search"
-              inputMode="tel"
-              enterKeyHint="search"
-              autoComplete="off"
-              defaultValue={filters.q ?? ''}
-              placeholder={f.searchPlaceholder}
-            />
-          </Field>
-          {board && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label={f.toggle}
-              aria-expanded={open}
-              aria-controls="f-payment f-from f-to"
-              onClick={() => setOpen((v) => !v)}
-              className="relative sm:hidden"
-            >
-              <SlidersHorizontal strokeWidth={1.5} aria-hidden />
-              {active > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
-                  {active}
-                </span>
-              )}
-            </Button>
-          )}
+            <SlidersHorizontal strokeWidth={1.5} aria-hidden />
+            {f.toggle}
+            {active > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+                {active}
+              </span>
+            )}
+          </Button>
         </div>
-        {!board && (
-          <div className="flex gap-2 sm:hidden">
-            <Button type="submit" className="flex-1">
-              {f.apply}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              aria-expanded={open}
-              aria-controls={board ? 'f-payment f-from f-to' : 'f-status f-payment f-from f-to'}
-              onClick={() => setOpen((v) => !v)}
-            >
-              <SlidersHorizontal strokeWidth={1.5} aria-hidden />
-              {f.toggle}
-              {active > 0 && (
-                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
-                  {active}
-                </span>
-              )}
-            </Button>
-          </div>
-        )}
-        {!board && (
-          <Field id="f-status" label={f.status} className={cn(hidden)}>
-            <Select name="status" defaultValue={filters.status ?? ''}>
-              <option value="">{f.all}</option>
-              {ORDER_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {statuses[s]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
+        <Field id="f-status" label={f.status} className={cn(hidden)}>
+          <Select name="status" defaultValue={filters.status ?? ''}>
+            <option value="">{f.all}</option>
+            {ORDER_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {statuses[s]}
+              </option>
+            ))}
+          </Select>
+        </Field>
         <Field id="f-payment" label={f.payment} className={cn(hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
@@ -166,15 +116,15 @@ export function OrdersFiltersForm({
           className={cn(
             'flex gap-2 sm:col-span-2 sm:justify-end lg:col-span-1',
             'max-sm:hidden',
-            open && (any || board) && 'max-sm:flex',
+            open && any && 'max-sm:flex',
           )}
         >
-          <Button type="submit" className={cn(board ? 'max-sm:flex-1' : 'max-sm:hidden')}>
+          <Button type="submit" className="max-sm:hidden">
             {f.apply}
           </Button>
           {any && (
             <Button asChild variant="outline" className="max-sm:flex-1">
-              <Link href={reset}>{f.reset}</Link>
+              <Link href="/orders?view=list">{f.reset}</Link>
             </Button>
           )}
         </div>

@@ -289,15 +289,21 @@
 main:has(> [data-layout='wide']) {
   max-width: none;
 }
+/* the board's page gives its sides to the columns: 24 px instead of the panel's 40 */
+@media (min-width: 1024px) {
+  main:has(> [data-layout='wide']) {
+    padding-inline: 24px;
+  }
+}
 .board-scroller {
   scrollbar-width: thin;
   scroll-padding-inline: 16px;
 }
-/* from 640 px columns come to rest at a column's start after a sideways scroll */
+/* from 640 px a sideways scroll comes to rest on whole columns at both ends (the board sizes them) */
 @media (min-width: 640px) {
   .board-scroller {
     scroll-padding-inline: 0;
-    scroll-snap-type: x proximity;
+    scroll-snap-type: x mandatory;
   }
   .board-scroller[data-carrying] {
     scroll-snap-type: none;

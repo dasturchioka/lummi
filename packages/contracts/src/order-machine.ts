@@ -95,6 +95,10 @@ export function findTransition(
   return ORDER_TRANSITIONS.find((t) => t.from === from && t.action === action);
 }
 
+/** Staff may make this move from that status: the order page's buttons and the board's drag read it. */
+export const staffMay = (from: OrderStatus, action: OrderAction): boolean =>
+  findTransition(from, action)?.actors.includes('staff') ?? false;
+
 /**
  * Paid: the payment was confirmed. Money only goes back to a paid order's shopper, as a Refund
  * (ADR 0006), so cancelling one of these tells them the manager will be in touch.

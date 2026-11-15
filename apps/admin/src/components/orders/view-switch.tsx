@@ -3,9 +3,8 @@ import Link from 'next/link';
 import type { AdminMessages } from '@/lib/i18n';
 import { listHref } from '@/lib/list-page';
 import { cn } from '@/lib/utils';
+import type { OrdersView } from '@/lib/orders-view';
 import type { OrderFilters } from './orders-filters';
-
-export type OrdersView = 'board' | 'list';
 
 /**
  * «Воронка | Список» (#52): two links in the panel's segmented grammar (a Milk Field track, the
