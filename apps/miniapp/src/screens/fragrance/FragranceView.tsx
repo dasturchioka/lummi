@@ -7,27 +7,24 @@ import { photoHeight } from '../../lib/photo-widths';
 import { useDiscountsText } from '../../discounts/queries';
 import { volumesText } from '../../discounts/volumes';
 import { usePrefs } from '../../lib/prefs';
-import { openExternal } from '../../lib/share';
 import { FragranceBadge } from '../../ui/Badge';
 import { BuyPair } from '../../ui/BuyPair';
 import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { DockNote } from '../../ui/DockNote';
-import { HeartButton } from '../../ui/HeartButton';
 import { LabelDivider } from '../../ui/LabelDivider';
 import { DISC } from '../../ui/photoDisc';
 import {
   ArrowLeftIcon,
   BottleIcon,
   ClockIcon,
-  ExternalIcon,
   LeafIcon,
   MoonIcon,
-  ShareIcon,
   SunIcon,
   SunMoonIcon,
   WaveIcon,
 } from '../../ui/icons';
+import { PhotoActions, UzumButton } from '../../ui/ProductActions';
 import { Screen } from '../../ui/Screen';
 import { VolumeStatus, VolumeTiles } from '../../ui/VolumeTiles';
 
@@ -131,13 +128,7 @@ function Gallery({
         <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
           <ArrowLeftIcon size={20} />
         </button>
-        {/* the action column: share, the heart under it */}
-        <div className="flex flex-col items-center gap-2">
-          <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
-            <ShareIcon size={20} />
-          </button>
-          <HeartButton target={card.slug} name={card.name} place="disc" />
-        </div>
+        <PhotoActions favourite={card.slug} name={card.name} onShare={onShare} />
       </div>
     </div>
   );
@@ -392,17 +383,7 @@ export function FragranceView({
         <Pyramid card={card} />
         {reviews}
 
-        {card.uzumUrl ? (
-          <Button
-            variant="secondary"
-            block
-            className="mt-7"
-            onClick={() => openExternal(card.uzumUrl as string)}
-          >
-            {t.card.uzum}
-            <ExternalIcon size={16} />
-          </Button>
-        ) : null}
+        <UzumButton url={card.uzumUrl} />
         {footer}
       </article>
     </Screen>

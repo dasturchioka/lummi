@@ -845,6 +845,18 @@ describe('the date of birth at checkout', () => {
     expect((await checkoutBody(s)).checkout.birthday).toEqual({ date: null, percent: 20 });
   });
 
+  it('checkout carries the delivery term from the setting `delivery.etaHours`', async () => {
+    const s = await shopper();
+    expect((await checkoutBody(s)).checkout.deliveryEtaHours).toBe(48);
+    const owner = await t.ownerSession();
+    const res = await owner.client.admin.settings.update({
+      params: { key: 'delivery.etaHours' },
+      body: { value: 72 },
+    });
+    expect(res.status).toBe(200);
+    expect((await checkoutBody(s)).checkout.deliveryEtaHours).toBe(72);
+  });
+
   it('is stored with the first order, under the order’s consent, and audited', async () => {
     const s = await shopper();
     const { body } = await checkoutBody(s, { birthDate: '1996-03-14' });

@@ -1,0 +1,1 @@
+ALTER TABLE "discovery_set" ADD COLUMN "uzum_url" text;

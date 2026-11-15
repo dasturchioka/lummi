@@ -27,6 +27,7 @@ export type SettingArea = (typeof SETTING_AREAS)[number];
 export const SETTING_UNITS = [
   'none',
   'seconds',
+  'hours',
   'days',
   'ms',
   'sum',
@@ -151,6 +152,21 @@ export const settingDefinitions = {
     hint: {
       ru: 'Пока клиент не выбрал город. Если у региона свой тариф, действует он.',
       uz: 'Mijoz shaharni tanlamaguncha. Viloyatning oʻz tarifi boʻlsa, oʻsha amal qiladi.',
+    },
+  },
+  /** The delivery term shown to the customer, in hours after the handover to BTS (TZ §8, spec Changes 2026-11-16). */
+  'delivery.etaHours': {
+    schema: z.number().int().min(1).max(720),
+    default: 48,
+    area: 'shop',
+    unit: 'hours',
+    label: {
+      ru: 'Срок доставки для клиента, часов',
+      uz: 'Mijoz uchun yetkazib berish muddati, soat',
+    },
+    hint: {
+      ru: 'Показываем «до N часов после передачи в BTS» в оформлении заказа и в сообщении «Передан в BTS».',
+      uz: 'Buyurtma rasmiylashtirishda va «BTSga topshirildi» xabarida «BTSga topshirilgandan keyin N soatgacha» deb koʻrsatiladi.',
     },
   },
   /** How many recipient + point pairs «Мои пункты BTS» keeps per customer; the least recently used goes first (spec Changes 2026-11-11). */

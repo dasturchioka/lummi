@@ -1,5 +1,5 @@
 {
-  "id": "5edf35b8-dd3b-4fb0-b83b-19d308154656",
+  "id": "00d2361d-6f17-401a-ba82-762d3448a217",
   "prevId": "5c8f4f1b-479b-42b1-bb03-3f645929df7c",
   "version": "7",
   "dialect": "postgresql",
@@ -1674,6 +1674,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "uzum_url": {
+          "name": "uzum_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "is_placeholder": {
           "name": "is_placeholder",
           "type": "boolean",
@@ -2684,137 +2690,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.manual_review_posts": {
-      "name": "manual_review_posts",
-      "schema": "",
-      "columns": {
-        "receipt_id": {
-          "name": "receipt_id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "receipt_posted_at": {
-          "name": "receipt_posted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "panel": {
-          "name": "panel",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{\"kind\":\"choices\"}'::jsonb"
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "shown_hash": {
-          "name": "shown_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "syncing_at": {
-          "name": "syncing_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "manual_review_posts_order_idx": {
-          "name": "manual_review_posts_order_idx",
-          "columns": [
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "manual_review_posts_receipt_id_receipts_id_fk": {
-          "name": "manual_review_posts_receipt_id_receipts_id_fk",
-          "tableFrom": "manual_review_posts",
-          "tableTo": "receipts",
-          "columnsFrom": [
-            "receipt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "manual_review_posts_order_id_orders_id_fk": {
-          "name": "manual_review_posts_order_id_orders_id_fk",
-          "tableFrom": "manual_review_posts",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -6607,8 +6482,7 @@
       "values": [
         "message",
         "order_card",
-        "review_post",
-        "manual_review_post"
+        "review_post"
       ]
     },
     "public.payment_pause_cause": {

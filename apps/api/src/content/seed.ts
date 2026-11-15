@@ -52,7 +52,7 @@ Oʻz iforingizni toping va har kuni qoʻllang.`,
 
 Отправляем почтой BTS в пункт BTS, который вы выбираете при оформлении заказа. Цена зависит от области и показана при оформлении, по умолчанию {defaultTariff}. При заказе от {freeDeliveryThreshold} доставка бесплатная.
 
-Срок: до 48 часов после передачи заказа в BTS. Если нужно уточнить, напишите менеджеру: {managerUsername}.
+Срок: {deliveryTerm} после передачи заказа в BTS. Если нужно уточнить, напишите менеджеру: {managerUsername}.
 
 ### Оплата
 
@@ -61,7 +61,7 @@ Oʻz iforingizni toping va har kuni qoʻllang.`,
 
 BTS pochtasi orqali buyurtma rasmiylashtirilganda tanlagan BTS punktingizga yuboramiz. Narx viloyatga bogʻliq va rasmiylashtirishda koʻrinadi, odatda {defaultTariff}. {freeDeliveryThreshold}dan boshlab buyurtmalar uchun yetkazib berish bepul.
 
-Muddat: buyurtma BTSga topshirilgandan keyin 48 soatgacha. Aniqlashtirish kerak boʻlsa, menejerga yozing: {managerUsername}.
+Muddat: buyurtma BTSga topshirilgandan keyin {deliveryTerm}. Aniqlashtirish kerak boʻlsa, menejerga yozing: {managerUsername}.
 
 ### Toʻlov
 
@@ -104,7 +104,7 @@ Ochilgan sifatli atir-upa mahsulotlari almashtirilmaydi va qaytarilmaydi.`,
 
 ### Сколько стоит доставка?
 
-Зависит от области, цена показана при оформлении, по умолчанию {defaultTariff}. От {freeDeliveryThreshold} доставка бесплатная. Срок: до 48 часов после передачи в BTS.`,
+Зависит от области, цена показана при оформлении, по умолчанию {defaultTariff}. От {freeDeliveryThreshold} доставка бесплатная. Срок: {deliveryTerm} после передачи в BTS.`,
     bodyUz: `### Bu mashhur brendlarning iforlarimi?
 
 Yoʻq. Bu mashhur atirlar asosida yaratilgan LUMMI iforlari, sifatli atir xomashyosidan.
@@ -127,7 +127,7 @@ Kartaga oʻtkazma orqali: rekvizit va summa buyurtmadan keyin chiqadi, soʻng ch
 
 ### Yetkazib berish qancha turadi?
 
-Viloyatga bogʻliq, narx rasmiylashtirishda koʻrinadi, odatda {defaultTariff}. {freeDeliveryThreshold}dan boshlab bepul. Muddat: BTSga topshirilgandan keyin 48 soatgacha.`,
+Viloyatga bogʻliq, narx rasmiylashtirishda koʻrinadi, odatda {defaultTariff}. {freeDeliveryThreshold}dan boshlab bepul. Muddat: BTSga topshirilgandan keyin {deliveryTerm}.`,
   },
   {
     slug: 'contacts',

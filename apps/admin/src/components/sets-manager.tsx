@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminDiscoverySet } from '@lummi/contracts';
+import { isUzumUrl, type AdminDiscoverySet } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
@@ -297,6 +297,12 @@ function ReadOnly({
           ))}
         </ol>
       </div>
+      {set.uzumUrl && (
+        <div>
+          <p className="text-small text-muted-foreground">{s.uzumUrl}</p>
+          <p className="mt-0.5 break-all">{set.uzumUrl}</p>
+        </div>
+      )}
       {set.composition.length < SET_SIZE && <Notice title={s.notForSale} />}
       <p className="text-xs text-muted-foreground">{s.priceOnly}</p>
     </div>
@@ -326,8 +332,10 @@ function PriceForm({
   const [picks, setPicks] = useState<string[]>(() =>
     Array.from({ length: SET_SIZE }, (_, i) => String(set.composition[i]?.id ?? '')),
   );
+  const [uzumUrl, setUzumUrl] = useState(set.uzumUrl ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const validUzum = isUzumUrl(uzumUrl);
   const chosen = picks.filter(Boolean);
   const duplicate = new Set(chosen).size !== chosen.length;
   const complete = chosen.length === SET_SIZE;
@@ -342,11 +350,17 @@ function PriceForm({
       className="grid gap-5"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!validPrice || !complete || duplicate) return;
+        if (!validPrice || !complete || duplicate || !validUzum) return;
         setPending(true);
         setError(null);
         const res = await browserApi.sets
-          .update({ body: { price: Number(price), composition: picks.map(Number) } })
+          .update({
+            body: {
+              price: Number(price),
+              uzumUrl: uzumUrl.trim(),
+              composition: picks.map(Number),
+            },
+          })
           .catch(() => null);
         setPending(false);
         if (res?.status === 200) onSaved();
@@ -381,6 +395,24 @@ function PriceForm({
           value={price}
           onChange={(e) => {
             setPrice(e.target.value);
+            onEdit();
+          }}
+        />
+      </Field>
+      <Field
+        id="set-uzum"
+        label={s.uzumUrl}
+        hint={s.uzumHint}
+        error={validUzum ? undefined : s.uzumInvalid}
+      >
+        <Input
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          placeholder="https://"
+          value={uzumUrl}
+          onChange={(e) => {
+            setUzumUrl(e.target.value);
             onEdit();
           }}
         />
@@ -443,7 +475,11 @@ function PriceForm({
       {!complete && <p className="text-xs text-muted-foreground">{s.incomplete}</p>}
       {error && <Notice title={error} />}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button type="submit" loading={pending} disabled={!validPrice || !complete || duplicate}>
+        <Button
+          type="submit"
+          loading={pending}
+          disabled={!validPrice || !complete || duplicate || !validUzum}
+        >
           {s.save}
         </Button>
         {saved && !error && <Saved text={s.saved} />}

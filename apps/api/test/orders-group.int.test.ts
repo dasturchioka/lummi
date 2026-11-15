@@ -565,6 +565,7 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
         fill(botMessages.ru.bot.handedToBts, {
           number: String(order.number),
           tracking: 'BTS 4471 0098',
+          eta: 'до 48 часов',
         }),
       ),
     );
@@ -634,6 +635,11 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
   it('walks Принят → Собирается → Передан в BTS → Доставлен: the card edited each time, history added, the shopper told in their language', async () => {
     await addStaff(dilnoza);
+    // the delivery term in the «Передан в BTS» message is the setting, not copy
+    await t.db
+      .insert(settings)
+      .values({ key: 'delivery.etaHours', value: 36 })
+      .onConflictDoUpdate({ target: settings.key, set: { value: 36 } });
     const order = await paidOrder(vali, { giftMessage: '' }, '998907654321');
     const posted = await card(order.number);
     // a gift with no greeting says so: the parcel still goes without a receipt inside
@@ -677,7 +683,7 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     const said = toShopper(vali).slice(heard);
     expect(said.map((m) => m.text)).toEqual([
       fill(uz.assembling, { number: n }),
-      fill(uz.handedToBts, { number: n, tracking: 'UZ-BTS-000123' }),
+      fill(uz.handedToBts, { number: n, tracking: 'UZ-BTS-000123', eta: '36 soatgacha' }),
       fill(uz.delivered, { number: n }),
     ]);
     for (const m of said)

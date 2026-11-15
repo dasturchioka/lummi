@@ -229,8 +229,15 @@
     {
       "idx": 32,
       "version": "7",
-      "when": 1794772010024,
-      "tag": "0032_manual_review_posts",
+      "when": 1794772962213,
+      "tag": "0032_discovery_set_uzum_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794776733831,
+      "tag": "0033_manual_review_posts",
       "breakpoints": true
     }
   ]

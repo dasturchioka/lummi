@@ -15,17 +15,18 @@ import { useDiscoverySet } from '../sets/queries';
 import { goBackOrCatalog, useOpenFragrance } from '../lib/navigation';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
+import { shareDiscovery } from '../lib/share';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { BuyPair } from '../ui/BuyPair';
 import { DockNote } from '../ui/DockNote';
-import { HeartButton } from '../ui/HeartButton';
 import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
 import { AlertIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon, PlusIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { ReviewsBlock } from './reviews/ReviewsBlock';
+import { PhotoActions, UzumButton } from '../ui/ProductActions';
 import { Screen } from '../ui/Screen';
 import { SetPhoto } from '../ui/SetPhoto';
 import { Skeleton } from '../ui/Skeleton';
@@ -86,6 +87,7 @@ export function DiscoverySetView({
   onBack = () => undefined,
   onAdd = () => undefined,
   onBuyNow = () => undefined,
+  onShare = () => undefined,
   onOpen = () => undefined,
   reviews,
 }: {
@@ -96,6 +98,8 @@ export function DiscoverySetView({
   onAdd?: () => void;
   /** «Купить сейчас»: a checkout of this one set, the cart left as it is (#25). */
   onBuyNow?: () => void;
+  /** «Поделиться»: the `set_discovery` link in Telegram's share sheet. */
+  onShare?: () => void;
   onOpen?: (slug: string) => void;
   /** Under the composition: the reviews block (#41). */
   reviews?: ReactNode;
@@ -136,7 +140,11 @@ export function DiscoverySetView({
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
-            <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} place="disc" />
+            <PhotoActions
+              favourite={DISCOVERY_FAVOURITE}
+              name={s.discoveryTitle}
+              onShare={onShare}
+            />
           </div>
         </div>
 
@@ -193,6 +201,7 @@ export function DiscoverySetView({
           </section>
         ) : null}
         {reviews}
+        <UzumButton url={set.uzumUrl} />
         <p className="type-small mt-6 text-muted">{t.card.disclaimer}</p>
       </article>
     </Screen>
@@ -221,6 +230,7 @@ export function DiscoverySetScreen() {
       note={note}
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
+      onShare={() => void shareDiscovery(s.discoveryTitle)}
       reviews={<ReviewsBlock target="discovery-set" />}
       onBuyNow={() =>
         void router.navigate({

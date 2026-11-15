@@ -6,7 +6,14 @@ import {
   type TransitionPayload,
 } from '@lummi/contracts';
 import type { OrderLineRow, OrderRow, orders, UpgradeRightRow } from '@lummi/db';
-import { fill, formatCalendarDate, formatDateTime, formatMoney, type Language } from '@lummi/i18n';
+import {
+  deliveryEta,
+  fill,
+  formatCalendarDate,
+  formatDateTime,
+  formatMoney,
+  type Language,
+} from '@lummi/i18n';
 import { botMessages, orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
 import type { OnHandMove } from './on-hand';
 
@@ -49,8 +56,16 @@ export interface Effects<A extends OrderAction> {
   discountSource?: 'release' | 'release_and_close_rights' | 'open_rights';
   /** Columns the move sets on the order besides its status. */
   columns?: (m: Move<A>) => Partial<typeof orders.$inferInsert>;
+  /** Set when the message states the delivery term: the service then reads `delivery.etaHours` for it, and only then. */
+  needsEta?: boolean;
   /** The shopper's message (spec Changes 2026-11-07); none for «Принят» and none for a return. */
-  message: (m: Move<A>, language: Language) => ShopperText | null;
+  message: (m: Move<A>, language: Language, ctx: { etaHours?: number }) => ShopperText | null;
+}
+
+/** The delivery term the service read because the effect said `needsEta`. */
+function etaOf(ctx: { etaHours?: number }): number {
+  if (ctx.etaHours === undefined) throw new Error('this message needs `needsEta`');
+  return ctx.etaHours;
 }
 
 const bot = (language: Language) => botMessages[language].bot;
@@ -151,10 +166,12 @@ export const EFFECTS: { [A in OrderAction]: Effects<A> } = {
     // the bottles leave the warehouse: the reserve ends and on hand drops together
     onHand: (m) => ({ lines: m.lines, sign: -1 }),
     columns: (m) => ({ trackingNumber: m.payload.trackingNumber }),
-    message: (m, lang) => ({
+    needsEta: true,
+    message: (m, lang, ctx) => ({
       text: fill(bot(lang).handedToBts, {
         number: number(m),
         tracking: m.payload.trackingNumber,
+        eta: deliveryEta(lang, etaOf(ctx)),
       }),
     }),
   },

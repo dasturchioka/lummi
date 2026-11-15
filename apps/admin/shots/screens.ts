@@ -1396,6 +1396,20 @@ export const screens: Screen[] = [
   { id: 'sets', path: '/sets', as: 'owner' },
   { id: 'sets-manager', path: '/sets', as: 'manager' },
   {
+    // The owner set the set's Uzum link (#54).
+    id: 'sets-uzum',
+    path: '/sets',
+    as: 'owner',
+    setup: async ({ db }) => {
+      await db.query(
+        "update discovery_set set uzum_url = 'https://uzum.uz/ru/product/lummi-discovery-set'",
+      );
+    },
+    teardown: async ({ db }) => {
+      await db.query('update discovery_set set uzum_url = null');
+    },
+  },
+  {
     // The same fragrance picked twice: the second field says so and «Сохранить» stays off.
     id: 'sets-duplicate',
     path: '/sets',

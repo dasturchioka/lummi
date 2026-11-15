@@ -684,6 +684,8 @@ export const discoverySet = pgTable(
     onHand: integer('on_hand').notNull().default(0),
     /** Content hash of the rendered photo set; null falls back to the box photo shipped with the app. */
     photoHash: text('photo_hash'),
+    /** The set's page on Uzum Market (https); null hides the «Купить на Uzum» button. */
+    uzumUrl: text('uzum_url'),
     /** Seed price that is ours, not the customer's; none may reach launch. */
     isPlaceholder: boolean('is_placeholder').notNull().default(true),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

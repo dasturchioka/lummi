@@ -152,6 +152,7 @@ export class OrdersService {
       'orders.giftMessageMaxLength',
       'orders.recipientPhoneCountryCodes',
       'birthday.percent',
+      'delivery.etaHours',
     ]);
     const saved = await listSavedPoints(tx, c.id);
     const item = source.kind === 'lines' ? loaded.lines[0] : undefined;
@@ -170,6 +171,7 @@ export class OrdersService {
       defaultSavedPointId: defaultSavedPoint(saved)?.id ?? null,
       paymentAvailable: (await readShopCard(tx)) !== null,
       birthday: { date: c.birthDate, percent: settings['birthday.percent'] },
+      deliveryEtaHours: settings['delivery.etaHours'],
     };
   }
 
