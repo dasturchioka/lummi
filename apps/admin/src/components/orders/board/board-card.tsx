@@ -36,7 +36,7 @@ function PaymentMarker({ card, t }: { card: AdminBoardCardDto; t: AdminMessages 
   return (
     <span
       className={cn(
-        'inline-flex min-w-0 items-center gap-1.5 text-[12px] leading-tight',
+        'inline-flex min-w-0 items-center gap-1.5 text-small leading-tight',
         look ? 'font-semibold text-foreground' : 'text-muted-foreground',
       )}
       title={t.orders.board.marker[marker]}

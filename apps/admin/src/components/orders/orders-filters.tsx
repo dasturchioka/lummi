@@ -56,7 +56,10 @@ export function OrdersFiltersForm({
   const statuses = ordersMessages[language].orders.status;
 
   return (
-    <Card className="mb-4 p-4 lg:p-5">
+    // the board on phones: the search row sits on the page itself, so the board starts higher
+    <Card
+      className={cn('mb-4 p-4 lg:p-5', board && 'max-sm:mb-3 max-sm:bg-transparent max-sm:p-0')}
+    >
       <form
         method="get"
         action="/orders"
@@ -70,7 +73,15 @@ export function OrdersFiltersForm({
         {!board && <input type="hidden" name="view" value="list" />}
         {/* the board on phones: the search and an icon toggle share one row, Enter searches */}
         <div className={cn(board ? 'flex items-end gap-2 sm:contents' : 'contents')}>
-          <Field id="f-q" label={f.search} className="min-w-0 flex-1 sm:col-span-2 lg:col-span-1">
+          <Field
+            id="f-q"
+            label={f.search}
+            className={cn(
+              'min-w-0 flex-1 sm:col-span-2 lg:col-span-1',
+              // the placeholder says what it searches; the label stays for screen readers
+              board && 'max-sm:gap-0 max-sm:[&>label]:sr-only',
+            )}
+          >
             <Input
               name="q"
               type="search"
