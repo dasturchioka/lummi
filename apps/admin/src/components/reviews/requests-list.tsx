@@ -26,7 +26,7 @@ import { ReviewsTabs } from './reviews-tabs';
 
 export type RequestFilters = { state?: string; from?: string; to?: string };
 
-const TONE = { answered: 'sage', sent: 'live', not_delivered: 'neutral' } as const;
+const TONE = { answered: 'sage', sent: 'calm', not_delivered: 'look' } as const;
 
 /**
  * The review requests the bot made (#55, TZ §5 L341): one row per order asked, with what came of
@@ -94,20 +94,6 @@ export function RequestsList({
       <PageHeader title={t.reviews.title} description={m.description} />
       <ReviewsTabs t={t} current="requests" />
 
-      <Card className="mb-4">
-        <dl
-          aria-label={m.countsLabel}
-          className="grid grid-cols-3 gap-3 px-4 py-3 text-small @xl:px-5"
-        >
-          {REVIEW_REQUEST_STATES.map((s) => (
-            <div key={s} className="min-w-0">
-              <dt className="text-muted-foreground [overflow-wrap:anywhere]">{m.states[s]}</dt>
-              <dd className="mt-0.5 text-lg font-semibold tabular-nums">{num(data.counts[s])}</dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-
       <ListFilters
         action="/reviews/requests"
         active={active}
@@ -147,6 +133,17 @@ export function RequestsList({
         </EmptyState>
       ) : (
         <Card className="@container">
+          <dl
+            aria-label={m.countsLabel}
+            className="grid grid-cols-3 gap-3 border-b border-border px-4 py-3 text-small @xl:px-5"
+          >
+            {REVIEW_REQUEST_STATES.map((s) => (
+              <div key={s} className="min-w-0">
+                <dt className="text-muted-foreground [overflow-wrap:anywhere]">{m.states[s]}</dt>
+                <dd className="mt-0.5 text-lg font-semibold tabular-nums">{num(data.counts[s])}</dd>
+              </div>
+            ))}
+          </dl>
           <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
             {countOf(language, data.total, m.total)}
           </p>

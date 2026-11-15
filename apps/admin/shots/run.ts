@@ -21,7 +21,7 @@ import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
 import { seedShotOrders } from './orders-data';
-import { seedShotRequests } from './delivery-data';
+import { seedShotRequests } from './not-delivered-data';
 import { seedShotReviews } from './reviews-data';
 import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';

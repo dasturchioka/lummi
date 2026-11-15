@@ -4,7 +4,8 @@ import {
   type AdminBirthdayCouponDto,
   type AdminBirthdayCouponsPageDto,
 } from '@lummi/contracts';
-import { formatMoney, formatPhone, type Language } from '@lummi/i18n';
+import { formatLocalDate, lastDayOf } from '@lummi/contracts';
+import { formatCalendarDate, formatMoney, formatPhone, type Language } from '@lummi/i18n';
 import Link from 'next/link';
 import { countOf } from '@/components/broadcasts/format';
 import { EmptyState } from '@/components/empty-state';
@@ -65,7 +66,7 @@ export function BirthdayList({
   const terms = (c: AdminBirthdayCouponDto) =>
     fill(m.discount, { percent: String(c.percent), max: formatMoney(c.maxAmount, language) });
   const delivery = (c: AdminBirthdayCouponDto) => (
-    <Badge tone={c.delivered ? 'sage' : 'neutral'}>
+    <Badge tone={c.delivered ? 'sage' : 'look'}>
       {c.delivered ? m.delivery.delivered : m.delivery.notDelivered}
     </Badge>
   );
@@ -85,18 +86,15 @@ export function BirthdayList({
       {formatTashkent(c.issuedAt)}
     </time>
   );
-  const expires = (c: AdminBirthdayCouponDto, stacked = false) => (
+  /** «до 23 ноября 2026»: the last day it works (the instant is 00:00 the day after). */
+  const until = (c: AdminBirthdayCouponDto) =>
+    fill(m.until, {
+      date: formatCalendarDate(formatLocalDate(lastDayOf(new Date(c.expiresAt))), language, true),
+    });
+  const expires = (c: AdminBirthdayCouponDto) => (
     <>
-      <time dateTime={c.expiresAt} className="whitespace-nowrap">
-        {formatTashkent(c.expiresAt)}
-      </time>
-      <span
-        className={
-          stacked ? 'block text-small text-muted-foreground' : 'ml-2 text-muted-foreground'
-        }
-      >
-        {m.states[c.state]}
-      </span>
+      <span className="whitespace-nowrap">{until(c)}</span>
+      <span className="block text-small text-muted-foreground">{m.states[c.state]}</span>
     </>
   );
 
@@ -160,14 +158,14 @@ export function BirthdayList({
               </span>
             )}
           </p>
-          <ul className="divide-y divide-border @5xl:hidden">
+          <ul className="divide-y divide-border @3xl:hidden">
             {data.items.map((c) => (
               <li key={c.id} className="grid gap-2 px-4 py-4 @xl:px-5">
                 <div className="min-w-0">{who(c)}</div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   {delivery(c)}
                   <span className="text-small text-muted-foreground tabular-nums">
-                    {m.columns.year} {c.birthdayYear}
+                    {m.columns.year}: {c.birthdayYear}
                   </span>
                 </div>
                 <MetaLine
@@ -182,15 +180,14 @@ export function BirthdayList({
                     <span key="o">
                       {m.columns.order}: {order(c)}
                     </span>,
-                    <span key="e">
-                      {m.columns.expires} {expires(c)}
-                    </span>,
+                    <span key="e">{until(c)}</span>,
                   ]}
                 />
+                <p className="text-small font-medium">{m.states[c.state]}</p>
               </li>
             ))}
           </ul>
-          <div className="hidden @5xl:block">
+          <div className="hidden @3xl:block">
             <Table>
               <THead>
                 <TR>
@@ -212,7 +209,7 @@ export function BirthdayList({
                     <TD className="text-muted-foreground">{issued(c)}</TD>
                     <TD className="w-px">{delivery(c)}</TD>
                     <TD>{order(c)}</TD>
-                    <TD>{expires(c, true)}</TD>
+                    <TD>{expires(c)}</TD>
                   </TR>
                 ))}
               </TBody>

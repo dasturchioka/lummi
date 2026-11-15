@@ -49,13 +49,13 @@ const EXPORT_MAX_ROWS = 20_000;
 /** A delivery that dies holding the review's post lease frees it after this long. */
 const LEASE_MS = 2 * 60 * 1000;
 /** The customer columns a review's display needs: the name and the phone (the account's, else the Recipient's). */
-const WHO = {
+export const WHO = {
   first: customers.firstName,
   last: customers.lastName,
   phone: customers.phone,
   recipientPhone: orders.recipientPhone,
 };
-const whoOf = (r: {
+export const whoOf = (r: {
   first: string;
   last: string | null;
   phone: string | null;

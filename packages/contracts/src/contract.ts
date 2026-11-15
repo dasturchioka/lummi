@@ -15,8 +15,8 @@ import {
   adminBirthdayCouponsQuerySchema,
   adminReviewRequestsPageSchema,
   adminReviewRequestsQuerySchema,
-  deliveryReportsErrorSchema,
-} from './delivery-reports';
+  adminBirthdayCouponsErrorSchema,
+} from './not-delivered';
 import { favouriteErrorSchema, favouriteIdsSchema, favouriteListSchema } from './favourites';
 import {
   marketingReportQuerySchema,
@@ -1631,8 +1631,8 @@ const adminReviews = c.router({
       query: adminReviewRequestsQuerySchema,
       responses: {
         200: adminReviewRequestsPageSchema,
-        401: deliveryReportsErrorSchema,
-        403: deliveryReportsErrorSchema,
+        401: adminReviewsErrorSchema,
+        403: adminReviewsErrorSchema,
       },
       summary:
         'Staff (#55): the review requests the bot made, newest first: sent, answered, or «не доставлено» (the customer had blocked the bot); filtered by state and Tashkent days, with the count of each state',
@@ -1649,8 +1649,8 @@ const adminBirthdayCoupons = c.router({
       query: adminBirthdayCouponsQuerySchema,
       responses: {
         200: adminBirthdayCouponsPageSchema,
-        401: deliveryReportsErrorSchema,
-        403: deliveryReportsErrorSchema,
+        401: adminBirthdayCouponsErrorSchema,
+        403: adminBirthdayCouponsErrorSchema,
       },
       summary:
         'Owner only (#55): every birthday coupon, newest first, with delivered / «не доставлено», the order that used it and its expiry; filtered by birthday year, delivery and use',

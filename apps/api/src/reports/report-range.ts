@@ -65,10 +65,18 @@ export function rangeBounds(range: TashkentRange): { start: string; end: string 
   };
 }
 
-/** An instant on a day of the range, as a SQL condition. */
-export function within(at: SQL | AnyColumn, range: TashkentRange): SQL {
-  const { start, end } = rangeBounds(range);
-  return and(sql`${at} >= ${start}`, sql`${at} < ${end}`)!;
+/**
+ * An instant on a day of the range, as a SQL condition. An end left out is open (the list filters
+ * of #55 take either day alone); with neither, no condition.
+ */
+export function within(
+  at: SQL | AnyColumn,
+  range: { from?: string; to?: string },
+): SQL | undefined {
+  return and(
+    range.from ? sql`${at} >= ${tashkentDayStart(range.from).toISOString()}` : undefined,
+    range.to ? sql`${at} < ${tashkentDayStart(range.to, 1).toISOString()}` : undefined,
+  );
 }
 
 /**

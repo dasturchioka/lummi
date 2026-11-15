@@ -22,7 +22,7 @@ import {
   seedShotCoupons,
   seedWorstCoupons,
   seedWorstRequests,
-} from './delivery-data';
+} from './not-delivered-data';
 import { shotMarketing } from './marketing-data';
 import { SHOT_ORDER } from './orders-data';
 import { cardBack, homeDay, homeDayBack, humoBack, humoSilent, noCard } from './home-data';

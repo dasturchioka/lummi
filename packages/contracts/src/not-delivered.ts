@@ -4,7 +4,8 @@ import { tashkentDaySchema } from './admin';
 /**
  * Staff views of what the bot could not deliver (#55, TZ §5 L341 and §3.8 L195): the review
  * requests («не доставлено» when the customer had blocked the bot) and the birthday coupons
- * (their message's `outbox_id` is null when the customer could not be messaged). Read-only.
+ * (their message's `outbox_id` is null when the customer could not be messaged). Both also count a
+ * message the outbox could not deliver after it was queued (a bot blocked in between). Read-only.
  */
 
 export const ADMIN_REVIEW_REQUESTS_PAGE_SIZE = 20;
@@ -75,7 +76,7 @@ export const adminBirthdayCouponSchema = z.object({
   /** The most it takes off, so'm. */
   maxAmount: z.number().int(),
   issuedAt: z.string().datetime(),
-  /** False when the customer could not be messaged: «не доставлено» (the coupon stays in the profile). */
+  /** False when the customer could not be messaged, or the queued message failed: «не доставлено» (the coupon stays in the profile). */
   delivered: z.boolean(),
   /** The order that holds it; null while none does. */
   usedOrderNumber: z.number().int().nullable(),
@@ -97,6 +98,6 @@ export const adminBirthdayCouponsPageSchema = z.object({
 });
 export type AdminBirthdayCouponsPageDto = z.infer<typeof adminBirthdayCouponsPageSchema>;
 
-export const deliveryReportsErrorSchema = z.object({
+export const adminBirthdayCouponsErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden']),
 });

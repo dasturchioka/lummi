@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { birthdayCoupons, eq, orders, reviews } from '@lummi/db';
+import {
+  birthdayCoupons,
+  customers as customersTable,
+  eq,
+  orders,
+  outbox,
+  reviews,
+} from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { seedCatalog } from '../src/catalog/seed';
@@ -71,6 +78,32 @@ async function request(
   }
 }
 
+/** A queued bot message and what came of it: `failed` is a late block (suppressed or failed). */
+async function queued(chatId: number, failed: boolean, orderId?: number) {
+  const [row] = await t.db
+    .insert(outbox)
+    .values({
+      chatId,
+      text: 'x',
+      options: orderId
+        ? {
+            reply_markup: {
+              inline_keyboard: [[{ text: '1', callback_data: `rev:r:${orderId}:1` }]],
+            },
+          }
+        : {},
+      queuedAt: new Date(),
+      ...(failed
+        ? {
+            failedAt: new Date(),
+            error: 'suppressed: customer refused write access or blocked the bot',
+          }
+        : { sentAt: new Date() }),
+    })
+    .returning();
+  return row!;
+}
+
 describe('review requests', () => {
   async function seed() {
     const a = await place(ali, '998901111111');
@@ -126,6 +159,34 @@ describe('review requests', () => {
     if (none.status !== 200) throw new Error('list');
     expect(none.body.items).toEqual([]);
     expect(none.body.total).toBe(0);
+  });
+
+  it('counts a late block (the queued message failed) as «не доставлено»', async () => {
+    const { a, c } = await seed();
+    await queued(ali.id, false, a.id); // delivered, and answered
+    await queued(sora.id, true, c.id); // sora blocked the bot after the request was queued
+    const res = await list({});
+    if (res.status !== 200) throw new Error('list');
+    expect(res.body.items.map((i) => [i.orderNumber, i.state])).toContainEqual([
+      c.number,
+      'not_delivered',
+    ]);
+    expect(res.body.counts).toEqual({ not_delivered: 2, sent: 0, answered: 1 });
+    const only = await list({ state: 'not_delivered' });
+    if (only.status !== 200) throw new Error('list');
+    expect(only.body.total).toBe(2);
+    const sent = await list({ state: 'sent' });
+    if (sent.status !== 200) throw new Error('list');
+    expect(sent.body.items).toEqual([]);
+  });
+
+  it('refuses a bad query with 400 and a signed-out call with 401', async () => {
+    for (const query of [{ state: 'x' }, { from: 'yesterday' }, { page: 0 }]) {
+      // the client throws on a status the contract does not list
+      await expect(list(query)).rejects.toThrow(/got: 400/);
+    }
+    const anon = await t.client.admin.reviews.requests({ query: {} as never });
+    expect(anon.status).toBe(401);
   });
 
   it('pages, and a manager may read it', async () => {
@@ -223,6 +284,38 @@ describe('birthday coupons', () => {
     expect(lostOnly.body.total).toBe(1);
     // the year list is the whole picture, not the filtered one
     expect(lostOnly.body.years).toEqual([2026, 2025]);
+  });
+
+  it('counts a late block (the queued message failed) as «не доставлено»', async () => {
+    const { used, old } = await seed();
+    const [c1] = await t.db.select().from(birthdayCoupons).where(eq(birthdayCoupons.id, used.id));
+    const [cust] = await t.db
+      .select()
+      .from(customersTable)
+      .where(eq(customersTable.id, c1!.customerId));
+    const failed = await queued(Number(cust!.telegramId), true);
+    await t.db
+      .update(birthdayCoupons)
+      .set({ outboxId: failed.id })
+      .where(eq(birthdayCoupons.id, used.id));
+    const res = await list({});
+    if (res.status !== 200) throw new Error('list');
+    expect(res.body.items.find((i) => i.id === used.id)?.delivered).toBe(false);
+    expect(res.body.notDelivered).toBe(2); // the lost one and this one
+    const only = await list({ delivery: 'not_delivered' });
+    if (only.status !== 200) throw new Error('list');
+    expect(only.body.total).toBe(2);
+    const ok = await list({ delivery: 'delivered' });
+    if (ok.status !== 200) throw new Error('list');
+    expect(ok.body.items.map((i) => i.id)).toEqual([old.id]);
+  });
+
+  it('refuses a bad query with 400 and a signed-out call with 401', async () => {
+    for (const query of [{ year: 'abc' }, { delivery: 'x' }, { used: 'maybe' }, { page: 0 }]) {
+      await expect(list(query)).rejects.toThrow(/got: 400/);
+    }
+    const anon = await t.client.admin.birthdayCoupons.list({ query: {} as never });
+    expect(anon.status).toBe(401);
   });
 
   it('is the owner’s: a manager gets 403', async () => {

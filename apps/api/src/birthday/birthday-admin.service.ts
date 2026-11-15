@@ -12,13 +12,16 @@ import {
   eq,
   isNotNull,
   isNull,
+  not,
   orders,
+  outbox,
   sql,
   type Db,
   type SQL,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
+import { customerName } from '../orders/order-read';
 import { DB, EDGES } from '../tokens';
 
 /**
@@ -36,10 +39,12 @@ export class BirthdayAdminService {
   async list(q: AdminBirthdayCouponsQuery): Promise<AdminBirthdayCouponsPageDto> {
     const query = adminBirthdayCouponsQuerySchema.parse(q);
     const b = birthdayCoupons;
+    // «не доставлено»: no message was queued, or the queued one failed or was suppressed (the
+    // customer blocked the bot after it); a pruned outbox row is no failure
+    const delivered = and(isNotNull(b.outboxId), isNull(outbox.failedAt))!;
     const where: SQL[] = [];
     if (query.year) where.push(eq(b.birthdayYear, query.year));
-    if (query.delivery)
-      where.push(query.delivery === 'delivered' ? isNotNull(b.outboxId) : isNull(b.outboxId));
+    if (query.delivery) where.push(query.delivery === 'delivered' ? delivered : not(delivered));
     if (query.used)
       where.push(query.used === 'used' ? isNotNull(b.usedByOrderId) : isNull(b.usedByOrderId));
     const filter = and(...where);
@@ -47,9 +52,10 @@ export class BirthdayAdminService {
     const [stats] = await this.db
       .select({
         total: sql<number>`count(*)`.mapWith(Number),
-        notDelivered: sql<number>`count(*) filter (where ${isNull(b.outboxId)})`.mapWith(Number),
+        notDelivered: sql<number>`count(*) filter (where ${not(delivered)})`.mapWith(Number),
       })
       .from(b)
+      .leftJoin(outbox, eq(outbox.id, b.outboxId))
       .where(filter);
     const years = await this.db
       .selectDistinct({ year: b.birthdayYear })
@@ -62,10 +68,12 @@ export class BirthdayAdminService {
         last: customers.lastName,
         phone: customers.phone,
         orderNumber: orders.number,
+        failed: outbox.failedAt,
       })
       .from(b)
       .innerJoin(customers, eq(customers.id, b.customerId))
       .leftJoin(orders, eq(orders.id, b.usedByOrderId))
+      .leftJoin(outbox, eq(outbox.id, b.outboxId))
       .where(filter)
       .orderBy(desc(b.issuedAt), desc(b.id))
       .limit(query.pageSize)
@@ -75,13 +83,13 @@ export class BirthdayAdminService {
     const items: AdminBirthdayCouponDto[] = rows.map(({ coupon: c, ...r }) => ({
       id: c.id,
       customerId: c.customerId,
-      customerName: [r.first, r.last].filter(Boolean).join(' '),
+      customerName: customerName({ firstName: r.first, lastName: r.last }),
       phone: r.phone,
       birthdayYear: c.birthdayYear,
       percent: c.percent,
       maxAmount: c.maxAmount,
       issuedAt: c.issuedAt.toISOString(),
-      delivered: c.outboxId !== null,
+      delivered: c.outboxId !== null && r.failed === null,
       usedOrderNumber: r.orderNumber,
       expiresAt: c.expiresAt.toISOString(),
       state: c.usedByOrderId !== null ? 'used' : c.expiresAt > now ? 'active' : 'expired',
