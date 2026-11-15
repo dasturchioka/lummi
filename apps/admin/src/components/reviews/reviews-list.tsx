@@ -14,6 +14,7 @@ import { formatTashkent, num } from '@/lib/setting-copy';
 import { fill } from '@/lib/utils';
 import { PublishButton } from './publish-button';
 import { ReviewBody } from './review-parts';
+import { ReviewsTabs } from './reviews-tabs';
 import { ReviewsFiltersForm, type ReviewFilters } from './reviews-filters';
 
 function ReviewCard({ review, t }: { review: AdminReviewDto; t: AdminMessages }) {
@@ -103,6 +104,7 @@ export function ReviewsList({
         }
       />
 
+      <ReviewsTabs t={t} current="reviews" />
       <ReviewsFiltersForm t={t} filters={filters} />
 
       {data.items.length === 0 ? (

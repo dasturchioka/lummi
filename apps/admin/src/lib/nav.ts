@@ -1,6 +1,7 @@
 import type { StaffDto } from '@lummi/contracts';
 import {
   BanknoteArrowDown,
+  Cake,
   ChartColumn,
   CircleUserRound,
   CreditCard,
@@ -73,6 +74,7 @@ export const NAV: NavGroup[] = [
       { key: 'promoCodes', icon: TicketPercent, href: '/promo-codes', roles: OWNER },
       { key: 'campaignLinks', icon: Link2, href: '/campaign-links', roles: OWNER },
       { key: 'broadcasts', icon: Megaphone, href: '/broadcasts', roles: OWNER },
+      { key: 'birthdayCoupons', icon: Cake, href: '/birthday-coupons', roles: OWNER },
     ],
   },
   {

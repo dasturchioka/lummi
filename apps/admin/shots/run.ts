@@ -21,6 +21,7 @@ import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
 import { seedShotOrders } from './orders-data';
+import { seedShotRequests } from './delivery-data';
 import { seedShotReviews } from './reviews-data';
 import { seedShotCampaigns, seedShotOpens } from './campaign-data';
 import { seedShotPromo } from './promo-data';
@@ -300,6 +301,7 @@ async function main() {
     repoRoot,
     resolve(repoRoot, 'apps/api', process.env.FILES_DIR ?? 'media'),
   );
+  await seedShotRequests(db);
   let count = 0;
   for (const lang of LANGS) {
     // one browser per language: `--lang` is what makes date fields show the local format
