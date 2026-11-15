@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   and,
   asc,
@@ -7,9 +6,7 @@ import {
   desc,
   eq,
   isNull,
-  lt,
   manualReviewPosts,
-  or,
   orderEvents,
   orders,
   receiptChecks,
@@ -25,27 +22,17 @@ import { fill } from '@lummi/i18n';
 import { dictionaries } from '@lummi/i18n/all';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Edges } from '../edges';
-import { MessageGoneError } from '../edges';
 import { OrderStatusService, type MadeMove } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { creditsFor } from '../payment/rules';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
-import type { CardEvent, CardView } from './card-view';
+import type { CardEvent } from './card-view';
 import { renderManualReview, type ManualReviewData } from './manual-review-view';
+import { PostSync } from './post-sync';
 
 /** Staff read the group in Russian, like the order card and the owner alerts. */
 const GROUP_LANGUAGE = 'ru';
-const POST_FORMAT = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } } as const;
-
-/** Another delivery is bringing the same post up to date; this one is retried after it. */
-export class PostBusyError extends Error {
-  constructor(receiptId: number) {
-    super(`receipt ${receiptId}: its manual-review post is being updated by another delivery`);
-    this.name = 'PostBusyError';
-  }
-}
-
 /**
  * Manual review in the orders group (#51; TZ §4: «При ручной проверке в группу заказов приходят
  * чек, найденные поступления и причина», TZ §6: «Оплата подтверждена» / «Чек не принят»).
@@ -63,6 +50,8 @@ export class PostBusyError extends Error {
 export class ManualReviewPosts {
   private readonly log = new Logger('ManualReviewPosts');
 
+  private readonly posts: PostSync<ManualReviewPostRow>;
+
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(EDGES) private readonly edges: Edges,
@@ -70,8 +59,36 @@ export class ManualReviewPosts {
     @Inject(SettingsService) private readonly settings: SettingsService,
     @Inject(OrderStatusService) status: OrderStatusService,
   ) {
+    this.posts = new PostSync<ManualReviewPostRow>(db, edges, outbox, settings, {
+      table: manualReviewPosts,
+      key: manualReviewPosts.receiptId,
+      kind: 'manual_review_post',
+      name: 'manual-review post',
+      render: async (post) => renderManualReview(await this.data(post), GROUP_LANGUAGE),
+      receipt: (post) => this.receipt(post),
+    });
     status.afterMove((tx, move) => this.onMove(tx, move));
     outbox.handle('manual_review_post', (task) => this.sync(task.ref));
+  }
+
+  /** The delivery of a `manual_review_post` row: the post as it is now (ADR 0034, `PostSync`). */
+  sync(receiptId: number): Promise<void> {
+    return this.posts.sync(receiptId);
+  }
+
+  /** The held receipt, captioned «Чек к заказу № N». */
+  private async receipt(post: ManualReviewPostRow) {
+    const [row] = await this.db
+      .select({ key: receipts.normalizedKey, number: orders.number })
+      .from(receipts)
+      .innerJoin(orders, eq(orders.id, receipts.orderId))
+      .where(eq(receipts.id, post.receiptId));
+    return {
+      bytes: row ? await this.edges.files.get(row.key) : null,
+      caption: fill(dictionaries[GROUP_LANGUAGE].bot.group.receiptCaption, {
+        number: String(row?.number ?? ''),
+      }),
+    };
   }
 
   /**
@@ -149,195 +166,6 @@ export class ManualReviewPosts {
       .update(manualReviewPosts)
       .set({ chatId: to })
       .where(eq(manualReviewPosts.chatId, from));
-  }
-
-  /**
-   * The delivery of a `manual_review_post` row, under the post's lease, as `OrderCards.sync`
-   * (ADR 0034): it goes round while a change arrived during the call, a delivery that finds the
-   * lease taken is retried by the queue, and every write after a Telegram call is a
-   * compare-and-set on the claim.
-   */
-  async sync(receiptId: number): Promise<void> {
-    const claim = this.edges.clock.now();
-    const window = await this.settings.get('outbox.requeueAfterSeconds');
-    const [claimed] = await this.db
-      .update(manualReviewPosts)
-      .set({ syncingAt: claim })
-      .where(
-        and(
-          eq(manualReviewPosts.receiptId, receiptId),
-          or(
-            isNull(manualReviewPosts.syncingAt),
-            lt(manualReviewPosts.syncingAt, new Date(claim.getTime() - window * 1000)),
-          ),
-        ),
-      )
-      .returning();
-    if (!claimed) {
-      if (!(await this.find(this.db, receiptId))) return;
-      throw new PostBusyError(receiptId);
-    }
-    const mine = and(
-      eq(manualReviewPosts.receiptId, receiptId),
-      eq(manualReviewPosts.syncingAt, claim),
-    );
-    try {
-      let post: ManualReviewPostRow = claimed;
-      for (;;) {
-        if ((await this.showOnce(post, claim)) === 'lost') return;
-        const [released] = await this.db
-          .update(manualReviewPosts)
-          .set({ syncingAt: null })
-          .where(and(mine, eq(manualReviewPosts.version, post.version)))
-          .returning();
-        if (released) return;
-        const [current] = await this.db.select().from(manualReviewPosts).where(mine);
-        if (!current) return; // the lease went to another delivery, which shows what is newer
-        post = current;
-      }
-    } catch (e) {
-      await this.db.update(manualReviewPosts).set({ syncingAt: null }).where(mine);
-      throw e;
-    }
-  }
-
-  /** One pass: post or edit as it renders now, then the receipt once; `lost` without the lease. */
-  private async showOnce(post: ManualReviewPostRow, claim: Date): Promise<'shown' | 'lost'> {
-    const view = renderManualReview(await this.data(post), GROUP_LANGUAGE);
-    const hash = hashOf(view);
-    const own = and(
-      eq(manualReviewPosts.receiptId, post.receiptId),
-      eq(manualReviewPosts.syncingAt, claim),
-    );
-    let { messageId, chatId, threadId, receiptPostedAt } = post;
-    if (messageId !== null && hash !== post.shownHash) {
-      try {
-        await this.edges.telegram.edit({
-          chatId,
-          messageId,
-          text: view.text,
-          options: { ...POST_FORMAT, reply_markup: { inline_keyboard: view.keyboard ?? [] } },
-        });
-      } catch (e) {
-        if (!(e instanceof MessageGoneError)) throw e;
-        this.log.warn(
-          `manual-review post ${post.receiptId}: the message is gone, posting it again`,
-        );
-        chatId = (await this.settings.get('bot.groupChatId')) ?? chatId;
-        threadId = (await this.settings.get('bot.topics')).orders;
-        messageId = null;
-        receiptPostedAt = null;
-      }
-      if (messageId !== null) {
-        const [recorded] = await this.db
-          .update(manualReviewPosts)
-          .set({ shownHash: hash })
-          .where(
-            and(
-              own,
-              post.shownHash === null
-                ? isNull(manualReviewPosts.shownHash)
-                : eq(manualReviewPosts.shownHash, post.shownHash),
-            ),
-          )
-          .returning({ id: manualReviewPosts.receiptId });
-        if (!recorded && !(await this.holds(post.receiptId, claim)))
-          return this.lostAfterCall(post.receiptId, claim);
-      }
-    }
-    if (messageId === null) {
-      const sent = await this.edges.telegram.send({
-        chatId,
-        threadId,
-        text: view.text,
-        options: {
-          ...POST_FORMAT,
-          ...(view.keyboard ? { reply_markup: { inline_keyboard: view.keyboard } } : {}),
-        },
-      });
-      messageId = sent.messageId;
-      const [recorded] = await this.db
-        .update(manualReviewPosts)
-        .set({ chatId, threadId, messageId, receiptPostedAt, shownHash: hash })
-        .where(own)
-        .returning({ id: manualReviewPosts.receiptId });
-      if (!recorded) {
-        this.log.warn(
-          `manual-review post ${post.receiptId}: posted after its lease expired; a copy may stay`,
-        );
-        return 'lost';
-      }
-    }
-    if (receiptPostedAt === null) {
-      if (!(await this.postReceipt({ ...post, chatId, threadId }, messageId, claim))) return 'lost';
-    }
-    return 'shown';
-  }
-
-  private async holds(receiptId: number, claim: Date): Promise<boolean> {
-    const [row] = await this.db
-      .select({ id: manualReviewPosts.receiptId })
-      .from(manualReviewPosts)
-      .where(
-        and(eq(manualReviewPosts.receiptId, receiptId), eq(manualReviewPosts.syncingAt, claim)),
-      );
-    return row !== undefined;
-  }
-
-  /** An edit that landed after the lease expired: mark the post unshown and draw it again. */
-  private async lostAfterCall(receiptId: number, claim: Date): Promise<'lost'> {
-    await this.outbox.withTx(async (tx) => {
-      const [post] = await tx
-        .update(manualReviewPosts)
-        .set({
-          version: sql`${manualReviewPosts.version} + 1`,
-          shownHash: `unshown:${claim.toISOString()}`,
-        })
-        .where(eq(manualReviewPosts.receiptId, receiptId))
-        .returning({ chatId: manualReviewPosts.chatId });
-      if (post) await this.outbox.enqueueTask(tx, 'manual_review_post', receiptId, post.chatId);
-    });
-    return 'lost';
-  }
-
-  /** The receipt's normalised image from private storage (ADR 0020), as a reply to the post. */
-  private async postReceipt(
-    post: ManualReviewPostRow,
-    postMessageId: number,
-    claim: Date,
-  ): Promise<boolean> {
-    const [row] = await this.db
-      .select({ key: receipts.normalizedKey, number: orders.number })
-      .from(receipts)
-      .innerJoin(orders, eq(orders.id, receipts.orderId))
-      .where(eq(receipts.id, post.receiptId));
-    const bytes = row ? await this.edges.files.get(row.key) : null;
-    if (row && bytes) {
-      await this.edges.telegram.send({
-        chatId: post.chatId,
-        threadId: post.threadId,
-        text: fill(dictionaries[GROUP_LANGUAGE].bot.group.receiptCaption, {
-          number: String(row.number),
-        }),
-        photo: { bytes },
-        options: {
-          reply_parameters: { message_id: postMessageId, allow_sending_without_reply: true },
-        },
-      });
-    } else {
-      this.log.warn(`manual-review post ${post.receiptId}: the receipt is gone from storage`);
-    }
-    const [recorded] = await this.db
-      .update(manualReviewPosts)
-      .set({ receiptPostedAt: this.edges.clock.now() })
-      .where(
-        and(
-          eq(manualReviewPosts.receiptId, post.receiptId),
-          eq(manualReviewPosts.syncingAt, claim),
-        ),
-      )
-      .returning({ id: manualReviewPosts.receiptId });
-    return recorded !== undefined;
   }
 
   /** What the post shows, read now. */
@@ -430,12 +258,4 @@ export class ManualReviewPosts {
     const next = sent < 0 ? undefined : events[sent + 1];
     return next ? { ...next, payload: next.payload as Record<string, unknown> } : null;
   }
-}
-
-function hashOf(view: CardView): string {
-  return createHash('sha256')
-    .update(view.text)
-    .update('\0')
-    .update(JSON.stringify(view.keyboard))
-    .digest('hex');
 }
