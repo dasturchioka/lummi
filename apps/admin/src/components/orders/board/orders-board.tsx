@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { listHref } from '@/lib/list-page';
+import { useVisiblePoll } from '@/lib/use-visible-poll';
 import { cn, fill } from '@/lib/utils';
 import {
   CancelDialog,
@@ -56,12 +57,10 @@ import { BoardCard, CardBody, type Target } from './board-card';
 import { BoardColumn, BoardRail, type Carry } from './board-column';
 import { arrivals, moveKind, withMoves, type Move, type MoveKind } from './board-state';
 
-/** The board refreshes this often while its tab is visible (feedback F12: «real time»). */
-export const BOARD_REFRESH_MS = 10_000;
-/** A focus right after a refresh does not fetch again. */
-const FOCUS_GAP_MS = 2_000;
 /** The board never gets shorter than this, however little room the viewport leaves. */
-const MIN_HEIGHT = 440;
+const MIN_HEIGHT = 360;
+/** Phones: the board fills the screen under the panel's 56 px top bar once scrolled to. */
+const PHONE_TOP = 56 + 12;
 /** How long a refusal stays on screen. */
 const TOAST_MS = 6_000;
 
@@ -161,7 +160,12 @@ const LAND: DropAnimation = {
   sideEffects: null,
 };
 
-/** Fills what the viewport leaves below the board's top (measured), never under `MIN_HEIGHT`. */
+/**
+ * The board's height. From 640 px it fills what the viewport leaves below the board's top
+ * (measured), so the whole board is in view without scrolling the page; on phones, whose header
+ * and filters take half the screen, it fills the screen under the top bar once scrolled to.
+ * Never under `MIN_HEIGHT`.
+ */
 function useFillHeight() {
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number | null>(null);
@@ -169,8 +173,9 @@ function useFillHeight() {
     const el = ref.current;
     if (!el) return;
     const measure = () => {
-      const top = el.getBoundingClientRect().top + window.scrollY;
-      setHeight(Math.max(MIN_HEIGHT, Math.floor(window.innerHeight - top - 16)));
+      const phone = window.matchMedia('(max-width: 639px)').matches;
+      const top = phone ? PHONE_TOP : el.getBoundingClientRect().top + window.scrollY + 16;
+      setHeight(Math.max(MIN_HEIGHT, Math.floor(window.innerHeight - top)));
     };
     measure();
     const watch = new ResizeObserver(measure);
@@ -186,8 +191,9 @@ function useFillHeight() {
 
 /**
  * The orders board (#52): the statuses as columns, cards are orders. One call
- * (`GET /admin/orders/board`), again every 10 s while the tab is visible and on focus, but never
- * while a card is carried or a move waits: a fresh board is applied once it is free. A move shows
+ * (`GET /admin/orders/board`), again every `LIVE_POLL_MS` while the tab is visible and on focus
+ * (feedback F12, «real time»), but never applied while a card is carried or a move waits: a fresh
+ * board follows once it is free. New filters remount it (the page keys it by them). A move shows
  * at once; the server decides, and a refusal puts the card back with one sentence.
  */
 export function OrdersBoard({
@@ -240,91 +246,52 @@ export function OrdersBoard({
   const epoch = useRef(0);
   const busy = useRef(false);
   const stale = useRef(false);
-  const inFlight = useRef(false);
-  const lastFetch = useRef(0);
-  const gone = useRef<AbortController | null>(null);
   const columnEls = useRef(new Map<OrderStatus, HTMLElement>());
-  const scroller = useRef<HTMLDivElement>(null);
   busy.current = carried !== null || dialog !== null || moves.some((m) => m.state !== 'done');
 
-  const fetchBoard = useCallback(async () => {
-    const view = gone.current;
-    if (!view || view.signal.aborted || inFlight.current) return;
-    if (busy.current) {
-      stale.current = true;
-      return;
-    }
-    inFlight.current = true;
-    lastFetch.current = Date.now();
-    const started = epoch.current;
-    try {
-      const res = await browserApi.orders.board({ query, fetchOptions: { signal: view.signal } });
-      if (view.signal.aborted) return;
-      if (res.status === 401) {
-        router.replace('/login');
-        return;
-      }
-      if (res.status !== 200) throw new Error(`board ${res.status}`);
-      // a move or a pick-up happened meanwhile: this board is older than what is shown
-      if (started !== epoch.current || busy.current) {
+  // live (#53's shared poll): the first board at once, then every 10 s while visible and on focus
+  const { refresh } = useVisiblePoll(
+    async (signal) => {
+      if (busy.current) {
         stale.current = true;
         return;
       }
-      const keep = movesRef.current.filter((m) => m.state !== 'done');
-      const before = boardRef.current ? withMoves(boardRef.current, movesRef.current) : null;
-      setArrived(arrivals(before, withMoves(res.body, keep)));
-      receivedAt.current = Date.now();
-      setBoard(res.body);
-      setMoves(keep);
-      setFailed(false);
-    } catch {
-      if (view.signal.aborted) return;
-      if (!boardRef.current) setFailed(true);
-    } finally {
-      inFlight.current = false;
-      if (!view.signal.aborted) setRetrying(false);
-    }
-  }, [query, router]);
-
-  // the first board, then every 10 s while visible and on focus (as the Home does)
-  useEffect(() => {
-    const view = new AbortController();
-    gone.current = view;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const tick = () => {
-      clearInterval(timer);
-      timer = setInterval(() => void fetchBoard(), BOARD_REFRESH_MS);
-    };
-    const refetch = () => {
-      if (Date.now() - lastFetch.current <= FOCUS_GAP_MS) return;
-      void fetchBoard();
-      tick();
-    };
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return clearInterval(timer);
-      refetch();
-      tick();
-    };
-    void fetchBoard();
-    if (document.visibilityState === 'visible') tick();
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', refetch);
-    return () => {
-      view.abort();
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', refetch);
-    };
-  }, [fetchBoard]);
+      const started = epoch.current;
+      try {
+        const res = await browserApi.orders.board({ query, fetchOptions: { signal } });
+        if (signal.aborted) return;
+        if (res.status === 401) return router.replace('/login');
+        if (res.status !== 200) throw new Error(`board ${res.status}`);
+        // a move or a pick-up happened meanwhile: this board is older than what is shown
+        if (started !== epoch.current || busy.current) {
+          stale.current = true;
+          return;
+        }
+        const keep = movesRef.current.filter((m) => m.state !== 'done');
+        const before = boardRef.current ? withMoves(boardRef.current, movesRef.current) : null;
+        setArrived(arrivals(before, withMoves(res.body, keep)));
+        receivedAt.current = Date.now();
+        setBoard(res.body);
+        setMoves(keep);
+        setFailed(false);
+      } catch {
+        if (signal.aborted) return;
+        if (!boardRef.current) setFailed(true);
+      } finally {
+        if (!signal.aborted) setRetrying(false);
+      }
+    },
+    { immediate: true },
+  );
 
   // a refresh skipped while busy comes as soon as the board is free again
   const free = carried === null && dialog === null && !moves.some((m) => m.state !== 'done');
   useEffect(() => {
     if (free && stale.current) {
       stale.current = false;
-      void fetchBoard();
+      refresh();
     }
-  }, [free, fetchBoard]);
+  }, [free, refresh]);
 
   // a refusal reads for a while, then goes
   useEffect(() => {
@@ -549,18 +516,14 @@ export function OrdersBoard({
       return { status, asks: moveKind(row.action) !== 'step' };
     });
 
+  /** The funnel line's press: its column to the board's left edge. */
   const jump = (s: OrderStatus) => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const go = () =>
-      columnEls.current.get(s)?.scrollIntoView({
-        behavior: reduce ? 'auto' : 'smooth',
-        inline: 'start',
-        block: 'nearest',
-      });
-    if ((CLOSED as readonly OrderStatus[]).includes(s) && !expanded.includes(s)) {
-      setExpanded((e) => [...e, s]);
-      requestAnimationFrame(go);
-    } else go();
+    columnEls.current.get(s)?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      inline: 'start',
+      block: 'nearest',
+    });
   };
   const toggle = (s: OrderStatus) => {
     if (expanded.includes(s)) setExpanded((e) => e.filter((x) => x !== s));
@@ -638,7 +601,7 @@ export function OrdersBoard({
             loading={retrying}
             onClick={() => {
               setRetrying(true);
-              void fetchBoard();
+              refresh();
             }}
           >
             {t.actions.retry}
@@ -655,27 +618,24 @@ export function OrdersBoard({
       data-board
       aria-busy={board ? undefined : true}
     >
-      <div className="mb-2.5 flex min-h-8 items-center justify-between gap-4">
+      <div className="mb-2.5">
         <nav
           aria-label={b.funnel}
-          className="-mx-1 min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]"
+          className="-mx-1 overflow-x-auto [scrollbar-width:none] max-sm:-mr-4 max-sm:pr-4"
         >
-          <ol className="flex items-center whitespace-nowrap">
-            {BOARD_STATUSES.map((s, i) => {
+          {/* one line that scrolls on phones; it wraps where the screen has room for most of it */}
+          <ol className="flex items-center whitespace-nowrap sm:flex-wrap">
+            {OPEN.map((s, i) => {
               const c = column(s);
-              const closedStart = s === 'cancelled';
               return (
                 <li key={s} className="flex items-center">
-                  {i > 0 &&
-                    (closedStart ? (
-                      <span aria-hidden className="mx-2 h-4 w-px bg-border-strong" />
-                    ) : (
-                      <ChevronRight
-                        aria-hidden
-                        className="size-3.5 shrink-0 text-faint"
-                        strokeWidth={1.5}
-                      />
-                    ))}
+                  {i > 0 && (
+                    <ChevronRight
+                      aria-hidden
+                      className="size-3.5 shrink-0 text-faint"
+                      strokeWidth={1.5}
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => jump(s)}
@@ -694,11 +654,6 @@ export function OrdersBoard({
             })}
           </ol>
         </nav>
-        {updated && (
-          <p className="shrink-0 text-small text-muted-foreground tabular-nums max-sm:hidden">
-            {fill(b.updated, { time: `${pad(updated.hour)}:${pad(updated.minute)}` })}
-          </p>
-        )}
       </div>
       {filtered && everything && (
         <p className="mb-2.5 text-[13.5px] font-semibold" role="status">
@@ -724,7 +679,6 @@ export function OrdersBoard({
         }}
       >
         <div
-          ref={scroller}
           className="board-scroller -mx-4 flex min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
           data-carrying={carried ? '' : undefined}
         >
@@ -766,16 +720,23 @@ export function OrdersBoard({
       </DndContext>
 
       {board && (
-        <p className="mt-2 text-small text-muted-foreground">
-          {fill(plural(language, board.recentDays, b.recent), { n: String(board.recentDays) })}
-          {' · '}
-          <Link
-            href={listHref('/orders', { view: 'list', ...filters })}
-            className="font-medium text-foreground underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
-          >
-            {b.allInList}
-          </Link>
-        </p>
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-small text-muted-foreground">
+          <p>
+            {fill(plural(language, board.recentDays, b.recent), { n: String(board.recentDays) })}
+            {' · '}
+            <Link
+              href={listHref('/orders', { view: 'list', ...filters })}
+              className="font-medium text-foreground underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current"
+            >
+              {b.allInList}
+            </Link>
+          </p>
+          {updated && (
+            <p className="tabular-nums" data-updated>
+              {fill(b.updated, { time: `${pad(updated.hour)}:${pad(updated.minute)}` })}
+            </p>
+          )}
+        </div>
       )}
 
       {/* one polite region for what moved; refusals also show in the toast below */}
@@ -912,7 +873,7 @@ export function OrdersBoard({
 /** A column before the first board: its head is known, its cards breathe in Milk Field. */
 function SkeletonColumn({ name }: { name: string }) {
   return (
-    <section className="flex h-full w-[248px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]">
+    <section className="flex h-full w-[256px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]">
       <header className="px-3 pt-2.5 pb-2">
         <div className="flex min-h-7 items-center">
           <h2 className="truncate text-[13.5px] leading-snug font-semibold text-muted-foreground">

@@ -293,6 +293,12 @@ main:has(> [data-layout='wide']) {
   scrollbar-width: thin;
   scroll-padding-inline: 16px;
 }
+/* from 640 px the closed rails (2 × 48 px, 8 px apart, 8 px of Milk) cover the scroller's end */
+@media (min-width: 640px) {
+  .board-scroller {
+    scroll-padding-inline: 0 112px;
+  }
+}
 @media (max-width: 639px) {
   .board-scroller {
     scroll-snap-type: x mandatory;

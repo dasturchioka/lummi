@@ -1805,8 +1805,17 @@ export const screens: Screen[] = [
   { id: 'reviews-order', path: '/reviews?order=9005', as: 'manager', act: imagesLoaded },
   { id: 'reviews-empty', path: '/reviews?rating=5&from=2026-01-01&to=2026-01-02', as: 'manager' },
   // ---- Orders board (#52): the funnel over a normal day, carrying a card, the move menu, the
-  // tracking dialog after a drop on «Передан в BTS», a closed column opened, empty, the worst case
-  { id: 'orders-board', path: '/orders', as: 'manager', ...boardOn, act: boardLoaded },
+  // tracking dialog after a drop on «Передан в BTS», a closed column opened, empty, the worst case.
+  // Viewport captures: the board fills the screen, and a full-page capture paints a board scrolled
+  // sideways out of place
+  {
+    id: 'orders-board',
+    path: '/orders',
+    as: 'manager',
+    ...boardOn,
+    fullPage: false,
+    act: boardLoaded,
+  },
   {
     id: 'orders-board-drag',
     path: '/orders',
@@ -1849,6 +1858,7 @@ export const screens: Screen[] = [
     path: '/orders',
     as: 'manager',
     ...boardOn,
+    fullPage: false,
     act: async ({ page }) => {
       await boardLoaded({ page } as ScreenContext);
       await page.locator('[data-rail="cancelled"]').click();
@@ -1856,13 +1866,14 @@ export const screens: Screen[] = [
       await page.waitForTimeout(200);
     },
   },
-  { id: 'orders-board-empty', path: '/orders', as: 'manager', act: emptyBoard },
+  { id: 'orders-board-empty', path: '/orders', as: 'manager', fullPage: false, act: emptyBoard },
   {
     id: 'orders-board-worst',
     path: '/orders',
     as: 'owner',
     setup: ({ db }) => boardCrowd(db),
     teardown: ({ db }) => boardCrowdBack(db),
+    fullPage: false,
     act: async ({ page }) => {
       await boardLoaded({ page } as ScreenContext);
       await boardCard(page, 9301);
@@ -1873,6 +1884,7 @@ export const screens: Screen[] = [
     path: '/orders?q=93+555',
     as: 'manager',
     ...boardOn,
+    fullPage: false,
     act: boardLoaded,
   },
   // ---- Orders panel (#33): the list (behind «Список» since #52), every order state, the dialogs

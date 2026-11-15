@@ -115,7 +115,7 @@ export function CardBody({
           ),
         ]}
       />
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <PaymentMarker card={card} t={t} />
         <span className="ml-auto text-[13.5px] font-semibold whitespace-nowrap tabular-nums">
           {boardMoney(card.total, language)}
@@ -232,7 +232,7 @@ export function BoardCard({
       // a long press is a pick-up here, never the browser's link menu
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
-        'relative touch-manipulation rounded-card bg-card px-3 pt-2 pb-3 select-none [-webkit-touch-callout:none]',
+        'relative touch-manipulation rounded-card bg-card px-3 pt-2 pb-3 select-none [-webkit-touch-callout:none] hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
         'transition-[opacity,box-shadow] duration-150 ease-out',
         // the place it was picked up from: an empty slot of the same size
         isDragging &&

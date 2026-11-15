@@ -95,7 +95,7 @@ export function BoardColumn({
       }}
       aria-labelledby={`board-${status}`}
       className={cn(
-        'flex h-full w-[248px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]',
+        'flex h-full w-[256px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]',
         'transition-[opacity,box-shadow] duration-150 ease-out',
         carry?.role === 'closed' && 'opacity-40',
         carry?.role === 'target' && carry.over && 'shadow-[inset_0_0_0_1.5px_var(--graphite)]',

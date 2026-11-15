@@ -100,7 +100,7 @@ export function OrdersFiltersForm({
           </Button>
         </div>
         {!board && (
-          <Field id="f-status" label={f.status} className={cn(hidden)}>
+          <Field id="f-status" label={f.status} className={cn('min-w-0', hidden)}>
             <Select name="status" defaultValue={filters.status ?? ''}>
               <option value="">{f.all}</option>
               {ORDER_STATUSES.map((s) => (
@@ -111,7 +111,7 @@ export function OrdersFiltersForm({
             </Select>
           </Field>
         )}
-        <Field id="f-payment" label={f.payment} className={cn(hidden)}>
+        <Field id="f-payment" label={f.payment} className={cn('min-w-0', hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
             {ORDER_PAYMENT_FILTERS.map((p) => (
@@ -121,10 +121,10 @@ export function OrdersFiltersForm({
             ))}
           </Select>
         </Field>
-        <Field id="f-from" label={f.from} className={cn(hidden)}>
+        <Field id="f-from" label={f.from} className={cn('min-w-0', hidden)}>
           <Input type="date" name="from" defaultValue={filters.from ?? ''} />
         </Field>
-        <Field id="f-to" label={f.to} className={cn(hidden)}>
+        <Field id="f-to" label={f.to} className={cn('min-w-0', hidden)}>
           <Input type="date" name="to" defaultValue={filters.to ?? ''} />
         </Field>
         <div

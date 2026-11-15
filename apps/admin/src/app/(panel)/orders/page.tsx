@@ -53,7 +53,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div data-layout="wide">
         {header(filters)}
         <OrdersFiltersForm t={t} language={language} filters={filters} view="board" />
-        <OrdersBoard t={t} language={language} filters={filters} />
+        <OrdersBoard key={JSON.stringify(filters)} t={t} language={language} filters={filters} />
       </div>
     );
   }
