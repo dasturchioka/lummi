@@ -57,5 +57,10 @@ export const creditText = (o: SampleOptions): string => operation('➕', 'HUMO P
 /** A ➖ debit: ignored by the API, not forwarded. */
 export const debitText = (o: SampleOptions): string => operation('➖', 'CLICK P2P HUMO2UZCAR', o);
 
-/** Not an operation (no ➕ or ➖ line): stored and flagged by the API, which alerts the owner. */
-export const OTHER_TEXT = 'HUMO: test message without an operation line (LUMMI staging)';
+/**
+ * No ➕ or ➖ line, but a card mask, so it looks like an operation in a changed format: stored and
+ * flagged by the API, which alerts the owner. (A message with no card mask and nothing
+ * amount-shaped is the Humo bot's own talk: kept, never alerted, #51.)
+ */
+export const OTHER_TEXT =
+  'HUMO: test message with a card but no operation line (LUMMI staging)\n💳 HUMOCARD *0000';

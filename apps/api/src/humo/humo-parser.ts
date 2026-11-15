@@ -20,14 +20,25 @@ export interface ParsedCredit {
 }
 
 /**
- * Why a Humo message is not a credit we can record: it reports no card operation (no ➕/➖ line),
- * or a required field of a ➕ does not fit the template.
+ * Why a Humo message is not a credit we can record: it looks like an operation (a card mask or
+ * something amount-shaped) but has no ➕/➖ line, or a required field of a ➕ does not fit the
+ * template.
  */
 export type HumoParseError = 'not_an_operation' | 'amount' | 'time' | 'card';
 
 export type HumoParse =
   | { kind: 'credit'; credit: ParsedCredit }
   | { kind: 'debit' }
+  /**
+   * The Humo bot's own talk (menus, settings answers, promos, codes): no ➕/➖ line, no card mask
+   * and nothing amount-shaped (#51). Kept, never alerted.
+   */
+  | { kind: 'service' }
+  /**
+   * The bot's word about the card itself (blocked, unblocked, a limit), with no ➕/➖ line: no
+   * money to record, but the owner hears of it, since a blocked card takes no transfers (#51).
+   */
+  | { kind: 'card_notice' }
   | { kind: 'unparseable'; reason: HumoParseError };
 
 /**
@@ -40,6 +51,28 @@ const AMOUNT = /^(\d{1,3}(?:([. \u00A0\u202F])\d{3}(?:\2\d{3})*)?|\d+)(?:,(\d{2}
 /** «20:54 22.06.2025»: no seconds, four-digit year. The clock emoji in front is not relied on. */
 const TIME = /(?<![\d:])(\d{2}):(\d{2}) (\d{2})\.(\d{2})\.(\d{4})(?![\d.:])/;
 
+/**
+ * What an operation notification carries whatever its layout (#51): a ➕/➖ anywhere, a card mask
+ * («*1234», «••1234», «XX1234») or something amount-shaped: digits grouped by `.`, `,` or a space
+ * («60.000», «1 000 000»), with tiyin («5,00», «60000.00»), or next to a currency word (UZS,
+ * so'm, сум, before or after, any case, any suffix: «60000 so'mga», «UZS 60000»). A message with
+ * any of them but no line starting with ➕/➖ may be a changed format, so it is refused and the
+ * owner alerted; only a message with none is the bot's own talk. Money is never dropped on a
+ * guess: a false match costs one alert.
+ */
+const OPERATION_LIKE = [
+  /[➕➖]/u,
+  /\*\s?\d{4}(?!\d)/u,
+  /[•·xX]{2,}\s?\d{4}/u,
+  /(?<!\d)\d{1,3}(?:[., \u00A0\u202F]\d{3})+(?!\d)/u,
+  /(?<!\d)\d+,\d{2}(?!\d)/u,
+  /(?<![\d.])\d+\.\d{2}(?![\d.])/u,
+  /\d[\s\u00A0\u202F]*(?:uzs|so['ʻʼ’‘`]?m|sum|сум|сўм)/iu,
+  /(?:uzs|so['ʻʼ’‘`]?m|сум|сўм)[\s\u00A0\u202F]*\d/iu,
+];
+/** Words of a notice about the card itself: blocked or unblocked, a limit. */
+const CARD_NOTICE = /blok|блок|limit|лимит/iu;
+
 export function parseHumoMessage(text: string): HumoParse {
   // Emoji may carry a variation selector (U+FE0F); it changes nothing.
   const lines = text
@@ -49,7 +82,11 @@ export function parseHumoMessage(text: string): HumoParse {
 
   // Exactly one signed line, ➕ (credit) or ➖ (debit).
   const signed = lines.filter((l) => l.startsWith('➕') || l.startsWith('➖'));
-  if (signed.length === 0) return unparseable('not_an_operation');
+  if (signed.length === 0) {
+    if (CARD_NOTICE.test(text)) return { kind: 'card_notice' };
+    const looksLikeOperation = lines.some((l) => OPERATION_LIKE.some((re) => re.test(l)));
+    return looksLikeOperation ? unparseable('not_an_operation') : { kind: 'service' };
+  }
   if (signed.length > 1) return unparseable('amount');
   const [amountLine] = signed as [string];
   // Money out of the card is none of our business: not parsed further, not stored.

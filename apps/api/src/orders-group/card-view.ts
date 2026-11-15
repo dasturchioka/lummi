@@ -220,16 +220,7 @@ function cardText(
     out.push(g.typedNote);
   }
   out.push(`👤 ${g.recipient}: ${escapeHtml(o.recipientName)}, ${formatPhone(o.recipientPhone)}`);
-  const c = d.customer;
-  const fullName = escapeHtml(c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName);
-  out.push(
-    `🙋 ${g.customer}: ` +
-      [
-        `<a href="tg://user?id=${c.telegramId}">${fullName}</a>`,
-        ...(c.username ? [`@${escapeHtml(c.username)}`] : []),
-        ...(c.phone ? [formatPhone(c.phone)] : []),
-      ].join(' · '),
-  );
+  out.push(`🙋 ${g.customer}: ${customerLine(d.customer)}`);
   if (o.comment) out.push(`💬 ${g.comment}: ${escapeHtml(clip(o.comment, squeeze.text))}`);
   if (o.isGift) {
     out.push(`🎁 ${g.gift}`);
@@ -272,9 +263,7 @@ const unitMl = (language: Language) => (language === 'uz' ? 'ml' : 'мл');
  * date too («9 ноября, 15:00»), so a card read days later still says when.
  */
 function historyLines(d: CardData, language: Language): string[] {
-  const dict = dictionaries[language];
-  const g = dict.bot.group;
-  const admin = dict.admin.orders;
+  const g = dictionaries[language].bot.group;
   let lastDay: string | null = null;
   const when = (at: Date) => {
     const day = formatDayMonth(at, language);
@@ -283,17 +272,30 @@ function historyLines(d: CardData, language: Language): string[] {
     return text;
   };
   const lines = [`🛒 ${g.placed}, ${when(d.order.createdAt)}`];
-  for (const e of d.events) {
-    const who =
-      e.actorType === 'staff'
-        ? escapeHtml(e.staffName ?? admin.detail.actor.removed)
-        : admin.detail.actor[e.actorType];
-    let line = `${EVENT_ICON[e.action]} ${admin.detail.event[e.action]} — ${who}, ${when(e.at)}`;
-    const detail = eventDetail(e, language);
-    if (detail) line += `: ${detail}`;
-    lines.push(line);
-  }
+  for (const e of d.events) lines.push(eventLine(e, language, when(e.at)));
   return lines;
+}
+
+/** «✅ Принят — Дилноза, 14:32», with the reason or tracking number after a colon. */
+export function eventLine(e: CardEvent, language: Language, when: string): string {
+  const admin = dictionaries[language].admin.orders;
+  const who =
+    e.actorType === 'staff'
+      ? escapeHtml(e.staffName ?? admin.detail.actor.removed)
+      : admin.detail.actor[e.actorType];
+  const line = `${EVENT_ICON[e.action]} ${admin.detail.event[e.action]} — ${who}, ${when}`;
+  const detail = eventDetail(e, language);
+  return detail ? `${line}: ${detail}` : line;
+}
+
+/** The customer as a `tg://user` link with @username and account phone, escaped. */
+export function customerLine(c: CardData['customer']): string {
+  const fullName = escapeHtml(c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName);
+  return [
+    `<a href="tg://user?id=${c.telegramId}">${fullName}</a>`,
+    ...(c.username ? [`@${escapeHtml(c.username)}`] : []),
+    ...(c.phone ? [formatPhone(c.phone)] : []),
+  ].join(' · ');
 }
 
 function eventDetail(e: CardEvent, language: Language): string | null {
