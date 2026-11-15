@@ -4,19 +4,18 @@ import type { AdminHome, StaffDto } from '@lummi/contracts';
 import { formatCalendarDate, type Language } from '@lummi/i18n';
 import { RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { browserApi } from '@/lib/api';
 import { nowKey, weekdayOf } from '@/lib/home-format';
 import { fill } from '@/lib/utils';
+import { LIVE_POLL_MS, useVisiblePoll } from '@/lib/use-visible-poll';
 import { QueueCard, SalesStrip, SystemLine, type HomeCopy } from './home-parts';
 import { LIFTED, NoCardLine, NowBlock, nowAnnouncement } from './now-block';
 
 /** The Home refreshes this often while its tab is visible. */
-export const REFRESH_MS = 10_000;
-/** A focus right after a refresh does not fetch again. */
-const FOCUS_GAP_MS = 2_000;
+export const REFRESH_MS = LIVE_POLL_MS;
 
 type Load = { data: AdminHome | null; failed: boolean };
 
@@ -46,65 +45,26 @@ export function HomeView({
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ data: null, failed: false });
   const [retrying, setRetrying] = useState(false);
-  /** The view whose request is running: a request of a view that is gone never blocks a new one. */
-  const inFlight = useRef<AbortController | null>(null);
-  const lastFetch = useRef(0);
-  /** Aborted when the view goes: a late answer then changes no state and redirects nowhere. */
-  const gone = useRef<AbortController | null>(null);
-
-  const fetchHome = useCallback(async () => {
-    const view = gone.current;
-    if (!view || view.signal.aborted || inFlight.current === view) return;
-    inFlight.current = view;
-    lastFetch.current = Date.now();
-    try {
-      const res = await browserApi.home({ fetchOptions: { signal: view.signal } });
-      if (view.signal.aborted) return;
-      if (res.status === 401) {
-        router.replace('/login');
-        return;
+  const { refresh } = useVisiblePoll(
+    async (signal) => {
+      try {
+        const res = await browserApi.home({ fetchOptions: { signal } });
+        if (signal.aborted) return;
+        if (res.status === 401) {
+          router.replace('/login');
+          return;
+        }
+        if (res.status !== 200) throw new Error(`home ${res.status}`);
+        setLoad({ data: res.body, failed: false });
+      } catch {
+        if (signal.aborted) return;
+        setLoad((was) => (was.data ? was : { data: null, failed: true }));
+      } finally {
+        if (!signal.aborted) setRetrying(false);
       }
-      if (res.status !== 200) throw new Error(`home ${res.status}`);
-      setLoad({ data: res.body, failed: false });
-    } catch {
-      if (view.signal.aborted) return;
-      setLoad((was) => (was.data ? was : { data: null, failed: true }));
-    } finally {
-      if (inFlight.current === view) inFlight.current = null;
-      if (!view.signal.aborted) setRetrying(false);
-    }
-  }, [router]);
-
-  useEffect(() => {
-    const view = new AbortController();
-    gone.current = view;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    /** Polls every `REFRESH_MS` from now: a fetch out of turn restarts the count. */
-    const tick = () => {
-      clearInterval(timer);
-      timer = setInterval(() => void fetchHome(), REFRESH_MS);
-    };
-    const refetch = () => {
-      if (Date.now() - lastFetch.current <= FOCUS_GAP_MS) return;
-      void fetchHome();
-      tick();
-    };
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return clearInterval(timer);
-      refetch();
-      tick();
-    };
-    void fetchHome();
-    if (document.visibilityState === 'visible') tick();
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', refetch);
-    return () => {
-      view.abort();
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', refetch);
-    };
-  }, [fetchHome]);
+    },
+    { ms: REFRESH_MS, immediate: true },
+  );
 
   // the Now item: which one is shown, whether it arrived on a refresh, what the live region says
   const data = load.data;
@@ -169,7 +129,7 @@ export function HomeView({
           className="h-12"
           onClick={() => {
             setRetrying(true);
-            void fetchHome();
+            refresh();
           }}
         >
           <RefreshCw strokeWidth={1.5} aria-hidden />

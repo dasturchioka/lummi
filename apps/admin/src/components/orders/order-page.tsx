@@ -15,7 +15,7 @@ import { ordersMessages } from '@lummi/i18n/orders';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -123,18 +123,18 @@ export function OrderPage({
   /** Counts the page's own writes: a poll that began before one never overwrites it. */
   const writes = useRef(0);
   const idle = useRef(true);
-  idle.current = dialog === null && busy === null;
+  useEffect(() => {
+    idle.current = dialog === null && busy === null;
+  });
   // live: another manager's or the bot's move shows here within ~10 s and on return to the tab
-  useVisiblePoll(() => {
+  useVisiblePoll(async (signal) => {
     if (!idle.current) return;
     const seen = writes.current;
-    void browserApi.orders
-      .get({ params: { number } })
-      .then((res) => {
-        if (res.status !== 200 || seen !== writes.current || !idle.current) return;
-        setPage((was) => (JSON.stringify(was) === JSON.stringify(res.body) ? was : res.body));
-      })
-      .catch(() => undefined);
+    const res = await browserApi.orders.get({ params: { number }, fetchOptions: { signal } });
+    if (signal.aborted || seen !== writes.current || !idle.current) return;
+    if (res.status === 401) return router.replace('/login');
+    if (res.status !== 200) return;
+    setPage((was) => (JSON.stringify(was) === JSON.stringify(res.body) ? was : res.body));
   });
   const statusLabel = (s: typeof status) => ordersMessages[language].orders.status[s];
 
