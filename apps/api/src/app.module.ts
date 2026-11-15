@@ -2,6 +2,7 @@ import type { UserFromGetMe } from 'grammy/types';
 import type { Db } from '@lummi/db';
 import { Module, type DynamicModule } from '@nestjs/common';
 import { AdminAuthController } from './admin/admin-auth.controller';
+import { OrdersExport } from './admin-orders/orders-export';
 import { AdminOrdersController } from './admin-orders/admin-orders.controller';
 import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
@@ -220,6 +221,7 @@ export class AppModule {
         PromoAdminService,
         ReceiptRejection,
         AdminOrdersService,
+        OrdersExport,
         Refunds,
         CampaignsService,
         SalesReports,

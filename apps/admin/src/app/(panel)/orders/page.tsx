@@ -5,6 +5,7 @@ import {
 } from '@lummi/contracts';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { OrdersExportButton } from '@/components/orders/export-button';
 import { OrdersBoard } from '@/components/orders/board/orders-board';
 import { OrdersFiltersForm } from '@/components/orders/orders-filters';
 import { OrdersList } from '@/components/orders/orders-list';
@@ -19,9 +20,9 @@ const LIST_KEYS = ['q', 'status', 'payment', 'from', 'to'] as const;
 const BOARD_KEYS = ['q', 'payment', 'from', 'to'] as const;
 
 /**
- * «Заказы» (#33, #52): the board («Воронка») by default, the list behind `?view=list`. A link that
+ * «Заказы» (#33, #52, #56): the board («Воронка») by default, the list behind `?view=list`. A link that
  * names a status (the Home's queues, an old bookmark) opens the list: on the board the status is
- * the column. The header's actions are shared by both views (#56 adds «Скачать в Excel» there).
+ * the column. The header's actions are shared by both views (the owner also gets «Скачать в Excel»).
  */
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
@@ -30,6 +31,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     asked === 'list' || (asked !== 'board' && sp.status !== undefined) ? 'list' : 'board';
   const { language, t } = await getAdminMessages();
   const o = t.orders;
+  const api = await serverApi();
+  // the file holds personal data: its button is the owner's (the API refuses a manager anyway)
+  const me = await api.me();
+  if (me.status === 401) redirect('/login');
+  const isOwner = me.status === 200 && me.body.role === 'owner';
 
   const header = (filters: Record<string, string | undefined>) => (
     <PageHeader
@@ -39,6 +45,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       actions={
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <ViewSwitch view={view} filters={filters} t={t} />
+          {isOwner && <OrdersExportButton filters={filters} language={language} t={t} />}
           <Link href="/credits" className={TEXT_LINK}>
             {o.toCredits}
           </Link>
@@ -61,7 +68,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const filters = readFilters(sp, adminOrdersQuerySchema.shape, LIST_KEYS);
   const page = readPage(sp);
-  const api = await serverApi();
   const query = adminOrdersQuerySchema.parse({
     ...filters,
     page,

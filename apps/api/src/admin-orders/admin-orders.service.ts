@@ -140,7 +140,7 @@ const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDE
  * The orders list's filters as conditions on `orders` joined with `customers` (the list and the
  * board read them alike), and the order number the search names, which the list puts first.
  */
-function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
+export function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
   conditions: SQL[];
   byNumber: number | null;
 } {
