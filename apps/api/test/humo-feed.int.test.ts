@@ -6,6 +6,7 @@ import { CreditEvents, type CreditRecorded } from '../src/humo/credit-events';
 import { SettingsService } from '../src/settings/settings.service';
 import type { WorkerRuntime } from '../src/worker/runtime';
 import { userbotLastSeenAt } from './harness/humo';
+import { recordedServiceMessages } from './fixtures/humo-messages';
 import { captureLogs } from './harness/logs';
 import { createTestApp, TEST_INTERNAL_SECRET, type TestApp } from './harness/test-app';
 
@@ -172,7 +173,7 @@ describe('Humo message intake', () => {
 
   it('stores an unparseable message raw, flags it, and alerts the owner once without its text', async () => {
     // it looks like an operation (the card), yet has no ➕ or ➖ line: the format may have changed
-    const text = '💳 HUMOCARD *1234 vaqtincha bloklandi. Kod: 123456';
+    const text = '💳 HUMOCARD *1234\nKod: 123456';
     const res = await post(506, text);
     expect(res).toMatchObject({
       status: 200,
@@ -195,20 +196,65 @@ describe('Humo message intake', () => {
     expect(await t.db.select().from(outbox)).toHaveLength(1);
   });
 
-  it('a service message (a menu, a settings answer, a promo) is ignored: nothing stored, no alert (#51)', async () => {
-    for (const [id, text] of [
-      [520, "Asosiy menyu\nKerakli bo'limni tanlang 👇"],
-      [521, '✅ SMS-xabarnoma yoqildi'],
-      [522, 'Tasdiqlash kodi: 123456. Uni hech kimga bermang!'],
-    ] as const) {
+  it('the real F16 service messages raise no alert, but each is kept raw for a re-parse (#51)', async () => {
+    let id = 531419;
+    for (const { text } of recordedServiceMessages) {
       const res = await post(id, text);
       expect(res).toMatchObject({
         status: 200,
         body: { outcome: 'service', duplicate: false, creditId: null },
       });
+      id += 2;
     }
-    expect(await t.db.select().from(humoMessages)).toHaveLength(0);
+    // traced where the intake keeps messages: the Telegram message id and the raw text
+    const kept = await t.db.select().from(humoMessages);
+    expect(kept.map((m) => [m.messageId, m.text, m.parseError])).toEqual(
+      recordedServiceMessages.map((m, i) => [531419 + 2 * i, m.text, 'service']),
+    );
+    expect(await t.db.select().from(credits)).toHaveLength(0);
     expect(await t.db.select().from(outbox)).toHaveLength(0);
+    // a repeat answers what is stored, and alerts nothing either
+    const again = await post(531419, recordedServiceMessages[0]!.text);
+    expect(again).toMatchObject({ body: { outcome: 'service', duplicate: true, creditId: null } });
+    expect(await t.db.select().from(outbox)).toHaveLength(0);
+  });
+
+  it('an amount alone or a card mask alone, with no ➕ or ➖, still alerts', async () => {
+    for (const [id, text] of [
+      [540, '60.000,00 UZS'],
+      [541, '💳 HUMOCARD *1234'],
+      [542, "To'ldirish 60.000,00"],
+    ] as const) {
+      expect(await post(id, text)).toMatchObject({ body: { outcome: 'unparseable' } });
+    }
+    expect((await t.db.select().from(humoMessages)).map((m) => m.parseError)).toEqual([
+      'not_an_operation',
+      'not_an_operation',
+      'not_an_operation',
+    ]);
+    await vi.waitFor(
+      () => expect(t.edges.telegram.sent.filter((m) => m.chatId === OWNER)).toHaveLength(3),
+      { timeout: 10_000 },
+    );
+    expect(t.edges.telegram.sent[0]!.text).toContain('нет строки с ➕ или ➖');
+  });
+
+  it('a notice about the card itself (blocked, a limit) is kept and always alerts the owner', async () => {
+    const res = await post(550, 'Kartangiz vaqtincha bloklandi');
+    expect(res).toMatchObject({ body: { outcome: 'service', duplicate: false, creditId: null } });
+    expect(
+      (await t.db.select().from(humoMessages)).map((m) => [m.messageId, m.parseError]),
+    ).toEqual([[550, 'card_notice']]);
+    await vi.waitFor(() => expect(t.edges.telegram.sent).toHaveLength(1), { timeout: 10_000 });
+    const alert = t.edges.telegram.sent[0]!;
+    expect(alert.chatId).toBe(OWNER);
+    expect(alert.text).toContain('550');
+    expect(alert.text).toContain('о карте');
+    expect((await post(550, 'Kartangiz vaqtincha bloklandi')).body).toMatchObject({
+      outcome: 'service',
+      duplicate: true,
+    });
+    expect(await t.db.select().from(outbox)).toHaveLength(1);
   });
 
   it('flags the field that is missing', async () => {
