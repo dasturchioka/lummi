@@ -1176,10 +1176,7 @@ export const settingDefinitions = {
     default: 60,
     area: 'shop',
     unit: 'none',
-    label: {
-      ru: 'Завершить отзыв без ответа через, минут',
-      uz: 'Javobsiz sharhni yakunlash, daqiqa',
-    },
+    label: { ru: 'Завершить отзыв без ответа через, минут', uz: 'Javobsiz sharhni yakunlash, daqiqa' },
     hint: {
       ru: 'Если покупатель оценил заказ, но не написал комментарий и не нажал «Готово», отзыв закрывается сам, и низкая оценка уходит менеджерам.',
       uz: 'Xaridor buyurtmani baholab, izoh yozmasa va «Tayyor» tugmasini bosmasa, sharh oʻzi yopiladi va past baho menejerlarga yuboriladi.',

@@ -15,27 +15,18 @@ import { useDiscoverySet } from '../sets/queries';
 import { goBackOrCatalog, useOpenFragrance } from '../lib/navigation';
 import { photoSrcSet, photoUrl } from '../lib/media';
 import { usePrefs } from '../lib/prefs';
-import { openExternal, shareDiscovery } from '../lib/share';
+import { shareDiscovery } from '../lib/share';
 import { hapticSuccess } from '../lib/telegram';
 import { Button } from '../ui/Button';
 import { BuyPair } from '../ui/BuyPair';
 import { DockNote } from '../ui/DockNote';
-import { HeartButton } from '../ui/HeartButton';
 import { LabelDivider } from '../ui/LabelDivider';
 import { NameLockup } from '../ui/NameLockup';
 import { DISC, EASE_OUT } from '../ui/photoDisc';
-import {
-  AlertIcon,
-  ArrowLeftIcon,
-  BoxIcon,
-  CheckIcon,
-  ChevronIcon,
-  ExternalIcon,
-  PlusIcon,
-  ShareIcon,
-} from '../ui/icons';
+import { AlertIcon, ArrowLeftIcon, BoxIcon, CheckIcon, ChevronIcon, PlusIcon } from '../ui/icons';
 import { Money } from '../ui/Money';
 import { ReviewsBlock } from './reviews/ReviewsBlock';
+import { PhotoActions, UzumButton } from '../ui/ProductActions';
 import { Screen } from '../ui/Screen';
 import { SetPhoto } from '../ui/SetPhoto';
 import { Skeleton } from '../ui/Skeleton';
@@ -149,13 +140,11 @@ export function DiscoverySetView({
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
-            {/* the action column: share, the heart under it (as the fragrance card) */}
-            <div className="flex flex-col items-center gap-2">
-              <button type="button" aria-label={t.card.share} onClick={onShare} className={DISC}>
-                <ShareIcon size={20} />
-              </button>
-              <HeartButton target={DISCOVERY_FAVOURITE} name={s.discoveryTitle} place="disc" />
-            </div>
+            <PhotoActions
+              favourite={DISCOVERY_FAVOURITE}
+              name={s.discoveryTitle}
+              onShare={onShare}
+            />
           </div>
         </div>
 
@@ -212,17 +201,7 @@ export function DiscoverySetView({
           </section>
         ) : null}
         {reviews}
-        {set.uzumUrl ? (
-          <Button
-            variant="secondary"
-            block
-            className="mt-7"
-            onClick={() => openExternal(set.uzumUrl as string)}
-          >
-            {t.card.uzum}
-            <ExternalIcon size={16} />
-          </Button>
-        ) : null}
+        <UzumButton url={set.uzumUrl} />
         <p className="type-small mt-6 text-muted">{t.card.disclaimer}</p>
       </article>
     </Screen>

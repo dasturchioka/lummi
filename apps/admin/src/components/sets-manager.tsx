@@ -1,6 +1,6 @@
 'use client';
 
-import type { AdminDiscoverySet } from '@lummi/contracts';
+import { isUzumUrl, type AdminDiscoverySet } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
@@ -335,7 +335,7 @@ function PriceForm({
   const [uzumUrl, setUzumUrl] = useState(set.uzumUrl ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const validUzum = uzumUrl.trim() === '' || /^https:\/\/\S+$/i.test(uzumUrl.trim());
+  const validUzum = isUzumUrl(uzumUrl);
   const chosen = picks.filter(Boolean);
   const duplicate = new Set(chosen).size !== chosen.length;
   const complete = chosen.length === SET_SIZE;

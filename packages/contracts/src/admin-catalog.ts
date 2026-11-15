@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uzumUrlSchema } from './uzum';
 import {
   FRAGRANCE_TYPES,
   MAX_PRICE,
@@ -76,7 +77,7 @@ export const fragranceInputSchema = z
     keyNotesUz: z.array(text(60)).length(KEY_NOTE_COUNT),
     internalRemark: optionalText(1000),
     aliases: z.array(text(80)).max(20),
-    uzumUrl: optionalText(500).refine((v) => !v || /^https?:\/\/\S+$/i.test(v), 'url'),
+    uzumUrl: uzumUrlSchema.nullable(),
     isHit: z.boolean(),
     isNew: z.boolean(),
     hidden: z.boolean(),

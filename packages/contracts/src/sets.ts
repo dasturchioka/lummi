@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CART_MAX_QTY, MAX_PRICE, SET_SIZE } from './constants';
 import { fragranceListItemSchema } from './catalog';
+import { uzumUrlSchema } from './uzum';
 
 /**
  * Sets (ADR 0009). The Discovery set is a product with its own price, photo and stock; a builder
@@ -77,17 +78,10 @@ export const adminDiscoverySetSchema = z.object({
 export type AdminDiscoverySet = z.infer<typeof adminDiscoverySetSchema>;
 
 /** The owner's edit: the shared price of both sets and the five fragrances, in order. */
-/** An https link, or empty for none. */
-const setUzumUrlSchema = z
-  .string()
-  .trim()
-  .max(500)
-  .refine((v) => v === '' || /^https:\/\/\S+$/i.test(v), 'url');
-
 export const discoverySetInputSchema = z.object({
   price: z.number().int().min(0).max(MAX_PRICE),
   /** Omitted keeps the link as it is; empty clears it. */
-  uzumUrl: setUzumUrlSchema.optional(),
+  uzumUrl: uzumUrlSchema.optional(),
   composition: z
     .array(z.number().int().positive())
     .length(SET_SIZE)
