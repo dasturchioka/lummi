@@ -566,6 +566,7 @@ export const adminMessages = defineMessages(
         units: {
           none: '',
           seconds: 'сек.',
+          hours: 'ч',
           days: 'сут.',
           ms: 'мс',
           sum: 'сум',
@@ -861,6 +862,7 @@ export const adminMessages = defineMessages(
             managerUsername: 'Ник менеджера',
             managerLink: 'Ссылка на чат с менеджером',
             reserveTime: 'Время на оплату заказа',
+            deliveryTerm: 'Срок доставки для клиента',
           },
           tokenUsed: 'в тексте',
           write: 'Текст',
@@ -1926,6 +1928,10 @@ export const adminMessages = defineMessages(
         priceOnly: 'Цену и состав меняет только владелец.',
         price: 'Цена набора, сум',
         priceHint: 'Одна цена для Discovery set и для набора, который клиент собирает сам.',
+        uzumUrl: 'Ссылка на Discovery set в Uzum Market',
+        uzumHint:
+          'Адрес начинается с https://. Пусто — кнопка «Купить на Uzum» на экране набора скрыта.',
+        uzumInvalid: 'Укажите ссылку, которая начинается с https://',
         placeholderPrice: 'Цена пока ориентировочная: уточните и сохраните её до запуска.',
         composition: 'Состав',
         compositionHint: 'Ровно пять разных ароматов. Порядок показывается клиенту.',
@@ -2894,6 +2900,7 @@ export const adminMessages = defineMessages(
         units: {
           none: '',
           seconds: 'soniya',
+          hours: 'soat',
           days: 'kun',
           ms: 'ms',
           sum: 'soʻm',
@@ -3195,6 +3202,7 @@ export const adminMessages = defineMessages(
             managerUsername: 'Menejerning Telegram nomi',
             managerLink: 'Menejer bilan chat havolasi',
             reserveTime: 'Buyurtmani toʻlash uchun vaqt',
+            deliveryTerm: 'Mijoz uchun yetkazib berish muddati',
           },
           tokenUsed: 'matnda bor',
           write: 'Matn',
@@ -4267,6 +4275,10 @@ export const adminMessages = defineMessages(
         priceOnly: 'Narx va tarkibni faqat egasi oʻzgartiradi.',
         price: 'Toʻplam narxi, soʻm',
         priceHint: 'Discovery set va mijoz oʻzi yigʻadigan toʻplam uchun bitta narx.',
+        uzumUrl: 'Discovery setning Uzum Market havolasi',
+        uzumHint:
+          'Manzil https:// bilan boshlanadi. Boʻsh qoldirilsa, toʻplam ekranidagi «Uzum’da sotib olish» tugmasi yashiriladi.',
+        uzumInvalid: 'https:// bilan boshlanadigan havolani kiriting',
         placeholderPrice: 'Narx hozircha taxminiy: ishga tushirishdan oldin aniqlashtirib saqlang.',
         composition: 'Tarkib',
         compositionHint: 'Aynan beshta turli atir. Tartib mijozga shunday koʻrsatiladi.',

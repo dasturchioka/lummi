@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { dictionaries } from './all';
 import {
+  deliveryEta,
   defineMessages,
   fill,
   formatCalendarDate,
@@ -160,5 +161,14 @@ describe('dates on the Tashkent wall clock', () => {
     expect(formatCalendarDate('1996-03-14', 'ru', true)).toBe('14 марта 1996');
     expect(formatCalendarDate('1996-03-14', 'uz', true)).toBe('1996-yil 14-mart');
     expect(formatCalendarDate('2000-02-29', 'ru', true)).toBe('29 февраля 2000');
+  });
+});
+
+describe('deliveryEta', () => {
+  it('reads the hours of the setting in each language', () => {
+    expect(deliveryEta('ru', 48)).toBe('до 48 часов');
+    expect(deliveryEta('ru', 1)).toBe('до 1 часа');
+    expect(deliveryEta('ru', 72)).toBe('до 72 часов');
+    expect(deliveryEta('uz', 48)).toBe('48 soatgacha');
   });
 });

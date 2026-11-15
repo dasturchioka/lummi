@@ -1,5 +1,5 @@
 import { CONTENT_PLACEHOLDERS } from '@lummi/contracts';
-import { formatDuration, formatMoney, type Language } from '@lummi/i18n';
+import { deliveryEta, formatDuration, formatMoney, type Language } from '@lummi/i18n';
 
 export type Placeholder = (typeof CONTENT_PLACEHOLDERS)[number];
 
@@ -9,6 +9,7 @@ export interface PlaceholderSettings {
   tariff?: number;
   manager?: string;
   reserveSeconds?: number;
+  etaHours?: number;
 }
 
 /**
@@ -27,6 +28,7 @@ export function placeholderValues(
     managerLink: s.manager && `https://t.me/${s.manager.replace(/^@/, '')}`,
     reserveTime:
       s.reserveSeconds === undefined ? undefined : formatDuration(s.reserveSeconds, language),
+    deliveryTerm: s.etaHours === undefined ? undefined : deliveryEta(language, s.etaHours),
   };
 }
 
