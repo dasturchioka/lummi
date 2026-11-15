@@ -1,14 +1,16 @@
-import { adminContract } from '@lummi/contracts';
+import { adminContract, adminOrdersExportQuerySchema, REPORT_EXPORT_MIME } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
-import { Controller, Inject, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpException, Inject, Query, Res, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
-import { CurrentStaff, StaffGuard } from '../staff/staff.guard';
+import type { Response } from 'express';
+import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
 import {
   AdminOrdersService,
   type CreditMarkAnswer,
   type CreditUnmarkAnswer,
   type MoveOutcome,
 } from './admin-orders.service';
+import { OrdersExport } from './orders-export';
 
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 
@@ -49,7 +51,10 @@ function moveResponse(out: MoveOutcome) {
 @Controller()
 @UseGuards(StaffGuard)
 export class AdminOrdersController {
-  constructor(@Inject(AdminOrdersService) private readonly orders: AdminOrdersService) {}
+  constructor(
+    @Inject(AdminOrdersService) private readonly orders: AdminOrdersService,
+    @Inject(OrdersExport) private readonly ordersExport: OrdersExport,
+  ) {}
 
   @TsRestHandler(adminContract.orders.list)
   list() {
@@ -66,6 +71,29 @@ export class AdminOrdersController {
       status: 200 as const,
       body: await this.orders.board(query),
     }));
+  }
+
+  /**
+   * The orders the list's filters match, as an Excel file (#56). The owner's alone: it holds names,
+   * phones and addresses (ADR 0017). A file, so outside the ts-rest contract; declared before
+   * `get`, so `export` is never read as an order number.
+   */
+  @Get('admin/orders/export')
+  @UseGuards(OwnerGuard)
+  async export(
+    @CurrentStaff() actor: StaffRow,
+    @Query() query: Record<string, string>,
+    @Res() res: Response,
+  ): Promise<void> {
+    const parsed = adminOrdersExportQuerySchema.safeParse(query);
+    if (!parsed.success) throw new HttpException({ code: 'invalid' }, 422);
+    const bytes = await this.ordersExport.workbook(actor.id, parsed.data);
+    res
+      .status(200)
+      .type(REPORT_EXPORT_MIME)
+      .setHeader('content-disposition', 'attachment; filename="LUMMI_Zakazy.xlsx"')
+      .setHeader('cache-control', 'no-store')
+      .send(bytes);
   }
 
   @TsRestHandler(adminContract.orders.get)

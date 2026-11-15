@@ -54,6 +54,7 @@ import {
   staff,
   type CreditRow,
   type Db,
+  type DbOrTx,
   type OrderRow,
   type SQL,
 } from '@lummi/db';
@@ -140,7 +141,7 @@ const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDE
  * The orders list's filters as conditions on `orders` joined with `customers` (the list and the
  * board read them alike), and the order number the search names, which the list puts first.
  */
-function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
+export function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
   conditions: SQL[];
   byNumber: number | null;
 } {
@@ -167,6 +168,24 @@ function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
 }
 
 /**
+ * The orders the filters match, newest first, a search putting the order with that number first:
+ * the one query behind the list's pages and the Excel export (#56), so the file is the list's pages
+ * together. The caller pages it, or not.
+ */
+export function listedOrders(db: DbOrTx, q: Omit<ListQuery, 'page' | 'pageSize'>) {
+  const { conditions, byNumber } = orderFilters(q);
+  return db
+    .select({ order: orders, customer: customers, payment: paymentState, refunded: refundedSum() })
+    .from(orders)
+    .innerJoin(customers, eq(customers.id, orders.customerId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(
+      ...(byNumber !== null ? [sql`${orders.number} = ${byNumber} desc`] : []),
+      desc(orders.number),
+    );
+}
+
+/**
  * The admin orders panel (#33): the list and the order page staff resolve any question from, the
  * credits list, and the staff moves. Every move goes through `transition()` (ADR 0011) with the
  * staff member as the actor; a rejection goes through `ReceiptRejection`, which also gives the
@@ -188,7 +207,7 @@ export class AdminOrdersService {
 
   /** Newest first. A search puts the order with that number first, then phone matches. */
   async list(q: ListQuery): Promise<AdminOrdersPageDto> {
-    const { conditions, byNumber } = orderFilters(q);
+    const { conditions } = orderFilters(q);
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [{ total } = { total: 0 }] = await this.db
@@ -196,16 +215,7 @@ export class AdminOrdersService {
       .from(orders)
       .innerJoin(customers, eq(customers.id, orders.customerId))
       .where(where);
-    const refunded = refundedSum();
-    const rows = await this.db
-      .select({ order: orders, customer: customers, payment: paymentState, refunded })
-      .from(orders)
-      .innerJoin(customers, eq(customers.id, orders.customerId))
-      .where(where)
-      .orderBy(
-        ...(byNumber !== null ? [sql`${orders.number} = ${byNumber} desc`] : []),
-        desc(orders.number),
-      )
+    const rows = await listedOrders(this.db, q)
       .limit(q.pageSize)
       .offset((q.page - 1) * q.pageSize);
 

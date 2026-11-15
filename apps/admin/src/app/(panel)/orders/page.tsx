@@ -5,6 +5,7 @@ import {
 } from '@lummi/contracts';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { OrdersExportButton } from '@/components/orders/export-button';
 import { OrdersBoard } from '@/components/orders/board/orders-board';
 import { BoardFilters } from '@/components/orders/board/board-filters';
 import { OrdersList } from '@/components/orders/orders-list';
@@ -13,22 +14,25 @@ import { PageHeader } from '@/components/page-header';
 import { getAdminMessages } from '@/lib/i18n';
 import { ordersView } from '@/lib/orders-view';
 import { clampPage, readFilters, readPage, type Search } from '@/lib/list-page';
-import { serverApi } from '@/lib/server-api';
+import { getMe, serverApi } from '@/lib/server-api';
 import { TEXT_LINK } from '@/lib/ui-classes';
 
 const LIST_KEYS = ['q', 'status', 'payment', 'from', 'to'] as const;
 const BOARD_KEYS = ['q', 'payment', 'from', 'to'] as const;
 
 /**
- * «Заказы» (#33, #52): the board («Воронка») by default, the list behind `?view=list`. A link that
+ * «Заказы» (#33, #52, #56): the board («Воронка») by default, the list behind `?view=list`. A link that
  * names a status (the Home's queues, an old bookmark) opens the list: on the board the status is
- * the column. The header's actions are shared by both views (#56 adds «Скачать в Excel» there).
+ * the column. The header's actions are shared by both views (the owner also gets «Скачать в Excel»).
  */
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const view = ordersView(sp);
   const { language, t } = await getAdminMessages();
   const o = t.orders;
+  // the file holds personal data: its button is the owner's (the API refuses a manager anyway)
+  const me = await getMe();
+  const isOwner = me.status === 200 && me.body.role === 'owner';
 
   // one header for both views, so «Воронка | Список» stays put when switching: the title and
   // the actions slot, no description (the board needs the height)
@@ -39,6 +43,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         // the header's actions slot, the same in both views (#56 adds «Скачать в Excel» here)
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-orders-actions>
           <ViewSwitch view={view} filters={filters} t={t} />
+          {isOwner && <OrdersExportButton filters={filters} language={language} t={t} />}
           <Link href="/credits" className={TEXT_LINK}>
             {o.toCredits}
           </Link>

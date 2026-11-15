@@ -64,6 +64,17 @@ export const adminOrdersQuerySchema = z.object({
 });
 export type AdminOrdersQuery = z.input<typeof adminOrdersQuerySchema>;
 
+/**
+ * `GET /admin/orders/export` (#56): the list's filters without its paging, and the language of the
+ * file's headers. The file holds every order the filters match, so it equals the list's pages together.
+ */
+export const adminOrdersExportQuerySchema = adminOrdersQuerySchema
+  .omit({ page: true, pageSize: true })
+  .extend({ lang: languageSchema.default('ru') });
+export type AdminOrdersExportParams = z.output<typeof adminOrdersExportQuerySchema>;
+/** The list's filters alone: what the export's audit entry records. */
+export type AdminOrdersExportFilters = Omit<AdminOrdersExportParams, 'lang'>;
+
 /** A row of the orders list: enough to find the order and see what it waits for. */
 export const adminOrderListItemSchema = z.object({
   number: z.number().int(),

@@ -1971,6 +1971,16 @@ export const screens: Screen[] = [
   { id: 'orders-filtered', path: '/orders?status=receipt_review', as: 'manager' },
   { id: 'orders-search', path: '/orders?view=list&q=93+555', as: 'manager' },
   { id: 'orders-empty', path: '/orders?view=list&q=7777777', as: 'manager' },
+  // #56: «Скачать в Excel» is the owner's, in the header both views share
+  { id: 'orders-export-list', path: '/orders?view=list&payment=paid', as: 'owner' },
+  {
+    id: 'orders-export-board',
+    path: '/orders',
+    as: 'owner',
+    ...boardOn,
+    fullPage: false,
+    act: boardLoaded,
+  },
   {
     id: 'order-awaiting',
     path: `/orders/${SHOT_ORDER.awaiting}`,
