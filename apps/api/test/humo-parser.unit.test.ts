@@ -99,8 +99,14 @@ describe('an amount that does not fit is refused, never guessed', () => {
     });
   });
 
-  it('a message with no ➕ or ➖ line reports no card operation', () => {
-    for (const text of ['Kartangiz vaqtincha bloklandi', '', humoMessage({ amount: null })]) {
+  it('a message with no ➕ or ➖ line that still looks like an operation (a card mask or an amount in UZS) is refused', () => {
+    for (const text of [
+      humoMessage({ amount: null }),
+      humoMessage({ amount: null, balance: null }), // the card mask alone
+      humoMessage({ amount: '75.750,00 UZS', card: null, balance: null }), // the amount alone
+      'Karta HUMOCARD *1234 vaqtincha bloklandi',
+      "To'lov: 99 000 UZS",
+    ]) {
       expect(parseHumoMessage(text)).toEqual({ kind: 'unparseable', reason: 'not_an_operation' });
     }
   });
@@ -217,4 +223,23 @@ describe('recorded real notifications (test/fixtures/humo-messages.ts)', () => {
   if (!recordedHumoMessages.some((n) => n.expected.kind === 'credit')) {
     it.todo('a real ➕ credit: waiting for the first transfer to the shop card');
   }
+});
+
+describe('a Humo service message: no card operation, nothing that looks like one (#51, F16)', () => {
+  // the Humo bot's menus, settings answers and promos, which the userbot also hears
+  it.each([
+    ['empty', ''],
+    ['a block notice without the card', 'Kartangiz vaqtincha bloklandi'],
+    ['the main menu', "Asosiy menyu\nKerakli bo'limni tanlang 👇"],
+    ['a settings answer', '✅ SMS-xabarnoma yoqildi'],
+    ['a language answer', '🇷🇺 Язык изменён на русский'],
+    [
+      'a promo with a percent',
+      "🎁 HUMO kartasi bilan to'lovlarda 5% keshbek!\nBatafsil: humocard.uz",
+    ],
+    ['a verification code', 'Tasdiqlash kodi: 123456. Uni hech kimga bermang!'],
+    ['a staging sample', 'HUMO: test message without an operation line (LUMMI staging)'],
+  ])('%s', (_name, text) => {
+    expect(parseHumoMessage(text)).toEqual({ kind: 'service' });
+  });
 });

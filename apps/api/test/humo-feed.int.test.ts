@@ -171,7 +171,8 @@ describe('Humo message intake', () => {
   });
 
   it('stores an unparseable message raw, flags it, and alerts the owner once without its text', async () => {
-    const text = 'Kartangiz vaqtincha bloklandi. Kod: 123456';
+    // it looks like an operation (the card), yet has no ➕ or ➖ line: the format may have changed
+    const text = '💳 HUMOCARD *1234 vaqtincha bloklandi. Kod: 123456';
     const res = await post(506, text);
     expect(res).toMatchObject({
       status: 200,
@@ -192,6 +193,22 @@ describe('Humo message intake', () => {
     const again = await post(506, text);
     expect(again).toMatchObject({ body: { outcome: 'unparseable', duplicate: true } });
     expect(await t.db.select().from(outbox)).toHaveLength(1);
+  });
+
+  it('a service message (a menu, a settings answer, a promo) is ignored: nothing stored, no alert (#51)', async () => {
+    for (const [id, text] of [
+      [520, "Asosiy menyu\nKerakli bo'limni tanlang 👇"],
+      [521, '✅ SMS-xabarnoma yoqildi'],
+      [522, 'Tasdiqlash kodi: 123456. Uni hech kimga bermang!'],
+    ] as const) {
+      const res = await post(id, text);
+      expect(res).toMatchObject({
+        status: 200,
+        body: { outcome: 'service', duplicate: false, creditId: null },
+      });
+    }
+    expect(await t.db.select().from(humoMessages)).toHaveLength(0);
+    expect(await t.db.select().from(outbox)).toHaveLength(0);
   });
 
   it('flags the field that is missing', async () => {
