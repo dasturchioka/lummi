@@ -1,6 +1,6 @@
 import { BOARD_STATUSES, type AdminBoardCardDto, type AdminOrdersBoardDto } from '@lummi/contracts';
 import { describe, expect, it } from 'vitest';
-import { arrivals, moveKind, secondsIn, withMoves, type Move } from './board-state';
+import { arrivals, columnWidth, moveKind, secondsIn, withMoves, type Move } from './board-state';
 
 const card = (
   number: number,
@@ -117,5 +117,20 @@ describe('a fresh board', () => {
   it('measures the time in a status from the server’s now', () => {
     expect(secondsIn(at(1), at(3))).toBe(7200);
     expect(secondsIn(at(3), at(1))).toBe(0);
+  });
+});
+
+describe('column width from 640 px', () => {
+  it('whole columns and a 40 px peek of the next, never a sliver', () => {
+    // 1280 px: 808 px beside the rails holds three columns of 248 and the peek
+    expect(columnWidth(808, 7)).toBe(248);
+    const w = columnWidth(968, 7);
+    expect(3 * (w + 8) + 40).toBeLessThanOrEqual(968);
+    expect(968 - 3 * (w + 8)).toBeLessThan(40 + 3);
+  });
+
+  it('all columns share the room when they fit, at most 320 each', () => {
+    expect(columnWidth(1800, 7)).toBe(Math.floor((1800 - 6 * 8) / 7));
+    expect(columnWidth(4000, 7)).toBe(320);
   });
 });

@@ -555,8 +555,8 @@ async function carry(page: Page, number: number, to: string) {
   await page.mouse.down();
   await page.mouse.move(x + 12, y + 4, { steps: 3 });
   // a few pixels into the target, clear of the edge where the board scrolls by itself
-  await page.mouse.move(target.x + Math.min(40, target.width / 2), y + 40, { steps: 12 });
-  await page.locator(`[data-carry="target"]`).first().waitFor();
+  await page.mouse.move(target.x + Math.min(24, target.width / 2), y + 40, { steps: 12 });
+  await page.locator('[data-over]').first().waitFor();
 }
 
 /** Every column empty, as a shop without orders sees it. */

@@ -35,6 +35,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <PageHeader
       title={o.title}
       description={o.description}
+      descriptionFromSm={view === 'board'}
       actions={
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <ViewSwitch view={view} filters={filters} t={t} />

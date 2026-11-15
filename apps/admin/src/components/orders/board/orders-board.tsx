@@ -16,6 +16,7 @@ import {
   type DragEndEvent,
   type DropAnimation,
   type KeyboardCoordinateGetter,
+  type Modifier,
 } from '@dnd-kit/core';
 import {
   BOARD_STATUSES,
@@ -55,7 +56,14 @@ import {
 import type { OrderFilters } from '../orders-filters';
 import { BoardCard, CardBody, type Target } from './board-card';
 import { BoardColumn, BoardRail, type Carry } from './board-column';
-import { arrivals, moveKind, withMoves, type Move, type MoveKind } from './board-state';
+import {
+  arrivals,
+  columnWidth,
+  moveKind,
+  withMoves,
+  type Move,
+  type MoveKind,
+} from './board-state';
 
 /** The board never gets shorter than this, however little room the viewport leaves. */
 const MIN_HEIGHT = 360;
@@ -64,8 +72,8 @@ const PHONE_TOP = 56 + 12;
 /** How long a refusal stays on screen. */
 const TOAST_MS = 6_000;
 
-const OPEN = BOARD_STATUSES.filter((s) => s !== 'cancelled' && s !== 'returned');
-const CLOSED = ['cancelled', 'returned'] as const satisfies readonly OrderStatus[];
+const OPEN: OrderStatus[] = BOARD_STATUSES.filter((s) => s !== 'cancelled' && s !== 'returned');
+const CLOSED: OrderStatus[] = ['cancelled', 'returned'];
 
 type DialogState = {
   kind: Exclude<MoveKind, 'step'>;
@@ -159,6 +167,54 @@ const LAND: DropAnimation = {
   },
   sideEffects: null,
 };
+
+/**
+ * The carried card stays on the screen: on a phone a card nearly as wide as the screen would
+ * otherwise hang off its edge while the thumb sits over the next column.
+ */
+const keepOnScreen: Modifier = ({ transform, draggingNodeRect, windowRect }) => {
+  if (!draggingNodeRect || !windowRect) return transform;
+  const x = Math.min(
+    Math.max(transform.x, windowRect.left - draggingNodeRect.left),
+    windowRect.left + windowRect.width - draggingNodeRect.left - draggingNodeRect.width,
+  );
+  const y = Math.min(
+    Math.max(transform.y, windowRect.top - draggingNodeRect.top),
+    windowRect.top + windowRect.height - draggingNodeRect.top - draggingNodeRect.height,
+  );
+  return { ...transform, x, y };
+};
+
+function useColumnWidth(count: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () =>
+      setWidth(
+        window.matchMedia('(min-width: 640px)').matches ? columnWidth(el.clientWidth, count) : null,
+      );
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [count]);
+  return { ref, width };
+}
+
+/** From 640 px the closed rails sit beside the scroller; on phones they end it. */
+function useWide() {
+  const [wide, setWide] = useState(true);
+  useLayoutEffect(() => {
+    const query = window.matchMedia('(min-width: 640px)');
+    const update = () => setWide(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return wide;
+}
 
 /**
  * The board's height. From 640 px it fills what the viewport leaves below the board's top
@@ -538,6 +594,24 @@ export function OrdersBoard({
   };
 
   const { ref: frame, height } = useFillHeight();
+  const wide = useWide();
+  const open = [...OPEN, ...CLOSED.filter((s) => expanded.includes(s))];
+  const { ref: scroller, width } = useColumnWidth(open.length);
+  const rails = CLOSED.filter((s) => !expanded.includes(s)).map((s) => {
+    const c = column(s);
+    return c ? (
+      <BoardRail
+        key={s}
+        column={c}
+        carry={carryOf(s)}
+        onOpen={() => toggle(s)}
+        language={language}
+        t={t}
+      />
+    ) : (
+      <div key={s} className="skeleton h-full w-12 shrink-0 rounded-card" />
+    );
+  });
   const listFor = (s: OrderStatus) => listHref('/orders', { view: 'list', ...filters, status: s });
   const updated = board ? utcToTashkent(new Date(board.at)) : null;
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -549,6 +623,7 @@ export function OrdersBoard({
       <BoardColumn
         key={s}
         column={c}
+        width={width}
         carry={carryOf(s)}
         language={language}
         t={t}
@@ -665,7 +740,7 @@ export function OrdersBoard({
         sensors={sensors}
         collisionDetection={collide}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
-        autoScroll={{ threshold: { x: 0.12, y: 0.18 } }}
+        autoScroll={{ threshold: { x: 0.08, y: 0.18 } }}
         accessibility={{ announcements, screenReaderInstructions: { draggable: b.instructions } }}
         onDragStart={({ active }) => {
           setLanding(false);
@@ -678,35 +753,21 @@ export function OrdersBoard({
           setOverStatus(null);
         }}
       >
-        <div
-          className="board-scroller -mx-4 flex min-h-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
-          data-carrying={carried ? '' : undefined}
-        >
-          {columns
-            ? OPEN.map((s) => renderColumn(s))
-            : OPEN.map((s) => <SkeletonColumn key={s} name={statusName(s)} />)}
-          {columns &&
-            CLOSED.filter((s) => expanded.includes(s)).map((s) => renderColumn(s, () => toggle(s)))}
-          <div className="flex shrink-0 gap-2 sm:sticky sm:right-0 sm:z-10 sm:bg-background sm:pl-2">
-            {CLOSED.map((s) => {
-              const c = column(s);
-              return c ? (
-                <BoardRail
-                  key={s}
-                  column={c}
-                  carry={carryOf(s)}
-                  expanded={expanded.includes(s)}
-                  onToggle={() => toggle(s)}
-                  language={language}
-                  t={t}
-                />
-              ) : (
-                <div key={s} className="skeleton h-full w-12 rounded-card" />
-              );
-            })}
+        <div className="flex min-h-0 flex-1 gap-2">
+          <div
+            ref={scroller}
+            className="board-scroller -mx-4 flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
+            data-carrying={carried ? '' : undefined}
+          >
+            {columns
+              ? open.map((s) => renderColumn(s, OPEN.includes(s) ? undefined : () => toggle(s)))
+              : OPEN.map((s) => <SkeletonColumn key={s} name={statusName(s)} width={width} />)}
+            {!wide && rails}
           </div>
+          {wide && rails}
         </div>
         <DragOverlay
+          modifiers={[keepOnScreen]}
           dropAnimation={landing ? LAND : RETURN}
           transition={() => undefined}
           zIndex={60}
@@ -871,9 +932,12 @@ export function OrdersBoard({
 }
 
 /** A column before the first board: its head is known, its cards breathe in Milk Field. */
-function SkeletonColumn({ name }: { name: string }) {
+function SkeletonColumn({ name, width }: { name: string; width: number | null }) {
   return (
-    <section className="flex h-full w-[256px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]">
+    <section
+      className="flex h-full w-[256px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]"
+      style={width ? { width } : undefined}
+    >
       <header className="px-3 pt-2.5 pb-2">
         <div className="flex min-h-7 items-center">
           <h2 className="truncate text-[13.5px] leading-snug font-semibold text-muted-foreground">

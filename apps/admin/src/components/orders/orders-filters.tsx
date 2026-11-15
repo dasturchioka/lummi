@@ -68,39 +68,63 @@ export function OrdersFiltersForm({
         )}
       >
         {!board && <input type="hidden" name="view" value="list" />}
-        <Field id="f-q" label={f.search} className="sm:col-span-2 lg:col-span-1">
-          <Input
-            name="q"
-            type="search"
-            inputMode="tel"
-            enterKeyHint="search"
-            autoComplete="off"
-            defaultValue={filters.q ?? ''}
-            placeholder={f.searchPlaceholder}
-          />
-        </Field>
-        <div className="flex gap-2 sm:hidden">
-          <Button type="submit" className="flex-1">
-            {f.apply}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            aria-expanded={open}
-            aria-controls={board ? 'f-payment f-from f-to' : 'f-status f-payment f-from f-to'}
-            onClick={() => setOpen((v) => !v)}
-          >
-            <SlidersHorizontal strokeWidth={1.5} aria-hidden />
-            {f.toggle}
-            {active > 0 && (
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
-                {active}
-              </span>
-            )}
-          </Button>
+        {/* the board on phones: the search and an icon toggle share one row, Enter searches */}
+        <div className={cn(board ? 'flex items-end gap-2 sm:contents' : 'contents')}>
+          <Field id="f-q" label={f.search} className="min-w-0 flex-1 sm:col-span-2 lg:col-span-1">
+            <Input
+              name="q"
+              type="search"
+              inputMode="tel"
+              enterKeyHint="search"
+              autoComplete="off"
+              defaultValue={filters.q ?? ''}
+              placeholder={f.searchPlaceholder}
+            />
+          </Field>
+          {board && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={f.toggle}
+              aria-expanded={open}
+              aria-controls="f-payment f-from f-to"
+              onClick={() => setOpen((v) => !v)}
+              className="relative sm:hidden"
+            >
+              <SlidersHorizontal strokeWidth={1.5} aria-hidden />
+              {active > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+                  {active}
+                </span>
+              )}
+            </Button>
+          )}
         </div>
         {!board && (
-          <Field id="f-status" label={f.status} className={cn('min-w-0', hidden)}>
+          <div className="flex gap-2 sm:hidden">
+            <Button type="submit" className="flex-1">
+              {f.apply}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={open}
+              aria-controls={board ? 'f-payment f-from f-to' : 'f-status f-payment f-from f-to'}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <SlidersHorizontal strokeWidth={1.5} aria-hidden />
+              {f.toggle}
+              {active > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums">
+                  {active}
+                </span>
+              )}
+            </Button>
+          </div>
+        )}
+        {!board && (
+          <Field id="f-status" label={f.status} className={cn(hidden)}>
             <Select name="status" defaultValue={filters.status ?? ''}>
               <option value="">{f.all}</option>
               {ORDER_STATUSES.map((s) => (
@@ -111,7 +135,7 @@ export function OrdersFiltersForm({
             </Select>
           </Field>
         )}
-        <Field id="f-payment" label={f.payment} className={cn('min-w-0', hidden)}>
+        <Field id="f-payment" label={f.payment} className={cn(hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
             {ORDER_PAYMENT_FILTERS.map((p) => (
@@ -121,20 +145,20 @@ export function OrdersFiltersForm({
             ))}
           </Select>
         </Field>
-        <Field id="f-from" label={f.from} className={cn('min-w-0', hidden)}>
+        <Field id="f-from" label={f.from} className={cn(hidden)}>
           <Input type="date" name="from" defaultValue={filters.from ?? ''} />
         </Field>
-        <Field id="f-to" label={f.to} className={cn('min-w-0', hidden)}>
+        <Field id="f-to" label={f.to} className={cn(hidden)}>
           <Input type="date" name="to" defaultValue={filters.to ?? ''} />
         </Field>
         <div
           className={cn(
             'flex gap-2 sm:col-span-2 sm:justify-end lg:col-span-1',
             'max-sm:hidden',
-            open && any && 'max-sm:flex',
+            open && (any || board) && 'max-sm:flex',
           )}
         >
-          <Button type="submit" className="max-sm:hidden">
+          <Button type="submit" className={cn(board ? 'max-sm:flex-1' : 'max-sm:hidden')}>
             {f.apply}
           </Button>
           {any && (

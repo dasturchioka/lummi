@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 
 /**
  * Every panel screen opens with this: the Tenor caps title (the nav label of the section), an
@@ -10,6 +11,7 @@ export function PageHeader({
   description,
   actions,
   titleAction,
+  descriptionFromSm,
 }: {
   /** Text, or a node when the title needs its own break points (a promo code). */
   title: React.ReactNode;
@@ -17,6 +19,8 @@ export function PageHeader({
   actions?: React.ReactNode;
   /** Phones only: a compact control beside the title (an icon «+»), instead of a full-width button. */
   titleAction?: React.ReactNode;
+  /** The description only from 640 px: a screen whose work needs the phone's height (the board). */
+  descriptionFromSm?: boolean;
 }) {
   return (
     <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between lg:mb-8">
@@ -26,7 +30,12 @@ export function PageHeader({
           {titleAction && <div className="-my-1.5 shrink-0 sm:hidden">{titleAction}</div>}
         </div>
         {description && (
-          <p className="mt-2 max-w-[64ch] text-sm text-pretty text-muted-foreground">
+          <p
+            className={cn(
+              'mt-2 max-w-[64ch] text-sm text-pretty text-muted-foreground',
+              descriptionFromSm && 'max-sm:hidden',
+            )}
+          >
             {description}
           </p>
         )}

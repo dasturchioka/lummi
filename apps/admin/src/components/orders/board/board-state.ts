@@ -116,3 +116,22 @@ export function arrivals(before: AdminBoardColumnDto[] | null, after: AdminBoard
 /** Whole seconds from `since` to the board's `at`, never below 0. */
 export const secondsIn = (since: string, at: string) =>
   Math.max(0, Math.floor((Date.parse(at) - Date.parse(since)) / 1000));
+
+/** From 640 px: columns are at least this wide, 8 px apart, and the next one peeks in by 40 px. */
+const MIN_COLUMN = 248;
+const MAX_COLUMN = 320;
+const GAP = 8;
+const PEEK = 40;
+
+/**
+ * From 640 px the board sizes its columns to the room it has, so a column never rests as a sliver
+ * at the edge: all of them share the width when they fit (at most `MAX_COLUMN` each), otherwise
+ * as many whole columns as fit and the next one peeking in by `PEEK`, as the shop's card rows do.
+ * Null on phones, where a column is the screen less 88 px and the board snaps column by column.
+ */
+export function columnWidth(room: number, count: number): number {
+  if (count * MIN_COLUMN + (count - 1) * GAP <= room)
+    return Math.min(MAX_COLUMN, Math.floor((room - (count - 1) * GAP) / count));
+  const whole = Math.max(1, Math.floor((room - PEEK) / (MIN_COLUMN + GAP)));
+  return Math.floor((room - PEEK) / whole - GAP);
+}

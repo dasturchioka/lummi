@@ -64,6 +64,7 @@ export function BoardColumn({
   columnRef,
   children,
   empty,
+  width,
 }: {
   column: AdminBoardColumnDto;
   carry: Carry | null;
@@ -77,6 +78,8 @@ export function BoardColumn({
   children: ReactNode;
   /** What an empty board says in its first column. */
   empty?: ReactNode;
+  /** From 640 px the board sizes its columns to the room it has (`useColumnWidth`). */
+  width?: number | null;
 }) {
   const b = t.orders.board;
   const status = column.status;
@@ -100,8 +103,10 @@ export function BoardColumn({
         carry?.role === 'closed' && 'opacity-40',
         carry?.role === 'target' && carry.over && 'shadow-[inset_0_0_0_1.5px_var(--graphite)]',
       )}
+      style={width ? { width } : undefined}
       data-column={status}
       data-carry={carry?.role}
+      data-over={carry?.role === 'target' && carry.over ? '' : undefined}
     >
       <header className="px-3 pt-2.5 pb-2">
         <div className="flex min-h-7 items-center justify-between gap-2">
@@ -153,20 +158,18 @@ export function BoardColumn({
  * A closed outcome folded to a rail (#52): «Отменён» and «Возвращён» stay out of the way, docked
  * at the board's right edge from 640 px, yet always in reach as a drop target. The count reads
  * first, the status runs down the rail; while a card is carried a rail it may go to names the
- * move instead. Pressing it opens the column beside it.
+ * move instead. Pressing it opens the column in its place (the column's head folds it back).
  */
 export function BoardRail({
   column,
   carry,
-  expanded,
-  onToggle,
+  onOpen,
   language,
   t,
 }: {
   column: AdminBoardColumnDto;
   carry: Carry | null;
-  expanded: boolean;
-  onToggle: () => void;
+  onOpen: () => void;
   language: Language;
   t: AdminMessages;
 }) {
@@ -178,23 +181,22 @@ export function BoardRail({
     data: { status },
     disabled: carry?.role === 'closed',
   });
-  const Chevron = expanded ? ChevronRight : ChevronLeft;
   return (
     <button
       ref={setNodeRef}
       type="button"
-      onClick={onToggle}
-      aria-expanded={expanded}
-      aria-label={fill(expanded ? b.collapse : b.expand, { status: name })}
+      onClick={onOpen}
+      aria-expanded={false}
+      aria-label={fill(b.expand, { status: name })}
       className={cn(
         'flex h-full w-12 shrink-0 snap-start flex-col items-center gap-2.5 rounded-card bg-field pt-3 pb-3 text-foreground',
         'transition-[opacity,box-shadow,background-color] duration-150 ease-out hover:bg-stone/45',
-        expanded && 'shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
         carry?.role === 'closed' && 'opacity-40',
         carry?.role === 'target' && carry.over && 'shadow-[inset_0_0_0_1.5px_var(--graphite)]',
       )}
       data-rail={status}
       data-carry={carry?.role}
+      data-over={carry?.role === 'target' && carry.over ? '' : undefined}
     >
       <span className="text-[13px] font-semibold tabular-nums">
         <Settle value={String(column.count)} />
@@ -209,7 +211,11 @@ export function BoardRail({
       >
         {carry?.role === 'target' ? carry.action : name}
       </span>
-      <Chevron className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+      <ChevronLeft
+        className="size-4 shrink-0 text-muted-foreground"
+        strokeWidth={1.5}
+        aria-hidden
+      />
     </button>
   );
 }

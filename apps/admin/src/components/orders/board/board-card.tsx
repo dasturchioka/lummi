@@ -36,9 +36,10 @@ function PaymentMarker({ card, t }: { card: AdminBoardCardDto; t: AdminMessages 
   return (
     <span
       className={cn(
-        'inline-flex min-w-0 items-center gap-1.5 text-small leading-tight',
+        'inline-flex min-w-0 items-center gap-1.5 text-[12px] leading-tight',
         look ? 'font-semibold text-foreground' : 'text-muted-foreground',
       )}
+      title={t.orders.board.marker[marker]}
       data-marker={marker}
     >
       <span
@@ -115,9 +116,9 @@ export function CardBody({
           ),
         ]}
       />
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+      <div className="mt-1 flex items-baseline justify-between gap-2">
         <PaymentMarker card={card} t={t} />
-        <span className="ml-auto text-[13.5px] font-semibold whitespace-nowrap tabular-nums">
+        <span className="shrink-0 text-[13.5px] font-semibold whitespace-nowrap tabular-nums">
           {boardMoney(card.total, language)}
         </span>
       </div>
