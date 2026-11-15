@@ -1,7 +1,7 @@
 'use client';
 
 import { useDraggable } from '@dnd-kit/core';
-import type { AdminBoardCardDto, OrderStatus } from '@lummi/contracts';
+import type { AdminBoardCardDto, OrderPaymentFilter, OrderStatus } from '@lummi/contracts';
 import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import * as Menu from '@radix-ui/react-dropdown-menu';
@@ -18,10 +18,8 @@ import { secondsIn } from './board-state';
 export const boardMoney = (n: number, language: Language) =>
   formatMoney(n, language).replace(/\u202f/g, '\u00a0');
 
-type Marker = 'unpaid' | 'checking' | 'manual_review' | 'paid' | 'refund_owed';
-
 /** Where the order's money stands, in one word; a paid order that ended owes its money back. */
-const markerOf = (card: AdminBoardCardDto): Marker =>
+const markerOf = (card: AdminBoardCardDto): OrderPaymentFilter =>
   card.refundOwed ? 'refund_owed' : card.payment;
 
 /**
@@ -36,7 +34,7 @@ function PaymentMarker({ card, t }: { card: AdminBoardCardDto; t: AdminMessages 
   return (
     <span
       className={cn(
-        'inline-flex min-w-0 items-center gap-1.5 text-small leading-tight',
+        'inline-flex max-w-full items-center gap-1.5',
         look ? 'font-semibold text-foreground' : 'text-muted-foreground',
       )}
       title={t.orders.board.marker[marker]}
@@ -52,14 +50,16 @@ function PaymentMarker({ card, t }: { card: AdminBoardCardDto; t: AdminMessages 
           look && 'shadow-[inset_0_0_0_1.5px_var(--graphite)]',
         )}
       />
-      <span className="truncate">{t.orders.board.marker[marker]}</span>
+      <span className="min-w-0 truncate">{t.orders.board.marker[marker]}</span>
     </span>
   );
 }
 
 /**
- * What a card shows (#52): the number and how long it is in this status, the customer, how many
- * items and where it goes, the payment marker and the total. The time is measured from the
+ * What a card shows (#52), in five quiet rows that hold a 156 px column in RU and UZ: the number
+ * (and «⋯»), the customer, how many items and where it goes, the total, then the payment marker
+ * and how long it is in this status. One fr column that may shrink to nothing, so a long name or
+ * word gives way inside the card instead of pushing past it. The time is measured from the
  * server's `at`, so a slow clock in the browser never ages an order.
  */
 export function CardBody({
@@ -73,7 +73,7 @@ export function CardBody({
   at: string;
   t: AdminMessages;
   language: Language;
-  /** The «Переместить в…» button: it takes the top-right corner beside the time. */
+  /** The «Переместить в…» button, at the top right beside the number. */
   menu?: React.ReactNode;
 }) {
   const o = t.orders;
@@ -82,23 +82,14 @@ export function CardBody({
     n: String(card.itemCount),
   });
   return (
-    <div className="grid gap-1">
-      <div className="flex min-h-7 items-center justify-between gap-2">
-        <span className="text-[14px] font-semibold whitespace-nowrap tabular-nums">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-0.5">
+      <div className="flex min-h-6 items-center justify-between gap-1">
+        <span className="text-[13.5px] font-semibold whitespace-nowrap tabular-nums">
           {fill(o.number, { number: String(card.number) })}
         </span>
-        <span className="flex min-w-0 items-center gap-0.5">
-          <span
-            className="truncate text-small whitespace-nowrap text-muted-foreground tabular-nums"
-            title={fill(o.board.inStatus, { age: waited })}
-          >
-            <span className="sr-only">{fill(o.board.inStatus, { age: '' })}</span>
-            {waited}
-          </span>
-          {menu}
-        </span>
+        {menu}
       </div>
-      <p className="truncate text-[13.5px] leading-snug font-medium" title={card.customer.name}>
+      <p className="truncate text-[13px] leading-snug font-medium" title={card.customer.name}>
         {card.customer.name}
       </p>
       <MetaLine
@@ -107,7 +98,10 @@ export function CardBody({
           <span key="n" className="whitespace-nowrap">
             {items}
           </span>,
-          <span key="city">{card.city ?? card.region[language]}</span>,
+          // «р-н» never breaks at its hyphen
+          <span key="city">
+            {(card.city ?? card.region[language]).replace(/-(?=\S{1,3}(\s|$))/g, '\u2011')}
+          </span>,
           card.isGift && (
             <span key="gift" className="inline-flex items-center gap-1 whitespace-nowrap">
               <Gift className="size-3.5" strokeWidth={1.5} aria-hidden />
@@ -116,10 +110,19 @@ export function CardBody({
           ),
         ]}
       />
-      <div className="mt-1 flex items-baseline justify-between gap-2">
+      <p className="mt-1 truncate text-[13.5px] leading-snug font-semibold whitespace-nowrap tabular-nums">
+        {boardMoney(card.total, language)}
+      </p>
+      {/* the marker and the time share a line where they fit; no dot slot, so the marker's
+          word has the card's whole width before it gives way */}
+      <div className="flex flex-wrap items-baseline gap-x-2 text-small leading-snug text-muted-foreground">
         <PaymentMarker card={card} t={t} />
-        <span className="shrink-0 text-[13.5px] font-semibold whitespace-nowrap tabular-nums">
-          {boardMoney(card.total, language)}
+        <span
+          className="whitespace-nowrap tabular-nums"
+          title={fill(o.board.inStatus, { age: waited })}
+        >
+          <span className="sr-only">{fill(o.board.inStatus, { age: '' })}</span>
+          {waited}
         </span>
       </div>
     </div>
@@ -159,10 +162,10 @@ function MoveMenu({
         aria-label={fill(b.moveFor, { number: String(card.number) })}
         onMouseDown={keep}
         onTouchStart={keep}
-        className="relative z-10 -mr-1.5 grid size-7 shrink-0 place-items-center rounded-button text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out hover:bg-field hover:text-foreground active:scale-[0.94] disabled:opacity-40 data-[state=open]:bg-field data-[state=open]:text-foreground after:absolute after:-inset-1.5"
+        className="relative z-10 -mr-1 grid size-6 shrink-0 place-items-center rounded-[6px] text-muted-foreground transition-[background-color,color,transform] duration-150 ease-out hover:bg-field hover:text-foreground active:scale-[0.94] disabled:opacity-40 data-[state=open]:bg-field data-[state=open]:text-foreground after:absolute after:-inset-2"
         data-move-menu={card.number}
       >
-        <Ellipsis className="size-[18px]" strokeWidth={1.5} aria-hidden />
+        <Ellipsis className="size-4" strokeWidth={1.5} aria-hidden />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content
@@ -215,16 +218,17 @@ export function BoardCard({
   onMove: (to: OrderStatus) => void;
   /** Its move is not settled yet (a dialog asks, or the request runs). */
   waiting: boolean;
-  /** It came into this column with the last fresh board: it settles in once. */
+  /** It came into this column (a fresh board, or a drop): it settles in once. */
   arrived: boolean;
   /** Another move runs: nothing else is picked up meanwhile. */
   locked: boolean;
 }) {
   const o = t.orders;
+  const movable = !locked && !waiting && targets.length > 0;
   const { setNodeRef, setActivatorNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `order:${card.number}`,
     data: { card },
-    disabled: locked || waiting || targets.length === 0,
+    disabled: !movable,
   });
   return (
     <li
@@ -233,7 +237,7 @@ export function BoardCard({
       // a long press is a pick-up here, never the browser's link menu
       onContextMenu={(e) => e.preventDefault()}
       className={cn(
-        'relative touch-manipulation rounded-card bg-card px-3 pt-2 pb-3 select-none [-webkit-touch-callout:none] hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
+        'relative touch-manipulation rounded-card bg-card px-2 pt-1.5 pb-2.5 select-none [-webkit-touch-callout:none] hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
         'transition-[opacity,box-shadow] duration-150 ease-out',
         // the place it was picked up from: an empty slot of the same size
         isDragging &&
@@ -267,7 +271,8 @@ export function BoardCard({
         ref={setActivatorNodeRef}
         href={`/orders/${card.number}`}
         draggable={false}
-        aria-describedby={attributes['aria-describedby']}
+        // the carrying instructions only where the card can be carried
+        aria-describedby={movable ? attributes['aria-describedby'] : undefined}
         className="absolute inset-0 rounded-card [-webkit-touch-callout:none] focus-visible:outline-offset-0"
       >
         <span className="sr-only">

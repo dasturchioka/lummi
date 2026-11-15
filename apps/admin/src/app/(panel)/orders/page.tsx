@@ -7,11 +7,12 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { OrdersExportButton } from '@/components/orders/export-button';
 import { OrdersBoard } from '@/components/orders/board/orders-board';
-import { OrdersFiltersForm } from '@/components/orders/orders-filters';
+import { BoardFilters } from '@/components/orders/board/board-filters';
 import { OrdersList } from '@/components/orders/orders-list';
-import { ViewSwitch, type OrdersView } from '@/components/orders/view-switch';
+import { ViewSwitch } from '@/components/orders/view-switch';
 import { PageHeader } from '@/components/page-header';
 import { getAdminMessages } from '@/lib/i18n';
+import { ordersView } from '@/lib/orders-view';
 import { clampPage, readFilters, readPage, type Search } from '@/lib/list-page';
 import { getMe, serverApi } from '@/lib/server-api';
 import { TEXT_LINK } from '@/lib/ui-classes';
@@ -26,22 +27,21 @@ const BOARD_KEYS = ['q', 'payment', 'from', 'to'] as const;
  */
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
-  const asked = Array.isArray(sp.view) ? sp.view[0] : sp.view;
-  const view: OrdersView =
-    asked === 'list' || (asked !== 'board' && sp.status !== undefined) ? 'list' : 'board';
+  const view = ordersView(sp);
   const { language, t } = await getAdminMessages();
   const o = t.orders;
   // the file holds personal data: its button is the owner's (the API refuses a manager anyway)
   const me = await getMe();
   const isOwner = me.status === 200 && me.body.role === 'owner';
 
+  // one header for both views, so «Воронка | Список» stays put when switching: the title and
+  // the actions slot, no description (the board needs the height)
   const header = (filters: Record<string, string | undefined>) => (
     <PageHeader
       title={o.title}
-      description={o.description}
-      descriptionFromSm={view === 'board'}
       actions={
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        // the header's actions slot, the same in both views (#56 adds «Скачать в Excel» here)
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-orders-actions>
           <ViewSwitch view={view} filters={filters} t={t} />
           {isOwner && <OrdersExportButton filters={filters} language={language} t={t} />}
           <Link href="/credits" className={TEXT_LINK}>
@@ -55,10 +55,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (view === 'board') {
     const filters = readFilters(sp, adminOrdersBoardQuerySchema.shape, BOARD_KEYS);
     return (
-      // the board takes the panel's whole width (globals.css drops the 1120 px cap)
+      // both views take the panel's whole width and its 24 px sides (globals.css)
       <div data-layout="wide">
         {header(filters)}
-        <OrdersFiltersForm t={t} language={language} filters={filters} view="board" />
+        <BoardFilters t={t} filters={filters} />
         <OrdersBoard key={JSON.stringify(filters)} t={t} language={language} filters={filters} />
       </div>
     );
@@ -78,7 +78,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (list.status !== 200) throw new Error(`orders failed to load: ${list.status}`);
   clampPage('/orders', { view: 'list', ...filters }, page, list.body.total, list.body.pageSize);
   return (
-    <>
+    <div data-layout="wide">
       {header(filters)}
       <OrdersList
         t={t}
@@ -89,6 +89,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         pageSize={list.body.pageSize}
         filters={filters}
       />
-    </>
+    </div>
   );
 }

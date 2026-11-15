@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { TabLinks } from '@/components/tab-links';
 import { Notice } from '@/components/ui/notice';
 import type { AdminMessages } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -32,26 +33,15 @@ export function ReportTabs({
     Object.entries(asked).filter((e): e is [string, string] => Boolean(e[1])),
   ).toString();
   return (
-    <nav
-      aria-label={r.tabs.label}
-      className="mb-4 inline-flex h-9 items-center rounded-full bg-field p-[3px]"
-    >
-      {(Object.keys(REPORT_PAGES) as ReportPage[]).map((page) => (
-        <Link
-          key={page}
-          href={query ? `${REPORT_PAGES[page]}?${query}` : REPORT_PAGES[page]}
-          aria-current={page === current ? 'page' : undefined}
-          className={cn(
-            'grid h-full place-items-center rounded-full px-4 text-[13px] whitespace-nowrap transition-[color,background-color] duration-150 ease-out',
-            page === current
-              ? 'bg-card font-semibold text-foreground'
-              : 'font-medium text-muted-foreground hover:text-foreground',
-          )}
-        >
-          {r.tabs[page]}
-        </Link>
-      ))}
-    </nav>
+    <TabLinks
+      label={r.tabs.label}
+      current={current}
+      items={(Object.keys(REPORT_PAGES) as ReportPage[]).map((page) => ({
+        key: page,
+        href: query ? `${REPORT_PAGES[page]}?${query}` : REPORT_PAGES[page],
+        label: r.tabs[page],
+      }))}
+    />
   );
 }
 

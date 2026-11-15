@@ -10,6 +10,7 @@ import {
   TRACKING_NUMBER_MAX,
   TRACKING_NUMBER_MIN,
   TYPED_REASON_MAX,
+  type AdminOrderConflict,
   type AdminOrderDto,
   type AdminOrderRefusal,
   type CancelReason,
@@ -19,6 +20,7 @@ import {
 } from '@lummi/contracts';
 import { formatCalendarDate, formatMoney, formatTiyin, type Language } from '@lummi/i18n';
 import { orderCancelledText, receiptRejectedText } from '@lummi/i18n/bot';
+import { ordersMessages } from '@lummi/i18n/orders';
 import { CircleAlert } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -48,6 +50,34 @@ export type Failure = { text: string; mismatch?: ('amount' | 'card')[] };
 
 /** The parent makes the request; it answers what failed (shown in the dialog), or null to close it. */
 export type Submit<B> = (body: B) => Promise<Failure | null>;
+
+/**
+ * What a move's 409 says once the order moved on meanwhile (the order page and the board alike):
+ * the receipt was decided, the credit was taken, a refund was recorded, or the order is in
+ * another status now. On the board the sentence names the order (`number`) and says the card
+ * stayed where it was.
+ */
+export function conflictText(
+  body: Exclude<AdminOrderConflict, { code: 'try_again' }>,
+  t: AdminMessages,
+  language: Language,
+  number?: number,
+): string {
+  const o = t.orders;
+  const status = ordersMessages[language].orders.status[body.order.order.status];
+  switch (body.code) {
+    case 'receipt_changed':
+      return o.receiptChanged;
+    case 'credit_taken':
+      return o.creditTaken;
+    case 'refunds_changed':
+      return o.refund.changed;
+    default:
+      return number === undefined
+        ? fill(o.conflict, { status })
+        : fill(o.board.refused.conflict, { number: String(number), status });
+  }
+}
 
 /**
  * What a move's 422 says in its dialog (the order page and the board alike): the setting's limit,

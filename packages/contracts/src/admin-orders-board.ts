@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { adminOrdersQuerySchema, paymentStateSchema } from './admin-orders';
 import { bilingualSchema } from './catalog';
-import { ORDER_ACTIONS, findTransition, type OrderTransition } from './order-machine';
+import { ORDER_ACTIONS, findTransition, staffMay, type OrderTransition } from './order-machine';
 import type { OrderStatus } from './order-status';
 import { orderStatusSchema } from './orders';
 
@@ -48,7 +48,7 @@ export const isHistoryStatus = (status: OrderStatus) =>
 export function staffMove(from: OrderStatus, to: OrderStatus): OrderTransition | undefined {
   for (const action of ORDER_ACTIONS) {
     const row = findTransition(from, action);
-    if (row && row.to === to && row.actors.includes('staff')) return row;
+    if (row?.to === to && staffMay(from, action)) return row;
   }
   return undefined;
 }
@@ -107,6 +107,11 @@ export const adminOrdersBoardSchema = z.object({
   at: z.string().datetime(),
   recentDays: z.number().int().positive(),
   limit: z.number().int().positive(),
+  /**
+   * The shop has any order at all, whatever the filters and the days: an empty board then means
+   * «nothing open or recent», not «no orders yet».
+   */
+  shopHasOrders: z.boolean(),
   /** One per status, in `BOARD_STATUSES` order. */
   columns: z.array(adminBoardColumnSchema),
 });

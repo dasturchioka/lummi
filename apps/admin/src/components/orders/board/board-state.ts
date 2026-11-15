@@ -3,9 +3,11 @@ import {
   type AdminBoardCardDto,
   type AdminBoardColumnDto,
   type AdminOrdersBoardDto,
+  type FulfilAction,
   type OrderAction,
   type OrderStatus,
 } from '@lummi/contracts';
+import type { AdminMessages } from '@/lib/i18n';
 
 /*
  * The orders board's own state (#52), apart from React: the server's board with the moves made
@@ -32,26 +34,33 @@ export type Move = {
  */
 export type MoveKind = 'step' | 'hand' | 'cancel' | 'return' | 'confirm' | 'reject';
 
-export function moveKind(action: OrderAction): MoveKind | null {
-  switch (action) {
-    case 'accept':
-    case 'start_assembly':
-    case 'deliver':
-      return 'step';
-    case 'hand_to_bts':
-      return 'hand';
-    case 'cancel':
-      return 'cancel';
-    case 'return':
-      return 'return';
-    case 'confirm_payment':
-      return 'confirm';
-    case 'reject_receipt':
-      return 'reject';
-    default:
-      return null;
-  }
-}
+/** The fulfilment presses the board sends at once (the order page's own step button). */
+export type StepAction = Extract<FulfilAction, 'accept' | 'start_assembly' | 'deliver'>;
+
+/**
+ * Every move staff make on the board, in one table: how it is made and its words, as the order
+ * page's buttons name it. The board offers no other.
+ */
+const STAFF_MOVES: Partial<
+  Record<OrderAction, { kind: MoveKind; label: (o: AdminMessages['orders']) => string }>
+> = {
+  accept: { kind: 'step', label: (o) => o.step.accept },
+  start_assembly: { kind: 'step', label: (o) => o.step.start_assembly },
+  deliver: { kind: 'step', label: (o) => o.step.deliver },
+  hand_to_bts: { kind: 'hand', label: (o) => o.step.hand_to_bts },
+  cancel: { kind: 'cancel', label: (o) => o.step.cancel },
+  return: { kind: 'return', label: (o) => o.ret.action },
+  confirm_payment: { kind: 'confirm', label: (o) => o.detail.confirm },
+  reject_receipt: { kind: 'reject', label: (o) => o.detail.reject },
+};
+
+export const moveKind = (action: OrderAction): MoveKind | null => STAFF_MOVES[action]?.kind ?? null;
+
+export const moveLabel = (action: OrderAction, t: AdminMessages): string =>
+  STAFF_MOVES[action]?.label(t.orders) ?? '';
+
+export const isStep = (action: OrderAction): action is StepAction =>
+  STAFF_MOVES[action]?.kind === 'step';
 
 /**
  * The order of cards in a column: a work column puts the longest wait first (oldest in its
@@ -66,19 +75,11 @@ export function columnOrder(status: OrderStatus) {
   };
 }
 
-/** The card with this number, wherever the server's board has it. */
-export function findCard(board: AdminOrdersBoardDto, number: number): AdminBoardCardDto | null {
-  for (const column of board.columns) {
-    const card = column.cards.find((c) => c.number === number);
-    if (card) return card;
-  }
-  return null;
-}
-
 /**
  * The columns as the board shows them: the server's, with each move not yet in them applied.
- * A moved card leaves its column (count and money too) and takes its place in the new one. A move
- * the server's board already shows (the card is in `to`) changes nothing.
+ * A moved card leaves its column and takes its place in the new one, and the counts follow. The
+ * money stays as the server last added it up (the server owns money): the next board, right after
+ * the move, brings the new sums. A move the server's board already shows changes nothing.
  */
 export function withMoves(board: AdminOrdersBoardDto, moves: Move[]): AdminBoardColumnDto[] {
   const columns = board.columns.map((c) => ({ ...c, cards: [...c.cards] }));
@@ -89,12 +90,10 @@ export function withMoves(board: AdminOrdersBoardDto, moves: Move[]): AdminBoard
     const card = source.cards.find((x) => x.number === move.number)!;
     source.cards = source.cards.filter((x) => x.number !== move.number);
     source.count = Math.max(0, source.count - 1);
-    source.sum = Math.max(0, source.sum - card.total);
     target.cards = [...target.cards, { ...card, status: move.to, statusSince: move.since }].sort(
       columnOrder(move.to),
     );
     target.count += 1;
-    target.sum += card.total;
   }
   return columns;
 }
@@ -117,21 +116,29 @@ export function arrivals(before: AdminBoardColumnDto[] | null, after: AdminBoard
 export const secondsIn = (since: string, at: string) =>
   Math.max(0, Math.floor((Date.parse(at) - Date.parse(since)) / 1000));
 
-/** From 640 px: columns are at least this wide, 8 px apart, and the next one peeks in by 40 px. */
-const MIN_COLUMN = 248;
-const MAX_COLUMN = 320;
+/**
+ * From 640 px: columns at least this wide (the card's narrow layout holds RU and UZ at it), 8 px
+ * apart, and the next one peeking in by 24 px. At 1280 five funnel columns fit beside the rails.
+ */
+const MIN_COLUMN = 156;
+const MAX_COLUMN = 300;
 const GAP = 8;
-const PEEK = 40;
+const PEEK = 24;
 
 /**
- * From 640 px the board sizes its columns to the room it has, so a column never rests as a sliver
- * at the edge: all of them share the width when they fit (at most `MAX_COLUMN` each), otherwise
- * as many whole columns as fit and the next one peeking in by `PEEK`, as the shop's card rows do.
- * Null on phones, where a column is the screen less 88 px and the board snaps column by column.
+ * From 640 px the board sizes its columns to the room it has, so a column never rests half
+ * hidden at either end: all of them share the width when they fit (at most `MAX_COLUMN` each);
+ * otherwise as many whole columns as fit and the next one peeking in, as the shop's card rows do.
+ * `endPad` is the room after the last column that lets the scroll end on a column's start too, so
+ * the board snaps whole columns at both ends. On phones a column is the screen less 88 px instead.
  */
-export function columnWidth(room: number, count: number): number {
+export function columnLayout(room: number, count: number): { width: number; endPad: number } {
   if (count * MIN_COLUMN + (count - 1) * GAP <= room)
-    return Math.min(MAX_COLUMN, Math.floor((room - (count - 1) * GAP) / count));
+    return {
+      width: Math.min(MAX_COLUMN, Math.floor((room - (count - 1) * GAP) / count)),
+      endPad: 0,
+    };
   const whole = Math.max(1, Math.floor((room - PEEK) / (MIN_COLUMN + GAP)));
-  return Math.floor((room - PEEK) / whole - GAP);
+  const width = Math.floor((room - PEEK) / whole - GAP);
+  return { width, endPad: room - whole * (width + GAP) + GAP };
 }

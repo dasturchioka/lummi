@@ -1,6 +1,14 @@
 import { BOARD_STATUSES, type AdminBoardCardDto, type AdminOrdersBoardDto } from '@lummi/contracts';
 import { describe, expect, it } from 'vitest';
-import { arrivals, columnWidth, moveKind, secondsIn, withMoves, type Move } from './board-state';
+import {
+  arrivals,
+  columnLayout,
+  isStep,
+  moveKind,
+  secondsIn,
+  withMoves,
+  type Move,
+} from './board-state';
 
 const card = (
   number: number,
@@ -28,6 +36,7 @@ function boardOf(cards: AdminBoardCardDto[]): AdminOrdersBoardDto {
     at: '2026-11-16T04:00:00.000Z',
     recentDays: 14,
     limit: 50,
+    shopHasOrders: true,
     columns: BOARD_STATUSES.map((status) => {
       const own = cards.filter((c) => c.status === status);
       return { status, count: own.length, sum: own.reduce((n, c) => n + c.total, 0), cards: own };
@@ -56,10 +65,11 @@ describe('moves on the board', () => {
       state: 'saving',
     };
     const cols = withMoves(board, [move]);
-    expect(column(cols, 'accepted')).toMatchObject({ count: 0, sum: 0, cards: [] });
+    expect(column(cols, 'accepted')).toMatchObject({ count: 0, sum: 200_000, cards: [] });
     const assembling = column(cols, 'assembling');
     expect(assembling.cards.map((c) => c.number)).toEqual([1002, 1003, 1001]);
-    expect(assembling).toMatchObject({ count: 3, sum: 400_000 });
+    // the money stays as the server added it up until the next board
+    expect(assembling).toMatchObject({ count: 3, sum: 200_000 });
     expect(assembling.cards[2]).toMatchObject({ status: 'assembling', statusSince: at(3) });
   });
 
@@ -99,6 +109,8 @@ describe('moves on the board', () => {
     expect(moveKind('reject_receipt')).toBe('reject');
     expect(moveKind('return')).toBe('return');
     expect(moveKind('submit_receipt')).toBeNull();
+    expect(isStep('accept')).toBe(true);
+    expect(isStep('hand_to_bts')).toBe(false);
   });
 });
 
@@ -121,16 +133,22 @@ describe('a fresh board', () => {
 });
 
 describe('column width from 640 px', () => {
-  it('whole columns and a 40 px peek of the next, never a sliver', () => {
-    // 1280 px: 808 px beside the rails holds three columns of 248 and the peek
-    expect(columnWidth(808, 7)).toBe(248);
-    const w = columnWidth(968, 7);
-    expect(3 * (w + 8) + 40).toBeLessThanOrEqual(968);
-    expect(968 - 3 * (w + 8)).toBeLessThan(40 + 3);
+  it('five funnel columns beside the rails at 1280, the next one peeking in', () => {
+    // 1280: 952 px of content less the rails (2 × 44 + 8 + 8) leaves 848
+    const { width } = columnLayout(848, 7);
+    expect(width).toBeGreaterThanOrEqual(156);
+    expect(5 * (width + 8) + 24).toBeLessThanOrEqual(848);
   });
 
-  it('all columns share the room when they fit, at most 320 each', () => {
-    expect(columnWidth(1800, 7)).toBe(Math.floor((1800 - 6 * 8) / 7));
-    expect(columnWidth(4000, 7)).toBe(320);
+  it('the scroll ends on a whole column too: the room after the last one completes the view', () => {
+    const room = 848;
+    const { width, endPad } = columnLayout(room, 7);
+    const content = 7 * width + 6 * 8 + endPad;
+    expect((content - room) % (width + 8)).toBe(0);
+  });
+
+  it('all columns share the room when they fit, at most 300 each, and need no end room', () => {
+    expect(columnLayout(1800, 7)).toEqual({ width: Math.floor((1800 - 6 * 8) / 7), endPad: 0 });
+    expect(columnLayout(4000, 7).width).toBe(300);
   });
 });

@@ -83,7 +83,7 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
 
   return (
     <>
-      <OrdersFiltersForm t={t} language={language} filters={filters} view="list" />
+      <OrdersFiltersForm t={t} language={language} filters={filters} />
 
       {items.length === 0 ? (
         <EmptyState

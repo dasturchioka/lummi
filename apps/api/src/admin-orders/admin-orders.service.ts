@@ -265,58 +265,74 @@ export class AdminOrdersService {
    */
   async board(q: AdminOrdersBoardQuery, limit = BOARD_COLUMN_LIMIT): Promise<AdminOrdersBoardDto> {
     const now = this.edges.clock.now();
-    const firstDay = formatLocalDate(addDays(tashkentDay(now), -(BOARD_RECENT_DAYS - 1)));
+    const firstDay = dayStart(
+      formatLocalDate(addDays(tashkentDay(now), -(BOARD_RECENT_DAYS - 1))),
+    ).toISOString();
     const history = sql`"orders"."status" in (${sql.join(
       BOARD_HISTORY_STATUSES.map((s) => sql`${s}`),
       sql`, `,
     )})`;
-    const recent = sql`(not ${history} or ${enteredStatus} >= ${dayStart(firstDay).toISOString()})`;
+    // A move stamps `updated_at` with the time its event records, and nothing moves it back, so
+    // `updated_at` is never before the order entered its status: the plain column rules out the
+    // old history first, and only what is left asks the order's history (#52 review).
+    const recent = sql`(not ${history} or (${orders.updatedAt} >= ${firstDay} and ${enteredStatus} >= ${firstDay}))`;
     const where = and(...orderFilters(q).conditions, recent);
-
-    const totals = await this.db
-      .select({
-        status: orders.status,
-        count: sql<number>`count(*)::int`.mapWith(Number),
-        sum: sql<number>`coalesce(sum(${orders.total}), 0)::bigint`.mapWith(Number),
-      })
-      .from(orders)
-      .innerJoin(customers, eq(customers.id, orders.customerId))
-      .where(where)
-      .groupBy(orders.status);
 
     // one rank per column: oldest in status first, or newest first in a history column
     const rank = sql<number>`row_number() over (partition by "orders"."status" order by
       case when ${history} then -extract(epoch from ${enteredStatus}) else extract(epoch from ${enteredStatus}) end,
       case when ${history} then -"orders"."number" else "orders"."number" end)`;
-    const ranked = this.db
-      .select({ id: orders.id, rank: rank.as('rank') })
-      .from(orders)
-      .innerJoin(customers, eq(customers.id, orders.customerId))
-      .where(where)
-      .as('ranked');
     const items =
       sql<number>`(select coalesce(sum(l.qty), 0) from ${orderLines} l where l.order_id = "orders"."id")`.mapWith(
         Number,
       );
-    const rows = await this.db
-      .select({
-        order: orders,
-        customer: customers,
-        payment: paymentState,
-        owed: sql<boolean>`(${refundOwed()})`,
-        since: enteredStatus,
-        items,
-      })
-      .from(orders)
-      .innerJoin(customers, eq(customers.id, orders.customerId))
-      .innerJoin(ranked, eq(ranked.id, orders.id))
-      .where(sql`${ranked.rank} <= ${limit}`)
-      .orderBy(ranked.rank);
+
+    // one snapshot, so a count and its cards never disagree
+    const { totals, rows, shopHasOrders } = await this.db.transaction(
+      async (tx) => {
+        const totals = await tx
+          .select({
+            status: orders.status,
+            count: sql<number>`count(*)::int`.mapWith(Number),
+            sum: sql<number>`coalesce(sum(${orders.total}), 0)::bigint`.mapWith(Number),
+          })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .where(where)
+          .groupBy(orders.status);
+        const ranked = tx
+          .select({ id: orders.id, rank: rank.as('rank') })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .where(where)
+          .as('ranked');
+        const rows = await tx
+          .select({
+            order: orders,
+            customer: customers,
+            payment: paymentState,
+            owed: sql<boolean>`(${refundOwed()})`,
+            since: enteredStatus,
+            items,
+          })
+          .from(orders)
+          .innerJoin(customers, eq(customers.id, orders.customerId))
+          .innerJoin(ranked, eq(ranked.id, orders.id))
+          .where(sql`${ranked.rank} <= ${limit}`)
+          .orderBy(ranked.rank);
+        const [any] = await tx
+          .select({ yes: sql<boolean>`exists (select 1 from ${orders})` })
+          .from(sql`(select 1) as one`);
+        return { totals, rows, shopHasOrders: Boolean(any?.yes) };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
 
     return {
       at: now.toISOString(),
       recentDays: BOARD_RECENT_DAYS,
       limit,
+      shopHasOrders,
       columns: BOARD_STATUSES.map((status) => {
         const total = totals.find((x) => x.status === status);
         return {

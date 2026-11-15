@@ -114,6 +114,16 @@ describe('the orders board', () => {
     expect(b.at).toBe(tashkent('2026-11-16 09:00').toISOString());
     expect(b.recentDays).toBe(14);
     expect(b.limit).toBe(50);
+    expect(b.shopHasOrders).toBe(false);
+  });
+
+  it('a shop whose orders all closed before the 14 days still has orders: the board says so', async () => {
+    const old = await orderAt('2026-10-20 10:00');
+    await cancelByStaff(t, old);
+    t.edges.clock.set(tashkent('2026-11-16 09:00'));
+    const b = await board();
+    expect(b.columns.every((c) => c.count === 0)).toBe(true);
+    expect(b.shopHasOrders).toBe(true);
   });
 
   it('each order sits in its status with what the card shows; a work column puts the longest wait first', async () => {
