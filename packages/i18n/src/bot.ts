@@ -189,7 +189,50 @@ export const botMessages = defineMessages(
         trackingStale: 'Заказ № {number} уже изменён, трек-номер не сохранён.',
         trackingSuperseded:
           'Этот вопрос по заказу № {number} уже не действует: ответьте на последний вопрос бота.',
+        /** A good tracking number was saved (#51, F8): the order moved to «Передан в BTS». */
+        trackingSaved: 'Трек-номер {tracking} сохранён, заказ № {number} передан в BTS.',
+        /** A photo, sticker or other non-text answer to the tracking question (#51, F17). */
+        trackingTextOnly:
+          'Ответьте текстом: трек-номер BTS для заказа № {number}, от {min} до {max} символов.',
         receiptCaption: 'Чек к заказу № {number}',
+        /**
+         * A receipt held for a person (#51, TZ §4: «При ручной проверке в группу заказов приходят
+         * чек, найденные поступления и причина»), with TZ §6's «Оплата подтверждена» and «Чек не
+         * принят». The reasons are the TZ's words for each review reason (`RECEIPT_REVIEW_REASONS`).
+         */
+        manualReview: {
+          title: 'Ручная проверка: заказ № {number}',
+          reason: 'Причина: {reason}',
+          reasons: {
+            duplicate: 'повторный чек (такой же чек уже был у другого заказа)',
+            not_confirmed: 'ИИ не уверен',
+            several: 'несколько поступлений, ИИ не уверен',
+            judge_failed: 'ИИ не уверен (ИИ не смог проверить чек)',
+            credit_marked: 'ИИ подтвердил чек поступлением, которое отметили «Не для заказа»',
+          },
+          due: 'К оплате: {amount}',
+          receiptAt: 'Чек от {at}: ответом на это сообщение',
+          candidates: 'Найденные поступления:',
+          noCandidates:
+            'Нет поступления: {amount} на карту магазина после оформления заказа не приходило.',
+          moreCandidates: '… и ещё {n}: в админке',
+          ask: 'Сверьте чек с поступлением и нажмите «Оплата подтверждена» или «Чек не принят».',
+          askNoCredit:
+            'Подтвердить оплату другим поступлением можно в админке, с причиной. Или нажмите «Чек не принят».',
+          confirm: '✅ Оплата подтверждена',
+          confirmWith: '✅ Оплата подтверждена: {at}',
+          reject: '⛔ Чек не принят',
+          confirmAsk: 'Подтвердить оплату поступлением {amount} от {at} ({card})?',
+          confirmYes: 'Да, оплата подтверждена',
+          rejectAsk:
+            'Чек не принят: выберите причину. Покупатель получит её и сможет загрузить чек заново.',
+          rejectConfirm: 'Чек не принят? Причина: {reason}.',
+          rejectYes: 'Да, чек не принят: {reason}',
+          paidWith: 'Поступление: {amount} · {at} · {card}',
+          creditTaken:
+            'Это поступление уже не свободно: оно оплатило другой заказ или его отметили «Не для заказа»',
+          creditMisfit: 'Это поступление не подходит заказу: привяжите его в админке, с причиной',
+        },
       },
     },
   },
@@ -342,7 +385,44 @@ export const botMessages = defineMessages(
         trackingStale: '№ {number} buyurtma allaqachon oʻzgargan, trek-raqam saqlanmadi.',
         trackingSuperseded:
           '№ {number} buyurtma boʻyicha bu savol endi amal qilmaydi: botning oxirgi savoliga javob bering.',
+        trackingSaved: '{tracking} trek-raqami saqlandi, № {number} buyurtma BTSga topshirildi.',
+        trackingTextOnly:
+          'Matn bilan javob bering: № {number} buyurtmaning BTS trek-raqami, {min} dan {max} tagacha belgi.',
         receiptCaption: '№ {number} buyurtma cheki',
+        manualReview: {
+          title: 'Qoʻlda tekshirish: № {number} buyurtma',
+          reason: 'Sabab: {reason}',
+          reasons: {
+            duplicate: 'takroriy chek (xuddi shunday chek boshqa buyurtmada boʻlgan)',
+            not_confirmed: 'AI ishonchi komil emas',
+            several: 'bir nechta tushum, AI ishonchi komil emas',
+            judge_failed: 'AI ishonchi komil emas (AI chekni tekshira olmadi)',
+            credit_marked:
+              'AI chekni «Buyurtma uchun emas» deb belgilangan tushum bilan tasdiqladi',
+          },
+          due: 'Toʻlov summasi: {amount}',
+          receiptAt: '{at} dagi chek: shu xabarga javob sifatida',
+          candidates: 'Topilgan tushumlar:',
+          noCandidates:
+            'Tushum yoʻq: buyurtma rasmiylashtirilgandan keyin doʻkon kartasiga {amount} kelmagan.',
+          moreCandidates: '… yana {n} ta: admin panelda',
+          ask: 'Chekni tushum bilan solishtiring va «Toʻlov tasdiqlandi» yoki «Chek qabul qilinmadi» tugmasini bosing.',
+          askNoCredit:
+            'Toʻlovni boshqa tushum bilan admin panelda, sababini yozib tasdiqlash mumkin. Yoki «Chek qabul qilinmadi» tugmasini bosing.',
+          confirm: '✅ Toʻlov tasdiqlandi',
+          confirmWith: '✅ Toʻlov tasdiqlandi: {at}',
+          reject: '⛔ Chek qabul qilinmadi',
+          confirmAsk: 'Toʻlov {at} dagi {amount} tushum ({card}) bilan tasdiqlansinmi?',
+          confirmYes: 'Ha, toʻlov tasdiqlandi',
+          rejectAsk:
+            'Chek qabul qilinmadi: sababni tanlang. Xaridor uni oladi va chekni qayta yuklay oladi.',
+          rejectConfirm: 'Chek qabul qilinmasinmi? Sabab: {reason}.',
+          rejectYes: 'Ha, chek qabul qilinmadi: {reason}',
+          paidWith: 'Tushum: {amount} · {at} · {card}',
+          creditTaken:
+            'Bu tushum endi boʻsh emas: u boshqa buyurtmani toʻlagan yoki «Buyurtma uchun emas» deb belgilangan',
+          creditMisfit: 'Bu tushum buyurtmaga mos emas: uni admin panelda sababini yozib bogʻlang',
+        },
       },
     },
   },
