@@ -11,7 +11,7 @@ import { parseHumoMessage, type HumoParseError } from './humo-parser';
 
 /** What did not fit, for the owner alert. Staff-facing, so Russian (like every owner alert). */
 const WHAT_FAILED: Record<HumoParseError, string> = {
-  not_an_operation: 'в нём нет строки с ➕ или ➖',
+  not_an_operation: 'в нём есть карта или сумма, но нет строки с ➕ или ➖',
   amount: 'не по шаблону поле «сумма»',
   time: 'не по шаблону поле «время»',
   card: 'не по шаблону поле «карта»',
@@ -35,11 +35,13 @@ export class HumoFeedService {
 
   /**
    * Idempotent on `messageId`: a repeat (or a concurrent twin) answers what is stored and records,
-   * alerts and emits nothing. A debit is neither stored nor remembered, so a repeat is a debit again.
+   * alerts and emits nothing. A debit or a service message (the Humo bot's menus, settings
+   * answers, promos, #51) is neither stored nor remembered, so a repeat is the same again.
    */
   async intake(messageId: number, text: string): Promise<HumoMessageResult> {
     const parsed = parseHumoMessage(text);
     if (parsed.kind === 'debit') return { outcome: 'debit', duplicate: false, creditId: null };
+    if (parsed.kind === 'service') return { outcome: 'service', duplicate: false, creditId: null };
 
     const result = await this.outbox.withTx(async (tx): Promise<HumoMessageResult> => {
       const [stored] = await tx

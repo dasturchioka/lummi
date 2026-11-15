@@ -20,14 +20,19 @@ export interface ParsedCredit {
 }
 
 /**
- * Why a Humo message is not a credit we can record: it reports no card operation (no ➕/➖ line),
- * or a required field of a ➕ does not fit the template.
+ * Why a Humo message is not a credit we can record: it looks like an operation (a card mask or an
+ * amount in UZS) but has no ➕/➖ line, or a required field of a ➕ does not fit the template.
  */
 export type HumoParseError = 'not_an_operation' | 'amount' | 'time' | 'card';
 
 export type HumoParse =
   | { kind: 'credit'; credit: ParsedCredit }
   | { kind: 'debit' }
+  /**
+   * The Humo bot's own talk (menus, settings answers, promos, codes): no ➕/➖ line and nothing
+   * that looks like an operation (#51). Not ours, like a debit.
+   */
+  | { kind: 'service' }
   | { kind: 'unparseable'; reason: HumoParseError };
 
 /**
@@ -40,6 +45,14 @@ const AMOUNT = /^(\d{1,3}(?:([. \u00A0\u202F])\d{3}(?:\2\d{3})*)?|\d+)(?:,(\d{2}
 /** «20:54 22.06.2025»: no seconds, four-digit year. The clock emoji in front is not relied on. */
 const TIME = /(?<![\d:])(\d{2}):(\d{2}) (\d{2})\.(\d{2})\.(\d{4})(?![\d.:])/;
 
+/**
+ * What an operation notification always carries, whatever its layout: a card mask («*1234») or an
+ * amount in UZS («75.750,00 UZS»). A message with either but no ➕/➖ line may be a changed
+ * format, so it is refused (and the owner alerted); one with neither is the bot's own talk.
+ */
+const CARD_MASK = /\*\s?\d{4}(?!\d)/;
+const UZS_AMOUNT = /\d[\s\u00A0\u202F]*UZS(?![A-Za-z])/u;
+
 export function parseHumoMessage(text: string): HumoParse {
   // Emoji may carry a variation selector (U+FE0F); it changes nothing.
   const lines = text
@@ -49,7 +62,10 @@ export function parseHumoMessage(text: string): HumoParse {
 
   // Exactly one signed line, ➕ (credit) or ➖ (debit).
   const signed = lines.filter((l) => l.startsWith('➕') || l.startsWith('➖'));
-  if (signed.length === 0) return unparseable('not_an_operation');
+  if (signed.length === 0) {
+    const looksLikeOperation = lines.some((l) => CARD_MASK.test(l) || UZS_AMOUNT.test(l));
+    return looksLikeOperation ? unparseable('not_an_operation') : { kind: 'service' };
+  }
   if (signed.length > 1) return unparseable('amount');
   const [amountLine] = signed as [string];
   // Money out of the card is none of our business: not parsed further, not stored.

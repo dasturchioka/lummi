@@ -18,8 +18,12 @@ export const humoMessageBodySchema = z.object({
 });
 
 export const humoMessageResultSchema = z.object({
-  /** credit: recorded (or had been); debit: ignored, nothing stored; unparseable: stored raw and flagged. */
-  outcome: z.enum(['credit', 'debit', 'unparseable']),
+  /**
+   * credit: recorded (or had been); debit: ignored, nothing stored; service: the Humo bot's own
+   * talk (a menu, a settings answer, a promo), ignored, nothing stored; unparseable: looks like an
+   * operation but does not fit the template, stored raw and flagged, the owner alerted.
+   */
+  outcome: z.enum(['credit', 'debit', 'service', 'unparseable']),
   /** This message_id was stored before; nothing was recorded or alerted again. */
   duplicate: z.boolean(),
   creditId: z.number().int().nullable(),
