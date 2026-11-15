@@ -19,6 +19,7 @@ import {
   salesReportSchema,
 } from './reports';
 import { adminHomeSchema } from './home';
+import { adminOrdersBoardQuerySchema, adminOrdersBoardSchema } from './admin-orders-board';
 import {
   addCartLineBodySchema,
   cartErrorSchema,
@@ -1471,6 +1472,15 @@ const adminOrders = c.router({
       responses: { 200: adminOrdersPageSchema, 401: adminOrderErrorSchema },
       summary:
         'Staff: orders newest first, filtered by status, payment state and Tashkent dates, searched by number or phone',
+    },
+    // before `get`: `/admin/orders/board` is not an order number
+    board: {
+      method: 'GET',
+      path: '/admin/orders/board',
+      query: adminOrdersBoardQuerySchema,
+      responses: { 200: adminOrdersBoardSchema, 401: adminOrderErrorSchema },
+      summary:
+        'Staff: the orders board (#52): per status the count, the money and the first cards (work columns oldest in status first; delivered, cancelled and returned only the recent days, newest first)',
     },
     get: {
       method: 'GET',

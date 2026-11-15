@@ -1,6 +1,7 @@
 export * from './admin';
 export * from './staff-access';
 export * from './admin-orders';
+export * from './admin-orders-board';
 export * from './admin-catalog';
 export * from './auth';
 export * from './delivery';
