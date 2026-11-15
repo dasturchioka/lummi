@@ -2,7 +2,6 @@
 
 import { OrderReviewSection } from '@/components/reviews/order-review';
 import {
-  charCount,
   FULFIL_ACTIONS,
   findTransition,
   type AdminOrderDto,
@@ -32,6 +31,7 @@ import {
   HandToBtsDialog,
   RefundDialog,
   RejectDialog,
+  refusalFailure,
   ReturnDialog,
   type Failure,
 } from './order-dialogs';
@@ -144,35 +144,7 @@ export function OrderPage({
         );
         return null;
       case 422:
-        switch (res.body.code) {
-          case 'note_too_long':
-            return { text: fill(o.rejectNoteTooLong, { max: String(res.body.max ?? '') }) };
-          case 'reason_required':
-            return { text: o.linkReasonRequired, mismatch: res.body.mismatch ?? [] };
-          case 'reason_invalid':
-            // the server gives the bounds; the reason the manager typed says which was crossed
-            return {
-              text:
-                charCount(reason?.trim() ?? '') < (res.body.min ?? 0)
-                  ? fill(o.linkReasonShort, { min: String(res.body.min ?? '') })
-                  : fill(o.linkReasonLong, { max: String(res.body.max ?? '') }),
-              mismatch: [],
-            };
-          case 'credit_mismatch':
-            return { text: res.body.what === 'before_order' ? o.beforeOrder : o.notAllowed };
-          case 'refund_too_large':
-            return {
-              text: fill(o.refund.amountTooLarge, {
-                max: formatMoney(res.body.max ?? 0, language),
-              }),
-            };
-          case 'invalid_date':
-            return { text: o.refund.dateInvalid };
-          case 'not_paid':
-            return { text: o.refund.notPaid };
-          default:
-            return { text: o.notAllowed };
-        }
+        return refusalFailure(res.body, t, language, reason);
       case 401:
         router.push('/login');
         return null;

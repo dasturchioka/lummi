@@ -3,7 +3,6 @@ import { formatMoney, formatPhone, plural, type Language } from '@lummi/i18n';
 import { Gift } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
-import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,7 +10,6 @@ import { MetaLine } from '@/components/ui/meta-line';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { formatTashkent, num } from '@/lib/setting-copy';
-import { TEXT_LINK } from '@/lib/ui-classes';
 import { listHref } from '@/lib/list-page';
 import { fill } from '@/lib/utils';
 import { PaymentBadge, paymentWorthShowing, RefundBadge, StatusBadge } from './badges';
@@ -30,15 +28,15 @@ type Props = {
 };
 
 /**
- * The orders list (#33): the filters (a GET form), the count, then the orders newest first, as
- * rows on phones and a table on wide screens. A row opens the order page; the number is the
+ * The orders list (#33; behind «Список» since #52, the page draws the header): the filters (a GET
+ * form), the count, then the orders newest first, as rows on phones and a table on wide screens. A row opens the order page; the number is the
  * keyboard path to it. Times are Asia/Tashkent; amounts come from the server.
  */
 export function OrdersList({ t, language, items, total, page, pageSize, filters }: Props) {
   const o = t.orders;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const filtered = Object.values(filters).some(Boolean);
-  const href = (p: number) => listHref('/orders', filters, p);
+  const href = (p: number) => listHref('/orders', { view: 'list', ...filters }, p);
 
   const number = (it: AdminOrderListItemDto) => (
     <Link
@@ -85,17 +83,7 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
 
   return (
     <>
-      <PageHeader
-        title={o.title}
-        description={o.description}
-        actions={
-          <Link href="/credits" className={TEXT_LINK}>
-            {o.toCredits}
-          </Link>
-        }
-      />
-
-      <OrdersFiltersForm t={t} language={language} filters={filters} />
+      <OrdersFiltersForm t={t} language={language} filters={filters} view="list" />
 
       {items.length === 0 ? (
         <EmptyState
@@ -103,7 +91,7 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
           action={
             filtered ? (
               <Button asChild variant="outline">
-                <Link href="/orders">{o.filters.reset}</Link>
+                <Link href="/orders?view=list">{o.filters.reset}</Link>
               </Button>
             ) : undefined
           }

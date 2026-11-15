@@ -84,14 +84,14 @@ export function nowKey(now: HomeNow): string {
   }
 }
 
-/** Each queue row's list, filtered to exactly its items (#48). */
+/** Each queue row's list, filtered to exactly its items (#48); orders as the list, not the board (#52). */
 export const QUEUE_HREF: Record<HomeQueue, string> = {
-  receipts: '/orders?payment=manual_review',
-  accept: '/orders?status=payment_confirmed',
-  assemble: '/orders?status=accepted',
-  bts: '/orders?status=assembling',
+  receipts: '/orders?view=list&payment=manual_review',
+  accept: '/orders?view=list&status=payment_confirmed',
+  assemble: '/orders?view=list&status=accepted',
+  bts: '/orders?view=list&status=assembling',
   credits: '/credits?linked=unlinked',
-  refunds: '/orders?payment=refund_owed',
+  refunds: '/orders?view=list&payment=refund_owed',
   stock: '/stock?filter=low&visibility=visible',
   reviews: '/reviews?state=waiting',
 };

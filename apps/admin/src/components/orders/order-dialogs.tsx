@@ -11,6 +11,7 @@ import {
   TRACKING_NUMBER_MIN,
   TYPED_REASON_MAX,
   type AdminOrderDto,
+  type AdminOrderRefusal,
   type CancelReason,
   type CreditOptionDto,
   type CreditOptionsDto,
@@ -47,6 +48,47 @@ export type Failure = { text: string; mismatch?: ('amount' | 'card')[] };
 
 /** The parent makes the request; it answers what failed (shown in the dialog), or null to close it. */
 export type Submit<B> = (body: B) => Promise<Failure | null>;
+
+/**
+ * What a move's 422 says in its dialog (the order page and the board alike): the setting's limit,
+ * a credit that differs and needs a reason, a reason out of bounds (the typed `reason` says which
+ * bound), or a step that is not open from here.
+ */
+export function refusalFailure(
+  body: AdminOrderRefusal,
+  t: AdminMessages,
+  language: Language,
+  reason?: string,
+): Failure {
+  const o = t.orders;
+  switch (body.code) {
+    case 'note_too_long':
+      return { text: fill(o.rejectNoteTooLong, { max: String(body.max ?? '') }) };
+    case 'reason_required':
+      return { text: o.linkReasonRequired, mismatch: body.mismatch ?? [] };
+    case 'reason_invalid':
+      // the server gives the bounds; the reason the manager typed says which was crossed
+      return {
+        text:
+          charCount(reason?.trim() ?? '') < (body.min ?? 0)
+            ? fill(o.linkReasonShort, { min: String(body.min ?? '') })
+            : fill(o.linkReasonLong, { max: String(body.max ?? '') }),
+        mismatch: [],
+      };
+    case 'credit_mismatch':
+      return { text: body.what === 'before_order' ? o.beforeOrder : o.notAllowed };
+    case 'refund_too_large':
+      return {
+        text: fill(o.refund.amountTooLarge, { max: formatMoney(body.max ?? 0, language) }),
+      };
+    case 'invalid_date':
+      return { text: o.refund.dateInvalid };
+    case 'not_paid':
+      return { text: o.refund.notPaid };
+    default:
+      return { text: o.notAllowed };
+  }
+}
 
 type Common = {
   open: boolean;

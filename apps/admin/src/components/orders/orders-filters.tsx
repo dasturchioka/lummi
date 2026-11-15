@@ -25,20 +25,30 @@ export type OrderFilters = {
 
 /**
  * The orders filters: a plain GET form, so a filtered view survives a reload and can be shared.
- * The search (number or phone) is always in view; on phones the four selects open behind
- * «Фильтры» (open while any is set), as the catalog and the audit do.
+ * The search (number or phone) is always in view; on phones the other fields open behind
+ * «Фильтры» (open while any is set), as the catalog and the audit do. The board (#52) has no
+ * status field: there the status is the column.
  */
 export function OrdersFiltersForm({
   t,
   language,
   filters,
+  view,
 }: {
   t: AdminMessages;
   language: Language;
   filters: OrderFilters;
+  view: 'board' | 'list';
 }) {
   const f = t.orders.filters;
-  const active = [filters.status, filters.payment, filters.from, filters.to].filter(Boolean).length;
+  const board = view === 'board';
+  const reset = board ? '/orders' : '/orders?view=list';
+  const active = [
+    board ? undefined : filters.status,
+    filters.payment,
+    filters.from,
+    filters.to,
+  ].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
   const any = active > 0 || Boolean(filters.q);
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
@@ -50,8 +60,14 @@ export function OrdersFiltersForm({
       <form
         method="get"
         action="/orders"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto] lg:items-end"
+        className={cn(
+          'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:items-end',
+          board
+            ? 'lg:grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))_auto]'
+            : 'lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto]',
+        )}
       >
+        {!board && <input type="hidden" name="view" value="list" />}
         <Field id="f-q" label={f.search} className="sm:col-span-2 lg:col-span-1">
           <Input
             name="q"
@@ -71,7 +87,7 @@ export function OrdersFiltersForm({
             type="button"
             variant="outline"
             aria-expanded={open}
-            aria-controls="f-status f-payment f-from f-to"
+            aria-controls={board ? 'f-payment f-from f-to' : 'f-status f-payment f-from f-to'}
             onClick={() => setOpen((v) => !v)}
           >
             <SlidersHorizontal strokeWidth={1.5} aria-hidden />
@@ -83,16 +99,18 @@ export function OrdersFiltersForm({
             )}
           </Button>
         </div>
-        <Field id="f-status" label={f.status} className={cn(hidden)}>
-          <Select name="status" defaultValue={filters.status ?? ''}>
-            <option value="">{f.all}</option>
-            {ORDER_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {statuses[s]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {!board && (
+          <Field id="f-status" label={f.status} className={cn(hidden)}>
+            <Select name="status" defaultValue={filters.status ?? ''}>
+              <option value="">{f.all}</option>
+              {ORDER_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statuses[s]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field id="f-payment" label={f.payment} className={cn(hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
@@ -121,7 +139,7 @@ export function OrdersFiltersForm({
           </Button>
           {any && (
             <Button asChild variant="outline" className="max-sm:flex-1">
-              <Link href="/orders">{f.reset}</Link>
+              <Link href={reset}>{f.reset}</Link>
             </Button>
           )}
         </div>
