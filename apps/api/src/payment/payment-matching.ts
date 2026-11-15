@@ -23,6 +23,7 @@ import { answered, type Edges, type ReceiptJudgement } from '../edges';
 import type { Env } from '../env';
 import { CreditEvents, type CreditRecorded } from '../humo/credit-events';
 import { describeError } from '../logging/describe-error';
+import { ManualReviewPosts } from '../orders-group/manual-review-posts';
 import { DISPATCH_TIMEOUT_MS, OutboxService } from '../outbox/outbox.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce } from '../util/transient';
@@ -119,6 +120,7 @@ export class PaymentMatching implements OnApplicationShutdown {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
     @Inject(PaymentNotFound) private readonly notFound: PaymentNotFound,
+    @Inject(ManualReviewPosts) private readonly posts: ManualReviewPosts,
     @Inject(CreditEvents) creditEvents: CreditEvents,
     @Inject(WorkerRuntime) runtime: WorkerRuntime,
   ) {
@@ -187,16 +189,21 @@ export class PaymentMatching implements OnApplicationShutdown {
         ? sql`and (r.id = ${only.receiptId} or exists (
             select 1 from ${receipts} x where x.id = ${only.receiptId} and ${sameReceipt('x', 'r', maxDistance)}))`
         : sql``;
-    // the first receipt waits for a person (#32); the later one is decided below
-    const { rows: held } = await this.db.execute<{ id: string }>(sql`
-      update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
-      where r.verdict in (${sqlList(WAITING_VERDICTS)})
-        and r.review_reason is distinct from 'duplicate'
-        and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
-        and ${isDuplicate(maxDistance)}
-        and not ${isRepeat(maxDistance)}
-        ${scope}
-      returning r.id`);
+    // the first receipt waits for a person (#32), its post in the orders group with it (#51); the
+    // later one is decided below
+    const held = await this.outbox.withTx(async (tx) => {
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        update ${receipts} r set verdict = 'manual_review', review_reason = 'duplicate'
+        where r.verdict in (${sqlList(WAITING_VERDICTS)})
+          and r.review_reason is distinct from 'duplicate'
+          and exists (select 1 from ${orders} o where o.id = r.order_id and o.status = 'receipt_review')
+          and ${isDuplicate(maxDistance)}
+          and not ${isRepeat(maxDistance)}
+          ${scope}
+        returning r.id`);
+      for (const r of rows) await this.posts.open(tx, Number(r.id));
+      return rows;
+    });
     const { rows: repeats } = await this.db.execute<{
       id: string;
       twin: string;
@@ -441,14 +448,31 @@ export class PaymentMatching implements OnApplicationShutdown {
         // another receipt's check took this credit first: wait for this shopper's own money.
         // Staff marked it «Не для заказа» while the AI answered (#49, no order holds it): the AI
         // confirmed a receipt with money staff say is not for an order, so a person decides.
-        if (out.orderId === null) await holdForPerson(tx, receipt.id, 'credit_marked');
+        if (out.orderId === null) await this.holdForPerson(tx, receipt.id, 'credit_marked');
         return record('credit_taken');
       }
       if (out.kind === 'duplicate_receipt') why = 'duplicate';
       else this.log.warn(`receipt ${receipt.id}: the AI's credit was refused (${out.kind})`);
     }
-    await holdForPerson(tx, receipt.id, why);
+    await this.holdForPerson(tx, receipt.id, why);
     return record('manual_review');
+  }
+
+  /**
+   * A pending receipt goes to a person with `why` (the shopper still reads «Чек на проверке») and
+   * its post opens in the orders group (#51). One already held keeps the reason it was first held
+   * for and its one post, redrawn with the candidates as they are now.
+   */
+  private async holdForPerson(
+    tx: DbOrTx,
+    receiptId: number,
+    why: NonNullable<ReceiptRow['reviewReason']>,
+  ): Promise<void> {
+    await tx
+      .update(receipts)
+      .set({ verdict: 'manual_review', reviewReason: why })
+      .where(and(eq(receipts.id, receiptId), eq(receipts.verdict, 'pending')));
+    await this.posts.open(tx, receiptId);
   }
 
   private getQueue(): Queue {
@@ -464,21 +488,6 @@ export class PaymentMatching implements OnApplicationShutdown {
     await this.queue?.close();
     this.connection?.disconnect();
   }
-}
-
-/**
- * A pending receipt goes to a person with `why` (the shopper still reads «Чек на проверке»); one
- * already held keeps the reason it was first held for.
- */
-async function holdForPerson(
-  tx: DbOrTx,
-  receiptId: number,
-  why: NonNullable<ReceiptRow['reviewReason']>,
-): Promise<void> {
-  await tx
-    .update(receipts)
-    .set({ verdict: 'manual_review', reviewReason: why })
-    .where(and(eq(receipts.id, receiptId), eq(receipts.verdict, 'pending')));
 }
 
 /** The judge's answer as `receipt_checks` keeps it. */

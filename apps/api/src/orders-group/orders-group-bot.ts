@@ -6,14 +6,18 @@ import {
 } from '@lummi/contracts';
 import {
   and,
+  credits,
   eq,
   isNull,
   orderCardPrompts,
   orderCards,
   orders,
   outbox,
+  receipts,
+  sql,
   staff,
   type DbOrTx,
+  type ManualReviewPanel,
   type OrderCardPanel,
   type StaffRow,
 } from '@lummi/db';
@@ -23,9 +27,18 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Edges } from '../edges';
 import { OrderStatusService, type TransitionActor } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
+import {
+  PaymentConfirmation,
+  WAITING_VERDICTS,
+  type ConfirmPaymentOutcome,
+} from '../payment/payment-confirmation';
+import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
+import { creditsFor } from '../payment/rules';
 import { StaffService } from '../staff/staff.service';
 import { EDGES } from '../tokens';
 import { decodePress, escapeHtml, isStepStatus, NEXT_STEP, type CardPress } from './card-view';
+import { ManualReviewPosts } from './manual-review-posts';
+import { decodeManualReviewPress } from './manual-review-view';
 import { OrderCards } from './order-cards';
 
 const g = dictionaries.ru.bot.group;
@@ -61,6 +74,9 @@ export class OrdersGroupBot {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(EDGES) private readonly edges: Edges,
     @Inject(StaffService) private readonly staff: StaffService,
+    @Inject(ManualReviewPosts) private readonly reviews: ManualReviewPosts,
+    @Inject(PaymentConfirmation) private readonly payments: PaymentConfirmation,
+    @Inject(ReceiptRejection) private readonly rejection: ReceiptRejection,
   ) {}
 
   /**
@@ -108,6 +124,133 @@ export class OrdersGroupBot {
       case 'back':
         return this.panel(tx, press, { kind: 'steps' });
     }
+  }
+
+  /**
+   * A tap on a manual-review post (#51); returns the toast to answer it with. «Оплата
+   * подтверждена» goes through `PaymentConfirmation` with the credit the button names and the
+   * staff member as the actor; «Чек не принят» through `ReceiptRejection` with a preset reason.
+   * Both doors take the order's lock first, as they do for the admin, so the group and the admin
+   * racing for one receipt end with one decision and the other hears «Уже изменено». Opening a
+   * confirmation or the reasons needs the receipt still waiting; a stale press redraws the post.
+   */
+  async onManualReviewTap(tx: DbOrTx, tap: CardTap): Promise<string | undefined> {
+    const presser = await this.activeStaff(tx, tap.fromId);
+    if (!presser.ok) return presser.refusal;
+    const press = decodeManualReviewPress(tap.data);
+    if (!press) return g.refused;
+    const post = await this.reviews.find(tx, press.receiptId);
+    if (!post) return g.refused;
+    const { orderId, receiptId } = post;
+    const staffId = presser.member.id;
+    switch (press.verb) {
+      case 'confirm': {
+        const out = await this.payments.confirmPaymentWithCredit(tx, {
+          orderId,
+          creditId: press.creditId,
+          receiptId,
+          actor: { type: 'staff', id: staffId },
+        });
+        return this.confirmAnswer(tx, receiptId, out);
+      }
+      case 'confirm_reject': {
+        const out = await this.rejection.rejectIn(tx, {
+          orderId,
+          receiptId,
+          reason: press.reason,
+          staffId,
+        });
+        return this.rejectAnswer(tx, receiptId, out);
+      }
+      case 'pick':
+        return this.reviewPanel(tx, orderId, receiptId, {
+          kind: 'confirm',
+          creditId: press.creditId,
+        });
+      case 'reject':
+        return this.reviewPanel(tx, orderId, receiptId, { kind: 'reject' });
+      case 'reason':
+        return this.reviewPanel(tx, orderId, receiptId, {
+          kind: 'confirm_reject',
+          reason: press.reason,
+        });
+      case 'back':
+        return this.reviewPanel(tx, orderId, receiptId, { kind: 'choices' });
+    }
+  }
+
+  /**
+   * Open a keyboard on a post whose receipt still waits for a person, under the order's lock
+   * (shared): a decision made meanwhile commits first and this press sees it. A credit to confirm
+   * with must still be one of the order's Candidate credits (`creditsFor`, the one rule).
+   */
+  private async reviewPanel(
+    tx: DbOrTx,
+    orderId: number,
+    receiptId: number,
+    panel: ManualReviewPanel,
+  ): Promise<string | undefined> {
+    const [order] = await tx
+      .select({ status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .for('share');
+    const [receipt] = await tx
+      .select({ verdict: receipts.verdict })
+      .from(receipts)
+      .where(eq(receipts.id, receiptId));
+    const waiting =
+      order?.status === 'receipt_review' && !!receipt && WAITING_VERDICTS.includes(receipt.verdict);
+    if (waiting && panel.kind === 'confirm') {
+      const [candidate] = await tx
+        .select({ id: credits.id })
+        .from(credits)
+        .where(and(eq(credits.id, panel.creditId), sql`${credits.id} in (${creditsFor(orderId)})`));
+      if (!candidate) return this.reviewChanged(tx, receiptId);
+    }
+    if (!waiting) return this.reviewChanged(tx, receiptId);
+    await this.reviews.redraw(tx, receiptId, panel);
+    return undefined;
+  }
+
+  private async confirmAnswer(
+    tx: DbOrTx,
+    receiptId: number,
+    out: Exclude<ConfirmPaymentOutcome, { kind: 'try_again' }>,
+  ): Promise<string | undefined> {
+    switch (out.kind) {
+      case 'confirmed':
+        return undefined;
+      case 'conflict':
+      case 'receipt_not_waiting':
+        return this.reviewChanged(tx, receiptId);
+      case 'credit_taken':
+        await this.reviews.redraw(tx, receiptId, { kind: 'choices' });
+        return g.manualReview.creditTaken;
+      case 'credit_mismatch':
+      case 'reason_required':
+        await this.reviews.redraw(tx, receiptId, { kind: 'choices' });
+        return g.manualReview.creditMisfit;
+      default:
+        return g.refused;
+    }
+  }
+
+  private async rejectAnswer(
+    tx: DbOrTx,
+    receiptId: number,
+    out: Exclude<RejectReceiptOutcome, { kind: 'try_again' }>,
+  ): Promise<string | undefined> {
+    if (out.kind === 'rejected') return undefined;
+    if (out.kind === 'conflict' || out.kind === 'receipt_changed')
+      return this.reviewChanged(tx, receiptId);
+    return g.refused;
+  }
+
+  /** The post moved on since it was drawn: say so, and draw it again as it is now. */
+  private async reviewChanged(tx: DbOrTx, receiptId: number): Promise<string> {
+    await this.reviews.redraw(tx, receiptId, { kind: 'choices' });
+    return g.changed;
   }
 
   /** No toast when the move was made; «Уже изменено» when the order moved on; «Нельзя» otherwise. */
