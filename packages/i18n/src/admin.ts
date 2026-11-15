@@ -1484,8 +1484,6 @@ export const adminMessages = defineMessages(
       },
       orders: {
         title: 'Заказы',
-        description:
-          'Заказы покупателей: оплата, сборка и доставка. Время в часовом поясе Ташкента.',
         toCredits: 'Поступления',
         filters: {
           search: 'Поиск',
@@ -3879,8 +3877,6 @@ export const adminMessages = defineMessages(
       },
       orders: {
         title: 'Buyurtmalar',
-        description:
-          'Mijozlar buyurtmalari: toʻlov, yigʻish va yetkazish. Vaqt Toshkent vaqti boʻyicha.',
         toCredits: 'Tushumlar',
         filters: {
           search: 'Qidiruv',

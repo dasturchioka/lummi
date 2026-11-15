@@ -318,6 +318,25 @@ main:has(> [data-layout='wide']) {
     scroll-snap-type: none;
   }
 }
+/*
+ * Where the board continues past an edge (the next column peeking in, or columns scrolled out),
+ * the edge fades over 24 px instead of cutting a card's words: a scroll cue, not a surface.
+ */
+.board-scroller[data-more-start] {
+  mask-image: linear-gradient(to right, transparent, #000 24px);
+}
+.board-scroller[data-more-end] {
+  mask-image: linear-gradient(to left, transparent, #000 24px);
+}
+.board-scroller[data-more-start][data-more-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+}
 .board-list {
   scrollbar-width: thin;
 }

@@ -30,11 +30,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const { language, t } = await getAdminMessages();
   const o = t.orders;
 
-  // the board needs the height: it goes without the description (the list keeps it)
+  // one header for both views, so «Воронка | Список» stays put when switching: the title and
+  // the actions slot, no description (the board needs the height)
   const header = (filters: Record<string, string | undefined>) => (
     <PageHeader
       title={o.title}
-      description={view === 'list' ? o.description : undefined}
       actions={
         // the header's actions slot, the same in both views (#56 adds «Скачать в Excel» here)
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-orders-actions>
@@ -50,7 +50,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (view === 'board') {
     const filters = readFilters(sp, adminOrdersBoardQuerySchema.shape, BOARD_KEYS);
     return (
-      // the board takes the panel's whole width (globals.css drops the 1120 px cap)
+      // both views take the panel's whole width and its 24 px sides (globals.css)
       <div data-layout="wide">
         {header(filters)}
         <BoardFilters t={t} filters={filters} />
@@ -73,7 +73,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (list.status !== 200) throw new Error(`orders failed to load: ${list.status}`);
   clampPage('/orders', { view: 'list', ...filters }, page, list.body.total, list.body.pageSize);
   return (
-    <>
+    <div data-layout="wide">
       {header(filters)}
       <OrdersList
         t={t}
@@ -84,6 +84,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         pageSize={list.body.pageSize}
         filters={filters}
       />
-    </>
+    </div>
   );
 }

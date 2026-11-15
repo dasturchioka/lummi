@@ -230,6 +230,14 @@ export function OrdersBoard({
   const { ref: frame, height } = useFillHeight();
   const shown = [...FUNNEL_COLUMNS, ...RAIL_STATUSES.filter((s) => expanded.includes(s))];
   const { ref: scroller, layout } = useColumnLayout(shown.length);
+  /** Marks the edges the board continues past, for their fade (globals.css). */
+  const markEdges = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    el.toggleAttribute('data-more-start', el.scrollLeft > 1);
+    el.toggleAttribute('data-more-end', el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, [scroller]);
+  useEffect(markEdges);
   const width = layout?.width ?? null;
   const listFor = (s?: OrderStatus) =>
     listHref('/orders', { view: 'list', ...filters, ...(s ? { status: s } : {}) });
@@ -381,6 +389,7 @@ export function OrdersBoard({
         <div className="flex min-h-0 flex-1 gap-2">
           <div
             ref={scroller}
+            onScroll={markEdges}
             className="board-scroller -mx-4 flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
             data-carrying={carried ? '' : undefined}
           >

@@ -24,8 +24,15 @@ export type OrderFilters = {
 };
 
 /**
+ * A field that keeps to its grid cell: a long chosen status or placeholder gives way inside it
+ * instead of running under the next field.
+ */
+const FIELD = 'min-w-0 grid-cols-[minmax(0,1fr)]';
+
+/**
  * The orders list's filters (#33; the board has its own, #52): a plain GET form, so a filtered
- * view survives a reload and can be shared.
+ * view survives a reload and can be shared. From 1024 px two rows of four cells: the search (two
+ * cells), the status and the payment state; the dates and the buttons.
  * The search (number or phone) is always in view; on phones the four selects open behind
  * «Фильтры» (open while any is set), as the catalog and the audit do.
  */
@@ -51,11 +58,11 @@ export function OrdersFiltersForm({
       <form
         method="get"
         action="/orders"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.3fr)_repeat(4,minmax(0,1fr))_auto] lg:items-end"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
       >
         {/* the list sits behind «Список»; the board has its own filters (#52) */}
         <input type="hidden" name="view" value="list" />
-        <Field id="f-q" label={f.search} className="sm:col-span-2 lg:col-span-1">
+        <Field id="f-q" label={f.search} className={cn(FIELD, 'sm:col-span-2')}>
           <Input
             name="q"
             type="search"
@@ -86,7 +93,7 @@ export function OrdersFiltersForm({
             )}
           </Button>
         </div>
-        <Field id="f-status" label={f.status} className={cn(hidden)}>
+        <Field id="f-status" label={f.status} className={cn(FIELD, hidden)}>
           <Select name="status" defaultValue={filters.status ?? ''}>
             <option value="">{f.all}</option>
             {ORDER_STATUSES.map((s) => (
@@ -96,7 +103,7 @@ export function OrdersFiltersForm({
             ))}
           </Select>
         </Field>
-        <Field id="f-payment" label={f.payment} className={cn(hidden)}>
+        <Field id="f-payment" label={f.payment} className={cn(FIELD, hidden)}>
           <Select name="payment" defaultValue={filters.payment ?? ''}>
             <option value="">{f.all}</option>
             {ORDER_PAYMENT_FILTERS.map((p) => (
@@ -106,15 +113,15 @@ export function OrdersFiltersForm({
             ))}
           </Select>
         </Field>
-        <Field id="f-from" label={f.from} className={cn(hidden)}>
+        <Field id="f-from" label={f.from} className={cn(FIELD, hidden)}>
           <Input type="date" name="from" defaultValue={filters.from ?? ''} />
         </Field>
-        <Field id="f-to" label={f.to} className={cn(hidden)}>
+        <Field id="f-to" label={f.to} className={cn(FIELD, hidden)}>
           <Input type="date" name="to" defaultValue={filters.to ?? ''} />
         </Field>
         <div
           className={cn(
-            'flex gap-2 sm:col-span-2 sm:justify-end lg:col-span-1',
+            'flex gap-2 sm:col-span-2 sm:justify-end',
             'max-sm:hidden',
             open && any && 'max-sm:flex',
           )}
