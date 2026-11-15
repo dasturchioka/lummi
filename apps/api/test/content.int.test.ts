@@ -121,6 +121,7 @@ describe('customer content endpoints', () => {
       { key: 'delivery.defaultTariff', value: 30_000 },
       { key: 'shop.managerUsername', value: '@other_manager' },
       { key: 'orders.reserveTtlSeconds', value: 5400 },
+      { key: 'delivery.etaHours', value: 72 },
     ]);
     const { client } = await t.signIn();
     const dp = await client.content.page({ params: { slug: 'delivery-payment' } });
@@ -133,10 +134,11 @@ describe('customer content endpoints', () => {
     // the payment window follows the reserve setting (ADR 0012)
     expect(dp.body.bodyRu).toContain('есть 90 минут');
     expect(dp.body.bodyUz).toContain('90 daqiqa vaqtingiz bor');
-    expect(dp.body.bodyRu).toContain('до 48 часов');
+    expect(dp.body.bodyRu).toContain('до 72 часов');
+    expect(dp.body.bodyUz).toContain('72 soatgacha');
     expect(contacts.body.bodyRu).toContain('[@other_manager](https://t.me/other_manager)');
     expect(`${dp.body.bodyRu}${dp.body.bodyUz}${contacts.body.bodyUz}`).not.toMatch(
-      /\{(freeDeliveryThreshold|defaultTariff|managerUsername|managerLink|reserveTime)\}/,
+      /\{(freeDeliveryThreshold|defaultTariff|managerUsername|managerLink|reserveTime|deliveryTerm)\}/,
     );
     // the admin keeps the placeholders, so the owner edits the template
     const admin = await owner.client.admin.content.pages.list();

@@ -306,6 +306,37 @@ describe('admin: the Discovery set', () => {
     expect(row).toMatchObject({ actorId: owner.staff.id, targetType: 'discovery_set' });
   });
 
+  it('keeps an https Uzum link for the set, clears it when empty, and refuses anything else', async () => {
+    const got = await owner.client.admin.sets.get();
+    const ids = (got.body as { composition: { id: number }[] }).composition.map((c) => c.id);
+    const put = async (uzumUrl: string) =>
+      (
+        await fetch(`${t.baseUrl}/admin/sets/discovery`, {
+          method: 'PUT',
+          headers: { cookie: owner.cookie, 'content-type': 'application/json' },
+          body: JSON.stringify({ price: 299_000, composition: ids, uzumUrl }),
+        })
+      ).status;
+    const { client } = await t.signIn(ali);
+    const shop = () => client.sets.discovery();
+    expect((await shop()).body).toMatchObject({ uzumUrl: null });
+    expect(await put('http://uzum.uz/x')).toBe(400);
+    expect(await put('javascript:alert(1)')).toBe(400);
+    expect(await put('  https://uzum.uz/product/lummi-discovery  ')).toBe(200);
+    expect((await shop()).body).toMatchObject({
+      uzumUrl: 'https://uzum.uz/product/lummi-discovery',
+    });
+    // a save without the field keeps the link; an empty one clears it
+    const kept = await owner.client.admin.sets.update({
+      body: { price: 299_000, composition: ids },
+    });
+    expect(kept.status === 200 && kept.body.uzumUrl).toBe(
+      'https://uzum.uz/product/lummi-discovery',
+    );
+    expect(await put('')).toBe(200);
+    expect((await shop()).body).toMatchObject({ uzumUrl: null });
+  });
+
   it('refuses a repeat, a wrong count and an unknown fragrance', async () => {
     const got = await owner.client.admin.sets.get();
     const ids = (got.body as { composition: { id: number }[] }).composition.map((c) => c.id);

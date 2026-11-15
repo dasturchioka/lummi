@@ -108,6 +108,8 @@ export const checkoutSchema = z.object({
    * checkout offers the field; `percent` is the coupon it brings (setting `birthday.percent`).
    */
   birthday: z.object({ date: z.string().nullable(), percent: z.number().int() }),
+  /** The delivery term in hours after the BTS handover (setting `delivery.etaHours`), for the checkout copy. */
+  deliveryEtaHours: z.number().int().positive(),
 });
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 

@@ -21,6 +21,7 @@ export class SetsService {
       available,
       soldOut: available === 0,
       photo: row.photoHash,
+      uzumUrl: row.uzumUrl,
       // The box stays on sale on its own stock, but a fragrance hidden from the catalog shows as
       // its name and attribution only: no card to open, no notes to read.
       fragrances: composition.map((f) => ({

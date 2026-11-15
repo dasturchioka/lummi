@@ -49,6 +49,7 @@ const set = (over: Partial<DiscoverySet> = {}): DiscoverySet => ({
   available: 10,
   soldOut: false,
   photo: null,
+  uzumUrl: null,
   fragrances: Array.from({ length: 5 }, (_, i) => ({
     slug: `f-${i}`,
     name: `Fragrance ${i}`,
@@ -101,6 +102,16 @@ describe('DiscoverySetView', () => {
     expect(screen.getAllByText(/Louis Vuitton/i).length).toBeGreaterThanOrEqual(5);
     fireEvent.click(screen.getByRole('button', { name: /В корзину/ }));
     expect(onAdd).toHaveBeenCalled();
+  });
+
+  it('shows «Купить на Uzum» only with a link, and shares the set', () => {
+    const onShare = vi.fn();
+    const { rerender } = render(<DiscoverySetView set={set()} onShare={onShare} />);
+    expect(screen.queryByRole('button', { name: /Uzum/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }));
+    expect(onShare).toHaveBeenCalled();
+    rerender(<DiscoverySetView set={set({ uzumUrl: 'https://uzum.uz/set' })} />);
+    expect(screen.getByRole('button', { name: /Uzum/ })).toBeTruthy();
   });
 
   it('is disabled and says why when sold out or incomplete', () => {
