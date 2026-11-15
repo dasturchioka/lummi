@@ -20,6 +20,7 @@ export {
   lte,
   notInArray,
   ne,
+  not,
   DrizzleQueryError,
   type SQL,
 } from 'drizzle-orm';

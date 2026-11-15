@@ -16,6 +16,13 @@ import {
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
+import {
+  forgetCoupons,
+  forgetWorst,
+  seedShotCoupons,
+  seedWorstCoupons,
+  seedWorstRequests,
+} from './not-delivered-data';
 import { shotMarketing } from './marketing-data';
 import { SHOT_ORDER } from './orders-data';
 import { boardCrowd, boardCrowdBack, boardDay, boardDayBack } from './board-data';
@@ -1835,6 +1842,47 @@ export const screens: Screen[] = [
   { id: 'order-with-review-published', path: '/orders/9004', as: 'manager' },
   { id: 'reviews-order', path: '/reviews?order=9005', as: 'manager', act: imagesLoaded },
   { id: 'reviews-empty', path: '/reviews?rating=5&from=2026-01-01&to=2026-01-02', as: 'manager' },
+  // ---- «Не доставлено» (#55): the review requests of «Отзывы», the owner's birthday coupons
+  { id: 'reviews-requests', path: '/reviews/requests', as: 'manager' },
+  {
+    id: 'reviews-requests-undelivered',
+    path: '/reviews/requests?state=not_delivered',
+    as: 'manager',
+  },
+  {
+    id: 'reviews-requests-empty',
+    path: '/reviews/requests?from=2026-01-01&to=2026-01-02',
+    as: 'manager',
+  },
+  {
+    id: 'reviews-requests-worst',
+    path: '/reviews/requests',
+    as: 'manager',
+    setup: ({ db }) => seedWorstRequests(db),
+    teardown: ({ db }) => forgetWorst(db),
+  },
+  { id: 'birthday-coupons-empty', path: '/birthday-coupons', as: 'owner' },
+  {
+    id: 'birthday-coupons',
+    path: '/birthday-coupons',
+    as: 'owner',
+    setup: ({ db }) => seedShotCoupons(db),
+    teardown: ({ db }) => forgetCoupons(db),
+  },
+  {
+    id: 'birthday-coupons-undelivered',
+    path: '/birthday-coupons?delivery=not_delivered',
+    as: 'owner',
+    setup: ({ db }) => seedShotCoupons(db),
+    teardown: ({ db }) => forgetCoupons(db),
+  },
+  {
+    id: 'birthday-coupons-worst',
+    path: '/birthday-coupons',
+    as: 'owner',
+    setup: ({ db }) => seedWorstCoupons(db),
+    teardown: ({ db }) => forgetCoupons(db),
+  },
   // ---- Orders board (#52): the funnel over a normal day, carrying a card, the move menu, the
   // tracking dialog after a drop on «Передан в BTS», a closed column opened, empty, the worst case.
   // Viewport captures: the board fills the screen, and a full-page capture paints a board scrolled
