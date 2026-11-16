@@ -207,7 +207,11 @@ describe('a receipt held for a person is posted to «Заказы»', () => {
     // button with what tells them apart: the amount, the time and who sent it
     t.edges.clock.advance(MIN);
     await recordCredit(t, { som: placed.order.amountDue, source: 'PAYME P2P UZCARD NA' });
-    const both = await post(placed.order.number, (m) => m.plain.includes('15:02'));
+    // the post is edited twice: with the new credit, then with the AI's new answer; wait for both
+    const both = await post(
+      placed.order.number,
+      (m) => m.plain.includes('15:02') && m.plain.includes('несколько поступлений'),
+    );
     expect(t.edges.receiptJudge.calls).toHaveLength(2);
     expect(both.plain).toContain('Причина: несколько поступлений, ИИ не уверен');
     const due = money(placed.order.amountDue);
