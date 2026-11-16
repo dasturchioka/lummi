@@ -55,6 +55,22 @@ describe('stepUps', () => {
     ]);
   });
 
+  it('offers a saving exactly at the threshold, and not one percent above it', () => {
+    // 10 ml 100 000 (10 000 a ml), 30 ml 280 000: 180 000 for 20 ml = 9 000 a ml, exactly −10 %
+    const exact = [v(10, 100_000), v(30, 280_000)];
+    expect(stepUps(exact, 10)).toEqual([{ fromMl: 10, toMl: 30, extra: 180_000 }]);
+    expect(stepUps(exact, 11)).toEqual([]);
+  });
+
+  it('reads effective prices: a markdown on the bigger volume can make an offer', () => {
+    // at 45 %: 10 → 30 saves 42 % and 30 → 50 saves 29 %, so nothing; 50 ml marked down to 189 000
+    // adds 40 000 for 20 ml = 2 000 a ml against 4 967 (−59 %)
+    expect(stepUps(placeholders, 45)).toEqual([]);
+    expect(stepUps([v(10, 69_000), v(30, 149_000), v(50, 189_000)], 45)).toEqual([
+      { fromMl: 30, toMl: 50, extra: 40_000 },
+    ]);
+  });
+
   it('takes the volumes in any order', () => {
     expect(stepUps([...placeholders].reverse(), 10)).toEqual(stepUps(placeholders, 10));
   });

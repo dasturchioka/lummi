@@ -332,17 +332,10 @@ export function FragranceView({
     volume && volume.available > 0
       ? card.upgradeRightPrices.find((r) => r.ml === volume.ml)
       : undefined;
-  // the server offers a step-up only from a volume that can be bought (#57); none where the
-  // customer's right prices either volume: the tiles already show other numbers, and its strip nudges
+  // the server offers a step-up only from a volume that can be bought, and none where the
+  // customer's right prices either volume (#57); the guard keeps a stale answer honest
   const stepUp =
-    volume && volume.available > 0
-      ? card.stepUps.find(
-          (u) =>
-            u.fromMl === volume.ml &&
-            rightPrices[u.fromMl] === undefined &&
-            rightPrices[u.toMl] === undefined,
-        )
-      : undefined;
+    volume && volume.available > 0 ? card.stepUps.find((u) => u.fromMl === volume.ml) : undefined;
   const [focusTick, setFocusTick] = useState(0);
 
   return (

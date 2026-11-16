@@ -110,12 +110,12 @@ export const settingDefinitions = {
     default: true,
     area: 'shop',
     label: {
-      ru: 'Подсказка «и на 20 мл больше» на карточке',
-      uz: 'Kartada «20 ml koʻproq» maslahati',
+      ru: 'Подсказка о большем объёме на карточке',
+      uz: 'Kartada kattaroq hajm maslahati',
     },
     hint: {
-      ru: 'Под объёмами: сколько доплатить за следующий объём в наличии, когда его миллилитр заметно дешевле.',
-      uz: 'Hajmlar ostida: mavjud keyingi hajm uchun qancha qoʻshish kerakligi, uning millilitri sezilarli arzon boʻlsa.',
+      ru: 'Под объёмами: «+70 000 сум — и на 20 мл больше», когда дополнительные миллилитры следующего объёма в наличии заметно дешевле.',
+      uz: 'Hajmlar ostida: «+70 000 soʻm qoʻshsangiz — 20 ml koʻproq», mavjud keyingi hajmning qoʻshimcha millilitrlari sezilarli arzon boʻlsa.',
     },
   },
   /** How much cheaper per ml the extra millilitres must be for the step-up line to show (#57). */
@@ -129,7 +129,7 @@ export const settingDefinitions = {
       uz: 'Kattaroq hajm maslahati: foyda kamida, %',
     },
     hint: {
-      ru: 'Доплата за каждый лишний мл должна быть дешевле мл выбранного объёма хотя бы на столько. Иначе подсказки нет.',
+      ru: 'Каждый дополнительный мл должен стоить дешевле мл выбранного объёма хотя бы на столько. Иначе подсказки нет.',
       uz: 'Har bir qoʻshimcha ml uchun toʻlov tanlangan hajmning 1 ml narxidan kamida shuncha arzon boʻlishi kerak. Aks holda maslahat chiqmaydi.',
     },
   },

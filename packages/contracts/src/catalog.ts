@@ -94,7 +94,8 @@ export const fragranceCardSchema = z.object({
   fullSizeMl: z.array(z.number().int()),
   /**
    * The step-ups worth offering under the volume tiles, smallest `fromMl` first, computed by the
-   * server (`stepUps`, settings `catalog.stepUp.*`). Empty while switched off.
+   * server (`stepUps`, settings `catalog.stepUp.*`); none onto or from a volume the customer's
+   * upgrade right prices (`upgradeRightPrices`). Empty while switched off.
    */
   stepUps: z.array(stepUpSchema),
 });

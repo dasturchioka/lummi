@@ -465,10 +465,19 @@ export class CatalogService {
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => ({ ru: n.ru, uz: n.uz }));
     const cards = volumeRows.map((v) => toVolumeCard(v, reserved.get(v.id) ?? 0, now));
-    const step = await readSettings(this.db, [
-      'catalog.stepUp.enabled',
-      'catalog.stepUp.minPercent',
+    const [rights, pricing, step] = await Promise.all([
+      upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
+      readPricingSettings(this.db),
+      readSettings(this.db, ['catalog.stepUp.enabled', 'catalog.stepUp.minPercent']),
     ]);
+    // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
+    // the right's price there, so «+N сум» would contradict them (the right's strip nudges then)
+    const righted = new Set<number>(rights.map((r) => r.ml));
+    const offers = step['catalog.stepUp.enabled']
+      ? stepUps(cards, step['catalog.stepUp.minPercent']).filter(
+          (u) => !righted.has(u.fromMl) && !righted.has(u.toMl),
+        )
+      : [];
 
     return {
       slug: f.slug,
@@ -488,11 +497,9 @@ export class CatalogService {
       isHit: f.isHit,
       isNew: f.isNew,
       volumes: cards,
-      upgradeRightPrices: await upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
-      fullSizeMl: (await readPricingSettings(this.db)).fullSizeVolumesMl,
-      stepUps: step['catalog.stepUp.enabled']
-        ? stepUps(cards, step['catalog.stepUp.minPercent'])
-        : [],
+      upgradeRightPrices: rights,
+      fullSizeMl: pricing.fullSizeVolumesMl,
+      stepUps: offers,
     };
   }
 }

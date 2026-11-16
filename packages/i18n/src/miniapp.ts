@@ -172,7 +172,7 @@ export const miniappMessages = defineMessages(
       stepUpExtra: '+{amount}',
       // no-break spaces: the dash stays with the amount, the number with «мл»
       stepUpMore: '—\u00a0и на {ml}\u00a0мл больше',
-      stepUpChoose: 'Выбрать {ml} мл: {offer}',
+      stepUpChoose: '{offer}: выбрать {ml} мл',
       notes: { top: 'Верх', heart: 'Сердце', base: 'База' },
       uzum: 'Купить на Uzum',
       toCart: 'В корзину',
@@ -474,7 +474,7 @@ export const miniappMessages = defineMessages(
       stepUpExtra: '+{amount}',
       // no-break spaces: «qoʻshsangiz —» stays with the amount, the number with «ml»
       stepUpMore: 'qoʻshsangiz\u00a0—\u00a0{ml}\u00a0ml koʻproq',
-      stepUpChoose: '{ml} ml ni tanlash: {offer}',
+      stepUpChoose: '{offer}: {ml} ml ni tanlash',
       notes: { top: 'Yuqori', heart: 'Yurak', base: 'Baza' },
       uzum: 'Uzum’da sotib olish',
       toCart: 'Savatga',

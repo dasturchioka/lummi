@@ -251,7 +251,7 @@ describe('FragranceView', () => {
           .getByTestId('step-up')
           .getAttribute('aria-label')
           ?.replace(/[\u00a0\u202f]/g, ' '),
-      ).toBe('Выбрать 30 мл: +50 200 сум — и на 20 мл больше');
+      ).toBe('+50 200 сум — и на 20 мл больше: выбрать 30 мл');
       fireEvent.click(screen.getByTestId('step-up'));
       expect(screen.getByRole('radio', { name: /30/ }).getAttribute('aria-checked')).toBe('true');
       // 30 ml has no step-up of its own here: the row goes
@@ -274,18 +274,6 @@ describe('FragranceView', () => {
       screen.getByTestId('step-up').focus();
       fireEvent.click(screen.getByTestId('step-up'));
       expect(document.activeElement).toBe(screen.getByRole('radio', { name: /30/ }));
-    });
-
-    it('never where an upgrade right prices either volume: the tiles show other numbers', () => {
-      show(
-        card({
-          ...steps,
-          upgradeRightPrices: [
-            { ml: 30, price: 119_200, source: 'set', percent: 20, lastDay: '2026-12-09' },
-          ],
-        }),
-      );
-      expect(screen.queryByTestId('step-up')).toBeNull();
     });
 
     it('never from a sold-out volume, whatever the answer says', () => {

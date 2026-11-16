@@ -173,6 +173,7 @@ const one: FragranceCard = {
   isHit: false,
   notes: { top: [], heart: [], base: demo.notes.base },
   volumes: demo.volumes.filter((v) => v.ml === 50),
+  stepUps: [],
 };
 
 /** Nothing optional: no volumes yet, no notes, no family, no key notes. */
@@ -184,6 +185,7 @@ const empty: FragranceCard = {
   keyNotes: { ru: [], uz: [] },
   notes: { top: [], heart: [], base: [] },
   volumes: [],
+  stepUps: [],
 };
 
 export const FIXTURES = { demo, worst, one, empty } as const;
