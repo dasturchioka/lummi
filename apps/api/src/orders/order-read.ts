@@ -1,5 +1,5 @@
 import type { OrderAction, OrderStatus, PaymentState, ReceiptVerdict } from '@lummi/contracts';
-import { orderEvents, orders, sql } from '@lummi/db';
+import { orderEvents, orders, sql, type SQL } from '@lummi/db';
 
 /*
  * How staff read an order, shared by the orders panel (#33), the admin Home (#48) and the orders
@@ -42,3 +42,20 @@ export const enteredStatus =
   sql<Date>`coalesce((select max(ev.created_at) from ${orderEvents} ev where ev.order_id = "orders"."id" and ev.to_status = "orders"."status"), "orders"."created_at")`.mapWith(
     orders.createdAt,
   );
+
+/**
+ * `e` (an `order_events` row) is its order's first payment confirmation and falls in
+ * [from, before): the one rule behind the admin Home's «Оплачено сегодня» (`HomeService.paidBetween`)
+ * and the orders list's `confirmedOn` filter its cards open. The action is written out, not bound, so the
+ * partial index `order_events_confirmed_idx` serves both.
+ */
+export function firstConfirmationIn(from: Date, before: Date): SQL {
+  return sql`e.action = 'confirm_payment'
+    and e.created_at >= ${from.toISOString()}::timestamptz
+    and e.created_at < ${before.toISOString()}::timestamptz
+    and not exists (
+      select 1 from ${orderEvents} earlier
+      where earlier.order_id = e.order_id and earlier.action = 'confirm_payment'
+        and (earlier.created_at, earlier.id) < (e.created_at, e.id)
+    )`;
+}

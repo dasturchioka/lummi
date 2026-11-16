@@ -1523,6 +1523,8 @@ export const adminMessages = defineMessages(
           apply: 'Показать',
           reset: 'Сбросить',
           toggle: 'Фильтры',
+          confirmedOn: 'Оплата подтверждена {date}',
+          confirmedOnRemove: 'Убрать фильтр «{label}»',
         },
         badRange: 'Дата «С» позже даты «По».',
         payment: {
@@ -3941,6 +3943,8 @@ export const adminMessages = defineMessages(
           apply: 'Koʻrsatish',
           reset: 'Tozalash',
           toggle: 'Filtrlar',
+          confirmedOn: 'Toʻlov tasdiqlangan: {date}',
+          confirmedOnRemove: '«{label}» filtrini olib tashlash',
         },
         badRange: '«Sanadan» sanasi «Sanagacha» sanasidan keyin.',
         payment: {

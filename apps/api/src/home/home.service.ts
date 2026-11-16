@@ -43,7 +43,12 @@ import {
   type StaffRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { customerName, enteredStatus, paymentState } from '../orders/order-read';
+import {
+  customerName,
+  enteredStatus,
+  firstConfirmationIn,
+  paymentState,
+} from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
 import type { Edges } from '../edges';
 import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
@@ -490,7 +495,8 @@ export class HomeService {
   /**
    * Orders whose payment was first confirmed within [from, to], and the credits that paid them.
    * It reads the confirmations in that stretch (`order_events_confirmed_idx`) and keeps each
-   * order's first one only.
+   * order's first one only (`firstConfirmationIn`, the rule the orders list's `confirmedOn` filter
+   * shares, so the cards open exactly the orders they count). `to` is included.
    */
   async paidBetween(from: Date, to: Date): Promise<PaidFigures> {
     const { rows } = await this.db.execute<{ orders: number; received: string }>(sql`
@@ -498,14 +504,7 @@ export class HomeService {
       from ${orderEvents} e
       join ${orders} o on o.id = e.order_id
       join ${credits} c on c.id = o.credit_id
-      where e.action = 'confirm_payment'
-        and e.created_at >= ${from.toISOString()}::timestamptz
-        and e.created_at <= ${to.toISOString()}::timestamptz
-        and not exists (
-          select 1 from ${orderEvents} earlier
-          where earlier.order_id = e.order_id and earlier.action = 'confirm_payment'
-            and (earlier.created_at, earlier.id) < (e.created_at, e.id)
-        )`);
+      where ${firstConfirmationIn(from, new Date(to.getTime() + 1))}`);
     const n = Number(rows[0]?.orders ?? 0);
     // a credit with tiyin counts in whole so'm, as an order's money does (`orderMoney`)
     const received = Number(rows[0]?.received ?? 0);

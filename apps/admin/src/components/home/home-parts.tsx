@@ -8,7 +8,15 @@ import {
   type OwnerHome,
 } from '@lummi/contracts';
 import { formatMoney, formatTiyin, plural, type Language } from '@lummi/i18n';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import {
+  ArrowRight,
+  BanknoteArrowDown,
+  ChevronRight,
+  ReceiptText,
+  ShoppingBag,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { Fragment, useState, type ReactNode } from 'react';
 import {
@@ -20,7 +28,9 @@ import {
   stockHalves,
   weekdayOf,
 } from '@/lib/home-format';
+import { StatAmount, StatCard, StatGrid } from '@/components/ui/stat-card';
 import type { AdminMessages } from '@/lib/i18n';
+import { listHref } from '@/lib/list-page';
 import { cn, fill } from '@/lib/utils';
 
 export type HomeCopy = AdminMessages['home'];
@@ -83,40 +93,84 @@ export function SalesStrip({
   const money = (n: number) => formatMoney(n, language);
   const weekday = weekdayOf(data.at.day);
   const weekChange = change(week.net, previousWeek.net);
-  const figs: { key: string; label: string; value: string; delta: string }[] = [
+  // the three money-in-today cards open the orders paid today (the list's `confirmedOn` reads the same
+  // orders); the 7-day card opens the sales report over those days
+  const paidList = listHref('/orders', { view: 'list', confirmedOn: data.at.day });
+  const figs: {
+    key: string;
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    delta: string;
+    href: string;
+  }[] = [
     {
       key: 'orders',
+      icon: ShoppingBag,
       label: s.orders,
       value: String(now.orders),
       delta: countChange(now.orders, before.orders),
+      href: paidList,
     },
     {
       key: 'received',
+      icon: BanknoteArrowDown,
       label: s.received,
       value: money(now.received),
       delta: change(now.received, before.received) ?? s.noBase,
+      href: paidList,
     },
     {
       key: 'average',
+      icon: ReceiptText,
       label: s.average,
       value: now.average === null ? '—' : money(now.average),
       delta: change(now.average, before.average) ?? s.noBase,
+      href: paidList,
     },
     {
       key: 'week',
+      icon: Wallet,
       label: s.week,
       value: money(week.net),
       delta: weekChange ? fill(s.weekVs, { delta: weekChange }) : s.noBase,
+      href: listHref('/reports', { from: week.from, to: week.to }),
     },
   ];
   const top = Math.max(1, ...days.map((d) => d.net));
   const today = days.at(-1);
+  // top right on a wide card (its end labels in the tooltip), full width with them on a phone's
+  const bars = (
+    <div className="flex w-full max-w-[112px] min-w-0 flex-col @max-[11.25rem]/card:max-w-none">
+      <div
+        role="img"
+        aria-label={fill(s.barsLabel, { amount: money(today?.net ?? 0) })}
+        title={`${s.barsFrom} · ${s.barsToday}`}
+        className="flex h-9 items-end gap-[3px] @max-[11.25rem]/card:h-8"
+      >
+        {days.map((d, i) => (
+          <i
+            key={d.day}
+            className={cn(
+              'min-h-0.5 flex-1 rounded-t-[2px]',
+              i === days.length - 1 ? 'bg-sage' : 'bg-stone',
+            )}
+            style={{ height: `${Math.round((Math.max(0, d.net) / top) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <div
+        aria-hidden
+        className="mt-1.5 hidden justify-between text-[11px] text-muted-foreground @max-[11.25rem]/card:flex"
+      >
+        <span>{s.barsFrom}</span>
+        <span>{s.barsToday}</span>
+      </div>
+    </div>
+  );
   return (
-    <section
-      aria-labelledby="home-sales"
-      className="rounded-card bg-card px-[18px] pt-[18px] pb-5 sm:px-6 sm:pt-5 sm:pb-[22px]"
-    >
-      <div className="flex items-baseline justify-between gap-4">
+    <section aria-labelledby="home-sales" className="@container">
+      <div className="flex items-baseline justify-between gap-4 px-1">
         <h2 id="home-sales" className="text-[15px] leading-[1.35] font-semibold">
           {s.title}{' '}
           <span className="mt-0.5 block text-small font-normal text-muted-foreground sm:mt-0 sm:ml-2 sm:inline">
@@ -131,43 +185,23 @@ export function SalesStrip({
           <ArrowRight className="size-4" strokeWidth={1.5} aria-hidden />
         </Link>
       </div>
-      <div className="mt-4 sm:flex sm:flex-wrap sm:items-end sm:gap-x-10 sm:gap-y-5">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-[18px] sm:flex sm:flex-wrap sm:gap-x-10 sm:gap-y-4">
-          {figs.map((f) => (
-            <div key={f.key} className="min-w-0">
-              <dt className="text-small text-muted-foreground">{f.label}</dt>
-              <dd className="mt-1 text-[17px] leading-[1.2] font-semibold whitespace-nowrap tabular-nums sm:text-[22px]">
-                <Settle value={f.value} />
-              </dd>
-              <dd className="mt-0.5 text-small text-muted-foreground">
-                <Settle value={f.delta} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-[18px] sm:mt-0 sm:ml-auto sm:max-w-[168px] sm:flex-[1_0_128px]">
-          <div
-            role="img"
-            aria-label={fill(s.barsLabel, { amount: money(today?.net ?? 0) })}
-            className="flex h-10 items-end gap-1 sm:h-11"
-          >
-            {days.map((d, i) => (
-              <i
-                key={d.day}
-                className={cn(
-                  'min-h-0.5 flex-1 rounded-t-[2px]',
-                  i === days.length - 1 ? 'bg-sage' : 'bg-stone',
-                )}
-                style={{ height: `${Math.round((Math.max(0, d.net) / top) * 100)}%` }}
-              />
-            ))}
-          </div>
-          <div className="mt-2 flex justify-between text-[11.5px] text-muted-foreground">
-            <span>{s.barsFrom}</span>
-            <span>{s.barsToday}</span>
-          </div>
-        </div>
-      </div>
+      <StatGrid className="mt-3">
+        {figs.map((f) => (
+          <StatCard
+            key={f.key}
+            icon={f.icon}
+            label={f.label}
+            value={
+              <Settle value={f.value}>
+                <StatAmount text={f.value} />
+              </Settle>
+            }
+            note={<Settle value={f.delta} />}
+            aside={f.key === 'week' ? bars : undefined}
+            href={f.href}
+          />
+        ))}
+      </StatGrid>
     </section>
   );
 }

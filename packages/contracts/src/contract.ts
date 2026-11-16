@@ -1478,7 +1478,7 @@ const adminOrders = c.router({
       query: adminOrdersQuerySchema,
       responses: { 200: adminOrdersPageSchema, 401: adminOrderErrorSchema },
       summary:
-        'Staff: orders newest first, filtered by status, payment state and Tashkent dates, searched by number or phone',
+        'Staff: orders newest first, filtered by status, payment state, Tashkent dates and the day the payment was first confirmed (`confirmedOn`), searched by number or phone',
     },
     // before `get`: `/admin/orders/board` is not an order number
     board: {

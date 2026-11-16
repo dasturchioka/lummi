@@ -63,7 +63,13 @@ import { AuditQueryService } from '../audit/audit-query.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
-import { customerName, enteredStatus, PAID_BY, paymentState } from '../orders/order-read';
+import {
+  customerName,
+  enteredStatus,
+  firstConfirmationIn,
+  PAID_BY,
+  paymentState,
+} from '../orders/order-read';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
@@ -138,6 +144,17 @@ const digitsOf = (column: unknown) =>
 const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
 
 /**
+ * The order's payment was first confirmed on that Tashkent day and a credit paid it: the orders
+ * the admin Home's «Оплачено сегодня» counts (`HomeService.paidBetween`, the same rule).
+ */
+function firstConfirmedOn(day: string): SQL {
+  return sql`(${orders.creditId} is not null and exists (
+    select 1 from ${orderEvents} e
+    where e.order_id = ${orders.id} and ${firstConfirmationIn(dayStart(day), dayStart(day, 1))}
+  ))`;
+}
+
+/**
  * The orders list's filters as conditions on `orders` joined with `customers` (the list and the
  * board read them alike), and the order number the search names, which the list puts first.
  */
@@ -151,6 +168,7 @@ export function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
   else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
   if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
   if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
+  if (q.confirmedOn) conditions.push(firstConfirmedOn(q.confirmedOn));
   const digits = q.q?.replace(/\D/g, '') ?? null;
   // an order number fits in nine digits; a phone is searched by four digits or more
   const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;

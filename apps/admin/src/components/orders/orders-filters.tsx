@@ -1,9 +1,9 @@
 'use client';
 
 import { ORDER_PAYMENT_FILTERS, ORDER_STATUSES } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
+import { formatCalendarDate, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { listHref } from '@/lib/list-page';
+import { cn, fill } from '@/lib/utils';
 
 export type OrderFilters = {
   q?: string;
@@ -21,6 +22,8 @@ export type OrderFilters = {
   payment?: string;
   from?: string;
   to?: string;
+  /** The Home's «Оплачено сегодня» cards: orders first paid that day. No field: a chip shows it. */
+  confirmedOn?: string;
 };
 
 /**
@@ -48,7 +51,7 @@ export function OrdersFiltersForm({
   const f = t.orders.filters;
   const active = [filters.status, filters.payment, filters.from, filters.to].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
-  const any = active > 0 || Boolean(filters.q);
+  const any = active > 0 || Boolean(filters.q || filters.confirmedOn);
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
   const hidden = !open && 'max-sm:hidden';
   const statuses = ordersMessages[language].orders.status;
@@ -62,6 +65,7 @@ export function OrdersFiltersForm({
       >
         {/* the list sits behind «Список»; the board has its own filters (#52) */}
         <input type="hidden" name="view" value="list" />
+        {filters.confirmedOn && <input type="hidden" name="confirmedOn" value={filters.confirmedOn} />}
         <Field id="f-q" label={f.search} className={cn(FIELD, 'sm:col-span-2')}>
           <Input
             name="q"
@@ -136,7 +140,46 @@ export function OrdersFiltersForm({
           )}
         </div>
       </form>
+      {filters.confirmedOn && (
+        <ConfirmedOnChip t={t} language={language} confirmedOn={filters.confirmedOn} filters={filters} />
+      )}
       {badRange && <Notice title={t.orders.badRange} className="mt-3" />}
     </Card>
+  );
+}
+
+/**
+ * The filter the Home's cards bring (orders first paid that day), which has no field of its own:
+ * a chosen chip (Graphite, Milk text) with a cross that drops it and keeps the other filters.
+ */
+function ConfirmedOnChip({
+  t,
+  language,
+  confirmedOn,
+  filters,
+}: {
+  t: AdminMessages;
+  language: Language;
+  confirmedOn: string;
+  filters: OrderFilters;
+}) {
+  const f = t.orders.filters;
+  // an old bookmark names its year
+  const otherYear = Number(confirmedOn.slice(0, 4)) !== new Date().getFullYear();
+  const label = fill(f.confirmedOn, { date: formatCalendarDate(confirmedOn, language, otherYear) });
+  const { confirmedOn: _dropped, ...rest } = filters;
+  return (
+    <div className="mt-3 flex">
+      <span className="inline-flex h-[34px] max-w-full items-center gap-1 rounded-full bg-primary pr-1 pl-3.5 text-[13px] font-medium text-primary-foreground">
+        <span className="truncate">{label}</span>
+        <Link
+          href={listHref('/orders', { view: 'list', ...rest })}
+          aria-label={fill(f.confirmedOnRemove, { label })}
+          className="grid size-[26px] shrink-0 place-items-center rounded-full transition-colors duration-150 focus-visible:outline-milk focus-visible:outline-offset-0 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-milk/15"
+        >
+          <X className="size-4" strokeWidth={1.5} aria-hidden />
+        </Link>
+      </span>
+    </div>
   );
 }
