@@ -6,13 +6,21 @@ import type {
   VolumeSales,
 } from '@lummi/contracts';
 import { formatCalendarDate, formatMoney, plural, type Language } from '@lummi/i18n';
-import { Download } from 'lucide-react';
+import {
+  BanknoteArrowUp,
+  Download,
+  ReceiptText,
+  ShoppingBag,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetaLine } from '@/components/ui/meta-line';
+import { StatAmount, StatCard, StatGrid } from '@/components/ui/stat-card';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
@@ -148,7 +156,10 @@ export function SalesReportView({
   );
 }
 
-/** The range at a glance: net, orders, average check, refunds; the parts of net under them. */
+/**
+ * The range at a glance: net, orders, average check, refunds as figure cards; the parts of net and
+ * how they add up in a muted line under them.
+ */
 function Totals({
   r,
   totals,
@@ -159,23 +170,30 @@ function Totals({
   money: (n: number) => string;
 }) {
   const f = r.figures;
-  const tiles: [string, string][] = [
-    [f.net, money(totals.net)],
-    [f.orders, num(totals.orders)],
-    [f.averageCheck, totals.averageCheck === null ? '—' : money(totals.averageCheck)],
-    [f.refunds, money(totals.refunds)],
+  const cards: { key: string; icon: LucideIcon; label: string; value: string }[] = [
+    { key: 'net', icon: Wallet, label: f.net, value: money(totals.net) },
+    { key: 'orders', icon: ShoppingBag, label: f.orders, value: num(totals.orders) },
+    {
+      key: 'average',
+      icon: ReceiptText,
+      label: f.averageCheck,
+      value: totals.averageCheck === null ? '—' : money(totals.averageCheck),
+    },
+    { key: 'refunds', icon: BanknoteArrowUp, label: f.refunds, value: money(totals.refunds) },
   ];
   return (
-    <Card className="p-4 sm:p-5">
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-4">
-        {tiles.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-small text-muted-foreground">{label}</dt>
-            <dd className="mt-0.5 text-lg font-semibold whitespace-nowrap tabular-nums">{value}</dd>
-          </div>
+    <section aria-label={r.total} className="@container">
+      <StatGrid>
+        {cards.map((c) => (
+          <StatCard
+            key={c.key}
+            icon={c.icon}
+            label={c.label}
+            value={<StatAmount text={c.value} />}
+          />
         ))}
-      </dl>
-      <dl className="mt-4 grid gap-1 border-t border-border pt-3 text-small sm:flex sm:flex-wrap sm:gap-x-6">
+      </StatGrid>
+      <dl className="mt-3 flex flex-col gap-1 px-1 text-small sm:flex-row sm:flex-wrap sm:gap-x-6">
         {(
           [
             [f.itemsBeforeDiscount, totals.itemsBeforeDiscount],
@@ -183,14 +201,14 @@ function Totals({
             [f.delivery, totals.delivery],
           ] as const
         ).map(([label, value]) => (
-          <div key={label} className="flex justify-between gap-3 sm:justify-start">
+          <div key={label} className="flex justify-between gap-2 sm:justify-start">
             <dt className="text-muted-foreground">{label}</dt>
             <dd className="font-medium whitespace-nowrap tabular-nums">{money(value)}</dd>
           </div>
         ))}
       </dl>
-      <p className="mt-2 text-small text-muted-foreground">{r.netHint}</p>
-    </Card>
+      <p className="mt-1.5 max-w-[80ch] px-1 text-small text-muted-foreground">{r.netHint}</p>
+    </section>
   );
 }
 
