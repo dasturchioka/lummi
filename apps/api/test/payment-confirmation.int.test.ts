@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   asc,
   credits,
@@ -17,7 +16,6 @@ import {
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { SettingsService } from '../src/settings/settings.service';
@@ -32,7 +30,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * (ADR 0011, 0012). The receipt AI (#32) and a manager in the admin panel (#33) both go through it.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -45,7 +42,7 @@ afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:30Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

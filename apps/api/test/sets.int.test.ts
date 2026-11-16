@@ -1,4 +1,3 @@
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import {
   auditLog,
@@ -13,10 +12,7 @@ import {
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { moveCartData } from '../src/cart/move-cart';
-import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
-
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 
 let t: TestApp;
 let owner: StaffSession;
@@ -27,7 +23,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 beforeEach(async () => {
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   owner = await t.ownerSession();
   manager = await t.managerSession();
 });

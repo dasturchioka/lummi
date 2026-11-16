@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { apiContract } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import {
@@ -18,10 +17,8 @@ import { initClient } from '@ts-rest/core';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { loadCartQuote } from '../src/cart/load-cart';
-import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -33,7 +30,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 beforeEach(async () => {
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 
 const ali = { id: 41, first_name: 'Ali', language_code: 'ru' };

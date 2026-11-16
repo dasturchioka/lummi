@@ -1,10 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { and, eq, fragrances, volumes } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { lastTashkentDays } from '../src/reports/report-range';
 import { salesSummary } from '../src/reports/sales-summary';
 import { fulfilTo, pay, placeOrder, tashkent } from './harness/fulfilment';
@@ -18,7 +16,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * door, the range and the export.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -31,7 +28,7 @@ afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(tashkent('2026-11-10 09:00'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

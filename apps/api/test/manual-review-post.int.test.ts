@@ -1,12 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { credits, eq, fragrances, isNull, orders, outbox, receipts, sql, staff } from '@lummi/db';
 import { Queue } from 'bullmq';
 import { formatMoney, formatPhone } from '@lummi/i18n';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import type { ReceiptJudgeInput, ReceiptJudgement } from '../src/edges';
 import { SettingsService } from '../src/settings/settings.service';
 import type { SentMessage } from './fakes';
@@ -22,7 +20,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * endpoint, the judge is the fake, and the worker posts to the fake Telegram.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -49,7 +46,7 @@ beforeEach(async () => {
   t.edges.telegram.releaseHeld();
   await t.reset();
   t.edges.telegram.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   const config = t.app.get(SettingsService);
   await config.set('bot.groupChatId', GROUP, { type: 'system' });

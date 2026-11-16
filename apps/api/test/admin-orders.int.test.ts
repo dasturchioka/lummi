@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   internalContract,
   type AdminCreditsQuery,
@@ -26,7 +25,6 @@ import {
 import { initClient } from '@ts-rest/core';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentMatching } from '../src/payment/payment-matching';
 import { ReceiptsService } from '../src/receipts/receipts.service';
@@ -43,7 +41,6 @@ import {
 
 /** Seam 1 (ADR 0028): the admin orders panel (#33) over HTTP, as owner and managers use it. */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -51,13 +48,13 @@ const snapshot = JSON.parse(
 let t: TestApp;
 beforeAll(async () => {
   t = await createTestApp();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

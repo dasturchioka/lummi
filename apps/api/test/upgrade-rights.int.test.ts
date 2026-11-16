@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody, FulfilBody, OrderStatus, SettingKey } from '@lummi/contracts';
 import {
   and,
@@ -21,7 +20,6 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
-import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
@@ -37,7 +35,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * «Доставлен» the way a manager takes it there: the admin panel's fulfilment steps (#33).
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -51,7 +48,7 @@ beforeEach(async () => {
   // 15:00 in Tashkent on 9 November
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

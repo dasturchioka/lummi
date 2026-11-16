@@ -1,11 +1,8 @@
 import { fragranceNotes, fragrances, notes, eq, inArray } from '@lummi/db';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedCatalog } from '../src/catalog/seed';
 import { CONTROL_QUERIES, type ControlQuery } from './search-control-queries';
 import { createTestApp, type TestApp } from './harness/test-app';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 /** TZ §3.2: the expected fragrance in the top 3 for at least 27 of the 30 control queries. */
 const REQUIRED = 27;
 
@@ -13,7 +10,7 @@ let t: TestApp;
 beforeAll(async () => {
   t = await createTestApp();
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 afterAll(() => t.close());
 

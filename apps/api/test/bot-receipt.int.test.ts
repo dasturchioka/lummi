@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
@@ -22,14 +21,12 @@ import { dictionaries } from '@lummi/i18n/all';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import type { WorkerRuntime } from '../src/worker/runtime';
 import { receiptPdf } from './harness/pdf';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, TEST_MINIAPP_URL, type TestApp } from './harness/test-app';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -49,7 +46,7 @@ beforeEach(async () => {
   t.edges.telegramFiles.downloads.length = 0;
   t.edges.telegram.answered.length = 0;
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

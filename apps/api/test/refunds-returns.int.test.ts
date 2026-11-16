@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody, FulfilBody, OrderStatus, PromoCodeInput } from '@lummi/contracts';
 import {
   and,
@@ -22,7 +21,6 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper, slugs, whileLockedUntil } from './harness/orders';
 import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
@@ -36,7 +34,6 @@ import { createTestApp, type StaffSession, type TestApp } from './harness/test-a
  * back-to-stock flags.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -50,7 +47,7 @@ beforeEach(async () => {
   // 15:00 in Tashkent on 9 November
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

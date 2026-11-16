@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   asc,
   credits,
@@ -16,7 +15,6 @@ import {
 import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import type { ReceiptJudgeInput, ReceiptJudgement } from '../src/edges';
 import { CreditEvents } from '../src/humo/credit-events';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
@@ -33,7 +31,6 @@ import { createTestApp, TEST_SHOP_CARD, type TestApp } from './harness/test-app'
  * recorded" event and the receipt checks on the test Redis, as in production.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -55,7 +52,7 @@ beforeEach(async () => {
   t.edges.receiptJudge.calls.length = 0;
   t.edges.receiptJudge.respond = undefined;
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 // nothing of one test's matching may run into the next one's rows

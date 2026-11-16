@@ -10,7 +10,6 @@ import {
   type CustomerRow,
 } from '@lummi/db';
 import type { Job } from 'bullmq';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BotBlockedError, RateLimitedError } from '../src/edges';
@@ -19,10 +18,8 @@ import { CustomersService } from '../src/auth/customers.service';
 import { moveCustomerData } from '../src/auth/customers.service';
 import { BROADCAST_ATTEMPTS, BroadcastService } from '../src/broadcast/broadcast.service';
 import { SettingsService } from '../src/settings/settings.service';
-import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 
 let t: TestApp;
 let svc: BroadcastService;
@@ -171,7 +168,7 @@ describe('sending', () => {
   });
 
   it("names a fragrance target's fragrance as the owner types the slug, for the owner only", async () => {
-    await seedCatalog(t.db, { materialsDir });
+    await t.seedCatalog();
     const known = await owner.client.admin.broadcasts.fragrance({ query: { slug: 'tygar' } });
     expect(known).toMatchObject({ status: 200, body: { name: 'Tygar' } });
     const unknown = await owner.client.admin.broadcasts.fragrance({
