@@ -473,7 +473,7 @@ describe('the Now item', () => {
 });
 
 describe('the owner strip', () => {
-  it('counts money in today from payments confirmed since Tashkent midnight', async () => {
+  it('counts money in today from payments confirmed since Tashkent midnight, as the list on confirmedOn does', async () => {
     // a week ago (Saturday 7 November): one paid at 00:30, one at 09:30 (after this hour)
     const w1 = await orderAt('2026-11-07 00:20');
     await payAt(w1, '2026-11-07 00:30');
@@ -504,20 +504,20 @@ describe('the owner strip', () => {
       average: await due(w1),
     });
 
-    // the cards open the orders list on `paidOn`: the same orders, the one paid after midnight
+    // the cards open the orders list on `confirmedOn`: the same orders, the one paid after midnight
     // for an order placed before it included
     const owner = await t.ownerSession();
-    const paidOn = async (day: string) => {
-      const res = await owner.client.admin.orders.list({ query: { paidOn: day } });
+    const confirmedOn = async (day: string) => {
+      const res = await owner.client.admin.orders.list({ query: { confirmedOn: day } });
       if (res.status !== 200) throw new Error(`orders ${res.status}`);
       return res.body.items.map((i) => i.number).sort((a, b) => a - b);
     };
-    expect(await paidOn('2026-11-14')).toEqual([d1, d2].sort((a, b) => a - b));
-    expect(await paidOn('2026-11-13')).toEqual([y]);
-    expect(await paidOn('2026-11-07')).toEqual([w1, w2].sort((a, b) => a - b));
+    expect(await confirmedOn('2026-11-14')).toEqual([d1, d2].sort((a, b) => a - b));
+    expect(await confirmedOn('2026-11-13')).toEqual([y]);
+    expect(await confirmedOn('2026-11-07')).toEqual([w1, w2].sort((a, b) => a - b));
   });
 
-  it('opens on paidOn exactly the orders it counts, whatever came after', async () => {
+  it('opens on confirmedOn exactly the orders it counts, whatever came after', async () => {
     // paid today, then cancelled and the money sent back: still money in today
     const back = await orderAt('2026-11-14 07:00');
     await payAt(back, '2026-11-14 07:10');
@@ -538,16 +538,16 @@ describe('the owner strip', () => {
     if (home.role !== 'owner') throw new Error('not the owner');
     const owner = await t.ownerSession();
     const list = (query: Record<string, string>) => owner.client.admin.orders.list({ query });
-    const res = await list({ paidOn: '2026-11-14' });
+    const res = await list({ confirmedOn: '2026-11-14' });
     if (res.status !== 200) throw new Error(`orders ${res.status}`);
     expect(res.body.items.map((i) => i.number).sort((a, b) => a - b)).toEqual(
       [back, linked].sort((a, b) => a - b),
     );
     expect(res.body.total).toBe(home.sales.paidToday.orders);
     // with the other filters, and a day that is no day
-    const cancelled = await list({ paidOn: '2026-11-14', status: 'cancelled' });
+    const cancelled = await list({ confirmedOn: '2026-11-14', status: 'cancelled' });
     expect(cancelled.status === 200 && cancelled.body.items.map((i) => i.number)).toEqual([back]);
-    const nonsense = await fetch(`${t.baseUrl}/admin/orders?paidOn=yesterday`, {
+    const nonsense = await fetch(`${t.baseUrl}/admin/orders?confirmedOn=yesterday`, {
       headers: { cookie: owner.cookie },
     });
     expect(nonsense.status).toBe(400);

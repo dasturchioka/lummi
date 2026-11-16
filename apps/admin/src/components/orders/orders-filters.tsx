@@ -23,7 +23,7 @@ export type OrderFilters = {
   from?: string;
   to?: string;
   /** The Home's «Оплачено сегодня» cards: orders first paid that day. No field: a chip shows it. */
-  paidOn?: string;
+  confirmedOn?: string;
 };
 
 /**
@@ -51,7 +51,7 @@ export function OrdersFiltersForm({
   const f = t.orders.filters;
   const active = [filters.status, filters.payment, filters.from, filters.to].filter(Boolean).length;
   const [open, setOpen] = useState(active > 0);
-  const any = active > 0 || Boolean(filters.q || filters.paidOn);
+  const any = active > 0 || Boolean(filters.q || filters.confirmedOn);
   const badRange = Boolean(filters.from && filters.to && filters.from > filters.to);
   const hidden = !open && 'max-sm:hidden';
   const statuses = ordersMessages[language].orders.status;
@@ -65,7 +65,7 @@ export function OrdersFiltersForm({
       >
         {/* the list sits behind «Список»; the board has its own filters (#52) */}
         <input type="hidden" name="view" value="list" />
-        {filters.paidOn && <input type="hidden" name="paidOn" value={filters.paidOn} />}
+        {filters.confirmedOn && <input type="hidden" name="confirmedOn" value={filters.confirmedOn} />}
         <Field id="f-q" label={f.search} className={cn(FIELD, 'sm:col-span-2')}>
           <Input
             name="q"
@@ -140,8 +140,8 @@ export function OrdersFiltersForm({
           )}
         </div>
       </form>
-      {filters.paidOn && (
-        <PaidOnChip t={t} language={language} paidOn={filters.paidOn} filters={filters} />
+      {filters.confirmedOn && (
+        <ConfirmedOnChip t={t} language={language} confirmedOn={filters.confirmedOn} filters={filters} />
       )}
       {badRange && <Notice title={t.orders.badRange} className="mt-3" />}
     </Card>
@@ -152,29 +152,29 @@ export function OrdersFiltersForm({
  * The filter the Home's cards bring (orders first paid that day), which has no field of its own:
  * a chosen chip (Graphite, Milk text) with a cross that drops it and keeps the other filters.
  */
-function PaidOnChip({
+function ConfirmedOnChip({
   t,
   language,
-  paidOn,
+  confirmedOn,
   filters,
 }: {
   t: AdminMessages;
   language: Language;
-  paidOn: string;
+  confirmedOn: string;
   filters: OrderFilters;
 }) {
   const f = t.orders.filters;
   // an old bookmark names its year
-  const otherYear = Number(paidOn.slice(0, 4)) !== new Date().getFullYear();
-  const label = fill(f.paidOn, { date: formatCalendarDate(paidOn, language, otherYear) });
-  const { paidOn: _dropped, ...rest } = filters;
+  const otherYear = Number(confirmedOn.slice(0, 4)) !== new Date().getFullYear();
+  const label = fill(f.confirmedOn, { date: formatCalendarDate(confirmedOn, language, otherYear) });
+  const { confirmedOn: _dropped, ...rest } = filters;
   return (
     <div className="mt-3 flex">
       <span className="inline-flex h-[34px] max-w-full items-center gap-1 rounded-full bg-primary pr-1 pl-3.5 text-[13px] font-medium text-primary-foreground">
         <span className="truncate">{label}</span>
         <Link
           href={listHref('/orders', { view: 'list', ...rest })}
-          aria-label={fill(f.paidOnRemove, { label })}
+          aria-label={fill(f.confirmedOnRemove, { label })}
           className="grid size-[26px] shrink-0 place-items-center rounded-full transition-colors duration-150 focus-visible:outline-milk focus-visible:outline-offset-0 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-milk/15"
         >
           <X className="size-4" strokeWidth={1.5} aria-hidden />

@@ -168,7 +168,7 @@ export function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
   else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
   if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
   if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
-  if (q.paidOn) conditions.push(firstConfirmedOn(q.paidOn));
+  if (q.confirmedOn) conditions.push(firstConfirmedOn(q.confirmedOn));
   const digits = q.q?.replace(/\D/g, '') ?? null;
   // an order number fits in nine digits; a phone is searched by four digits or more
   const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;

@@ -93,9 +93,9 @@ export function SalesStrip({
   const money = (n: number) => formatMoney(n, language);
   const weekday = weekdayOf(data.at.day);
   const weekChange = change(week.net, previousWeek.net);
-  // the three money-in-today cards open the orders paid today (the list's `paidOn` reads the same
+  // the three money-in-today cards open the orders paid today (the list's `confirmedOn` reads the same
   // orders); the 7-day card opens the sales report over those days
-  const paidList = listHref('/orders', { view: 'list', paidOn: data.at.day });
+  const paidList = listHref('/orders', { view: 'list', confirmedOn: data.at.day });
   const figs: {
     key: string;
     icon: LucideIcon;
@@ -139,23 +139,33 @@ export function SalesStrip({
   ];
   const top = Math.max(1, ...days.map((d) => d.net));
   const today = days.at(-1);
+  // top right on a wide card (its end labels in the tooltip), full width with them on a phone's
   const bars = (
-    <div
-      role="img"
-      aria-label={fill(s.barsLabel, { amount: money(today?.net ?? 0) })}
-      title={`${s.barsFrom} · ${s.barsToday}`}
-      className="flex h-9 max-w-[112px] min-w-0 flex-1 items-end gap-[3px]"
-    >
-      {days.map((d, i) => (
-        <i
-          key={d.day}
-          className={cn(
-            'min-h-0.5 flex-1 rounded-t-[2px]',
-            i === days.length - 1 ? 'bg-sage' : 'bg-stone',
-          )}
-          style={{ height: `${Math.round((Math.max(0, d.net) / top) * 100)}%` }}
-        />
-      ))}
+    <div className="flex w-full max-w-[112px] min-w-0 flex-col @max-[11.25rem]/card:max-w-none">
+      <div
+        role="img"
+        aria-label={fill(s.barsLabel, { amount: money(today?.net ?? 0) })}
+        title={`${s.barsFrom} · ${s.barsToday}`}
+        className="flex h-9 items-end gap-[3px] @max-[11.25rem]/card:h-8"
+      >
+        {days.map((d, i) => (
+          <i
+            key={d.day}
+            className={cn(
+              'min-h-0.5 flex-1 rounded-t-[2px]',
+              i === days.length - 1 ? 'bg-sage' : 'bg-stone',
+            )}
+            style={{ height: `${Math.round((Math.max(0, d.net) / top) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <div
+        aria-hidden
+        className="mt-1.5 hidden justify-between text-[11px] text-muted-foreground @max-[11.25rem]/card:flex"
+      >
+        <span>{s.barsFrom}</span>
+        <span>{s.barsToday}</span>
+      </div>
     </div>
   );
   return (

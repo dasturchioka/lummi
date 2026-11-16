@@ -495,7 +495,7 @@ export class HomeService {
   /**
    * Orders whose payment was first confirmed within [from, to], and the credits that paid them.
    * It reads the confirmations in that stretch (`order_events_confirmed_idx`) and keeps each
-   * order's first one only (`firstConfirmationIn`, the rule the orders list's `paidOn` filter
+   * order's first one only (`firstConfirmationIn`, the rule the orders list's `confirmedOn` filter
    * shares, so the cards open exactly the orders they count). `to` is included.
    */
   async paidBetween(from: Date, to: Date): Promise<PaidFigures> {

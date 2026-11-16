@@ -46,7 +46,7 @@ export const enteredStatus =
 /**
  * `e` (an `order_events` row) is its order's first payment confirmation and falls in
  * [from, before): the one rule behind the admin Home's «Оплачено сегодня» (`HomeService.paidBetween`)
- * and the orders list's `paidOn` filter its cards open. The action is written out, not bound, so the
+ * and the orders list's `confirmedOn` filter its cards open. The action is written out, not bound, so the
  * partial index `order_events_confirmed_idx` serves both.
  */
 export function firstConfirmationIn(from: Date, before: Date): SQL {

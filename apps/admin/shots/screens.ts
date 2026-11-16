@@ -624,9 +624,9 @@ export const screens: Screen[] = [
       await homeLoaded(ctx);
       const { page } = ctx;
       const card = page.locator('section[aria-labelledby="home-sales"] ul a').first();
-      const n = Number(await card.locator('p').nth(1).innerText());
+      const n = Number(await card.locator('[data-stat-value]').innerText());
       await card.click();
-      await page.waitForURL(/paidOn=/);
+      await page.waitForURL(/confirmedOn=/);
       await page.locator('form[action="/orders"]').waitFor();
       await page.locator('a[href^="/orders/"]:visible').first().waitFor();
       const rows = await page.locator('a[href^="/orders/"]:visible').count();
@@ -636,6 +636,37 @@ export const screens: Screen[] = [
   { id: 'home-humo', path: '/', as: 'owner', ...homeOn('humo'), act: homeLoaded },
   { id: 'home-no-card', path: '/', as: 'owner', ...homeOn('noCard'), act: homeLoaded },
   { id: 'home-no-card-manager', path: '/', as: 'manager', ...homeOn('noCard'), act: homeLoaded },
+  {
+    id: 'home-worst',
+    path: '/',
+    as: 'owner',
+    ...homeOn(),
+    // the strip at its widest: nine-digit sums and three-digit counts (break-ui)
+    act: async ({ page }) => {
+      await page.route('**/api/admin/home', async (route) => {
+        const res = await route.fetch();
+        const body = (await res.json()) as AdminHome;
+        if (body.role !== 'owner') return route.fulfill({ response: res });
+        const days = body.sales.days.map((d, i) => ({ ...d, net: 40_000_000 + i * 9_000_000 }));
+        await route.fulfill({
+          response: res,
+          json: {
+            ...body,
+            sales: {
+              ...body.sales,
+              paidToday: { orders: 128, received: 128_450_000, average: 1_003_516 },
+              paidWeekAgo: { orders: 97, received: 101_200_000, average: 1_043_299 },
+              week: { ...body.sales.week, net: 987_654_321 },
+              previousWeek: { ...body.sales.previousWeek, net: 812_000_000 },
+              days,
+            },
+          },
+        });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.locator('[data-now]').waitFor();
+    },
+  },
   {
     id: 'home-clear',
     path: '/',

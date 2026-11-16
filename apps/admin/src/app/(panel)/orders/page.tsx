@@ -17,7 +17,7 @@ import { clampPage, readFilters, readPage, type Search } from '@/lib/list-page';
 import { getMe, serverApi } from '@/lib/server-api';
 import { TEXT_LINK } from '@/lib/ui-classes';
 
-const LIST_KEYS = ['q', 'status', 'payment', 'from', 'to', 'paidOn'] as const;
+const LIST_KEYS = ['q', 'status', 'payment', 'from', 'to', 'confirmedOn'] as const;
 const BOARD_KEYS = ['q', 'payment', 'from', 'to'] as const;
 
 /**

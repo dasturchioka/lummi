@@ -5,11 +5,12 @@ import { cn } from '@/lib/utils';
 
 /*
  * Figure cards: one white card per figure on the Milk ground (the Home's sales strip, the sales
- * report's totals). Flat like every card: tone, not shadow. Top row: the figure's line icon on a
- * Milk Field tile, and at the right an optional `aside` (the 14 bars) and, on a card that opens a
- * page, the ↗ corner. Then the value, the label that names its measure, and an optional note (the
- * change) right under it. The DOM reads label, value, note, then the top row, so a screen reader
- * says «Поступило, 4 250 000 сум» first; `order` draws them as described.
+ * report's totals). Flat like every card: tone, not shadow. The card is a grid and its own
+ * container (`card`): top left the figure's line icon on a Milk Field tile, top right an optional
+ * `aside` (the 14 bars) and, on a card that opens a page, the ↗ corner; then the value, the label
+ * that names its measure, and an optional note (the change). On a narrow card (a phone) the aside
+ * drops under the note at full width. The DOM reads label, value, note, then the top row, so a
+ * screen reader says «Поступило, 4 250 000 сум» first; the grid draws them as described.
  */
 
 /**
@@ -25,7 +26,8 @@ export function StatGrid({ className, ...props }: ComponentProps<'ul'>) {
   );
 }
 
-const CARD = 'flex min-w-0 flex-col rounded-card bg-card p-3.5 sm:p-[18px]';
+const CARD =
+  '@container/card relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)] content-start gap-x-3 rounded-card bg-card p-3.5 sm:p-[18px]';
 /**
  * A card that opens a page. On a fine pointer the hover draws the hairline-strong inset (an outline,
  * not elevation) and nudges the corner; a press sinks it to 0.985. Reduced motion keeps the outline.
@@ -35,6 +37,9 @@ const LINKED = cn(
   '[@media(hover:hover)_and_(pointer:fine)]:hover:shadow-[inset_0_0_0_1px_var(--hairline-strong)]',
   'motion-safe:active:scale-[0.985]',
 );
+/** Below this card width (a phone's two columns) the aside goes under the note. */
+const NARROW_ASIDE =
+  '@max-[11.25rem]/card:col-span-2 @max-[11.25rem]/card:col-start-1 @max-[11.25rem]/card:row-start-5 @max-[11.25rem]/card:mt-3 @max-[11.25rem]/card:h-auto @max-[11.25rem]/card:pr-0';
 
 export function StatCard({
   icon: Icon,
@@ -50,41 +55,53 @@ export function StatCard({
   value: ReactNode;
   /** A muted line under the label: the change against the comparison. */
   note?: ReactNode;
-  /** At the top row's right end, as tall as the icon tile. */
+  /**
+   * Top right, as tall as the icon tile; under the note on a narrow card, where it may show what
+   * only its tooltip says on a wide one (`@max-[11.25rem]/card:` variants).
+   */
   aside?: ReactNode;
-  /** The page holding exactly what the figure counts: the whole card opens it. */
+  /** The page listing exactly what the figure is made of: the whole card opens it. */
   href?: string;
 }) {
   const body = (
     <>
-      <p className="order-2 mt-1 text-[13px] leading-[1.35] text-muted-foreground sm:text-sm">
+      <p className="col-span-2 row-start-3 mt-1 text-[13px] leading-[1.35] text-muted-foreground sm:text-sm">
         {label}
       </p>
-      <p className="order-1 mt-4 text-[21px] leading-[1.15] font-semibold tabular-nums sm:mt-5 sm:text-2xl">
+      {/* a nine-digit sum still fits a 320 px phone's card: the size follows the card's width */}
+      <p
+        className="col-span-2 row-start-2 mt-4 text-[clamp(17px,14cqi,21px)] leading-[1.15] font-semibold tabular-nums sm:mt-5 sm:text-2xl"
+        data-stat-value
+      >
         {value}
       </p>
       {note !== undefined && (
-        <p className="order-3 mt-1.5 text-small text-muted-foreground">{note}</p>
+        <p className="col-span-2 row-start-4 mt-1.5 text-small text-muted-foreground">{note}</p>
       )}
-      {/* last in the DOM (the bars' summary after the figure), first on the card */}
-      <div className="order-first flex h-9 items-start gap-3">
-        <span
-          aria-hidden
-          className="grid size-9 shrink-0 place-items-center rounded-button bg-field"
-        >
-          <Icon className="size-[18px]" strokeWidth={1.5} />
-        </span>
-        <span className="ml-auto flex h-full min-w-0 flex-1 items-start justify-end gap-2.5">
-          {aside}
-          {href && (
-            <ArrowUpRight
-              aria-hidden
-              strokeWidth={1.5}
-              className="size-4 shrink-0 text-muted-foreground transition-[color,transform] duration-150 ease-out [@media(hover:hover)_and_(pointer:fine)]:group-hover:text-foreground motion-safe:[@media(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-px motion-safe:[@media(hover:hover)_and_(pointer:fine)]:group-hover:-translate-y-px"
-            />
+      <span
+        aria-hidden
+        className="col-start-1 row-start-1 grid size-9 place-items-center rounded-button bg-field"
+      >
+        <Icon className="size-[18px]" strokeWidth={1.5} />
+      </span>
+      {aside && (
+        <div
+          className={cn(
+            'col-start-2 row-start-1 flex h-9 min-w-0 justify-end',
+            href && 'pr-[26px]',
+            NARROW_ASIDE,
           )}
-        </span>
-      </div>
+        >
+          {aside}
+        </div>
+      )}
+      {href && (
+        <ArrowUpRight
+          aria-hidden
+          strokeWidth={1.5}
+          className="absolute top-3.5 right-3.5 size-4 text-muted-foreground transition-[color,transform] duration-150 ease-out sm:top-[18px] sm:right-[18px] [@media(hover:hover)_and_(pointer:fine)]:group-hover:text-foreground motion-safe:[@media(hover:hover)_and_(pointer:fine)]:group-hover:translate-x-px motion-safe:[@media(hover:hover)_and_(pointer:fine)]:group-hover:-translate-y-px"
+        />
+      )}
     </>
   );
   return href ? (

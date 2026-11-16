@@ -9,7 +9,7 @@ import type { OrderFilters } from './orders-filters';
 /**
  * «Воронка | Список» (#52): two links in the panel's segmented grammar (a Milk Field track, the
  * current one white). Each keeps the filters that apply to it: the board has no status filter and
- * no `paidOn` (the Home's cards open the list).
+ * no `confirmedOn` (the Home's cards open the list).
  */
 export function ViewSwitch({
   view,
@@ -21,7 +21,7 @@ export function ViewSwitch({
   t: AdminMessages;
 }) {
   const v = t.orders.view;
-  const { status: _status, paidOn: _paidOn, ...shared } = filters;
+  const { status: _status, confirmedOn: _confirmedOn, ...shared } = filters;
   const links = [
     { key: 'board', label: v.board, icon: Kanban, href: listHref('/orders', shared) },
     {
