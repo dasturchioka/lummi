@@ -35,6 +35,18 @@ export const volumeCardSchema = z.object({
 });
 export type VolumeCard = z.infer<typeof volumeCardSchema>;
 
+/**
+ * A Step-up (GLOSSARY, #57): from a volume that can be bought, the next larger one that can be
+ * bought too, offered because its extra millilitres cost less per ml («+70 000 сум — и на 20 мл
+ * больше»). `extra` is the difference of the two effective prices, integer so'm, always above 0.
+ */
+export const stepUpSchema = z.object({
+  fromMl: volumeCardSchema.shape.ml,
+  toMl: volumeCardSchema.shape.ml,
+  extra: z.number().int().positive(),
+});
+export type StepUp = z.infer<typeof stepUpSchema>;
+
 /** One full-size volume as the customer's upgrade right prices it (ADR 0003, 0007). */
 export const upgradeRightPriceSchema = z.object({
   /** A volume `pricing.fullSizeVolumesMl` calls full size. */
@@ -80,6 +92,11 @@ export const fragranceCardSchema = z.object({
   upgradeRightPrices: z.array(upgradeRightPriceSchema),
   /** The volumes a right discounts (setting `pricing.fullSizeVolumesMl`), for «на один флакон 30 или 50 мл». */
   fullSizeMl: z.array(z.number().int()),
+  /**
+   * The step-ups worth offering under the volume tiles, smallest `fromMl` first, computed by the
+   * server (`stepUps`, settings `catalog.stepUp.*`). Empty while switched off.
+   */
+  stepUps: z.array(stepUpSchema),
 });
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 

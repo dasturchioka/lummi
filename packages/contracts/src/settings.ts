@@ -104,6 +104,35 @@ export const settingDefinitions = {
       uz: 'Avval qoʻlda tanlanganlar, keyin xuddi shu oila va turdagilar, faqat mavjudlari.',
     },
   },
+  /** The step-up line under the product page's volume tiles (#57): on or off. */
+  'catalog.stepUp.enabled': {
+    schema: z.boolean(),
+    default: true,
+    area: 'shop',
+    label: {
+      ru: 'Подсказка «и на 20 мл больше» на карточке',
+      uz: 'Kartada «20 ml koʻproq» maslahati',
+    },
+    hint: {
+      ru: 'Под объёмами: сколько доплатить за следующий объём в наличии, когда его миллилитр заметно дешевле.',
+      uz: 'Hajmlar ostida: mavjud keyingi hajm uchun qancha qoʻshish kerakligi, uning millilitri sezilarli arzon boʻlsa.',
+    },
+  },
+  /** How much cheaper per ml the extra millilitres must be for the step-up line to show (#57). */
+  'catalog.stepUp.minPercent': {
+    schema: z.number().int().min(1).max(90),
+    default: 10,
+    area: 'shop',
+    unit: 'none',
+    label: {
+      ru: 'Подсказка о большем объёме: выгода от, %',
+      uz: 'Kattaroq hajm maslahati: foyda kamida, %',
+    },
+    hint: {
+      ru: 'Доплата за каждый лишний мл должна быть дешевле мл выбранного объёма хотя бы на столько. Иначе подсказки нет.',
+      uz: 'Har bir qoʻshimcha ml uchun toʻlov tanlangan hajmning 1 ml narxidan kamida shuncha arzon boʻlishi kerak. Aks holda maslahat chiqmaydi.',
+    },
+  },
   // Excel catalog import (spec Changes 2026-11-07, #26)
   /** The largest `LUMMI_Katalog.xlsx` the import accepts. */
   'catalog.import.maxBytes': {

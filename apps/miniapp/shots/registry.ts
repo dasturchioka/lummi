@@ -3037,6 +3037,16 @@ export const screens: ScreenDef[] = [
       ]);
     },
   },
+  {
+    // The step-up (#57): a tap on «+80 000 сум — и на 20 мл больше» chooses 30 ml, which offers 50 ml.
+    id: 'fragrance-step-up',
+    path: '/p/symphony',
+    act: async ({ page }) => {
+      await page.getByTestId('step-up').click();
+      await page.getByRole('radio', { name: /30/, checked: true }).waitFor();
+      await page.getByTestId('step-up').scrollIntoViewIfNeeded();
+    },
+  },
   { id: 'fragrance-not-found', path: '/p/no-such-scent' },
   {
     // «Похожие ароматы» at the foot of the card (the curated ones, then the same family and type).

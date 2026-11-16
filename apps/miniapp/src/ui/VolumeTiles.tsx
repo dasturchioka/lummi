@@ -1,9 +1,10 @@
-import type { VolumeCard } from '@lummi/contracts';
-import { fill } from '@lummi/i18n';
+import type { StepUp, VolumeCard } from '@lummi/contracts';
+import { fill, formatMoney } from '@lummi/i18n';
 import { useRef, type KeyboardEvent } from 'react';
 import { saleEndDate } from '../lib/format';
 import { usePrefs } from '../lib/prefs';
 import { Badge } from './Badge';
+import { ChevronIcon } from './icons';
 import { Money } from './Money';
 import { EASE_OUT } from './photoDisc';
 
@@ -191,5 +192,41 @@ export function VolumeStatus({ volume, stock = true }: { volume: VolumeCard; sto
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Under the tiles (#57): the chosen volume's Step-up as one quiet control, «+70 000 сум — и на
+ * 20 мл больше» with the bigger volume and a chevron at the right; a tap chooses that volume. The
+ * server decided it is worth offering (`stepUps`); this only draws it. Outlined like a secondary
+ * control (hairline-strong inset, radius 10), pressed it washes to Milk Field; no emoji, no box of
+ * colour (DESIGN.md: no sticker discounts).
+ */
+export function StepUpRow({
+  stepUp,
+  onChoose,
+}: {
+  stepUp: StepUp;
+  onChoose: (ml: StepUp['toMl']) => void;
+}) {
+  const { t, language } = usePrefs();
+  const extra = fill(t.card.stepUpExtra, { amount: formatMoney(stepUp.extra, language) });
+  const more = fill(t.card.stepUpMore, { ml: String(stepUp.toMl - stepUp.fromMl) });
+  return (
+    <button
+      type="button"
+      data-testid="step-up"
+      aria-label={fill(t.card.stepUpChoose, { ml: String(stepUp.toMl), offer: `${extra} ${more}` })}
+      onClick={() => onChoose(stepUp.toMl)}
+      className="type-small flex min-h-11 w-full items-center justify-between gap-3 rounded-btn px-3.5 py-2 text-left text-muted shadow-[inset_0_0_0_1px_var(--c-line-strong)] transition-colors duration-150 hover:bg-field active:bg-field"
+    >
+      <span className="text-pretty">
+        <span className="font-semibold whitespace-nowrap text-ink">{extra}</span> {more}
+      </span>
+      <span className="flex shrink-0 items-center gap-0.5 font-semibold whitespace-nowrap text-ink">
+        {stepUp.toMl} {t.card.ml}
+        <ChevronIcon size={16} />
+      </span>
+    </button>
   );
 }

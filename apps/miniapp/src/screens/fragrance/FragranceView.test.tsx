@@ -76,6 +76,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
   ],
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
+  stepUps: [],
   ...over,
 });
 
@@ -235,6 +236,37 @@ describe('FragranceView', () => {
       show({ ...c, volumes: c.volumes.map((v) => (v.ml === 30 ? { ...v, available: 0 } : v)) });
       fireEvent.click(screen.getByRole('radio', { name: /30/ }));
       expect(screen.queryByTestId('right-deal')).toBeNull();
+    });
+  });
+
+  describe('the step-up under the tiles (#57)', () => {
+    const steps = { stepUps: [{ fromMl: 10 as const, toMl: 30 as const, extra: 50_200 }] };
+    const text = () => screen.getByTestId('step-up').textContent?.replace(/[\u00a0\u202f]/g, ' ');
+
+    it('offers the next volume with what it adds, and a tap chooses it', () => {
+      show(card(steps));
+      expect(text()).toBe('+50 200 сум — и на 20 мл больше30 мл');
+      expect(
+        screen
+          .getByTestId('step-up')
+          .getAttribute('aria-label')
+          ?.replace(/[\u00a0\u202f]/g, ' '),
+      ).toBe('Выбрать 30 мл: +50 200 сум — и на 20 мл больше');
+      fireEvent.click(screen.getByTestId('step-up'));
+      expect(screen.getByRole('radio', { name: /30/ }).getAttribute('aria-checked')).toBe('true');
+      // 30 ml has no step-up of its own here: the row goes
+      expect(screen.queryByTestId('step-up')).toBeNull();
+    });
+
+    it('in Uzbek', () => {
+      language = 'uz';
+      show(card(steps));
+      expect(text()).toBe('+50 200 soʻm qoʻshsangiz — 20 ml koʻproq30 ml');
+    });
+
+    it('draws nothing without a step-up for the chosen volume', () => {
+      show(card());
+      expect(screen.queryByTestId('step-up')).toBeNull();
     });
   });
 });
