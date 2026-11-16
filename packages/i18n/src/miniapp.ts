@@ -170,7 +170,8 @@ export const miniappMessages = defineMessages(
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
       stepUpExtra: '+{amount}',
-      stepUpMore: '— и на {ml} мл больше',
+      // no-break spaces: the dash stays with the amount, the number with «мл»
+      stepUpMore: '—\u00a0и на {ml}\u00a0мл больше',
       stepUpChoose: 'Выбрать {ml} мл: {offer}',
       notes: { top: 'Верх', heart: 'Сердце', base: 'База' },
       uzum: 'Купить на Uzum',
@@ -470,8 +471,9 @@ export const miniappMessages = defineMessages(
       inStock: 'Sotuvda bor',
       unavailable: 'Sotuvda yoʻq',
       saleUntil: '{date}',
-      stepUpExtra: '+{amount} qoʻshsangiz',
-      stepUpMore: '— {ml} ml koʻproq',
+      stepUpExtra: '+{amount}',
+      // no-break spaces: «qoʻshsangiz —» stays with the amount, the number with «ml»
+      stepUpMore: 'qoʻshsangiz\u00a0—\u00a0{ml}\u00a0ml koʻproq',
       stepUpChoose: '{ml} ml ni tanlash: {offer}',
       notes: { top: 'Yuqori', heart: 'Yurak', base: 'Baza' },
       uzum: 'Uzum’da sotib olish',

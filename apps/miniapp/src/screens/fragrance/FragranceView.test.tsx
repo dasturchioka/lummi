@@ -268,5 +268,31 @@ describe('FragranceView', () => {
       show(card());
       expect(screen.queryByTestId('step-up')).toBeNull();
     });
+
+    it('hands the focus to the chosen tile, so it is announced and the keyboard stays put', () => {
+      show(card(steps));
+      screen.getByTestId('step-up').focus();
+      fireEvent.click(screen.getByTestId('step-up'));
+      expect(document.activeElement).toBe(screen.getByRole('radio', { name: /30/ }));
+    });
+
+    it('never where an upgrade right prices either volume: the tiles show other numbers', () => {
+      show(
+        card({
+          ...steps,
+          upgradeRightPrices: [
+            { ml: 30, price: 119_200, source: 'set', percent: 20, lastDay: '2026-12-09' },
+          ],
+        }),
+      );
+      expect(screen.queryByTestId('step-up')).toBeNull();
+    });
+
+    it('never from a sold-out volume, whatever the answer says', () => {
+      const c = card(steps);
+      show({ ...c, volumes: c.volumes.map((v) => (v.ml === 10 ? { ...v, available: 0 } : v)) });
+      fireEvent.click(screen.getByRole('radio', { name: /10/ }));
+      expect(screen.queryByTestId('step-up')).toBeNull();
+    });
   });
 });
