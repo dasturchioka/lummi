@@ -30,6 +30,7 @@ import {
 } from '@/lib/home-format';
 import { StatAmount, StatCard, StatGrid } from '@/components/ui/stat-card';
 import type { AdminMessages } from '@/lib/i18n';
+import { listHref } from '@/lib/list-page';
 import { cn, fill } from '@/lib/utils';
 
 export type HomeCopy = AdminMessages['home'];
@@ -94,7 +95,7 @@ export function SalesStrip({
   const weekChange = change(week.net, previousWeek.net);
   // the three money-in-today cards open the orders paid today (the list's `paidOn` reads the same
   // orders); the 7-day card opens the sales report over those days
-  const paidList = `/orders?view=list&paidOn=${data.at.day}`;
+  const paidList = listHref('/orders', { view: 'list', paidOn: data.at.day });
   const figs: {
     key: string;
     icon: LucideIcon;
@@ -133,7 +134,7 @@ export function SalesStrip({
       label: s.week,
       value: money(week.net),
       delta: weekChange ? fill(s.weekVs, { delta: weekChange }) : s.noBase,
-      href: `/reports?from=${week.from}&to=${week.to}`,
+      href: listHref('/reports', { from: week.from, to: week.to }),
     },
   ];
   const top = Math.max(1, ...days.map((d) => d.net));

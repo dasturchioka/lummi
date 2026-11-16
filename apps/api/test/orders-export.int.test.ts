@@ -105,6 +105,8 @@ const filterSets: AdminOrdersQuery[] = [
   { q: '5556677' },
   { q: String(1001) },
   { status: 'receipt_review', from: '2026-11-08' },
+  { paidOn: '2026-11-08' },
+  { paidOn: '2026-11-08', payment: 'paid', q: '1112233' },
   { q: '0000000000' },
 ];
 
@@ -146,6 +148,7 @@ describe('the orders export', () => {
     // the sample is not trivial: some filters keep some orders and drop others
     expect((await listed({})).length).toBe(4);
     expect(await listed({ from: '2026-11-08', to: '2026-11-08' })).toHaveLength(2);
+    expect(await listed({ paidOn: '2026-11-08' })).toEqual([numbers.paid]);
   });
 
   it("has the columns, whole so'm, and who confirmed the payment", async () => {

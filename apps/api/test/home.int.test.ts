@@ -517,6 +517,42 @@ describe('the owner strip', () => {
     expect(await paidOn('2026-11-07')).toEqual([w1, w2].sort((a, b) => a - b));
   });
 
+  it('opens on paidOn exactly the orders it counts, whatever came after', async () => {
+    // paid today, then cancelled and the money sent back: still money in today
+    const back = await orderAt('2026-11-14 07:00');
+    await payAt(back, '2026-11-14 07:10');
+    await cancelByStaff(t, back);
+    await refund(t, back, (await orderRow(t, back)).amountDue, '2026-11-14');
+    // a credit with no receipt, linked by a manager
+    const linked = await orderAt('2026-11-14 07:30');
+    t.edges.clock.set(tashkent('2026-11-14 07:40'));
+    const creditId = await recordCredit(t, { som: (await orderRow(t, linked)).amountDue });
+    const manager = await t.managerSession();
+    const confirmed = await manager.client.admin.orders.confirmPayment({
+      params: { number: linked },
+      body: { creditId, receiptId: null },
+    });
+    expect(confirmed.status).toBe(200);
+
+    const home = await homeAs('owner', '2026-11-14 09:00');
+    if (home.role !== 'owner') throw new Error('not the owner');
+    const owner = await t.ownerSession();
+    const list = (query: Record<string, string>) => owner.client.admin.orders.list({ query });
+    const res = await list({ paidOn: '2026-11-14' });
+    if (res.status !== 200) throw new Error(`orders ${res.status}`);
+    expect(res.body.items.map((i) => i.number).sort((a, b) => a - b)).toEqual(
+      [back, linked].sort((a, b) => a - b),
+    );
+    expect(res.body.total).toBe(home.sales.paidToday.orders);
+    // with the other filters, and a day that is no day
+    const cancelled = await list({ paidOn: '2026-11-14', status: 'cancelled' });
+    expect(cancelled.status === 200 && cancelled.body.items.map((i) => i.number)).toEqual([back]);
+    const nonsense = await fetch(`${t.baseUrl}/admin/orders?paidOn=yesterday`, {
+      headers: { cookie: owner.cookie },
+    });
+    expect(nonsense.status).toBe(400);
+  });
+
   it('counts a credit with tiyin in whole so’m', async () => {
     const n = await orderAt('2026-11-14 08:00');
     const order = await orderRow(t, n);

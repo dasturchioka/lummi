@@ -140,7 +140,9 @@ export function OrdersFiltersForm({
           )}
         </div>
       </form>
-      {filters.paidOn && <PaidOnChip t={t} language={language} filters={filters} />}
+      {filters.paidOn && (
+        <PaidOnChip t={t} language={language} paidOn={filters.paidOn} filters={filters} />
+      )}
       {badRange && <Notice title={t.orders.badRange} className="mt-3" />}
     </Card>
   );
@@ -153,14 +155,18 @@ export function OrdersFiltersForm({
 function PaidOnChip({
   t,
   language,
+  paidOn,
   filters,
 }: {
   t: AdminMessages;
   language: Language;
+  paidOn: string;
   filters: OrderFilters;
 }) {
   const f = t.orders.filters;
-  const label = fill(f.paidOn, { date: formatCalendarDate(filters.paidOn!, language) });
+  // an old bookmark names its year
+  const otherYear = Number(paidOn.slice(0, 4)) !== new Date().getFullYear();
+  const label = fill(f.paidOn, { date: formatCalendarDate(paidOn, language, otherYear) });
   const { paidOn: _dropped, ...rest } = filters;
   return (
     <div className="mt-3 flex">
@@ -169,7 +175,7 @@ function PaidOnChip({
         <Link
           href={listHref('/orders', { view: 'list', ...rest })}
           aria-label={fill(f.paidOnRemove, { label })}
-          className="grid size-[26px] shrink-0 place-items-center rounded-full transition-colors duration-150 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-milk/15"
+          className="grid size-[26px] shrink-0 place-items-center rounded-full transition-colors duration-150 focus-visible:outline-milk focus-visible:outline-offset-0 [@media(hover:hover)_and_(pointer:fine)]:hover:bg-milk/15"
         >
           <X className="size-4" strokeWidth={1.5} aria-hidden />
         </Link>

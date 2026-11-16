@@ -63,7 +63,13 @@ import { AuditQueryService } from '../audit/audit-query.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { cancellationOf } from '../order-status/history';
 import { OrderStatusService, type TransitionOutcome } from '../order-status/order-status.service';
-import { customerName, enteredStatus, PAID_BY, paymentState } from '../orders/order-read';
+import {
+  customerName,
+  enteredStatus,
+  firstConfirmationIn,
+  PAID_BY,
+  paymentState,
+} from '../orders/order-read';
 import { linesOf, toOrderDto } from '../orders/orders.service';
 import { PaymentConfirmation, type ConfirmPaymentOutcome } from '../payment/payment-confirmation';
 import { ReceiptRejection, type RejectReceiptOutcome } from '../payment/receipt-rejection';
@@ -139,19 +145,12 @@ const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDE
 
 /**
  * The order's payment was first confirmed on that Tashkent day and a credit paid it: the orders
- * the admin Home's «Оплачено сегодня» counts (`HomeService.paidBetween`), read from the order's side.
+ * the admin Home's «Оплачено сегодня» counts (`HomeService.paidBetween`, the same rule).
  */
 function firstConfirmedOn(day: string): SQL {
   return sql`(${orders.creditId} is not null and exists (
     select 1 from ${orderEvents} e
-    where e.order_id = ${orders.id} and e.action = 'confirm_payment'
-      and e.created_at >= ${dayStart(day).toISOString()}::timestamptz
-      and e.created_at < ${dayStart(day, 1).toISOString()}::timestamptz
-      and not exists (
-        select 1 from ${orderEvents} earlier
-        where earlier.order_id = e.order_id and earlier.action = 'confirm_payment'
-          and (earlier.created_at, earlier.id) < (e.created_at, e.id)
-      )
+    where e.order_id = ${orders.id} and ${firstConfirmationIn(dayStart(day), dayStart(day, 1))}
   ))`;
 }
 

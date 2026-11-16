@@ -8,11 +8,14 @@ import { cn } from '@/lib/utils';
  * report's totals). Flat like every card: tone, not shadow. Top row: the figure's line icon on a
  * Milk Field tile, and at the right an optional `aside` (the 14 bars) and, on a card that opens a
  * page, the ↗ corner. Then the value, the label that names its measure, and an optional note (the
- * change) right under it. The label comes first in the DOM, so a screen reader says «Поступило,
- * 4 250 000 сум»; the value is drawn above it.
+ * change) right under it. The DOM reads label, value, note, then the top row, so a screen reader
+ * says «Поступило, 4 250 000 сум» first; `order` draws them as described.
  */
 
-/** The cards' grid: two columns, four once the content column holds them (a container query). */
+/**
+ * The cards' grid: two columns, four once the content column holds them. That is a container
+ * query: the caller wraps it in an `@container` (the strip's or the report's section).
+ */
 export function StatGrid({ className, ...props }: ComponentProps<'ul'>) {
   return (
     <ul
@@ -54,7 +57,17 @@ export function StatCard({
 }) {
   const body = (
     <>
-      <div className="flex h-9 items-start gap-3">
+      <p className="order-2 mt-1 text-[13px] leading-[1.35] text-muted-foreground sm:text-sm">
+        {label}
+      </p>
+      <p className="order-1 mt-4 text-[21px] leading-[1.15] font-semibold tabular-nums sm:mt-5 sm:text-2xl">
+        {value}
+      </p>
+      {note !== undefined && (
+        <p className="order-3 mt-1.5 text-small text-muted-foreground">{note}</p>
+      )}
+      {/* last in the DOM (the bars' summary after the figure), first on the card */}
+      <div className="order-first flex h-9 items-start gap-3">
         <span
           aria-hidden
           className="grid size-9 shrink-0 place-items-center rounded-button bg-field"
@@ -72,15 +85,6 @@ export function StatCard({
           )}
         </span>
       </div>
-      <p className="order-2 mt-1 text-[13px] leading-[1.35] text-muted-foreground sm:text-sm">
-        {label}
-      </p>
-      <p className="order-1 mt-4 text-[21px] leading-[1.15] font-semibold tabular-nums sm:mt-5 sm:text-2xl">
-        {value}
-      </p>
-      {note !== undefined && (
-        <p className="order-3 mt-1.5 text-small text-muted-foreground">{note}</p>
-      )}
     </>
   );
   return href ? (

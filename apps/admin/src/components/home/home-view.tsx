@@ -163,14 +163,14 @@ function HomeSkeleton({ owner }: { owner: boolean }) {
     <>
       {owner && (
         <div className="@container">
-          <div className="skeleton mx-1 h-4 w-36" />
+          <div className="skeleton mx-1 h-5 w-36" />
           <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 @4xl:grid-cols-4 @4xl:gap-4">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="rounded-card bg-card p-3.5 sm:p-[18px]">
                 <div className="skeleton size-9 rounded-button" />
-                <div className="skeleton mt-4 h-[22px] w-4/5 sm:mt-5" />
-                <div className="skeleton mt-2.5 h-2.5 w-3/5" />
-                <div className="skeleton mt-3 h-2.5 w-2/5" />
+                <div className="skeleton mt-4 h-6 w-4/5 sm:mt-5 sm:h-7" />
+                <div className="skeleton mt-2 h-3 w-3/5" />
+                <div className="skeleton mt-3 h-3 w-2/5" />
               </div>
             ))}
           </div>
