@@ -117,11 +117,12 @@ export const secondsIn = (since: string, at: string) =>
   Math.max(0, Math.floor((Date.parse(at) - Date.parse(since)) / 1000));
 
 /**
- * From 640 px: columns at least this wide (the card's narrow layout holds RU and UZ at it), 8 px
- * apart, and the next one peeking in by 24 px. At 1280 five funnel columns fit beside the rails.
+ * From 640 px: columns at least this wide, so a card reads without crowding (#59; it was 156 and
+ * five columns at 1280 were cramped), 8 px apart, and the next one peeking in by 24 px. At 1280
+ * three whole funnel columns fit beside the rails; the rest is a sideways scroll.
  */
-const MIN_COLUMN = 156;
-const MAX_COLUMN = 300;
+const MIN_COLUMN = 264;
+const MAX_COLUMN = 320;
 const GAP = 8;
 const PEEK = 24;
 

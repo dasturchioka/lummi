@@ -133,11 +133,12 @@ describe('a fresh board', () => {
 });
 
 describe('column width from 640 px', () => {
-  it('five funnel columns beside the rails at 1280, the next one peeking in', () => {
+  it('three roomy funnel columns beside the rails at 1280, the next one peeking in', () => {
     // 1280: 952 px of content less the rails (2 × 44 + 8 + 8) leaves 848
     const { width } = columnLayout(848, 7);
-    expect(width).toBeGreaterThanOrEqual(156);
-    expect(5 * (width + 8) + 24).toBeLessThanOrEqual(848);
+    expect(width).toBeGreaterThanOrEqual(264);
+    expect(3 * (width + 8) + 24).toBeLessThanOrEqual(848);
+    expect(4 * (width + 8)).toBeGreaterThan(848);
   });
 
   it('the scroll ends on a whole column too: the room after the last one completes the view', () => {
@@ -147,8 +148,8 @@ describe('column width from 640 px', () => {
     expect((content - room) % (width + 8)).toBe(0);
   });
 
-  it('all columns share the room when they fit, at most 300 each, and need no end room', () => {
-    expect(columnLayout(1800, 7)).toEqual({ width: Math.floor((1800 - 6 * 8) / 7), endPad: 0 });
-    expect(columnLayout(4000, 7).width).toBe(300);
+  it('all columns share the room when they fit, at most 320 each, and need no end room', () => {
+    expect(columnLayout(2000, 7)).toEqual({ width: Math.floor((2000 - 6 * 8) / 7), endPad: 0 });
+    expect(columnLayout(4000, 7).width).toBe(320);
   });
 });

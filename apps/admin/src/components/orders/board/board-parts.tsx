@@ -71,7 +71,7 @@ export function FunnelLine({
 export function SkeletonColumn({ name, width }: { name: string; width: number | null }) {
   return (
     <section
-      className="flex h-full w-[256px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]"
+      className="flex h-full w-[264px] shrink-0 snap-start flex-col rounded-card bg-field max-sm:w-[calc(100vw-88px)]"
       style={width ? { width } : undefined}
     >
       <header className="px-2.5 pt-2 pb-1.5">
