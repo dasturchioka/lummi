@@ -77,23 +77,24 @@ describe('GET /catalog/fragrances/:slug', () => {
       return res.body.stepUps;
     };
     expect(await stepsOf('symphony')).toEqual([
-      { fromMl: 10, toMl: 30, extra: 80_000 },
-      { fromMl: 30, toMl: 50, extra: 70_000 },
+      { fromMl: 10, toMl: 30, saving: 58_000 },
+      { fromMl: 30, toMl: 50, saving: 29_000 },
     ]);
     const owner = await t.ownerSession();
     const set = async (key: string, value: unknown) => {
       const res = await owner.client.admin.settings.update({ params: { key }, body: { value } });
       expect(res.status).toBe(200);
     };
-    await set('catalog.stepUp.minPercent', 30);
-    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 30, extra: 80_000 }]);
+    // 10 → 30 saves 28 %, 30 → 50 11 %
+    await set('catalog.stepUp.minPercent', 20);
+    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
     // a sold-out 30 ml: the 10 ml steps over it
     const [sym] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'symphony'));
     await t.db
       .update(volumes)
       .set({ onHand: 0 })
       .where(and(eq(volumes.fragranceId, sym!.id), eq(volumes.ml, 30)));
-    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 50, extra: 150_000 }]);
+    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 50, saving: 126_000 }]);
     await set('catalog.stepUp.enabled', false);
     expect(await stepsOf('symphony')).toEqual([]);
   });

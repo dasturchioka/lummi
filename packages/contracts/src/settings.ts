@@ -114,11 +114,11 @@ export const settingDefinitions = {
       uz: 'Kartada kattaroq hajm maslahati',
     },
     hint: {
-      ru: 'Под объёмами: «+70 000 сум — и на 20 мл больше», когда дополнительные миллилитры следующего объёма в наличии заметно дешевле.',
-      uz: 'Hajmlar ostida: «+70 000 soʻm qoʻshsangiz — 20 ml koʻproq», mavjud keyingi hajmning qoʻshimcha millilitrlari sezilarli arzon boʻlsa.',
+      ru: 'Под объёмами: «С 30 мл экономия 58 000 сум», когда следующий объём в наличии заметно дешевле за мл, чем выбранный.',
+      uz: 'Hajmlar ostida: «30 ml olsangiz, 58 000 soʻm tejaysiz», mavjud keyingi hajm 1 ml hisobida tanlanganidan sezilarli arzon boʻlsa.',
     },
   },
-  /** How much cheaper per ml the extra millilitres must be for the step-up line to show (#57). */
+  /** How much the step-up must save, as a percent of the bigger volume at the chosen rate (#57, #60). */
   'catalog.stepUp.minPercent': {
     schema: z.number().int().min(1).max(90),
     default: 10,
@@ -129,8 +129,8 @@ export const settingDefinitions = {
       uz: 'Kattaroq hajm maslahati: foyda kamida, %',
     },
     hint: {
-      ru: 'Каждый дополнительный мл должен стоить дешевле мл выбранного объёма хотя бы на столько. Иначе подсказки нет.',
-      uz: 'Har bir qoʻshimcha ml uchun toʻlov tanlangan hajmning 1 ml narxidan kamida shuncha arzon boʻlishi kerak. Aks holda maslahat chiqmaydi.',
+      ru: 'Экономия: больший объём по цене мл выбранного минус его цена. Подсказка есть, только если она не меньше этого процента.',
+      uz: 'Tejam: katta hajm tanlangan hajmning 1 ml narxida, minus uning narxi. Maslahat faqat tejam shu foizdan kam boʻlmasa chiqadi.',
     },
   },
   // Excel catalog import (spec Changes 2026-11-07, #26)

@@ -169,9 +169,8 @@ export const miniappMessages = defineMessages(
       inStock: 'В наличии',
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
-      stepUpExtra: '+{amount}',
-      // no-break spaces: the dash stays with the amount, the number with «мл»
-      stepUpMore: '—\u00a0и на {ml}\u00a0мл больше',
+      // {amount} is drawn in Sage Ink; no-break spaces keep «30 мл» and the amount whole
+      stepUpSave: 'С\u00a0{ml}\u00a0мл экономия {amount}',
       stepUpChoose: '{offer}: выбрать {ml} мл',
       notes: { top: 'Верх', heart: 'Сердце', base: 'База' },
       uzum: 'Купить на Uzum',
@@ -471,9 +470,8 @@ export const miniappMessages = defineMessages(
       inStock: 'Sotuvda bor',
       unavailable: 'Sotuvda yoʻq',
       saleUntil: '{date}',
-      stepUpExtra: '+{amount}',
-      // no-break spaces: «qoʻshsangiz —» stays with the amount, the number with «ml»
-      stepUpMore: 'qoʻshsangiz\u00a0—\u00a0{ml}\u00a0ml koʻproq',
+      // {amount} is drawn in Sage Ink; no-break spaces keep «30 ml» and the amount whole
+      stepUpSave: '{ml}\u00a0ml olsangiz, {amount} tejaysiz',
       stepUpChoose: '{offer}: {ml} ml ni tanlash',
       notes: { top: 'Yuqori', heart: 'Yurak', base: 'Baza' },
       uzum: 'Uzum’da sotib olish',

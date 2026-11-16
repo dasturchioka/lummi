@@ -36,14 +36,15 @@ export const volumeCardSchema = z.object({
 export type VolumeCard = z.infer<typeof volumeCardSchema>;
 
 /**
- * A Step-up (GLOSSARY, #57): from a volume that can be bought, the next larger one that can be
- * bought too, offered because its extra millilitres cost less per ml («+70 000 сум — и на 20 мл
- * больше»). `extra` is the difference of the two effective prices, integer so'm, always above 0.
+ * A Step-up (GLOSSARY, #57, #60): from a volume that can be bought, the next larger one that can
+ * be bought too, with what the customer saves by taking it («30 ml olsangiz, 58 000 soʻm
+ * tejaysiz»): the bigger volume at the chosen volume's price per ml, less its own price, in whole
+ * thousands of so'm rounded down. Always above 0.
  */
 export const stepUpSchema = z.object({
   fromMl: volumeCardSchema.shape.ml,
   toMl: volumeCardSchema.shape.ml,
-  extra: z.number().int().positive(),
+  saving: z.number().int().positive(),
 });
 export type StepUp = z.infer<typeof stepUpSchema>;
 

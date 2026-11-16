@@ -3038,7 +3038,7 @@ export const screens: ScreenDef[] = [
     },
   },
   {
-    // The step-up (#57): a tap on «+80 000 сум — и на 20 мл больше» chooses 30 ml, which offers 50 ml.
+    // The step-up (#57, #60): a tap on «С 30 мл экономия 58 000 сум» chooses 30 ml, which offers 50 ml.
     id: 'fragrance-step-up',
     path: '/p/symphony',
     act: async ({ page }) => {
@@ -3048,8 +3048,8 @@ export const screens: ScreenDef[] = [
     },
   },
   {
-    // The step-up at its longest on the narrowest phone: a seven-digit «+1 200 000» (prices put
-    // on Symphony for the shot), UZ the longer line; the number never parts from «ml».
+    // The step-up at its longest on the narrowest phone: a large saving «780 000» (prices put on
+    // Symphony for the shot: 3 × 990 000 against 2 190 000), UZ the longer line.
     id: 'fragrance-step-up-360',
     path: '/p/symphony',
     width: 360,

@@ -1,33 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import { stepUps } from '../src/pricing/step-up';
 
-/** The Step-up rule (#57): what the product page offers under its volume tiles. */
+/**
+ * The Step-up rule (#57, #60): what the product page offers under its volume tiles, and what it
+ * says the customer saves: the bigger volume at the chosen volume's price per ml, less its price.
+ */
 
 type Ml = 10 | 30 | 50;
 const v = (ml: Ml, effectivePrice: number, available = 20) => ({ ml, effectivePrice, available });
 const placeholders = [v(10, 69_000), v(30, 149_000), v(50, 219_000)];
 
 describe('stepUps', () => {
-  it('offers each next volume with what it adds, at the placeholder prices', () => {
-    // 10 → 30: 80 000 for 20 ml = 4 000 a ml against 6 900 (−42 %); 30 → 50: 3 500 against 4 967 (−29 %)
+  it('saves against the chosen volume, at the placeholder prices', () => {
+    // 10 → 30: 3 × 69 000 = 207 000 against 149 000 → 58 000 (28 %)
+    // 30 → 50: 149 000 / 30 × 50 = 248 333 against 219 000 → 29 333, shown as 29 000 (11 %)
     expect(stepUps(placeholders, 10)).toEqual([
-      { fromMl: 10, toMl: 30, extra: 80_000 },
-      { fromMl: 30, toMl: 50, extra: 70_000 },
+      { fromMl: 10, toMl: 30, saving: 58_000 },
+      { fromMl: 30, toMl: 50, saving: 29_000 },
     ]);
   });
 
   it('keeps only what clears the threshold, never rounding up into an offer', () => {
-    expect(stepUps(placeholders, 30)).toEqual([{ fromMl: 10, toMl: 30, extra: 80_000 }]);
-    // 30 → 50 saves 29.53… %: 29 offers it, 30 does not
-    expect(stepUps(placeholders, 29)).toHaveLength(2);
-    // 10 → 30 saves exactly 42.02… %: 42 offers it, 43 does not
-    expect(stepUps(placeholders, 42)).toEqual([{ fromMl: 10, toMl: 30, extra: 80_000 }]);
-    expect(stepUps(placeholders, 43)).toEqual([]);
+    expect(stepUps(placeholders, 12)).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
+    // 10 → 30 saves 28.02 %: 28 offers it, 29 does not
+    expect(stepUps(placeholders, 28)).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
+    expect(stepUps(placeholders, 29)).toEqual([]);
+  });
+
+  it('offers a saving exactly at the threshold, and not one percent above it', () => {
+    // 10 ml 100 000: 30 ml at that rate is 300 000; at 270 000 it saves exactly 10 %
+    const exact = [v(10, 100_000), v(30, 270_000)];
+    expect(stepUps(exact, 10)).toEqual([{ fromMl: 10, toMl: 30, saving: 30_000 }]);
+    expect(stepUps(exact, 11)).toEqual([]);
+  });
+
+  it('shows the saving in whole thousands, and nothing under one thousand', () => {
+    // 10 ml 10 000: 30 ml at that rate is 30 000; at 29 500 it saves 500
+    expect(stepUps([v(10, 10_000), v(30, 29_500)], 1)).toEqual([]);
   });
 
   it('steps over a sold-out volume to the next one that can be bought', () => {
+    // 10 → 50: 5 × 69 000 = 345 000 against 219 000
     expect(stepUps([v(10, 69_000), v(30, 149_000, 0), v(50, 219_000)], 10)).toEqual([
-      { fromMl: 10, toMl: 50, extra: 150_000 },
+      { fromMl: 10, toMl: 50, saving: 126_000 },
     ]);
   });
 
@@ -36,38 +51,32 @@ describe('stepUps', () => {
     expect(stepUps([v(50, 219_000)], 10)).toEqual([]);
   });
 
-  it('reads effective prices: a markdown on the smaller volume can take the offer away', () => {
-    // 30 ml at 99 000: 50 ml adds 120 000 for 20 ml = 6 000 a ml against 3 300
+  it('reads effective prices: a markdown on the chosen volume can take the offer away', () => {
+    // 30 ml at 99 000 (3 300 a ml): 50 ml at that rate is 165 000, less than 219 000
     expect(stepUps([v(10, 69_000), v(30, 99_000), v(50, 219_000)], 10)).toEqual([
-      { fromMl: 10, toMl: 30, extra: 30_000 },
+      { fromMl: 10, toMl: 30, saving: 108_000 },
     ]);
-  });
-
-  it('offers nothing when the bigger volume costs the same or less, or nothing is charged', () => {
-    expect(stepUps([v(10, 149_000), v(30, 149_000)], 10)).toEqual([]);
-    expect(stepUps([v(10, 160_000), v(30, 149_000)], 10)).toEqual([]);
-    expect(stepUps([v(10, 0), v(30, 149_000)], 10)).toEqual([]);
-  });
-
-  it('offers nothing at staging’s demo price (10 ml for 1 000)', () => {
-    expect(stepUps([v(10, 1_000), v(30, 149_000), v(50, 219_000)], 10)).toEqual([
-      { fromMl: 30, toMl: 50, extra: 70_000 },
-    ]);
-  });
-
-  it('offers a saving exactly at the threshold, and not one percent above it', () => {
-    // 10 ml 100 000 (10 000 a ml), 30 ml 280 000: 180 000 for 20 ml = 9 000 a ml, exactly −10 %
-    const exact = [v(10, 100_000), v(30, 280_000)];
-    expect(stepUps(exact, 10)).toEqual([{ fromMl: 10, toMl: 30, extra: 180_000 }]);
-    expect(stepUps(exact, 11)).toEqual([]);
   });
 
   it('reads effective prices: a markdown on the bigger volume can make an offer', () => {
-    // at 45 %: 10 → 30 saves 42 % and 30 → 50 saves 29 %, so nothing; 50 ml marked down to 189 000
-    // adds 40 000 for 20 ml = 2 000 a ml against 4 967 (−59 %)
-    expect(stepUps(placeholders, 45)).toEqual([]);
-    expect(stepUps([v(10, 69_000), v(30, 149_000), v(50, 189_000)], 45)).toEqual([
-      { fromMl: 30, toMl: 50, extra: 40_000 },
+    // at 20 %: 30 → 50 saves 11 %, none; 50 ml marked down to 169 000 saves 79 333 (31 %)
+    expect(stepUps(placeholders, 20)).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
+    expect(stepUps([v(10, 69_000), v(30, 149_000), v(50, 169_000)], 20)).toEqual([
+      { fromMl: 10, toMl: 30, saving: 58_000 },
+      { fromMl: 30, toMl: 50, saving: 79_000 },
+    ]);
+  });
+
+  it('counts a bigger volume at the same price as the saving it is, and skips a free one', () => {
+    expect(stepUps([v(10, 149_000), v(30, 149_000)], 10)).toEqual([
+      { fromMl: 10, toMl: 30, saving: 298_000 },
+    ]);
+    expect(stepUps([v(10, 0), v(30, 149_000)], 10)).toEqual([]);
+  });
+
+  it('offers nothing from staging’s demo price (10 ml for 1 000)', () => {
+    expect(stepUps([v(10, 1_000), v(30, 149_000), v(50, 219_000)], 10)).toEqual([
+      { fromMl: 30, toMl: 50, saving: 29_000 },
     ]);
   });
 
