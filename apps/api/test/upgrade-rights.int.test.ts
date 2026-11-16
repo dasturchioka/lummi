@@ -529,8 +529,8 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
     expect(await steps(inBox[0]!)).toEqual([]);
     // a fragrance it does not cover keeps both
     expect(await steps(outside[0]!)).toEqual([
-      { fromMl: 10, toMl: 30, extra: 80_000 },
-      { fromMl: 30, toMl: 50, extra: 70_000 },
+      { fromMl: 10, toMl: 30, saving: 58_000 },
+      { fromMl: 30, toMl: 50, saving: 29_000 },
     ]);
   });
 

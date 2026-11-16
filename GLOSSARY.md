@@ -121,7 +121,7 @@ A 30 ml or 50 ml bottle. The 10 ml bottle is not full size.
 _Avoid_: Big bottle, flakon
 
 **Step-up**:
-The next larger Volume of the same fragrance that can be bought, offered under the volume tiles with what it adds («+70 000 сум — и на 20 мл больше»), when its extra millilitres cost at least a setting's percent less per ml than the chosen Volume, and the customer's Upgrade right prices neither. A nudge, not a Discount: it changes no price.
+The next larger Volume of the same fragrance that can be bought, offered under the volume tiles with what the customer saves by taking it («С 30 мл экономия 58 000 сум»). The saving is the bigger Volume priced at the chosen Volume's price per ml, less its own price, in whole thousands rounded down. It is offered when the saving is at least a setting's percent, and when the customer's Upgrade right prices neither volume. A nudge, not a Discount: it changes no price.
 _Avoid_: Upsell, upgrade (that is the Upgrade right), bigger-bottle discount
 
 ### Delivery

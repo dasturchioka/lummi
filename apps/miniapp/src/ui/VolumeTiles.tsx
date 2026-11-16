@@ -208,12 +208,13 @@ export function VolumeStatus({ volume, stock = true }: { volume: VolumeCard; sto
 }
 
 /**
- * Under the tiles (#57): the chosen volume's Step-up as one quiet control, «+70 000 сум — и на
- * 20 мл больше» with the bigger volume and a chevron at the right; a tap chooses that volume. The
- * server decided it is worth offering (`stepUps`); this only draws it. Outlined like a secondary
- * control (hairline-strong inset, radius 10), pressed it washes to Milk Field at once and fades back
- * on release; only the amount is Ink 600, in both languages; no emoji, no box of colour (DESIGN.md:
- * no sticker discounts). The parent moves the focus to the chosen tile (`focusTick`).
+ * Under the tiles (#57, #60): the chosen volume's Step-up as one quiet control, «С 30 мл экономия
+ * 58 000 сум» / «30 ml olsangiz, 58 000 soʻm tejaysiz», a chevron at the right; a tap chooses that
+ * volume. The server decided it is worth offering and computed the saving (`stepUps`); this only
+ * draws it. Outlined like a secondary control (hairline-strong inset, radius 10); pressed it
+ * washes to Milk Field at once and fades back on release. The saving alone is Sage Ink 600 (savings
+ * are Sage Ink, DESIGN.md); no emoji, no box of colour. The parent moves the focus to the chosen
+ * tile (`focusTick`).
  */
 export function StepUpRow({
   stepUp,
@@ -223,25 +224,28 @@ export function StepUpRow({
   onChoose: (ml: StepUp['toMl']) => void;
 }) {
   const { t, language } = usePrefs();
-  const extra = fill(t.card.stepUpExtra, { amount: formatMoney(stepUp.extra, language) });
-  const more = fill(t.card.stepUpMore, { ml: String(stepUp.toMl - stepUp.fromMl) });
+  const amount = formatMoney(stepUp.saving, language);
+  const ml = String(stepUp.toMl);
+  const [before = '', after = ''] = fill(t.card.stepUpSave, { ml, amount: '\u0000' }).split(
+    '\u0000',
+  );
   return (
     <button
       type="button"
       data-testid="step-up"
-      aria-label={fill(t.card.stepUpChoose, { ml: String(stepUp.toMl), offer: `${extra} ${more}` })}
+      aria-label={fill(t.card.stepUpChoose, {
+        ml,
+        offer: fill(t.card.stepUpSave, { ml, amount }),
+      })}
       onClick={() => onChoose(stepUp.toMl)}
       className={`type-small inset-line flex min-h-11 w-full items-center justify-between gap-3 rounded-btn px-3.5 py-2 text-left text-muted transition-colors duration-150 ${EASE_OUT} hover:bg-field active:bg-field active:duration-0`}
     >
       <span className="text-pretty">
-        <span className="font-semibold whitespace-nowrap text-ink">{extra}</span>
-        {'\u00a0'}
-        {more}
+        {before}
+        <span className="font-semibold whitespace-nowrap text-sage-ink">{amount}</span>
+        {after}
       </span>
-      <span className="flex shrink-0 items-center gap-0.5 font-semibold whitespace-nowrap text-ink">
-        {stepUp.toMl} {t.card.ml}
-        <ChevronIcon size={16} />
-      </span>
+      <ChevronIcon size={16} className="shrink-0 text-ink" />
     </button>
   );
 }
