@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody, PromoCodeInput } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import { and, auditLog, btsPoints, eq, fragrances, orders, regions, volumes } from '@lummi/db';
@@ -9,7 +8,6 @@ import pg from 'pg';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
@@ -22,7 +20,6 @@ import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from '
  * use held by `createOrder` under the code's row lock, and the cancel that voids it. Seed prices:
  * 10 ml 69 000, 30 ml 149 000, 50 ml 219 000; the default tariff 25 000 below 250 000.
  */
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -36,7 +33,7 @@ afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
 });

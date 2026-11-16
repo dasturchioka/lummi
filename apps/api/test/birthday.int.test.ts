@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import {
@@ -21,7 +20,6 @@ import pg from 'pg';
 import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
 import { holdBirthdayCoupon } from '../src/birthday/birthday-coupons';
 import { DiscountSourceHooks } from '../src/order-status/discount-sources';
@@ -35,7 +33,6 @@ import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app'
  * hold at order creation and the release on cancel (ADR 0005). Tashkent is UTC+5: 10:00 there is
  * 05:00Z. Seed prices: 10 ml 69 000, 30 ml 149 000, 50 ml 219 000; tariff 25 000 below 250 000.
  */
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -437,7 +434,7 @@ describe('«Мои скидки» lists active coupons with days left', () => {
 /** The coupon as the order's one discount (ADR 0002, 0005, 0007, 0008). */
 describe('the coupon in the cart and the order', () => {
   beforeEach(async () => {
-    await seedCatalog(t.db, { materialsDir });
+    await t.seedCatalog();
     await importBtsPoints(t.db, snapshot);
   });
 
@@ -807,7 +804,7 @@ describe('the coupon in the cart and the order', () => {
 
 describe('the date of birth at checkout', () => {
   beforeEach(async () => {
-    await seedCatalog(t.db, { materialsDir });
+    await t.seedCatalog();
     await importBtsPoints(t.db, snapshot);
   });
 

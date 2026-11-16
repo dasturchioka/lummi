@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   asc,
   credits,
@@ -20,7 +19,6 @@ import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import type { ReceiptJudgeInput, ReceiptJudgement } from '../src/edges';
-import { seedCatalog } from '../src/catalog/seed';
 import { OrderStatusService } from '../src/order-status/order-status.service';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { SettingsService } from '../src/settings/settings.service';
@@ -36,7 +34,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * the worker's minute is `worker.tick()` at the fake clock's now.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -67,7 +64,7 @@ beforeEach(async () => {
   t.edges.receiptJudge.respond = undefined;
   t.edges.receiptJudge.verdicts = [notConfirmed];
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   await settings.set('bot.groupChatId', GROUP, { type: 'system' });
   await settings.set(

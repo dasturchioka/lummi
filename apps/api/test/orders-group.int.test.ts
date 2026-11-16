@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import {
@@ -24,7 +23,6 @@ import { fill, formatMoney, formatPhone } from '@lummi/i18n';
 import { botMessages, orderCancelledText } from '@lummi/i18n/bot';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { OrderCards } from '../src/orders-group/order-cards';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { ReceiptsService } from '../src/receipts/receipts.service';
@@ -35,7 +33,6 @@ import { payWithCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, TEST_BOT_TOKEN, TEST_MINIAPP_URL, type TestApp } from './harness/test-app';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -58,7 +55,7 @@ beforeEach(async () => {
   t.edges.telegram.releaseHeld();
   await t.reset();
   t.edges.telegram.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   const config = t.app.get(SettingsService);
   await config.set('bot.groupChatId', GROUP, { type: 'system' });

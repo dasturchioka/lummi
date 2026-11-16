@@ -1,12 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { and, asc, auditLog, credits, eq, orders, receiptChecks, receipts } from '@lummi/db';
 import pg from 'pg';
 import { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import type { ReceiptJudgeInput } from '../src/edges';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { PaymentMatching } from '../src/payment/payment-matching';
@@ -25,7 +23,6 @@ import { createTestApp, type StaffSession, type TestApp } from './harness/test-a
  * Redis, as in production.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -46,7 +43,7 @@ beforeEach(async () => {
   t.edges.receiptJudge.calls.length = 0;
   t.edges.receiptJudge.respond = undefined;
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 // nothing of one test's matching may run into the next one's rows

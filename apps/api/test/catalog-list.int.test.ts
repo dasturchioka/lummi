@@ -1,13 +1,9 @@
 import { and, eq, families, fragranceSimilar, fragrances, inArray, volumes } from '@lummi/db';
 import type { CatalogQuery } from '@lummi/contracts';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '../src/audit/audit.service';
-import { seedCatalog } from '../src/catalog/seed';
 import { SettingsService } from '../src/settings/settings.service';
 import { createTestApp, type TestApp } from './harness/test-app';
-
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 
 let t: TestApp;
 let settings: SettingsService;
@@ -18,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 beforeEach(async () => {
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 
 async function list(query: CatalogQuery = {}) {

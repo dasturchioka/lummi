@@ -1,9 +1,16 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "envMode": "loose",
+  "globalDependencies": [
+    "materials/catalog/**"
+  ],
   "tasks": {
     "lint": {},
     "typecheck": {},
-    "test": { "cache": false }
+    "test": {
+      "dependsOn": [
+        "^typecheck"
+      ]
+    }
   }
 }

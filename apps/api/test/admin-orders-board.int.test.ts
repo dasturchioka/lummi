@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   BOARD_STATUSES,
   type AdminOrdersBoardDto,
@@ -11,7 +10,6 @@ import { btsPoints, eq, receipts } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AdminOrdersService } from '../src/admin-orders/admin-orders.service';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import {
   cancelByStaff,
@@ -30,7 +28,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
 
 /** Seam 1 (ADR 0028): the orders board (#52) over HTTP, as staff open it. */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -38,13 +35,13 @@ const snapshot = JSON.parse(
 let t: TestApp;
 beforeAll(async () => {
   t = await createTestApp();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(tashkent('2026-11-16 09:00'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

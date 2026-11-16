@@ -7,7 +7,9 @@ import { apiContract } from '@lummi/contracts';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { inject } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { seedRegions } from '../../src/bts/seed-regions';
+import { seedCatalog } from '../../src/catalog/seed';
 import { createApp } from '../../src/app';
 import { WorkerRuntime } from '../../src/worker/runtime';
 import { parseEnv, type Env } from '../../src/env';
@@ -76,6 +78,14 @@ export interface TestApp {
   withCookie(cookie: string): ReturnType<typeof makeClient>;
   /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions and the shop card. Call in beforeEach. */
   reset(): Promise<void>;
+  /**
+   * `seedCatalog(t.db, { materialsDir })`, fast; call it after `reset()`. The file's first call
+   * seeds for real and copies every table the seed changed into the schema `seed_snapshot`. Later
+   * calls put those rows back, one statement a table, with their identity sequences. They don't
+   * parse the workbook and write about 1 000 rows again: on CI's 2-core runner that took about a
+   * second per test (#58).
+   */
+  seedCatalog(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -156,6 +166,7 @@ export async function createTestApp(
   await app.listen(0, '127.0.0.1');
   const baseUrl = await app.getUrl();
   let worker: WorkerRuntime | undefined;
+  let seedSnapshot: SeedSnapshot | undefined;
   let redis: Redis | undefined;
   const queueNames = [
     env.OUTBOX_QUEUE,
@@ -273,6 +284,10 @@ export async function createTestApp(
       );
       await worker?.resume();
     },
+    async seedCatalog() {
+      if (!seedSnapshot) seedSnapshot = await seedAndSnapshot(pool, db);
+      else await restoreSeed(pool, seedSnapshot);
+    },
     async close() {
       await app.close();
       redis?.disconnect();
@@ -283,4 +298,101 @@ export async function createTestApp(
       await a.end();
     },
   };
+}
+
+const MATERIALS = fileURLToPath(new URL('../../../../materials', import.meta.url));
+
+/** What the catalog seed wrote: its tables (and the columns a row can be inserted with), its sequences. */
+type SeedSnapshot = {
+  tables: { name: string; columns: string }[];
+  sequences: { name: string; value: string; called: boolean }[];
+};
+
+/** Each public table's content as one digest, to see which tables the seed changed. */
+async function digests(pool: pg.Pool): Promise<Map<string, string>> {
+  const { rows } = await pool.query<{ tablename: string }>(
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE '\\_\\_%'`,
+  );
+  const out = new Map<string, string>();
+  for (const { tablename } of rows) {
+    const { rows: d } = await pool.query<{ digest: string }>(
+      `SELECT md5(coalesce(string_agg(x::text, '|' ORDER BY x::text), '')) AS digest FROM public."${tablename}" x`,
+    );
+    out.set(tablename, d[0]!.digest);
+  }
+  return out;
+}
+
+/** The real seed, then a copy of every table it changed and of their sequences, kept in `seed_snapshot`. */
+async function seedAndSnapshot(pool: pg.Pool, db: Db): Promise<SeedSnapshot> {
+  const before = await digests(pool);
+  await seedCatalog(db, { materialsDir: MATERIALS });
+  const after = await digests(pool);
+  const changed = [...after.keys()].filter((name) => after.get(name) !== before.get(name));
+  await pool.query('DROP SCHEMA IF EXISTS seed_snapshot CASCADE');
+  await pool.query('CREATE SCHEMA seed_snapshot');
+  const tables: SeedSnapshot['tables'] = [];
+  for (const name of changed) {
+    // generated columns are computed again on insert, never copied
+    const { rows } = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1 AND is_generated = 'NEVER'
+        ORDER BY ordinal_position`,
+      [name],
+    );
+    const columns = rows.map((r) => `"${r.column_name}"`).join(', ');
+    await pool.query(
+      `CREATE TABLE seed_snapshot."${name}" AS SELECT ${columns} FROM public."${name}"`,
+    );
+    tables.push({ name, columns });
+  }
+  // the identity and serial sequences of those tables, as the seed left them
+  const { rows: owned } = await pool.query<{ seq: string }>(
+    `SELECT s.relname AS seq FROM pg_class s
+       JOIN pg_depend d ON d.objid = s.oid AND d.deptype IN ('a', 'i')
+       JOIN pg_class t ON t.oid = d.refobjid
+       JOIN pg_namespace n ON n.oid = s.relnamespace AND n.nspname = 'public'
+      WHERE s.relkind = 'S' AND t.relname = ANY($1)`,
+    [changed],
+  );
+  const sequences: SeedSnapshot['sequences'] = [];
+  for (const { seq } of owned) {
+    const { rows } = await pool.query<{ last_value: string; is_called: boolean }>(
+      `SELECT last_value, is_called FROM public."${seq}"`,
+    );
+    sequences.push({ name: seq, value: rows[0]!.last_value, called: rows[0]!.is_called });
+  }
+  return { tables, sequences };
+}
+
+/**
+ * The seeded rows back, right after a `reset()`: each table the seed changed is emptied and
+ * refilled from its copy, in one transaction. Foreign keys are not checked here (replica role):
+ * the copy was consistent when it was taken.
+ */
+async function restoreSeed(pool: pg.Pool, snap: SeedSnapshot): Promise<void> {
+  const c = await pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query('SET LOCAL session_replication_role = replica');
+    for (const { name, columns } of snap.tables) {
+      await c.query(`DELETE FROM public."${name}"`);
+      await c.query(
+        `INSERT INTO public."${name}" (${columns}) OVERRIDING SYSTEM VALUE
+           SELECT ${columns} FROM seed_snapshot."${name}"`,
+      );
+    }
+    for (const s of snap.sequences)
+      await c.query('SELECT setval($1::regclass, $2, $3)', [
+        `public."${s.name}"`,
+        s.value,
+        s.called,
+      ]);
+    await c.query('COMMIT');
+  } catch (err) {
+    await c.query('ROLLBACK');
+    throw err;
+  } finally {
+    c.release();
+  }
 }

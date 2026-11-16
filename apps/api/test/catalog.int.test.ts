@@ -14,7 +14,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 beforeEach(async () => {
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 
 async function card(slug: string) {
@@ -40,6 +40,7 @@ describe('seed', () => {
 
   it('is idempotent and keeps prices someone has since changed', async () => {
     await t.db.update(volumes).set({ price: 123_000 }).where(eq(volumes.ml, 10));
+    // the real seed again: this is what is tested, not the harness's copy
     await seedCatalog(t.db, { materialsDir });
     expect(await t.db.select().from(fragrances)).toHaveLength(67);
     const [v] = await t.db.select().from(volumes).where(eq(volumes.ml, 10)).limit(1);

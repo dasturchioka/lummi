@@ -1,12 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CreateOrderBody } from '@lummi/contracts';
 import { and, birthdayCoupons, eq, fragrances, orders, upgradeRights, volumes } from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { samarkandPoint, shopper, slugs as slugsOf, untilWaitingOnLocks } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
 import { createTestApp, type TestApp } from './harness/test-app';
@@ -20,7 +18,6 @@ import { createTestApp, type TestApp } from './harness/test-app';
  * threshold is counted before an upgrade right and after a promo code or a birthday coupon.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -34,7 +31,7 @@ beforeEach(async () => {
   // 15:00 in Tashkent on 11 November
   t.edges.clock.set(new Date('2026-11-11T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
 });
 

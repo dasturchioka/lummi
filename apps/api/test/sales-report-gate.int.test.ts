@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type {
   MarketingFigures,
   MarketingReport,
@@ -10,7 +9,6 @@ import type {
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import {
   BLOGGER_FILTER,
   EXPECTED_ACQUISITION,
@@ -42,7 +40,6 @@ import { createTestApp, type StaffSession, type TestApp } from './harness/test-a
  * fixture's campaign link opens.
  */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -55,7 +52,7 @@ let owner: StaffSession;
 beforeAll(async () => {
   t = await createTestApp();
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   ({ catalog, numberOf } = await placeTwentyOrders(t));
   owner = await t.ownerSession();

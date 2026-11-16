@@ -1,17 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CART_MAX_QTY } from '@lummi/contracts/constants';
 import { and, cartLines, discoverySet, eq, fragrances, orders, volumes } from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -24,7 +21,7 @@ afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-11T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   await t.db.update(discoverySet).set({ onHand: 5 });
 });

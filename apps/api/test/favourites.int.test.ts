@@ -1,11 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { customers, discoverySet, eq, fragrances } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { moveCustomerData } from '../src/auth/customers.service';
-import { seedCatalog } from '../src/catalog/seed';
 import { createTestApp, type TestApp } from './harness/test-app';
-
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 
 let t: TestApp;
 beforeAll(async () => {
@@ -14,7 +10,7 @@ beforeAll(async () => {
 afterAll(() => t.close());
 beforeEach(async () => {
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
 });
 
 const ali = { id: 61, first_name: 'Ali', language_code: 'ru' };

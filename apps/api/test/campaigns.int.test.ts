@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { CampaignLinkInput, PromoCodeInput } from '@lummi/contracts';
 import { signContact } from '@lummi/contracts/sign-contact';
 import {
@@ -16,7 +15,6 @@ import {
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { CampaignsService } from '../src/campaigns/campaigns.service';
 import { samarkandPoint } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
@@ -27,7 +25,6 @@ import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from '
  * that logs, routes and prefills, and attribution on orders and customers. The attribution window
  * is exactly N x 24 h before the order (an open exactly N x 24 h old still counts).
  */
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -42,7 +39,7 @@ afterAll(() => t.close());
 beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
 });

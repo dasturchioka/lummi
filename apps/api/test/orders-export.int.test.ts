@@ -1,13 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AdminOrdersQuery, CreateOrderBody } from '@lummi/contracts';
 import { and, auditLog, btsPoints, eq, fragrances, orders, regions } from '@lummi/db';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { seedCatalog } from '../src/catalog/seed';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper } from './harness/orders';
 import { payWithCredit, uniqueReceiptImage } from './harness/payments';
@@ -16,7 +14,6 @@ import { createTestApp, type StaffSession, type TestApp } from './harness/test-a
 
 /** Seam 1 (ADR 0028): the orders Excel export (#56): the list's filters, the owner only, audited. */
 
-const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -74,7 +71,7 @@ async function sendReceipt(number: number) {
 beforeAll(async () => {
   t = await createTestApp();
   await t.reset();
-  await seedCatalog(t.db, { materialsDir });
+  await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
   slugs = (await t.db.select({ slug: fragrances.slug }).from(fragrances))
