@@ -76,6 +76,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
   ],
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
+  stepUps: [],
   ...over,
 });
 
@@ -235,6 +236,51 @@ describe('FragranceView', () => {
       show({ ...c, volumes: c.volumes.map((v) => (v.ml === 30 ? { ...v, available: 0 } : v)) });
       fireEvent.click(screen.getByRole('radio', { name: /30/ }));
       expect(screen.queryByTestId('right-deal')).toBeNull();
+    });
+  });
+
+  describe('the step-up under the tiles (#57)', () => {
+    const steps = { stepUps: [{ fromMl: 10 as const, toMl: 30 as const, extra: 50_200 }] };
+    const text = () => screen.getByTestId('step-up').textContent?.replace(/[\u00a0\u202f]/g, ' ');
+
+    it('offers the next volume with what it adds, and a tap chooses it', () => {
+      show(card(steps));
+      expect(text()).toBe('+50 200 сум — и на 20 мл больше30 мл');
+      expect(
+        screen
+          .getByTestId('step-up')
+          .getAttribute('aria-label')
+          ?.replace(/[\u00a0\u202f]/g, ' '),
+      ).toBe('+50 200 сум — и на 20 мл больше: выбрать 30 мл');
+      fireEvent.click(screen.getByTestId('step-up'));
+      expect(screen.getByRole('radio', { name: /30/ }).getAttribute('aria-checked')).toBe('true');
+      // 30 ml has no step-up of its own here: the row goes
+      expect(screen.queryByTestId('step-up')).toBeNull();
+    });
+
+    it('in Uzbek', () => {
+      language = 'uz';
+      show(card(steps));
+      expect(text()).toBe('+50 200 soʻm qoʻshsangiz — 20 ml koʻproq30 ml');
+    });
+
+    it('draws nothing without a step-up for the chosen volume', () => {
+      show(card());
+      expect(screen.queryByTestId('step-up')).toBeNull();
+    });
+
+    it('hands the focus to the chosen tile, so it is announced and the keyboard stays put', () => {
+      show(card(steps));
+      screen.getByTestId('step-up').focus();
+      fireEvent.click(screen.getByTestId('step-up'));
+      expect(document.activeElement).toBe(screen.getByRole('radio', { name: /30/ }));
+    });
+
+    it('never from a sold-out volume, whatever the answer says', () => {
+      const c = card(steps);
+      show({ ...c, volumes: c.volumes.map((v) => (v.ml === 10 ? { ...v, available: 0 } : v)) });
+      fireEvent.click(screen.getByRole('radio', { name: /10/ }));
+      expect(screen.queryByTestId('step-up')).toBeNull();
     });
   });
 });

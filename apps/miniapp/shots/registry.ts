@@ -3037,6 +3037,40 @@ export const screens: ScreenDef[] = [
       ]);
     },
   },
+  {
+    // The step-up (#57): a tap on «+80 000 сум — и на 20 мл больше» chooses 30 ml, which offers 50 ml.
+    id: 'fragrance-step-up',
+    path: '/p/symphony',
+    act: async ({ page }) => {
+      await page.getByTestId('step-up').click();
+      await page.getByRole('radio', { name: /30/, checked: true }).waitFor();
+      await page.getByTestId('step-up').scrollIntoViewIfNeeded();
+    },
+  },
+  {
+    // The step-up at its longest on the narrowest phone: a seven-digit «+1 200 000» (prices put
+    // on Symphony for the shot), UZ the longer line; the number never parts from «ml».
+    id: 'fragrance-step-up-360',
+    path: '/p/symphony',
+    width: 360,
+    setup: async ({ db }) => {
+      await db.query(
+        `update volumes set price = case ml when 10 then 990000 when 30 then 2190000 else price end
+           where fragrance_id = (select id from fragrances where slug = $1)`,
+        ['symphony'],
+      );
+    },
+    teardown: async ({ db }) => {
+      await db.query(
+        `update volumes set price = case ml when 10 then 69000 when 30 then 149000 else price end
+           where fragrance_id = (select id from fragrances where slug = $1)`,
+        ['symphony'],
+      );
+    },
+    act: async ({ page }) => {
+      await page.getByTestId('step-up').scrollIntoViewIfNeeded();
+    },
+  },
   { id: 'fragrance-not-found', path: '/p/no-such-scent' },
   {
     // «Похожие ароматы» at the foot of the card (the curated ones, then the same family and type).

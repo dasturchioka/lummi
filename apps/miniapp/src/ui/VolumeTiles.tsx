@@ -1,9 +1,10 @@
-import type { VolumeCard } from '@lummi/contracts';
-import { fill } from '@lummi/i18n';
-import { useRef, type KeyboardEvent } from 'react';
+import type { StepUp, VolumeCard } from '@lummi/contracts';
+import { fill, formatMoney } from '@lummi/i18n';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { saleEndDate } from '../lib/format';
 import { usePrefs } from '../lib/prefs';
 import { Badge } from './Badge';
+import { ChevronIcon } from './icons';
 import { Money } from './Money';
 import { EASE_OUT } from './photoDisc';
 
@@ -100,6 +101,7 @@ export function VolumeTiles({
   selected,
   onSelect,
   soldOutChoosable = true,
+  focusTick,
 }: {
   volumes: VolumeCard[];
   /** Per volume, the price with the customer's upgrade right (the fragrance card, #38): struck like a markdown. */
@@ -107,9 +109,20 @@ export function VolumeTiles({
   selected: VolumeCard['ml'];
   onSelect: (ml: VolumeCard['ml']) => void;
   soldOutChoosable?: boolean;
+  /**
+   * Bumped by a choice made outside the tiles (the step-up, #57): the chosen tile takes the focus,
+   * so it is announced and the keyboard stays in the group instead of falling to the page's top.
+   */
+  focusTick?: number;
 }) {
   const { t } = usePrefs();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const focused = useRef(focusTick);
+  useEffect(() => {
+    if (focusTick === focused.current) return;
+    focused.current = focusTick;
+    refs.current[volumes.findIndex((v) => v.ml === selected)]?.focus({ preventScroll: true });
+  }, [focusTick, selected, volumes]);
   const strikeSlot = volumes.some(
     (v) => v.available > 0 && (v.salePrice !== null || rightPrices[v.ml] !== undefined),
   );
@@ -191,5 +204,44 @@ export function VolumeStatus({ volume, stock = true }: { volume: VolumeCard; sto
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Under the tiles (#57): the chosen volume's Step-up as one quiet control, «+70 000 сум — и на
+ * 20 мл больше» with the bigger volume and a chevron at the right; a tap chooses that volume. The
+ * server decided it is worth offering (`stepUps`); this only draws it. Outlined like a secondary
+ * control (hairline-strong inset, radius 10), pressed it washes to Milk Field at once and fades back
+ * on release; only the amount is Ink 600, in both languages; no emoji, no box of colour (DESIGN.md:
+ * no sticker discounts). The parent moves the focus to the chosen tile (`focusTick`).
+ */
+export function StepUpRow({
+  stepUp,
+  onChoose,
+}: {
+  stepUp: StepUp;
+  onChoose: (ml: StepUp['toMl']) => void;
+}) {
+  const { t, language } = usePrefs();
+  const extra = fill(t.card.stepUpExtra, { amount: formatMoney(stepUp.extra, language) });
+  const more = fill(t.card.stepUpMore, { ml: String(stepUp.toMl - stepUp.fromMl) });
+  return (
+    <button
+      type="button"
+      data-testid="step-up"
+      aria-label={fill(t.card.stepUpChoose, { ml: String(stepUp.toMl), offer: `${extra} ${more}` })}
+      onClick={() => onChoose(stepUp.toMl)}
+      className={`type-small inset-line flex min-h-11 w-full items-center justify-between gap-3 rounded-btn px-3.5 py-2 text-left text-muted transition-colors duration-150 ${EASE_OUT} hover:bg-field active:bg-field active:duration-0`}
+    >
+      <span className="text-pretty">
+        <span className="font-semibold whitespace-nowrap text-ink">{extra}</span>
+        {'\u00a0'}
+        {more}
+      </span>
+      <span className="flex shrink-0 items-center gap-0.5 font-semibold whitespace-nowrap text-ink">
+        {stepUp.toMl} {t.card.ml}
+        <ChevronIcon size={16} />
+      </span>
+    </button>
   );
 }

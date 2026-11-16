@@ -521,6 +521,22 @@ describe('the right in the cart and the order (ADR 0002, 0005, 0007)', () => {
     return res.body;
   }
 
+  it('offers no step-up onto or from a volume the right prices (#57)', async () => {
+    const { s, inBox, outside } = await withRight();
+    const steps = async (slug: string) => {
+      const card = await s.catalog.fragrance({ params: { slug } });
+      if (card.status !== 200) throw new Error(`card ${card.status}`);
+      return card.body.stepUps;
+    };
+    // the right prices 30 and 50 ml of the set's fragrances: their tiles show other numbers
+    expect(await steps(inBox[0]!)).toEqual([]);
+    // a fragrance it does not cover keeps both
+    expect(await steps(outside[0]!)).toEqual([
+      { fromMl: 10, toMl: 30, extra: 80_000 },
+      { fromMl: 30, toMl: 50, extra: 70_000 },
+    ]);
+  });
+
   it('discounts one full-size bottle of a covered fragrance by 20 %, delivery left out', async () => {
     const { s, inBox, right } = await withRight();
     await add(s, inBox[0]!, 30, 2);

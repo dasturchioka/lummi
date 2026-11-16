@@ -75,6 +75,11 @@ const demo: FragranceCard = {
   ],
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
+  // as the server's `stepUps` gives them for these prices (#57)
+  stepUps: [
+    { fromMl: 10, toMl: 30, extra: 80_000 },
+    { fromMl: 30, toMl: 50, extra: 70_000 },
+  ],
 };
 
 const worst: FragranceCard = {
@@ -157,6 +162,8 @@ const worst: FragranceCard = {
   ],
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
+  // 30 -> 50 ml costs more per ml than 30 ml itself: no step-up
+  stepUps: [],
 };
 
 /** A fragrance sold in one volume only (the others "simply absent"), all notes on one level. */
@@ -166,6 +173,7 @@ const one: FragranceCard = {
   isHit: false,
   notes: { top: [], heart: [], base: demo.notes.base },
   volumes: demo.volumes.filter((v) => v.ml === 50),
+  stepUps: [],
 };
 
 /** Nothing optional: no volumes yet, no notes, no family, no key notes. */
@@ -177,6 +185,7 @@ const empty: FragranceCard = {
   keyNotes: { ru: [], uz: [] },
   notes: { top: [], heart: [], base: [] },
   volumes: [],
+  stepUps: [],
 };
 
 export const FIXTURES = { demo, worst, one, empty } as const;
