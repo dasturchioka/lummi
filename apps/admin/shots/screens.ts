@@ -613,6 +613,26 @@ export const screens: Screen[] = [
   // ---- Home (#48): the work queue over a normal shot day, then each state that takes the Now slot
   { id: 'home', path: '/', as: 'owner', ...homeOn(), act: homeLoaded },
   { id: 'home-manager', path: '/', as: 'manager', ...homeOn(), act: homeLoaded },
+  {
+    id: 'home-paid-today',
+    path: '/',
+    as: 'owner',
+    ...homeOn(),
+    // a card opens what it counts: «Заказы» goes to the list of orders paid today, which the chip
+    // names; the list holds as many orders as the card says
+    act: async (ctx) => {
+      await homeLoaded(ctx);
+      const { page } = ctx;
+      const card = page.locator('section[aria-labelledby="home-sales"] ul a').first();
+      const n = Number(await card.locator('p').nth(1).innerText());
+      await card.click();
+      await page.waitForURL(/paidOn=/);
+      await page.locator('form[action="/orders"]').waitFor();
+      await page.locator('a[href^="/orders/"]:visible').first().waitFor();
+      const rows = await page.locator('a[href^="/orders/"]:visible').count();
+      if (rows !== n) throw new Error(`the card says ${n} orders, the list shows ${rows}`);
+    },
+  },
   { id: 'home-humo', path: '/', as: 'owner', ...homeOn('humo'), act: homeLoaded },
   { id: 'home-no-card', path: '/', as: 'owner', ...homeOn('noCard'), act: homeLoaded },
   { id: 'home-no-card-manager', path: '/', as: 'manager', ...homeOn('noCard'), act: homeLoaded },

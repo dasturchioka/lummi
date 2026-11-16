@@ -92,13 +92,24 @@ export function SalesStrip({
   const money = (n: number) => formatMoney(n, language);
   const weekday = weekdayOf(data.at.day);
   const weekChange = change(week.net, previousWeek.net);
-  const figs: { key: string; icon: LucideIcon; label: string; value: string; delta: string }[] = [
+  // the three money-in-today cards open the orders paid today (the list's `paidOn` reads the same
+  // orders); the 7-day card opens the sales report over those days
+  const paidList = `/orders?view=list&paidOn=${data.at.day}`;
+  const figs: {
+    key: string;
+    icon: LucideIcon;
+    label: string;
+    value: string;
+    delta: string;
+    href: string;
+  }[] = [
     {
       key: 'orders',
       icon: ShoppingBag,
       label: s.orders,
       value: String(now.orders),
       delta: countChange(now.orders, before.orders),
+      href: paidList,
     },
     {
       key: 'received',
@@ -106,6 +117,7 @@ export function SalesStrip({
       label: s.received,
       value: money(now.received),
       delta: change(now.received, before.received) ?? s.noBase,
+      href: paidList,
     },
     {
       key: 'average',
@@ -113,6 +125,7 @@ export function SalesStrip({
       label: s.average,
       value: now.average === null ? '—' : money(now.average),
       delta: change(now.average, before.average) ?? s.noBase,
+      href: paidList,
     },
     {
       key: 'week',
@@ -120,6 +133,7 @@ export function SalesStrip({
       label: s.week,
       value: money(week.net),
       delta: weekChange ? fill(s.weekVs, { delta: weekChange }) : s.noBase,
+      href: `/reports?from=${week.from}&to=${week.to}`,
     },
   ];
   const top = Math.max(1, ...days.map((d) => d.net));
@@ -129,7 +143,7 @@ export function SalesStrip({
       role="img"
       aria-label={fill(s.barsLabel, { amount: money(today?.net ?? 0) })}
       title={`${s.barsFrom} · ${s.barsToday}`}
-      className="flex h-9 w-[min(112px,52%)] items-end gap-[3px]"
+      className="flex h-9 max-w-[112px] min-w-0 flex-1 items-end gap-[3px]"
     >
       {days.map((d, i) => (
         <i
@@ -173,6 +187,7 @@ export function SalesStrip({
             }
             note={<Settle value={f.delta} />}
             aside={f.key === 'week' ? bars : undefined}
+            href={f.href}
           />
         ))}
       </StatGrid>

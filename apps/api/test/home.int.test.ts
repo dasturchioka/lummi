@@ -503,6 +503,18 @@ describe('the owner strip', () => {
       received: await due(w1),
       average: await due(w1),
     });
+
+    // the cards open the orders list on `paidOn`: the same orders, the one paid after midnight
+    // for an order placed before it included
+    const owner = await t.ownerSession();
+    const paidOn = async (day: string) => {
+      const res = await owner.client.admin.orders.list({ query: { paidOn: day } });
+      if (res.status !== 200) throw new Error(`orders ${res.status}`);
+      return res.body.items.map((i) => i.number).sort((a, b) => a - b);
+    };
+    expect(await paidOn('2026-11-14')).toEqual([d1, d2].sort((a, b) => a - b));
+    expect(await paidOn('2026-11-13')).toEqual([y]);
+    expect(await paidOn('2026-11-07')).toEqual([w1, w2].sort((a, b) => a - b));
   });
 
   it('counts a credit with tiyin in whole so’m', async () => {

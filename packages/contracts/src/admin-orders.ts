@@ -57,6 +57,11 @@ export const adminOrdersQuerySchema = z.object({
   /** Last day, Tashkent, inclusive. */
   to: tashkentDaySchema.optional(),
   /**
+   * Orders whose payment was first confirmed on this Tashkent day, a credit paying it: the orders
+   * the admin Home's «Оплачено сегодня» cards count, which open the list with it.
+   */
+  paidOn: tashkentDaySchema.optional(),
+  /**
    * An order number or part of a phone (the account phone or the Recipient's), as typed: only its
    * digits count. The order with that number comes first.
    */

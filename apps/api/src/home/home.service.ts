@@ -490,7 +490,8 @@ export class HomeService {
   /**
    * Orders whose payment was first confirmed within [from, to], and the credits that paid them.
    * It reads the confirmations in that stretch (`order_events_confirmed_idx`) and keeps each
-   * order's first one only.
+   * order's first one only. The orders list's `paidOn` filter (`firstConfirmedOn`), which the
+   * cards open, reads the same orders: keep the two alike.
    */
   async paidBetween(from: Date, to: Date): Promise<PaidFigures> {
     const { rows } = await this.db.execute<{ orders: number; received: string }>(sql`

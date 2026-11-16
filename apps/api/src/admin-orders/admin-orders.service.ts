@@ -138,6 +138,24 @@ const digitsOf = (column: unknown) =>
 const knownNumber = (n: number) => Number.isSafeInteger(n) && n > 0 && n <= ORDER_NUMBER_MAX;
 
 /**
+ * The order's payment was first confirmed on that Tashkent day and a credit paid it: the orders
+ * the admin Home's «Оплачено сегодня» counts (`HomeService.paidBetween`), read from the order's side.
+ */
+function firstConfirmedOn(day: string): SQL {
+  return sql`(${orders.creditId} is not null and exists (
+    select 1 from ${orderEvents} e
+    where e.order_id = ${orders.id} and e.action = 'confirm_payment'
+      and e.created_at >= ${dayStart(day).toISOString()}::timestamptz
+      and e.created_at < ${dayStart(day, 1).toISOString()}::timestamptz
+      and not exists (
+        select 1 from ${orderEvents} earlier
+        where earlier.order_id = e.order_id and earlier.action = 'confirm_payment'
+          and (earlier.created_at, earlier.id) < (e.created_at, e.id)
+      )
+  ))`;
+}
+
+/**
  * The orders list's filters as conditions on `orders` joined with `customers` (the list and the
  * board read them alike), and the order number the search names, which the list puts first.
  */
@@ -151,6 +169,7 @@ export function orderFilters(q: Omit<ListQuery, 'page' | 'pageSize'>): {
   else if (q.payment) conditions.push(sql`(${paymentState}) = ${q.payment}`);
   if (q.from) conditions.push(sql`${orders.createdAt} >= ${dayStart(q.from).toISOString()}`);
   if (q.to) conditions.push(sql`${orders.createdAt} < ${dayStart(q.to, 1).toISOString()}`);
+  if (q.paidOn) conditions.push(firstConfirmedOn(q.paidOn));
   const digits = q.q?.replace(/\D/g, '') ?? null;
   // an order number fits in nine digits; a phone is searched by four digits or more
   const byNumber = digits && Number(digits) <= ORDER_NUMBER_MAX ? Number(digits) : null;
