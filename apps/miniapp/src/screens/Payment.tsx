@@ -10,14 +10,7 @@ import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CancelOrder } from '../orders/CancelOrder';
 import { StatusPill, Timeline } from '../orders/parts';
-import {
-  holdPolls,
-  ORDERS_KEY,
-  orderKey,
-  paymentKey,
-  usePayment,
-  useOrdersText,
-} from '../orders/queries';
+import { holdPolls, ORDERS_KEY, orderKey, paymentKey, usePayment, useOrdersText } from '../orders/queries';
 import { precheckReceipt, uploadReceipt, UploadNetworkError } from '../orders/upload';
 import { copyText } from '../lib/clipboard';
 import { formatFileSize } from '../lib/format';

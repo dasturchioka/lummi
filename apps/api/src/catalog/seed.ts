@@ -3,18 +3,7 @@ import { SET_SIZE } from '@lummi/contracts/constants';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  and,
-  asc,
-  discoverySet,
-  discoverySetItems,
-  eq,
-  fragrances,
-  sql,
-  volumes,
-  type Db,
-  type DbOrTx,
-} from '@lummi/db';
+import { and, asc, discoverySet, discoverySetItems, eq, fragrances, sql, volumes, type Db, type DbOrTx } from '@lummi/db';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService } from '../admin/catalog-admin.service';
 import { CatalogImportService } from '../catalog-import/catalog-import.service';
@@ -38,9 +27,7 @@ export const PLACEHOLDER_ON_HAND = 20;
 export const PLACEHOLDER_DISCOVERY_ON_HAND = 10;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
-export const SEED_WORKBOOK = fileURLToPath(
-  new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url),
-);
+export const SEED_WORKBOOK = fileURLToPath(new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url));
 
 /**
  * Spelling variants (aliases) for names whose Cyrillic or phonetic reading does not follow from
@@ -88,13 +75,12 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
     .where(sql`id and is_placeholder and on_hand = 0`);
 }
 
+
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
   const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);
   const raw = await readWorkbook(bytes, { maxRows: 100_000 });
   if (opts.limit !== undefined) {
-    const keep = new Set(
-      raw.fragrances.slice(0, opts.limit).map((r) => normaliseCode(r.cells.code)),
-    );
+    const keep = new Set(raw.fragrances.slice(0, opts.limit).map((r) => normaliseCode(r.cells.code)));
     raw.fragrances = raw.fragrances.filter((r) => keep.has(normaliseCode(r.cells.code)));
     raw.volumes = raw.volumes.filter((r) => keep.has(normaliseCode(r.cells.code)));
     // curated similar fragrances inside the kept ones only
@@ -134,10 +120,7 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
       for (const ml of [10, 30, 50]) {
         const file = join(opts.materialsDir, `flakons/${slug}_${ml}ml.webp`);
         const { hash } = await storePhoto(opts.photos, await readFile(file));
-        const [f] = await db
-          .select({ id: fragrances.id })
-          .from(fragrances)
-          .where(eq(fragrances.slug, slug));
+        const [f] = await db.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.slug, slug));
         if (f) {
           await db
             .update(volumes)
@@ -148,16 +131,7 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
     }
   }
   // Discovery set (#22): outside the workbook, by the first five fragrances in workbook order.
-  const first = await db
-    .select({ id: fragrances.id })
-    .from(fragrances)
-    .orderBy(asc(fragrances.id))
-    .limit(SET_SIZE);
-  await db.transaction((tx) =>
-    seedDiscoverySet(
-      tx,
-      first.map((f) => f.id),
-    ),
-  );
+  const first = await db.select({ id: fragrances.id }).from(fragrances).orderBy(asc(fragrances.id)).limit(SET_SIZE);
+  await db.transaction((tx) => seedDiscoverySet(tx, first.map((f) => f.id)));
   return { fragrances: raw.fragrances.length };
 }
