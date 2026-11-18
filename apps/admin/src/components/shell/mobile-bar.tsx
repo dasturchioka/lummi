@@ -5,6 +5,8 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { LanguageSwitch } from '@/components/language-switch';
+import { ThemeSwitch } from '@/components/theme-switch';
+import type { Theme } from '@/lib/theme-cookie';
 import { Button } from '@/components/ui/button';
 import type { AdminMessages } from '@/lib/i18n';
 import { HomeLogo, NavScroller, PanelAccount, PanelNav } from './panel-nav';
@@ -16,10 +18,12 @@ import { HomeLogo, NavScroller, PanelAccount, PanelNav } from './panel-nav';
 export function MobileBar({
   member,
   language,
+  theme,
   t,
 }: {
   member: StaffDto;
   language: 'ru' | 'uz';
+  theme: Theme;
   t: AdminMessages;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,7 +34,10 @@ export function MobileBar({
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-milk pr-1.5 pl-1 pt-[env(safe-area-inset-top)] box-content lg:hidden">
         <HomeLogo />
         <div className="flex items-center gap-1">
-          <LanguageSwitch current={language} label={t.language} />
+          <div className="flex items-center gap-1">
+            <LanguageSwitch current={language} label={t.language} />
+            <ThemeSwitch current={theme} label={t.theme.label} names={t.theme} />
+          </div>
           <DialogPrimitive.Trigger asChild>
             <Button variant="ghost" size="icon" aria-label={t.nav.menu}>
               <Menu className="size-[22px]" strokeWidth={1.5} aria-hidden />
@@ -39,7 +46,7 @@ export function MobileBar({
         </div>
       </header>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-50 bg-graphite/40 lg:hidden" />
+        <DialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-50 bg-overlay lg:hidden" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
           className="motion-sheet fixed inset-y-0 left-0 z-50 flex w-[min(304px,86vw)] flex-col bg-milk pt-[env(safe-area-inset-top)] pb-[max(16px,env(safe-area-inset-bottom))] outline-none lg:hidden"

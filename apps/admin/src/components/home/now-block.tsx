@@ -325,7 +325,7 @@ export function NowBlock({
           <Button
             asChild
             variant="outline"
-            className="h-12 px-[18px] text-milk shadow-[inset_0_0_0_1px_rgba(245,242,236,0.22)] hover:bg-milk/8"
+            className="h-12 px-[18px] text-milk shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--milk)_22%,transparent)] hover:bg-milk/8"
           >
             <Link href={secondary.href}>{secondary.label}</Link>
           </Button>
