@@ -215,15 +215,32 @@ function vial(oilPrice: number, ml: BottleMl, s: CostSettings): VialParts {
  * gram before the supplier discount.
  */
 export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): UnitCost {
+  return withDefect(bottleParts(oilPrice, ml, s), s.packaging.defectPercent);
+}
+
+function bottleParts(oilPrice: number, ml: BottleMl, s: CostSettings): Parts {
   const p = s.packaging;
-  return withDefect(
-    {
-      ...vial(oilPrice, ml, s),
-      box: ml === 5 ? 0 : p.box[ml],
-      insert: ml === 5 ? 0 : p.insert,
-    },
-    p.defectPercent,
-  );
+  return {
+    ...vial(oilPrice, ml, s),
+    box: ml === 5 ? 0 : p.box[ml],
+    insert: ml === 5 ? 0 : p.insert,
+  };
+}
+
+/**
+ * The same bottle as `bottleCost`, unrounded, for a caller that multiplies it by thousands of
+ * bottles (the planner, #78): `liquid` is oil plus ethanol, `total` includes the defect percent.
+ */
+export function bottleCostExact(
+  oilPrice: number,
+  ml: BottleMl,
+  s: CostSettings,
+): { liquid: number; total: number } {
+  const r = bottleParts(oilPrice, ml, s);
+  return {
+    liquid: r.oil + r.ethanol,
+    total: sumWithDefect(r, s.packaging.defectPercent).total,
+  };
 }
 
 /**
@@ -232,6 +249,12 @@ export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): Uni
  * Null with no fragrance to average over.
  */
 export function giftSampleCost(oilPrices: readonly number[], s: CostSettings): number | null {
+  const exact = giftSampleCostExact(oilPrices, s);
+  return exact === null ? null : som(exact);
+}
+
+/** `giftSampleCost` before rounding, for a caller that multiplies it by the sample count. */
+export function giftSampleCostExact(oilPrices: readonly number[], s: CostSettings): number | null {
   if (oilPrices.length === 0) return null;
   const ml = s.order.giftSampleMl;
   const defect = 1 + s.packaging.defectPercent / 100;
@@ -240,7 +263,7 @@ export function giftSampleCost(oilPrices: readonly number[], s: CostSettings): n
     const liquid = ((v.oil + v.ethanol) / 5) * ml;
     return a + (liquid + v.bottle + v.label + v.spray + v.filling) * defect;
   }, 0);
-  return som(sum / oilPrices.length + s.packaging.insert);
+  return sum / oilPrices.length + s.packaging.insert;
 }
 
 /**
@@ -265,9 +288,18 @@ export function setCost(oilPrices: readonly number[], ml: SetVialMl, s: CostSett
   );
 }
 
-function withDefect(r: Parts, defectPercent: number): UnitCost {
+/** The sum of a cost's parts and the defect percent on it, unrounded: the one place both are worked out. */
+export function sumWithDefect(
+  r: Parts,
+  defectPercent: number,
+): { base: number; defect: number; total: number } {
   const base = r.oil + r.ethanol + r.bottle + r.label + r.spray + r.filling + r.box + r.insert;
   const defect = (base * defectPercent) / 100;
+  return { base, defect, total: base + defect };
+}
+
+function withDefect(r: Parts, defectPercent: number): UnitCost {
+  const { base, defect, total } = sumWithDefect(r, defectPercent);
   return {
     oil: som(r.oil),
     ethanol: som(r.ethanol),
@@ -279,6 +311,52 @@ function withDefect(r: Parts, defectPercent: number): UnitCost {
     insert: som(r.insert),
     base: som(base),
     defect: som(defect),
-    total: som(base + defect),
+    total: som(total),
   };
+}
+
+/** Where a sale is made: the Mini App (mailer, BTS delivery, online payment) or Uzum (its commission). */
+export type SaleChannel = 'app' | 'uzum';
+
+export interface OrderCosts {
+  mailer: number;
+  /** BTS charge less what the customer pays for delivery below the free-delivery threshold. */
+  delivery: number;
+  /** Online-payment percent (Mini App) or the Uzum commission. */
+  commission: number;
+  ad: number;
+  tax: number;
+  gift: number;
+  /** Goods plus every cost above. */
+  total: number;
+  profit: number;
+  /** Profit over revenue; 0 without revenue, as the calculator has it. */
+  margin: number;
+}
+
+/**
+ * The costs of one order and its profit (calculator `orderCosts`), unrounded. `goods` is the
+ * unit cost total of what it holds, `giftSample` the cost of a gift sample added to it (0: none).
+ * `delivery` is pricing's: the free-delivery threshold and what the customer pays below it.
+ */
+export function orderCosts(a: {
+  revenue: number;
+  goods: number;
+  channel: SaleChannel;
+  giftSample?: number;
+  delivery: { freeFrom: number; customerFee: number };
+  settings: CostSettings;
+}): OrderCosts {
+  const { revenue, goods, channel, settings: s } = a;
+  const o = s.order;
+  const app = channel === 'app';
+  const mailer = app ? o.mailer : 0;
+  const delivery = app ? o.btsCharge - (revenue < a.delivery.freeFrom ? a.delivery.customerFee : 0) : 0;
+  const commission = (revenue * (app ? o.onlinePaymentPercent : o.uzumCommissionPercent)) / 100;
+  const ad = o.adPerSale;
+  const tax = (revenue * o.taxPercent) / 100;
+  const gift = a.giftSample ?? 0;
+  const total = goods + mailer + delivery + commission + ad + tax + gift;
+  const profit = revenue - total;
+  return { mailer, delivery, commission, ad, tax, gift, total, profit, margin: revenue ? profit / revenue : 0 };
 }
