@@ -10,7 +10,7 @@ const KEYS = ['from', 'to'] as const;
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   const range = readFilters(sp, reportQuerySchema.shape, KEYS);
-  const top: TopOrder = sp.top === 'net' ? 'net' : 'units';
+  const top: TopOrder = sp.top === 'net' || sp.top === 'profit' ? sp.top : 'units';
 
   const api = await serverApi();
   let res = await api.reports.sales({ query: range });

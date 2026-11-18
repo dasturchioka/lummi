@@ -19,6 +19,7 @@ import {
   type AdminCreditDto,
   type AdminCreditsPageDto,
   type AdminCreditsQuery,
+  type AdminOrderCostsDto,
   type AdminOrderDto,
   type AdminOrderEventDto,
   type AdminOrderListItemDto,
@@ -385,6 +386,29 @@ export class AdminOrdersService {
     if (!knownNumber(number)) return null;
     const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
     return o ? this.pageOf(o) : null;
+  }
+
+  /**
+   * The order's cost snapshot (#77) and each line's frozen unit cost, in the page's line order;
+   * null when there is no such order.
+   */
+  async costs(number: number): Promise<AdminOrderCostsDto | null> {
+    if (!knownNumber(number)) return null;
+    const [o] = await this.db.select().from(orders).where(eq(orders.number, number));
+    if (!o) return null;
+    const lines = await this.db
+      .select({ position: orderLines.position, qty: orderLines.qty, unitCost: orderLines.unitCost })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, o.id))
+      .orderBy(asc(orderLines.position));
+    return {
+      snapshot: o.costs,
+      lines: lines.map((l) => ({
+        position: l.position,
+        unitCost: l.unitCost,
+        cost: l.unitCost === null ? null : l.unitCost * l.qty,
+      })),
+    };
   }
 
   private async pageOf(o: OrderRow): Promise<AdminOrderDto> {

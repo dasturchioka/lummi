@@ -1,4 +1,9 @@
-import { settingDefinitions, type SettingKey, type UnitCost } from '@lummi/contracts';
+import {
+  settingDefinitions,
+  type SalesChannel,
+  type SettingKey,
+  type UnitCost,
+} from '@lummi/contracts';
 
 /**
  * The cost model (ADR 0040): the customer's cost calculator, as pure functions. Every caller (the
@@ -146,9 +151,10 @@ export function costSettingsFrom(v: Record<CostSettingKey, number>): CostSetting
 /** The registry's defaults (the calculator's `P0`), for tests and tools. */
 export function defaultCostSettings(): CostSettings {
   return costSettingsFrom(
-    Object.fromEntries(
-      COST_SETTING_KEYS.map((k) => [k, settingDefinitions[k].default]),
-    ) as Record<CostSettingKey, number>,
+    Object.fromEntries(COST_SETTING_KEYS.map((k) => [k, settingDefinitions[k].default])) as Record<
+      CostSettingKey,
+      number
+    >,
   );
 }
 
@@ -185,7 +191,10 @@ const ethanolPerMl = (l: LiquidSettings) =>
  * What filling `ml` of perfume uses up, the filling loss included: grams of oil and ml of ethanol
  * (unrounded). The oil part of a bottle's cost is these grams at the landed price.
  */
-export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number; ethanolMl: number } {
+export function liquidNeeded(
+  ml: number,
+  l: LiquidSettings,
+): { oilGrams: number; ethanolMl: number } {
   const liquid = filled(ml, l);
   return {
     oilGrams: oilShare(liquid, l) * l.oilDensity,
@@ -331,10 +340,11 @@ function withDefect(r: Parts, defectPercent: number): UnitCost {
   };
 }
 
-/** Where a sale is made: the Mini App (mailer, BTS delivery, online payment) or Uzum (its commission). */
-export type SaleChannel = 'app' | 'uzum';
-
-export interface OrderCosts {
+/**
+ * One order's Order costs part by part (GLOSSARY: what it costs besides its goods), its whole cost
+ * and its profit, unrounded.
+ */
+export interface OrderCostParts {
   mailer: number;
   /** BTS charge less what the customer pays for delivery below the free-delivery threshold. */
   delivery: number;
@@ -343,8 +353,8 @@ export interface OrderCosts {
   ad: number;
   tax: number;
   gift: number;
-  /** Goods plus every cost above. */
-  total: number;
+  /** Everything the order costs the shop: its goods plus every cost above. */
+  cost: number;
   profit: number;
   /** Profit over revenue; 0 without revenue, as the calculator has it. */
   margin: number;
@@ -358,21 +368,34 @@ export interface OrderCosts {
 export function orderCosts(a: {
   revenue: number;
   goods: number;
-  channel: SaleChannel;
+  /** The Mini App (mailer, BTS delivery, online payment) or Uzum (its commission). */
+  channel: SalesChannel;
   giftSample?: number;
   delivery: { freeFrom: number; customerFee: number };
   settings: CostSettings;
-}): OrderCosts {
+}): OrderCostParts {
   const { revenue, goods, channel, settings: s } = a;
   const o = s.order;
-  const app = channel === 'app';
+  const app = channel === 'miniapp';
   const mailer = app ? o.mailer : 0;
-  const delivery = app ? o.btsCharge - (revenue < a.delivery.freeFrom ? a.delivery.customerFee : 0) : 0;
+  const delivery = app
+    ? o.btsCharge - (revenue < a.delivery.freeFrom ? a.delivery.customerFee : 0)
+    : 0;
   const commission = (revenue * (app ? o.onlinePaymentPercent : o.uzumCommissionPercent)) / 100;
   const ad = o.adPerSale;
   const tax = (revenue * o.taxPercent) / 100;
   const gift = a.giftSample ?? 0;
-  const total = goods + mailer + delivery + commission + ad + tax + gift;
-  const profit = revenue - total;
-  return { mailer, delivery, commission, ad, tax, gift, total, profit, margin: revenue ? profit / revenue : 0 };
+  const cost = goods + mailer + delivery + commission + ad + tax + gift;
+  const profit = revenue - cost;
+  return {
+    mailer,
+    delivery,
+    commission,
+    ad,
+    tax,
+    gift,
+    cost,
+    profit,
+    margin: revenue ? profit / revenue : 0,
+  };
 }

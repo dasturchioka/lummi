@@ -1,5 +1,5 @@
 {
-  "id": "3e3d331a-f0bc-4e96-ae26-189655df91aa",
+  "id": "252ebb1a-b3ae-4d33-a25b-805ab5468bec",
   "prevId": "1a939809-d8e5-4a3c-91c4-fd1ca3a130eb",
   "version": "7",
   "dialect": "postgresql",
@@ -409,108 +409,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bottlings": {
-      "name": "bottlings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "bottlings_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lines": {
-          "name": "lines",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "oil_mg": {
-          "name": "oil_mg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ethanol_ml": {
-          "name": "ethanol_ml",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bottlings_fragrance_idx": {
-          "name": "bottlings_fragrance_idx",
-          "columns": [
-            {
-              "expression": "fragrance_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bottlings_fragrance_id_fragrances_id_fk": {
-          "name": "bottlings_fragrance_id_fragrances_id_fk",
-          "tableFrom": "bottlings",
-          "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "bottlings_amounts_check": {
-          "name": "bottlings_amounts_check",
-          "value": "\"bottlings\".\"oil_mg\" >= 0 and \"bottlings\".\"ethanol_ml\" >= 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.broadcast_deliveries": {
@@ -2579,13 +2477,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "oil_mg": {
-          "name": "oil_mg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "is_hit": {
           "name": "is_hit",
           "type": "boolean",
@@ -2664,10 +2555,6 @@
         "fragrances_oil_price_check": {
           "name": "fragrances_oil_price_check",
           "value": "\"fragrances\".\"oil_price\" is null or \"fragrances\".\"oil_price\" > 0"
-        },
-        "fragrances_oil_mg_check": {
-          "name": "fragrances_oil_mg_check",
-          "value": "\"fragrances\".\"oil_mg\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -3035,158 +2922,6 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.oil_receipts": {
-      "name": "oil_receipts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "oil_receipts_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "supplier": {
-          "name": "supplier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "invoice": {
-          "name": "invoice",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "received_on": {
-          "name": "received_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "oil_mg": {
-          "name": "oil_mg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price_per_gram": {
-          "name": "price_per_gram",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "discount_percent": {
-          "name": "discount_percent",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "import_percent": {
-          "name": "import_percent",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "draft": {
-          "name": "draft",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "voided_at": {
-          "name": "voided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "void_reason": {
-          "name": "void_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "oil_receipts_fragrance_idx": {
-          "name": "oil_receipts_fragrance_idx",
-          "columns": [
-            {
-              "expression": "fragrance_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "oil_receipts_fragrance_id_fragrances_id_fk": {
-          "name": "oil_receipts_fragrance_id_fragrances_id_fk",
-          "tableFrom": "oil_receipts",
-          "tableTo": "fragrances",
-          "columnsFrom": [
-            "fragrance_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "oil_receipts_amounts_check": {
-          "name": "oil_receipts_amounts_check",
-          "value": "\"oil_receipts\".\"oil_mg\" > 0 and \"oil_receipts\".\"price_per_gram\" > 0\n        and \"oil_receipts\".\"discount_percent\" between 0 and 100 and \"oil_receipts\".\"import_percent\" between 0 and 100"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.order_card_prompts": {
@@ -3710,6 +3445,12 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "unit_cost": {
+          "name": "unit_cost",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -3810,6 +3551,10 @@
         "order_lines_promo_gift_check": {
           "name": "order_lines_promo_gift_check",
           "value": "not \"order_lines\".\"promo_gift\" or (\"order_lines\".\"unit_price\" = 0 and \"order_lines\".\"line_total\" = 0 and \"order_lines\".\"qty\" = 1)"
+        },
+        "order_lines_unit_cost_check": {
+          "name": "order_lines_unit_cost_check",
+          "value": "\"order_lines\".\"unit_cost\" is null or \"order_lines\".\"unit_cost\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -4058,6 +3803,12 @@
         "review_request": {
           "name": "review_request",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "costs": {
+          "name": "costs",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -6406,176 +6157,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.stock_moves": {
-      "name": "stock_moves",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "stock_moves_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "stock_move_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "oil_mg": {
-          "name": "oil_mg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "bottles": {
-          "name": "bottles",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "oil_receipt_id": {
-          "name": "oil_receipt_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "bottling_id": {
-          "name": "bottling_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "order_id": {
-          "name": "order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "details": {
-          "name": "details",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "actor_type": {
-          "name": "actor_type",
-          "type": "actor_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "stock_moves_fragrance_idx": {
-          "name": "stock_moves_fragrance_idx",
-          "columns": [
-            {
-              "expression": "fragrance_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "stock_moves_oil_receipt_id_oil_receipts_id_fk": {
-          "name": "stock_moves_oil_receipt_id_oil_receipts_id_fk",
-          "tableFrom": "stock_moves",
-          "tableTo": "oil_receipts",
-          "columnsFrom": [
-            "oil_receipt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "stock_moves_bottling_id_bottlings_id_fk": {
-          "name": "stock_moves_bottling_id_bottlings_id_fk",
-          "tableFrom": "stock_moves",
-          "tableTo": "bottlings",
-          "columnsFrom": [
-            "bottling_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "stock_moves_order_id_orders_id_fk": {
-          "name": "stock_moves_order_id_orders_id_fk",
-          "tableFrom": "stock_moves",
-          "tableTo": "orders",
-          "columnsFrom": [
-            "order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.upgrade_rights": {
       "name": "upgrade_rights",
       "schema": "",
@@ -7232,19 +6813,6 @@
       "values": [
         "owner",
         "manager"
-      ]
-    },
-    "public.stock_move_kind": {
-      "name": "stock_move_kind",
-      "schema": "public",
-      "values": [
-        "oil_receipt",
-        "oil_receipt_corrected",
-        "oil_receipt_voided",
-        "bottling",
-        "sale",
-        "returned",
-        "correction"
       ]
     },
     "public.theme": {

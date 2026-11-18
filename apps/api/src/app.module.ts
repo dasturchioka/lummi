@@ -105,6 +105,8 @@ import { CampaignsAdminController, CampaignsController } from './campaigns/campa
 import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
+import { ProfitabilityController } from './profitability/profitability.controller';
+import { Profitability } from './profitability/profitability.service';
 import { ReportsController } from './reports/reports.controller';
 import { PurchasePlanController } from './cost/purchase-plan.controller';
 import { PurchasePlans } from './cost/purchase-plan.service';
@@ -180,6 +182,7 @@ export class AppModule {
         CampaignsAdminController,
         DiscountsController,
         ReportsController,
+        ProfitabilityController,
         PurchasePlanController,
         HomeController,
       ],
@@ -252,6 +255,7 @@ export class AppModule {
         Refunds,
         CampaignsService,
         SalesReports,
+        Profitability,
         PurchasePlans,
         MarketingReports,
         HomeService,

@@ -21,6 +21,7 @@ import {
   type ReceiptRow,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { freezeOrderCosts } from '../cost/freeze-order-costs';
 import { OrderStatusService } from '../order-status/order-status.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
@@ -142,7 +143,8 @@ export function confirmPaymentHttpStatus(out: ConfirmPaymentOutcome): number {
  * another card with a typed reason. Then, in the caller's transaction, it links the credit, moves
  * the order to «Оплата подтверждена» through `transitionIn()` (its history and the audit entry
  * with the actor, the amounts, the card and the reason; the shopper's message through the outbox)
- * and gives the receipt its verdict. A refusal writes nothing. The DB backs the link:
+ * and gives the receipt its verdict, and freezes the order's cost snapshot (#77). A refusal writes
+ * nothing. The DB backs the link:
  * `orders_credit_idx` (one order per credit) and `receipts_one_accepted_idx`.
  */
 @Injectable()
@@ -283,6 +285,8 @@ export class PaymentConfirmation {
     // the order is locked in `expected` and the payload fits it: any refusal here is a bug, and rolls back
     if (moved.kind !== 'done')
       throw new Error(`order ${order.number}: confirm_payment answered ${moved.kind}`);
+    // the cost snapshot (#77): the order's profit as the oil prices and settings make it now
+    const costs = await freezeOrderCosts(tx, moved.order, moved.event.createdAt);
     if (receipt) {
       await tx
         .update(receipts)
@@ -291,7 +295,7 @@ export class PaymentConfirmation {
     }
     return {
       kind: 'confirmed',
-      order: moved.order,
+      order: { ...moved.order, costs: costs ?? moved.order.costs },
       event: moved.event,
       offShopCard,
       differenceTiyin,

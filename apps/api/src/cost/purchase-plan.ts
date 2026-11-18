@@ -1,11 +1,10 @@
-import type { PurchasePlan, PurchasePlanRow } from '@lummi/contracts';
+import type { PurchasePlan, PurchasePlanRow, SalesChannel } from '@lummi/contracts';
 import {
   bottleCostExact,
   giftSampleCostExact,
   landedOilPrice,
   orderCosts,
   som,
-  type SaleChannel,
   type BottleMl,
   type CostSettings,
 } from './unit-cost';
@@ -101,7 +100,7 @@ export function planPurchase(
       const unit = bottleCostExact(f.oilPrice, ml, s);
       const net = full * (1 - discount);
       // each bottle is an order of its own, on the Mini App or on Uzum
-      const profitOn = (channel: SaleChannel) =>
+      const profitOn = (channel: SalesChannel) =>
         orderCosts({
           revenue: net,
           goods: unit.total,
@@ -109,7 +108,7 @@ export function planPurchase(
           delivery: { freeFrom: p.freeDeliveryThreshold, customerFee: p.customerDeliveryFee },
           settings: s,
         }).profit;
-      const one = profitOn('app') * (1 - uzum) + profitOn('uzum') * uzum;
+      const one = profitOn('miniapp') * (1 - uzum) + profitOn('uzum') * uzum;
       revenueFull += full * count;
       revenueNet += net * count;
       rowRevenue += net * count;

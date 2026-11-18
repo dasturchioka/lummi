@@ -137,7 +137,8 @@ export function HowCounted({
   children,
   className,
 }: {
-  r: Copy;
+  /** Only its «Как считается?» label: the reports' copy, or another page's. */
+  r: Pick<Copy, 'how'>;
   children: ReactNode;
   className?: string;
 }) {

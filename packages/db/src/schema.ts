@@ -1,4 +1,4 @@
-import type { Discount } from '@lummi/contracts';
+import type { Discount, OrderCostSnapshot } from '@lummi/contracts';
 import {
   CAMPAIGN_SOURCES,
   FRAGRANCE_TIERS,
@@ -927,6 +927,11 @@ export const orders = pgTable(
      */
     reviewRequestedAt: timestamp('review_requested_at', { withTimezone: true }),
     reviewRequest: text('review_request', { enum: ['sent', 'not_delivered'] }),
+    /**
+     * The cost snapshot (#77): the order's goods at unit cost and its order costs, frozen when the
+     * payment is confirmed so a later oil price or setting never rewrites its profit. Null before.
+     */
+    costs: jsonb('costs').$type<OrderCostSnapshot>(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -991,6 +996,11 @@ export const orderLines = pgTable(
     /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
     setComposition:
       jsonb('set_composition').$type<{ fragranceId: number; name: string; brand: string }[]>(),
+    /**
+     * The unit cost frozen with the order's cost snapshot (#77, ADR 0040); null before the payment
+     * is confirmed, or when a fragrance had no oil price then.
+     */
+    unitCost: integer('unit_cost'),
   },
   (t) => [
     uniqueIndex('order_lines_order_position_idx').on(t.orderId, t.position),
@@ -1008,6 +1018,7 @@ export const orderLines = pgTable(
       'order_lines_promo_gift_check',
       sql`not ${t.promoGift} or (${t.unitPrice} = 0 and ${t.lineTotal} = 0 and ${t.qty} = 1)`,
     ),
+    check('order_lines_unit_cost_check', sql`${t.unitCost} is null or ${t.unitCost} >= 0`),
   ],
 );
 

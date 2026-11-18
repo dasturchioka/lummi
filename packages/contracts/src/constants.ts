@@ -76,6 +76,8 @@ export type SetLineKind = Exclude<LineKind, 'volume'>;
 
 /** Both kinds of set hold exactly this many different fragrances, 10 ml each (ADR 0009). */
 export const SET_SIZE = 5;
+/** The ml of a set's vials (ADR 0009); the 5 × 5 ml set comes with #79. */
+export const SET_VIAL_ML = 10;
 
 /**
  * What opens an Upgrade right (ADR 0003): a delivered set, or a delivered single bottle of
