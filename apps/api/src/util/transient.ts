@@ -19,20 +19,33 @@ export function isTransient(e: unknown): boolean {
 }
 
 /**
+ * A transaction found the world moved under it in a way our own code detects (not Postgres): what
+ * it read before taking its locks changed meanwhile. Thrown to roll back and run once more, like a
+ * transient failure (`retryTransientOnce`).
+ */
+export class RetryableConflictError extends Error {}
+
+/** A failure worth one more run: Postgres's transient ones, or our own `RetryableConflictError`. */
+function isRetryable(e: unknown): boolean {
+  return e instanceof RetryableConflictError || isTransient(e);
+}
+
+/**
  * Runs `run` (a whole transaction) and, when Postgres aborts it as a deadlock victim or for a
- * serialization failure, runs it once more. A second transient failure becomes `TryAgainError`,
- * so the caller answers a clean 409 instead of a 500; anything else is rethrown as it is.
+ * serialization failure, or it throws `RetryableConflictError`, runs it once more. A second such
+ * failure becomes `TryAgainError`, so the caller answers a clean 409 instead of a 500; anything
+ * else is rethrown as it is.
  */
 export async function retryTransientOnce<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (e) {
-    if (!isTransient(e)) throw e;
+    if (!isRetryable(e)) throw e;
   }
   try {
     return await run();
   } catch (e) {
-    if (isTransient(e)) throw new TryAgainError(e);
+    if (isRetryable(e)) throw new TryAgainError(e);
     throw e;
   }
 }

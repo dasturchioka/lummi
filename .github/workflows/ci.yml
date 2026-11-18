@@ -11,22 +11,26 @@ jobs:
     # stage-1's pushes are checked by deploy.yml; its open pull request to main would run the same
     # suite a second time on the same commit
     if: github.event_name != 'pull_request' || github.head_ref != 'stage-1'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # #72: GitHub's free minutes ran out; the self-hosted runner on the staging VPS (low priority)
+    runs-on: [self-hosted, lummi]
+    # A newer push to the same branch makes the running check pointless (#72: VPS load). When
+    # deploy.yml calls this, each run gets a group of its own, so a deploy's check is never cancelled.
+    concurrency:
+      group: ${{ github.event_name == 'push' && github.ref != 'refs/heads/stage-1' && github.ref != 'refs/heads/main' && format('ci-{0}', github.ref) || format('ci-run-{0}', github.run_id) }}
+      cancel-in-progress: true
+    # the shared 4-vCPU VPS runs the suite several times slower than GitHub's runner did (#72)
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      # no `cache: npm`: on this runner ~/.npm persists between runs
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: npm
       - run: npm ci
-      # Turbo's local cache across runs: a package whose inputs (and its dependencies' typecheck)
-      # did not change replays its lint, typecheck and test instead of running them again (#58)
-      - uses: actions/cache@v4
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: turbo-${{ runner.os }}-
-      - run: npx turbo run lint typecheck test
+      # Turbo's cache lives on the runner's disk across runs (#58, #72): a package whose inputs did
+      # not change replays its lint, typecheck and test instead of running them again
+      # two tasks at a time: the runner shares 4 vCPUs with other projects, and parallel jsdom suites
+      # starve each other into timeouts (#72)
+      - run: npx turbo run lint typecheck test --cache-dir="$HOME/.cache/turbo" --concurrency=2
       - run: npm run build -w @lummi/miniapp
       - run: npm run size -w @lummi/miniapp

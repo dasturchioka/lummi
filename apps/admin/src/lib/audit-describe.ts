@@ -1,5 +1,11 @@
 import type { AuditEntryDto } from '@lummi/contracts';
-import { formatCalendarDate, formatMoney, formatTiyin, type Language } from '@lummi/i18n';
+import {
+  formatCalendarDate,
+  formatMoney,
+  formatTiyin,
+  promoGiftLabel,
+  type Language,
+} from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import type { AdminMessages } from './i18n';
 import { formatTashkent, num } from './setting-copy';
@@ -250,13 +256,25 @@ function switchedOff(c: Ctx): string[] {
   });
 }
 
-/** A promo code's rule, as short as it reads: «10 %» or «50 000 сум». */
+/** A promo code's rule, as short as it reads: «10 %», «50 000 сум» or «подарок Rain Tea 10 мл». */
 function promoRule(c: Ctx): string | null {
   const percent = int(c.p.percent);
   const amount = int(c.p.amount);
+  const gift = giftName(c, c.p.promoGift);
   if (percent !== null) return fill(c.t.audit.detail.promoPercent, { percent: String(percent) });
   if (amount !== null) return money(c, amount);
+  if (gift !== null) return fill(c.t.audit.detail.promoGift, { gift });
   return null;
+}
+
+/** A Promo gift as the payload carries it (ADR 0039), by its one name: «Rain Tea 10 мл». */
+function giftName(c: Ctx, v: unknown): string | null {
+  if (!isRecord(v)) return null;
+  if (v.kind === 'discovery_set') return promoGiftLabel({ kind: 'discovery_set' }, c.language);
+  const ml = int(v.ml);
+  const name = str(v.name);
+  if (name === null || ml === null) return null;
+  return promoGiftLabel({ kind: 'volume', name, ml }, c.language);
 }
 
 /** A staff member's account changed: who it is. */
@@ -707,6 +725,7 @@ const describers: Record<string, Describer> = {
       'percent',
       'amount',
       'maxDiscount',
+      'promoGift',
       'expiresOn',
       'minOrderTotal',
       'totalLimit',
@@ -724,10 +743,14 @@ const describers: Record<string, Describer> = {
   },
   'promo.updated': (c) => {
     c.take('code', 'changed');
-    return [
-      fill(c.t.audit.detail.code, { code: str(c.p.code) ?? '—' }),
-      ...changedLines(c, c.p.changed),
-    ];
+    // a changed gift reads by its name, not as its fields
+    const changed = c.p.changed;
+    const gift = isRecord(changed) && Array.isArray(changed.promoGift) ? changed.promoGift : null;
+    const named =
+      gift && isRecord(changed)
+        ? { ...changed, promoGift: gift.map((g) => giftName(c, g) ?? '—') }
+        : changed;
+    return [fill(c.t.audit.detail.code, { code: str(c.p.code) ?? '—' }), ...changedLines(c, named)];
   },
   'promo.deleted': (c) => (
     c.take('code'),

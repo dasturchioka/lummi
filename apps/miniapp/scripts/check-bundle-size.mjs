@@ -1,11 +1,13 @@
 /* eslint-env node */
 /* global console, process, URL */
-// Fails when the initial JS (entry chunk plus its static imports) exceeds 150 KB gzip (ADR 0027).
+// Fails when the initial JS (entry chunk plus its static imports) exceeds the budget below (ADR 0027).
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
 
-const BUDGET_KB = 150;
+// 152 since 2026-11-18 (ADR 0027 amended): profile photos (#67) and the promo gift (#69) added RU+UZ
+// strings to the dictionary every first load carries; #73 splits it per language to win it back.
+const BUDGET_KB = 152;
 const dist = new URL('../dist/', import.meta.url).pathname;
 const manifest = JSON.parse(readFileSync(join(dist, '.vite/manifest.json'), 'utf8'));
 

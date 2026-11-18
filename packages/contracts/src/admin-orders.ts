@@ -97,6 +97,8 @@ export const adminOrderListItemSchema = z.object({
   recipient: z.object({ name: z.string(), phone: z.string() }),
   region: bilingualSchema,
   isGift: z.boolean(),
+  /** It holds a gift code's free item (ADR 0039): «Подарок по промокоду». */
+  promoGift: z.boolean(),
   /** What its Refunds sent back, whole so'm: 0 when none («Возврат N сум» beside the status). */
   refunded: som,
 });

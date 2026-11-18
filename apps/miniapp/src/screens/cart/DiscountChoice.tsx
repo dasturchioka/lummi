@@ -1,10 +1,11 @@
-import type {
-  CartDto,
-  CartLineDto,
-  Discount,
-  DiscountChoiceDto,
-  DiscountOptionDto,
-  UpgradeRightSource,
+import {
+  promoGiftOf,
+  type CartDto,
+  type CartLineDto,
+  type Discount,
+  type DiscountChoiceDto,
+  type DiscountOptionDto,
+  type UpgradeRightSource,
 } from '@lummi/contracts';
 import { fill, formatCalendarDate, formatMoney } from '@lummi/i18n';
 import { Fragment, type ReactNode } from 'react';
@@ -134,7 +135,9 @@ export function DiscountChoice({
     const bottle = bottleOf(o.discount, cart.lines, c.bottle);
     return [
       <span key="amount" className="whitespace-nowrap text-sage-ink tabular-nums">
-        −{formatMoney(o.discount.amount, language)}
+        {promoGiftOf(o.discount)
+          ? t.cart.promoGift
+          : `−${formatMoney(o.discount.amount, language)}`}
       </span>,
       bottle,
       o.terms ? <span className="whitespace-nowrap">{until(o.terms.lastDay)}</span> : null,

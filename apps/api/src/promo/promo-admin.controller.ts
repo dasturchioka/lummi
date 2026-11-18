@@ -7,7 +7,11 @@ import { PromoAdminService, type PromoFailure } from './promo-admin.service';
 
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 function failure(f: PromoFailure) {
-  return f.reason === 'not_found' ? notFound : { status: 409 as const, body: { code: f.reason } };
+  if (f.reason === 'not_found') return notFound;
+  // the Promo gift names no volume the catalog has (ADR 0039)
+  if (f.reason === 'invalid')
+    return { status: 422 as const, body: { code: f.reason, fields: f.fields ?? [] } };
+  return { status: 409 as const, body: { code: f.reason } };
 }
 
 /** Promo codes are the owner's (ADR 0017): a manager gets 403. */

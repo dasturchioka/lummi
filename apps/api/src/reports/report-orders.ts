@@ -1,4 +1,4 @@
-import { formatLocalDate, tashkentDay, type Discount } from '@lummi/contracts';
+import { formatLocalDate, promoGiftValue, tashkentDay, type Discount } from '@lummi/contracts';
 import { and, eq, gte, inArray, lte, or, orders, refunds, sql, type DbOrTx } from '@lummi/db';
 import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
 import { rangeBounds, within, type TashkentRange } from './report-range';
@@ -14,10 +14,28 @@ export interface ReportOrder {
   campaignLinkId: number | null;
   /** When it reached «Доставлен» (`fulfilledAt`): the reports count it on this Tashkent day. */
   deliveredAt: Date;
+  /** Items before discount as reports count them (`reportedMoney`): a Promo gift at its regular price. */
   items: number;
   discount: Discount | null;
+  /** The discount as reports count it (`reportedMoney`): a Promo gift is its regular price. */
   discountAmount: number;
+  /** The snapshot's own discount, what the order's lines share (a Promo gift's line costs 0). */
+  snapshotDiscountAmount: number;
   delivery: number;
+}
+
+/**
+ * The one place an order's money is turned into report figures (ADR 0039): a gift code's Promo
+ * gift is counted at its regular price in «Сумма до скидки» and in «Скидка», so «Чистые продажи»
+ * stays what was paid. Every report, the promo stats and the orders Excel read it from here.
+ */
+export function reportedMoney(o: {
+  itemsSubtotal: number;
+  discountAmount: number;
+  discount: Discount | null;
+}): { itemsBeforeDiscount: number; discount: number } {
+  const value = promoGiftValue(o.discount);
+  return { itemsBeforeDiscount: o.itemsSubtotal + value, discount: o.discountAmount + value };
 }
 
 /** A Refund as a report counts it: the order's refunds sent on one day, on the day they count. */
@@ -49,8 +67,23 @@ export function deliveredAt(at: Date | null, orderId: number): Date {
   return at;
 }
 
-function reportOrder({ at, ...o }: { at: Date | null } & Omit<ReportOrder, 'deliveredAt'>) {
-  return { ...o, deliveredAt: deliveredAt(at, o.id) };
+/** A report's order: its money as `reportedMoney` counts it, the snapshot's discount kept beside. */
+function reportOrder({
+  at,
+  ...o
+}: { at: Date | null } & Omit<ReportOrder, 'deliveredAt' | 'snapshotDiscountAmount'>): ReportOrder {
+  const money = reportedMoney({
+    itemsSubtotal: o.items,
+    discountAmount: o.discountAmount,
+    discount: o.discount,
+  });
+  return {
+    ...o,
+    items: money.itemsBeforeDiscount,
+    discountAmount: money.discount,
+    snapshotDiscountAmount: o.discountAmount,
+    deliveredAt: deliveredAt(at, o.id),
+  };
 }
 
 /*

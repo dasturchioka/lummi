@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { PromoForm } from '@/components/promo/promo-form';
+import { promoGiftChoicesOf } from '@/components/promo/promo-gift-choices';
 import { getAdminMessages } from '@/lib/i18n';
 import { serverApi } from '@/lib/server-api';
 
@@ -13,5 +14,14 @@ export default async function PromoCodePage({ params }: { params: Promise<{ id: 
   if (one.status === 403) redirect('/'); // promo codes are the owner's
   if (one.status !== 200) throw new Error(`promo code failed to load: ${one.status}`);
   const { t, language } = await getAdminMessages();
-  return <PromoForm key={one.body.id} initial={one.body} language={language} t={t} />;
+  const promoGiftChoices = await promoGiftChoicesOf(api);
+  return (
+    <PromoForm
+      key={one.body.id}
+      initial={one.body}
+      promoGiftChoices={promoGiftChoices}
+      language={language}
+      t={t}
+    />
+  );
 }

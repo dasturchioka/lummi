@@ -1,0 +1,9 @@
+ALTER TYPE "public"."promo_kind" ADD VALUE 'gift';--> statement-breakpoint
+ALTER TABLE "promo_codes" DROP CONSTRAINT "promo_codes_terms_check";--> statement-breakpoint
+ALTER TABLE "order_lines" ADD COLUMN "promo_gift" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD COLUMN "gift_volume_id" bigint;--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD COLUMN "gift_discovery_set" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD CONSTRAINT "promo_codes_gift_volume_id_volumes_id_fk" FOREIGN KEY ("gift_volume_id") REFERENCES "public"."volumes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "order_lines" ADD CONSTRAINT "order_lines_promo_gift_check" CHECK (not "order_lines"."promo_gift" or ("order_lines"."unit_price" = 0 and "order_lines"."line_total" = 0 and "order_lines"."qty" = 1));--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD CONSTRAINT "promo_codes_gift_check" CHECK (case when "promo_codes"."kind"::text = 'gift' then ("promo_codes"."gift_volume_id" is not null) <> "promo_codes"."gift_discovery_set" else "promo_codes"."gift_volume_id" is null and not "promo_codes"."gift_discovery_set" end);--> statement-breakpoint
+ALTER TABLE "promo_codes" ADD CONSTRAINT "promo_codes_terms_check" CHECK (("promo_codes"."kind" = 'percent' and "promo_codes"."percent" between 1 and 100 and "promo_codes"."amount" is null) or ("promo_codes"."kind" = 'fixed' and "promo_codes"."amount" > 0 and "promo_codes"."percent" is null and "promo_codes"."max_discount" is null) or ("promo_codes"."kind"::text = 'gift' and "promo_codes"."percent" is null and "promo_codes"."amount" is null and "promo_codes"."max_discount" is null));

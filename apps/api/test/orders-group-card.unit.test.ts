@@ -105,6 +105,7 @@ const line = (position: number): OrderLineRow => ({
   markedDown: false,
   qty: 99,
   lineTotal: 19_701_000,
+  promoGift: false,
   setVolumeIds: null,
   setComposition: null,
 });
@@ -195,6 +196,103 @@ describe('the card text', () => {
     expect(shown).toContain('Скидка (Промокод LUMMI10): −29 900 сум');
     expect(shown).toContain('Доставка: бесплатно');
     expect(shown).toContain('Итого: 269 100 сум');
+  });
+
+  it('lists a Promo gift as «Подарок по промокоду RAINTEA: Rain Tea 10 мл», with nothing taken off (ADR 0039)', () => {
+    const gift = (language: 'ru' | 'uz') =>
+      plainText(
+        renderCard(
+          data({
+            order: {
+              ...order,
+              itemsSubtotal: 219_000,
+              discount: {
+                type: 'promo_code',
+                code: 'RAINTEA',
+                amount: 0,
+                promoGift: { item: { kind: 'volume', volumeId: 9 }, value: 69_000 },
+              },
+              discountAmount: 0,
+              deliveryFee: 25_000,
+              total: 244_000,
+              amountDue: 244_000,
+            },
+            lines: [
+              {
+                ...line(0),
+                qty: 1,
+                unitPrice: 219_000,
+                regularUnitPrice: 219_000,
+                lineTotal: 219_000,
+              },
+              {
+                ...line(1),
+                nameRu: 'Rain Tea',
+                nameUz: 'Rain Tea',
+                ml: 10,
+                qty: 1,
+                unitPrice: 0,
+                regularUnitPrice: 69_000,
+                lineTotal: 0,
+                promoGift: true,
+              },
+            ],
+          }),
+          language,
+        ).text,
+        { parse_mode: 'HTML' },
+      ).replace(/[\u00a0\u202f]/g, ' ');
+    const ru = gift('ru');
+    expect(ru).toContain('• Подарок по промокоду RAINTEA: Rain Tea 10 мл');
+    expect(ru).not.toContain('Скидка');
+    expect(ru).not.toMatch(/Rain Tea.*— 0/);
+    expect(ru).toContain('Итого: 244 000 сум');
+    expect(gift('uz')).toContain('• RAINTEA promokodi sovgʻasi: Rain Tea 10 ml');
+  });
+
+  it('never squeezes the Promo gift out: a card near 4096 still says which gift goes in the parcel', () => {
+    const worst = data({
+      order: {
+        ...order,
+        comment: '<&>'.repeat(166),
+        isGift: true,
+        giftMessage: 'Ж'.repeat(1000),
+        discount: {
+          type: 'promo_code',
+          code: 'BLOGER_MALIKA_NOVOGODNIY_2026_UZ',
+          amount: 0,
+          promoGift: { item: { kind: 'discovery_set' }, value: 299_000 },
+        },
+        discountAmount: 0,
+      },
+      lines: [
+        ...Array.from({ length: 120 }, (_, i) => line(i)),
+        {
+          ...line(120),
+          kind: 'discovery_set',
+          volumeId: null,
+          nameRu: 'Discovery set',
+          nameUz: 'Discovery set',
+          ml: 10,
+          qty: 1,
+          unitPrice: 0,
+          regularUnitPrice: 299_000,
+          lineTotal: 0,
+          promoGift: true,
+          setComposition: ['Symphony', 'Tygar', 'Megamare', 'Erba Pura', 'Oud Wood'].map(
+            (name, i) => ({ fragranceId: i + 1, name, brand: 'X' }),
+          ),
+        },
+      ],
+    });
+    const { text } = renderCard(worst);
+    expect(visibleLength(text)).toBeLessThanOrEqual(MESSAGE_MAX);
+    const shown = plainText(text, { parse_mode: 'HTML' });
+    expect(shown).toContain('… и ещё');
+    expect(shown).toContain(
+      '• Подарок по промокоду BLOGER_MALIKA_NOVOGODNIY_2026_UZ: Discovery set',
+    );
+    expect(shown).toContain('   Symphony, Tygar, Megamare, Erba Pura, Oud Wood');
   });
 
   it('escapes what people typed, everywhere it appears', () => {

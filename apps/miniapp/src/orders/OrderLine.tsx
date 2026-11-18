@@ -7,11 +7,14 @@ import { SetFragranceList } from '../ui/SetFragranceList';
 import { Thumb } from '../ui/Thumb';
 import { useOrdersText } from './queries';
 
-/** What a line row shows: an order line as bought, or the buy-now item priced by its quote. */
+/**
+ * What a line row shows: an order line as bought, the buy-now item priced by its quote, or a gift
+ * code's free item (`promoGift`, ADR 0039).
+ */
 export type OrderLineView = Pick<
   OrderLineDto,
   'kind' | 'brand' | 'name' | 'setComposition' | 'photo' | 'ml' | 'qty' | 'lineTotal' | 'markedDown'
->;
+> & { promoGift?: boolean };
 
 /**
  * A line as bought (DESIGN.md compact row): thumbnail, «по мотивам» and the italic name over the
@@ -23,7 +26,7 @@ export function OrderLine({ line }: { line: OrderLineView }) {
   const { t, language } = usePrefs();
   const o = useOrdersText();
   return (
-    <li className="flex gap-3 p-3" data-testid="order-line">
+    <li className="flex gap-3 p-3" data-testid={line.promoGift ? 'promo-gift-line' : 'order-line'}>
       {/* top-aligned: a set's five names make the row taller than its thumbnail */}
       <Thumb
         photo={line.photo}
@@ -43,6 +46,11 @@ export function OrderLine({ line }: { line: OrderLineView }) {
           {line.name[language]}
         </p>
         {line.setComposition ? <SetFragranceList items={line.setComposition} /> : null}
+        {line.promoGift ? (
+          <p className="type-caption mt-1 font-medium text-pretty text-sage-ink">
+            {t.cart.promoGift}
+          </p>
+        ) : null}
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
           <p className="type-small min-w-0 text-muted">
             {line.kind !== 'volume'
@@ -51,7 +59,7 @@ export function OrderLine({ line }: { line: OrderLineView }) {
           </p>
           <Money
             amount={line.lineTotal}
-            className={`shrink-0 ${line.markedDown ? 'text-sage-ink' : ''}`}
+            className={`shrink-0 ${line.markedDown || line.promoGift ? 'text-sage-ink' : ''}`}
           />
         </div>
       </div>

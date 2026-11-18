@@ -57,7 +57,8 @@ export function rightEnd(openedAt: Date, validityDays: number): Date {
  * the five fragrances of its snapshot (ADR 0009); while the 10 ml source is switched on, each
  * fragrance bought as a single 10 ml bottle opens one, however many of it were bought. The 10 ml
  * bottles inside a set are the set's, never single bottles. Percent and term come from the
- * source's settings now and stay on the right. Idempotent on the source line and unit.
+ * source's settings now and stay on the right. A Promo gift's line counts too while
+ * `promo.giftOpensUpgradeRights` is on (ADR 0039). Idempotent on the source line and unit.
  */
 export async function openUpgradeRights(
   tx: DbOrTx,
@@ -72,6 +73,7 @@ export async function openUpgradeRights(
     'upgradeRights.single10ml.enabled',
     'upgradeRights.single10ml.percent',
     'upgradeRights.single10ml.validityDays',
+    'promo.giftOpensUpgradeRights',
   ]);
   const base = (source: InsertRight['source'], percent: number, validityDays: number) => ({
     customerId: order.customerId,
@@ -85,6 +87,8 @@ export async function openUpgradeRights(
   const rows: InsertRight[] = [];
   const singles = new Set<number>();
   for (const line of lines) {
+    // a Promo gift (ADR 0039) opens rights like a bought line only while the setting says so
+    if (line.promoGift && !s['promo.giftOpensUpgradeRights']) continue;
     if (line.kind !== 'volume') {
       if (!s['upgradeRights.set.enabled'] || !line.setComposition) continue;
       for (let unit = 0; unit < line.qty; unit++)

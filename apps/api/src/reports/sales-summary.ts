@@ -117,7 +117,8 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   for (const [orderId, its] of linesOf) {
     const o = order.get(orderId)!;
     const at = o.deliveredAt.getTime();
-    const shares = discountShares(its, o.discount, o.discountAmount);
+    // the snapshot's own discount: a Promo gift's line costs 0 and takes no share, so its net is 0
+    const shares = discountShares(its, o.discount, o.snapshotDiscountAmount);
     its.forEach((l, i) => {
       const net = l.lineTotal - shares[i]!;
       if (l.kind !== 'volume') {

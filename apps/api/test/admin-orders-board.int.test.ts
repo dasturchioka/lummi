@@ -155,6 +155,7 @@ describe('the orders board', () => {
       city: point.city,
       region: { ru: expect.stringMatching(/^Самарк/), uz: expect.any(String) },
       isGift: false,
+      promoGift: false,
     });
     // never moved: in its status since checkout
     expect(column(b, 'awaiting_payment').cards[0]).toMatchObject({

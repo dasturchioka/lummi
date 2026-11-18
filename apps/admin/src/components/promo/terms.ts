@@ -1,5 +1,5 @@
 import type { AdminPromoCode } from '@lummi/contracts';
-import { formatMoney, type Language } from '@lummi/i18n';
+import { formatMoney, promoGiftLabel, type Language } from '@lummi/i18n';
 import { num } from '@/components/broadcasts/format';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
@@ -7,6 +7,7 @@ import { fill } from '@/lib/utils';
 type Terms = Pick<
   AdminPromoCode,
   | 'kind'
+  | 'promoGift'
   | 'percent'
   | 'amount'
   | 'maxDiscount'
@@ -17,9 +18,14 @@ type Terms = Pick<
   | 'appliesToMarkedDown'
 >;
 
-/** «−10 %, не больше 30 000 сум» or «−50 000 сум»: what the code takes off the items. */
+/**
+ * «−10 %, не больше 30 000 сум», «−50 000 сум» or «Подарок: Rain Tea 10 мл»: what the code takes
+ * off the items, or adds to the order.
+ */
 export function discountOf(p: Terms, t: AdminMessages, language: Language): string {
   const m = t.promo;
+  if (p.kind === 'gift')
+    return p.promoGift ? fill(m.giftOff, { gift: promoGiftLabel(p.promoGift, language) }) : m.gift;
   if (p.kind === 'fixed') return `−${formatMoney(p.amount ?? 0, language)}`;
   const off = fill(m.percentOff, { n: String(p.percent ?? 0) });
   return p.maxDiscount === null

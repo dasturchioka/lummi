@@ -2,11 +2,13 @@ import {
   CANCEL_REASONS,
   cancelReasonsFor,
   ORDER_STATUSES,
+  promoGiftOf,
   type CancelReason,
   type OrderAction,
   type OrderStatus,
 } from '@lummi/contracts';
 import type { OrderCardPanel, OrderLineRow, OrderRow } from '@lummi/db';
+import { lineGiftLabel } from '../orders/promo-gift';
 import type { OrderMoney } from '../refunds/order-money';
 import {
   fill,
@@ -184,8 +186,11 @@ function cardText(
     '',
   );
 
+  // The Promo gift (ADR 0039) is said apart from the bought lines, so no squeeze ever drops it:
+  // staff must see what goes into the parcel. It costs nothing, so it stands in the discount's row.
   const sorted = [...d.lines].sort((a, b) => a.position - b.position);
-  const shown = squeeze.lines === null ? sorted : sorted.slice(0, squeeze.lines);
+  const bought = sorted.filter((l) => !l.promoGift);
+  const shown = squeeze.lines === null ? bought : bought.slice(0, squeeze.lines);
   for (const l of shown) {
     const name = escapeHtml(language === 'uz' ? l.nameUz : l.nameRu);
     const what = l.kind === 'volume' ? `${name}, ${l.ml} ${unitMl(language)}` : name;
@@ -193,9 +198,16 @@ function cardText(
     if (l.setComposition)
       out.push(`   ${escapeHtml(l.setComposition.map((f) => f.name).join(', '))}`);
   }
-  if (shown.length < sorted.length)
-    out.push(fill(g.moreLines, { n: String(sorted.length - shown.length) }));
-  if (o.discount) {
+  if (shown.length < bought.length)
+    out.push(fill(g.moreLines, { n: String(bought.length - shown.length) }));
+  const gift = o.discount?.type === 'promo_code' && promoGiftOf(o.discount) ? o.discount : null;
+  for (const l of sorted.filter((x) => x.promoGift)) {
+    const label = fill(admin.detail.promoGiftSource, { code: escapeHtml(gift?.code ?? '') });
+    out.push(`• ${label}: ${escapeHtml(lineGiftLabel(l, language))}`);
+    if (l.setComposition)
+      out.push(`   ${escapeHtml(l.setComposition.map((f) => f.name).join(', '))}`);
+  }
+  if (o.discount && !gift) {
     const source = fill(admin.detail.discountSource[o.discount.type], {
       code: o.discount.type === 'promo_code' ? escapeHtml(o.discount.code) : '',
     });

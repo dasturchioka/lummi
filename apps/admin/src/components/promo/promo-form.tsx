@@ -34,10 +34,24 @@ import { fill } from '@/lib/utils';
 import { CodeText } from './code-text';
 import { discountOf } from './terms';
 
+/** A fragrance a gift code may give, with the volumes it is sold in (ADR 0039). */
+export interface PromoGiftChoice {
+  id: number;
+  name: string;
+  volumes: number[];
+}
+
+/** The gift picker's value: the Discovery set, a fragrance (`f<id>`), or nothing yet. */
+const DISCOVERY = 'discovery';
+
 /** The form as typed: numbers stay text until the save, so a half-typed one is never rewritten. */
 interface Draft {
   code: string;
   kind: PromoKind;
+  /** A gift code's Promo gift: `discovery`, `f<fragrance id>`, or '' (none chosen). */
+  promoGift: string;
+  /** The Promo gift fragrance's volume in ml, as text; '' until chosen. */
+  promoGiftMl: string;
   percent: string;
   amount: string;
   maxDiscount: string;
@@ -58,6 +72,12 @@ function toDraft(p: AdminPromoCode | null): Draft {
   return {
     code: p?.code ?? '',
     kind: p?.kind ?? 'percent',
+    promoGift: !p?.promoGift
+      ? ''
+      : p.promoGift.kind === 'discovery_set'
+        ? DISCOVERY
+        : `f${p.promoGift.fragranceId}`,
+    promoGiftMl: p?.promoGift?.kind === 'volume' ? String(p.promoGift.ml) : '',
     percent: text(p?.percent ?? null),
     amount: text(p?.amount ?? null),
     maxDiscount: text(p?.maxDiscount ?? null),
@@ -74,21 +94,34 @@ function toDraft(p: AdminPromoCode | null): Draft {
 /** Blank is «none»; spaces typed as thousands separators (any kind, `\s`) are dropped; the schema checks the rest. */
 const number = (s: string) => (s.trim() === '' ? null : Number(s.replace(/\s/g, '')));
 
-/** The body the API takes; the fields of the other kind are sent empty, as the schema asks. */
+/** The chosen gift as the API takes it; null until both the fragrance and its volume are picked. */
+function chosenPromoGift(d: Draft): PromoCodeInput['promoGift'] {
+  if (d.promoGift === DISCOVERY) return { kind: 'discovery_set' };
+  const ml = Number(d.promoGiftMl);
+  if (!d.promoGift.startsWith('f') || (ml !== 10 && ml !== 30 && ml !== 50)) return null;
+  return { kind: 'volume', fragranceId: Number(d.promoGift.slice(1)), ml };
+}
+
+/**
+ * The body the API takes; the fields of the other kinds are sent empty, as the schema asks. A gift
+ * cuts no item's price, so its marked-down switch is sent off (ADR 0039).
+ */
 function toInput(d: Draft): PromoCodeInput {
   const percent = d.kind === 'percent';
+  const gift = d.kind === 'gift';
   return {
     code: d.code,
     kind: d.kind,
     percent: percent ? number(d.percent) : null,
-    amount: percent ? null : number(d.amount),
+    amount: d.kind === 'fixed' ? number(d.amount) : null,
     maxDiscount: percent ? number(d.maxDiscount) : null,
+    promoGift: gift ? chosenPromoGift(d) : null,
     expiresOn: d.expiresOn === '' ? null : d.expiresOn,
     minOrderTotal: number(d.minOrderTotal),
     totalLimit: number(d.totalLimit),
     perCustomerLimit: number(d.perCustomerLimit),
     newCustomersOnly: d.newCustomersOnly,
-    appliesToMarkedDown: d.appliesToMarkedDown,
+    appliesToMarkedDown: gift ? false : d.appliesToMarkedDown,
     active: d.active,
   };
 }
@@ -106,10 +139,13 @@ function moneyEcho(s: string, language: Language): string | undefined {
  */
 export function PromoForm({
   initial,
+  promoGiftChoices,
   language,
   t,
 }: {
   initial: AdminPromoCode | null;
+  /** The fragrances a gift code may give, by name. */
+  promoGiftChoices: PromoGiftChoice[];
   language: Language;
   t: AdminMessages;
 }) {
@@ -128,6 +164,9 @@ export function PromoForm({
 
   const messageFor = (field: string, code: string | undefined) => {
     if (field === 'code') return code === 'required' ? m.errors.required : m.errors.codeFormat;
+    // a fragrance without its volume reads as «choose the volume», not as no gift at all
+    if (field === 'promoGift')
+      return draft.promoGift.startsWith('f') ? m.errors.giftVolume : m.errors.gift;
     if (code === 'required') return m.errors.required;
     return field === 'percent' ? m.errors.percent : m.errors.number;
   };
@@ -170,6 +209,10 @@ export function PromoForm({
     if (res?.status === 409 && (res.body as { code?: string }).code === 'code_taken') {
       setErrors({ code: m.codeTaken });
       setBanner({ kind: 'error', text: m.codeTaken });
+    } else if (res?.status === 422) {
+      // the gift's volume left the catalog while the form was open
+      setErrors({ promoGift: m.errors.gift });
+      setBanner({ kind: 'error', text: m.fixErrors });
     } else setBanner({ kind: 'error', text: m.failed });
   };
 
@@ -207,7 +250,16 @@ export function PromoForm({
   );
 
   const percent = draft.kind === 'percent';
+  const giftKind = draft.kind === 'gift';
   const preview = toInput(draft);
+  const giftFragrance = draft.promoGift.startsWith('f')
+    ? promoGiftChoices.find((f) => `f${f.id}` === draft.promoGift)
+    : undefined;
+  // the preview names the gift as the list will
+  const previewGift: AdminPromoCode['promoGift'] =
+    preview.promoGift?.kind === 'volume'
+      ? { ...preview.promoGift, name: giftFragrance?.name ?? '', brand: '' }
+      : preview.promoGift;
   const used = saved?.everUsed ?? false;
   return (
     // fields focused by a failed save scroll clear of the top bar and the sticky save bar
@@ -280,6 +332,58 @@ export function PromoForm({
                 {numberField('percent', m.percent, m.percentHint)}
                 {numberField('maxDiscount', m.maxDiscount, m.maxDiscountHint, true)}
               </>
+            ) : giftKind ? (
+              <>
+                <Field
+                  id="p-gift"
+                  className="content-start"
+                  label={m.gift}
+                  hint={m.giftHint}
+                  error={errors.promoGift}
+                >
+                  <Select
+                    value={draft.promoGift}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      const f = promoGiftChoices.find((c) => `f${c.id}` === next);
+                      set('promoGift', next);
+                      // keep the volume when the new fragrance has it, else the only one it has
+                      setDraft((d) => ({
+                        ...d,
+                        promoGiftMl:
+                          f && f.volumes.includes(Number(d.promoGiftMl))
+                            ? d.promoGiftMl
+                            : f?.volumes.length === 1
+                              ? String(f.volumes[0])
+                              : '',
+                      }));
+                    }}
+                  >
+                    <option value="">{m.giftChoose}</option>
+                    <option value={DISCOVERY}>{m.giftDiscovery}</option>
+                    {promoGiftChoices.map((f) => (
+                      <option key={f.id} value={`f${f.id}`}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {giftFragrance && (
+                  <Field id="p-gift-ml" className="content-start" label={m.giftVolume}>
+                    <Select
+                      value={draft.promoGiftMl}
+                      onChange={(e) => set('promoGiftMl', e.target.value)}
+                    >
+                      <option value="">{m.giftVolumeChoose}</option>
+                      {giftFragrance.volumes.map((ml) => (
+                        <option key={ml} value={String(ml)}>
+                          {fill(m.giftMl, { ml: String(ml) })}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+              </>
             ) : (
               numberField('amount', m.amount, m.amountHint, true)
             )}
@@ -292,7 +396,7 @@ export function PromoForm({
             >
               {m.preview}
               <span className="font-semibold text-foreground tabular-nums">
-                {discountOf(preview, t, language)}
+                {discountOf({ ...preview, promoGift: previewGift }, t, language)}
               </span>
             </p>
           )}
@@ -322,12 +426,15 @@ export function PromoForm({
             checked={draft.newCustomersOnly}
             onChange={(v) => set('newCustomersOnly', v)}
           />
-          <Toggle
-            label={m.appliesToMarkedDown}
-            hint={m.appliesToMarkedDownHint}
-            checked={draft.appliesToMarkedDown}
-            onChange={(v) => set('appliesToMarkedDown', v)}
-          />
+          {/* a gift cuts no item's price: the marked-down switch means nothing for it */}
+          {!giftKind && (
+            <Toggle
+              label={m.appliesToMarkedDown}
+              hint={m.appliesToMarkedDownHint}
+              checked={draft.appliesToMarkedDown}
+              onChange={(v) => set('appliesToMarkedDown', v)}
+            />
+          )}
         </Section>
 
         <Section title={m.sectionLimits}>

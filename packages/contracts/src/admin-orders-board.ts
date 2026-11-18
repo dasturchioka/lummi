@@ -88,6 +88,8 @@ export const adminBoardCardSchema = z.object({
   city: z.string().nullable(),
   region: bilingualSchema,
   isGift: z.boolean(),
+  /** It holds a gift code's free item (ADR 0039): «Подарок по промокоду». */
+  promoGift: z.boolean(),
 });
 export type AdminBoardCardDto = z.infer<typeof adminBoardCardSchema>;
 

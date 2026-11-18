@@ -87,7 +87,7 @@ const SOLD_STATUSES = PAID_STATUSES.filter((s) => s !== 'returned');
  * Paid orders per fragrance for the top-sales ranking: orders whose payment was confirmed since
  * `since` and that are still sold (not cancelled, not returned). A fragrance counts once per
  * order, bought as a bottle or picked into a builder set; the Discovery set's five are the
- * owner's choice, so its sales lift none of them. A Refund (#40) leaves an order's status alone
+ * owner's choice, so its sales lift none of them, and neither does a gift code's free bottle. A Refund (#40) leaves an order's status alone
  * and is not looked at.
  */
 export async function paidOrderCounts(db: DbOrTx, since: Date): Promise<Map<number, number>> {
@@ -100,7 +100,8 @@ export async function paidOrderCounts(db: DbOrTx, since: Date): Promise<Map<numb
     from (
       select l.order_id, l.fragrance_id
       from ${orderLines} l
-      where l.kind = 'volume' and l.fragrance_id is not null
+      -- a gift code's free bottle was not bought (ADR 0039)
+      where l.kind = 'volume' and l.fragrance_id is not null and not l.promo_gift
       union all
       select l.order_id, (pick->>'fragranceId')::bigint
       from ${orderLines} l cross join lateral jsonb_array_elements(l.set_composition) pick

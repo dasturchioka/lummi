@@ -487,6 +487,34 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     ['Код NEW10', 'Процент: 10 → 15'],
     [],
   ],
+  [
+    'promo.created',
+    {
+      code: 'RAINTEA',
+      kind: 'gift',
+      percent: null,
+      amount: null,
+      promoGift: { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea', brand: 'Bvlgari' },
+    },
+    {},
+    ['Код RAINTEA: подарок Rain Tea 10 мл'],
+    ['Kod RAINTEA: sovgʻa Rain Tea 10 ml'],
+  ],
+  [
+    'promo.updated',
+    {
+      code: 'RAINTEA',
+      changed: {
+        promoGift: [
+          { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea' },
+          { kind: 'discovery_set' },
+        ],
+      },
+    },
+    {},
+    ['Код RAINTEA', 'Подарок: Rain Tea 10 мл → Discovery set'],
+    ['Kod RAINTEA', 'Sovgʻa: Rain Tea 10 ml → Discovery set'],
+  ],
   ['promo.deleted', { code: 'NEW10' }, {}, ['Код NEW10'], ['Kod NEW10']],
   [
     'campaign_link.created',

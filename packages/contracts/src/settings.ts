@@ -642,6 +642,23 @@ export const settingDefinitions = {
       uz: 'Shuncha urinishdan keyin yangi kodni oyna tugagach kiritish mumkin.',
     },
   },
+  /**
+   * A delivered Promo gift (ADR 0039) opens Upgrade rights like a bought one: a gift Discovery set
+   * while the set source is on, a gift 10 ml while the 10 ml source is on. The customer to confirm.
+   */
+  'promo.giftOpensUpgradeRights': {
+    schema: z.boolean(),
+    default: true,
+    area: 'pricing',
+    label: {
+      ru: 'Подарок по промокоду даёт скидку на полный флакон',
+      uz: 'Promokod sovgʻasi toʻliq flakonga chegirma beradi',
+    },
+    hint: {
+      ru: 'Включено: доставленный подарок (Discovery set или флакон 10 мл) открывает скидку на полный флакон, как купленный. Выключено: не открывает.',
+      uz: 'Yoqilgan: yetkazilgan sovgʻa (Discovery set yoki 10 ml flakon) sotib olingandek toʻliq flakonga chegirma ochadi. Oʻchirilgan: ochmaydi.',
+    },
+  },
   // Birthday coupon (TZ §3.8, #30). Its threshold base and marked-down flag are the
   // `pricing.thresholdBase` and `pricing.discountsApplyToMarkedDown` entries above. Percent and
   // cap are fixed on each coupon when it is issued, as its bot message announced them.

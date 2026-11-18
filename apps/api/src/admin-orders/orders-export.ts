@@ -1,4 +1,5 @@
 import {
+  promoGiftOf,
   utcToTashkent,
   type AdminOrdersExportFilters,
   type AdminOrdersExportParams,
@@ -24,6 +25,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { AuditService } from '../audit/audit.service';
 import { customerName, PAID_BY } from '../orders/order-read';
+import { reportedMoney } from '../reports/report-orders';
 import { MONEY, sheet } from '../reports/report-workbook';
 import { DB } from '../tokens';
 import { listedOrders, orderFilters } from './admin-orders.service';
@@ -105,8 +107,10 @@ type ExportRow = Awaited<ReturnType<typeof rowsFor>>[number];
 /** The discount's source as the order page words it. */
 function discountSource(d: Discount | null, language: Language): string {
   if (!d) return '';
-  const src = adminMessages[language].admin.orders.detail.discountSource;
-  return d.type === 'promo_code' ? fill(src.promo_code, { code: d.code }) : src[d.type];
+  const detail = adminMessages[language].admin.orders.detail;
+  const src = detail.discountSource;
+  if (d.type !== 'promo_code') return src[d.type];
+  return fill(promoGiftOf(d) ? detail.promoGiftSource : src.promo_code, { code: d.code });
 }
 
 /** The workbook: one sheet, in the admin's language; money cells are numbers in whole so'm. */
@@ -162,13 +166,16 @@ async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Bu
       items: lines
         .map((l) => {
           const name = language === 'uz' ? l.nameUz : l.nameRu;
-          return l.kind === 'volume'
-            ? `${name}, ${l.ml} ${x.ml} × ${l.qty}`
-            : `${name} (${o.detail.setOf}) × ${l.qty}`;
+          const item =
+            l.kind === 'volume'
+              ? `${name}, ${l.ml} ${x.ml} × ${l.qty}`
+              : `${name} (${o.detail.setOf}) × ${l.qty}`;
+          return l.promoGift ? `${o.detail.promoGift}: ${item}` : item;
         })
         .join('\n'),
-      subtotal: ord.itemsSubtotal,
-      discount: ord.discountAmount,
+      // as the reports count them: a Promo gift at its regular price in both (ADR 0039)
+      subtotal: reportedMoney(ord).itemsBeforeDiscount,
+      discount: reportedMoney(ord).discount,
       discountSource: discountSource(ord.discount, language),
       delivery: ord.deliveryFee,
       total: ord.total,

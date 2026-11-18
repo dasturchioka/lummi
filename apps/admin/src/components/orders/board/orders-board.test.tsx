@@ -92,6 +92,7 @@ const card = (number: number, s: OrderStatus): AdminBoardCardDto => ({
   city: 'Самарканд',
   region: { ru: 'Самаркандская область', uz: 'Samarqand viloyati' },
   isGift: false,
+  promoGift: false,
 });
 const boardOf = (cards: AdminBoardCardDto[]): AdminOrdersBoardDto => ({
   at: '2026-11-16T05:00:00.000Z',

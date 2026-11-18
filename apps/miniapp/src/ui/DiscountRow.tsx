@@ -1,4 +1,4 @@
-import type { Discount } from '@lummi/contracts';
+import { promoGiftOf, type Discount } from '@lummi/contracts';
 import { Fragment, type ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Figure } from './Figure';
@@ -53,20 +53,22 @@ export function DiscountRow({
   was?: string;
 }) {
   const { t } = usePrefs();
+  // a gift code takes nothing off: its row names the gift and costs 0 (ADR 0039)
+  const gift = promoGiftOf(discount) !== null;
   return (
     <div
       className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 ${was ? 'text-totals-ink/60' : 'text-totals-accent'}`}
       data-testid={testId}
     >
-      <dt className="min-w-0">{t.cart.discount}</dt>
+      <dt className="min-w-0">{gift ? t.cart.promoGift : t.cart.discount}</dt>
       <dd className="type-price">
         {was ? (
           <s className="font-medium decoration-totals-ink/60">
             <span className="sr-only">{was}: </span>
-            <Figure amount={discount.amount} minus />
+            <Figure amount={discount.amount} minus={!gift} />
           </s>
         ) : (
-          <Figure amount={discount.amount} minus />
+          <Figure amount={discount.amount} minus={!gift} />
         )}
       </dd>
       <dd className="type-caption col-span-2 [overflow-wrap:anywhere] opacity-80">

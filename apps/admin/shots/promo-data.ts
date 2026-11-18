@@ -8,6 +8,7 @@ const base: PromoCodeInput = {
   percent: null,
   amount: null,
   maxDiscount: null,
+  promoGift: null,
   expiresOn: null,
   minOrderTotal: null,
   totalLimit: null,

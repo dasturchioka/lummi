@@ -48,6 +48,30 @@ export const builderLineSchema = z.object({
   short: z.array(z.object({ slug: z.string(), name: z.string(), inCart: z.boolean() })),
 });
 
+/**
+ * A gift code's free item (ADR 0039), shown under the lines at 0 («Подарок по промокоду») while
+ * the quote applies the code. It is not a cart line: no quantity, no stepper, no removal.
+ */
+export const promoGiftLineSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('volume'),
+    photo: z.string().nullable(),
+    slug: z.string(),
+    name: z.string(),
+    brand: z.string(),
+    ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
+    /** What the shopper pays for it: always 0, said by the server (ADR 0001). */
+    lineTotal: z.literal(0),
+  }),
+  z.object({
+    kind: z.literal('discovery_set'),
+    photo: z.string().nullable(),
+    fragrances: setFragrances,
+    lineTotal: z.literal(0),
+  }),
+]);
+export type PromoGiftLineDto = z.infer<typeof promoGiftLineSchema>;
+
 export const cartLineSchema = z.discriminatedUnion('kind', [
   volumeLineSchema,
   discoveryLineSchema,
@@ -99,6 +123,8 @@ export const cartSchema = z.object({
   suggestions: z.array(cartSuggestionSchema),
   /** The link-prefilled or entered promo code (the promo ticket reads and clears it). */
   promoCode: z.string().nullable(),
+  /** The applied gift code's free item (ADR 0039); null when the quote applies no gift. */
+  promoGift: promoGiftLineSchema.nullable(),
   /**
    * The discount switch (#39): every choice, cheapest total first and «Не применять» last, in an
    * order that does not move when the shopper switches. Empty when there is nothing to choose
