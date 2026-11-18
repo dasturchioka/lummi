@@ -6,7 +6,7 @@ import type {
   DiscountChoiceDto,
   QuoteLine,
 } from '@lummi/contracts';
-import { CART_MAX_QTY } from '@lummi/contracts/constants';
+import { CART_MAX_QTY, SET_VIAL_ML } from '@lummi/contracts/constants';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useIsMutating } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
@@ -358,7 +358,7 @@ function Line({
                   className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
                   data-testid="set-name"
                 >
-                  {line.kind === 'discovery_set' ? s.lineDiscovery : s.lineBuilder}
+                  {line.kind === 'discovery_set' ? s.discovery[line.vialMl].line : s.lineBuilder}
                 </p>
               </>
             )}
@@ -654,7 +654,7 @@ export function CartView({
         )}
         {/* a gift code's free item (ADR 0039): not a cart line, so no stepper and no removal */}
         {data.promoGift ? (
-          <OrderLine line={promoGiftLine(data.promoGift, s.lineDiscovery)} />
+          <OrderLine line={promoGiftLine(data.promoGift, s.discovery[SET_VIAL_ML].line)} />
         ) : null}
       </Card>
       <PromoField

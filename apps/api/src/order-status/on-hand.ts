@@ -14,8 +14,8 @@ type LineKind = OrderLineRow['kind'];
 
 /**
  * Where a line kind's bottles are on hand. A volume line and a builder set line both hold
- * 10/30/50 ml volumes (`lineVolumeUnits`, the Reserve's own rule); the Discovery set's on hand is
- * its own row (ADR 0009). A new line kind needs a case here and a shelf below, or this stops
+ * volumes (`lineVolumeUnits`, the Reserve's own rule); a Discovery set's on hand is its own row
+ * (ADR 0009), keyed by its vial ml, the line's `ml` (ADR 0042). A new line kind needs a case here and a shelf below, or this stops
  * compiling.
  */
 function shelfOf(kind: LineKind) {
@@ -49,12 +49,10 @@ interface ShelfOps {
   write(tx: DbOrTx, id: number, onHand: number): Promise<void>;
 }
 
-/** The row id of the single Discovery set row, as a number for `OnHandChange` (its key is `true`). */
-const DISCOVERY_ROW = 1;
-
 /**
- * The shelves in lock order: the Discovery row first, then volumes by ascending id. Checkout takes
- * them in the same order, so a handover and a concurrent checkout cannot wait on each other.
+ * The shelves in lock order: the Discovery rows first (ascending vial ml, their key and the
+ * `OnHandChange` id), then volumes by ascending id. Checkout takes them in the same order, so a
+ * handover and a concurrent checkout cannot wait on each other.
  */
 const SHELF_ORDER: readonly Shelf[] = ['discovery_set', 'volumes'];
 
@@ -62,26 +60,28 @@ const SHELVES: Record<Shelf, ShelfOps> = {
   discovery_set: {
     async bottles(tx, orderId, positions) {
       if (positions.length === 0) return new Map();
-      const { rows } = await tx.execute<{ qty: string | null }>(sql`
-        select sum(qty) as qty from order_lines
+      const { rows } = await tx.execute<{ ml: string; qty: string }>(sql`
+        select ml, sum(qty) as qty from order_lines
         where order_id = ${orderId} and kind = 'discovery_set'
           and position in (${sql.join(
             positions.map((p) => sql`${p}`),
             sql`, `,
-          )})`);
-      const qty = Number(rows[0]?.qty ?? 0);
-      return qty > 0 ? new Map([[DISCOVERY_ROW, qty]]) : new Map();
+          )})
+        group by ml`);
+      return new Map(rows.map((r) => [Number(r.ml), Number(r.qty)]));
     },
     async lock(tx, ids) {
       if (ids.length === 0) return new Map();
-      const [row] = await tx
-        .select({ onHand: discoverySet.onHand })
+      const rows = await tx
+        .select({ vialMl: discoverySet.vialMl, onHand: discoverySet.onHand })
         .from(discoverySet)
+        .where(inArray(discoverySet.vialMl, ids))
+        .orderBy(asc(discoverySet.vialMl))
         .for('update');
-      return new Map(row ? [[DISCOVERY_ROW, row.onHand]] : []);
+      return new Map(rows.map((r) => [r.vialMl, r.onHand]));
     },
-    async write(tx, _id, onHand) {
-      await tx.update(discoverySet).set({ onHand }).where(eq(discoverySet.id, true));
+    async write(tx, vialMl, onHand) {
+      await tx.update(discoverySet).set({ onHand }).where(eq(discoverySet.vialMl, vialMl));
     },
   },
   volumes: {

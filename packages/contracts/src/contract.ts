@@ -100,6 +100,8 @@ import {
 import {
   bottlingBodySchema,
   bottlingResultSchema,
+  setBottlingBodySchema,
+  setBottlingResultSchema,
   oilReceiptCorrectionSchema,
   oilReceiptInputSchema,
   oilReceiptSchema,
@@ -177,6 +179,8 @@ import {
   adminDiscoverySetSchema,
   adminSetsErrorSchema,
   builderSchema,
+  discoveryQuerySchema,
+  discoveryVialMlSchema,
   discoverySetInputSchema,
   discoverySetSchema,
   setsErrorSchema,
@@ -463,8 +467,10 @@ export const contract = c.router({
     discovery: {
       method: 'GET',
       path: '/sets/discovery',
+      query: discoveryQuerySchema,
       responses: { 200: discoverySetSchema, 401: setsErrorSchema },
-      summary: 'The Discovery set: price, its own availability, photo and its five fragrances',
+      summary:
+        'A Discovery set (`vialMl` 10, the default, or 5): price, its own availability, photo and its five fragrances',
     },
     builder: {
       method: 'GET',
@@ -497,7 +503,8 @@ export const contract = c.router({
       path: '/cart/sets/discovery',
       body: addDiscoveryBodySchema,
       responses: { 200: cartSchema, 401: addSetErrorSchema, 409: addSetErrorSchema },
-      summary: 'Add the Discovery set (capped at its own stock); 409 sold_out when none is left',
+      summary:
+        'Add a Discovery set (`vialMl`, capped at its own stock); 409 sold_out when none is left',
     },
     addBuilder: {
       method: 'POST',
@@ -1291,12 +1298,14 @@ const adminSets = c.router({
     get: {
       method: 'GET',
       path: '/admin/sets/discovery',
+      query: discoveryQuerySchema,
       responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
-      summary: 'Staff: the Discovery set with its own on hand, reserve and available',
+      summary: 'Staff: a Discovery set (`vialMl`) with its own on hand, reserve and available',
     },
     update: {
       method: 'PUT',
       path: '/admin/sets/discovery',
+      query: discoveryQuerySchema,
       body: discoverySetInputSchema,
       responses: {
         200: adminDiscoverySetSchema,
@@ -1304,11 +1313,13 @@ const adminSets = c.router({
         403: adminSetsErrorSchema,
         422: adminSetsErrorSchema,
       },
-      summary: 'Owner only: the price (builder too) and the five fragrances, in order (audited)',
+      summary:
+        "Owner only: a Discovery set's price (the 5 × 10 ml one's is the builder's too) and its five fragrances, in order (audited)",
     },
     setOnHand: {
       method: 'PATCH',
       path: '/admin/sets/discovery/on-hand',
+      query: discoveryQuerySchema,
       body: onHandBodySchema,
       responses: {
         200: adminDiscoverySetSchema,
@@ -2033,6 +2044,20 @@ const adminWarehouse = c.router({
       },
       summary:
         'Owner and manager: bottle oil into volumes; oil by the cost formula with the loss, 409 oil_short with the shortfall',
+    },
+    bottleSet: {
+      method: 'POST',
+      path: '/admin/warehouse/sets/:vialMl/bottlings',
+      pathParams: z.object({ vialMl: z.coerce.number().pipe(discoveryVialMlSchema) }),
+      body: setBottlingBodySchema,
+      responses: {
+        201: setBottlingResultSchema,
+        401: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+        422: warehouseErrorSchema,
+      },
+      summary:
+        "Owner and manager: fill boxes of a Discovery set straight from its five fragrances' oil (#79); 409 oil_short names the fragrance, 422 while the set is not five",
     },
   },
 });

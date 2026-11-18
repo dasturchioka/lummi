@@ -1,4 +1,4 @@
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_VIAL_MLS, SET_SIZE, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -16,11 +16,12 @@ import {
 import { available, reservedByVolume } from '../catalog/catalog.service';
 
 /**
- * What is held back of the Discovery set's own stock: the units on Discovery lines of orders that
- * are neither handed to BTS nor cancelled (`RESERVING_STATUSES`, ADR 0010). Like
- * `reservedByVolume`, the one place that knows, so "available" is on hand minus reserve.
+ * What is held back of a Discovery set's own stock: the units on its lines (a Discovery line's `ml`
+ * is its vial size, ADR 0042) of orders that are neither handed to BTS nor cancelled
+ * (`RESERVING_STATUSES`, ADR 0010). Like `reservedByVolume`, the one place that knows, so
+ * "available" is on hand minus reserve.
  */
-export async function reservedDiscovery(db: DbOrTx): Promise<number> {
+export async function reservedDiscovery(db: DbOrTx, vialMl: DiscoveryVialMl): Promise<number> {
   const statuses = sql.join(
     RESERVING_STATUSES.map((s) => sql`${s}`),
     sql`, `,
@@ -28,16 +29,32 @@ export async function reservedDiscovery(db: DbOrTx): Promise<number> {
   const { rows } = await db.execute<{ reserved: string | null }>(sql`
     select sum(ol.qty) as reserved
     from order_lines ol join orders o on o.id = ol.order_id
-    where o.status in (${statuses}) and ol.kind = 'discovery_set'`);
+    where o.status in (${statuses}) and ol.kind = 'discovery_set' and ol.ml = ${vialMl}`);
   return Number(rows[0]?.reserved ?? 0);
 }
 
-/** The Discovery set row. The migration inserts it, so it always exists. */
-export async function readDiscoverySet(db: DbOrTx, lock = false): Promise<DiscoverySetRow> {
-  const q = db.select().from(discoverySet).limit(1);
+/** A Discovery set's row. The migrations insert both, so it always exists. */
+export async function readDiscoverySet(
+  db: DbOrTx,
+  vialMl: DiscoveryVialMl,
+  lock = false,
+): Promise<DiscoverySetRow> {
+  const q = db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl));
   const [row] = await (lock ? q.for('update') : q);
-  if (!row) throw new Error('discovery_set row missing: run the migrations');
+  if (!row) throw new Error(`discovery_set ${vialMl} ml row missing: run the migrations`);
   return row;
+}
+
+/**
+ * Locks the rows of the given Discovery sets `FOR UPDATE` in ascending vial ml: the order every
+ * checkout and handover takes them in, before any volume, so none waits on another.
+ */
+export async function lockDiscoverySets(
+  db: DbOrTx,
+  vialMls: Iterable<DiscoveryVialMl>,
+): Promise<void> {
+  const wanted = DISCOVERY_VIAL_MLS.filter((ml) => [...vialMls].includes(ml)).sort((a, b) => a - b);
+  for (const ml of wanted) await readDiscoverySet(db, ml, true);
 }
 
 export interface SetFragranceRow {
@@ -50,8 +67,11 @@ export interface SetFragranceRow {
   hidden: boolean;
 }
 
-/** The Discovery set's composition in the owner's order. */
-export async function readComposition(db: DbOrTx): Promise<SetFragranceRow[]> {
+/** A Discovery set's composition in the owner's order. */
+export async function readComposition(
+  db: DbOrTx,
+  vialMl: DiscoveryVialMl,
+): Promise<SetFragranceRow[]> {
   return db
     .select({
       id: fragrances.id,
@@ -64,6 +84,7 @@ export async function readComposition(db: DbOrTx): Promise<SetFragranceRow[]> {
     })
     .from(discoverySetItems)
     .innerJoin(fragrances, eq(fragrances.id, discoverySetItems.fragranceId))
+    .where(eq(discoverySetItems.vialMl, vialMl))
     .orderBy(asc(discoverySetItems.position));
 }
 
@@ -80,6 +101,7 @@ export function discoveryAvailable(
 }
 
 export interface DiscoveryState {
+  vialMl: DiscoveryVialMl;
   row: DiscoverySetRow;
   composition: SetFragranceRow[];
   reserved: number;
@@ -88,17 +110,22 @@ export interface DiscoveryState {
 }
 
 /**
- * The one read of the Discovery set: row, composition, reserve and what is available. The shop,
+ * The one read of a Discovery set: row, composition, reserve and what is available. The shop,
  * the cart, the admin and (with `lock`) order creation all go through it, so "available" is
  * judged in one place.
  */
 export async function loadDiscovery(
   db: DbOrTx,
+  vialMl: DiscoveryVialMl,
   opts: { lock?: boolean } = {},
 ): Promise<DiscoveryState> {
-  const row = await readDiscoverySet(db, opts.lock);
-  const [composition, reserved] = await Promise.all([readComposition(db), reservedDiscovery(db)]);
+  const row = await readDiscoverySet(db, vialMl, opts.lock);
+  const [composition, reserved] = await Promise.all([
+    readComposition(db, vialMl),
+    reservedDiscovery(db, vialMl),
+  ]);
   return {
+    vialMl,
     row,
     composition,
     reserved,

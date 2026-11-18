@@ -29,6 +29,7 @@ function failure(f: WarehouseFailure) {
           neededGrams: gramsFromMg(f.neededMg),
           balanceGrams: gramsFromMg(f.balanceMg),
           shortGrams: gramsFromMg(f.neededMg - f.balanceMg),
+          ...(f.fragrance === undefined ? {} : { fragrance: f.fragrance }),
         },
       };
   }
@@ -118,6 +119,17 @@ export class WarehouseController {
     return tsRestHandler(adminContract.warehouse.bottle, async ({ params, body }) => {
       const res = await this.warehouse.bottle(actor, params.id, body);
       return res.ok ? { status: 201 as const, body: res.value } : failure(res);
+    });
+  }
+
+  @TsRestHandler(adminContract.warehouse.bottleSet)
+  bottleSet(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.bottleSet, async ({ params, body }) => {
+      const res = await this.warehouse.bottleSet(actor, params.vialMl, body.quantity);
+      if (res.ok) return { status: 201 as const, body: res.value };
+      const f = failure(res);
+      // a set has no 404: both rows always exist
+      return f.status === 404 ? { status: 422 as const, body: { code: 'invalid' as const } } : f;
     });
   }
 

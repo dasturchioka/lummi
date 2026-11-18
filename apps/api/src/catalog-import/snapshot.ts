@@ -6,6 +6,7 @@ import {
   fragranceSimilar,
   fragrances,
   notes,
+  sellableVolume,
   volumes,
   type DbOrTx,
 } from '@lummi/db';
@@ -79,7 +80,12 @@ export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
       .select()
       .from(fragranceSimilar)
       .orderBy(asc(fragranceSimilar.fragranceId), asc(fragranceSimilar.position)),
-    db.select().from(volumes).orderBy(asc(volumes.fragranceId), asc(volumes.ml)),
+    // the workbook's volumes: the 5 ml is counted on the stock page, never sold (ADR 0042)
+    db
+      .select()
+      .from(volumes)
+      .where(sellableVolume())
+      .orderBy(asc(volumes.fragranceId), asc(volumes.ml)),
   ]);
   const familyName = new Map(fam.map((f) => [f.id, f.nameRu]));
   const noteName = new Map(nts.map((n) => [n.id, n.nameRu]));

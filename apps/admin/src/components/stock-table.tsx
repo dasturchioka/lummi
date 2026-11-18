@@ -6,6 +6,7 @@ import {
   type StockLevel,
   type StockRow,
 } from '@lummi/contracts';
+import { asDiscoveryVialMl } from '@lummi/contracts/constants';
 import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import Link from 'next/link';
@@ -166,8 +167,12 @@ export function StockTable({
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const s = t.stock;
 
+  /** A Discovery set row's `ml` is its vial size (ADR 0042). */
+  const setMl = (r: StockRow) => asDiscoveryVialMl(r.ml);
   const label = (r: StockRow) =>
-    r.kind === 'discovery' ? s.discovery : `${r.name} ${fill(s.ml, { ml: String(r.ml) })}`;
+    r.kind === 'discovery'
+      ? `${s.discovery} ${fill(s.discoverySub, { ml: String(setMl(r)) })}`
+      : `${r.name} ${fill(s.ml, { ml: String(r.ml) })}`;
 
   const open = (r: StockRow) => {
     setSavedKey(null);
@@ -191,7 +196,7 @@ export function StockTable({
     try {
       const res =
         r.kind === 'discovery'
-          ? await browserApi.sets.setOnHand({ body })
+          ? await browserApi.sets.setOnHand({ query: { vialMl: setMl(r) }, body })
           : await browserApi.onHand.set({ params: { id: r.volumeId! }, body });
       if (res.status === 200) {
         close();
@@ -282,7 +287,7 @@ export function StockTable({
     );
   const sub = (r: StockRow) =>
     r.kind === 'discovery'
-      ? s.discoverySub
+      ? fill(s.discoverySub, { ml: String(setMl(r)) })
       : [fill(s.ml, { ml: String(r.ml) }), r.hidden ? s.hiddenTag : null]
           .filter(Boolean)
           .join(' · ');
@@ -296,7 +301,8 @@ export function StockTable({
       rows: StockRow[];
     }[]
   >((out, r) => {
-    const key = r.kind === 'discovery' ? 'discovery' : `f${r.fragranceId}`;
+    // each Discovery set is a card of its own
+    const key = r.kind === 'discovery' ? r.key : `f${r.fragranceId}`;
     const last = out[out.length - 1];
     if (last && last.key === key) last.rows.push(r);
     else
@@ -353,7 +359,7 @@ export function StockTable({
                       <span className="flex items-center gap-2">
                         <span className="font-semibold">
                           {r.kind === 'discovery'
-                            ? s.discoverySub
+                            ? fill(s.discoverySub, { ml: String(setMl(r)) })
                             : fill(s.ml, { ml: String(r.ml) })}
                         </span>
                         <ShortTag level={r.level} t={t} />

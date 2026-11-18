@@ -25,6 +25,7 @@ const right = (over: Partial<MyUpgradeRightDto> = {}): MyUpgradeRightDto => ({
   source: 'set',
   sourceOrderNumber: 1042,
   percent: 20,
+  anyFragrance: false,
   fragrances: [
     { name: 'Symphony', brand: 'Louis Vuitton', slug: 'symphony' },
     { name: 'Megamare', brand: 'Orto Parisi', slug: 'megamare' },

@@ -8,13 +8,13 @@ import { Thumb } from '../ui/Thumb';
 import { useOrdersText } from './queries';
 
 /**
- * What a line row shows: an order line as bought, the buy-now item priced by its quote, or a gift
- * code's free item (`promoGift`, ADR 0039).
+ * What a line row shows: an order line as bought, the buy-now item priced by its quote, a gift
+ * code's free item (`promoGift`, ADR 0039) or a first order's gift sample (`giftSample`, ADR 0042).
  */
 export type OrderLineView = Pick<
   OrderLineDto,
   'kind' | 'brand' | 'name' | 'setComposition' | 'photo' | 'ml' | 'qty' | 'lineTotal' | 'markedDown'
-> & { promoGift?: boolean };
+> & { promoGift?: boolean; giftSample?: boolean };
 
 /**
  * A line as bought (DESIGN.md compact row): thumbnail, «по мотивам» and the italic name over the
@@ -46,9 +46,9 @@ export function OrderLine({ line }: { line: OrderLineView }) {
           {line.name[language]}
         </p>
         {line.setComposition ? <SetFragranceList items={line.setComposition} /> : null}
-        {line.promoGift ? (
+        {line.promoGift || line.giftSample ? (
           <p className="type-caption mt-1 font-medium text-pretty text-sage-ink">
-            {t.cart.promoGift}
+            {line.promoGift ? t.cart.promoGift : t.cart.giftSample}
           </p>
         ) : null}
         <div className="mt-auto flex items-baseline justify-between gap-3 pt-1">
@@ -59,7 +59,7 @@ export function OrderLine({ line }: { line: OrderLineView }) {
           </p>
           <Money
             amount={line.lineTotal}
-            className={`shrink-0 ${line.markedDown || line.promoGift ? 'text-sage-ink' : ''}`}
+            className={`shrink-0 ${line.markedDown || line.promoGift || line.giftSample ? 'text-sage-ink' : ''}`}
           />
         </div>
       </div>

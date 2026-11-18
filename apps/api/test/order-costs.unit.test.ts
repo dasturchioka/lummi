@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { orderCostSnapshot } from '../src/cost/freeze-order-costs';
 import { lineUnitCost, saleProfit } from '../src/cost/order-costs';
 import { defaultCostSettings, type CostSettings } from '../src/cost/unit-cost';
 
@@ -170,5 +171,64 @@ describe("a line's unit cost (the order's goods)", () => {
 
   it('a volume the model has no cost for (no such bottle) has none', () => {
     expect(lineUnitCost({ kind: 'volume', fragranceId: 1, ml: 100 }, of, s).unitCost).toBeNull();
+  });
+});
+
+describe("a first order's gift sample in the cost snapshot (#79, ADR 0042)", () => {
+  const s = defaultCostSettings();
+  const oil = new Map([
+    [1, { name: 'Guidance', oilPrice: 3950 }],
+    [2, { name: 'Tygar', oilPrice: null }],
+  ]);
+  const order = { itemsSubtotal: 189_000, discountAmount: 0, deliveryFee: 25_000 };
+  const bottle = {
+    kind: 'volume' as const,
+    fragranceId: 1,
+    ml: 30,
+    setComposition: null,
+    qty: 1,
+    giftSample: false,
+  };
+  const sample = { ...bottle, ml: 5, giftSample: true };
+  const at = new Date('2026-11-19T10:00:00Z');
+
+  it('costs the calculator’s `giftCost` for its own fragrance, apart from the goods', () => {
+    // 5 ml vial of oil 3950: (oil 5 720.11 + ethanol 540.75 + bottle 2 000 + label 500 + filling
+    // 1 000) × 1.02 + card 1 000 = 10 956.07
+    const { snapshot, unitCosts } = orderCostSnapshot(order, [bottle, sample], oil, s, at);
+    expect(unitCosts).toEqual([52_086, 10_956]);
+    expect(snapshot.profit).toMatchObject({
+      revenue: 189_000,
+      goods: 52_086,
+      giftSample: 10_956,
+      // 52 086 + mailer 2 000 + ad 3 000 + tax 1 890 + sample 10 956
+      cost: 69_932,
+      profit: 119_068,
+    });
+    expect(snapshot.missing).toEqual([]);
+  });
+
+  it('its fill is the setting `cost.order.giftSampleMl`', () => {
+    const three = { ...s, order: { ...s.order, giftSampleMl: 3 } };
+    const { unitCosts } = orderCostSnapshot(order, [bottle, sample], oil, three, at);
+    expect(unitCosts[1]).toBe(8_402);
+  });
+
+  it('no oil price for the sample’s fragrance, no profit: the fragrance is named', () => {
+    const { snapshot, unitCosts } = orderCostSnapshot(
+      order,
+      [bottle, { ...sample, fragranceId: 2 }],
+      oil,
+      s,
+      at,
+    );
+    expect(unitCosts).toEqual([52_086, null]);
+    expect(snapshot.profit).toBeNull();
+    expect(snapshot.missing).toEqual(['Tygar']);
+  });
+
+  it('an order without one costs no sample', () => {
+    const { snapshot } = orderCostSnapshot(order, [bottle], oil, s, at);
+    expect(snapshot.profit).toMatchObject({ giftSample: 0, cost: 58_976 });
   });
 });

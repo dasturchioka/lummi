@@ -16,6 +16,7 @@ import {
   fragranceSimilar,
   fragrances,
   inArray,
+  sellableVolume,
   notes,
   orderEvents,
   orderLines,
@@ -287,7 +288,8 @@ export class CatalogService {
       this.db
         .select()
         .from(volumes)
-        .where(only ? inArray(volumes.fragranceId, only) : undefined)
+        // a 5 ml bottle is never sold alone (ADR 0042)
+        .where(and(sellableVolume(), only ? inArray(volumes.fragranceId, only) : undefined))
         .orderBy(asc(volumes.ml)),
     ]);
     const reserved = await reservedByVolume(
@@ -466,7 +468,11 @@ export class CatalogService {
         .innerJoin(notes, eq(notes.id, fragranceNotes.noteId))
         .where(eq(fragranceNotes.fragranceId, f.id))
         .orderBy(asc(fragranceNotes.position)),
-      this.db.select().from(volumes).where(eq(volumes.fragranceId, f.id)).orderBy(asc(volumes.ml)),
+      this.db
+        .select()
+        .from(volumes)
+        .where(and(eq(volumes.fragranceId, f.id), sellableVolume()))
+        .orderBy(asc(volumes.ml)),
     ]);
     const reserved = await reservedByVolume(
       this.db,

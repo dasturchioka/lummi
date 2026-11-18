@@ -14,6 +14,7 @@ import {
   type OrdersPageDto,
   type PromoGiftItem,
 } from '@lummi/contracts';
+import { SET_VIAL_ML, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -52,7 +53,8 @@ import {
   type LineSource,
   type StoredLine,
 } from '../cart/load-cart';
-import { readDiscoverySet } from '../sets/sets';
+import { lockDiscoverySets } from '../sets/sets';
+import { giftSampleLine, giftSampleStillAvailable, pickGiftSample } from './gift-sample';
 import { toRegionDto } from '../delivery/dto';
 import { defaultSavedPoint, listSavedPoints, rememberPoint } from '../delivery/saved-points';
 import { buyNowLine } from './buy-now';
@@ -204,8 +206,9 @@ export class OrdersService {
    * once on a deadlock or serialization failure, then answered with `try_again`):
    * 0. the customer row is locked, so a repeat of the same request (same idempotency key) waits
    *    for the first and then returns the order it made, never a second one;
-   * 1. the cart row, then the Discovery set row (when the cart holds it), then the stock rows of
-   *    its lines (a volume line's volume, the five 10 ml of a builder line) are locked
+   * 1. the cart row, then the Discovery set rows the lines hold (ascending vial ml), then the stock
+   *    rows of its lines (a volume line's volume, the five 10 ml of a builder line, a first order's
+   *    gift sample's 5 ml, ADR 0042) are locked
    *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
    *    waits here and then sees this order's reserve; every checkout takes them in this order;
    *    then the entered promo code's row, so one for its last use waits and then sees this use;
@@ -293,7 +296,7 @@ export class OrdersService {
       const source = await this.sourceOf(tx, input.item);
       if (!source) return { kind: 'invalid', code: 'unknown_item' } as const;
 
-      // 1. Freeze the cart (a cart order), then the Discovery set row (when a line holds it), then
+      // 1. Freeze the cart (a cart order), then the Discovery set rows (when a line holds one), then
       // the stock of every volume in id order: the same order in every checkout, buy-now included,
       // so none can deadlock another.
       let wanted: readonly StoredLine[];
@@ -308,12 +311,19 @@ export class OrdersService {
       // A gift code's item (ADR 0039) is stock like a line: read without a lock here, its row locked
       // with the others below, and checked again once the code itself is locked.
       const promoGift = source.kind === 'cart' ? await enteredPromoGift(tx, c.id) : null;
-      if (wanted.some((w) => w.kind === 'discovery_set') || promoGift?.kind === 'discovery_set')
-        await readDiscoverySet(tx, true);
+      // each Discovery set a line holds (a gift code's is the 5 × 10 ml one), in ascending vial ml
+      await lockDiscoverySets(tx, [
+        ...wanted.flatMap((w) => (w.kind === 'discovery_set' && w.vialMl ? [w.vialMl] : [])),
+        ...(promoGift?.kind === 'discovery_set' ? [SET_VIAL_ML as DiscoveryVialMl] : []),
+      ]);
+      // A first order's gift sample (ADR 0042): picked here, its 5 ml locked with the others below
+      // and checked again under the lock.
+      const sample = await pickGiftSample(tx, c.id);
       // a volume line locks its volume; a builder line the 10 ml of each of its five
       const lockVolumes = [
         ...wanted.flatMap((w) => w.volumeId ?? []),
         ...(promoGift?.kind === 'volume' ? [promoGift.volumeId] : []),
+        ...(sample ? [sample.volumeId] : []),
       ];
       const lockFragrances = [
         ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
@@ -379,6 +389,9 @@ export class OrdersService {
       const heldPromoCodeId = quote.discount?.type === 'promo_code' ? loaded.promoCodeId : null;
       if (quote.discount?.type === 'promo_code' && heldPromoCodeId === null)
         throw new Error(`promo ${quote.discount.code}: applied without passing its checks`);
+      // the sample's last bottle may have gone to another first order meanwhile: then there is none
+      const giftSample =
+        sample && (await giftSampleStillAvailable(tx, sample.volumeId)) ? sample : null;
 
       // 3. The snapshot.
       const reserveUntil = new Date(now.getTime() + settings['orders.reserveTtlSeconds'] * 1000);
@@ -474,16 +487,17 @@ export class OrdersService {
                 photo: l.photo,
               };
             // A set line (ADR 0009): its five fragrances as bought. A builder set also records the
-            // five 10 ml volumes its reserve takes one of each from; the Discovery set holds none
-            // (its own stock is its reserve) and its snapshot is the composition alone.
+            // five 10 ml volumes its reserve takes one of each from; a Discovery set holds none
+            // (its own stock is its reserve), its `ml` is its vial size (ADR 0042) and its
+            // snapshot is the composition alone.
             const name = (t: typeof dictionaries.ru.sets) =>
-              l.kind === 'discovery_set' ? t.lineDiscovery : t.lineBuilder;
+              l.kind === 'discovery_set' ? t.discovery[l.vialMl].line : t.lineBuilder;
             return {
               ...base,
               kind: l.kind,
               nameRu: name(dictionaries.ru.sets),
               nameUz: name(dictionaries.uz.sets),
-              ml: 10,
+              ml: l.kind === 'discovery_set' ? l.vialMl : SET_VIAL_ML,
               photo: l.photo,
               setVolumeIds: l.kind === 'builder_set' ? l.items.map((i) => i.volumeId) : null,
               setComposition: l.items.map((i) => ({
@@ -496,6 +510,16 @@ export class OrdersService {
           // A gift code's item (ADR 0039): one more line at 0, its regular price kept as its value.
           ...(promoGiftOf(quote.discount) && loaded.promoGift
             ? [promoGiftLine(order.id, bought.length, loaded.promoGift)]
+            : []),
+          // The first order's gift sample (ADR 0042): last, at 0; not a discount, so with any.
+          ...(giftSample
+            ? [
+                giftSampleLine(
+                  order.id,
+                  bought.length + (promoGiftOf(quote.discount) && loaded.promoGift ? 1 : 0),
+                  giftSample,
+                ),
+              ]
             : []),
         ])
         .returning();
@@ -638,16 +662,20 @@ export class OrdersService {
     // a gift code's Promo gift (ADR 0039) is named, so the shopper knows it is in the parcel
     const promoGift = lines.find((l) => l.promoGift);
     const promoGiftName = promoGift ? lineGiftLabel(promoGift, c.language) : null;
+    // the first order's gift sample (ADR 0042) is named too
+    const sample = lines.find((l) => l.giftSample);
     const created = fill(t.orderCreated, {
       number: String(order.number),
       amount: formatMoney(order.amountDue, c.language),
       until: formatDateTime(order.reserveUntil, c.language),
     });
+    const extras = [
+      promoGiftName ? fill(t.orderCreatedGift, { gift: promoGiftName }) : null,
+      sample ? fill(t.orderCreatedSample, { name: sample.nameRu, ml: String(sample.ml) }) : null,
+    ].filter((x) => x !== null);
     return {
       chatId: c.telegramId,
-      text: promoGiftName
-        ? `${created}\n\n${fill(t.orderCreatedGift, { gift: promoGiftName })}`
-        : created,
+      text: [created, ...extras].join('\n\n'),
       options: url
         ? { reply_markup: { inline_keyboard: [[{ text: t.openOrder, web_app: { url } }]] } }
         : {},
@@ -728,8 +756,8 @@ function promoGiftLine(orderId: number, position: number, g: PromoGiftView) {
   return {
     ...base,
     kind: 'discovery_set' as const,
-    nameRu: dictionaries.ru.sets.lineDiscovery,
-    nameUz: dictionaries.uz.sets.lineDiscovery,
+    nameRu: dictionaries.ru.sets.discovery[SET_VIAL_ML].line,
+    nameUz: dictionaries.uz.sets.discovery[SET_VIAL_ML].line,
     ml: 10,
     setComposition: g.items.map((i) => ({
       fragranceId: i.fragranceId,
@@ -785,6 +813,7 @@ function toOrderLineDto(l: OrderLineRow): OrderLineDto {
     qty: l.qty,
     lineTotal: l.lineTotal,
     promoGift: l.promoGift,
+    giftSample: l.giftSample,
     setComposition: l.setComposition?.map((f) => ({ name: f.name, brand: f.brand })) ?? null,
   };
 }

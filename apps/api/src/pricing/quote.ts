@@ -92,6 +92,8 @@ export interface PricingSettings {
   thresholdBase: SettingValue<'pricing.thresholdBase'>;
   discountsApplyToMarkedDown: SettingValue<'pricing.discountsApplyToMarkedDown'>;
   fullSizeVolumesMl: SettingValue<'pricing.fullSizeVolumesMl'>;
+  /** What a right from a set covers: its own five fragrances, or any fragrance (#79). */
+  setDiscountScope: SettingValue<'entitlements.setDiscountScope'>;
 }
 
 export interface QuoteInput {
@@ -253,6 +255,20 @@ function eligibleSubtotal(billable: PricedLine[], appliesToMarkedDown: boolean):
   );
 }
 
+/**
+ * Whether an upgrade right covers a fragrance: the ones it was opened for, or any fragrance for a
+ * right from a set while `setDiscountScope` is `any_fragrance` (#79, the owner's calculator). The
+ * fragrance card's «Скидка за набор» asks the same.
+ */
+export function rightCovers(
+  e: Pick<Extract<Entitlement, { type: 'upgrade_right' }>, 'source' | 'fragranceIds'>,
+  fragranceId: number,
+  settings: Pick<PricingSettings, 'setDiscountScope'>,
+): boolean {
+  if (e.source === 'set' && settings.setDiscountScope === 'any_fragrance') return true;
+  return e.fragranceIds.includes(fragranceId);
+}
+
 function entitlementOption(
   e: Entitlement,
   billable: PricedLine[],
@@ -265,7 +281,8 @@ function entitlementOption(
 
 /**
  * Upgrade right (ADR 0007): % of the single most expensive covered Full size unit. Sets are never
- * full size (ADR 0009); marked-down bottles only when the setting allows it (ADR 0008).
+ * full size (ADR 0009); marked-down bottles only when the setting allows it (ADR 0008). A right
+ * from a set covers its own fragrances, or every fragrance while `setDiscountScope` says so (#79).
  */
 function upgradeRightOption(
   e: Extract<Entitlement, { type: 'upgrade_right' }>,
@@ -275,7 +292,7 @@ function upgradeRightOption(
   let target: PricedLine | null = null;
   for (const l of billable) {
     if (l.item.kind !== 'volume') continue;
-    if (!e.fragranceIds.includes(l.item.fragranceId)) continue;
+    if (!rightCovers(e, l.item.fragranceId, settings)) continue;
     if (!settings.fullSizeVolumesMl.includes(l.item.volumeMl)) continue;
     if (!discountApplies(l, settings.discountsApplyToMarkedDown.upgradeRight)) continue;
     if (!target || l.unitPrice > target.unitPrice) target = l;

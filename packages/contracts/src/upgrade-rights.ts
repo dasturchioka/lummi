@@ -11,6 +11,8 @@ export const myUpgradeRightSchema = z.object({
   /** The order that opened it («Набор из заказа № 1042»), so two rights are told apart. */
   sourceOrderNumber: z.number().int(),
   percent: z.number().int(),
+  /** A set's right covers any fragrance (setting `entitlements.setDiscountScope`, #79), not only its five. */
+  anyFragrance: z.boolean(),
   /**
    * The covered fragrances as bought (a set's five, or the one 10 ml bottle's); `slug` opens the
    * card while the fragrance is on sale, null once it is hidden.

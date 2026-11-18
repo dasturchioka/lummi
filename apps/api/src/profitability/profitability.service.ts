@@ -15,7 +15,9 @@ import {
   asc,
   discoverySet,
   discoverySetItems,
+  eq,
   fragrances,
+  sellableVolume,
   volumes,
   type Db,
   type DbOrTx,
@@ -302,11 +304,15 @@ async function readShop(tx: DbOrTx): Promise<Shop> {
       saleEndsAt: volumes.saleEndsAt,
     })
     .from(volumes)
+    // what the shop sells: the 5 ml never alone (ADR 0042)
+    .where(sellableVolume())
     .orderBy(asc(volumes.ml));
-  const [set] = await tx.select().from(discoverySet);
+  // the page's set is the 5 × 10 ml Discovery set (#77)
+  const [set] = await tx.select().from(discoverySet).where(eq(discoverySet.vialMl, SET_VIAL_ML));
   const items = await tx
     .select({ fragranceId: discoverySetItems.fragranceId })
     .from(discoverySetItems)
+    .where(eq(discoverySetItems.vialMl, SET_VIAL_ML))
     .orderBy(asc(discoverySetItems.position));
   const cost = await readCostSettings(tx);
   const s = await readSettings(tx, [

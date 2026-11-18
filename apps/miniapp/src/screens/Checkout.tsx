@@ -12,6 +12,7 @@ import {
   RECIPIENT_NAME_MAX,
   RECIPIENT_PHONE_INPUT_MAX,
   normalizeRecipientPhone,
+  SET_VIAL_ML,
 } from '@lummi/contracts/constants';
 import { deliveryEta, fill, formatPhone } from '@lummi/i18n';
 import { setsMessages } from '@lummi/i18n/sets';
@@ -174,7 +175,10 @@ function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }
     line.kind === 'volume'
       ? { ru: line.name, uz: line.name }
       : line.kind === 'discovery_set'
-        ? { ru: setsMessages.ru.sets.lineDiscovery, uz: setsMessages.uz.sets.lineDiscovery }
+        ? {
+            ru: setsMessages.ru.sets.discovery[line.vialMl].line,
+            uz: setsMessages.uz.sets.discovery[line.vialMl].line,
+          }
         : { ru: setsMessages.ru.sets.lineBuilder, uz: setsMessages.uz.sets.lineBuilder };
   return (
     <>
@@ -786,7 +790,10 @@ export function Checkout() {
         {data.promoGift ? (
           <Card as="ul" className="mb-3 overflow-hidden" data-testid="checkout-promo-gift">
             <OrderLine
-              line={promoGiftLine(data.promoGift, setsMessages[language].sets.lineDiscovery)}
+              line={promoGiftLine(
+                data.promoGift,
+                setsMessages[language].sets.discovery[SET_VIAL_ML].line,
+              )}
             />
           </Card>
         ) : null}

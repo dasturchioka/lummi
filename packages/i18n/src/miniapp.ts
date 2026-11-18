@@ -219,6 +219,8 @@ export const miniappMessages = defineMessages(
       sourcePromo: 'Промокод {code}',
       /** A gift code's free item (ADR 0039): its line at 0, and the totals row. */
       promoGift: 'Подарок по промокоду',
+      /** A first order's gift sample (ADR 0042): its line at 0. */
+      giftSample: 'Пробник в подарок',
       delivery: 'Доставка BTS, {city}',
       deliveryNoCity: 'Доставка BTS',
       deliveryFree: 'Бесплатно',
@@ -543,6 +545,7 @@ export const miniappMessages = defineMessages(
       sourceBirthday: 'Tugʻilgan kun kuponi',
       sourcePromo: 'Promokod {code}',
       promoGift: 'Promokod sovgʻasi',
+      giftSample: 'Sovgʻa namuna',
       delivery: 'BTS yetkazish, {city}',
       deliveryNoCity: 'BTS yetkazish',
       deliveryFree: 'Bepul',
