@@ -13,7 +13,7 @@ import { Button } from '../ui/Button';
 import { CHIP_ROW, Chip, TypeChips } from '../ui/Chips';
 import { FragranceGrid } from '../ui/FragranceGrid';
 import { GridSkeleton } from '../ui/GridSkeleton';
-import { BoxIcon, ChevronIcon, GridIcon, SearchIcon } from '../ui/icons';
+import { ChevronIcon, GridIcon, SearchIcon } from '../ui/icons';
 import { Screen } from '../ui/Screen';
 import { SetCards } from './sets/SetCards';
 import { ScreenHeader } from '../ui/ScreenHeader';
@@ -87,14 +87,7 @@ export function Catalog() {
     setSheet(name);
   };
 
-  // The chip photos are the top seller of each type over the whole catalog, whatever the filters:
-  // keep the last ones while «Наборы» (which loads no list) or a failed request has none.
-  const [typePhotos, setTypePhotos] = useState(facets?.typePhotos);
-  if (facets?.typePhotos && facets.typePhotos !== typePhotos) setTypePhotos(facets.typePhotos);
-  // «Наборы» has no bottle of its own: the box icon holds its circle.
-  const typeOptions = typeChipOptions(TYPES, t.catalog.types, typePhotos).map((o) =>
-    o.value === 'sets' ? { ...o, icon: <BoxIcon size={16} /> } : o,
-  );
+  const typeOptions = typeChipOptions(TYPES, t.catalog.types);
 
   const familyName = facets?.families.find((f) => f.id === filters.family)?.name[language];
   const priceLabel =

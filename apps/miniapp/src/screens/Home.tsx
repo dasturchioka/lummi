@@ -18,13 +18,12 @@ const Novelties = lazy(() => import('./home/Novelties'));
 const PromoBanner = lazy(() => import('./home/PromoBanner'));
 
 /**
- * The fabric photos of the top block (approved variant 2), one per theme. To ship them, put the
- * files in `public/home/` and set the two paths here; nothing else changes. Export them as WebP,
- * 3:2, at least 1170 px wide, with a quiet area in the upper third for the logo and slogan.
- * Until then the slot shows the stand-in: Stone (Dark Block in dark) with the hairline arcs of
+ * The fabric photos of the top block (approved variant 2), one per theme: files in `public/home/`,
+ * paths here. Light has the customer's photo (884 px wide; a 1170 px original is asked in
+ * open-questions). Dark has none yet and keeps the stand-in: Dark Block with the hairline arcs of
  * the brandbook cover.
  */
-const FABRIC: Record<Theme, string | null> = { light: null, dark: null };
+const FABRIC: Record<Theme, string | null> = { light: '/home/fabric-light.webp', dark: null };
 
 /** Two hairline arcs, as on the brandbook cover (bb-01). Stand-in only; a photo replaces them. */
 function CoverArcs() {

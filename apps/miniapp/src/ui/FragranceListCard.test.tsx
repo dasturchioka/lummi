@@ -33,6 +33,7 @@ const item = (over: Partial<FragranceListItem> = {}): FragranceListItem => ({
   isHit: false,
   isNew: false,
   fromPrice: 99_000,
+  fromRegularPrice: null,
   soldOut: false,
   photo: null,
   volumes: [],
@@ -49,6 +50,26 @@ describe('FragranceListCard', () => {
     expect(screen.getByText('Symphony')).toBeTruthy();
     expect(screen.getByText('лимон · ветивер · амбра')).toBeTruthy();
     expect(screen.getByText(/^от 99\s000\sсум$/)).toBeTruthy();
+  });
+
+  it('strikes the regular price when the from-price is a markdown (RU)', () => {
+    language = 'ru';
+    render(<FragranceListCard item={item({ fromPrice: 79_000, fromRegularPrice: 99_000 })} />);
+    expect(screen.getByText(/^от 79\s000\sсум$/)).toBeTruthy();
+    const struck = screen.getByTestId('regular-price');
+    expect(struck.tagName).toBe('S');
+    expect(struck.textContent).toMatch(/^99\s000\sсум$/);
+  });
+
+  it('strikes the regular price in Uzbek, and shows none without a markdown', () => {
+    language = 'uz';
+    const { unmount } = render(
+      <FragranceListCard item={item({ fromPrice: 79_000, fromRegularPrice: 99_000 })} />,
+    );
+    expect(screen.getByTestId('regular-price').textContent).toMatch(/^99\s000\ssoʻm$/);
+    unmount();
+    render(<FragranceListCard item={item()} />);
+    expect(screen.queryByTestId('regular-price')).toBeNull();
   });
 
   it('speaks Uzbek', () => {
