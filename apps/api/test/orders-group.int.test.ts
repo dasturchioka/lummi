@@ -106,6 +106,8 @@ async function samarkand() {
     .select()
     .from(btsPoints)
     .where(and(eq(btsPoints.regionId, region!.id), eq(btsPoints.active, true)))
+    // ordered, so every call names the same point (an unordered LIMIT 1 drifted on CI)
+    .orderBy(btsPoints.id)
     .limit(1);
   return { region: region!, point: point! };
 }
