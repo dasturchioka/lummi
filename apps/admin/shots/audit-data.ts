@@ -19,6 +19,18 @@ export async function seedShotAudit(db: ShotSql) {
   const banner = (await db.query('select id from promo_banners order by id limit 1', []))
     .rows[0] as { id: number } | undefined;
   const bannerId = String(banner?.id ?? 2);
+  // the object and the details name the same thing: the volume's own fragrance, the manager's own name
+  const volume = (
+    await db.query(
+      'select v.id, f.name from volumes v join fragrances f on f.id = v.fragrance_id order by v.id limit 1',
+      [],
+    )
+  ).rows[0] as { id: number; name: string } | undefined;
+  const managerName =
+    (
+      (await db.query('select name from staff where id = $1', [manager])).rows[0] as
+        { name: string } | undefined
+    )?.name ?? 'Aziza';
   const rows: [string, number | null, string, string, string | null, Record<string, unknown>][] = [
     [
       'staff',
@@ -98,8 +110,8 @@ export async function seedShotAudit(db: ShotSql) {
       owner,
       'catalog.on_hand_changed',
       'volume',
-      '1',
-      { fragrance: 'Tygar', ml: 30, onHand: [12, 9] },
+      String(volume?.id ?? 1),
+      { fragrance: volume?.name ?? 'Tygar', ml: 30, onHand: [12, 9] },
     ],
     [
       'staff',
@@ -107,7 +119,7 @@ export async function seedShotAudit(db: ShotSql) {
       'staff.created',
       'staff',
       String(manager ?? 1),
-      { name: 'Aziza', login: 'aziza', role: 'manager' },
+      { name: managerName, login: 'aziza', role: 'manager' },
     ],
     [
       'system',

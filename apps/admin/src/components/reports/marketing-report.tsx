@@ -298,7 +298,7 @@ function FiguresTable<R extends MarketingFigures>({
           <ul className="divide-y divide-border @4xl:hidden">
             {lines.map((line) =>
               'folded' in line ? (
-                <li key={line.key} className="px-4 py-2 text-xs text-muted-foreground/80">
+                <li key={line.key} className="px-4 py-2 text-xs text-muted-foreground">
                   {line.label}: {line.folded.join(' · ')}
                 </li>
               ) : (
@@ -344,7 +344,7 @@ function FiguresTable<R extends MarketingFigures>({
               <TBody>
                 {lines.map((line) =>
                   'folded' in line ? (
-                    <TR key={line.key} className="text-xs text-muted-foreground/80">
+                    <TR key={line.key} className="text-xs text-muted-foreground">
                       <TD colSpan={columns.length + 1} className="py-2 pr-2 pl-5">
                         {line.label}: {line.folded.join(' · ')}
                       </TD>

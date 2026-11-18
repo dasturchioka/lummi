@@ -14,7 +14,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { displayValue, formatTashkent, num, pick } from '@/lib/setting-copy';
 import { describeInput } from '@/lib/setting-input';
-import { describeAudit } from '@/lib/audit-describe';
+import { describeAudit, humanise } from '@/lib/audit-describe';
 import { fill } from '@/lib/utils';
 
 export type { AuditFilters };
@@ -38,9 +38,9 @@ const knownKey = (id: string | null): id is SettingKey =>
 
 /** Readable action name; a code a later ticket adds shows as the code itself until it is labelled. */
 export const actionLabel = (t: AdminMessages, code: string) =>
-  (t.audit.actions as Record<string, string>)[code] ?? code;
+  (t.audit.actions as Record<string, string>)[code] ?? `${t.audit.what}: ${humanise(code)}`;
 const targetLabel = (t: AdminMessages, type: string) =>
-  (t.audit.targets as Record<string, string>)[type] ?? type;
+  (t.audit.targets as Record<string, string>)[type] ?? `${t.audit.target}: ${humanise(type)}`;
 
 export function who(t: AdminMessages, e: AuditEntryDto): string {
   if (e.actorType === 'staff') return e.actorName ?? t.audit.actors.unknownStaff;
@@ -68,13 +68,18 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
       </>
     );
   // a banner, fragrance or volume by its name (the API looks it up), an order by its number
-  const named =
-    e.targetName ?? (e.targetType === 'order' ? (e.payload.number as number | undefined) : null);
-  if (named !== null && named !== undefined && e.targetType !== 'staff')
+  const named = (language === 'uz' ? (e.targetNameUz ?? e.targetName) : e.targetName) || null;
+  if (named)
     return (
       <>
-        {targetLabel(t, e.targetType)}{' '}
-        {e.targetType === 'order' && e.targetName === null ? `№\u00a0${named}` : `«${named}»`}
+        {targetLabel(t, e.targetType)} «{named}»
+      </>
+    );
+  if (e.targetType === 'order' && typeof e.payload.number === 'number')
+    return (
+      <>
+        {targetLabel(t, e.targetType)} №{'\u00a0'}
+        {e.payload.number}
       </>
     );
   return (
@@ -214,7 +219,15 @@ export function AuditView({ t, language, items, total, page, pageSize, filters, 
                 </div>
                 <MetaLine
                   className="text-small text-muted-foreground [overflow-wrap:anywhere]"
-                  parts={[who(t, e), <Target key="target" t={t} language={language} e={e} />]}
+                  parts={[
+                    who(t, e),
+                    // a sign-in names the actor twice: the object is the same person
+                    !(
+                      e.targetType === 'staff' &&
+                      e.actorType === 'staff' &&
+                      e.targetId === String(e.actorId)
+                    ) && <Target key="target" t={t} language={language} e={e} />,
+                  ]}
                 />
                 <div className="mt-1 text-[13px]">
                   <Details t={t} language={language} e={e} />

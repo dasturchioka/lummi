@@ -12,6 +12,7 @@ import {
   eq,
   fragrances,
   inArray,
+  orderLines,
   promoBanners,
   sql,
   staff,
@@ -89,6 +90,7 @@ export class AuditQueryService {
       .offset(offset);
 
     const names = await this.targetNames(rows.map((r) => r.row));
+    const returned = await this.returnedLines(rows.map((r) => r.row));
     return rows.map(({ row, staffName, customerName, targetName }) => ({
       id: row.id,
       createdAt: row.createdAt.toISOString(),
@@ -98,16 +100,20 @@ export class AuditQueryService {
       action: row.action,
       targetType: row.targetType,
       targetId: row.targetId,
-      targetName: targetName ?? names.get(`${row.targetType}:${row.targetId}`) ?? null,
-      payload: row.payload as Record<string, unknown>,
+      targetName: targetName ?? names.get(`${row.targetType}:${row.targetId}`)?.ru ?? null,
+      targetNameUz: targetName ?? names.get(`${row.targetType}:${row.targetId}`)?.uz ?? null,
+      payload: returned.get(row.id)
+        ? { ...(row.payload as Record<string, unknown>), lines: returned.get(row.id) }
+        : (row.payload as Record<string, unknown>),
     }));
   }
 
   /**
    * Names for the targets that have one, in one query per kind for the whole page: a banner's
-   * title, a fragrance's name, and the fragrance a volume belongs to. A deleted row has none.
+   * titles (RU and UZ), a fragrance's name, and the fragrance a volume belongs to. A deleted row
+   * has none.
    */
-  private async targetNames(rows: { targetType: string; targetId: string | null }[]) {
+  async targetNames(rows: { targetType: string; targetId: string | null }[]) {
     const ids = (type: string) => [
       ...new Set(
         rows
@@ -115,21 +121,21 @@ export class AuditQueryService {
           .map((r) => Number(r.targetId)),
       ),
     ];
-    const out = new Map<string, string>();
+    const out = new Map<string, { ru: string; uz: string }>();
     const banners = ids('promo_banner');
     if (banners.length)
       for (const b of await this.db
-        .select({ id: promoBanners.id, title: promoBanners.titleRu })
+        .select({ id: promoBanners.id, ru: promoBanners.titleRu, uz: promoBanners.titleUz })
         .from(promoBanners)
         .where(inArray(promoBanners.id, banners)))
-        out.set(`promo_banner:${b.id}`, b.title);
+        out.set(`promo_banner:${b.id}`, { ru: b.ru, uz: b.uz });
     const frs = ids('fragrance');
     if (frs.length)
       for (const f of await this.db
         .select({ id: fragrances.id, name: fragrances.name })
         .from(fragrances)
         .where(inArray(fragrances.id, frs)))
-        out.set(`fragrance:${f.id}`, f.name);
+        out.set(`fragrance:${f.id}`, { ru: f.name, uz: f.name });
     const vols = ids('volume');
     if (vols.length)
       for (const v of await this.db
@@ -137,7 +143,45 @@ export class AuditQueryService {
         .from(volumes)
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
         .where(inArray(volumes.id, vols)))
-        out.set(`volume:${v.id}`, v.name);
+        out.set(`volume:${v.id}`, { ru: v.name, uz: v.name });
+    return out;
+  }
+
+  /**
+   * A return's payload keeps only `{position, backToStock}` per line; the page needs what the
+   * line was. One query for the page's returns: name (RU and UZ), volume and quantity as bought.
+   */
+  private async returnedLines(
+    rows: { id: number; action: string; targetId: string | null; payload: unknown }[],
+  ) {
+    const out = new Map<number, unknown[]>();
+    const returns = rows.filter(
+      (r) => r.action === 'order.returned' && r.targetId !== null && /^\d+$/.test(r.targetId),
+    );
+    if (returns.length === 0) return out;
+    const lines = await this.db
+      .select({
+        orderId: orderLines.orderId,
+        position: orderLines.position,
+        nameRu: orderLines.nameRu,
+        nameUz: orderLines.nameUz,
+        ml: orderLines.ml,
+        qty: orderLines.qty,
+      })
+      .from(orderLines)
+      .where(inArray(orderLines.orderId, [...new Set(returns.map((r) => Number(r.targetId)))]));
+    for (const r of returns) {
+      const payloadLines = (r.payload as { lines?: { position: number }[] }).lines;
+      if (!Array.isArray(payloadLines)) continue;
+      out.set(
+        r.id,
+        payloadLines.map((l) => ({
+          ...l,
+          ...lines.find((x) => x.orderId === Number(r.targetId) && x.position === l.position),
+          orderId: undefined,
+        })),
+      );
+    }
     return out;
   }
 

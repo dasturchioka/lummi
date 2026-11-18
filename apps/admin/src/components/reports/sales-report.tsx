@@ -148,7 +148,9 @@ export function SalesReportView({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-small text-muted-foreground">{r.setsHint}</p>
+            <HowCounted r={r} className="mt-1">
+              <p>{r.setsHint}</p>
+            </HowCounted>
           </Card>
         </div>
       )}
@@ -305,7 +307,7 @@ function Days({
           ) : (
             <li
               key={row.to}
-              className="flex justify-between gap-3 px-4 py-2 text-xs text-muted-foreground/80"
+              className="flex justify-between gap-3 px-4 py-2 text-xs text-muted-foreground"
             >
               <span>
                 <QuietLabel r={r} row={row} language={language} />
@@ -343,7 +345,7 @@ function Days({
                 <TR
                   key={row.to}
                   data-testid={`quiet-${row.from}`}
-                  className="text-xs text-muted-foreground/80"
+                  className="text-xs text-muted-foreground"
                 >
                   <TD className="px-3">
                     <QuietLabel r={r} row={row} language={language} />

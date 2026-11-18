@@ -1,5 +1,5 @@
 import type { AuditEntryDto } from '@lummi/contracts';
-import { formatCalendarDate, formatMoney, type Language } from '@lummi/i18n';
+import { formatCalendarDate, formatMoney, formatTiyin, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import type { AdminMessages } from './i18n';
 import { formatTashkent, num } from './setting-copy';
@@ -48,9 +48,14 @@ export function humanise(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Sentence case: «RU» and «Telegram» keep their capitals inside a sentence. */
+const lower = (s: string) =>
+  /^[A-Z]{2}|^Telegram|^Uzum/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1);
+/** A field's name starting a line («Цена: 1 → 2»). */
 const label = (t: AdminMessages, key: string) =>
-  (t.audit.fields as Record<string, string>)[key] ?? humanise(key);
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+  cap((t.audit.fields as Record<string, string>)[key] ?? humanise(key));
+/** The same name inside a sentence («Изменено: цена, текст»). */
 const fieldLabel = (t: AdminMessages, key: string) => lower(label(t, key));
 
 const SHORT = 80;
@@ -82,7 +87,17 @@ function asPair(v: unknown): [unknown, unknown] | null {
   return null;
 }
 
-/** «цена: 1 → 2», for a diff keyed by field; a list of keys reads as «Изменено: цена, текст». */
+/** «цена: 1 → 2» pairs of a diff keyed by field, the name in sentence case inside a line. */
+function diffPairs(c: Ctx, diff: unknown): string[] {
+  if (!isRecord(diff)) return [];
+  return Object.entries(diff).map(([k, v]) => {
+    const pair = asPair(v);
+    const value = pair ? `${valueText(c, pair[0])} → ${valueText(c, pair[1])}` : valueText(c, v);
+    return fill(c.t.audit.detail.field, { label: fieldLabel(c.t, k), value });
+  });
+}
+
+/** «Цена: 1 → 2», for a diff keyed by field; a list of keys reads as «Изменено: цена, текст». */
 function changedLines(c: Ctx, changed: unknown): string[] {
   const { t } = c;
   if (Array.isArray(changed)) {
@@ -91,12 +106,7 @@ function changedLines(c: Ctx, changed: unknown): string[] {
       ? [fill(t.audit.detail.changed, { list: keys.map((k) => fieldLabel(t, k)).join(', ') })]
       : [];
   }
-  if (!isRecord(changed)) return [];
-  return Object.entries(changed).map(([k, v]) => {
-    const pair = asPair(v);
-    const value = pair ? `${valueText(c, pair[0])} → ${valueText(c, pair[1])}` : valueText(c, v);
-    return fill(t.audit.detail.field, { label: label(t, k), value });
-  });
+  return diffPairs(c, changed).map(cap);
 }
 
 const orderStatus = (language: Language, s: unknown): string => {
@@ -115,17 +125,55 @@ function reasonText(c: Ctx, v: unknown): string | null {
   return known[s] ?? s;
 }
 
-const money = (c: Ctx, n: number) => formatMoney(n, c.language);
+/** So'm as the panel writes it; a figure that is not a whole number reads as a plain number. */
+const money = (c: Ctx, n: number) =>
+  Number.isSafeInteger(n) ? formatMoney(n, c.language) : num(n);
+/** An exact amount in tiyin (a credit), with its sign outside `formatTiyin`. */
+const tiyin = (c: Ctx, n: number) =>
+  Number.isSafeInteger(n)
+    ? `${n < 0 ? '−' : ''}${formatTiyin(Math.abs(n), c.language)}`
+    : num(n / 100);
 const quote = (s: string) => `«${s}»`;
 
 /** The order's number, from the payload, else the target id. */
-const orderNumber = (c: Ctx) => String(c.p.number ?? c.e.targetId ?? '');
+const orderNumber = (c: Ctx) =>
+  String(int(c.p.number) ?? (c.e.targetType === 'order' ? c.e.targetId : null) ?? '—');
+
+/** One returned line as the API enriched it: «Tygar, 30 мл × 2: вернули на полку». */
+function returnLine(c: Ctx, l: Payload): string {
+  const d = c.t.audit.detail;
+  const name =
+    c.language === 'uz' ? (str(l.nameUz) ?? str(l.nameRu)) : (str(l.nameRu) ?? str(l.nameUz));
+  const back = l.backToStock === true ? d.backYes : d.backNo;
+  if (!name) return `${fill(d.returnPosition, { n: String((int(l.position) ?? 0) + 1) })}: ${back}`;
+  return fill(d.returnLine, {
+    name,
+    ml: String(int(l.ml) ?? '—'),
+    qty: String(int(l.qty) ?? 1),
+    back,
+  });
+}
 
 /** One line for an order's move: «Заказ № 12: Принят → Собирается», then why, where and how much. */
 const orderMove: Describer = (c) => {
   const { p, t } = c;
   const d = t.audit.detail;
-  c.take('number', 'from', 'to', 'reason', 'note', 'trackingNumber');
+  c.take(
+    'number',
+    'from',
+    'to',
+    'reason',
+    'note',
+    'trackingNumber',
+    'creditAmountTiyin',
+    'amountDue',
+    'differenceTiyin',
+    'cardLast4',
+    'offShopCard',
+    'duplicateOf',
+    'reserveEnded',
+    'lines',
+  );
   const lines: (string | null)[] = [
     fill(d.move, {
       number: orderNumber(c),
@@ -139,37 +187,31 @@ const orderMove: Describer = (c) => {
   if (str(p.trackingNumber)) lines.push(fill(d.tracking, { number: str(p.trackingNumber)! }));
   const credit = int(p.creditAmountTiyin);
   if (credit !== null) {
-    c.take('creditAmountTiyin', 'amountDue', 'differenceTiyin', 'cardLast4', 'offShopCard');
     const card = str(p.cardLast4);
     lines.push(
-      fill(d.credit, { amount: money(c, credit / 100) }) +
+      fill(d.credit, { amount: tiyin(c, credit) }) +
         (card ? `, ${fill(d.cardLast4, { last4: card })}` : ''),
     );
     const diff = int(p.differenceTiyin);
-    if (diff) lines.push(fill(d.creditDiff, { diff: money(c, diff / 100) }));
+    if (diff) lines.push(fill(d.creditDiff, { diff: tiyin(c, diff) }));
     if (p.offShopCard === true) lines.push(d.otherCard);
   }
   if (p.duplicateOf !== undefined && p.duplicateOf !== null) lines.push(d.duplicate);
   if (p.reserveEnded === true) lines.push(d.reserveEnded);
-  if (Array.isArray(p.lines)) {
-    const rows = p.lines.filter(isRecord);
-    lines.push(
-      fill(d.returnedBack, {
-        n: String(rows.filter((r) => r.backToStock === true).length),
-        total: String(rows.length),
-      }),
-    );
-  }
+  if (Array.isArray(p.lines)) lines.push(...p.lines.filter(isRecord).map((l) => returnLine(c, l)));
   return lines;
 };
 
 /** The ids a payload stays quiet about: they point at rows, not at anything a person reads. */
 const QUIET = ['receiptId', 'creditId', 'pausedSeconds', 'onHand', 'orderId', 'slug', 'code'];
 
-const staffName = (c: Ctx) => str(c.p.name) ?? c.e.targetName ?? c.t.audit.actors.unknownStaff;
+/** The target's name in the panel's language, when the audit read found one. */
+const targetName = (c: Ctx) =>
+  (c.language === 'uz' ? (c.e.targetNameUz ?? c.e.targetName) : c.e.targetName) || null;
+const staffName = (c: Ctx) => str(c.p.name) ?? targetName(c) ?? c.t.audit.actors.unknownStaff;
 const roleName = (c: Ctx, role: unknown) =>
   (c.t.roles as Record<string, string>)[String(role)] ?? String(role ?? '—');
-const volumeText = (c: Ctx, v: unknown) => (typeof v === 'number' ? String(v) : valueText(c, v));
+const onHandText = (c: Ctx, v: unknown) => (typeof v === 'number' ? String(v) : valueText(c, v));
 
 /** A banner's name for a sentence: «Title» when known, else its number. */
 const bannerName = (title: string | null, id: unknown) =>
@@ -196,6 +238,42 @@ function promoRule(c: Ctx): string | null {
   return null;
 }
 
+/** A staff member's account changed: who it is. */
+const staffOnly: Describer = (c) => {
+  c.take('name', 'login', 'telegramId');
+  return [staffName(c)];
+};
+const telegramOf: Describer = (c) => {
+  c.take('name', 'telegramId');
+  return [
+    fill(c.t.audit.detail.telegram, { name: staffName(c), id: String(c.p.telegramId ?? '—') }),
+  ];
+};
+const reviewOf: Describer = (c) => {
+  c.take('orderId', 'rating');
+  return [
+    int(c.p.rating) !== null && fill(c.t.audit.detail.rating, { rating: String(c.p.rating) }),
+  ];
+};
+/** A credit marked, or freed again: its amount, time and card, and the note staff left. */
+const creditOf: Describer = (c) => {
+  c.take('amountTiyin', 'occurredAt', 'cardLast4', 'note', 'markedBy', 'markedAt');
+  const d = c.t.audit.detail;
+  const card = str(c.p.cardLast4);
+  return [
+    fill(d.creditMarked, {
+      amount: tiyin(c, int(c.p.amountTiyin) ?? 0),
+      at: when(c.p.occurredAt, c.language) ?? '—',
+    }) + (card ? `, ${fill(d.cardLast4, { last4: card })}` : ''),
+    str(c.p.note) && fill(d.note, { note: str(c.p.note)! }),
+  ];
+};
+const btsOf: Describer = (c) => (
+  c.take('code'),
+  [fill(c.t.audit.detail.bts, { code: str(c.p.code) ?? '—' })]
+);
+const fragranceOf: Describer = (c) => (c.take('name'), [str(c.p.name) ?? targetName(c)]);
+
 const describers: Record<string, Describer> = {
   // settings and the shop card: the view prints the «was → became» pair
   'setting.changed': (c) => (c.take('old', 'new'), []),
@@ -218,22 +296,10 @@ const describers: Record<string, Describer> = {
       fill(c.t.audit.detail.staffLogin, { name: staffName(c), login: str(c.p.login) ?? '—' }),
     ];
   },
-  'staff.activated': (c) => {
-    c.take('name', 'login', 'telegramId');
-    return [staffName(c)];
-  },
-  'staff.deactivated': (c) => {
-    c.take('name', 'login', 'telegramId');
-    return [staffName(c)];
-  },
-  'staff.owner_seeded': (c) => {
-    c.take('name', 'login', 'telegramId');
-    return [staffName(c)];
-  },
-  'staff.owner_updated': (c) => {
-    c.take('name', 'login', 'telegramId');
-    return [staffName(c)];
-  },
+  'staff.activated': staffOnly,
+  'staff.deactivated': staffOnly,
+  'staff.owner_seeded': staffOnly,
+  'staff.owner_updated': staffOnly,
   'staff.password_reset': (c) => {
     c.take('name', 'login');
     return [fill(c.t.audit.detail.passwordReset, { name: staffName(c) })];
@@ -242,18 +308,8 @@ const describers: Record<string, Describer> = {
     c.take('forced');
     return [c.p.forced === true ? c.t.audit.detail.passwordForced : c.t.audit.detail.passwordOwn];
   },
-  'staff.telegram_linked': (c) => {
-    c.take('name', 'telegramId');
-    return [
-      fill(c.t.audit.detail.telegram, { name: staffName(c), id: String(c.p.telegramId ?? '—') }),
-    ];
-  },
-  'staff.telegram_unlinked': (c) => {
-    c.take('name', 'telegramId');
-    return [
-      fill(c.t.audit.detail.telegram, { name: staffName(c), id: String(c.p.telegramId ?? '—') }),
-    ];
-  },
+  'staff.telegram_linked': telegramOf,
+  'staff.telegram_unlinked': telegramOf,
   'staff.locked': (c) => {
     c.take('until', 'by');
     return [fill(c.t.audit.detail.until, { until: when(c.p.until, c.language) ?? '—' })];
@@ -360,43 +416,11 @@ const describers: Record<string, Describer> = {
         }),
     ];
   },
-  'review.published': (c) => {
-    c.take('orderId', 'rating');
-    return [
-      int(c.p.rating) !== null && fill(c.t.audit.detail.rating, { rating: String(c.p.rating) }),
-    ];
-  },
-  'review.hidden': (c) => {
-    c.take('orderId', 'rating');
-    return [
-      int(c.p.rating) !== null && fill(c.t.audit.detail.rating, { rating: String(c.p.rating) }),
-    ];
-  },
+  'review.published': reviewOf,
+  'review.hidden': reviewOf,
 
-  'credit.marked_not_for_order': (c) => {
-    c.take('amountTiyin', 'occurredAt', 'cardLast4', 'note');
-    const d = c.t.audit.detail;
-    const card = str(c.p.cardLast4);
-    return [
-      fill(d.creditMarked, {
-        amount: money(c, (int(c.p.amountTiyin) ?? 0) / 100),
-        at: when(c.p.occurredAt, c.language) ?? '—',
-      }) + (card ? `, ${fill(d.cardLast4, { last4: card })}` : ''),
-      str(c.p.note) && fill(d.note, { note: str(c.p.note)! }),
-    ];
-  },
-  'credit.unmarked_not_for_order': (c) => {
-    c.take('amountTiyin', 'occurredAt', 'cardLast4', 'note', 'markedBy', 'markedAt');
-    const d = c.t.audit.detail;
-    const card = str(c.p.cardLast4);
-    return [
-      fill(d.creditMarked, {
-        amount: money(c, (int(c.p.amountTiyin) ?? 0) / 100),
-        at: when(c.p.occurredAt, c.language) ?? '—',
-      }) + (card ? `, ${fill(d.cardLast4, { last4: card })}` : ''),
-      str(c.p.note) && fill(d.note, { note: str(c.p.note)! }),
-    ];
-  },
+  'credit.marked_not_for_order': creditOf,
+  'credit.unmarked_not_for_order': creditOf,
 
   'bts_point.created': (c) => {
     c.take('code', 'city', 'name', 'address', 'landmark', 'hours', 'active', 'regionId');
@@ -412,14 +436,8 @@ const describers: Record<string, Describer> = {
       ...changedLines(c, c.p.changed),
     ];
   },
-  'bts_point.shown': (c) => (
-    c.take('code'),
-    [fill(c.t.audit.detail.bts, { code: str(c.p.code) ?? '—' })]
-  ),
-  'bts_point.hidden': (c) => (
-    c.take('code'),
-    [fill(c.t.audit.detail.bts, { code: str(c.p.code) ?? '—' })]
-  ),
+  'bts_point.shown': btsOf,
+  'bts_point.hidden': btsOf,
   'bts_points.imported': (c) => {
     c.take('inserted', 'updated', 'unchanged', 'source', 'fetchedAt', 'refresh');
     return [
@@ -443,48 +461,41 @@ const describers: Record<string, Describer> = {
 
   'catalog.fragrance_created': (c) => {
     c.take('name', 'slug', 'code', 'hidden', 'source');
-    return [str(c.p.name) ?? c.e.targetName, c.p.hidden === true && c.t.audit.detail.hiddenNew];
+    return [str(c.p.name) ?? targetName(c), c.p.hidden === true && c.t.audit.detail.hiddenNew];
   },
   'catalog.fragrance_updated': (c) => {
     c.take('name', 'changed', 'volumes', 'source');
     const d = c.t.audit.detail;
     const volumes = Array.isArray(c.p.volumes) ? c.p.volumes.filter(isRecord) : [];
     return [
-      str(c.p.name) ?? c.e.targetName,
+      str(c.p.name) ?? targetName(c),
       ...changedLines(c, c.p.changed),
       ...volumes.map((v) => {
         const { ml, ...diff } = v;
-        return fill(d.volumes, {
-          ml: String(ml ?? '—'),
-          changes: changedLines(c, diff)
-            .map((l) => lower(l))
-            .join('; '),
-        });
+        return fill(d.volumes, { ml: String(ml ?? '—'), changes: diffPairs(c, diff).join('; ') });
       }),
     ];
   },
-  'catalog.fragrance_hidden': (c) => (c.take('name'), [str(c.p.name) ?? c.e.targetName]),
-  'catalog.fragrance_unhidden': (c) => (c.take('name'), [str(c.p.name) ?? c.e.targetName]),
+  'catalog.fragrance_hidden': fragranceOf,
+  'catalog.fragrance_unhidden': fragranceOf,
   'catalog.on_hand_changed': (c) => {
     c.take('fragrance', 'ml', 'onHand');
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(c.t.audit.detail.stock, {
-        name: str(c.p.fragrance) ?? c.e.targetName ?? '—',
+        name: str(c.p.fragrance) ?? targetName(c) ?? '—',
         ml: String(c.p.ml ?? '—'),
-        old: volumeText(c, pair[0]),
-        new: volumeText(c, pair[1]),
+        old: onHandText(c, pair[0]),
+        new: onHandText(c, pair[1]),
       }),
     ];
   },
   'catalog.photo_uploaded': (c) => {
     c.take('ml', 'fragranceId', 'photo');
+    const ml = int(c.p.ml);
     return [
-      c.e.targetName && int(c.p.ml) !== null
-        ? `${c.e.targetName}: ${lower(fill(c.t.audit.detail.photoFor, { ml: String(c.p.ml) }))}`
-        : int(c.p.ml) !== null
-          ? fill(c.t.audit.detail.photoFor, { ml: String(c.p.ml) })
-          : c.t.audit.detail.photo,
+      targetName(c),
+      ml !== null ? fill(c.t.audit.detail.photoFor, { ml: String(ml) }) : c.t.audit.detail.photo,
     ];
   },
   'catalog.family_created': (c) => dictionary(c),
@@ -547,7 +558,7 @@ const describers: Record<string, Describer> = {
     c.take('onHand');
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
-      fill(c.t.audit.detail.onHand, { old: volumeText(c, pair[0]), new: volumeText(c, pair[1]) }),
+      fill(c.t.audit.detail.onHand, { old: onHandText(c, pair[0]), new: onHandText(c, pair[1]) }),
     ];
   },
   'sets.discovery_photo_uploaded': (c) => (c.take('photo'), [c.t.audit.detail.photo]),
@@ -555,44 +566,42 @@ const describers: Record<string, Describer> = {
   'content.banner_created': (c) => {
     c.take('title', 'target');
     return [
-      fill(c.t.audit.detail.bannerNew, { title: str(c.p.title) ?? c.t.audit.detail.unknownName }),
+      fill(c.t.audit.detail.banner, { title: str(c.p.title) ?? c.t.audit.detail.unknownName }),
       str(c.p.target) &&
-        (((c.t.content.banner as { targets?: Record<string, string> }).targets ?? {})[
-          String(c.p.target)
-        ] ??
+        ((c.t.content.banner.targets as Record<string, string>)[String(c.p.target)] ??
           valueText(c, c.p.target)),
     ];
   },
   'content.banner_updated': (c) => {
     c.take('changed');
     return [
-      c.e.targetName && fill(c.t.audit.detail.bannerNew, { title: c.e.targetName }),
+      targetName(c) && fill(c.t.audit.detail.banner, { title: targetName(c) ?? '' }),
       ...changedLines(c, c.p.changed),
     ];
   },
   'content.banner_activated': (c) => {
     const lines = [
-      fill(c.t.audit.detail.bannerOn, { name: bannerName(c.e.targetName, c.e.targetId) }),
+      fill(c.t.audit.detail.bannerOn, { name: bannerName(targetName(c), c.e.targetId) }),
     ];
     return [...lines, ...switchedOff(c)];
   },
   'content.banner_deactivated': (c) => {
     const lines = [
-      fill(c.t.audit.detail.bannerOff, { name: bannerName(c.e.targetName, c.e.targetId) }),
+      fill(c.t.audit.detail.bannerOff, { name: bannerName(targetName(c), c.e.targetId) }),
     ];
     return [...lines, ...switchedOff(c)];
   },
   'content.banner_deleted': (c) => {
     c.take('title', 'wasActive');
     return [
-      fill(c.t.audit.detail.bannerNew, { title: str(c.p.title) ?? c.t.audit.detail.unknownName }),
+      fill(c.t.audit.detail.banner, { title: str(c.p.title) ?? c.t.audit.detail.unknownName }),
       c.p.wasActive === true && c.t.audit.detail.bannerWasActive,
     ];
   },
   'content.banner_photo_uploaded': (c) => {
     c.take('photo');
     return [
-      c.e.targetName && fill(c.t.audit.detail.bannerNew, { title: c.e.targetName }),
+      targetName(c) && fill(c.t.audit.detail.banner, { title: targetName(c) ?? '' }),
       c.t.audit.detail.photo,
     ];
   },
@@ -699,7 +708,7 @@ const describers: Record<string, Describer> = {
   },
 };
 
-/** A family or a note: its name in the reader's language, with the other one after it. */
+/** A family or a note: its Russian and Uzbek names side by side. */
 function dictionary(c: Ctx): string[] {
   c.take('nameRu', 'nameUz', 'aliases');
   const ru = str(c.p.nameRu);

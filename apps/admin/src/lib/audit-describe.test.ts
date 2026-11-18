@@ -1,5 +1,7 @@
 import type { AuditEntryDto } from '@lummi/contracts';
 import { adminMessages } from '@lummi/i18n/admin';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DESCRIBED_ACTIONS, describeAudit, humanise } from './audit-describe';
 
@@ -17,9 +19,40 @@ const entry = (
   targetType: 'x',
   targetId: '2',
   targetName: null,
+  targetNameUz: null,
   payload,
   ...over,
 });
+
+/**
+ * The actions the API source writes, found where it writes them: `action: …` (a literal or a
+ * ternary pair), `audit: '…'` in the order-status effects, and the dictionary template
+ * `catalog.${target}_created|updated`. A new action there without a describer fails this test.
+ */
+function apiActions(): string[] {
+  const root = fileURLToPath(new URL('../../../api/src', import.meta.url));
+  const files: string[] = [];
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const path = `${dir}/${name}`;
+      if (statSync(path).isDirectory()) walk(path);
+      else if (/\.ts$/.test(name) && !/\.(spec|test)\.ts$/.test(name)) files.push(path);
+    }
+  };
+  walk(root);
+  const found = new Set<string>();
+  const code = /'([a-z_]+(?:\.[a-z_]+)+)'/g;
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/\baction: ([^\n]*)/g))
+      for (const c of m[1]!.matchAll(code)) found.add(c[1]!);
+    for (const m of text.matchAll(/\baudit: '([a-z_.]+)'/g)) found.add(m[1]!);
+    if (text.includes('action: `catalog.${target}_'))
+      for (const k of ['family', 'note'])
+        for (const v of ['created', 'updated']) found.add(`catalog.${k}_${v}`);
+  }
+  return [...found].sort();
+}
 
 const ru = adminMessages.ru.admin;
 const uz = adminMessages.uz.admin;
@@ -119,7 +152,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
   ],
   ['customer.write_access_granted', {}, {}, [], []],
   ['customer.write_access_refused', {}, {}, [], []],
-  ['customer.data_consent_given', { order: 12 }, {}, ['При заказе № 12'], ['12-buyurtmada']],
+  ['customer.data_consent_given', { order: 12 }, {}, ['При заказе № 12'], ['№ 12 buyurtmada']],
   ['customer.birth_date_set', { via: 'profile', set: true }, {}, ['В профиле'], ['Profilda']],
   [
     'customer.birth_date_corrected',
@@ -133,7 +166,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     { number: 12, total: 100000, status: 'awaiting_payment' },
     {},
     ['Заказ № 12 на 100 000 сум'],
-    ['12-buyurtma, 100 000 soʻm'],
+    ['№ 12 buyurtma, 100 000 soʻm'],
   ],
   [
     'order.refunded',
@@ -192,7 +225,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     'bts_point.updated',
     { code: 'a', changed: { hours: { from: '9', to: '10' } } },
     {},
-    ['Пункт a', 'часы работы: 9 → 10'],
+    ['Пункт a', 'Часы работы: 9 → 10'],
     [],
   ],
   ['bts_point.shown', { code: 'a' }, {}, ['Пункт a'], ['a punkti']],
@@ -238,7 +271,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     'catalog.photo_uploaded',
     { ml: 30, fragranceId: 1, photo: ['a', 'b'] },
     { targetName: 'Tygar' },
-    ['Tygar: фото для 30 мл'],
+    ['Tygar', 'Фото для 30 мл'],
     [],
   ],
   [
@@ -313,7 +346,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     'content.banner_updated',
     { changed: { titleRu: ['A', 'B'] } },
     { targetName: 'B' },
-    ['Баннер «B»', 'заголовок (RU): A → B'],
+    ['Баннер «B»', 'Заголовок (RU): A → B'],
     [],
   ],
   [
@@ -351,7 +384,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     'promo.updated',
     { code: 'NEW10', changed: { percent: [10, 15] } },
     {},
-    ['Код NEW10', 'процент: 10 → 15'],
+    ['Код NEW10', 'Процент: 10 → 15'],
     [],
   ],
   ['promo.deleted', { code: 'NEW10' }, {}, ['Код NEW10'], ['Kod NEW10']],
@@ -366,7 +399,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     'campaign_link.updated',
     { code: 'insta', changed: { sourceLabel: ['a', 'b'] } },
     {},
-    ['Ссылка insta', 'название: a → b'],
+    ['Ссылка insta', 'Название: a → b'],
     [],
   ],
   ['campaign_link.deleted', { code: 'insta' }, {}, ['Ссылка insta'], []],
@@ -395,24 +428,9 @@ describe('audit details read as text (#63)', () => {
     for (const line of say(e, 'uz')) expect(line).not.toMatch(/[{}[\]"]/);
   });
 
-  it('every action the API writes has a describer', () => {
-    const written = [
-      ...table.map((r) => r[0]),
-      'order.receipt_submitted',
-      'order.payment_confirmed',
-      'order.receipt_rejected',
-      'order.payment_not_found',
-      'order.accepted',
-      'order.assembling',
-      'order.handed_to_bts',
-      'order.delivered',
-      'order.returned',
-      'order.cancelled',
-    ];
-    for (const a of written) expect(DESCRIBED_ACTIONS).toContain(a);
-    for (const a of Object.keys(ru.audit.actions)) {
-      if (a.startsWith('order.') || a.startsWith('review.')) expect(DESCRIBED_ACTIONS).toContain(a);
-    }
+  it('every action the API writes has a describer (read from the API source)', () => {
+    expect(apiActions().length).toBeGreaterThan(55);
+    for (const a of apiActions()) expect(DESCRIBED_ACTIONS, a).toContain(a);
   });
 
   it('an order move names both statuses and what came with it', () => {
@@ -457,18 +475,96 @@ describe('audit details read as text (#63)', () => {
     ).toEqual(['Баннер «Лето» включён на Главной', 'Баннер «Зима» выключен']);
   });
 
-  it('an unknown key is a labelled line, never braces', () => {
+  it('an unknown key is a labelled line, never braces; a named key reads in the panel language', () => {
     expect(
       say(
         entry('catalog.fragrance_hidden', {
           name: 'Tygar',
-          belowReserve: 3,
+          someKey: 3,
           nested: { a: 1, b: [1, 2] },
           flag: true,
+          belowReserve: 3,
         }),
       ),
-    ).toEqual(['Tygar', 'Below reserve: 3', 'Nested: a 1, b 1, 2', 'Flag: да']);
+    ).toEqual(['Tygar', 'Some key: 3', 'Nested: a 1, b 1, 2', 'Flag: да', 'Остаток ниже брони: 3']);
     expect(say(entry('future.thing', { someKey: 'x' }, {}), 'uz')).toEqual(['Some key: x']);
     expect(humanise('belowReserve')).toBe('Below reserve');
+  });
+
+  it('a credit in tiyin and a negative difference read exactly, never throw', () => {
+    const lines = say(
+      entry('order.payment_confirmed', {
+        number: 12,
+        from: 'receipt_review',
+        to: 'payment_confirmed',
+        creditAmountTiyin: 7575050,
+        differenceTiyin: -12345,
+        amountDue: 76000,
+        cardLast4: '1111',
+        offShopCard: false,
+        receiptId: 1,
+        creditId: 2,
+      }),
+    );
+    expect(lines.slice(1)).toEqual([
+      'Поступление 75 750,50 сум, карта ••1111',
+      'Разница с суммой заказа: −123,45 сум',
+    ]);
+    const credit = say(
+      entry('credit.marked_not_for_order', {
+        amountTiyin: 7575050,
+        occurredAt: '2026-11-17T10:00:00.000Z',
+        cardLast4: '1234',
+      }),
+    );
+    expect(credit[0]).toBe('Поступление 75 750,50 сум от 17.11.2026 15:00, карта ••1234');
+  });
+
+  it('every key an order move reads is taken: nothing prints twice in English', () => {
+    const notFound = say(
+      entry('order.payment_not_found', {
+        number: 12,
+        from: 'receipt_review',
+        to: 'awaiting_payment',
+        receiptId: 5,
+        duplicateOf: 4,
+        pausedSeconds: 30,
+        reserveEnded: true,
+      }),
+    );
+    expect(notFound.slice(1)).toEqual([
+      'Чек повторяет присланный раньше',
+      'Бронь закончилась, заказ отменён',
+    ]);
+    const lines = [
+      { position: 0, backToStock: true, nameRu: 'Тигар', nameUz: 'Tygar', ml: 30, qty: 2 },
+      { position: 1, backToStock: false },
+    ];
+    const returned = entry('order.returned', {
+      number: 12,
+      from: 'delivered',
+      to: 'returned',
+      reason: 'не подошёл',
+      lines,
+    });
+    expect(say(returned).slice(1)).toEqual([
+      'Причина: не подошёл',
+      'Тигар, 30 мл × 2: вернули на полку',
+      'Позиция 2: не вернули на полку',
+    ]);
+    expect(say(returned, 'uz').slice(2)).toEqual([
+      'Tygar, 30 ml × 2: javonga qaytarildi',
+      '2-pozitsiya: javonga qaytarilmadi',
+    ]);
+  });
+
+  it('a banner is named in the panel language', () => {
+    const e = entry(
+      'content.banner_deactivated',
+      {},
+      { targetName: 'Зима', targetNameUz: 'Qish', targetType: 'promo_banner' },
+    );
+    expect(say(e)).toEqual(['Баннер «Зима» выключен']);
+    expect(say(e, 'uz')).toEqual(['«Qish» banneri oʻchirildi']);
   });
 });
