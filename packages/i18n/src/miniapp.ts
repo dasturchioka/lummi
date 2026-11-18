@@ -277,6 +277,7 @@ export const miniappMessages = defineMessages(
       photoTooLarge: 'Фото слишком большое: нужно до 10 МБ.',
       photoBadType: 'Подойдёт фото в формате JPEG, PNG или WebP.',
       photoNoTelegram: 'В вашем профиле Telegram нет фото.',
+      photoTooMany: 'Слишком часто меняете фото. Попробуйте через час.',
       photoFailed: 'Не получилось сохранить. Попробуйте ещё раз.',
     },
     /** Info pages (about, delivery, returns, FAQ, contacts, offer); the texts themselves come from the API. */
@@ -591,6 +592,7 @@ export const miniappMessages = defineMessages(
       photoTooLarge: 'Rasm juda katta: 10 MB gacha boʻlishi kerak.',
       photoBadType: 'JPEG, PNG yoki WebP formatidagi rasm kerak.',
       photoNoTelegram: 'Telegram profilingizda rasm yoʻq.',
+      photoTooMany: 'Rasmni juda tez-tez almashtiryapsiz. Bir soatdan keyin urinib koʻring.',
       photoFailed: 'Saqlab boʻlmadi. Yana urinib koʻring.',
     },
     info: {

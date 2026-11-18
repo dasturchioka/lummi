@@ -25,14 +25,19 @@ export class CustomersService {
   ) {}
 
   /** First sign-in creates the customer (language from language_code); later ones refresh the profile only. */
-  async signIn(user: InitDataUser, outer?: DbOrTx): Promise<CustomerRow> {
+  async signIn(
+    user: InitDataUser,
+    outer?: DbOrTx,
+    opts: { signed?: boolean } = {},
+  ): Promise<CustomerRow> {
     const run = async (tx: DbOrTx): Promise<CustomerRow> => {
       const profile = {
         firstName: user.first_name,
         lastName: user.last_name ?? null,
         username: user.username ?? null,
-        // the bot's /start has no photo_url: only the Mini App's signed one updates it
-        ...(user.photo_url === undefined ? {} : { telegramPhotoUrl: user.photo_url }),
+        // Only the Mini App's signed initData speaks for the photo: without a `photo_url` there it
+        // is gone, so the stored one is cleared. The bot's /start (`ctx.from`) never carries one.
+        ...(opts.signed ? { telegramPhotoUrl: user.photo_url ?? null } : {}),
       };
       const [created] = await tx
         .insert(customers)

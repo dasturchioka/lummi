@@ -132,3 +132,6 @@ export type InfoPageSlug = (typeof INFO_PAGE_SLUGS)[number];
 
 /** The target that stands for the Discovery set in `PUT/DELETE /favourites/:target` (#45). */
 export const DISCOVERY_FAVOURITE = 'discovery-set';
+
+/** Side lengths (px) of the square WebP renditions of a profile photo (#67); the API renders them, the Mini App and the panel pick by them. */
+export const PROFILE_PHOTO_SIZES = [96, 192, 384] as const;

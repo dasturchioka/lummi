@@ -272,7 +272,7 @@ const telegramOf: Describer = (c) => {
 };
 const photoOf: Describer = (c) => {
   c.take('photo', 'source');
-  const how = c.t.audit.detail.avatar as Record<string, string>;
+  const how = c.t.audit.detail.profilePhoto as Record<string, string>;
   return [how[String(c.p.source)] ?? c.t.audit.detail.photo];
 };
 const reviewOf: Describer = (c) => {

@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
 import { SearchIcon } from '../ui/icons-core';
-import { AvatarImage } from '../ui/AvatarImage';
+import { ProfilePhotoImage } from '../ui/ProfilePhotoImage';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
@@ -128,7 +128,7 @@ export function Home() {
             className={`${DISC} relative overflow-hidden`}
           >
             <Monogram size={22} />
-            <AvatarImage photo={customer?.photo} sizes="44px" />
+            <ProfilePhotoImage photo={customer?.photo} sizes="44px" />
           </Link>
         </div>
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">

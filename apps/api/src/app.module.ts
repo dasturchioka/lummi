@@ -84,8 +84,12 @@ import { OrderCards } from './orders-group/order-cards';
 import { Refunds } from './refunds/refunds';
 import { OrdersGroupBot } from './orders-group/orders-group-bot';
 import { WebhookController } from './bot/webhook.controller';
-import { AdminAvatarController, AvatarController } from './avatar/avatar.controller';
-import { AvatarService } from './avatar/avatar.service';
+import {
+  AdminProfilePhotoController,
+  ProfilePhotoController,
+  ProfilePhotoMediaController,
+} from './profile-photo/profile-photo.controller';
+import { ProfilePhotoService } from './profile-photo/profile-photo.service';
 import { MeController } from './me/me.controller';
 import { CreditEvents } from './humo/credit-events';
 import { HumoFeedController } from './humo/humo-feed.controller';
@@ -130,8 +134,9 @@ export class AppModule {
         HealthController,
         AuthController,
         MeController,
-        AvatarController,
-        AdminAvatarController,
+        ProfilePhotoController,
+        AdminProfilePhotoController,
+        ProfilePhotoMediaController,
         CatalogController,
         CartController,
         SetsController,
@@ -224,7 +229,7 @@ export class AppModule {
         StaffSessionService,
         LoginThrottle,
         StaffTelegramLinks,
-        AvatarService,
+        ProfilePhotoService,
         StaffGuard,
         OwnerGuard,
         InternalGuard,

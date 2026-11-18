@@ -1,5 +1,6 @@
 'use client';
 
+import type { PROFILE_PHOTO_SIZES } from '@lummi/contracts';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -14,12 +15,15 @@ export function initialsOf(name: string): string {
     .toUpperCase();
 }
 
-/** Profile photos are square WebP renditions of one content hash (#67), served like product photos. */
-export const avatarUrl = (hash: string, size: 96 | 192 | 384 = 96) =>
-  `/api/media/public/avatar-${hash}-${size}.webp`;
+/**
+ * Profile photos are personal data (#67): square WebP renditions served by the API itself (the
+ * panel's `/api` proxy), never by the media host.
+ */
+export const profilePhotoUrl = (key: string, size: (typeof PROFILE_PHOTO_SIZES)[number] = 96) =>
+  `/api/profile-photos/${key}-${size}.webp`;
 
 /**
- * A person's photo in a circle, with their initial letters on Stone when there is none (or it
+ * A person's profile photo in a circle, with their initial letters on Stone when there is none (or it
  * fails to load). Decorative: the name always sits beside it.
  */
 export function Avatar({
@@ -45,8 +49,8 @@ export function Avatar({
       {initialsOf(name)}
       {showPhoto ? (
         <img
-          src={avatarUrl(photo)}
-          srcSet={`${avatarUrl(photo, 96)} 1x, ${avatarUrl(photo, 192)} 2x, ${avatarUrl(photo, 384)} 4x`}
+          src={profilePhotoUrl(photo)}
+          srcSet={`${profilePhotoUrl(photo, 96)} 1x, ${profilePhotoUrl(photo, 192)} 2x, ${profilePhotoUrl(photo, 384)} 4x`}
           alt=""
           onError={() => setFailed(photo)}
           className="absolute inset-0 size-full object-cover"

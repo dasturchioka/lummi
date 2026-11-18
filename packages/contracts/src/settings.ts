@@ -955,6 +955,18 @@ export const settingDefinitions = {
       uz: 'Urinishlar tugaganda qancha kutish kerak. Bu vaqtda toʻgʻri parol ham qabul qilinmaydi.',
     },
   },
+  /** Profile photo changes (upload, Telegram photo, remove) one customer or staff member may make per hour (#67). */
+  'photos.changesPerHour': {
+    schema: z.number().int().min(1).max(100),
+    default: 10,
+    area: 'system',
+    unit: 'count',
+    label: { ru: 'Смен фото профиля в час', uz: 'Soatiga profil rasmini almashtirish' },
+    hint: {
+      ru: 'Сколько раз в час клиент или сотрудник может загрузить, взять из Telegram или убрать фото профиля. Дальше сервер отвечает «слишком часто».',
+      uz: 'Mijoz yoki xodim soatiga necha marta profil rasmini yuklashi, Telegramdan olishi yoki olib tashlashi mumkin. Undan ortig‘iga server «juda tez-tez» deb javob beradi.',
+    },
+  },
   'auth.telegramLinkTtlSeconds': {
     schema: z.number().int().min(60).max(86_400),
     default: 10 * 60,

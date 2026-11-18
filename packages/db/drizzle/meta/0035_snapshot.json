@@ -1,5 +1,5 @@
 {
-  "id": "8743fb81-ca76-4d86-b612-5dc195472888",
+  "id": "0e6bc118-b40d-421a-bced-805599a67464",
   "prevId": "063e2282-034a-426a-a35e-79e8048dfdf7",
   "version": "7",
   "dialect": "postgresql",
@@ -1503,8 +1503,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "photo_hash": {
-          "name": "photo_hash",
+        "photo_key": {
+          "name": "photo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -5801,8 +5801,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "photo_hash": {
-          "name": "photo_hash",
+        "photo_key": {
+          "name": "photo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false

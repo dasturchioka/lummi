@@ -9,7 +9,7 @@ export const toStaffDto = (s: StaffRow): StaffDto => ({
   hasPassword: s.passwordHash !== null,
   mustChangePassword: s.mustChangePassword,
   name: s.name,
-  photo: s.photoHash,
+  photo: s.photoKey,
   role: s.role,
   active: s.active,
 });

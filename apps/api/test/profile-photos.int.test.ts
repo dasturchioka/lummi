@@ -1,7 +1,8 @@
 import { auditLog, customers, eq, staff } from '@lummi/db';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AVATAR_SIZES, avatarKey } from '../src/avatar/avatar-pipeline';
+import { PROFILE_PHOTO_SIZES } from '@lummi/contracts';
+import { profilePhotoKey } from '../src/profile-photo/profile-photo-pipeline';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -50,27 +51,30 @@ const post = (token: string) =>
   fetch(`${t.baseUrl}/me/photo/telegram`, { method: 'POST', headers: bearer(token) });
 const del = (token: string) =>
   fetch(`${t.baseUrl}/me/photo`, { method: 'DELETE', headers: bearer(token) });
-const keysOf = (hash: string) => AVATAR_SIZES.map((s) => avatarKey(hash, s));
-const stored = () => [...t.edges.files.files.keys()].filter((k) => k.includes('avatar-'));
+const keysOf = (hash: string) => PROFILE_PHOTO_SIZES.map((s) => profilePhotoKey(hash, s));
+const stored = () => [...t.edges.files.files.keys()].filter((k) => k.startsWith('profile-photos/'));
 
-describe('customer photo upload', () => {
+describe('customer profile photo upload', () => {
   it('crops a non-square photo to a centred square, stores three WebP sizes and audits', async () => {
     const { token, id } = await signIn(1);
     const res = await put(token, await image(1200, 600));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { photo: string };
     expect(body.photo).toMatch(/^[a-f0-9]{32}$/);
-    for (const size of AVATAR_SIZES) {
-      const file = await t.edges.files.get(avatarKey(body.photo, size));
+    for (const size of PROFILE_PHOTO_SIZES) {
+      const file = await t.edges.files.get(profilePhotoKey(body.photo, size));
       const meta = await sharp(file!).metadata();
       expect([meta.format, meta.width, meta.height]).toEqual(['webp', size, size]);
     }
     expect(stored()).toHaveLength(3);
     // no original is kept
     expect([...t.edges.files.files.keys()].some((k) => k.startsWith('originals/'))).toBe(false);
-    const served = await fetch(`${t.baseUrl}/media/public/avatar-${body.photo}-192.webp`);
+    const served = await fetch(`${t.baseUrl}/profile-photos/${body.photo}-192.webp`);
     expect(served.status).toBe(200);
     expect(served.headers.get('content-type')).toBe('image/webp');
+    expect(served.headers.get('cache-control')).toBe('private, max-age=86400');
+    // not on the product-photo route
+    expect((await fetch(`${t.baseUrl}/media/public/${body.photo}-192.webp`)).status).toBe(404);
     const me = await t.client.me.get({ extraHeaders: bearer(token) });
     expect(me.status === 200 && me.body.photo).toBe(body.photo);
     const [entry] = await t.db
@@ -134,24 +138,85 @@ describe('customer photo upload', () => {
     ).toHaveLength(3);
   });
 
-  it("one customer cannot touch another's photo; shared renditions survive the other's removal", async () => {
+  it("one customer cannot touch another's photo; names are random and never shared", async () => {
     const a = await signIn(1);
     const b = await signIn(2);
     const bytes = await image(400, 400);
     const pa = (await (await put(a.token, bytes)).json()) as { photo: string };
     const pb = (await (await put(b.token, bytes)).json()) as { photo: string };
-    expect(pb.photo).toBe(pa.photo); // identical bytes, one set of files
+    expect(pb.photo).not.toBe(pa.photo); // identical bytes, two owners, two unrelated names
+    expect(stored()).toHaveLength(6);
     await del(a.token);
     const [rowB] = await t.db.select().from(customers).where(eq(customers.id, b.id));
-    expect(rowB!.photoHash).toBe(pb.photo);
-    expect(stored()).toHaveLength(3);
+    expect(rowB!.photoKey).toBe(pb.photo);
+    expect(stored().sort()).toEqual(keysOf(pb.photo).sort());
     await del(b.token);
     expect(stored()).toHaveLength(0);
     // another customer's photo is never reachable: no id in any path
     const other = await put(a.token, await image(400, 400, 'png', 99));
     expect(((await other.json()) as { id: number }).id).toBe(a.id);
     const [rowB2] = await t.db.select().from(customers).where(eq(customers.id, b.id));
-    expect(rowB2!.photoHash).toBeNull();
+    expect(rowB2!.photoKey).toBeNull();
+  });
+
+  it('drops EXIF and GPS, applies the orientation, and refuses SVG, GIF and oversized pixels', async () => {
+    const { token } = await signIn(1);
+    const withExif = await sharp({
+      create: { width: 600, height: 300, channels: 3, background: { r: 1, g: 2, b: 3 } },
+    })
+      .jpeg()
+      .withExif({ IFD0: { Copyright: 'secret' }, IFD3: { GPSLatitudeRef: 'N' } })
+      .toBuffer();
+    expect((await sharp(withExif).metadata()).exif).toBeDefined();
+    const res = await put(token, withExif, 'image/jpeg');
+    expect(res.status).toBe(200);
+    const { photo } = (await res.json()) as { photo: string };
+    for (const size of PROFILE_PHOTO_SIZES) {
+      const meta = await sharp((await t.edges.files.get(profilePhotoKey(photo, size)))!).metadata();
+      expect(meta.exif).toBeUndefined();
+      expect(meta.icc).toBeUndefined();
+    }
+    const gif = await sharp({ create: { width: 50, height: 50, channels: 3, background: '#fff' } })
+      .gif()
+      .toBuffer();
+    expect((await put(token, gif, 'image/png')).status).toBe(415);
+    // a decompression bomb: far more pixels than the 40 Mpx guard, tiny on the wire
+    const bomb = await sharp({
+      create: { width: 9000, height: 9000, channels: 3, background: '#000' },
+    })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    expect(bomb.length).toBeLessThan(10 * 1024 * 1024);
+    expect((await put(token, bomb)).status).toBe(422);
+  });
+
+  it('throttles changes per customer by photos.changesPerHour, 429, and frees up after an hour', async () => {
+    t.edges.clock.set(new Date('2026-11-18T10:00:00Z'));
+    const { token } = await signIn(1);
+    const other = await signIn(2);
+    for (let i = 0; i < 10; i++)
+      expect((await put(token, await image(200, 200, 'png', 10 + i))).status).toBe(200);
+    const blocked = await put(token, await image(200, 200, 'png', 99));
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toMatchObject({ code: 'too_many' });
+    expect((await del(token)).status).toBe(429);
+    // another customer is unaffected
+    expect((await put(other.token, await image(200, 200))).status).toBe(200);
+    t.edges.clock.set(new Date('2026-11-18T11:00:01Z'));
+    const again = await signIn(1);
+    expect((await put(again.token, await image(200, 200, 'png', 99))).status).toBe(200);
+  });
+
+  it('signs in again without a photo_url: the stored Telegram URL is cleared', async () => {
+    const { token } = await signIn(7, PHOTO_URL);
+    const [before] = await t.db.select().from(customers).where(eq(customers.telegramId, 7));
+    expect(before!.telegramPhotoUrl).toBe(PHOTO_URL);
+    const again = await signIn(7);
+    const [after] = await t.db.select().from(customers).where(eq(customers.telegramId, 7));
+    expect(after!.telegramPhotoUrl).toBeNull();
+    const me = await t.client.me.get({ extraHeaders: bearer(again.token) });
+    expect(me.status === 200 && me.body.telegramPhoto).toBe(false);
+    void token;
   });
 });
 
@@ -198,6 +263,17 @@ describe('customer Telegram photo', () => {
     ).toEqual([]);
   });
 
+  it('applies the same image check to Telegram bytes: an SVG is refused', async () => {
+    const { token } = await signIn(8, PHOTO_URL);
+    t.edges.telegramFiles.urls.set(
+      PHOTO_URL,
+      new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    );
+    const res = await post(token);
+    expect(res.status).toBe(404);
+    expect(stored()).toEqual([]);
+  });
+
   it('never takes a URL from the client', async () => {
     const { token } = await signIn(5);
     t.edges.telegramFiles.urls.set('https://evil.test/x.png', await image(200, 200));
@@ -211,7 +287,7 @@ describe('customer Telegram photo', () => {
   });
 });
 
-describe('staff avatar', () => {
+describe('staff profile photo', () => {
   const putStaff = (as: StaffSession, body: Uint8Array) =>
     fetch(`${t.baseUrl}/admin/me/photo`, {
       method: 'PUT',
@@ -246,14 +322,14 @@ describe('staff avatar', () => {
     };
     expect(theirs.id).toBe(manager.staff.id);
     const [o] = await t.db.select().from(staff).where(eq(staff.id, owner.staff.id));
-    expect(o!.photoHash).toBe(mine.photo);
+    expect(o!.photoKey).toBe(mine.photo);
     const gone = await fetch(`${t.baseUrl}/admin/me/photo`, {
       method: 'DELETE',
       headers: { cookie: manager.cookie },
     });
     expect(gone.status).toBe(200);
     const [o2] = await t.db.select().from(staff).where(eq(staff.id, owner.staff.id));
-    expect(o2!.photoHash).toBe(mine.photo);
+    expect(o2!.photoKey).toBe(mine.photo);
     expect(stored().sort()).toEqual(keysOf(mine.photo).sort());
     expect((await fetch(`${t.baseUrl}/admin/me/photo`, { method: 'DELETE' })).status).toBe(401);
   });

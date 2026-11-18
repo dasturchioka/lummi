@@ -28,6 +28,7 @@ export default function PhotoSheet({
     too_large: t.profile.photoTooLarge,
     bad_type: t.profile.photoBadType,
     no_telegram: t.profile.photoNoTelegram,
+    too_many: t.profile.photoTooMany,
     failed: t.profile.photoFailed,
   } as const;
 

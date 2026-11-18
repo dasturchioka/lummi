@@ -3,13 +3,14 @@ import { API_BASE, withSession } from '../lib/api';
 
 export type PhotoOutcome =
   | { ok: true; customer: CustomerDto }
-  | { ok: false; reason: 'too_large' | 'bad_type' | 'no_telegram' | 'failed' };
+  | { ok: false; reason: 'too_large' | 'bad_type' | 'no_telegram' | 'too_many' | 'failed' };
 
 const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
 
 async function outcome(res: Response): Promise<PhotoOutcome> {
   if (res.ok) return { ok: true, customer: customerSchema.parse(await res.json()) };
   if (res.status === 413) return { ok: false, reason: 'too_large' };
+  if (res.status === 429) return { ok: false, reason: 'too_many' };
   if (res.status === 415 || res.status === 422) return { ok: false, reason: 'bad_type' };
   if (res.status === 404) {
     const body = (await res.json().catch(() => ({}))) as { code?: string };

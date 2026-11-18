@@ -17,7 +17,7 @@ export async function toCustomerDto(
     theme: c.theme,
     phone: c.phone,
     writeAccess: c.writeAccess,
-    photo: c.photoHash,
+    photo: c.photoKey,
     telegramPhoto: c.telegramPhotoUrl !== null,
     config: { managerUsername: await settings.get('shop.managerUsername') },
   };

@@ -10,7 +10,7 @@ import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
 import { ChevronIcon, ContrastIcon, GlobeIcon, HeartIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
-import { AvatarImage } from '../ui/AvatarImage';
+import { ProfilePhotoImage } from '../ui/ProfilePhotoImage';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Segmented } from '../ui/Segmented';
@@ -52,7 +52,7 @@ export function Profile() {
           className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-pill bg-block text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95"
         >
           <Monogram size={30} />
-          <AvatarImage photo={customer?.photo} sizes="56px" />
+          <ProfilePhotoImage photo={customer?.photo} sizes="56px" />
         </button>
         {customer ? (
           <div className="min-w-0">

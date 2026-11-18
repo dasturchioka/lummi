@@ -11,8 +11,6 @@ import { SettingsService } from '../settings/settings.service';
 import { EDGES, ENV } from '../tokens';
 import type { Env } from '../env';
 
-const toDto = toCustomerDto;
-
 @Controller()
 @UseGuards(SessionGuard)
 export class MeController {
@@ -29,7 +27,7 @@ export class MeController {
     return tsRestHandler(contract.me.get, async () => {
       const c = await this.customers.getById(customerId);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 
@@ -38,7 +36,7 @@ export class MeController {
     return tsRestHandler(contract.me.updatePreferences, async ({ body }) => {
       const c = await this.customers.updatePreferences(customerId, body);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 
@@ -84,7 +82,7 @@ export class MeController {
       return {
         status: 200 as const,
         body: {
-          customer: await toDto(done.customer, this.settings),
+          customer: await toCustomerDto(done.customer, this.settings),
           session: session
             ? { token: session.token, expiresAt: session.expiresAt.toISOString() }
             : null,
@@ -98,7 +96,7 @@ export class MeController {
     return tsRestHandler(contract.me.writeAccess, async ({ body }) => {
       const c = await this.customers.recordWriteAccess(customerId, body.allowed);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 }

@@ -2,11 +2,11 @@ import { Controller, Get, Inject, NotFoundException, Param, Res } from '@nestjs/
 import type { Response } from 'express';
 import type { Edges } from '../edges';
 import { EDGES } from '../tokens';
-import { AVATAR_FILE } from '../avatar/avatar-pipeline';
 import { PHOTO_FILE, PUBLIC_PREFIX } from './photo-pipeline';
 
 /**
- * Product photos for development and tests. In production Caddy serves the same files on
+ * Product photos (never profile photos, which are personal data and have their own API route,
+ * `ProfilePhotoMediaController`) for development and tests. In production Caddy serves the same files on
  * `media.<domain>` with the same header (ADR 0020), from `FILES_DIR/public` only, never from
  * `FILES_DIR` itself: receipts live beside it under `private/` and are served only through the API
  * (#28). Names are content hashes, so a file never changes and may be cached forever.
@@ -17,7 +17,7 @@ export class MediaController {
 
   @Get(':file')
   async photo(@Param('file') file: string, @Res() res: Response): Promise<void> {
-    if (!PHOTO_FILE.test(file) && !AVATAR_FILE.test(file)) throw new NotFoundException();
+    if (!PHOTO_FILE.test(file)) throw new NotFoundException();
     const data = await this.edges.files.get(`${PUBLIC_PREFIX}${file}`);
     if (!data) throw new NotFoundException();
     res

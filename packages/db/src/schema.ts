@@ -65,8 +65,8 @@ export const customers = pgTable(
     username: text('username'),
     /** The signed initData `photo_url` of the last sign-in; the server fetches it itself when asked (#67). */
     telegramPhotoUrl: text('telegram_photo_url'),
-    /** Content hash of the profile photo's stored renditions (#67); null = the monogram. */
-    photoHash: text('photo_hash'),
+    /** Random name of the profile photo's stored renditions (#67), unguessable and the customer's alone; null = the monogram. */
+    photoKey: text('photo_key'),
     language: languageEnum('language').notNull(),
     /** Light by default whatever Telegram says; dark is a Profile option (spec 2026-11-07). */
     theme: themeEnum('theme').notNull().default('light'),
@@ -166,8 +166,8 @@ export const staff = pgTable(
     /** A temporary password (set by the owner or the CLI): nothing else works until it is changed. */
     mustChangePassword: boolean('must_change_password').notNull().default(false),
     name: text('name').notNull(),
-    /** Content hash of the member's avatar renditions (#67); null = the initial letter. */
-    photoHash: text('photo_hash'),
+    /** Random name of the member's profile photo renditions (#67); null = the initial letter. */
+    photoKey: text('photo_key'),
     role: staffRoleEnum('role').notNull(),
     active: boolean('active').notNull().default(true),
     createdAt: createdAt(),

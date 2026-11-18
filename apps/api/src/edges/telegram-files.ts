@@ -96,17 +96,7 @@ export class GrammyFiles implements TelegramFiles {
         signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
         redirect: 'error',
       });
-      if (!res.ok || !res.body) return { kind: 'unavailable' };
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-        total += chunk.length;
-        if (total > maxBytes) {
-          return { kind: 'too_large' };
-        }
-        chunks.push(chunk);
-      }
-      return { kind: 'ok', bytes: Buffer.concat(chunks) };
+      return await readCapped(res, maxBytes);
     } catch (e) {
       if (e instanceof GrammyError && /too big/i.test(e.description)) return { kind: 'too_large' };
       // describeError keeps the error's name and code, never the request URL (which holds the token)

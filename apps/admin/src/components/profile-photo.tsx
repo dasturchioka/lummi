@@ -41,7 +41,9 @@ export function ProfilePhoto({ member, t }: { member: StaffDto; t: AdminMessages
             ? p.photoBadType
             : res.status === 404
               ? p.photoNoTelegram
-              : p.photoFailed;
+              : res.status === 429
+                ? p.photoTooMany
+                : p.photoFailed;
       setNote({ text: reason, error: true });
     } catch {
       setNote({ text: p.photoFailed, error: true });

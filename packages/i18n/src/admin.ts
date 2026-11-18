@@ -95,6 +95,7 @@ export const adminMessages = defineMessages(
         photoTooBig: 'Файл больше 10 МБ.',
         photoBadType: 'Подойдёт JPEG, PNG или WebP.',
         photoNoTelegram: 'В вашем профиле Telegram нет фото.',
+        photoTooMany: 'Слишком часто меняете фото. Попробуйте через час.',
         photoFailed: 'Не получилось сохранить фото. Попробуйте ещё раз.',
         passwordTitle: 'Пароль',
         currentPassword: 'Текущий пароль',
@@ -133,8 +134,7 @@ export const adminMessages = defineMessages(
         locked: 'Слишком много неудачных попыток',
         lockedHint: 'Вход закрыт до {time}. Попробуйте снова после этого времени.',
         loginTaken: 'Такой логин уже занят. Выберите другой.',
-        inactiveMember:
-          'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
+        inactiveMember: 'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
         ownRole: 'Свою роль менять нельзя: попросите другого владельца.',
         lastOwner: 'В магазине должен остаться хотя бы один действующий владелец.',
         telegramOnly:
@@ -362,7 +362,8 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Сотрудники',
-        description: 'Кто может входить в панель и что кому открыто.',
+        description:
+          'Кто может входить в панель и что кому открыто.',
         add: 'Добавить сотрудника',
         addTitle: 'Новый сотрудник',
         roleChoice: 'Роль',
@@ -871,7 +872,7 @@ export const adminMessages = defineMessages(
           stock: '{name}, {ml} мл: остаток {old} → {new}',
           photoFor: 'Фото для {ml} мл',
           photo: 'Фото заменено',
-          avatar: {
+          profilePhoto: {
             upload: 'Загружено фото',
             telegram: 'Взято фото из Telegram',
             removed: 'Фото убрано',
@@ -1713,13 +1714,7 @@ export const adminMessages = defineMessages(
           many: '{total} промокодов',
           other: '{total} промокода',
         },
-        columns: {
-          code: 'Код',
-          uses: 'Использовано',
-          fulfilled: 'Выданные заказы',
-          net: 'Чистые продажи',
-          state: 'Состояние',
-        },
+        columns: { code: 'Код', uses: 'Использовано', fulfilled: 'Выданные заказы', net: 'Чистые продажи', state: 'Состояние' },
         report: 'Отчёт по коду',
         reportLabel: 'Отчёт по коду {code}: маркетинг',
         statsHint:
@@ -2820,6 +2815,7 @@ export const adminMessages = defineMessages(
         photoTooBig: 'Fayl 10 MB dan katta.',
         photoBadType: 'JPEG, PNG yoki WebP boʻlishi kerak.',
         photoNoTelegram: 'Telegram profilingizda rasm yoʻq.',
+        photoTooMany: 'Rasmni juda tez-tez almashtiryapsiz. Bir soatdan keyin urinib koʻring.',
         photoFailed: 'Rasmni saqlab boʻlmadi. Yana urinib koʻring.',
         passwordTitle: 'Parol',
         currentPassword: 'Joriy parol',
@@ -3083,7 +3079,8 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Xodimlar',
-        description: 'Panelga kim kira oladi va kimga nima ochiq.',
+        description:
+          'Panelga kim kira oladi va kimga nima ochiq.',
         add: 'Xodim qoʻshish',
         addTitle: 'Yangi xodim',
         roleChoice: 'Rol',
@@ -3107,7 +3104,8 @@ export const adminMessages = defineMessages(
           'Lotin harflari, raqamlar, nuqta, _ va -; 3 dan 32 belgigacha. Katta-kichik harf farqi yoʻq.',
         noLogin: 'loginsiz',
         password: 'Vaqtinchalik parol',
-        passwordHint: 'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
+        passwordHint:
+          'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
         pendingPassword: 'parol almashtirilishi kutilmoqda',
         addedTitle: 'Xodim qoʻshildi',
         addedText:
@@ -3599,7 +3597,7 @@ export const adminMessages = defineMessages(
           stock: '{name}, {ml} ml: qoldiq {old} → {new}',
           photoFor: '{ml} ml uchun rasm',
           photo: 'Rasm almashtirildi',
-          avatar: {
+          profilePhoto: {
             upload: 'Rasm yuklandi',
             telegram: 'Telegram rasmi olindi',
             removed: 'Rasm olib tashlandi',
@@ -3833,8 +3831,7 @@ export const adminMessages = defineMessages(
           cancel: 'Bekor qilish',
           needsPhoto: 'Bannerni yoqish uchun rasm yuklang.',
           title: 'Sarlavha',
-          titleHint:
-            'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
+          titleHint: 'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
           subtitle: 'Qisqa matn',
           subtitleHint:
             'Ikki qator koʻrinadi, taxminan 55 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi: asosiysini boshida yozing.',
@@ -4455,13 +4452,7 @@ export const adminMessages = defineMessages(
           many: '{total} ta promokod',
           other: '{total} ta promokod',
         },
-        columns: {
-          code: 'Kod',
-          uses: 'Foydalanilgan',
-          fulfilled: 'Yetkazilgan buyurtmalar',
-          net: 'Sof savdo',
-          state: 'Holat',
-        },
+        columns: { code: 'Kod', uses: 'Foydalanilgan', fulfilled: 'Yetkazilgan buyurtmalar', net: 'Sof savdo', state: 'Holat' },
         report: 'Kod hisoboti',
         reportLabel: '{code} kodi hisoboti: marketing',
         statsHint:
