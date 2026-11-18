@@ -899,6 +899,9 @@ export const adminMessages = defineMessages(
           bottledLine: '{ml} мл × {qty}',
           bottledOil: 'Масла {grams} г, спирта {ml} мл',
           warehouseExported: 'Ароматов в файле: {fragrances}, записей истории: {moves}',
+          receiptDrafts: 'Черновики приходов по плану закупки: {count}, всего {grams} г',
+          draftDiscarded: '{name}: удалён черновик прихода {grams} г',
+          fromDraft: 'Подтверждён черновик из плана закупки',
           banner: 'Баннер «{title}»',
           bannerOn: 'Баннер {name} включён на Главной',
           bannerOff: 'Баннер {name} выключен',
@@ -2494,6 +2497,7 @@ export const adminMessages = defineMessages(
         value: 'По себестоимости: {sum}',
         open: 'Масло и история',
         openLabel: 'Масло и история: {name}',
+        drafts: 'Черновиков прихода: {n}',
         exportExcel: 'Скачать Excel',
       },
       warehouse: {
@@ -2561,6 +2565,15 @@ export const adminMessages = defineMessages(
           cancel: 'Отмена',
           short: 'Это масло уже разлито: забрать нужно {needed} г, а в остатке {balance} г.',
           alreadyVoided: 'Приход уже отменён. Обновите страницу.',
+          draft: 'Черновик',
+          draftLine: 'По плану закупки: подтвердите, как в накладной, или удалите.',
+          confirm: 'Подтвердить',
+          discard: 'Удалить',
+          confirmTitle: 'Подтвердить приход',
+          confirmText: 'Как в накладной. Граммы добавятся к остатку масла.',
+          discardTitle: 'Удалить черновик?',
+          discardText: 'Масло не изменится.',
+          notDraft: 'Черновик уже подтверждён или удалён. Обновите страницу.',
         },
         history: {
           title: 'История',
@@ -2801,6 +2814,11 @@ export const adminMessages = defineMessages(
         description:
           'План закупки масла: сколько выйдет флаконов, какой будет оборот и прибыль. Считается по настройкам, ценам масла и ценам каталога.',
         export: 'Скачать в Excel',
+        drafts: 'Черновики приходов по плану',
+        draftsHint:
+          'Для каждого аромата плана — черновик прихода на его килограммы по цене масла. Масло не изменится, пока вы не подтвердите приход по накладной на странице аромата.',
+        draftsDone: 'Создано черновиков: {n}. Они ждут на страницах ароматов в разделе «Склад».',
+        draftsFailed: 'Не удалось создать черновики. Попробуйте ещё раз.',
         inputsTitle: 'Что считаем',
         whatIf:
           'Значения здесь для пробы, они не сохраняются. Остальные числа закупки — в настройках.',
@@ -3904,6 +3922,9 @@ export const adminMessages = defineMessages(
           bottledLine: '{ml} ml × {qty}',
           bottledOil: '{grams} g moy, {ml} ml spirt',
           warehouseExported: 'Fayldagi atirlar: {fragrances}, tarix yozuvlari: {moves}',
+          receiptDrafts: 'Xarid rejasi boʻyicha kirim qoralamalari: {count}, jami {grams} g',
+          draftDiscarded: '{name}: {grams} g kirim qoralamasi oʻchirildi',
+          fromDraft: 'Xarid rejasidagi qoralama tasdiqlandi',
           banner: '«{title}» banneri',
           bannerOn: '{name} banneri Bosh sahifada yoqildi',
           bannerOff: '{name} banneri oʻchirildi',
@@ -5510,6 +5531,7 @@ export const adminMessages = defineMessages(
         value: 'Tannarx boʻyicha: {sum}',
         open: 'Moy va tarix',
         openLabel: 'Moy va tarix: {name}',
+        drafts: 'Kirim qoralamalari: {n}',
         exportExcel: 'Excel yuklab olish',
       },
       warehouse: {
@@ -5577,6 +5599,15 @@ export const adminMessages = defineMessages(
           cancel: 'Bekor qilish',
           short: 'Bu moy allaqachon quyilgan: {needed} g olish kerak, qoldiqda esa {balance} g.',
           alreadyVoided: 'Kirim allaqachon bekor qilingan. Sahifani yangilang.',
+          draft: 'Qoralama',
+          draftLine: 'Xarid rejasidan: yuk xatidagidek tasdiqlang yoki oʻchiring.',
+          confirm: 'Tasdiqlash',
+          discard: 'Oʻchirish',
+          confirmTitle: 'Kirimni tasdiqlash',
+          confirmText: 'Yuk xatidagidek. Grammlar moy qoldigʻiga qoʻshiladi.',
+          discardTitle: 'Qoralama oʻchirilsinmi?',
+          discardText: 'Moy oʻzgarmaydi.',
+          notDraft: 'Qoralama allaqachon tasdiqlangan yoki oʻchirilgan. Sahifani yangilang.',
         },
         history: {
           title: 'Tarix',
@@ -5811,6 +5842,12 @@ export const adminMessages = defineMessages(
         description:
           'Moy xaridi rejasi: nechta flakon chiqadi, aylanma va foyda qancha boʻladi. Sozlamalar, moy narxlari va katalog narxlari boʻyicha hisoblanadi.',
         export: 'Excel ga yuklab olish',
+        drafts: 'Reja boʻyicha kirim qoralamalari',
+        draftsHint:
+          'Rejadagi har bir atir uchun uning kilogrammlariga moy narxida kirim qoralamasi. Atir sahifasida kirimni yuk xati boʻyicha tasdiqlamaguningizcha moy oʻzgarmaydi.',
+        draftsDone:
+          'Qoralamalar yaratildi: {n}. Ular «Ombor» boʻlimidagi atir sahifalarida kutmoqda.',
+        draftsFailed: 'Qoralamalarni yaratib boʻlmadi. Yana urinib koʻring.',
         inputsTitle: 'Nimani hisoblaymiz',
         whatIf:
           'Bu yerdagi qiymatlar sinov uchun, saqlanmaydi. Xaridning boshqa raqamlari sozlamalarda.',

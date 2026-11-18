@@ -5,15 +5,19 @@ import {
   type OilReceipt,
   type OilReceiptCorrection,
   type OilReceiptInput,
+  type ReceiptDraftsBody,
   type StockMove,
   type WarehouseFragrance,
 } from '@lummi/contracts';
+import { utcToTashkent } from '@lummi/contracts';
 import {
+  and,
   asc,
   bottlings,
   desc,
   eq,
   fragrances,
+  inArray,
   oilReceipts,
   orders,
   sql,
@@ -38,7 +42,7 @@ import { bottlingNeeds, gramsFromMg, mgFromGrams, receiptCost } from './oil';
 import { recordStockMove } from './stock-moves';
 
 export type WarehouseFailure =
-  | { ok: false; reason: 'not_found' | 'voided' | 'try_again' }
+  | { ok: false; reason: 'not_found' | 'voided' | 'draft' | 'not_draft' | 'try_again' }
   | { ok: false; reason: 'invalid'; fields: string[] }
   /** The oil balance holds less than the operation takes. */
   | { ok: false; reason: 'oil_short'; neededMg: number; balanceMg: number };
@@ -72,6 +76,7 @@ function receiptOut(r: OilReceiptRow): OilReceipt {
     discountPercent: r.discountPercent,
     importPercent: r.importPercent,
     ...receiptCost(r),
+    draft: r.draft,
     voided: r.voidedAt !== null,
     voidReason: r.voidReason,
     createdAt: r.createdAt.toISOString(),
@@ -126,12 +131,13 @@ export class WarehouseService {
           .from(oilReceipts)
           .where(eq(oilReceipts.fragranceId, id))
           .orderBy(desc(oilReceipts.id));
-        const standing = receipts.filter((r) => r.voidedAt === null);
+        const standing = receipts.filter((r) => r.voidedAt === null && !r.draft);
+        const drafts = owner ? receipts.filter((r) => r.draft).length : 0;
         return {
           fragranceId: f.id,
           name: f.name,
           hidden: f.hidden,
-          oil: fragranceOil(f, standing, vols, ctx),
+          oil: fragranceOil(f, standing, vols, ctx, drafts),
           lowOilLitres: ctx.lowOilLitres,
           volumes: vols.map((v) => {
             const held = reserved.get(v.id) ?? 0;
@@ -173,41 +179,166 @@ export class WarehouseService {
       this.db.transaction(async (tx) => {
         const f = await lockFragrance(tx, fragranceId);
         if (!f) return notFound;
-        const cols = receiptColumns(input);
         const [r] = await tx
           .insert(oilReceipts)
-          .values({ fragranceId, ...cols })
+          .values({ fragranceId, ...receiptColumns(input) })
           .returning();
-        await tx
-          .update(fragrances)
-          .set({ oilMg: f.oilMg + cols.oilMg })
-          .where(eq(fragrances.id, fragranceId));
-        const actorRef = { type: 'staff' as const, id: actor.id };
-        await recordStockMove(tx, {
-          fragranceId,
-          kind: 'receipt',
-          actor: actorRef,
-          oilMg: cols.oilMg,
-          receiptId: r!.id,
-          details: { invoice: cols.invoice, supplier: cols.supplier },
-        });
-        await this.audit.record(tx, {
-          actor: actorRef,
-          action: 'warehouse.oil_received',
-          targetType: 'oil_receipt',
-          targetId: r!.id,
-          payload: {
-            fragrance: f.name,
-            supplier: cols.supplier,
-            invoice: cols.invoice,
-            receivedOn: cols.receivedOn,
-            grams: input.grams,
-            pricePerGram: cols.pricePerGram,
-            discountPercent: cols.discountPercent,
-            importPercent: cols.importPercent,
-          },
-        });
+        await this.received(tx, actor, f, r!, false);
         return { ok: true, value: receiptOut(r!) } as const;
+      }),
+    );
+  }
+
+  /**
+   * A receipt's oil joins the balance (the fragrance row is locked): the stock move and the audit
+   * entry, the same for a new receipt and a confirmed draft.
+   */
+  private async received(
+    tx: DbOrTx,
+    actor: StaffRow,
+    f: { id: number; name: string; oilMg: number },
+    r: OilReceiptRow,
+    fromDraft: boolean,
+  ) {
+    await tx
+      .update(fragrances)
+      .set({ oilMg: f.oilMg + r.oilMg })
+      .where(eq(fragrances.id, f.id));
+    const actorRef = { type: 'staff' as const, id: actor.id };
+    await recordStockMove(tx, {
+      fragranceId: f.id,
+      kind: 'receipt',
+      actor: actorRef,
+      oilMg: r.oilMg,
+      receiptId: r.id,
+      details: { invoice: r.invoice, supplier: r.supplier },
+    });
+    await this.audit.record(tx, {
+      actor: actorRef,
+      action: 'warehouse.oil_received',
+      targetType: 'oil_receipt',
+      targetId: r.id,
+      payload: {
+        fragrance: f.name,
+        supplier: r.supplier,
+        invoice: r.invoice,
+        receivedOn: r.receivedOn,
+        grams: gramsFromMg(r.oilMg),
+        pricePerGram: r.pricePerGram,
+        discountPercent: r.discountPercent,
+        importPercent: r.importPercent,
+        ...(fromDraft ? { fromDraft: true } : {}),
+      },
+    });
+  }
+
+  /**
+   * «Buy this» on the purchase plan (#78): a draft receipt per fragrance, the planned grams at its
+   * oil price with the settings' discount and import, dated today, supplier from the fragrance.
+   * Drafts hold no oil. Refused (422) for a fragrance that is gone or has no oil price.
+   */
+  async draftReceipts(
+    actor: StaffRow,
+    body: ReceiptDraftsBody,
+  ): Promise<WarehouseOutcome<{ created: number }>> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          id: fragrances.id,
+          name: fragrances.name,
+          oilPrice: fragrances.oilPrice,
+          oilSupplier: fragrances.oilSupplier,
+        })
+        .from(fragrances)
+        .where(
+          inArray(
+            fragrances.id,
+            body.lines.map((l) => l.fragranceId),
+          ),
+        );
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const fields = body.lines.flatMap((l, i) =>
+        byId.get(l.fragranceId)?.oilPrice != null ? [] : [`lines.${i}.fragranceId`],
+      );
+      if (fields.length) return { ok: false, reason: 'invalid', fields } as const;
+      const { liquid } = await readCostSettings(tx);
+      const d = utcToTashkent(this.edges.clock.now());
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const today = `${d.year}-${pad(d.month)}-${pad(d.day)}`;
+      await tx.insert(oilReceipts).values(
+        body.lines.map((l) => {
+          const f = byId.get(l.fragranceId)!;
+          return {
+            fragranceId: f.id,
+            draft: true,
+            supplier: f.oilSupplier ?? '',
+            invoice: '',
+            receivedOn: today,
+            oilMg: mgFromGrams(l.grams),
+            pricePerGram: f.oilPrice!,
+            discountPercent: liquid.oilDiscountPercent,
+            importPercent: liquid.oilImportPercent,
+          };
+        }),
+      );
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'warehouse.receipt_drafts_created',
+        targetType: 'warehouse',
+        payload: {
+          count: body.lines.length,
+          grams: gramsFromMg(body.lines.reduce((a, l) => a + mgFromGrams(l.grams), 0)),
+          fragrances: body.lines.map((l) => byId.get(l.fragranceId)!.name),
+        },
+      });
+      return { ok: true, value: { created: body.lines.length } } as const;
+    });
+  }
+
+  /** A draft confirmed as the invoice reads: it becomes a receipt and its grams join the balance. */
+  async confirmReceipt(
+    actor: StaffRow,
+    receiptId: number,
+    input: OilReceiptInput,
+  ): Promise<WarehouseOutcome<OilReceipt>> {
+    return transient(() =>
+      this.db.transaction(async (tx) => {
+        const locked = await lockReceipt(tx, receiptId);
+        if (!locked) return notFound;
+        if (!locked.receipt.draft) return { ok: false, reason: 'not_draft' } as const;
+        const [r] = await tx
+          .update(oilReceipts)
+          .set({ ...receiptColumns(input), draft: false, updatedAt: this.edges.clock.now() })
+          .where(eq(oilReceipts.id, receiptId))
+          .returning();
+        await this.received(tx, actor, locked.fragrance, r!, true);
+        return { ok: true, value: receiptOut(r!) } as const;
+      }),
+    );
+  }
+
+  /** A draft dropped: it never held oil, so nothing else moves. */
+  async discardReceipt(
+    actor: StaffRow,
+    receiptId: number,
+  ): Promise<WarehouseOutcome<{ discarded: true }>> {
+    return transient(() =>
+      this.db.transaction(async (tx) => {
+        const locked = await lockReceipt(tx, receiptId);
+        if (!locked) return notFound;
+        const { receipt: r, fragrance: f } = locked;
+        if (!r.draft) return { ok: false, reason: 'not_draft' } as const;
+        await tx
+          .delete(oilReceipts)
+          .where(and(eq(oilReceipts.id, receiptId), eq(oilReceipts.draft, true)));
+        await this.audit.record(tx, {
+          actor: { type: 'staff', id: actor.id },
+          action: 'warehouse.receipt_draft_discarded',
+          targetType: 'oil_receipt',
+          targetId: receiptId,
+          payload: { fragrance: f.name, grams: gramsFromMg(r.oilMg) },
+        });
+        return { ok: true, value: { discarded: true as const } } as const;
       }),
     );
   }
@@ -226,6 +357,7 @@ export class WarehouseService {
         const locked = await lockReceipt(tx, receiptId);
         if (!locked) return notFound;
         const { receipt: old, fragrance: f } = locked;
+        if (old.draft) return { ok: false, reason: 'draft' } as const;
         if (old.voidedAt) return { ok: false, reason: 'voided' } as const;
         const { reason, ...rest } = input;
         const cols = receiptColumns(rest);
@@ -287,6 +419,7 @@ export class WarehouseService {
         const locked = await lockReceipt(tx, receiptId);
         if (!locked) return notFound;
         const { receipt: old, fragrance: f } = locked;
+        if (old.draft) return { ok: false, reason: 'draft' } as const;
         if (old.voidedAt) return { ok: false, reason: 'voided' } as const;
         if (f.oilMg < old.oilMg) return short(old.oilMg, f.oilMg);
         const now = this.edges.clock.now();

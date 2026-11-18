@@ -1,5 +1,5 @@
 {
-  "id": "7162d7cf-fb99-423a-8754-fb43c0d259bb",
+  "id": "0a9128eb-cd83-45e1-bee6-b41f5582cf6e",
   "prevId": "1a939809-d8e5-4a3c-91c4-fd1ca3a130eb",
   "version": "7",
   "dialect": "postgresql",
@@ -3105,6 +3105,13 @@
           "type": "numeric(5, 2)",
           "primaryKey": false,
           "notNull": true
+        },
+        "draft": {
+          "name": "draft",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "voided_at": {
           "name": "voided_at",

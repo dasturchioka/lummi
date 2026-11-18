@@ -1832,8 +1832,9 @@ export const workerHeartbeat = pgTable(
 /**
  * An oil receipt (ADR 0041): oil of one fragrance as a supplier's invoice reads, grams kept in
  * milligrams, the price as typed (so'm per gram before the supplier discount) with the discount
- * and the delivery to Termez for this invoice. It adds to the fragrance's oil balance. A correction
- * rewrites it, a void takes its oil back off; both carry a reason and leave a stock move.
+ * and the delivery to Termez for this invoice. It adds to the fragrance's oil balance (a draft
+ * waits for its confirmation first). A correction rewrites it, a void takes its oil back off; both
+ * carry a reason and leave a stock move.
  */
 export const oilReceipts = pgTable(
   'oil_receipts',
@@ -1854,6 +1855,11 @@ export const oilReceipts = pgTable(
       mode: 'number',
     }).notNull(),
     importPercent: numeric('import_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+    /**
+     * A draft (#78's «buy this»): the planned grams at the fragrance's oil price, waiting for the
+     * owner to confirm it as the invoice reads. It holds no oil: the balance moves on confirmation.
+     */
+    draft: boolean('draft').notNull().default(false),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     voidReason: text('void_reason'),
     createdAt: createdAt(),

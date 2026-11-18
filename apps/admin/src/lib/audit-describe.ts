@@ -586,9 +586,11 @@ const describers: Record<string, Describer> = {
       'pricePerGram',
       'discountPercent',
       'importPercent',
+      'fromDraft',
     );
     const d = c.t.audit.detail;
     return [
+      c.p.fromDraft === true && d.fromDraft,
       fill(d.oilReceived, {
         name: str(c.p.fragrance) ?? d.unknownName,
         grams: valueText(c, c.p.grams),
@@ -652,6 +654,29 @@ const describers: Record<string, Describer> = {
           .join(', '),
       }),
       fill(d.bottledOil, { grams: valueText(c, c.p.oilGrams), ml: valueText(c, c.p.ethanolMl) }),
+    ];
+  },
+  'warehouse.receipt_drafts_created': (c) => {
+    c.take('count', 'grams', 'fragrances');
+    const names = Array.isArray(c.p.fragrances)
+      ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(c.t.audit.detail.receiptDrafts, {
+        count: String(int(c.p.count) ?? names.length),
+        grams: valueText(c, c.p.grams),
+      }),
+      names.length > 0 && clip(names.join(', ')),
+    ];
+  },
+  'warehouse.receipt_draft_discarded': (c) => {
+    c.take('fragrance', 'grams');
+    const d = c.t.audit.detail;
+    return [
+      fill(d.draftDiscarded, {
+        name: str(c.p.fragrance) ?? d.unknownName,
+        grams: valueText(c, c.p.grams),
+      }),
     ];
   },
   'warehouse.exported': (c) => {

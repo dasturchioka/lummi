@@ -96,6 +96,9 @@ import {
   oilReceiptInputSchema,
   oilReceiptSchema,
   oilReceiptVoidSchema,
+  receiptDiscardedSchema,
+  receiptDraftsBodySchema,
+  receiptDraftsResultSchema,
   warehouseErrorSchema,
   warehouseFragranceSchema,
 } from './warehouse';
@@ -1951,6 +1954,48 @@ const adminWarehouse = c.router({
       },
       summary:
         'Owner only: void a receipt with a reason; its grams leave the balance, 409 oil_short when used up',
+    },
+    draftReceipts: {
+      method: 'POST',
+      path: '/admin/warehouse/receipt-drafts',
+      body: receiptDraftsBodySchema,
+      responses: {
+        201: receiptDraftsResultSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        422: warehouseErrorSchema,
+      },
+      summary:
+        "Owner only: draft receipts from the purchase plan, the planned grams at each fragrance's oil price; no oil moves",
+    },
+    confirmReceipt: {
+      method: 'POST',
+      path: '/admin/warehouse/receipts/:id/confirm',
+      pathParams: warehouseId,
+      body: oilReceiptInputSchema,
+      responses: {
+        200: oilReceiptSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary:
+        'Owner only: a draft receipt confirmed as the invoice reads; its grams join the balance (audited)',
+    },
+    discardReceipt: {
+      method: 'DELETE',
+      path: '/admin/warehouse/receipts/:id',
+      pathParams: warehouseId,
+      body: c.noBody(),
+      responses: {
+        200: receiptDiscardedSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary: 'Owner only: discard a draft receipt (audited); a confirmed one is voided instead',
     },
     bottle: {
       method: 'POST',

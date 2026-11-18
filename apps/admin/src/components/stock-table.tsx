@@ -109,6 +109,11 @@ function OilLine({
         </span>
       </span>
       <OilTag level={oil.level} t={t} />
+      {oil.drafts > 0 && (
+        <span className="inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full bg-field px-2.5 text-xs font-semibold">
+          {fill(s.drafts, { n: num(oil.drafts) })}
+        </span>
+      )}
       {oil.value?.total != null && (
         <span className="text-muted-foreground tabular-nums">
           {fill(s.value, { sum: formatMoney(oil.value.total, language) })}

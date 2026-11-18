@@ -491,6 +491,7 @@ function ReceiptsSection({
   const rs = w.receipts;
   const [correcting, setCorrecting] = useState<OilReceipt | null>(null);
   const [voiding, setVoiding] = useState<OilReceipt | null>(null);
+  const [discarding, setDiscarding] = useState<OilReceipt | null>(null);
   const money = (n: number) => formatMoney(n, language);
   return (
     <Section title={rs.title}>
@@ -508,8 +509,17 @@ function ReceiptsSection({
               )}
             >
               <div className="grid min-w-0 gap-0.5">
-                <p className="font-semibold leading-snug [overflow-wrap:anywhere]">
-                  {formatCalendarDate(r.receivedOn, language)} · {r.invoice} · {r.supplier}
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold leading-snug [overflow-wrap:anywhere]">
+                  {r.draft && (
+                    <span className="inline-flex h-6 items-center rounded-full bg-field px-2.5 text-xs font-semibold">
+                      {rs.draft}
+                    </span>
+                  )}
+                  <span>
+                    {[formatCalendarDate(r.receivedOn, language), r.invoice, r.supplier]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                 </p>
                 <p className="text-sm tabular-nums">
                   {fill(rs.line, {
@@ -527,8 +537,19 @@ function ReceiptsSection({
                     {fill(rs.voided, { reason: r.voidReason ?? '' })}
                   </p>
                 )}
+                {r.draft && <p className="text-small font-medium">{rs.draftLine}</p>}
               </div>
-              {!r.voided && (
+              {r.draft && (
+                <div className="flex gap-1 sm:-mr-2">
+                  <Button variant="ghost" size="sm" onClick={() => setCorrecting(r)}>
+                    {rs.confirm}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDiscarding(r)}>
+                    {rs.discard}
+                  </Button>
+                </div>
+              )}
+              {!r.voided && !r.draft && (
                 <div className="flex gap-1 sm:-mr-2">
                   <Button variant="ghost" size="sm" onClick={() => setCorrecting(r)}>
                     {rs.correct}
@@ -546,6 +567,9 @@ function ReceiptsSection({
         <CorrectDialog receipt={correcting} onClose={() => setCorrecting(null)} w={w} />
       )}
       {voiding && <VoidDialog receipt={voiding} onClose={() => setVoiding(null)} w={w} />}
+      {discarding && (
+        <DiscardDialog receipt={discarding} onClose={() => setDiscarding(null)} w={w} />
+      )}
     </Section>
   );
 }
@@ -559,6 +583,8 @@ function refusal(res: { status: number; body: unknown } | null, w: W): string {
       balance: num(body.balanceGrams ?? 0),
     });
   if (res?.status === 409 && body.code === 'voided') return w.receipts.alreadyVoided;
+  if (res?.status === 409 && (body.code === 'not_draft' || body.code === 'draft'))
+    return w.receipts.notDraft;
   if (res?.status === 409) return w.tryAgain;
   return w.failed;
 }
@@ -587,20 +613,24 @@ function CorrectDialog({
   const [bad, setBad] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A draft is confirmed as the invoice reads (no reason); a receipt is corrected with one. */
+  const confirming = receipt.draft;
 
   async function save() {
     const read = readDraft(draft);
     const fix = read.ok ? new Set<string>() : read.bad;
-    if (!reason.trim()) fix.add('reason');
+    if (!confirming && !reason.trim()) fix.add('reason');
     setBad(fix);
     if (!read.ok || fix.size) return;
     setPending(true);
-    const res = await browserApi.warehouse
-      .correctReceipt({
-        params: { id: receipt.id },
-        body: { ...read.value, reason: reason.trim() },
-      })
-      .catch(() => null);
+    const res = await (
+      confirming
+        ? browserApi.warehouse.confirmReceipt({ params: { id: receipt.id }, body: read.value })
+        : browserApi.warehouse.correctReceipt({
+            params: { id: receipt.id },
+            body: { ...read.value, reason: reason.trim() },
+          })
+    ).catch(() => null);
     setPending(false);
     if (res?.status === 200) {
       onClose();
@@ -611,9 +641,11 @@ function CorrectDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:w-[min(640px,calc(100vw-32px))]">
-        <DialogTitle>{rs.correctTitle}</DialogTitle>
+        <DialogTitle>{confirming ? rs.confirmTitle : rs.correctTitle}</DialogTitle>
         <DialogDescription>
-          {receipt.invoice} · {receipt.supplier}
+          {confirming
+            ? rs.confirmText
+            : [receipt.invoice, receipt.supplier].filter(Boolean).join(' · ')}
         </DialogDescription>
         <form
           className="mt-5 grid gap-4"
@@ -632,18 +664,20 @@ function CorrectDialog({
             }}
             w={w}
           />
-          <Field id={`fix-${receipt.id}-reason`} label={rs.reason}>
-            <Input
-              autoComplete="off"
-              maxLength={STOCK_REASON_MAX}
-              aria-invalid={bad.has('reason') || undefined}
-              value={reason}
-              onChange={(e) => {
-                setReason(e.target.value);
-                setError(null);
-              }}
-            />
-          </Field>
+          {!confirming && (
+            <Field id={`fix-${receipt.id}-reason`} label={rs.reason}>
+              <Input
+                autoComplete="off"
+                maxLength={STOCK_REASON_MAX}
+                aria-invalid={bad.has('reason') || undefined}
+                value={reason}
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setError(null);
+                }}
+              />
+            </Field>
+          )}
           {bad.size > 0 && (
             <p role="alert" className="text-xs font-medium">
               {w.receipt.invalid}
@@ -655,7 +689,7 @@ function CorrectDialog({
               {rs.cancel}
             </Button>
             <Button type="submit" loading={pending}>
-              {rs.save}
+              {confirming ? rs.confirm : rs.save}
             </Button>
           </DialogFooter>
         </form>
@@ -711,6 +745,51 @@ function VoidDialog({ receipt, onClose, w }: { receipt: OilReceipt; onClose: () 
           </AlertDialogCancel>
           <Button loading={pending} disabled={!reason.trim()} onClick={() => void confirm()}>
             {rs.voidConfirm}
+          </Button>
+        </DialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function DiscardDialog({
+  receipt,
+  onClose,
+  w,
+}: {
+  receipt: OilReceipt;
+  onClose: () => void;
+  w: W;
+}) {
+  const rs = w.receipts;
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function discard() {
+    setPending(true);
+    const res = await browserApi.warehouse
+      .discardReceipt({ params: { id: receipt.id } })
+      .catch(() => null);
+    setPending(false);
+    if (res?.status === 200) {
+      onClose();
+      router.refresh();
+    } else setError(refusal(res, w));
+  }
+
+  return (
+    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogTitle>{rs.discardTitle}</AlertDialogTitle>
+        <AlertDialogDescription>{rs.discardText}</AlertDialogDescription>
+        {error && <Notice className="mt-4" title={error} />}
+        <DialogFooter>
+          <AlertDialogCancel asChild>
+            <Button variant="outline">{rs.cancel}</Button>
+          </AlertDialogCancel>
+          <Button loading={pending} onClick={() => void discard()}>
+            {rs.discard}
           </Button>
         </DialogFooter>
       </AlertDialogContent>

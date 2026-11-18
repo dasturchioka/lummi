@@ -16,7 +16,9 @@ function failure(f: WarehouseFailure) {
     case 'invalid':
       return { status: 422 as const, body: { code: 'invalid' as const, fields: f.fields } };
     case 'voided':
-      return { status: 409 as const, body: { code: 'voided' as const } };
+    case 'draft':
+    case 'not_draft':
+      return { status: 409 as const, body: { code: f.reason } };
     case 'try_again':
       return { status: 409 as const, body: { code: 'try_again' as const } };
     case 'oil_short':
@@ -77,6 +79,36 @@ export class WarehouseController {
   voidReceipt(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.warehouse.voidReceipt, async ({ params, body }) => {
       const res = await this.warehouse.voidReceipt(actor, params.id, body.reason);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
+    });
+  }
+
+  @TsRestHandler(adminContract.warehouse.draftReceipts)
+  @UseGuards(OwnerGuard)
+  draftReceipts(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.draftReceipts, async ({ body }) => {
+      const res = await this.warehouse.draftReceipts(actor, body);
+      if (res.ok) return { status: 201 as const, body: res.value };
+      return res.reason === 'invalid'
+        ? { status: 422 as const, body: { code: 'invalid' as const, fields: res.fields } }
+        : { status: 422 as const, body: { code: 'invalid' as const } };
+    });
+  }
+
+  @TsRestHandler(adminContract.warehouse.confirmReceipt)
+  @UseGuards(OwnerGuard)
+  confirmReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.confirmReceipt, async ({ params, body }) => {
+      const res = await this.warehouse.confirmReceipt(actor, params.id, body);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
+    });
+  }
+
+  @TsRestHandler(adminContract.warehouse.discardReceipt)
+  @UseGuards(OwnerGuard)
+  discardReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.discardReceipt, async ({ params }) => {
+      const res = await this.warehouse.discardReceipt(actor, params.id);
       return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }

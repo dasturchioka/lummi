@@ -34,6 +34,8 @@ export function fragranceOil(
   receipts: readonly ReceiptPrice[],
   vols: readonly { ml: number; onHand: number }[],
   ctx: OilContext,
+  /** Draft receipts waiting for the owner (#78). */
+  drafts = 0,
 ): FragranceOil {
   const litres = liquidFromOil(gramsFromMg(f.oilMg), ctx.costs.liquid) / 1000;
   let value: FragranceOil['value'] = null;
@@ -59,6 +61,7 @@ export function fragranceOil(
     liquidLitres: round3(litres),
     level: oilLevel(litres, ctx.lowOilLitres),
     value,
+    drafts,
   };
 }
 
@@ -78,6 +81,7 @@ export async function fragranceOils(
     ? await tx
         .select({
           fragranceId: oilReceipts.fragranceId,
+          draft: oilReceipts.draft,
           oilMg: oilReceipts.oilMg,
           pricePerGram: oilReceipts.pricePerGram,
           discountPercent: oilReceipts.discountPercent,
@@ -97,9 +101,10 @@ export async function fragranceOils(
       f.id,
       fragranceOil(
         f,
-        receipts.filter((r) => r.fragranceId === f.id),
+        receipts.filter((r) => r.fragranceId === f.id && !r.draft),
         vols.filter((v) => v.fragranceId === f.id),
         ctx,
+        receipts.filter((r) => r.fragranceId === f.id && r.draft).length,
       ),
     ]),
   );

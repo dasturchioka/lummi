@@ -63,11 +63,40 @@ export const oilReceiptSchema = oilReceiptInputSchema.extend({
   landedPerGram: som,
   /** What the oil of this receipt cost, landed. */
   total: som,
+  /**
+   * A draft from the purchase plan (#78): the planned grams at the fragrance's oil price, holding
+   * no oil until the owner confirms it as the invoice reads. Its supplier and invoice may be empty.
+   */
+  draft: z.boolean(),
   voided: z.boolean(),
   voidReason: z.string().nullable(),
   createdAt: z.string(),
 });
 export type OilReceipt = z.infer<typeof oilReceiptSchema>;
+
+/** «Buy this» on the purchase plan (#78): a draft receipt per fragrance, the plan's grams. */
+export const receiptDraftsBodySchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        fragranceId: z.number().int().positive(),
+        grams: z
+          .number()
+          .positive()
+          .max(MAX_RECEIPT_GRAMS)
+          .refine(hasAtMostDecimals(3), 'at most 3 decimals'),
+      }),
+    )
+    .min(1)
+    .max(500)
+    .refine(
+      (ls) => new Set(ls.map((l) => l.fragranceId)).size === ls.length,
+      'one line per fragrance',
+    ),
+});
+export type ReceiptDraftsBody = z.infer<typeof receiptDraftsBodySchema>;
+export const receiptDraftsResultSchema = z.object({ created: z.number().int() });
+export const receiptDiscardedSchema = z.object({ discarded: z.literal(true) });
 
 /** A bottling: how many bottles of each volume the oil goes into. */
 export const bottlingBodySchema = z.object({
@@ -110,6 +139,8 @@ export const fragranceOilSchema = z.object({
    * landed price of its receipts, the bottles at their unit cost (null without an oil price).
    */
   value: z.object({ oil: som, bottles: som.nullable(), total: som.nullable() }).nullable(),
+  /** Draft receipts waiting for the owner's confirmation (#78); 0 for a manager. */
+  drafts: z.number().int(),
 });
 export type FragranceOil = z.infer<typeof fragranceOilSchema>;
 
@@ -178,6 +209,10 @@ export const warehouseErrorSchema = z.object({
     'invalid',
     'oil_short',
     'voided',
+    /** A draft is confirmed or discarded, never corrected or voided. */
+    'draft',
+    /** Only a draft is confirmed or discarded. */
+    'not_draft',
     'try_again',
   ]),
   /** With `invalid`: the paths to fix. */

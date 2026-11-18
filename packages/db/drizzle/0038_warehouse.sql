@@ -19,6 +19,7 @@ CREATE TABLE "oil_receipts" (
 	"price_per_gram" integer NOT NULL,
 	"discount_percent" numeric(5, 2) NOT NULL,
 	"import_percent" numeric(5, 2) NOT NULL,
+	"draft" boolean DEFAULT false NOT NULL,
 	"voided_at" timestamp with time zone,
 	"void_reason" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

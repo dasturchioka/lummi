@@ -276,6 +276,131 @@ describe('correcting and voiding a receipt', () => {
   });
 });
 
+describe('draft receipts from the purchase plan (#78)', () => {
+  async function drafts(lines: { fragranceId: number; grams: number }[], as = owner) {
+    return as.client.admin.warehouse.draftReceipts({ body: { lines } });
+  }
+
+  it("creates drafts at the fragrance's oil price and the settings' percents, touching no balance", async () => {
+    const [a, b] = await slugsOf(t, 2);
+    const ida = await fragranceId(a);
+    const idb = await fragranceId(b);
+    await t.db
+      .update(fragrances)
+      .set({ oilPrice: 3950, oilSupplier: 'Test Oils' })
+      .where(eq(fragrances.id, ida));
+    await t.db
+      .update(fragrances)
+      .set({ oilPrice: 2150, oilSupplier: null })
+      .where(eq(fragrances.id, idb));
+    const res = await drafts([
+      { fragranceId: ida, grams: 1000 },
+      { fragranceId: idb, grams: 2500 },
+    ]);
+    expect(res.status === 201 && res.body).toEqual({ created: 2 });
+
+    const pa = await page(ida);
+    expect(pa.oil).toMatchObject({ oilGrams: 0 });
+    expect(pa.receipts).toEqual([
+      expect.objectContaining({
+        draft: true,
+        grams: 1000,
+        supplier: 'Test Oils',
+        invoice: '',
+        receivedOn: '2026-11-18',
+        pricePerGram: 3950,
+        discountPercent: 9,
+        importPercent: 3,
+        voided: false,
+      }),
+    ]);
+    expect(pa.history).toEqual([]);
+    expect((await page(idb)).receipts?.[0]).toMatchObject({
+      draft: true,
+      supplier: '',
+      grams: 2500,
+    });
+    // the stock page says a draft waits
+    const list = await owner.client.admin.stock.list({ query: { pageSize: 50 } });
+    if (list.status !== 200) throw new Error('stock');
+    expect(list.body.oil.find((o) => o.fragranceId === ida)?.drafts).toBe(1);
+    const [audit] = await audits('warehouse.receipt_drafts_created');
+    expect(audit).toMatchObject({ actorId: owner.staff.id });
+    expect(audit?.payload).toMatchObject({ count: 2, grams: 3500 });
+  });
+
+  it('confirms a draft as the invoice reads: the oil joins the balance', async () => {
+    const id = await fragranceId();
+    await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
+    await drafts([{ fragranceId: id, grams: 1000 }]);
+    const draft = (await page(id)).receipts![0]!;
+    const done = await owner.client.admin.warehouse.confirmReceipt({
+      params: { id: draft.id },
+      body: { ...RECEIPT, grams: 980 },
+    });
+    expect(done.status === 200 && done.body).toMatchObject({
+      draft: false,
+      grams: 980,
+      invoice: 'INV-0001',
+    });
+    const p = await page(id);
+    expect(p.oil.oilGrams).toBe(980);
+    expect(p.history.map((m) => [m.kind, m.oilGrams, m.invoice])).toEqual([
+      ['receipt', 980, 'INV-0001'],
+    ]);
+    const [received] = await audits('warehouse.oil_received');
+    expect(received?.payload).toMatchObject({ grams: 980, fromDraft: true });
+
+    const again = await owner.client.admin.warehouse.confirmReceipt({
+      params: { id: draft.id },
+      body: RECEIPT,
+    });
+    expect(again.status === 409 && again.body).toEqual({ code: 'not_draft' });
+  });
+
+  it('discards a draft, and keeps drafts out of corrections, voids and values', async () => {
+    const id = await fragranceId();
+    await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
+    await drafts([{ fragranceId: id, grams: 1000 }]);
+    const draft = (await page(id)).receipts![0]!;
+    expect((await page(id)).oil.value?.oil).toBe(0);
+    const fixed = await owner.client.admin.warehouse.correctReceipt({
+      params: { id: draft.id },
+      body: { ...RECEIPT, reason: 'x' },
+    });
+    expect(fixed.status === 409 && fixed.body).toEqual({ code: 'draft' });
+    const voided = await owner.client.admin.warehouse.voidReceipt({
+      params: { id: draft.id },
+      body: { reason: 'x' },
+    });
+    expect(voided.status === 409 && voided.body).toEqual({ code: 'draft' });
+
+    const gone = await owner.client.admin.warehouse.discardReceipt({ params: { id: draft.id } });
+    expect(gone.status === 200 && gone.body).toEqual({ discarded: true });
+    expect((await page(id)).receipts).toEqual([]);
+    expect(await audits('warehouse.receipt_draft_discarded')).toHaveLength(1);
+
+    const real = await receive(id);
+    const keep = await owner.client.admin.warehouse.discardReceipt({ params: { id: real.id } });
+    expect(keep.status === 409 && keep.body).toEqual({ code: 'not_draft' });
+  });
+
+  it('refuses a fragrance without an oil price or that does not exist, and a manager', async () => {
+    const id = await fragranceId();
+    await t.db.update(fragrances).set({ oilPrice: null }).where(eq(fragrances.id, id));
+    const res = await drafts([
+      { fragranceId: id, grams: 1000 },
+      { fragranceId: 9999, grams: 1000 },
+    ]);
+    expect(res.status === 422 && res.body).toEqual({
+      code: 'invalid',
+      fields: ['lines.0.fragranceId', 'lines.1.fragranceId'],
+    });
+    expect((await page(id)).receipts).toEqual([]);
+    expect((await drafts([{ fragranceId: id, grams: 1 }], manager)).status).toBe(403);
+  });
+});
+
 describe('the audit', () => {
   it('names the actor of every receipt, correction, void and bottling', async () => {
     const id = await fragranceId();
