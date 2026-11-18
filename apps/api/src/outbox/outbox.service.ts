@@ -162,7 +162,7 @@ export class OutboxService implements OnApplicationShutdown {
           opts: {
             jobId: `outbox-${id}`, // the outbox id: the same row is never queued twice
             attempts: SEND_ATTEMPTS,
-            backoff: { type: 'custom' },
+            backoff: { type: 'exponential', delay: 5000 },
             removeOnComplete: true,
             removeOnFail: true,
           },
@@ -265,16 +265,6 @@ export class OutboxService implements OnApplicationShutdown {
 }
 
 export const SEND_ATTEMPTS = 5;
-
-/**
- * The retry delay of an outbox row (the queue's `backoffStrategy`): 5 s, doubling, as before; but
- * a delivery that found its post busy (another delivery holds the lease, which lasts one Telegram
- * call) comes back in 0.5 s, doubling to at most 5 s, instead of idling 5 s or more (#71).
- */
-export function outboxBackoff(attemptsMade: number, _type?: string, err?: Error): number {
-  const n = Math.max(attemptsMade, 1);
-  return err?.name === 'PostBusyError' ? Math.min(500 * 2 ** (n - 1), 5000) : 5000 * 2 ** (n - 1);
-}
 
 function toMessage(row: OutboxRow): OutboundMessage {
   return {

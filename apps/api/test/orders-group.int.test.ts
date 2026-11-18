@@ -26,6 +26,7 @@ import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { OrderCards } from '../src/orders-group/order-cards';
 import { PaymentConfirmation } from '../src/payment/payment-confirmation';
 import { ReceiptsService } from '../src/receipts/receipts.service';
+import { OutboxService } from '../src/outbox/outbox.service';
 import { SettingsService } from '../src/settings/settings.service';
 import { WorkerRuntime } from '../src/worker/runtime';
 import { plainText, type SentMessage } from './fakes';
@@ -881,7 +882,7 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
     await card(order.number);
     await t.app.get(WorkerRuntime).tick();
-    // a delivery that found the card busy is retried by the queue (backoff from 0.5 s)
+    // a delivery that found the card busy is finished: the holder draws the latest version
     await vi.waitFor(
       async () => {
         const rows = await t.db.select().from(outbox).where(eq(outbox.kind, 'order_card'));
@@ -1024,6 +1025,51 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
     telegram.heldEdits[1]!.land();
     await card(order.number, (text) => text.includes('Собирается — Bekzod'));
     await vi.waitFor(async () => expect(await leaseOf()).toBeNull());
+  });
+
+  it('a delivery that finds the card busy is finished: the holder draws the latest version, nothing is retried or failed', async () => {
+    await addStaff(dilnoza);
+    const order = await paidOrder();
+    const telegram = t.edges.telegram;
+    telegram.holdEdits = true;
+    await press(dilnoza, '✅ Принят', await card(order.number));
+    await vi.waitFor(() => expect(telegram.heldEdits).toHaveLength(1), { timeout: 10_000 });
+
+    // a second change while the first delivery holds the lease (inside the lease window)
+    const admin = await t.signInStaff('manager', bekzod);
+    const moved = await admin.client.admin.orders.fulfil({
+      params: { number: order.number },
+      body: { action: 'start_assembly', expectedStatus: 'accepted' },
+    });
+    expect(moved.status).toBe(200);
+    // its delivery finds the card busy and is done at once: its row is sent, no second edit started
+    await vi.waitFor(async () => {
+      const rows = await t.db
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.kind, 'order_card'), eq(outbox.ref, order.id)))
+        .orderBy(asc(outbox.id));
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      expect(rows.at(-1)!.sentAt).not.toBeNull();
+    });
+    expect(telegram.heldEdits).toHaveLength(1);
+
+    // the holder's call lands; it sees the newer version and draws it
+    telegram.holdEdits = false;
+    telegram.heldEdits[0]!.land();
+    await card(order.number, (text) => text.includes('Собирается — Bekzod'));
+    await vi.waitFor(async () => {
+      const rows = await t.db
+        .select()
+        .from(outbox)
+        .where(and(eq(outbox.kind, 'order_card'), eq(outbox.ref, order.id)));
+      expect(rows.every((r) => r.sentAt !== null && r.failedAt === null)).toBe(true);
+      const [row] = await t.db.select().from(orderCards).where(eq(orderCards.orderId, order.id));
+      expect(row!.syncingAt).toBeNull();
+    });
+    const queue = t.app.get(OutboxService).getQueue();
+    const counts = await queue.getJobCounts('delayed', 'failed', 'waiting', 'active');
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(0);
   });
 
   it('an old render that lands after a newer one is put right', async () => {
