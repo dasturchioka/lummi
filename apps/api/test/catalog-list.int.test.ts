@@ -195,7 +195,7 @@ describe('one lowest-price rule', () => {
 describe('list photo and struck price', () => {
   const card = async (slug: string) =>
     (await list({ limit: 100 })).items.find((i) => i.slug === slug)!;
-  const photo = async (slug: string, ml: number, photoHash: string | null) =>
+  const setPhoto = async (slug: string, ml: number, photoHash: string | null) =>
     t.db
       .update(volumes)
       .set({ photoHash })
@@ -203,12 +203,23 @@ describe('list photo and struck price', () => {
 
   it('shows the 50 ml photo, else the largest volume that has one', async () => {
     expect((await card('tygar')).photo).toBeNull();
-    await photo('tygar', 10, 'p10');
+    await setPhoto('tygar', 10, 'p10');
     expect((await card('tygar')).photo).toBe('p10');
-    await photo('tygar', 30, 'p30');
+    await setPhoto('tygar', 30, 'p30');
     expect((await card('tygar')).photo).toBe('p30');
-    await photo('tygar', 50, 'p50');
+    await setPhoto('tygar', 50, 'p50');
     expect((await card('tygar')).photo).toBe('p50');
+  });
+
+  it('on a tie in effective price the marked-down volume is the from-volume', async () => {
+    await setPrice('tygar', 10, 60_000);
+    await setPrice('tygar', 30, 90_000);
+    await t.db
+      .update(volumes)
+      .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
+      .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 30)));
+    t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
+    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 90_000 });
   });
 
   it('sets fromRegularPrice only while the from-volume is marked down', async () => {

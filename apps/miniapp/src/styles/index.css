@@ -70,12 +70,12 @@
   text-transform: uppercase;
   font-weight: 400;
 }
-/* The attribution on list cards and compact rows: a step under `type-label`, tighter tracking, still legible. */
+/* The attribution on list cards and name-lockup rows: a step under `type-label`, same +0.2em tracking, never below 10 px. */
 @utility type-label-sm {
   font-family: var(--font-display);
   font-size: 10px;
   line-height: 1.45;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   font-weight: 400;
 }

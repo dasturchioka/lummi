@@ -824,6 +824,8 @@ const WORST_HITS = [
   'blue-sapphire',
   'miss-dior-blooming-bouquet',
 ];
+/** The two top sellers: the first row of the catalog grid on the 390 px viewport. */
+const FIRST_ROW = ['elysium-pour-homme-parfum', 'baccarat-rouge-540'];
 const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
   setup: async ({ db }) => {
     await db.query(`update fragrances set is_hit = true where slug = any($1)`, [WORST_HITS]);
@@ -1710,8 +1712,12 @@ export const screens: ScreenDef[] = [
     // #61: the 50 ml photo, the 10 ml marked down (struck regular price), the type chips with icons
     id: 'polish-catalog-markdown',
     path: '/catalog',
-    setup: async ({ db }) => db.markdown('symphony', 10, 55_000, 5),
-    teardown: async ({ db }) => db.restore('symphony'),
+    setup: async ({ db }) => {
+      for (const slug of FIRST_ROW) await db.markdown(slug, 10, 55_000, 5);
+    },
+    teardown: async ({ db }) => {
+      for (const slug of FIRST_ROW) await db.restore(slug);
+    },
   },
   {
     // #61: the 60-character name, seven-digit prices, the from-volume marked down, at 360 px

@@ -7,6 +7,7 @@ import { AddButton } from './AddButton';
 import { attribution } from './attribution';
 import { FragranceBadge } from './Badge';
 import { HeartButton } from './HeartButton';
+import { Money } from './Money';
 
 /**
  * One fragrance in a list: the DESIGN.md product card with the card's label lockup (caps attribution
@@ -96,12 +97,21 @@ export function FragranceListCard({
         {fill(t.list.from, { price: formatMoney(item.fromPrice, language) })}
       </span>
       {item.fromRegularPrice !== null ? (
-        <s data-testid="regular-price" className="type-price-sm text-muted">
-          {formatMoney(item.fromRegularPrice, language)}
+        <s data-testid="regular-price" className="text-muted">
+          <Money amount={item.fromRegularPrice} size="small" />
         </s>
       ) : null}
     </span>
   ) : null;
+
+  // The name leads the card: 24 px in a row, 22 px in the grid (clamped to three lines so a row of
+  // cards keeps its prices level; the full name stays in the button's label), 18 px in a compact row.
+  const nameFont = compact || grid ? 'type-name' : 'type-name-lg';
+  const nameSize = compact
+    ? 'mt-px text-[18px]'
+    : grid
+      ? 'mt-0.5 text-[22px] line-clamp-3'
+      : 'mt-0.5';
 
   const lockup = (
     <>
@@ -109,15 +119,7 @@ export function FragranceListCard({
       <span className="type-label-sm text-balance text-muted [overflow-wrap:anywhere]">
         {attribution(t.card.basedOn, item.brand)}
       </span>
-      <span
-        className={`text-pretty text-ink [overflow-wrap:anywhere] ${
-          compact
-            ? 'type-name mt-px text-[18px]'
-            : grid
-              ? 'type-name mt-0.5 text-[22px]'
-              : 'type-name-lg mt-0.5'
-        }`}
-      >
+      <span className={`${nameFont} text-pretty text-ink [overflow-wrap:anywhere] ${nameSize}`}>
         {item.name}
       </span>
       {compact ? null : (

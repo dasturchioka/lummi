@@ -149,12 +149,15 @@ function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | nu
   return prices.length ? Math.min(...prices) : null;
 }
 
-/** The from-volume's regular price when that volume is marked down, else null (ADR 0008). */
-function fromRegularPrice(cards: readonly VolumeCard[]): number | null {
+/**
+ * THE from-volume: the volume the card's «от …» prices (the lowest effective price among those
+ * with something available). On a tie the marked-down one wins, so its struck regular price shows.
+ */
+function fromVolume(cards: readonly VolumeCard[]): VolumeCard | null {
   const from = lowestPrice(cards);
   if (from === null) return null;
-  const c = cards.find((x) => x.available > 0 && x.effectivePrice === from);
-  return c && c.salePrice !== null ? c.price : null;
+  const tied = cards.filter((c) => c.available > 0 && c.effectivePrice === from);
+  return tied.find((c) => c.salePrice !== null) ?? tied[0] ?? null;
 }
 
 /** The list photo: the 50 ml bottle, else the largest volume that has a photo. */
@@ -165,6 +168,7 @@ function listPhoto(cards: readonly VolumeCard[]): string | null {
 }
 
 function toListItem(e: CatalogEntry): FragranceListItem {
+  const from = fromVolume(e.cards);
   return {
     slug: e.slug,
     name: e.name,
@@ -174,8 +178,8 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     keyNotes: e.keyNotes,
     isHit: e.isHit,
     isNew: e.isNew,
-    fromPrice: lowestPrice(e.cards),
-    fromRegularPrice: fromRegularPrice(e.cards),
+    fromPrice: from?.effectivePrice ?? null,
+    fromRegularPrice: from && from.salePrice !== null ? from.price : null,
     soldOut: soldOut(e.cards),
     photo: listPhoto(e.cards),
     volumes: e.cards,
