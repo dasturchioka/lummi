@@ -138,13 +138,14 @@ describe('the 20-order report gate (TZ §10)', () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await res.arrayBuffer());
     const [days, fragrances, volumes, sets] = wb.worksheets;
-    // the last sheet is profit (#77): these orders have no cost snapshot (no oil prices)
+    // then profit (#77) and the channel split (#80): these orders have no cost snapshot (no oil prices)
     expect(wb.worksheets.map((s) => s.name)).toEqual([
       'По дням',
       'Ароматы',
       'Объёмы',
       'Наборы',
       'Прибыль',
+      'Каналы',
     ]);
     const rows = (ws: ExcelJS.Worksheet) =>
       ws
@@ -202,6 +203,7 @@ describe('the 20-order report gate (TZ §10)', () => {
       'Hajmlar',
       'Toʻplamlar',
       'Foyda',
+      'Kanallar',
     ]);
     expect(wb.worksheets[0]!.getRow(1).getCell(7).value).toBe('Sof savdo');
   });
