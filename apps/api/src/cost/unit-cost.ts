@@ -215,15 +215,30 @@ function vial(oilPrice: number, ml: BottleMl, s: CostSettings): VialParts {
  * gram before the supplier discount.
  */
 export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): UnitCost {
+  return withDefect(bottleParts(oilPrice, ml, s), s.packaging.defectPercent);
+}
+
+function bottleParts(oilPrice: number, ml: BottleMl, s: CostSettings): Parts {
   const p = s.packaging;
-  return withDefect(
-    {
-      ...vial(oilPrice, ml, s),
-      box: ml === 5 ? 0 : p.box[ml],
-      insert: ml === 5 ? 0 : p.insert,
-    },
-    p.defectPercent,
-  );
+  return {
+    ...vial(oilPrice, ml, s),
+    box: ml === 5 ? 0 : p.box[ml],
+    insert: ml === 5 ? 0 : p.insert,
+  };
+}
+
+/**
+ * The same bottle as `bottleCost`, unrounded, for a caller that multiplies it by thousands of
+ * bottles (the planner, #78): `liquid` is oil plus ethanol, `total` includes the defect percent.
+ */
+export function bottleCostExact(
+  oilPrice: number,
+  ml: BottleMl,
+  s: CostSettings,
+): { liquid: number; total: number } {
+  const r = bottleParts(oilPrice, ml, s);
+  const base = r.oil + r.ethanol + r.bottle + r.label + r.spray + r.filling + r.box + r.insert;
+  return { liquid: r.oil + r.ethanol, total: base * (1 + s.packaging.defectPercent / 100) };
 }
 
 /**
@@ -232,6 +247,12 @@ export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): Uni
  * Null with no fragrance to average over.
  */
 export function giftSampleCost(oilPrices: readonly number[], s: CostSettings): number | null {
+  const exact = giftSampleCostExact(oilPrices, s);
+  return exact === null ? null : som(exact);
+}
+
+/** `giftSampleCost` before rounding, for a caller that multiplies it by the sample count. */
+export function giftSampleCostExact(oilPrices: readonly number[], s: CostSettings): number | null {
   if (oilPrices.length === 0) return null;
   const ml = s.order.giftSampleMl;
   const defect = 1 + s.packaging.defectPercent / 100;
@@ -240,7 +261,7 @@ export function giftSampleCost(oilPrices: readonly number[], s: CostSettings): n
     const liquid = ((v.oil + v.ethanol) / 5) * ml;
     return a + (liquid + v.bottle + v.label + v.spray + v.filling) * defect;
   }, 0);
-  return som(sum / oilPrices.length + s.packaging.insert);
+  return sum / oilPrices.length + s.packaging.insert;
 }
 
 /**
