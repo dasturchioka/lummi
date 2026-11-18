@@ -1,4 +1,6 @@
 import {
+  SET_SIZE,
+  SET_VIAL_ML,
   UZUM_SALES_PAGE_SIZE,
   type UzumSale,
   type UzumSaleInput,
@@ -11,7 +13,6 @@ import {
   asc,
   desc,
   discoverySet,
-  discoverySetItems,
   eq,
   fragrances,
   inArray,
@@ -32,14 +33,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readCostSettings } from '../cost/cost-settings';
-import type { CostedItem } from '../cost/order-costs';
+import { costSnapshot, type CostedItem } from '../cost/order-costs';
 import type { Edges } from '../edges';
-import { readDiscoverySet, reservedDiscovery } from '../sets/sets';
+import { loadDiscovery, type DiscoveryState } from '../sets/sets';
 import { isOwner } from '../staff/staff.guard';
 import { DB, EDGES } from '../tokens';
 import { retryOrTryAgain, uniqueViolation } from '../util/transient';
 import { recordStockMove } from '../warehouse/stock-moves';
-import { uzumSaleCosts } from './uzum-costs';
 
 export type UzumFailure =
   | { ok: false; reason: 'not_found' | 'voided' | 'duplicate_order' | 'try_again' }
@@ -51,8 +51,11 @@ export type UzumOutcome<T> = { ok: true; value: T } | UzumFailure;
 /** A sale as the writer takes it, from the form or a file. */
 export type NewUzumSale = UzumSaleInput & { via: 'form' | 'import'; rows?: number[] };
 
-/** The Discovery set's ml: five 10 ml vials (ADR 0009), as its order lines record it. */
-const DISCOVERY_ML = 10;
+/**
+ * A percent as the `numeric(5, 2)` column keeps it: two decimals, halves up (decimal, not binary:
+ * 20.555 is 20.56), so the frozen costs and the row read the same commission.
+ */
+export const percent2 = (n: number) => Number(`${Math.round(Number(`${n}e2`))}e-2`);
 
 const notFound = { ok: false, reason: 'not_found' } as const;
 
@@ -234,14 +237,12 @@ export class UzumSalesService {
     if (standing.length) throw new Refused({ ok: false, reason: 'duplicate_order' });
 
     const costs = await readCostSettings(tx);
-    const composition = withSet
-      ? (
-          await tx
-            .select({ fragranceId: discoverySetItems.fragranceId })
-            .from(discoverySetItems)
-            .orderBy(asc(discoverySetItems.position))
-        ).map((r) => r.fragranceId)
-      : [];
+    // the Discovery set's five as they are now; a set short of them has nothing to cost
+    const composition = locked.discovery?.composition.map((f) => f.id) ?? [];
+    const setItem: CostedItem | null =
+      composition.length === SET_SIZE
+        ? { kind: 'set', ml: SET_VIAL_ML, fragranceIds: composition }
+        : null;
     const fragranceIds = [
       ...new Set([...[...locked.volumes.values()].map((v) => v.fragranceId), ...composition]),
     ];
@@ -257,22 +258,22 @@ export class UzumSalesService {
     const actorRef = { type: 'staff' as const, id: actor.id };
     const ids: number[] = [];
     for (const s of sales) {
-      const commissionPercent = s.commissionPercent ?? costs.order.uzumCommissionPercent;
+      const commissionPercent = percent2(s.commissionPercent ?? costs.order.uzumCommissionPercent);
       const lines = s.lines.map((l) => {
         const v = l.kind === 'volume' ? locked.volumes.get(l.volumeId)! : null;
         const item: CostedItem | null = v
           ? { kind: 'volume', fragranceId: v.fragranceId, ml: v.ml }
-          : composition.length
-            ? { kind: 'set', ml: DISCOVERY_ML, fragranceIds: composition }
-            : null;
+          : setItem;
         return { l, v, item, lineTotal: l.qty * l.price };
       });
       const revenue = lines.reduce((sum, x) => sum + x.lineTotal, 0);
-      const { snapshot, unitCosts } = uzumSaleCosts(
-        lines.map((x) => ({ item: x.item, qty: x.l.qty, lineTotal: x.lineTotal })),
-        commissionPercent,
+      // the order's own arithmetic on the Uzum channel (#77): the sale's commission, no mailer,
+      // no delivery, one ad, the tax
+      const { snapshot, unitCosts } = costSnapshot(
+        lines.map((x) => ({ item: x.item, qty: x.l.qty })),
+        { channel: 'uzum', revenue, deliveryPaid: 0, giftSample: 0 },
         oil,
-        costs,
+        { ...costs, order: { ...costs.order, uzumCommissionPercent: commissionPercent } },
         now,
       );
       const [row] = await tx
@@ -297,12 +298,12 @@ export class UzumSalesService {
             volumeId: x.l.kind === 'volume' ? x.l.volumeId : null,
             fragranceId: x.v?.fragranceId ?? null,
             name: x.v ? (oil.get(x.v.fragranceId)?.name ?? null) : null,
-            ml: x.v?.ml ?? DISCOVERY_ML,
+            ml: x.v?.ml ?? SET_VIAL_ML,
             qty: x.l.qty,
             price: x.l.price,
             lineTotal: x.lineTotal,
             unitCost: unitCosts[position] ?? null,
-            setFragranceIds: x.v ? null : composition,
+            setFragranceIds: x.v ? null : composition.length ? composition : null,
           })),
         )
         .returning();
@@ -341,8 +342,11 @@ export class UzumSalesService {
 // ---- stock ----
 
 interface Locked {
-  /** The Discovery set's on hand, when a line sells it. */
-  discovery: number | null;
+  /**
+   * The Discovery set through its one read (`loadDiscovery`, locked), when a line sells it: its
+   * on hand, its five and what is available (0 unless it has all five).
+   */
+  discovery: DiscoveryState | null;
   volumes: Map<number, { fragranceId: number; ml: number; onHand: number }>;
 }
 
@@ -351,7 +355,7 @@ interface Locked {
  * set's row first, then the volumes in ascending id. Values are as of the lock.
  */
 async function lockShelves(tx: DbOrTx, withSet: boolean, volumeIds: number[]): Promise<Locked> {
-  const discovery = withSet ? (await readDiscoverySet(tx, true)).onHand : null;
+  const discovery = withSet ? await loadDiscovery(tx, { lock: true }) : null;
   const rows = volumeIds.length
     ? await tx
         .select({
@@ -387,7 +391,7 @@ async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLi
       names.set(f.id, f.name);
   for (const [key, want] of wanted) {
     if (key === 'set') {
-      const free = available(locked.discovery ?? 0, await reservedDiscovery(tx));
+      const free = locked.discovery?.available ?? 0;
       if (want > free)
         short.push({
           kind: 'discovery_set',
@@ -428,11 +432,9 @@ async function moveShelves(
     else byVolume.set(l.volumeId!, (byVolume.get(l.volumeId!) ?? 0) + l.qty);
   }
   if (set > 0) {
-    locked.discovery = (locked.discovery ?? 0) + sign * set;
-    await tx
-      .update(discoverySet)
-      .set({ onHand: locked.discovery })
-      .where(eq(discoverySet.id, true));
+    const row = locked.discovery!.row;
+    row.onHand += sign * set;
+    await tx.update(discoverySet).set({ onHand: row.onHand }).where(eq(discoverySet.id, true));
   }
   for (const [id, qty] of [...byVolume].sort(([a], [b]) => a - b)) {
     const v = locked.volumes.get(id)!;
@@ -488,13 +490,13 @@ async function salesOut(
     ).map((s) => [s.id, s.name]),
   );
   return rows.map((r) => {
-    const its = lines.filter((l) => l.saleId === r.id);
+    const saleLines = lines.filter((l) => l.saleId === r.id);
     return {
       id: r.id,
       soldOn: r.soldOn,
       uzumOrder: r.uzumOrder,
       commissionPercent: r.commissionPercent,
-      lines: its.map((l) => ({
+      lines: saleLines.map((l) => ({
         kind: l.kind,
         volumeId: l.volumeId,
         fragranceId: l.fragranceId,
@@ -505,7 +507,7 @@ async function salesOut(
         lineTotal: l.lineTotal,
         unitCost: owner ? l.unitCost : null,
       })),
-      units: its.reduce((sum, l) => sum + l.qty, 0),
+      units: saleLines.reduce((sum, l) => sum + l.qty, 0),
       revenue: r.revenue,
       costs: owner ? r.costs : null,
       source: r.source,
@@ -537,16 +539,14 @@ export async function saleItems(tx: DbOrTx): Promise<UzumSaleItem[]> {
     tx,
     rows.map((r) => r.volumeId),
   );
-  const set = await readDiscoverySet(tx);
+  const set = await loadDiscovery(tx);
   return [
     ...rows.map(({ onHand, ...r }) => ({
       kind: 'volume' as const,
       ...r,
       available: available(onHand, reserved.get(r.volumeId) ?? 0),
     })),
-    {
-      kind: 'discovery_set' as const,
-      available: available(set.onHand, await reservedDiscovery(tx)),
-    },
+    // through the set's one read: 0 unless it has all five
+    { kind: 'discovery_set' as const, available: set.available },
   ];
 }

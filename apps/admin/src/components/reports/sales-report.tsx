@@ -229,6 +229,9 @@ function Totals({
   );
 }
 
+/** A margin as the report shows it: «42 %», or «—» without revenue. */
+const marginText = (m: number | null) => (m === null ? '—' : `${Math.round(m * 100)}\u00a0%`);
+
 /**
  * The range's profit (#77) as figure cards under the sales figures: revenue, cost, profit and
  * margin over the orders with a cost snapshot; how many were left out says so under them.
@@ -253,7 +256,7 @@ function Profit({
       key: 'margin',
       icon: Percent,
       label: f.margin,
-      value: profit.margin === null ? '—' : `${Math.round(profit.margin * 100)}\u00a0%`,
+      value: marginText(profit.margin),
     },
   ];
   return (
@@ -307,9 +310,8 @@ function Channels({
   money: (n: number) => string;
 }) {
   const c = r.channels;
-  const margin = (x: ChannelSales) =>
-    x.profit.margin === null ? '—' : `${Math.round(x.profit.margin * 100)}\u00a0%`;
-  const profit = (x: ChannelSales) => (x.profit.orders === 0 ? '—' : money(x.profit.profit));
+  const margin = (x: ChannelSales) => marginText(x.profit.margin);
+  const profit = (x: ChannelSales) => (x.profit.sales === 0 ? '—' : money(x.profit.profit));
   const th = 'h-auto py-2 align-bottom leading-tight whitespace-normal px-3';
   const td = 'px-3 text-right whitespace-nowrap';
   const uncosted = (['miniapp', 'uzum'] as const).filter((k) => data.channels[k].profit.uncosted);
@@ -388,7 +390,7 @@ function Channels({
                     <TD className={td}>{num(x.revenue)}</TD>
                     <TD className={td}>{num(x.commission)}</TD>
                     <TD className={cn(td, 'font-semibold')}>
-                      {x.profit.orders === 0 ? '—' : num(x.profit.profit)}
+                      {x.profit.sales === 0 ? '—' : num(x.profit.profit)}
                     </TD>
                     <TD className={td}>{margin(x)}</TD>
                   </TR>

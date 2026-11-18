@@ -129,7 +129,11 @@ export const channelSalesSchema = z.object({
   sales: count,
   revenue: som,
   commission: som,
-  profit: salesProfitSchema,
+  /**
+   * `salesProfitSchema` over the channel's sales: `sales` counts those with costs (an Uzum sale
+   * is not an order, GLOSSARY), `uncosted` the rest.
+   */
+  profit: salesProfitSchema.omit({ orders: true }).extend({ sales: count }),
 });
 export type ChannelSales = z.infer<typeof channelSalesSchema>;
 

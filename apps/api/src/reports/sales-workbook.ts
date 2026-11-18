@@ -121,7 +121,7 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
       channel: c[key],
       sales: x.sales,
       revenue: x.revenue,
-      costed: x.profit.orders,
+      costed: x.profit.sales,
       uncosted: x.profit.uncosted,
       costedRevenue: x.profit.revenue,
       commission: x.commission,

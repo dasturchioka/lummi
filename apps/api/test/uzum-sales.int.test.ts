@@ -1,7 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { UzumSaleInput, WarehouseFragrance } from '@lummi/contracts';
-import { and, auditLog, discoverySet, eq, fragrances, volumes } from '@lummi/db';
+import {
+  and,
+  auditLog,
+  discoverySet,
+  discoverySetItems,
+  eq,
+  fragrances,
+  settings,
+  uzumSales,
+  volumes,
+} from '@lummi/db';
 import ExcelJS from 'exceljs';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -178,6 +188,34 @@ describe('recording an Uzum sale', () => {
     );
     expect(res).toMatchObject({ units: 1, revenue: 299_000 });
     expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(2);
+  });
+
+  it('judges the Discovery set through its one read: short of its five, none is available', async () => {
+    await t.db.update(discoverySet).set({ onHand: 3 });
+    const [first] = await t.db.select().from(discoverySetItems).orderBy(discoverySetItems.position);
+    await t.db.delete(discoverySetItems).where(eq(discoverySetItems.position, first!.position));
+
+    const list = await manager.client.admin.uzum.list({ query: {} });
+    expect(list.status === 200 && list.body.items.at(-1)).toEqual({
+      kind: 'discovery_set',
+      available: 0,
+    });
+    const res = await record(sale({ lines: [{ kind: 'discovery_set', qty: 1, price: 299_000 }] }));
+    expect(res.status).toBe(409);
+    expect(res.status === 409 && res.body.short).toEqual([
+      { kind: 'discovery_set', volumeId: null, name: null, ml: null, wanted: 1, available: 0 },
+    ]);
+    expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(3);
+  });
+
+  it('freezes the commission as the row keeps it, to two decimals', async () => {
+    await t.db.insert(settings).values({ key: 'cost.order.uzumCommissionPercent', value: 20.555 });
+    const res = await recorded(sale(), owner);
+    expect(res.commissionPercent).toBe(20.56);
+    // 69 000 × 20.56 % = 14 186.4
+    expect(res.costs?.profit).toMatchObject({ commissionPercent: 20.56, commission: 14_186 });
+    const [row] = await t.db.select().from(uzumSales).where(eq(uzumSales.id, res.id));
+    expect(row!.commissionPercent).toBe(20.56);
   });
 
   it('refuses more than is available (on hand less the reserve) and writes nothing', async () => {
@@ -359,11 +397,12 @@ describe('the sales report', () => {
     });
     if (res.status !== 200) throw new Error(`report ${res.status}`);
     const { channels, profit } = res.body;
+    const { orders, ...rest } = profit;
     expect(channels.miniapp).toEqual({
       sales: 1,
       revenue: 69_000,
       commission: 0,
-      profit,
+      profit: { sales: orders, ...rest },
     });
     expect(profit).toMatchObject({ orders: 1, revenue: 69_000, profit: miniapp.profit });
     expect(channels.uzum).toEqual({
@@ -371,7 +410,7 @@ describe('the sales report', () => {
       revenue: 139_000,
       commission: 14_145,
       profit: {
-        orders: 1,
+        sales: 1,
         uncosted: 1,
         revenue: 69_000,
         cost: 69_000 - 28_703,
@@ -384,7 +423,7 @@ describe('the sales report', () => {
       revenue: 208_000,
       commission: 14_145,
       profit: {
-        orders: 2,
+        sales: 2,
         uncosted: 1,
         revenue: 138_000,
         cost: 138_000 - miniapp.profit - 28_703,

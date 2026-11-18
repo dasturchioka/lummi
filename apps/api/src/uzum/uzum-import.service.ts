@@ -28,6 +28,7 @@ import { readCostSettings } from '../cost/cost-settings';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import {
+  DISCOVERY_NAME,
   planUzumImport,
   readUzumWorkbook,
   saleSummary,
@@ -217,7 +218,7 @@ const shortIssue = (s: UzumShortLine): UzumImportIssue => ({
   column: null,
   code: 'stock_short',
   params: {
-    name: s.name ?? 'Discovery set',
+    name: s.name ?? DISCOVERY_NAME,
     ml: s.ml ?? '',
     wanted: s.wanted,
     available: s.available,

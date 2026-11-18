@@ -192,13 +192,11 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
   }
 
   const profit = profitOf(sold);
-  const miniapp: ChannelSales = {
-    sales: sold.length,
-    revenue: sold.reduce((sum, o) => sum + o.items - o.discountAmount, 0),
-    commission: sold.reduce((sum, o) => sum + (o.profit?.commission ?? 0), 0),
-    profit,
-  };
-  const uzum = await uzumChannel(db, range);
+  const miniapp: ChannelSale[] = sold.map((o) => ({
+    revenue: o.items - o.discountAmount,
+    profit: o.profit,
+  }));
+  const uzum = await uzumSalesIn(db, range);
 
   return {
     from: range.from,
@@ -206,7 +204,11 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
     days: daily,
     totals,
     profit,
-    channels: { miniapp, uzum, total: bothChannels(miniapp, uzum) },
+    channels: {
+      miniapp: channelOf(miniapp),
+      uzum: channelOf(uzum),
+      total: channelOf([...miniapp, ...uzum]),
+    },
     fragrances: ranked([...fragrances.values()], (r) => r.fragranceId).map(
       ({ at: _at, ...r }) => r,
     ),
@@ -283,8 +285,14 @@ function addCost(
   row.profit += net - cost;
 }
 
+/** One sale of a channel (#80): what it brought in, and its frozen profit when it has one. */
+type ChannelSale = {
+  revenue: number;
+  profit: { revenue: number; cost: number; commission: number } | null;
+};
+
 /** The Uzum sales of the range's days (#80), voided ones left out, at their frozen profit. */
-async function uzumChannel(db: DbOrTx, range: TashkentRange): Promise<ChannelSales> {
+async function uzumSalesIn(db: DbOrTx, range: TashkentRange): Promise<ChannelSale[]> {
   const rows = await db
     .select({ revenue: uzumSales.revenue, costs: uzumSales.costs })
     .from(uzumSales)
@@ -295,30 +303,20 @@ async function uzumChannel(db: DbOrTx, range: TashkentRange): Promise<ChannelSal
         isNull(uzumSales.voidedAt),
       ),
     );
-  return {
-    sales: rows.length,
-    revenue: rows.reduce((sum, r) => sum + r.revenue, 0),
-    commission: rows.reduce((sum, r) => sum + (r.costs.profit?.commission ?? 0), 0),
-    profit: profitOf(rows.map((r) => ({ profit: r.costs.profit }))),
-  };
+  return rows.map((r) => ({ revenue: r.revenue, profit: r.costs.profit }));
 }
 
-/** Both channels together: the sums, margin over the costed revenue. */
-function bothChannels(a: ChannelSales, b: ChannelSales): ChannelSales {
-  const revenue = a.profit.revenue + b.profit.revenue;
-  const cost = a.profit.cost + b.profit.cost;
+/**
+ * A channel's figures (#80), or both channels' together: every sale's revenue, and `profitOf`
+ * over the ones with costs, which it counts as `sales` (an Uzum sale is not an order).
+ */
+function channelOf(sales: readonly ChannelSale[]): ChannelSales {
+  const { orders, ...profit } = profitOf(sales);
   return {
-    sales: a.sales + b.sales,
-    revenue: a.revenue + b.revenue,
-    commission: a.commission + b.commission,
-    profit: {
-      orders: a.profit.orders + b.profit.orders,
-      uncosted: a.profit.uncosted + b.profit.uncosted,
-      revenue,
-      cost,
-      profit: revenue - cost,
-      margin: revenue > 0 ? (revenue - cost) / revenue : null,
-    },
+    sales: sales.length,
+    revenue: sales.reduce((sum, x) => sum + x.revenue, 0),
+    commission: sales.reduce((sum, x) => sum + (x.profit?.commission ?? 0), 0),
+    profit: { sales: orders, ...profit },
   };
 }
 

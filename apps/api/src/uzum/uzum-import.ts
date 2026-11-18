@@ -10,7 +10,7 @@ import {
   type UzumSaleLineInput,
 } from '@lummi/contracts';
 import ExcelJS from 'exceljs';
-import { cellText, type ColumnDef } from '../catalog-import/workbook';
+import { HEADER_FILL, cellText, type ColumnDef } from '../catalog-import/workbook';
 
 /**
  * `LUMMI_Uzum.xlsx` (#80): Uzum sales from a file. Uzum's own seller export is not known to us yet
@@ -54,12 +54,6 @@ const fold = (s: string) =>
     .replace(/[‐‑‒–—−]/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
-
-const HEADER_FILL: ExcelJS.Fill = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FFCFC6B8' },
-};
 
 /** The template: the sales sheet with its headers, and every fragrance with its volumes to copy from. */
 export async function writeUzumTemplate(catalog: readonly UzumCatalogFragrance[]): Promise<Buffer> {

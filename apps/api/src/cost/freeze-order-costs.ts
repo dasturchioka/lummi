@@ -17,7 +17,7 @@ import {
 } from '@lummi/db';
 import { readCostSettings } from './cost-settings';
 import { PAID_BY } from '../orders/order-read';
-import { lineUnitCost, saleProfit, type CostedItem } from './order-costs';
+import { costSnapshot, type CostedItem } from './order-costs';
 import type { CostSettings } from './unit-cost';
 
 /** What a line is, for its unit cost: its bottle, or its set's five fragrances at the vial size. */
@@ -33,10 +33,8 @@ export function costedItemOf(
 
 /**
  * An order's cost snapshot from its lines, the oil prices and the settings now (#77): each line
- * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel. Pure.
- * The goods are known only when every line's unit cost is: otherwise `profit` is null and
- * `missing` names the fragrances without an oil price (ADR 0040: no oil price, no cost); empty, a
- * line had nothing to cost (no fragrance, or a size the model has no cost for).
+ * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel, by the
+ * one builder `costSnapshot`. Pure.
  */
 export function orderCostSnapshot(
   order: Pick<OrderRow, 'itemsSubtotal' | 'discountAmount' | 'deliveryFee'>,
@@ -45,37 +43,19 @@ export function orderCostSnapshot(
   s: CostSettings,
   at: Date,
 ): { snapshot: OrderCostSnapshot; unitCosts: (number | null)[] } {
-  const missing = new Set<number>();
-  const unitCosts = lines.map((l) => {
-    const item = costedItemOf(l);
-    if (!item) return null;
-    const cost = lineUnitCost(item, (id) => oil.get(id)?.oilPrice ?? null, s);
-    cost.missing.forEach((id) => missing.add(id));
-    return cost.unitCost;
-  });
-  const known = unitCosts.every((c) => c !== null);
-  const goods = known ? lines.reduce((sum, l, i) => sum + unitCosts[i]! * l.qty, 0) : null;
-  return {
-    snapshot: {
-      at: at.toISOString(),
-      profit:
-        goods === null
-          ? null
-          : saleProfit(
-              {
-                channel: 'miniapp',
-                revenue: order.itemsSubtotal - order.discountAmount,
-                goods,
-                deliveryPaid: order.deliveryFee,
-                // a gift sample goes in with #79; until then no order has one
-                giftSample: 0,
-              },
-              s,
-            ),
-      missing: [...missing].map((id) => oil.get(id)?.name ?? `#${id}`).sort(),
+  return costSnapshot(
+    lines.map((l) => ({ item: costedItemOf(l), qty: l.qty })),
+    {
+      channel: 'miniapp',
+      revenue: order.itemsSubtotal - order.discountAmount,
+      deliveryPaid: order.deliveryFee,
+      // a gift sample goes in with #79; until then no order has one
+      giftSample: 0,
     },
-    unitCosts,
-  };
+    oil,
+    s,
+    at,
+  );
 }
 
 /**
