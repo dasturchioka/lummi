@@ -6,6 +6,7 @@ import { PAYMENT_LINK_REASON_MAX } from './order-transition-payloads';
 import { RECEIPT_UPLOAD_MAX_MB } from './receipt-upload';
 import { RECEIPT_REJECT_NOTE_HARD_MAX } from './receipt-review';
 import { CREDIT_MARK_NOTE_MAX } from './admin-orders';
+import { MAX_PRICE } from './constants';
 
 /** The longest `receipts.botChoiceSeconds` may be: a day. The sweep that deletes pending files keeps them longer. */
 export const BOT_CHOICE_MAX_SECONDS = 86_400;
@@ -14,6 +15,9 @@ export const BOT_CHOICE_MAX_SECONDS = 86_400;
 export const SETTING_AREAS = [
   'shop',
   'pricing',
+  'costLiquid',
+  'costPackaging',
+  'costOrder',
   'search',
   'auth',
   'ai',
@@ -58,6 +62,38 @@ export interface SettingMeta {
 export interface SettingDefinition extends SettingMeta {
   schema: z.ZodTypeAny;
   default: unknown;
+}
+
+/** A cost-model amount in whole so'm (ADR 0040). */
+function costSom<A extends SettingArea>(
+  area: A,
+  def: number,
+  meta: { label: Bilingual; hint?: Bilingual; min?: number },
+) {
+  return {
+    schema: z.number().int().min(meta.min ?? 0).max(MAX_PRICE),
+    default: def,
+    area,
+    unit: 'sum' as const,
+    label: meta.label,
+    ...(meta.hint ? { hint: meta.hint } : {}),
+  };
+}
+
+/** A cost-model percent; fractions are fine (Uzum takes 20.5 %). */
+function costPercent<A extends SettingArea>(
+  area: A,
+  def: number,
+  meta: { label: Bilingual; hint?: Bilingual; max?: number },
+) {
+  return {
+    schema: z.number().min(0).max(meta.max ?? 100),
+    default: def,
+    area,
+    unit: 'none' as const,
+    label: meta.label,
+    ...(meta.hint ? { hint: meta.hint } : {}),
+  };
 }
 
 /**
@@ -750,6 +786,192 @@ export const settingDefinitions = {
     hint: {
       ru: 'Защита от злоупотреблений: считается от дня, когда покупатель указал дату рождения.',
       uz: 'Suiisteʼmoldan himoya: xaridor tugʻilgan sanasini kiritgan kundan hisoblanadi.',
+    },
+  },
+  // ---- Cost model (#75, ADR 0040): the customer's calculator, defaults its `P0`. The cost of a
+  // bottle or set is computed from these and the fragrance's oil price (`apps/api/src/cost`).
+  // Prices and the free-delivery threshold are not here: they are the catalog's and pricing's.
+  'cost.liquid.usdRate': costSom('costLiquid', 12_000, {
+    label: { ru: 'Курс доллара', uz: 'Dollar kursi' },
+    hint: {
+      ru: 'Сколько сумов стоит 1 $: для цен и расходов в долларах (например, масло по чеку в $ за кг).',
+      uz: '1 $ necha soʻm turadi: dollardagi narx va xarajatlar uchun (masalan, chekdagi kg uchun $ moy narxi).',
+    },
+    min: 1,
+  }),
+  'cost.liquid.oilPercent': costPercent('costLiquid', 30, {
+    label: { ru: 'Масло в жидкости, %', uz: 'Suyuqlikdagi moy, %' },
+    hint: {
+      ru: 'Доля парфюмерного масла в готовых духах. Обычно масло и спирт вместе дают 100 %.',
+      uz: 'Tayyor atirdagi atir moyi ulushi. Odatda moy va spirt birga 100 % boʻladi.',
+    },
+  }),
+  'cost.liquid.ethanolPercent': costPercent('costLiquid', 70, {
+    label: { ru: 'Спирт в жидкости, %', uz: 'Suyuqlikdagi spirt, %' },
+    hint: {
+      ru: 'Доля парфюмерного спирта в готовых духах.',
+      uz: 'Tayyor atirdagi atir spirti ulushi.',
+    },
+  }),
+  'cost.liquid.oilDiscountPercent': costPercent('costLiquid', 9, {
+    label: { ru: 'Скидка поставщика на масло, %', uz: 'Yetkazib beruvchining moyga chegirmasi, %' },
+    hint: {
+      ru: 'Снимается с цены масла по накладной, которая указана у каждого аромата.',
+      uz: 'Har bir ifor uchun koʻrsatilgan yuk xati boʻyicha moy narxidan ayriladi.',
+    },
+  }),
+  'cost.liquid.ethanolPerLitre': costSom('costLiquid', 150_000, {
+    label: { ru: 'Парфюмерный спирт, за 1 литр', uz: 'Atir spirti, 1 litr uchun' },
+    hint: {
+      ru: 'Цена уже со скидкой поставщика.',
+      uz: 'Yetkazib beruvchi chegirmasi bilan narx.',
+    },
+  }),
+  'cost.liquid.oilDensity': {
+    schema: z.number().gt(0).max(3),
+    default: 1,
+    area: 'costLiquid',
+    unit: 'none',
+    label: { ru: 'Плотность масла, г/мл', uz: 'Moy zichligi, g/ml' },
+    hint: {
+      ru: 'Сколько граммов весит 1 мл масла: масло покупается в граммах, а разливается в миллилитрах.',
+      uz: '1 ml moy necha gramm keladi: moy grammda sotib olinadi, millilitrda quyiladi.',
+    },
+  },
+  'cost.liquid.fixativePerMl': costSom('costLiquid', 0, {
+    label: { ru: 'Фиксатор, за 1 мл духов', uz: 'Fiksator, 1 ml atir uchun' },
+    hint: { ru: '0 — без фиксатора.', uz: '0 — fiksatorsiz.' },
+  }),
+  'cost.liquid.fillingLossPercent': costPercent('costLiquid', 3, {
+    label: { ru: 'Потери при розливе, %', uz: 'Quyishdagi yoʻqotish, %' },
+    hint: {
+      ru: 'Сколько жидкости теряется при розливе: на каждый флакон уходит на столько больше.',
+      uz: 'Quyishda qancha suyuqlik yoʻqoladi: har bir flakonga shuncha koʻp ketadi.',
+    },
+    max: 50,
+  }),
+  'cost.liquid.oilImportPercent': costPercent('costLiquid', 3, {
+    label: { ru: 'Доставка масла до Термеза, % к цене', uz: 'Moyni Termizgacha yetkazish, narxga %' },
+    hint: {
+      ru: 'Добавляется к цене масла после скидки поставщика.',
+      uz: 'Yetkazib beruvchi chegirmasidan keyingi moy narxiga qoʻshiladi.',
+    },
+  }),
+  'cost.packaging.bottle5Ml': costSom('costPackaging', 2_000, {
+    label: { ru: 'Флакон 5 мл', uz: '5 ml flakon' },
+    hint: {
+      ru: 'Для пробника и набора 5 × 5 мл. У флакона 5 мл нет коробки и открытки.',
+      uz: 'Namuna va 5 × 5 ml toʻplam uchun. 5 ml flakonda quti va otkritka yoʻq.',
+    },
+  }),
+  'cost.packaging.bottle10Ml': costSom('costPackaging', 2_000, {
+    label: { ru: 'Флакон 10 мл', uz: '10 ml flakon' },
+  }),
+  'cost.packaging.bottle30Ml': costSom('costPackaging', 6_000, {
+    label: { ru: 'Флакон 30 мл', uz: '30 ml flakon' },
+  }),
+  'cost.packaging.bottle50Ml': costSom('costPackaging', 7_000, {
+    label: { ru: 'Флакон 50 мл', uz: '50 ml flakon' },
+  }),
+  'cost.packaging.label': costSom('costPackaging', 500, {
+    label: { ru: 'Этикетка, за штуку', uz: 'Yorliq, donasi' },
+  }),
+  'cost.packaging.spray': costSom('costPackaging', 0, {
+    label: { ru: 'Распылитель и крышка, за штуку', uz: 'Purkagich va qopqoq, donasi' },
+    hint: { ru: '0 — если они входят в цену флакона.', uz: '0 — agar ular flakon narxiga kirsa.' },
+  }),
+  'cost.packaging.filling': costSom('costPackaging', 1_000, {
+    label: { ru: 'Розлив, за флакон', uz: 'Quyish, flakon uchun' },
+    hint: {
+      ru: 'Работа: наполнить и собрать один флакон.',
+      uz: 'Ish: bitta flakonni toʻldirish va yigʻish.',
+    },
+  }),
+  'cost.packaging.box10Ml': costSom('costPackaging', 5_000, {
+    label: { ru: 'Коробка 10 мл', uz: '10 ml quti' },
+  }),
+  'cost.packaging.box30Ml': costSom('costPackaging', 5_000, {
+    label: { ru: 'Коробка 30 мл', uz: '30 ml quti' },
+  }),
+  'cost.packaging.box50Ml': costSom('costPackaging', 5_000, {
+    label: { ru: 'Коробка 50 мл', uz: '50 ml quti' },
+  }),
+  'cost.packaging.setBox5Ml': costSom('costPackaging', 5_000, {
+    label: { ru: 'Коробка набора 5 × 5 мл', uz: '5 × 5 ml toʻplam qutisi' },
+  }),
+  'cost.packaging.setBox10Ml': costSom('costPackaging', 5_000, {
+    label: { ru: 'Коробка набора 5 × 10 мл', uz: '5 × 10 ml toʻplam qutisi' },
+    hint: {
+      ru: 'Флаконы в наборе идут без своих коробок и открыток: на набор одна коробка и одна открытка.',
+      uz: 'Toʻplamdagi flakonlar alohida quti va otkritkasiz: toʻplamga bitta quti va bitta otkritka.',
+    },
+  }),
+  'cost.packaging.insert': costSom('costPackaging', 1_000, {
+    label: { ru: 'Открытка с QR', uz: 'QR kodli otkritka' },
+    hint: {
+      ru: 'Одна во флаконе 10, 30 или 50 мл и одна в наборе.',
+      uz: '10, 30 yoki 50 ml flakonda bitta va toʻplamda bitta.',
+    },
+  }),
+  'cost.packaging.defectPercent': costPercent('costPackaging', 2, {
+    label: { ru: 'Брак и бой, %', uz: 'Brak va sinish, %' },
+    hint: {
+      ru: 'Добавляется ко всей себестоимости флакона или набора.',
+      uz: 'Flakon yoki toʻplam tannarxining hammasiga qoʻshiladi.',
+    },
+    max: 50,
+  }),
+  'cost.order.mailer': costSom('costOrder', 2_000, {
+    label: { ru: 'Почтовый пакет BTS', uz: 'BTS pochta paketi' },
+    hint: { ru: 'Упаковка одной посылки.', uz: 'Bitta posilka qadogʻi.' },
+  }),
+  'cost.order.btsCharge': costSom('costOrder', 25_000, {
+    label: { ru: 'BTS берёт за посылку', uz: 'BTS posilka uchun oladi' },
+    hint: {
+      ru: 'Сколько платит магазин. Что платит покупатель, задаёт тариф доставки; с порога бесплатной доставки он не платит ничего.',
+      uz: 'Doʻkon toʻlaydigan summa. Xaridor toʻlovini yetkazib berish tarifi belgilaydi; bepul yetkazib berish chegarasidan u hech narsa toʻlamaydi.',
+    },
+  }),
+  'cost.order.adPerSale': costSom('costOrder', 3_000, {
+    label: { ru: 'Реклама на одну продажу', uz: 'Bitta sotuvga reklama' },
+  }),
+  'cost.order.taxPercent': costPercent('costOrder', 1, {
+    label: { ru: 'Налог, % от выручки', uz: 'Soliq, tushumdan %' },
+  }),
+  'cost.order.onlinePaymentPercent': costPercent('costOrder', 0, {
+    label: { ru: 'Комиссия онлайн-оплаты, %', uz: 'Onlayn toʻlov komissiyasi, %' },
+    hint: {
+      ru: '0 — перевод на карту без комиссии.',
+      uz: '0 — kartaga oʻtkazma komissiyasiz.',
+    },
+  }),
+  'cost.order.uzumCommissionPercent': costPercent('costOrder', 20.5, {
+    label: { ru: 'Комиссия Uzum, %', uz: 'Uzum komissiyasi, %' },
+    hint: {
+      ru: 'С продаж через Uzum Market; почтового пакета и доставки там нет.',
+      uz: 'Uzum Market orqali sotuvlardan; u yerda pochta paketi va yetkazib berish yoʻq.',
+    },
+  }),
+  'cost.order.giftSampleCount': {
+    schema: z.number().int().min(0).max(1_000_000),
+    default: 2_000,
+    area: 'costOrder',
+    unit: 'none',
+    label: { ru: 'Пробников в подарок, шт.', uz: 'Sovgʻa namunalari, dona' },
+    hint: {
+      ru: 'Сколько пробников заложить в закупку.',
+      uz: 'Xaridda nechta namuna hisobga olinadi.',
+    },
+  },
+  'cost.order.giftSampleMl': {
+    schema: z.number().int().min(1).max(5),
+    default: 5,
+    area: 'costOrder',
+    unit: 'ml',
+    label: { ru: 'Объём пробника', uz: 'Namuna hajmi' },
+    hint: {
+      ru: 'Пробник разливается во флакон 5 мл.',
+      uz: 'Namuna 5 ml flakonga quyiladi.',
     },
   },
   // ---- Bot and orders group

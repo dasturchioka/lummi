@@ -30,6 +30,14 @@ export const SEASONS = ['spring_summer', 'autumn_winter', 'all_year', 'spring_au
 export const TIMES_OF_DAY = ['day', 'evening', 'day_evening', 'everyday'] as const;
 export const NOTE_LEVELS = ['top', 'heart', 'base'] as const;
 export const VOLUMES_ML = [10, 30, 50] as const;
+/**
+ * The oil grade a fragrance is bought at, as the supplier's invoice names it (ADR 0040): admin
+ * only, shown as «TOP», «PREMIUM», «PREMIUM NEW».
+ */
+export const FRAGRANCE_TIERS = ['top', 'premium', 'premium_new'] as const;
+export type FragranceTier = (typeof FRAGRANCE_TIERS)[number];
+/** The highest oil price a fragrance may carry, so'm per gram (about $80 a gram). */
+export const MAX_OIL_PRICE = 1_000_000;
 
 /** Catalog sorts: top sales (default), new, price low to high, price high to low. */
 export const CATALOG_SORTS = ['top', 'new', 'price_asc', 'price_desc'] as const;

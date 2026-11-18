@@ -8,6 +8,7 @@ export * from './delivery';
 export * from './internal';
 export * from './catalog';
 export * from './quote';
+export * from './cost';
 export * from './settings';
 export * from './setting-issues';
 export * from './setting-rules';
