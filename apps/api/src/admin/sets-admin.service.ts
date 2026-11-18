@@ -89,7 +89,8 @@ export class SetsAdminService {
   async setOnHand(
     actor: StaffRow,
     onHand: number,
-    expected?: number,
+    expected: number | undefined,
+    reason: string,
   ): Promise<Outcome<AdminDiscoverySet>> {
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, true);
@@ -105,7 +106,7 @@ export class SetsAdminService {
         action: 'sets.discovery_on_hand_changed',
         targetType: 'discovery_set',
         targetId: 'discovery',
-        payload: { onHand: [old.onHand, onHand] },
+        payload: { onHand: [old.onHand, onHand], reason },
       });
       return { ok: true, value: await this.get(tx) } as const;
     });

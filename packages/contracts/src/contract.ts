@@ -85,6 +85,16 @@ import {
   stockQuerySchema,
 } from './admin-stock';
 import {
+  bottlingBodySchema,
+  bottlingResultSchema,
+  oilReceiptCorrectionSchema,
+  oilReceiptInputSchema,
+  oilReceiptSchema,
+  oilReceiptVoidSchema,
+  warehouseErrorSchema,
+  warehouseFragranceSchema,
+} from './warehouse';
+import {
   audienceCountSchema,
   audienceQuerySchema,
   broadcastBodySchema,
@@ -1854,6 +1864,87 @@ const adminCampaigns = c.router({
   },
 });
 
+/**
+ * The raw-material warehouse (#76, ADR 0041): a fragrance's oil, its receipts and its bottlings.
+ * Receipts carry purchase prices and are the owner's; bottling is stock work, the manager's too.
+ */
+const warehouseId = z.object({ id: z.coerce.number().int().positive() });
+const adminWarehouse = c.router({
+  warehouse: {
+    get: {
+      method: 'GET',
+      path: '/admin/warehouse/fragrances/:id',
+      pathParams: warehouseId,
+      responses: {
+        200: warehouseFragranceSchema,
+        401: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+      },
+      summary:
+        "Owner and manager: a fragrance's oil balance, bottles, history; receipts and values for the owner only",
+    },
+    receive: {
+      method: 'POST',
+      path: '/admin/warehouse/fragrances/:id/receipts',
+      pathParams: warehouseId,
+      body: oilReceiptInputSchema,
+      responses: {
+        201: oilReceiptSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary: 'Owner only: an oil receipt adds its grams to the oil balance (audited)',
+    },
+    correctReceipt: {
+      method: 'PUT',
+      path: '/admin/warehouse/receipts/:id',
+      pathParams: warehouseId,
+      body: oilReceiptCorrectionSchema,
+      responses: {
+        200: oilReceiptSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary:
+        'Owner only: correct a receipt with a reason; the balance moves by the change in grams, 409 oil_short when used up',
+    },
+    voidReceipt: {
+      method: 'POST',
+      path: '/admin/warehouse/receipts/:id/void',
+      pathParams: warehouseId,
+      body: oilReceiptVoidSchema,
+      responses: {
+        200: oilReceiptSchema,
+        401: warehouseErrorSchema,
+        403: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary:
+        'Owner only: void a receipt with a reason; its grams leave the balance, 409 oil_short when used up',
+    },
+    bottle: {
+      method: 'POST',
+      path: '/admin/warehouse/fragrances/:id/bottlings',
+      pathParams: warehouseId,
+      body: bottlingBodySchema,
+      responses: {
+        201: bottlingResultSchema,
+        401: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+        422: warehouseErrorSchema,
+      },
+      summary:
+        'Owner and manager: bottle oil into volumes; oil by the cost formula with the loss, 409 oil_short with the shortfall',
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
   ...adminOrders,
@@ -1866,6 +1957,7 @@ export const adminContract = c.router({
   ...adminBirthdayCoupons,
   ...adminReports,
   ...adminHome,
+  ...adminWarehouse,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */

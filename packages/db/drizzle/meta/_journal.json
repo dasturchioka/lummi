@@ -267,6 +267,13 @@
       "when": 1795023306718,
       "tag": "0037_cost_model",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795026172760,
+      "tag": "0038_warehouse",
+      "breakpoints": true
     }
   ]
 }

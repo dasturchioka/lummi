@@ -38,6 +38,7 @@ import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
+import { recordCountChanges, recordStockMove } from '../warehouse/stock-moves';
 
 export type Failure = {
   ok: false;
@@ -258,7 +259,12 @@ export class CatalogAdminService {
       .from(volumes)
       .where(eq(volumes.fragranceId, id))
       .orderBy(asc(volumes.ml));
-    return fragranceCosts(f.oilPrice, vols, await readCostSettings(this.db), this.edges.clock.now());
+    return fragranceCosts(
+      f.oilPrice,
+      vols,
+      await readCostSettings(this.db),
+      this.edges.clock.now(),
+    );
   }
 
   async create(actor: StaffRow, raw: FragranceInput): Promise<Outcome<FragranceAdmin>> {
@@ -304,6 +310,15 @@ export class CatalogAdminService {
     const id = row!.id;
     await this.writeLinks(tx, id, input);
     for (const v of input.volumes) await this.insertVolume(tx, id, v, opts.placeholder);
+    // the first counts are a correction from the form or the import (#76); the seed writes none
+    if (actor)
+      await this.recordFormCounts(
+        tx,
+        actor,
+        id,
+        input.volumes.map((v) => [v.ml, v.onHand]),
+        opts.source,
+      );
     await reindexFragrances(tx, [id]);
     if (actor) {
       await this.audit.record(tx, {
@@ -370,11 +385,13 @@ export class CatalogAdminService {
     await tx.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, id));
     await this.writeLinks(tx, id, input);
     const volumeChanges: Record<string, unknown>[] = [];
+    const counted: [ml: number, change: number][] = [];
     for (const v of input.volumes) {
       const old = before.volumes.find((x) => x.ml === v.ml);
       if (!old) {
         await this.insertVolume(tx, id, v);
         volumeChanges.push({ ml: v.ml, added: true, price: v.price, onHand: v.onHand });
+        counted.push([v.ml, v.onHand]);
         continue;
       }
       const end = v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null;
@@ -392,7 +409,9 @@ export class CatalogAdminService {
         .where(eq(volumes.id, old.id));
       const diff = this.volumeDiff(old, v, writeOnHand);
       if (diff) volumeChanges.push({ ml: v.ml, ...diff });
+      if (writeOnHand) counted.push([v.ml, v.onHand - old.onHand]);
     }
+    if (actor) await this.recordFormCounts(tx, actor, id, counted, opts.source);
 
     await reindexFragrances(tx, [id]);
     const after = (await this.get(id, tx))!;
@@ -511,6 +530,24 @@ export class CatalogAdminService {
       salePrice: v.salePrice,
       saleEndsAt: v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null,
       onHand: v.onHand,
+    });
+  }
+
+  /** Counts the form or the import changed, as one correction in the fragrance's history (#76). */
+  private async recordFormCounts(
+    tx: DbOrTx,
+    actor: StaffRow,
+    fragranceId: number,
+    changes: [ml: number, change: number][],
+    source: 'import' | undefined,
+  ) {
+    if (!changes.some(([, change]) => change !== 0)) return;
+    await recordStockMove(tx, {
+      fragranceId,
+      kind: 'correction',
+      actor: { type: 'staff', id: actor.id },
+      bottles: Object.fromEntries(changes),
+      details: { source: source ?? 'form' },
     });
   }
 
@@ -671,7 +708,8 @@ export class CatalogAdminService {
     actor: StaffRow,
     volumeId: number,
     onHand: number,
-    expected?: number,
+    expected: number | undefined,
+    reason: string,
   ): Promise<Outcome<OnHandItem>> {
     return transient(() =>
       this.db.transaction(async (tx) => {
@@ -693,7 +731,14 @@ export class CatalogAdminService {
           action: 'catalog.on_hand_changed',
           targetType: 'volume',
           targetId: volumeId,
-          payload: { fragrance: f!.name, ml: old.ml, onHand: [old.onHand, onHand] },
+          payload: { fragrance: f!.name, ml: old.ml, onHand: [old.onHand, onHand], reason },
+        });
+        // a count from the stock page is a correction in the fragrance's history (#76)
+        await recordCountChanges(tx, [{ volumeId, from: old.onHand, to: onHand }], {
+          kind: 'correction',
+          actor: { type: 'staff', id: actor.id },
+          reason,
+          details: { source: 'stock' },
         });
         const reserved = (await reservedByVolume(tx, [volumeId])).get(volumeId) ?? 0;
         return {

@@ -155,7 +155,13 @@ export class OnHandController {
   @TsRestHandler(adminContract.onHand.set)
   set(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.onHand.set, async ({ params, body }) => {
-      const res = await this.catalog.setOnHand(actor, params.id, body.onHand, body.expected);
+      const res = await this.catalog.setOnHand(
+        actor,
+        params.id,
+        body.onHand,
+        body.expected,
+        body.reason,
+      );
       if (res.ok) return { status: 200 as const, body: res.value };
       if (res.reason === 'on_hand_changed') return failure(res);
       return res.reason === 'try_again'

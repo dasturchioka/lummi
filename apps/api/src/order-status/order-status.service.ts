@@ -25,6 +25,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
+import { recordCountChanges } from '../warehouse/stock-moves';
 import { DiscountSourceHooks } from './discount-sources';
 import { EFFECTS, type Effects, type Move } from './effects';
 import { cancellationOf } from './history';
@@ -219,6 +220,18 @@ export class OrderStatusService {
         createdAt: now,
       })
       .returning();
+    // bottles that left at handover or came back are moves in their fragrances' history (#76)
+    await recordCountChanges(
+      tx,
+      onHand
+        .filter((c) => c.shelf === 'volumes')
+        .map((c) => ({ volumeId: c.id, from: c.from, to: c.to })),
+      {
+        kind: action === 'hand_to_bts' ? 'sale' : 'returned',
+        actor: { type: actor.type, id: actorId },
+        orderId: order.id,
+      },
+    );
     await this.audit.record(tx, {
       actor: { type: actor.type, id: actorId },
       action: fx.audit,

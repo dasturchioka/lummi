@@ -24,7 +24,7 @@ export class SetsAdminController {
   @TsRestHandler(adminContract.sets.setOnHand)
   setOnHand(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.sets.setOnHand, async ({ body }) => {
-      const res = await this.sets.setOnHand(actor, body.onHand, body.expected);
+      const res = await this.sets.setOnHand(actor, body.onHand, body.expected, body.reason);
       return res.ok
         ? { status: 200 as const, body: res.value }
         : {

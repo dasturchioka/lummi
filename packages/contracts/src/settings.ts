@@ -71,7 +71,11 @@ function costSom<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; min?: number },
 ) {
   return {
-    schema: z.number().int().min(meta.min ?? 0).max(MAX_PRICE),
+    schema: z
+      .number()
+      .int()
+      .min(meta.min ?? 0)
+      .max(MAX_PRICE),
     default: def,
     area,
     unit: 'sum' as const,
@@ -87,7 +91,10 @@ function costPercent<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; max?: number },
 ) {
   return {
-    schema: z.number().min(0).max(meta.max ?? 100),
+    schema: z
+      .number()
+      .min(0)
+      .max(meta.max ?? 100),
     default: def,
     area,
     unit: 'none' as const,
@@ -342,6 +349,18 @@ export const settingDefinitions = {
     hint: {
       ru: 'Строка склада подсвечивается, когда доступно не больше этого числа штук. Нуль подсвечивается всегда.',
       uz: 'Mavjud miqdor shu sondan oshmasa, ombor qatori ajratib koʻrsatiladi. Nol har doim ajratiladi.',
+    },
+  },
+  /** The low-oil warning on the stock page (#76, ADR 0041): litres of perfume the oil still makes. */
+  'stock.lowOilLitres': {
+    schema: z.number().min(0).max(1000),
+    default: 1,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Мало масла: запас жидкости, л', uz: 'Moy kam: suyuqlik zaxirasi, l' },
+    hint: {
+      ru: 'Аромат помечается «Мало масла», когда его масла хватит не больше чем на столько литров духов (потери при розливе учтены). 0 — только когда масла нет совсем.',
+      uz: 'Moyidan shu litrdan koʻp boʻlmagan atir chiqsa, ifor «Moy kam» deb belgilanadi (quyishdagi yoʻqotish hisobga olingan). 0 — faqat moy umuman qolmaganda.',
     },
   },
   /**
@@ -851,7 +870,10 @@ export const settingDefinitions = {
     max: 50,
   }),
   'cost.liquid.oilImportPercent': costPercent('costLiquid', 3, {
-    label: { ru: 'Доставка масла до Термеза, % к цене', uz: 'Moyni Termizgacha yetkazish, narxga %' },
+    label: {
+      ru: 'Доставка масла до Термеза, % к цене',
+      uz: 'Moyni Termizgacha yetkazish, narxga %',
+    },
     hint: {
       ru: 'Добавляется к цене масла после скидки поставщика.',
       uz: 'Yetkazib beruvchi chegirmasidan keyingi moy narxiga qoʻshiladi.',

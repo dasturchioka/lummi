@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { uzumUrlSchema } from './uzum';
+import { stockReasonSchema } from './warehouse';
 import {
   FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
@@ -210,6 +211,8 @@ export const onHandBodySchema = z.object({
    * write is refused with 409 `on_hand_changed` and the current count (a concurrent edit).
    */
   expected: z.number().int().min(0).optional(),
+  /** Why the count changed (a recount, breakage…): kept in the history and the audit (#76). */
+  reason: stockReasonSchema,
 });
 
 /** Dictionary entries (families and notes): RU/UZ names and aliases. */
@@ -224,7 +227,8 @@ export const dictionaryInputSchema = z.object({
  */
 export const noteInputSchema = dictionaryInputSchema.superRefine((v, ctx) => {
   for (const path of ['nameRu', 'nameUz'] as const) {
-    if (v[path].includes(',')) ctx.addIssue({ code: 'custom', path: [path], message: 'comma_in_note' });
+    if (v[path].includes(','))
+      ctx.addIssue({ code: 'custom', path: [path], message: 'comma_in_note' });
   }
 });
 export type DictionaryInput = z.infer<typeof dictionaryInputSchema>;

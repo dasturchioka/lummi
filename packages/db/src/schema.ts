@@ -10,6 +10,7 @@ import {
   RECEIPT_FILE_KINDS,
   RECEIPT_REVIEW_REASONS,
   RECEIPT_VERDICTS,
+  STOCK_MOVE_KINDS,
   UPGRADE_RIGHT_SOURCES,
   type CancelReason,
   type OrderStatus,
@@ -25,6 +26,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -509,6 +511,11 @@ export const fragrances = pgTable(
     /** Who sold the oil and on which invoice, as the owner writes them. */
     oilSupplier: text('oil_supplier'),
     oilInvoice: text('oil_invoice'),
+    /**
+     * The oil balance (ADR 0041): this fragrance's oil in the warehouse, whole milligrams. Up with
+     * an oil receipt, down with a bottling; written only under this row's lock, with a stock move.
+     */
+    oilMg: integer('oil_mg').notNull().default(0),
     isHit: boolean('is_hit').notNull().default(false),
     isNew: boolean('is_new').notNull().default(false),
     hidden: boolean('hidden').notNull().default(false),
@@ -521,6 +528,7 @@ export const fragrances = pgTable(
       sql`cardinality(${t.keyNotesRu}) = 3 and cardinality(${t.keyNotesUz}) = 3`,
     ),
     check('fragrances_oil_price_check', sql`${t.oilPrice} is null or ${t.oilPrice} > 0`),
+    check('fragrances_oil_mg_check', sql`${t.oilMg} >= 0`),
   ],
 );
 
@@ -1820,3 +1828,106 @@ export const workerHeartbeat = pgTable(
   },
   (t) => [check('worker_heartbeat_one_row', sql`${t.id}`)],
 );
+
+/**
+ * An oil receipt (ADR 0041): oil of one fragrance as a supplier's invoice reads, grams kept in
+ * milligrams, the price as typed (so'm per gram before the supplier discount) with the discount
+ * and the delivery to Termez for this invoice. It adds to the fragrance's oil balance. A correction
+ * rewrites it, a void takes its oil back off; both carry a reason and leave a stock move.
+ */
+export const oilReceipts = pgTable(
+  'oil_receipts',
+  {
+    id: id(),
+    fragranceId: bigint('fragrance_id', { mode: 'number' })
+      .notNull()
+      .references(() => fragrances.id, { onDelete: 'cascade' }),
+    supplier: text('supplier').notNull(),
+    invoice: text('invoice').notNull(),
+    /** The day the oil came in, a Tashkent date. */
+    receivedOn: date('received_on', { mode: 'string' }).notNull(),
+    oilMg: integer('oil_mg').notNull(),
+    pricePerGram: integer('price_per_gram').notNull(),
+    discountPercent: numeric('discount_percent', {
+      precision: 5,
+      scale: 2,
+      mode: 'number',
+    }).notNull(),
+    importPercent: numeric('import_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('oil_receipts_fragrance_idx').on(t.fragranceId, t.id),
+    check(
+      'oil_receipts_amounts_check',
+      sql`${t.oilMg} > 0 and ${t.pricePerGram} > 0
+        and ${t.discountPercent} between 0 and 100 and ${t.importPercent} between 0 and 100`,
+    ),
+  ],
+);
+export type OilReceiptRow = typeof oilReceipts.$inferSelect;
+
+/**
+ * A bottling (ADR 0041): oil of one fragrance turned into bottles. The oil it took (the cost
+ * model's `liquidNeeded` for the counts, filling loss included) left the oil balance and the
+ * bottles joined on hand in the same transaction. Ethanol is costed, not stocked: kept for the record.
+ */
+export const bottlings = pgTable(
+  'bottlings',
+  {
+    id: id(),
+    fragranceId: bigint('fragrance_id', { mode: 'number' })
+      .notNull()
+      .references(() => fragrances.id, { onDelete: 'cascade' }),
+    /** Bottles per volume, as the form sent them: `[{ ml, quantity }]`. */
+    lines: jsonb('lines').$type<{ ml: number; quantity: number }[]>().notNull(),
+    oilMg: integer('oil_mg').notNull(),
+    ethanolMl: integer('ethanol_ml').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('bottlings_fragrance_idx').on(t.fragranceId, t.id),
+    check('bottlings_amounts_check', sql`${t.oilMg} >= 0 and ${t.ethanolMl} >= 0`),
+  ],
+);
+export type BottlingRow = typeof bottlings.$inferSelect;
+
+export const stockMoveKindEnum = pgEnum('stock_move_kind', STOCK_MOVE_KINDS);
+
+/**
+ * A fragrance's warehouse history (ADR 0041), append only: one row per change of its oil balance
+ * or of its bottles on hand, written in the transaction that made it. `oil_mg` and `bottles` are
+ * signed changes (`bottles` keyed by ml); `details` keeps what the history line needs to read
+ * (an invoice, an order number, where a count came from).
+ */
+export const stockMoves = pgTable(
+  'stock_moves',
+  {
+    id: id(),
+    /**
+     * No foreign key on purpose: a key check would take a share lock on the fragrance row, and the
+     * BTS handover writes a move while holding volume locks, the reverse of a bottling's order
+     * (fragrance, then volumes). Fragrances are never deleted.
+     */
+    fragranceId: bigint('fragrance_id', { mode: 'number' }).notNull(),
+    kind: stockMoveKindEnum('kind').notNull(),
+    oilMg: integer('oil_mg').notNull().default(0),
+    bottles: jsonb('bottles').$type<Record<string, number>>().notNull().default({}),
+    receiptId: bigint('receipt_id', { mode: 'number' }).references(() => oilReceipts.id),
+    bottlingId: bigint('bottling_id', { mode: 'number' }).references(() => bottlings.id),
+    orderId: bigint('order_id', { mode: 'number' }).references(() => orders.id),
+    reason: text('reason'),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    actorType: actorTypeEnum('actor_type').notNull(),
+    actorId: bigint('actor_id', { mode: 'number' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('stock_moves_fragrance_idx').on(t.fragranceId, t.id),
+    index('stock_moves_created_idx').on(t.createdAt),
+  ],
+);
+export type StockMoveRow = typeof stockMoves.$inferSelect;

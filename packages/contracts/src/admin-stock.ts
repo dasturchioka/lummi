@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { birthDateSchema } from './birthday';
 import { ORDER_STATUSES } from './order-status';
+import { fragranceOilSchema } from './warehouse';
 
 /* ---- stock (#27) ---- */
 
@@ -34,8 +35,11 @@ export type StockRow = z.infer<typeof stockRowSchema>;
 
 export const stockQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
-  /** `low`: available at or under the threshold (zero included); `zero`: nothing available. */
-  filter: z.enum(['low', 'zero']).optional(),
+  /**
+   * `low`: available at or under the threshold (zero included); `zero`: nothing available;
+   * `oilLow`: fragrances whose oil is running low or gone (#76; the Discovery set never matches).
+   */
+  filter: z.enum(['low', 'zero', 'oilLow']).optional(),
   /** Fragrances hidden from the catalog; the Discovery set counts as visible. */
   visibility: z.enum(['visible', 'hidden']).optional(),
   /** Pages hold whole fragrances (all their matching volumes), so a card is never split. */
@@ -47,6 +51,10 @@ export type StockQuery = z.infer<typeof stockQuerySchema>;
 export const stockListSchema = z.object({
   /** The setting `stock.lowAvailableThreshold`. */
   lowThreshold: z.number().int(),
+  /** The setting `stock.lowOilLitres` (#76). */
+  lowOilLitres: z.number(),
+  /** The oil of each fragrance on this page (#76, ADR 0041), in the rows' order. */
+  oil: z.array(fragranceOilSchema),
   /** This page's rows: the Discovery set first (page 1 only, when it matches), then whole fragrances in name order. */
   rows: z.array(stockRowSchema),
   /** Fragrances matching the search and filters, over all pages. */
