@@ -45,9 +45,10 @@ type ErrorText = (status: number, code?: string) => string;
 
 /**
  * Owner-only staff page (ADR 0017, 0038): the list (a table on wide cards, a list below that)
- * with each member's role and what it opens, «Добавить сотрудника» (a role choice) and «Сбросить пароль» in dialogs that end on the login and temporary
- * password shown once, and a confirmation before a manager is switched off, removed or loses
- * their Telegram. Switching a manager back on needs no confirmation.
+ * with each member's role and what it opens. «Добавить сотрудника» (with a role choice) and
+ * «Сбросить пароль» are dialogs that end on the login and temporary password shown once. A
+ * confirmation comes before a manager is switched off, removed or loses their Telegram, and
+ * before a role changes. Switching a manager back on needs no confirmation.
  */
 export function StaffManager({
   initial,
@@ -70,20 +71,16 @@ export function StaffManager({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
+  const codeText: Record<string, string> = {
+    telegram_only: t.errors.telegramOnly,
+    login_taken: t.errors.loginTaken,
+    own_role: t.errors.ownRole,
+    last_owner: t.errors.lastOwner,
+    inactive: t.errors.inactiveMember,
+  };
   const errorText: ErrorText = (status, code) =>
-    code === 'telegram_only'
-      ? t.errors.telegramOnly
-      : code === 'own_role'
-        ? t.errors.ownRole
-        : code === 'last_owner'
-          ? t.errors.lastOwner
-          : code === 'login_taken'
-            ? t.errors.loginTaken
-            : status === 409
-              ? t.errors.conflict
-              : status === 403
-                ? t.errors.forbidden
-                : t.errors.generic;
+    (code && codeText[code]) ||
+    (status === 409 ? t.errors.conflict : status === 403 ? t.errors.forbidden : t.errors.generic);
 
   const ask = (kind: Confirm['kind'], member: StaffDto) => {
     setRowError(null);
@@ -217,12 +214,14 @@ export function StaffManager({
                         className="mt-0.5 text-[13px] text-muted-foreground"
                         parts={[t.roles[s.role], s.login ?? t.staff.noLogin, telegram(s)]}
                       />
-                      <p className="mt-0.5 text-[13px] text-pretty text-muted-foreground">
+                    </div>
+                    <div className="shrink-0">{status(s)}</div>
+                    <div className="basis-full">
+                      <p className="text-[13px] text-pretty text-muted-foreground">
                         {opensFor(s.role, t)}
                       </p>
                       {pending(s) && <p className="mt-0.5">{pending(s)}</p>}
                     </div>
-                    <div className="shrink-0">{status(s)}</div>
                     {rowActions && (
                       <div className="-ml-3 flex basis-full flex-wrap gap-x-1.5">{rowActions}</div>
                     )}
@@ -258,8 +257,8 @@ export function StaffManager({
                         </p>
                         {s.id !== meId && <div className="-ml-3 mt-1">{roleButton(s)}</div>}
                       </TD>
-                      <TD className="[overflow-wrap:anywhere]">
-                        <p>
+                      <TD className="min-w-40">
+                        <p className="whitespace-nowrap">
                           {s.login ?? (
                             <span className="text-muted-foreground">{t.staff.noLogin}</span>
                           )}
@@ -364,17 +363,14 @@ function ConfirmContent({
     setPending(true);
     setError(null);
     const params = { id: member.id };
-    const call =
-      kind === 'remove'
-        ? browserApi.staff.remove({ params })
-        : kind === 'unlink'
-          ? browserApi.staff.unlinkTelegram({ params })
-          : kind === 'toOwner' || kind === 'toManager'
-            ? browserApi.staff.setRole({
-                params,
-                body: { role: kind === 'toOwner' ? 'owner' : 'manager' },
-              })
-            : browserApi.staff.update({ params, body: { active: false } });
+    const calls = {
+      remove: () => browserApi.staff.remove({ params }),
+      unlink: () => browserApi.staff.unlinkTelegram({ params }),
+      deactivate: () => browserApi.staff.update({ params, body: { active: false } }),
+      toOwner: () => browserApi.staff.setRole({ params, body: { role: 'owner' } }),
+      toManager: () => browserApi.staff.setRole({ params, body: { role: 'manager' } }),
+    };
+    const call = calls[kind]();
     const res = await call.catch(() => null);
     setPending(false);
     if (res?.status === 200) onDone();

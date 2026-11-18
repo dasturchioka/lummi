@@ -101,7 +101,7 @@ import {
   settingStateSchema,
   updateSettingBodySchema,
   changePasswordBodySchema,
-  createManagerBodySchema,
+  createStaffBodySchema,
   devLoginBodySchema,
   lockedErrorSchema,
   loginWidgetBodySchema,
@@ -739,7 +739,7 @@ const adminCore = c.router({
     create: {
       method: 'POST',
       path: '/admin/staff',
-      body: createManagerBodySchema,
+      body: createStaffBodySchema,
       responses: {
         201: staffSchema,
         401: adminErrorSchema,
@@ -777,7 +777,7 @@ const adminCore = c.router({
         409: adminErrorSchema,
       },
       summary:
-        "Owner only: change a member's role, effective at once (guards read the role per request); 409 own_role for yourself, last_owner when no other active owner would remain",
+        "Owner only: change a member's role, effective at once (guards read the role per request); 409 own_role for yourself, last_owner when no other active owner would remain, inactive for promoting a switched-off member",
     },
     remove: {
       method: 'DELETE',

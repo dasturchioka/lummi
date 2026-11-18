@@ -122,6 +122,7 @@ export const adminMessages = defineMessages(
         locked: 'Слишком много неудачных попыток',
         lockedHint: 'Вход закрыт до {time}. Попробуйте снова после этого времени.',
         loginTaken: 'Такой логин уже занят. Выберите другой.',
+        inactiveMember: 'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
         ownRole: 'Свою роль менять нельзя: попросите другого владельца.',
         lastOwner: 'В магазине должен остаться хотя бы один действующий владелец.',
         telegramOnly:
@@ -350,7 +351,7 @@ export const adminMessages = defineMessages(
       staff: {
         title: 'Сотрудники',
         description:
-          'Кто может входить в панель и что кому открыто. Менеджеры работают с заказами, складом и пунктами BTS, остальное доступно только владельцу.',
+          'Кто может входить в панель и что кому открыто.',
         add: 'Добавить сотрудника',
         addTitle: 'Новый сотрудник',
         roleChoice: 'Роль',
@@ -396,8 +397,8 @@ export const adminMessages = defineMessages(
         role: 'Роль',
         status: 'Статус',
         actions: 'Действия',
-        active: 'Доступ открыт',
-        inactive: 'Доступ закрыт',
+        active: 'Активен',
+        inactive: 'Отключён',
         you: 'вы',
         deactivate: 'Отключить',
         activate: 'Включить',
@@ -697,7 +698,8 @@ export const adminMessages = defineMessages(
         badRange: 'Дата «С» позже даты «По».',
         actions: {
           'setting.changed': 'Изменена настройка',
-          'staff.created': 'Добавлен менеджер',
+          'staff.created': 'Добавлен сотрудник',
+          'staff.role_changed': 'Изменена роль сотрудника',
           'staff.removed': 'Удалён сотрудник',
           'staff.signed_in': 'Вход в панель',
           'staff.activated': 'Доступ сотрудника включён',
@@ -2495,7 +2497,7 @@ export const adminMessages = defineMessages(
         minLength: 'Kamida {min} belgi.',
         shownOnce: 'Faqat bir marta koʻrsatiladi',
         shownOnceText:
-          'Nusxalab, menejerga bering. Oyna yopilgach, parolni bilib boʻlmaydi, faqat qayta tiklash mumkin.',
+          'Nusxalab, xodimga bering. Oyna yopilgach, parolni bilib boʻlmaydi, faqat qayta tiklash mumkin.',
         mismatch: 'Parollar mos kelmadi.',
       },
       changePassword: {
@@ -2550,6 +2552,7 @@ export const adminMessages = defineMessages(
         locked: 'Muvaffaqiyatsiz urinishlar juda koʻp',
         lockedHint: 'Kirish {time} gacha yopiq. Shu vaqtdan keyin qayta urinib koʻring.',
         loginTaken: 'Bu login band. Boshqasini tanlang.',
+        inactiveMember: 'Oʻchirib qoʻyilgan xodimni egasi qilib boʻlmaydi. Avval kirishni yoqing.',
         ownRole: 'Oʻz rolingizni almashtirib boʻlmaydi: boshqa egasidan soʻrang.',
         lastOwner: 'Doʻkonda kamida bitta faol egasi qolishi kerak.',
         telegramOnly:
@@ -2776,7 +2779,7 @@ export const adminMessages = defineMessages(
       staff: {
         title: 'Xodimlar',
         description:
-          'Panelga kim kira oladi va kimga nima ochiq. Menejerlar buyurtmalar, ombor va BTS punktlari bilan ishlaydi, qolgani faqat egasi uchun.',
+          'Panelga kim kira oladi va kimga nima ochiq.',
         add: 'Xodim qoʻshish',
         addTitle: 'Yangi xodim',
         roleChoice: 'Rol',
@@ -2803,7 +2806,7 @@ export const adminMessages = defineMessages(
         pendingPassword: 'parol almashtirilishi kutilmoqda',
         addedTitle: 'Xodim qoʻshildi',
         addedText:
-          '{name} uchun login va vaqtinchalik parol tayyor. Ularni menejerga bering: xodim birinchi kirishda oʻz parolini oʻrnatadi.',
+          '{name} uchun login va vaqtinchalik parol tayyor. Ularni xodimga bering: xodim birinchi kirishda oʻz parolini oʻrnatadi.',
         done: 'Tayyor',
         resetPassword: 'Parolni tiklash',
         resetTitle: 'Parol tiklansinmi?',
@@ -2812,7 +2815,7 @@ export const adminMessages = defineMessages(
         resetLoginText: '{name} uchun hali login yoʻq: uni parol bilan birga bering.',
         resetSubmit: 'Tiklash',
         resetDoneTitle: 'Parol tiklandi',
-        resetDoneText: '{name} uchun yangi vaqtinchalik parol tayyor. Login va parolni menejerga bering.',
+        resetDoneText: '{name} uchun yangi vaqtinchalik parol tayyor. Login va parolni xodimga bering.',
         unlink: 'Telegramni uzish',
         unlinkTitle: 'Telegram uzilsinmi?',
         unlinkText:
@@ -3128,7 +3131,8 @@ export const adminMessages = defineMessages(
         badRange: '«Sanadan» sanasi «Sanagacha» sanasidan keyin.',
         actions: {
           'setting.changed': 'Sozlama oʻzgartirildi',
-          'staff.created': 'Menejer qoʻshildi',
+          'staff.created': 'Xodim qoʻshildi',
+          'staff.role_changed': 'Xodim roli oʻzgartirildi',
           'staff.removed': 'Xodim oʻchirildi',
           'staff.signed_in': 'Panelga kirish',
           'staff.activated': 'Xodim kirishi yoqildi',

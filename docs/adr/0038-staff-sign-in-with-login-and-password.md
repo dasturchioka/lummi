@@ -1,8 +1,10 @@
 # Staff sign in with a login and password; Telegram is bound through the bot
 
+Amended in part by #64 (2026-11-18): owners can be added and promoted in the panel (see "What stays").
+
 Amends ADR 0017. Decided by Sardor on 2026-11-14 (ticket #50): the shop has an owner and several managers, and the Telegram Login Widget alone is a hard way in for them (it needs the bot's domain set with BotFather, a Telegram session in the browser, and an owner who knows each manager's numeric id). **Login and password become the main way into the admin panel; «Войти через Telegram» stays as the second button.** The owner creates the managers' accounts and hands them their passwords.
 
-What stays from ADR 0017: one `staff` table gates the panel and the orders-group buttons; the session is the same httpOnly, revocable cookie; group buttons know a presser only by Telegram id; owners are created by the server CLI, never in the panel; every account action is audited with its actor.
+What stays from ADR 0017: one `staff` table gates the panel and the orders-group buttons; the session is the same httpOnly, revocable cookie; group buttons know a presser only by Telegram id; the first owner is created by the server CLI, and from #64 an owner can add other owners and change roles in the panel (never their own role, never leaving the shop without an active owner); every account action is audited with its actor.
 
 ## Decisions
 

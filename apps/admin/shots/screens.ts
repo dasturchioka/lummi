@@ -41,13 +41,7 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (
-      await page
-        .getByRole('listbox')
-        .isVisible()
-        .catch(() => false)
-    )
-      return;
+    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();

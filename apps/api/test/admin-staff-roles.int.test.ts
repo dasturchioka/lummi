@@ -103,14 +103,62 @@ describe('staff roles (#64)', () => {
 
   it('a demotion needs another active owner: with one, it goes through', async () => {
     const owner = await t.ownerSession();
-    const other = await add(owner, 'jasur', 'owner');
+    await add(owner, 'jasur', 'owner');
     const otherClient = await signedIn('jasur');
     const res = await otherClient.admin.staff.setRole({
       params: { id: owner.staff.id },
       body: { role: 'manager' },
     });
     expect(res.status).toBe(200);
-    expect(other.role).toBe('owner');
+    const [now] = await t.db.select().from(staff).where(eq(staff.id, owner.staff.id));
+    expect(now?.role).toBe('manager');
+  });
+
+  it('two owners demoting each other at once: exactly one succeeds, the other is refused', async () => {
+    const owner = await t.ownerSession();
+    const other = await add(owner, 'jasur', 'owner');
+    const otherClient = await signedIn('jasur');
+    const [a, b] = await Promise.all([
+      owner.client.admin.staff.setRole({ params: { id: other.id }, body: { role: 'manager' } }),
+      otherClient.admin.staff.setRole({
+        params: { id: owner.staff.id },
+        body: { role: 'manager' },
+      }),
+    ]);
+    // the loser is refused either inside the lock (409 last_owner) or, when the winner had already
+    // committed, at the guard (403): which one depends on timing, never on both succeeding
+    expect([a.status, b.status].filter((x) => x === 200)).toHaveLength(1);
+    const refused = a.status === 200 ? b : a;
+    expect([403, 409]).toContain(refused.status);
+    if (refused.status === 409) expect(refused.body).toEqual({ code: 'last_owner' });
+    const rows = await t.db.select().from(staff);
+    expect(rows.filter((r) => r.role === 'owner' && r.active)).toHaveLength(1);
+  });
+
+  it('an owner demoted a moment ago cannot change roles: the actor is re-checked inside the lock', async () => {
+    const owner = await t.ownerSession();
+    const other = await add(owner, 'jasur', 'owner');
+    const manager = await add(owner, 'dilnoza');
+    await t.db.update(staff).set({ role: 'manager' }).where(eq(staff.id, other.id));
+    const stale = { ...(other as unknown as typeof owner.staff), role: 'owner' as const };
+    const res = await t.app.get(StaffService).setRole(stale, manager.id, 'owner');
+    expect(res).toEqual({ ok: false, reason: 'conflict' });
+    const [row] = await t.db.select().from(staff).where(eq(staff.id, manager.id));
+    expect(row?.role).toBe('manager');
+  });
+
+  it('refuses to promote a switched-off member', async () => {
+    const owner = await t.ownerSession();
+    const member = await add(owner, 'dilnoza');
+    await owner.client.admin.staff.update({ params: { id: member.id }, body: { active: false } });
+    const res = await owner.client.admin.staff.setRole({
+      params: { id: member.id },
+      body: { role: 'owner' },
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ code: 'inactive' });
+    const [row] = await t.db.select().from(staff).where(eq(staff.id, member.id));
+    expect(row?.role).toBe('manager');
   });
 
   it("a manager's open session loses owner routes when demoted and gets them back when promoted", async () => {
