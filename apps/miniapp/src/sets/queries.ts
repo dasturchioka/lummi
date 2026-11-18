@@ -1,3 +1,4 @@
+import type { DiscoveryVialMl } from '@lummi/contracts/constants';
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrap } from '../lib/api';
 
@@ -9,7 +10,7 @@ export const DISCOVERY_KEY = ['sets', 'discovery'] as const;
  * photo, the five fragrances. Money is the server's. Kept apart from the builder and the
  * add-to-cart hooks (`./actions`), so Home's banner carries only this query (ADR 0030 budget).
  */
-export function useDiscoverySet(vialMl: 10 | 5 = 10) {
+export function useDiscoverySet(vialMl: DiscoveryVialMl = 10) {
   return useQuery({
     queryKey: [...DISCOVERY_KEY, vialMl],
     staleTime: 30_000,

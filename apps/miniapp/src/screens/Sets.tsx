@@ -1,5 +1,10 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
-import { DISCOVERY_FAVOURITE, SET_SIZE } from '@lummi/contracts/constants';
+import {
+  DISCOVERY_FAVOURITE,
+  DISCOVERY_SETS,
+  SET_SIZE,
+  type DiscoveryVialMl,
+} from '@lummi/contracts/constants';
 import { buyNowParam } from '@lummi/contracts/buy-now';
 import { fill, plural } from '@lummi/i18n';
 import { useRouter, useSearch } from '@tanstack/react-router';
@@ -107,10 +112,10 @@ export function DiscoverySetView({
   const { t, language } = usePrefs();
   const s = useSetsText();
   const ready = set.fragrances.length === SET_SIZE;
-  // the 5 × 5 ml set (ADR 0042) has its own name and lead; the heart, the share link and the
-  // reviews stay the 5 × 10 ml one's for now
-  const five = set.vialMl === 5;
-  const title = five ? s.discovery5Title : s.discoveryTitle;
+  // each set's own name and lead (ADR 0042); the heart and the share link are the 5 × 10 ml
+  // set's only for now (`extras`)
+  const text = s.discovery[set.vialMl];
+  const { extras } = DISCOVERY_SETS[set.vialMl];
   return (
     <Screen
       tabBar={false}
@@ -144,9 +149,9 @@ export function DiscoverySetView({
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
-            {five ? null : (
-              <PhotoActions favourite={DISCOVERY_FAVOURITE} name={title} onShare={onShare} />
-            )}
+            {extras ? (
+              <PhotoActions favourite={DISCOVERY_FAVOURITE} name={text.title} onShare={onShare} />
+            ) : null}
           </div>
         </div>
 
@@ -154,12 +159,10 @@ export function DiscoverySetView({
         <header className="mt-5 flex flex-col">
           <p className="type-label text-muted">{t.home.discoveryLabel}</p>
           <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
-            {title}
+            {text.title}
           </h1>
           <LabelDivider />
-          <p className="type-body mt-3 text-pretty text-muted">
-            {five ? s.discovery5Lead : s.discoveryLead}
-          </p>
+          <p className="type-body mt-3 text-pretty text-muted">{text.lead}</p>
           <p className="mt-2 text-ink">
             <Money amount={set.price} />
           </p>
@@ -222,7 +225,7 @@ export function Discovery5SetScreen() {
   return <DiscoveryScreenOf vialMl={5} />;
 }
 
-function DiscoveryScreenOf({ vialMl }: { vialMl: 10 | 5 }) {
+function DiscoveryScreenOf({ vialMl }: { vialMl: DiscoveryVialMl }) {
   const router = useRouter();
   const open = useOpenFragrance();
   const s = useSetsText();
@@ -243,8 +246,8 @@ function DiscoveryScreenOf({ vialMl }: { vialMl: 10 | 5 }) {
       note={note}
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
-      onShare={() => void shareDiscovery(s.discoveryTitle)}
-      reviews={vialMl === 10 ? <ReviewsBlock target="discovery-set" /> : undefined}
+      onShare={() => void shareDiscovery(s.discovery[vialMl].title)}
+      reviews={DISCOVERY_SETS[vialMl].extras ? <ReviewsBlock target="discovery-set" /> : undefined}
       onBuyNow={() =>
         void router.navigate({
           to: '/checkout',
