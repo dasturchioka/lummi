@@ -17,7 +17,7 @@ Each result is the full breakdown: oil, ethanol with fixative, bottle, label, sp
 - #75: the catalog page's `fragranceCosts` (`GET /admin/catalog/fragrances/:id/costs`).
 - #76: bottling uses `liquidNeeded` for what it consumes.
 - #77: costs order lines with `bottleCost` / `setCost` when the order is confirmed and freezes them in the order, then adds the order costs from `settings.order`.
-- #78: the planner uses `landedOilPrice` and `bottleCost`.
+- #78: the planner uses `landedOilPrice`, and `bottleCostExact` and `giftSampleCostExact`, the same bottle and sample before rounding, because it multiplies them by thousands of bottles; it rounds each figure of its own result once.
 - #79: 5 ml uses `BottleMl` 5 and `SetVialMl` 5.
 
 A 5 ml bottle has no box and no card. A set's vials have neither: the set gets one set box and one card, and the defect % goes on the whole.
