@@ -1007,6 +1007,7 @@ async function setUpShop(t: TestApp): Promise<FixtureCatalog> {
     percent: null,
     amount: null,
     maxDiscount: null,
+    gift: null,
     expiresOn: null,
     minOrderTotal: null,
     totalLimit: null,

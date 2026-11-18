@@ -59,6 +59,7 @@ function promo(over: Partial<PromoCodeInput> = {}): PromoCodeInput {
     percent: 10,
     amount: null,
     maxDiscount: null,
+    gift: null,
     expiresOn: null,
     minOrderTotal: null,
     totalLimit: null,

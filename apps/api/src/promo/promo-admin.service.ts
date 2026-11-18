@@ -10,8 +10,10 @@ import {
   type PromoCodeInput,
 } from '@lummi/contracts';
 import {
+  and,
   desc,
   eq,
+  fragrances,
   inArray,
   promoCodes,
   promoCodeUses,
@@ -20,6 +22,7 @@ import {
   type DbOrTx,
   type PromoCodeRow,
   type StaffRow,
+  volumes,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { isUniqueViolation } from '../admin/catalog-admin.service';
@@ -30,23 +33,90 @@ import { DB, EDGES } from '../tokens';
 import { marketingSummaryOver } from '../reports/marketing-summary';
 import { promoState } from './promo-codes';
 
-export type PromoFailure = { ok: false; reason: 'not_found' | 'code_taken' | 'in_use' };
+export type PromoFailure = {
+  ok: false;
+  reason: 'not_found' | 'code_taken' | 'in_use' | 'invalid';
+  fields?: string[];
+};
 export type PromoOutcome<T> = { ok: true; value: T } | PromoFailure;
-const fail = (reason: PromoFailure['reason']): PromoFailure => ({ ok: false, reason });
+const fail = (reason: PromoFailure['reason'], fields?: string[]): PromoFailure =>
+  fields ? { ok: false, reason, fields } : { ok: false, reason };
+
+/** A gift code's item as the list and the audit name it (ADR 0039). */
+type Gift = AdminPromoCode['gift'];
 
 /**
  * The editable fields, both ways. They are the input's own fields except the last day, which is
- * stored as an instant (23:59:59 Tashkent that day): a new field is one edit in the schema and
- * the contract, nothing here.
+ * stored as an instant (23:59:59 Tashkent that day), and a gift code's gift, stored as the volume
+ * it names (`resolveGift`) or the Discovery set flag: a new plain field is one edit in the schema
+ * and the contract, nothing here.
  */
-function toColumns({ expiresOn, ...rest }: PromoCodeInput) {
-  return { ...rest, expiresAt: expiresOn === null ? null : lastInstantOf(expiresOn) };
+function toColumns({ expiresOn, gift, ...rest }: PromoCodeInput, giftVolumeId: number | null) {
+  return {
+    ...rest,
+    giftVolumeId,
+    giftDiscoverySet: gift?.kind === 'discovery_set',
+    // a gift cuts no item's price, so the marked-down flag means nothing for it (ADR 0039)
+    appliesToMarkedDown: rest.kind === 'gift' ? false : rest.appliesToMarkedDown,
+    expiresAt: expiresOn === null ? null : lastInstantOf(expiresOn),
+  };
 }
 
-/** The editable fields as the form shows them: what the audit diffs and the list returns. */
-function fieldsOf(r: PromoCodeRow): PromoCodeInput {
-  const { id: _id, createdAt: _c, updatedAt: _u, campaignLinkMade: _l, expiresAt, ...rest } = r;
-  return { ...rest, expiresOn: tashkentDateOf(expiresAt) };
+/** The editable fields as the form shows them (the gift named): what the audit diffs and the list returns. */
+function fieldsOf(r: PromoCodeRow, gift: Gift): Omit<PromoCodeInput, 'gift'> & { gift: Gift } {
+  const {
+    id: _id,
+    createdAt: _c,
+    updatedAt: _u,
+    campaignLinkMade: _l,
+    giftVolumeId: _v,
+    giftDiscoverySet: _d,
+    expiresAt,
+    ...rest
+  } = r;
+  return { ...rest, gift, expiresOn: tashkentDateOf(expiresAt) };
+}
+
+/** Each gift code's item, named: its volume's fragrance and ml, or the Discovery set. */
+async function giftsOf(tx: DbOrTx, rows: PromoCodeRow[]): Promise<Map<number, Gift>> {
+  const ids = [...new Set(rows.flatMap((r) => (r.giftVolumeId === null ? [] : [r.giftVolumeId])))];
+  const named =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({
+            id: volumes.id,
+            fragranceId: volumes.fragranceId,
+            ml: volumes.ml,
+            name: fragrances.name,
+            brand: fragrances.originalBrand,
+          })
+          .from(volumes)
+          .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+          .where(inArray(volumes.id, ids));
+  const byVolume = new Map(named.map((v) => [v.id, v]));
+  return new Map(
+    rows.map((r): [number, Gift] => {
+      if (r.giftDiscoverySet) return [r.id, { kind: 'discovery_set' }];
+      const v = r.giftVolumeId === null ? undefined : byVolume.get(r.giftVolumeId);
+      if (!v) return [r.id, null];
+      const ml = v.ml as 10 | 30 | 50;
+      return [r.id, { kind: 'volume', fragranceId: v.fragranceId, ml, name: v.name, brand: v.brand }];
+    }),
+  );
+}
+
+/** The volume a gift names (null for the Discovery set or no gift); `undefined` when there is none such. */
+async function resolveGift(
+  tx: DbOrTx,
+  gift: PromoCodeInput['gift'],
+): Promise<number | null | undefined> {
+  if (gift?.kind !== 'volume') return null;
+  const [v] = await tx
+    .select({ id: volumes.id })
+    .from(volumes)
+    .where(and(eq(volumes.fragranceId, gift.fragranceId), eq(volumes.ml, gift.ml)));
+  return v?.id;
 }
 
 /** The last second a code works: 23:59:59 Asia/Tashkent of its last day (spec Changes 2026-11-07). */
@@ -66,7 +136,8 @@ function tashkentDateOf(at: Date | null): string | null {
 
 function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
   const out: Record<string, [unknown, unknown]> = {};
-  for (const k of Object.keys(after)) if (before[k] !== after[k]) out[k] = [before[k], after[k]];
+  for (const k of Object.keys(after))
+    if (JSON.stringify(before[k]) !== JSON.stringify(after[k])) out[k] = [before[k], after[k]];
   return out;
 }
 
@@ -125,16 +196,18 @@ export class PromoAdminService {
     try {
       return await this.db.transaction(async (tx) => {
         const now = this.edges.clock.now();
+        const giftVolumeId = await resolveGift(tx, input.gift);
+        if (giftVolumeId === undefined) return fail('invalid', ['gift']);
         const [row] = await tx
           .insert(promoCodes)
-          .values({ ...toColumns(input), createdAt: now, updatedAt: now })
+          .values({ ...toColumns(input, giftVolumeId), createdAt: now, updatedAt: now })
           .returning();
         await this.audit.record(tx, {
           actor: { type: 'staff', id: actor.id },
           action: 'promo.created',
           targetType: 'promo_code',
           targetId: row!.id,
-          payload: fieldsOf(row!),
+          payload: fieldsOf(row!, (await giftsOf(tx, [row!])).get(row!.id) ?? null),
         });
         // every promo code has a campaign link (ticket #35)
         await this.campaigns.ensurePromoLink(tx, row!, { type: 'staff', id: actor.id });
@@ -157,13 +230,18 @@ export class PromoAdminService {
         // the same row lock `createOrder` takes, so an order never prices with half an edit
         const [old] = await tx.select().from(promoCodes).where(eq(promoCodes.id, id)).for('update');
         if (!old) return fail('not_found');
-        const before = fieldsOf(old);
-        const changed = diff(before, { ...before, ...fieldsOf({ ...old, ...toColumns(input) }) });
+        const giftVolumeId = await resolveGift(tx, input.gift);
+        if (giftVolumeId === undefined) return fail('invalid', ['gift']);
+        const columns = toColumns(input, giftVolumeId);
+        const edited = { ...old, ...columns };
+        const before = fieldsOf(old, (await giftsOf(tx, [old])).get(old.id) ?? null);
+        const after = fieldsOf(edited, (await giftsOf(tx, [edited])).get(old.id) ?? null);
+        const changed = diff(before, { ...before, ...after });
         if (Object.keys(changed).length === 0)
           return { ok: true, value: (await this.get(id, tx))! } as const;
         await tx
           .update(promoCodes)
-          .set({ ...toColumns(input), updatedAt: this.edges.clock.now() })
+          .set({ ...columns, updatedAt: this.edges.clock.now() })
           .where(eq(promoCodes.id, id));
         await this.audit.record(tx, {
           actor: { type: 'staff', id: actor.id },
@@ -221,13 +299,14 @@ export class PromoAdminService {
       )
       .groupBy(promoCodeUses.promoCodeId);
     const byId = new Map(counts.map((c) => [c.id, c]));
+    const gifts = await giftsOf(tx, rows);
     const now = this.edges.clock.now();
     return rows.map((r) => {
       const c = byId.get(r.id);
       const uses = Number(c?.uses ?? 0);
       return {
         id: r.id,
-        ...fieldsOf(r),
+        ...fieldsOf(r, gifts.get(r.id) ?? null),
         uses,
         everUsed: Number(c?.ever ?? 0) > 0,
         state: promoState(r, uses, now),

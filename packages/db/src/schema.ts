@@ -957,6 +957,8 @@ export const orderLines = pgTable(
     markedDown: boolean('marked_down').notNull().default(false),
     qty: integer('qty').notNull(),
     lineTotal: integer('line_total').notNull(),
+    /** A gift code's free item (ADR 0039): unit price 0, `regular_unit_price` its value, quantity 1. */
+    promoGift: boolean('promo_gift').notNull().default(false),
     /** A set's five 10 ml volumes. A builder set's reserve takes one of each per set unit; the Discovery set only records them (its own stock is the reserve). */
     setVolumeIds: bigint('set_volume_ids', { mode: 'number' }).array(),
     /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
@@ -974,6 +976,10 @@ export const orderLines = pgTable(
     check(
       'order_lines_money_check',
       sql`${t.unitPrice} >= 0 and ${t.regularUnitPrice} >= 0 and ${t.lineTotal} >= 0`,
+    ),
+    check(
+      'order_lines_promo_gift_check',
+      sql`not ${t.promoGift} or (${t.unitPrice} = 0 and ${t.lineTotal} = 0 and ${t.qty} = 1)`,
     ),
   ],
 );
@@ -1485,7 +1491,7 @@ export const infoPages = pgTable('info_pages', {
 export type PromoBannerRow = typeof promoBanners.$inferSelect;
 export type InfoPageRow = typeof infoPages.$inferSelect;
 
-export const promoKindEnum = pgEnum('promo_kind', ['percent', 'fixed']);
+export const promoKindEnum = pgEnum('promo_kind', ['percent', 'fixed', 'gift']);
 
 /**
  * A Promo code (ticket #29; ADR 0002, 0005, 0007, 0008; spec Changes 2026-11-07 promo counting):
@@ -1506,6 +1512,9 @@ export const promoCodes = pgTable(
     amount: integer('amount'),
     /** A percent code's cap, so'm. */
     maxDiscount: integer('max_discount'),
+    /** A gift code's free item (ADR 0039): one volume, or the Discovery set (`gift_discovery_set`). */
+    giftVolumeId: bigint('gift_volume_id', { mode: 'number' }).references(() => volumes.id),
+    giftDiscoverySet: boolean('gift_discovery_set').notNull().default(false),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
     /** Compared with items before discount, without delivery (ADR 0007). */
     minOrderTotal: integer('min_order_total'),
@@ -1525,7 +1534,12 @@ export const promoCodes = pgTable(
     check('promo_codes_code_check', sql`${t.code} = upper(btrim(${t.code})) and ${t.code} <> ''`),
     check(
       'promo_codes_terms_check',
-      sql`(${t.kind} = 'percent' and ${t.percent} between 1 and 100 and ${t.amount} is null) or (${t.kind} = 'fixed' and ${t.amount} > 0 and ${t.percent} is null and ${t.maxDiscount} is null)`,
+      sql`(${t.kind} = 'percent' and ${t.percent} between 1 and 100 and ${t.amount} is null) or (${t.kind} = 'fixed' and ${t.amount} > 0 and ${t.percent} is null and ${t.maxDiscount} is null) or (${t.kind}::text = 'gift' and ${t.percent} is null and ${t.amount} is null and ${t.maxDiscount} is null)`,
+    ),
+    // a gift code names exactly one item; the other kinds name none (text: the enum value is new)
+    check(
+      'promo_codes_gift_check',
+      sql`case when ${t.kind}::text = 'gift' then (${t.giftVolumeId} is not null) <> ${t.giftDiscoverySet} else ${t.giftVolumeId} is null and not ${t.giftDiscoverySet} end`,
     ),
     check(
       'promo_codes_limits_check',

@@ -1,4 +1,10 @@
-import type { CartLineDto, DeliveryCityDto, Quote } from '@lummi/contracts';
+import type {
+  CartLineDto,
+  DeliveryCityDto,
+  PromoGiftItem,
+  PromoGiftLineDto,
+  Quote,
+} from '@lummi/contracts';
 import { CART_MAX_QTY, SET_SIZE, type LineKind } from '@lummi/contracts/constants';
 import {
   asc,
@@ -15,8 +21,15 @@ import { available, reservedByVolume } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { loadEntitlements } from '../entitlements/entitlements';
 import { readPricingSettings } from '../pricing/pricing-settings';
-import { quote, volumePrice, type Entitlement, type QuoteLineInput } from '../pricing/quote';
-import { judgePromoCode, type JudgedPromoCode } from '../promo/promo-codes';
+import {
+  quote,
+  volumePrice,
+  type Entitlement,
+  type PromoCode,
+  type QuoteLineInput,
+  type RefusedPromoCode,
+} from '../pricing/quote';
+import { judgePromoCode, type JudgedPromoCode, type PromoTerms } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { loadDiscovery, tenMlOf, type DiscoveryState, type TenMl } from '../sets/sets';
 
@@ -69,6 +82,23 @@ export type SetLineView = DiscoveryLineView | BuilderLineView;
 
 export type CartLineView = VolumeLineView | SetLineView;
 
+/**
+ * A gift code's item (ADR 0039) as the cart found it: what the order snapshot and the cart show,
+ * its regular price, and whether none is left after the cart's own lines.
+ */
+export type GiftView = { regular: number; soldOut: boolean; photo: string | null } & (
+  | {
+      kind: 'volume';
+      volumeId: number;
+      fragranceId: number;
+      slug: string;
+      name: string;
+      brand: string;
+      ml: number;
+    }
+  | { kind: 'discovery_set'; items: SetItem[] }
+);
+
 /** Caps what the customer asked for at what is available; a sold-out line keeps its own. */
 function capped(wanted: number, left: number) {
   return {
@@ -91,6 +121,8 @@ export interface LoadedQuote {
   promoCodeId: number | null;
   /** The customer's active entitlements the quote chose from. */
   entitlements: Entitlement[];
+  /** The entered gift code's item, whether the quote applied it or not; null for any other code. */
+  gift: GiftView | null;
 }
 
 /** A line as stored: what was asked for. Volume, price and stock are resolved when it is read. */
@@ -313,6 +345,15 @@ export async function loadQuote(
   const judged: JudgedPromoCode | null = cartState?.promoCode
     ? await judgePromoCode(tx, cartState.promoCode, customerId, now)
     : null;
+  // A gift code's item takes what the cart's own lines leave of it (ADR 0039, 0010).
+  const terms = judged?.promoCode ?? null;
+  const gift =
+    terms && !('refused' in terms) && terms.kind === 'gift'
+      ? await loadGift(tx, terms.giftItem, {
+          volumeLeft: (id) => free.get(id),
+          discovery: discovery ? { state: discovery, left: discoveryFree } : null,
+        })
+      : null;
   const settings = await readSettings(tx, ['delivery.defaultTariff']);
   const quoteLines: QuoteLineInput[] = [
     ...volumeLines.map((l): QuoteLineInput => ({
@@ -336,7 +377,7 @@ export async function loadQuote(
   const q = quote({
     lines: quoteLines,
     entitlements,
-    promoCode: judged?.promoCode ?? null,
+    promoCode: terms && withGift(terms, gift),
     choice: cartState?.discountChoice ?? null,
     deliveryTariff:
       opts.deliveryTariff ?? city?.region.deliveryTariff ?? settings['delivery.defaultTariff'],
@@ -350,6 +391,106 @@ export async function loadQuote(
     city,
     promoCodeId: judged?.promoCodeId ?? null,
     entitlements,
+    gift,
+  };
+}
+
+/** The judged code as `quote()` takes it: a gift code with its item priced and its stock known. */
+function withGift(
+  terms: PromoTerms | RefusedPromoCode,
+  gift: GiftView | null,
+): PromoCode | RefusedPromoCode {
+  if ('refused' in terms || terms.kind !== 'gift') return terms;
+  if (!gift) throw new Error(`promo ${terms.code}: a gift code without its gift loaded`);
+  const { giftItem, ...rest } = terms;
+  return { ...rest, gift: { item: giftItem, regular: gift.regular, soldOut: gift.soldOut } };
+}
+
+/**
+ * A gift code's item at its regular price (a markdown changes nothing: reports count the regular
+ * price, ADR 0039), sold out when nothing is left of it once the cart's lines took theirs: a
+ * volume the cart already holds is what `volumeLeft` says is left; the Discovery set likewise when
+ * the cart holds it. A hidden fragrance is not for sale, so its gift is sold out too.
+ */
+async function loadGift(
+  tx: DbOrTx,
+  item: PromoGiftItem,
+  cart: {
+    volumeLeft: (volumeId: number) => number | undefined;
+    discovery: { state: DiscoveryState; left: number } | null;
+  },
+): Promise<GiftView> {
+  if (item.kind === 'discovery_set') {
+    const state = cart.discovery?.state ?? (await loadDiscovery(tx));
+    const left = cart.discovery ? cart.discovery.left : state.available;
+    return {
+      kind: 'discovery_set',
+      regular: state.row.price,
+      soldOut: left < 1,
+      photo: state.row.photoHash,
+      items: state.composition.map((f) => ({
+        fragranceId: f.id,
+        slug: f.slug,
+        name: f.name,
+        brand: f.brand,
+      })),
+    };
+  }
+  const [v] = await tx
+    .select({
+      fragranceId: fragrances.id,
+      slug: fragrances.slug,
+      name: fragrances.name,
+      brand: fragrances.originalBrand,
+      hidden: fragrances.hidden,
+      ml: volumes.ml,
+      photo: volumes.photoHash,
+      price: volumes.price,
+      onHand: volumes.onHand,
+    })
+    .from(volumes)
+    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+    .where(eq(volumes.id, item.volumeId));
+  if (!v) throw new Error(`gift volume ${item.volumeId} is not in the catalog`);
+  const left =
+    cart.volumeLeft(item.volumeId) ??
+    (v.hidden
+      ? 0
+      : available(v.onHand, (await reservedByVolume(tx, [item.volumeId])).get(item.volumeId) ?? 0));
+  return {
+    kind: 'volume',
+    volumeId: item.volumeId,
+    fragranceId: v.fragranceId,
+    slug: v.slug,
+    name: v.name,
+    brand: v.brand,
+    ml: v.ml,
+    photo: v.photo,
+    regular: v.price,
+    soldOut: left < 1,
+  };
+}
+
+/** The gift line the cart and checkout list at 0, while the quote applies the gift code (ADR 0039). */
+export function appliedGift(q: Quote, gift: GiftView | null): PromoGiftLineDto | null {
+  return q.discount?.type === 'promo_code' && q.discount.gift && gift ? toGiftDto(gift) : null;
+}
+
+/** The gift line the cart and checkout show under the lines, at 0 («Подарок по промокоду»). */
+function toGiftDto(g: GiftView): PromoGiftLineDto {
+  if (g.kind === 'discovery_set')
+    return {
+      kind: 'discovery_set',
+      photo: g.photo,
+      fragrances: g.items.map(({ slug, name, brand }) => ({ slug, name, brand })),
+    };
+  return {
+    kind: 'volume',
+    photo: g.photo,
+    slug: g.slug,
+    name: g.name,
+    brand: g.brand,
+    ml: g.ml as 10 | 30 | 50,
   };
 }
 

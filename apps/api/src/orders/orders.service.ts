@@ -40,9 +40,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { attributedLinkId } from '../campaigns/attribution';
 import {
+  appliedGift,
   loadQuote,
   readCartLines,
   toLineDto,
+  type GiftView,
   type LineSource,
   type StoredLine,
 } from '../cart/load-cart';
@@ -61,7 +63,7 @@ import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readShopCard } from '../payment/shop-card.service';
-import { lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
+import { enteredGift, lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
@@ -80,12 +82,29 @@ export type CreateOutcome =
   | { kind: 'invalid'; code: OrderInputError }
   | { kind: 'payment_unavailable' };
 
-/** The same discount source and amount; an upgrade right's line key may differ (it names a cart line). */
+/**
+ * The same discount source and amount; an upgrade right's line key may differ (it names a cart
+ * line). A gift code's gift must be the same item at the same value (ADR 0039).
+ */
 export function sameDiscount(a: Discount | null, b: Discount | null): boolean {
   if (a === null || b === null) return a === b;
   if (a.type !== b.type || a.amount !== b.amount) return false;
-  if (a.type === 'promo_code') return b.type === 'promo_code' && a.code === b.code;
+  if (a.type === 'promo_code')
+    return (
+      b.type === 'promo_code' &&
+      a.code === b.code &&
+      JSON.stringify(a.gift ?? null) === JSON.stringify(b.gift ?? null)
+    );
   return 'id' in b && a.id === b.id;
+}
+
+/** The gift the code names changed between checkout's read and its lock (ADR 0039): run it again. */
+class GiftMovedError extends Error {
+  /** Read as a serialization failure, so `retryTransientOnce` runs the transaction once more. */
+  readonly code = '40001';
+  constructor() {
+    super('the gift promo code changed its gift while checkout locked its stock');
+  }
 }
 
 /** Where the parcel goes: a point from our list (its region), or a typed address in a region. */
@@ -158,6 +177,7 @@ export class OrdersService {
     const item = source.kind === 'lines' ? loaded.lines[0] : undefined;
     return {
       quote: loaded.quote,
+      promoGift: appliedGift(loaded.quote, loaded.gift),
       itemCount: loaded.lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
       region: region ? toRegionDto(region) : null,
       deliveryCity: loaded.city,
@@ -282,9 +302,16 @@ export class OrdersService {
           .for('update');
         wanted = await readCartLines(tx, c.id);
       } else wanted = source.lines;
-      if (wanted.some((w) => w.kind === 'discovery_set')) await readDiscoverySet(tx, true);
+      // A gift code's item (ADR 0039) is stock like a line: read without a lock here, its row locked
+      // with the others below, and checked again once the code itself is locked.
+      const gift = source.kind === 'cart' ? await enteredGift(tx, c.id) : null;
+      if (wanted.some((w) => w.kind === 'discovery_set') || gift?.kind === 'discovery_set')
+        await readDiscoverySet(tx, true);
       // a volume line locks its volume; a builder line the 10 ml of each of its five
-      const lockVolumes = wanted.flatMap((w) => w.volumeId ?? []);
+      const lockVolumes = [
+        ...wanted.flatMap((w) => w.volumeId ?? []),
+        ...(gift?.kind === 'volume' ? [gift.volumeId] : []),
+      ];
       const lockFragrances = [
         ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
       ];
@@ -314,6 +341,14 @@ export class OrdersService {
         deliveryTariff: region.deliveryTariff,
       });
       const { quote } = loaded;
+      // the gift the quote judged is the one whose stock is locked, or the owner moved it meanwhile
+      if (loaded.gift) {
+        const judged =
+          loaded.gift.kind === 'volume'
+            ? { kind: 'volume', volumeId: loaded.gift.volumeId }
+            : { kind: 'discovery_set' };
+        if (JSON.stringify(judged) !== JSON.stringify(gift)) throw new GiftMovedError();
+      }
       const bought = loaded.lines.filter((l) => !l.soldOut);
       const conflict = async (code: CheckoutConflictCode) =>
         ({
@@ -408,8 +443,8 @@ export class OrdersService {
         });
       const lines = await tx
         .insert(orderLines)
-        .values(
-          bought.map((l, position) => {
+        .values([
+          ...bought.map((l, position) => {
             const priced = quote.lines.find((q) => q.key === String(l.lineId));
             if (!priced) throw new Error(`quote has no line ${l.lineId}`);
             const base = {
@@ -455,7 +490,11 @@ export class OrdersService {
               })),
             };
           }),
-        )
+          // A gift code's item (ADR 0039): one more line at 0, its regular price kept as its value.
+          ...(quote.discount?.type === 'promo_code' && quote.discount.gift && loaded.gift
+            ? [giftLine(order.id, bought.length, loaded.gift)]
+            : []),
+        ])
         .returning();
 
       // 4. The cart, the saved pair, consent, audit and the message. A cart order takes the entered
@@ -647,6 +686,45 @@ export function orderUrl(miniAppUrl: string, number: number): string {
   return `${ordersUrl(miniAppUrl)}/${number}`;
 }
 
+/**
+ * A gift code's free item as an order line (ADR 0039): unit price 0, its regular price kept as
+ * `regular_unit_price`, quantity 1, flagged. A volume holds its reserve like any volume line; the
+ * Discovery set its own stock, with its five fragrances as given (ADR 0009).
+ */
+function giftLine(orderId: number, position: number, g: GiftView) {
+  const base = {
+    orderId,
+    position,
+    unitPrice: 0,
+    regularUnitPrice: g.regular,
+    markedDown: false,
+    qty: 1,
+    lineTotal: 0,
+    promoGift: true,
+    photo: g.photo,
+  };
+  if (g.kind === 'volume')
+    return {
+      ...base,
+      kind: 'volume' as const,
+      volumeId: g.volumeId,
+      fragranceId: g.fragranceId,
+      slug: g.slug,
+      nameRu: g.name,
+      nameUz: g.name,
+      brand: g.brand,
+      ml: g.ml,
+    };
+  return {
+    ...base,
+    kind: 'discovery_set' as const,
+    nameRu: dictionaries.ru.sets.lineDiscovery,
+    nameUz: dictionaries.uz.sets.lineDiscovery,
+    ml: 10,
+    setComposition: g.items.map((i) => ({ fragranceId: i.fragranceId, name: i.name, brand: i.brand })),
+  };
+}
+
 /** The order as the shopper sees it; `cancellation` comes from its history (`cancellationOf`). */
 export function toOrderDto(
   o: OrderRow,
@@ -692,6 +770,7 @@ function toOrderLineDto(l: OrderLineRow): OrderLineDto {
     markedDown: l.markedDown,
     qty: l.qty,
     lineTotal: l.lineTotal,
+    promoGift: l.promoGift,
     setComposition: l.setComposition?.map((f) => ({ name: f.name, brand: f.brand })) ?? null,
   };
 }

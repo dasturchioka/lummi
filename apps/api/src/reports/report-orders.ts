@@ -1,4 +1,4 @@
-import { formatLocalDate, tashkentDay, type Discount } from '@lummi/contracts';
+import { formatLocalDate, promoGiftValue, tashkentDay, type Discount } from '@lummi/contracts';
 import { and, eq, gte, inArray, lte, or, orders, refunds, sql, type DbOrTx } from '@lummi/db';
 import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
 import { rangeBounds, within, type TashkentRange } from './report-range';
@@ -14,9 +14,13 @@ export interface ReportOrder {
   campaignLinkId: number | null;
   /** When it reached «Доставлен» (`fulfilledAt`): the reports count it on this Tashkent day. */
   deliveredAt: Date;
+  /** Items before discount, a gift code's gift at its regular price included (ADR 0039). */
   items: number;
   discount: Discount | null;
+  /** The discount as reports count it: a gift code's gift is its regular price (ADR 0039). */
   discountAmount: number;
+  /** A gift code's gift value, in both figures above; 0 otherwise. Its line costs 0 in the snapshot. */
+  giftValue: number;
   delivery: number;
 }
 
@@ -49,8 +53,22 @@ export function deliveredAt(at: Date | null, orderId: number): Date {
   return at;
 }
 
-function reportOrder({ at, ...o }: { at: Date | null } & Omit<ReportOrder, 'deliveredAt'>) {
-  return { ...o, deliveredAt: deliveredAt(at, o.id) };
+/**
+ * The one place a report reads an order's money: a gift code's gift (ADR 0039) is counted at its
+ * regular price in «Сумма до скидки» and in «Скидка», so «Чистые продажи» stays what was paid.
+ */
+function reportOrder({
+  at,
+  ...o
+}: { at: Date | null } & Omit<ReportOrder, 'deliveredAt' | 'giftValue'>): ReportOrder {
+  const giftValue = promoGiftValue(o.discount);
+  return {
+    ...o,
+    items: o.items + giftValue,
+    discountAmount: o.discountAmount + giftValue,
+    giftValue,
+    deliveredAt: deliveredAt(at, o.id),
+  };
 }
 
 /*

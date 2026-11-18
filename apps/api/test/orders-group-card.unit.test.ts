@@ -105,6 +105,7 @@ const line = (position: number): OrderLineRow => ({
   markedDown: false,
   qty: 99,
   lineTotal: 19_701_000,
+  promoGift: false,
   setVolumeIds: null,
   setComposition: null,
 });

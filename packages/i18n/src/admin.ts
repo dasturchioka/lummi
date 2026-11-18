@@ -1955,6 +1955,9 @@ export const adminMessages = defineMessages(
             upgrade_right: 'Право на большой флакон',
             birthday_coupon: 'Купон ко дню рождения',
           },
+          /** A gift code's free line (ADR 0039), and the discount it stands for. */
+          promoGift: 'Подарок по промокоду',
+          promoGiftSource: 'Подарок по промокоду {code}',
           deliveryFee: 'Доставка',
           free: 'Бесплатно',
           total: 'Итого',
@@ -4670,6 +4673,8 @@ export const adminMessages = defineMessages(
             upgrade_right: 'Katta flakon huquqi',
             birthday_coupon: 'Tugʻilgan kun kuponi',
           },
+          promoGift: 'Promokod sovgʻasi',
+          promoGiftSource: '{code} promokodi sovgʻasi',
           deliveryFee: 'Yetkazish',
           free: 'Bepul',
           total: 'Jami',

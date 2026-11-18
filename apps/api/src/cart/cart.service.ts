@@ -45,6 +45,7 @@ import {
   loadCartQuote,
   loadQuote,
   readCartLines,
+  appliedGift,
   toLineDto,
   type BuilderLineView,
   type StoredLine,
@@ -85,6 +86,7 @@ export class CartService {
       city,
       entitlements,
       promoCodeId,
+      gift,
     } = await loadCartQuote(tx, now, customerId);
     const choice = cartState?.discountChoice ?? null;
     if (choice && (q.staleChoice || declinesNothing(choice, entitlements, promoCodeId)))
@@ -114,6 +116,7 @@ export class CartService {
           )
         : [],
       promoCode: cartState?.promoCode ?? null,
+      promoGift: appliedGift(q, gift),
       discountOptions: discountOptionsOf(q, entitlements),
       lapsedDiscount:
         q.staleChoice && choice ? await lapsedDiscountOf(tx, customerId, choice) : null,
@@ -248,7 +251,8 @@ export class CartService {
       const old = await tx
         .select()
         .from(orderLines)
-        .where(eq(orderLines.orderId, order.id))
+        // a gift code's free line came with that code (ADR 0039): it is not bought again
+        .where(and(eq(orderLines.orderId, order.id), eq(orderLines.promoGift, false)))
         .orderBy(asc(orderLines.position));
       // the cart row first, like every cart write: a concurrent add or change waits for this one
       await this.touch(tx, customerId);

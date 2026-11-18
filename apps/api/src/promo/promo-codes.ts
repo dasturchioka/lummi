@@ -1,5 +1,5 @@
 import { normalizePromoCode } from '@lummi/contracts/constants';
-import type { PromoCodeState } from '@lummi/contracts';
+import type { PromoCodeState, PromoGiftItem } from '@lummi/contracts';
 import {
   and,
   carts,
@@ -21,9 +21,17 @@ import type { PromoCode, RefusedPromoCode } from '../pricing/quote';
  * use it writes, and the void a cancel or return makes. The money itself is `quote()`'s.
  */
 
+/**
+ * A code's terms as the DB gives them. A gift code names its item only: its price and whether any
+ * is left after the cart's own lines are the cart's to find (`loadQuote`, ADR 0039).
+ */
+export type PromoTerms =
+  | Exclude<PromoCode, { kind: 'gift' }>
+  | (Omit<Extract<PromoCode, { kind: 'gift' }>, 'gift'> & { giftItem: PromoGiftItem });
+
 /** What the cart's quote gets for the entered code, and the code's id when it passed. */
 export interface JudgedPromoCode {
-  promoCode: PromoCode | RefusedPromoCode;
+  promoCode: PromoTerms | RefusedPromoCode;
   /** Set only when the code passed every DB check, so `quote()` may apply it. */
   promoCodeId: number | null;
 }
@@ -93,18 +101,38 @@ export async function judgePromoCode(
   return { promoCode: terms(p), promoCodeId: p.id };
 }
 
-function terms(p: PromoCodeRow): PromoCode {
+function terms(p: PromoCodeRow): PromoTerms {
   const common = {
     code: p.code,
     minOrderTotal: p.minOrderTotal,
     appliesToMarkedDown: p.appliesToMarkedDown,
   };
+  if (p.kind === 'gift') {
+    if (p.giftDiscoverySet) return { ...common, kind: 'gift', giftItem: { kind: 'discovery_set' } };
+    if (p.giftVolumeId === null) throw new Error(`promo ${p.code}: a gift code without a gift`);
+    return { ...common, kind: 'gift', giftItem: { kind: 'volume', volumeId: p.giftVolumeId } };
+  }
   if (p.kind === 'fixed') {
     if (p.amount === null) throw new Error(`promo ${p.code}: a fixed code without an amount`);
     return { ...common, kind: 'fixed', amount: p.amount };
   }
   if (p.percent === null) throw new Error(`promo ${p.code}: a percent code without a percent`);
   return { ...common, kind: 'percent', percent: p.percent, maxDiscount: p.maxDiscount };
+}
+
+/**
+ * The gift the code in the customer's cart names, read without a lock (ADR 0039): checkout locks
+ * its stock row with the others before it locks the code; null for no code or another kind.
+ */
+export async function enteredGift(tx: DbOrTx, customerId: number): Promise<PromoGiftItem | null> {
+  const [row] = await tx
+    .select({ volumeId: promoCodes.giftVolumeId, discovery: promoCodes.giftDiscoverySet })
+    .from(promoCodes)
+    .innerJoin(carts, eq(carts.promoCode, promoCodes.code))
+    .where(eq(carts.customerId, customerId));
+  if (!row) return null;
+  if (row.discovery) return { kind: 'discovery_set' };
+  return row.volumeId === null ? null : { kind: 'volume', volumeId: row.volumeId };
 }
 
 /**

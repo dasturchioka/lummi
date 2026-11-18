@@ -11,8 +11,22 @@ export { normalizePromoCode, PROMO_CODE_PATTERN } from './promo-code';
  */
 const som = (min: number) => z.number().int().min(min).max(100_000_000);
 
-export const PROMO_KINDS = ['percent', 'fixed'] as const;
+export const PROMO_KINDS = ['percent', 'fixed', 'gift'] as const;
 export type PromoKind = (typeof PROMO_KINDS)[number];
+
+/**
+ * A gift code's free item as the owner picks it (ADR 0039): one volume of a fragrance, or the
+ * Discovery set. Quantity is always 1.
+ */
+export const promoGiftInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('volume'),
+    fragranceId: z.number().int().positive(),
+    ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
+  }),
+  z.object({ kind: z.literal('discovery_set') }),
+]);
+export type PromoGiftInput = z.infer<typeof promoGiftInputSchema>;
 
 /** A code as stored: `normalizePromoCode`'s form, then Latin letters, digits, `-` and `_` only. */
 export const promoCodeTextSchema = z
@@ -23,7 +37,7 @@ export const promoCodeTextSchema = z
 
 /**
  * What the owner saves. A percent code has a whole percent (1-100) and an optional cap; a fixed
- * code has an amount and no cap. `expiresOn` is a Tashkent calendar day: the code works until
+ * code has an amount and no cap; a gift code has its gift and neither (ADR 0039). `expiresOn` is a Tashkent calendar day: the code works until
  * 23:59:59 that day. Limits and the minimum are optional (null: none).
  */
 export const promoCodeInputSchema = z
@@ -33,6 +47,8 @@ export const promoCodeInputSchema = z
     percent: z.number().int().min(1).max(100).nullable(),
     amount: som(1).nullable(),
     maxDiscount: som(1).nullable(),
+    /** A gift code's free item; null for the other kinds. */
+    gift: promoGiftInputSchema.nullable().default(null),
     expiresOn: tashkentDaySchema.nullable(),
     minOrderTotal: som(1).nullable(),
     totalLimit: z.number().int().min(1).max(1_000_000).nullable(),
@@ -44,13 +60,19 @@ export const promoCodeInputSchema = z
   .superRefine((v, ctx) => {
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: 'custom', path: [path], message });
+    if (v.kind !== 'gift' && v.gift !== null) issue('gift', 'only_a_gift_code_has_a_gift');
     if (v.kind === 'percent') {
       if (v.percent === null) issue('percent', 'required');
       if (v.amount !== null) issue('amount', 'percent_code_has_no_amount');
-    } else {
+    } else if (v.kind === 'fixed') {
       if (v.amount === null) issue('amount', 'required');
       if (v.percent !== null) issue('percent', 'fixed_code_has_no_percent');
       if (v.maxDiscount !== null) issue('maxDiscount', 'fixed_code_has_no_cap');
+    } else {
+      if (v.gift === null) issue('gift', 'required');
+      if (v.percent !== null) issue('percent', 'gift_code_has_no_percent');
+      if (v.amount !== null) issue('amount', 'gift_code_has_no_amount');
+      if (v.maxDiscount !== null) issue('maxDiscount', 'gift_code_has_no_cap');
     }
   });
 export type PromoCodeInput = z.infer<typeof promoCodeInputSchema>;
@@ -66,6 +88,19 @@ export const adminPromoCodeSchema = z.object({
   percent: z.number().int().nullable(),
   amount: z.number().int().nullable(),
   maxDiscount: z.number().int().nullable(),
+  /** A gift code's free item, named for the list row («Rain Tea 10 мл»); null for the other kinds. */
+  gift: z
+    .discriminatedUnion('kind', [
+      z.object({
+        kind: z.literal('volume'),
+        fragranceId: z.number().int(),
+        ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
+        name: z.string(),
+        brand: z.string(),
+      }),
+      z.object({ kind: z.literal('discovery_set') }),
+    ])
+    .nullable(),
   /** The last day it works, Tashkent (`YYYY-MM-DD`). */
   expiresOn: z.string().nullable(),
   minOrderTotal: z.number().int().nullable(),

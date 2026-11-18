@@ -1,4 +1,5 @@
 import {
+  promoGiftValue,
   utcToTashkent,
   type AdminOrdersExportFilters,
   type AdminOrdersExportParams,
@@ -105,8 +106,10 @@ type ExportRow = Awaited<ReturnType<typeof rowsFor>>[number];
 /** The discount's source as the order page words it. */
 function discountSource(d: Discount | null, language: Language): string {
   if (!d) return '';
-  const src = adminMessages[language].admin.orders.detail.discountSource;
-  return d.type === 'promo_code' ? fill(src.promo_code, { code: d.code }) : src[d.type];
+  const detail = adminMessages[language].admin.orders.detail;
+  const src = detail.discountSource;
+  if (d.type !== 'promo_code') return src[d.type];
+  return fill(d.gift ? detail.promoGiftSource : src.promo_code, { code: d.code });
 }
 
 /** The workbook: one sheet, in the admin's language; money cells are numbers in whole so'm. */
@@ -162,13 +165,16 @@ async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Bu
       items: lines
         .map((l) => {
           const name = language === 'uz' ? l.nameUz : l.nameRu;
-          return l.kind === 'volume'
-            ? `${name}, ${l.ml} ${x.ml} × ${l.qty}`
-            : `${name} (${o.detail.setOf}) × ${l.qty}`;
+          const item =
+            l.kind === 'volume'
+              ? `${name}, ${l.ml} ${x.ml} × ${l.qty}`
+              : `${name} (${o.detail.setOf}) × ${l.qty}`;
+          return l.promoGift ? `${o.detail.promoGift}: ${item}` : item;
         })
         .join('\n'),
-      subtotal: ord.itemsSubtotal,
-      discount: ord.discountAmount,
+      // a gift code's gift at its regular price in both, as the reports count it (ADR 0039)
+      subtotal: ord.itemsSubtotal + promoGiftValue(ord.discount),
+      discount: ord.discountAmount + promoGiftValue(ord.discount),
       discountSource: discountSource(ord.discount, language),
       delivery: ord.deliveryFee,
       total: ord.total,

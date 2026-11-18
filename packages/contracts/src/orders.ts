@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { birthDateSchema } from './birthday';
 import { parseBuyNowParam, BUY_NOW_ITEM_MAX } from './buy-now';
-import { builderLineSchema, cartSchema, discoveryLineSchema, volumeLineSchema } from './cart';
+import {
+  builderLineSchema,
+  cartSchema,
+  discoveryLineSchema,
+  promoGiftLineSchema,
+  volumeLineSchema,
+} from './cart';
 import { btsPointSchema, deliveryCitySchema, regionSchema } from './delivery';
 import { LINE_KINDS } from './constants';
 import { discountSchema, quoteSchema, thresholdBaseSchema } from './quote';
@@ -79,6 +85,8 @@ export const savedPointErrorSchema = z.object({ code: z.enum(['unauthorized', 'n
  */
 export const checkoutSchema = z.object({
   quote: quoteSchema,
+  /** The applied gift code's free item (ADR 0039), listed at 0; null when the quote applies no gift. */
+  promoGift: promoGiftLineSchema.nullable(),
   /** Units that will be ordered: sold-out lines stay in the cart and are not counted. */
   itemCount: z.number().int().nonnegative(),
   /** The region whose tariff the quote used; null when none was given (saved city or default tariff). */
@@ -189,6 +197,8 @@ export const orderLineSchema = z.object({
   markedDown: z.boolean(),
   qty: z.number().int().positive(),
   lineTotal: som,
+  /** A gift code's free item (ADR 0039): unit price and total 0, «Подарок по промокоду». */
+  promoGift: z.boolean(),
   /** A set's five fragrances (ADR 0009); null for a single volume. */
   setComposition: z.array(z.object({ name: z.string(), brand: z.string() })).nullable(),
 });
