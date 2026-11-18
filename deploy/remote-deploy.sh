@@ -34,3 +34,15 @@ dc up -d --wait --remove-orphans
 [ -f .deploy.env ] && cp .deploy.env .deploy.env.prev
 printf 'IMAGE_TAG=%s\nGHCR_OWNER=%s\n' "$TAG" "$OWNER" > .deploy.env
 dc ps
+
+# Old lummi images go (only this project's, never the other projects' on the shared VPS); what runs
+# and this deploy's tag stay. The previous tag stays too, for a quick roll back.
+prev=$(sed -n 's/^IMAGE_TAG=//p' .deploy.env.prev 2>/dev/null || true)
+inuse=$(docker ps --format '{{.Image}}')
+# `|| true` on the grep: no match must not fail the deploy under `set -euo pipefail`
+{ docker images --format '{{.Repository}}:{{.Tag}}' | grep "^ghcr.io/${OWNER}/lummi-" || true; } |
+  while read -r ref; do
+    case "$ref" in *":$TAG"|*":${prev:-none}"|*":stage-1"|*":main") continue ;; esac
+    printf '%s\n' "$inuse" | grep -qx "$ref" && continue
+    docker rmi "$ref" >/dev/null 2>&1 || true
+  done

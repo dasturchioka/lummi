@@ -1,9 +1,11 @@
 name: E2E
 # Seam 3 of ADR 0028: one happy-path browser test (apps/miniapp/e2e) against a disposable stack.
 # A workflow of its own, not a job in ci.yml: deploy.yml calls ci.yml as its `check`, so a job there
-# would hold every deploy back on a flake. #72: it runs on the pull request (stage-1 → main, so on
-# every stage-1 push) and by hand, not on every branch push.
+# would hold every deploy back on a flake. It reports on branches, on the pull request (stage-1 →
+# main) and by hand.
 on:
+  push:
+    branches-ignore: [stage-1, main]
   pull_request:
   workflow_dispatch:
 
@@ -13,24 +15,26 @@ concurrency:
 
 jobs:
   e2e:
-    runs-on: [self-hosted, lummi]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      # its own stack and ports on the staging VPS, never staging's (#72)
-      E2E_COMPOSE_PROJECT: lummi-e2e-ci
-      API_PORT: '4291'
-      MINIAPP_PORT: '5291'
-      POSTGRES_HOST_PORT: '2591'
-      REDIS_HOST_PORT: '2691'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+          cache: npm
       - run: npm ci
-      # Chromium's system libraries are installed on the runner host once (#72; no sudo here);
-      # the browser itself stays in ~/.cache/ms-playwright between runs
-      - run: npx playwright install chromium
+      - id: playwright
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
       - name: E2E
         # The bot token only signs initData for the API under test; it is not a real bot.
         env:
