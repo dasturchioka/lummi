@@ -41,7 +41,13 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
+    if (
+      await page
+        .getByRole('listbox')
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();
@@ -574,7 +580,7 @@ async function carry(page: Page, number: number, to: string) {
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + 12, y + 4, { steps: 3 });
-  const target = page.locator(`[data-column="${to}"], [data-rail="${to}"]`).first();
+  const target = page.locator(`[data-column="${to}"]`).first();
   const width = page.viewportSize()!.width;
   let box = await target.boundingBox();
   if (!box || box.x + box.width > width) {
@@ -1016,16 +1022,13 @@ export const screens: Screen[] = [
       await page.getByRole('link', { name: t.audit.filters.reset }).first().waitFor();
     },
   },
+  // several entries of different actions, read as text (#63); the newest are on page one
   {
     id: 'audit-details',
-    path: '/audit?action=setting.changed',
+    path: '/audit',
     as: 'owner',
-    fullPage: false,
     act: async ({ page }) => {
-      await page.locator('summary:visible').first().click();
-      const raw = page.locator('details[open] pre:visible').first();
-      await raw.waitFor();
-      await raw.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await page.getByText('9001').locator('visible=true').first().waitFor();
     },
   },
   // a staff member as the target is named like the actor
@@ -2031,7 +2034,10 @@ export const screens: Screen[] = [
     fullPage: false,
     act: async ({ page }) => {
       await boardLoaded({ page } as ScreenContext);
-      await page.locator('[data-rail="cancelled"]').click();
+      // #66: the closed outcomes are ordinary columns at the end; scroll the board to them
+      await page
+        .locator('[data-column="returned"]')
+        .evaluate((el) => el.scrollIntoView({ inline: 'end', block: 'nearest' }));
       await page.locator('[data-column="cancelled"] [data-order]').first().waitFor();
       await page.waitForTimeout(200);
     },

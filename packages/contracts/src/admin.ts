@@ -168,8 +168,13 @@ export const auditEntrySchema = z.object({
   action: z.string(),
   targetType: z.string(),
   targetId: z.string().nullable(),
-  /** A staff target's name while the staff member still exists; null for any other target. */
+  /**
+   * The target's name while it still exists: a staff member, a banner (its RU title), a fragrance,
+   * or the fragrance of a volume; null for any other target or a deleted one.
+   */
   targetName: z.string().nullable(),
+  /** The same name in Uzbek (a banner's UZ title; otherwise equal to `targetName`). */
+  targetNameUz: z.string().nullable(),
   payload: z.record(z.unknown()),
 });
 export type AuditEntryDto = z.infer<typeof auditEntrySchema>;

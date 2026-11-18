@@ -50,7 +50,7 @@ const page = (number: number, s: OrderStatus) => ({
 });
 
 /**
- * jsdom lays nothing out: each column (and rail) gets a 280 px slot in the board's order, each
+ * jsdom lays nothing out: each column gets a 280 px slot in the board's order, each
  * card a place inside its column, so the keyboard can carry a card from one to the next.
  */
 function layOut() {
@@ -69,8 +69,8 @@ function layOut() {
     // the carried copy (a portal) starts where the first card sits
     const carried = this.closest('.motion-lift') ?? this.querySelector('.motion-lift');
     const self = carried ? document.querySelector('[data-order]') : this;
-    const home = self?.closest('[data-column], [data-rail]');
-    const status = home?.getAttribute('data-column') ?? home?.getAttribute('data-rail');
+    const home = self?.closest('[data-column]');
+    const status = home?.getAttribute('data-column');
     const i = status ? BOARD_STATUSES.indexOf(status as OrderStatus) : -1;
     if (i < 0) return rect(0, 0, 0, 0);
     return self === home ? rect(i * 300, 0, 280, 600) : rect(i * 300 + 10, 60, 260, 120);
@@ -243,6 +243,20 @@ describe('OrdersBoard', () => {
     });
   });
 
+  it('shows every status as the same kind of column, the closed outcomes last, none folded', async () => {
+    board.mockResolvedValue(ok([card(1008, 'cancelled'), card(1009, 'returned')]));
+    render(<OrdersBoard t={t} language="ru" filters={{}} />);
+    await tick();
+    const shown = [...document.querySelectorAll('[data-column]')].map((c) =>
+      c.getAttribute('data-column'),
+    );
+    expect(shown).toEqual([...BOARD_STATUSES]);
+    expect(shown.slice(-2)).toEqual(['cancelled', 'returned']);
+    expect(document.querySelector('[data-rail]')).toBeNull();
+    expect(columnOf(1008)).toBe('cancelled');
+    expect(columnOf(1009)).toBe('returned');
+  });
+
   it('closing the dialog puts the card back where it was', async () => {
     board.mockResolvedValue(ok([card(1006, 'accepted')]));
     get.mockResolvedValue({ status: 200, body: page(1006, 'accepted') });
@@ -268,7 +282,7 @@ describe('OrdersBoard', () => {
     link.focus();
     fireEvent.keyDown(link, { key: ' ', code: 'Space' });
     await tick(50);
-    // «Принят» is the next column it may go to; «Отменён» is a rail further on
+    // «Принят» is the next column it may go to; «Отменён» is a column further on
     fireEvent.keyDown(document, { key: 'ArrowRight', code: 'ArrowRight' });
     await tick(50);
     expect(document.querySelector('[data-over]')?.getAttribute('data-column')).toBe('accepted');

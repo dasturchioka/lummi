@@ -24,9 +24,12 @@ import {
   GlobeIcon,
   GridIcon,
   HomeIcon,
+  MarsIcon,
   SearchIcon,
   Spinner,
+  UnisexIcon,
   UserIcon,
+  VenusIcon,
 } from '../ui/icons';
 import { Logo, Monogram } from '../ui/Logo';
 import { Money } from '../ui/Money';
@@ -40,10 +43,6 @@ import { Sheet } from '../ui/Sheet';
 import { Skeleton } from '../ui/Skeleton';
 import { EmptyState, ErrorState } from '../ui/States';
 import { TabBar } from '../ui/TabBar';
-// Placeholder bottle thumbnails, cut down from materials/flakons (dev only, never in dist).
-import thumbA from './thumbs/symphony.webp';
-import thumbB from './thumbs/althair.webp';
-import thumbC from './thumbs/absolu-aventus.webp';
 
 /** The card's volumes as the list carries them: `prices` per 10 / 30 / 50 ml, 0 stock = sold out. */
 const volumesOf = (prices: [number, number, number], stock: [number, number, number]) =>
@@ -72,6 +71,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     isHit: true,
     isNew: false,
     fromPrice: 69_000,
+    fromRegularPrice: null,
     soldOut: false,
     photo: '32c0930f6c672207',
     volumes: volumesOf([69_000, 149_000, 219_000], [20, 20, 20]),
@@ -87,6 +87,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     isHit: false,
     isNew: false,
     fromPrice: 69_000,
+    fromRegularPrice: null,
     soldOut: false,
     photo: 'd11347a1d027622c',
     // one volume left: «+» adds it without asking
@@ -106,6 +107,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     isHit: false,
     isNew: true,
     fromPrice: 1_249_000,
+    fromRegularPrice: null,
     soldOut: false,
     photo: null,
     volumes: volumesOf([1_249_000, 1_890_000, 2_450_000], [5, 5, 5]),
@@ -120,6 +122,7 @@ const LIST_ITEMS: Record<'normal' | 'longBrand' | 'worst' | 'soldOut', Fragrance
     isHit: false,
     isNew: false,
     fromPrice: 69_000,
+    fromRegularPrice: null,
     soldOut: true,
     photo: 'bdee0c5f88c675d9',
     volumes: volumesOf([69_000, 149_000, 219_000], [0, 0, 0]),
@@ -470,16 +473,22 @@ export function Gallery({ sheetOpen = false }: { sheetOpen?: boolean }) {
               options={d.types.map((label, i) => ({
                 value: String(i),
                 label,
-                thumb: [thumbA, thumbB, thumbC, thumbA, thumbB][i],
+                icon: [
+                  <GridIcon size={16} />,
+                  <MarsIcon size={16} />,
+                  <VenusIcon size={16} />,
+                  <UnisexIcon size={16} />,
+                  <BoxIcon size={16} />,
+                ][i],
               }))}
             />
           </Specimen>
-          <Specimen label="Chip · inactive · active · pressed · photo loading · icon">
+          <Specimen label="Chip · inactive · active · pressed · empty circle · icon">
             <div className="flex flex-wrap gap-2">
-              <Chip label={d.types[1]} thumb={thumbB} />
-              <Chip label={d.types[0]} thumb={thumbA} selected />
-              <Chip label={d.types[2]} thumb={thumbC} pressed />
-              <Chip label={d.types[3]} thumb={null} />
+              <Chip label={d.types[1]} icon={<MarsIcon size={16} />} />
+              <Chip label={d.types[0]} icon={<GridIcon size={16} />} selected />
+              <Chip label={d.types[2]} icon={<VenusIcon size={16} />} pressed />
+              <Chip label={d.types[3]} />
               <Chip label={d.types[4]} icon={<BoxIcon size={16} />} />
             </div>
           </Specimen>

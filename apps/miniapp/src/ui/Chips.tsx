@@ -1,12 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 
-/**
- * The type chip's 30 px circle. The bottle photo is a whole 3:4 label (text, icons, the stand), so
- * a plain cover crop shows a peach blur with a 3 px bottle; the circle zooms in on the bottle's
- * shoulders and label instead, as the comp draws it. No photo yet (the list is still loading, or
- * failed): the empty circle holds the place, so the row never shifts when the photos arrive.
- */
-function ChipCircle({ thumb, icon }: { thumb?: string | null; icon?: ReactNode }) {
+/** The type chip's 30 px circle: a linear icon on a Stone circle (no icon: an empty circle). */
+function ChipCircle({ icon }: { icon?: ReactNode }) {
   return (
     <span
       aria-hidden="true"
@@ -14,16 +9,7 @@ function ChipCircle({ thumb, icon }: { thumb?: string | null; icon?: ReactNode }
         icon ? 'bg-block text-ink' : 'bg-photo'
       }`}
     >
-      {thumb ? (
-        <img
-          src={thumb}
-          alt=""
-          decoding="async"
-          className="absolute top-[-64%] left-[-45%] aspect-[3/4] w-[190%] max-w-none"
-        />
-      ) : (
-        icon
-      )}
+      {icon}
     </span>
   );
 }
@@ -31,8 +17,8 @@ function ChipCircle({ thumb, icon }: { thumb?: string | null; icon?: ReactNode }
 /**
  * The in-page filter chips.
  *
- * - `variant="type"` (default, approved variant 2): a 40 px pill with a round bottle photo (or an
- *   icon, or an empty circle while the photo loads) cropped to 30 px, then the label. Inactive is a
+ * - `variant="type"` (default, approved variant 2): a 40 px pill with a round 30 px slot holding a
+ *   linear icon, then the label. Inactive is a
  *   Card White pill (Graphite in dark), active is the primary fill (Graphite with Milk text;
  *   inverted in dark) at 600.
  * - `variant="filter"` (DESIGN.md Chips): a 34 px pill with a hairline-strong inset outline, for a
@@ -45,7 +31,6 @@ function ChipCircle({ thumb, icon }: { thumb?: string | null; icon?: ReactNode }
 export function Chip({
   label,
   variant = 'type',
-  thumb,
   icon,
   trailing,
   selected = false,
@@ -58,9 +43,7 @@ export function Chip({
 }: {
   label: string;
   variant?: 'type' | 'filter';
-  /** Type chips: the bottle photo URL; `null` while there is none yet (an empty circle). */
-  thumb?: string | null;
-  /** Type chips without a photo of their own («Наборы»): a line icon on a Stone circle. */
+  /** Type chips: a line icon on a Stone circle. */
   icon?: ReactNode;
   /** After the label: the chevron of a chip that opens a sheet. */
   trailing?: ReactNode;
@@ -94,7 +77,7 @@ export function Chip({
       data-pressed={pressed || undefined}
       className={`inline-flex shrink-0 items-center rounded-pill text-[13px] leading-none font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] data-[pressed]:scale-[0.97] ${look}`}
     >
-      {filter ? null : <ChipCircle thumb={thumb} icon={icon} />}
+      {filter ? null : <ChipCircle icon={icon} />}
       {label}
       {trailing}
     </button>
@@ -112,7 +95,6 @@ export const CHIP_ROW =
 export interface TypeChipOption<V extends string> {
   value: V;
   label: string;
-  thumb?: string | null;
   icon?: ReactNode;
 }
 
@@ -172,7 +154,6 @@ export function TypeChips<V extends string>({
           key={o.value}
           role="radio"
           label={o.label}
-          thumb={o.thumb ?? null}
           icon={o.icon}
           selected={o.value === value}
           tabIndex={o.value === value ? 0 : -1}

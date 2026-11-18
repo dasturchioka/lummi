@@ -18,7 +18,7 @@ export function NameLockup({
   const { t } = usePrefs();
   return (
     <>
-      <span className="type-label block text-pretty text-muted [overflow-wrap:anywhere]">
+      <span className="type-label-sm block text-pretty text-muted [overflow-wrap:anywhere]">
         {attribution(t.card.basedOn, brand)}
       </span>
       <span

@@ -35,6 +35,7 @@ const item = (n: number): FragranceListItem => ({
   isHit: false,
   isNew: false,
   fromPrice: 69_000,
+  fromRegularPrice: null,
   soldOut: false,
   photo: null,
   volumes: [],
