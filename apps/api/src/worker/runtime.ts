@@ -5,7 +5,7 @@ import { Redis } from 'ioredis';
 import type { Edges } from '../edges';
 import type { Env } from '../env';
 import { AlertService } from '../outbox/alert.service';
-import { OutboxService, SEND_ATTEMPTS } from '../outbox/outbox.service';
+import { OutboxService, SEND_ATTEMPTS, outboxBackoff } from '../outbox/outbox.service';
 import { SettingsService } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { describeError } from '../logging/describe-error';
@@ -166,6 +166,7 @@ export class WorkerRuntime implements OnApplicationShutdown {
       connection: this.connection,
       concurrency: 5,
       limiter: { max: SEND_RATE_PER_SECOND, duration: 1000 },
+      settings: { backoffStrategy: outboxBackoff },
     });
     this.worker.on('error', (e) => this.log.error(`queue error: ${describeError(e)}`));
     // Starting stays synchronous; a queue with a rate reads its setting first, so its worker comes up a moment later.

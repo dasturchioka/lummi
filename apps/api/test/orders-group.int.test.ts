@@ -881,7 +881,7 @@ describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {
 
     await card(order.number);
     await t.app.get(WorkerRuntime).tick();
-    // a delivery that found the card busy is retried by the queue (backoff from 5 s)
+    // a delivery that found the card busy is retried by the queue (backoff from 0.5 s)
     await vi.waitFor(
       async () => {
         const rows = await t.db.select().from(outbox).where(eq(outbox.kind, 'order_card'));
