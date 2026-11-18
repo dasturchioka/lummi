@@ -1,4 +1,5 @@
-import { asc, fragrances, sql, volumes, VOLUMES_ML, type Db, type StaffRow } from '@lummi/db';
+import { STOCK_VOLUMES_ML } from '@lummi/contracts/constants';
+import { asc, fragrances, sql, volumes, type Db, type StaffRow } from '@lummi/db';
 import { fill, type Language } from '@lummi/i18n';
 import { adminMessages } from '@lummi/i18n/admin';
 import { Inject, Injectable } from '@nestjs/common';
@@ -55,7 +56,7 @@ export class WarehouseExport {
         const e = x.export;
         const wb = new ExcelJS.Workbook();
         wb.title = e.sheet;
-        const mlColumns: Column[] = VOLUMES_ML.map((ml) => ({
+        const mlColumns: Column[] = STOCK_VOLUMES_ML.map((ml) => ({
           header: fill(e.bottles, { ml: String(ml) }),
           key: `ml${ml}`,
           width: 12,
@@ -81,7 +82,10 @@ export class WarehouseExport {
             oil: o.oilGrams,
             liquid: o.liquidLitres,
             ...Object.fromEntries(
-              VOLUMES_ML.map((ml) => [`ml${ml}`, mine.find((c) => c.ml === ml)?.onHand ?? null]),
+              STOCK_VOLUMES_ML.map((ml) => [
+                `ml${ml}`,
+                mine.find((c) => c.ml === ml)?.onHand ?? null,
+              ]),
             ),
             ...(o.value
               ? { oilValue: o.value.oil, bottlesValue: o.value.bottles, total: o.value.total }
@@ -107,7 +111,7 @@ export class WarehouseExport {
             kind: x.kinds[m.kind],
             oil: m.oilGrams || null,
             ...Object.fromEntries(
-              VOLUMES_ML.map((ml) => [
+              STOCK_VOLUMES_ML.map((ml) => [
                 `ml${ml}`,
                 m.bottles.find((b) => b.ml === ml)?.change ?? null,
               ]),

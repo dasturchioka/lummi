@@ -162,6 +162,14 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Stock value** takes the oil at the average landed price of the fragrance's standing receipts. Does the owner value it another way (the latest invoice, FIFO)?
 - **History before launch:** counts made before the warehouse shipped are not in the history; the first lines are what happens after it.
 
+## 5 ml, the 5 × 5 ml set and the gift sample (ticket #79, ADR 0042)
+
+- **The 5 × 5 ml set's photo and five fragrances:** it starts with the 5 × 10 ml set's five and the app's box photo until the owner uploads his own. Does it hold the same five as the 5 × 10 ml box or its own?
+- **The 5 × 5 ml set has no heart, share link or reviews block yet**, and a gift promo code can name only the 5 × 10 ml set. Wanted for it too?
+- **Which fragrance is the sample:** our default is the one with the most 5 ml bottles available; the owner can pick one by name in «Настройки → Магазин». A chosen fragrance out of 5 ml gives no sample (not another one), with a warning on the stock page and the Home. Confirm. The warning threshold `giftSample.lowStock` (10 bottles) is ours.
+- **«First order»:** a customer with no order that is not cancelled. An unpaid order that expires counts as cancelled, so the next order gets the sample; a returned one does not. Confirm.
+- **The after-set discount on any fragrance** (`entitlements.setDiscountScope`) stays on «Аромат из набора» (TZ) until the owner switches it.
+
 ## Uzum sales (ticket #80)
 - **Uzum's seller export.** We have not seen Uzum's own Excel export of orders, so the import reads our template (`LUMMI_Uzum_shablon.xlsx`: date, Uzum order number, fragrance or «Discovery set», ml, quantity, price for one, commission %; one row per line, the rows of one order make one sale). Ask the customer for one real export file from the seller cabinet (seller.uzum.uz → Заказы → Выгрузить) to map its columns; the template stays as the fallback.
 - **What «цена» means.** The price typed is what the Uzum buyer paid for one unit, before Uzum's commission; the commission % comes off it in the profit. Confirm, or say whether he would rather type what Uzum pays out.

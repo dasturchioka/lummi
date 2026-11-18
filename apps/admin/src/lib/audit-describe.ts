@@ -1,5 +1,10 @@
 import type { AuditEntryDto } from '@lummi/contracts';
 import {
+  DISCOVERY_SETS,
+  DISCOVERY_VIAL_MLS,
+  type DiscoveryVialMl,
+} from '@lummi/contracts/constants';
+import {
   formatCalendarDate,
   formatMoney,
   formatTiyin,
@@ -656,6 +661,37 @@ const describers: Record<string, Describer> = {
       fill(d.bottledOil, { grams: valueText(c, c.p.oilGrams), ml: valueText(c, c.p.ethanolMl) }),
     ];
   },
+  'warehouse.set_bottled': (c) => {
+    c.take(
+      'vialMl',
+      'quantity',
+      'onHand',
+      'fragrances',
+      'oilGrams',
+      'ethanolMl',
+      'oilPercent',
+      'oilDensity',
+      'fillingLossPercent',
+    );
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.onHand) ?? [null, null];
+    const names = Array.isArray(c.p.fragrances)
+      ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(d.setBottled, {
+        ml: valueText(c, c.p.vialMl),
+        qty: valueText(c, c.p.quantity),
+        old: onHandText(c, pair[0]),
+        new: onHandText(c, pair[1]),
+      }),
+      fill(d.setBottledOil, {
+        grams: valueText(c, c.p.oilGrams),
+        names: clip(names.join(', ')),
+        ml: valueText(c, c.p.ethanolMl),
+      }),
+    ];
+  },
   'warehouse.oil_receipt_drafts_created': (c) => {
     c.take('count', 'grams', 'fragrances');
     const names = Array.isArray(c.p.fragrances)
@@ -697,8 +733,9 @@ const describers: Record<string, Describer> = {
     return [fill(c.t.audit.detail.exported, { count: String(int(c.p.count) ?? 0) })];
   },
 
+  // which set is the Target column's (`discoverySetOf`); `vialMl` names it there
   'sets.discovery_changed': (c) => {
-    c.take('price', 'uzumUrl', 'composition');
+    c.take('vialMl', 'price', 'uzumUrl', 'composition');
     const d = c.t.audit.detail;
     const price = asPair(c.p.price);
     const comp = asPair(c.p.composition);
@@ -729,14 +766,14 @@ const describers: Record<string, Describer> = {
     ];
   },
   'sets.discovery_on_hand_changed': (c) => {
-    c.take('onHand', 'reason');
+    c.take('vialMl', 'onHand', 'reason');
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(c.t.audit.detail.onHand, { old: onHandText(c, pair[0]), new: onHandText(c, pair[1]) }),
       str(c.p.reason) && fill(c.t.audit.detail.reason, { reason: str(c.p.reason)! }),
     ];
   },
-  'sets.discovery_photo_uploaded': (c) => (c.take('photo'), [c.t.audit.detail.photo]),
+  'sets.discovery_photo_uploaded': (c) => (c.take('vialMl', 'photo'), [c.t.audit.detail.photo]),
 
   'content.banner_created': (c) => {
     c.take('title', 'target');
@@ -964,9 +1001,10 @@ function uzumSale(c: Ctx): ReturnType<Describer> {
       date: when(c.p.soldOn, c.language) ?? '—',
       lines: lines
         .map((l) => {
+          const ml = String(l.ml ?? '—');
           const item = str(l.name)
-            ? `${str(l.name)} ${fill(c.t.uzum.ml, { ml: String(l.ml ?? '—') })}`
-            : c.t.uzum.set;
+            ? `${str(l.name)} ${fill(c.t.uzum.ml, { ml })}`
+            : fill(c.t.uzum.setName, { ml });
           return `${item} × ${valueText(c, l.qty)}`;
         })
         .join(', '),
@@ -979,4 +1017,19 @@ function uzumSale(c: Ctx): ReturnType<Describer> {
     c.p.via === 'import' && fill(d.uzumImported, { rows: rows.join(', ') || '—' }),
     str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
   ];
+}
+
+/**
+ * The Discovery set an audit entry is about (ADR 0042): its `vialMl`, else its target key (an
+ * entry from before the 5 × 5 ml set has `discovery` and no `vialMl`). Null when it names neither.
+ */
+export function discoverySetOf(e: {
+  targetType: string;
+  targetId: string | null;
+  payload: Record<string, unknown>;
+}): DiscoveryVialMl | null {
+  if (e.targetType !== 'discovery_set') return null;
+  const byMl = DISCOVERY_VIAL_MLS.find((ml) => ml === e.payload.vialMl);
+  if (byMl !== undefined) return byMl;
+  return DISCOVERY_VIAL_MLS.find((ml) => DISCOVERY_SETS[ml].key === e.targetId) ?? null;
 }

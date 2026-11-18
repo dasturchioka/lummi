@@ -27,13 +27,19 @@ const GUIDANCE = 1;
 const TYGAR = 2;
 const BLUE_SAPPHIRE = 3;
 
-/** The setting defaults, so the table also pins them: 250 000, before/before/after/after, off/off, 30+50. */
+/**
+ * The setting defaults, so the table also pins them: 250 000, before/before/after/after, off/off,
+ * 30+50, a set's right on its own fragrances.
+ */
 const DEFAULTS: PricingSettings = {
   freeDeliveryThreshold: settingDefinitions['pricing.freeDeliveryThreshold'].default,
   thresholdBase: settingDefinitions['pricing.thresholdBase'].default,
   discountsApplyToMarkedDown: settingDefinitions['pricing.discountsApplyToMarkedDown'].default,
   fullSizeVolumesMl: settingDefinitions['pricing.fullSizeVolumesMl'].default,
+  setDiscountScope: settingDefinitions['entitlements.setDiscountScope'].default,
 };
+/** The owner's calculator: a set's right on any fragrance's full-size bottle (#79). */
+const ANY_FRAGRANCE: PricingSettings = { ...DEFAULTS, setDiscountScope: 'any_fragrance' };
 const TARIFF = 25_000;
 
 interface LineOpts {
@@ -521,6 +527,83 @@ describe('quote(): upgrade right (ADR 0003, 0007, 0009)', () => {
         deliveryFee: 25_000,
         total: 200_200,
       },
+    },
+  ]);
+});
+
+describe("quote(): what a set's right covers is a setting (#79, entitlements.setDiscountScope)", () => {
+  it("defaults to the set's own fragrances (TZ §3.4)", () => {
+    expect(DEFAULTS.setDiscountScope).toBe('set_fragrances');
+  });
+  runTable([
+    {
+      name: 'set_fragrances: a fragrance outside the set gets nothing',
+      given: {
+        lines: [volume('t50', TYGAR, 50, 219_000)],
+        entitlements: [setRight(1, [GUIDANCE, BLUE_SAPPHIRE])],
+      },
+      expected: { discount: null, alternatives: [], total: 244_000 },
+    },
+    {
+      name: "any_fragrance: a fragrance outside the set gets the set's %",
+      given: {
+        lines: [volume('t50', TYGAR, 50, 219_000)],
+        entitlements: [setRight(1, [GUIDANCE, BLUE_SAPPHIRE])],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: {
+        discount: { type: 'upgrade_right', id: 1, source: 'set', amount: 43_800, lineKey: 't50' },
+        thresholdBaseAmount: 219_000,
+        deliveryFee: 25_000,
+        total: 200_200,
+      },
+    },
+    {
+      name: 'any_fragrance: still the single most expensive full-size unit, whatever its fragrance',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 149_000), volume('t50', TYGAR, 50, 219_000)],
+        entitlements: [setRight(1, [GUIDANCE])],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: { discount: { amount: 43_800, lineKey: 't50' }, total: 324_200 },
+    },
+    {
+      name: 'any_fragrance: never a 10 ml bottle',
+      given: {
+        lines: [volume('t10', TYGAR, 10, 69_000, { qty: 2 })],
+        entitlements: [setRight(1, [GUIDANCE])],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: { discount: null, alternatives: [], total: 163_000 },
+    },
+    {
+      name: 'any_fragrance: never a set',
+      given: {
+        lines: [set('discovery5', 99_000)],
+        entitlements: [setRight(1, [GUIDANCE])],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: { discount: null, alternatives: [], total: 124_000 },
+    },
+    {
+      name: 'any_fragrance: a marked-down bottle stays out by default',
+      given: {
+        lines: [
+          volume('t50', TYGAR, 50, 219_000, { markdown: { price: 175_000, endsAt: TOMORROW } }),
+        ],
+        entitlements: [setRight(1, [GUIDANCE])],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: { discount: null, total: 200_000 },
+    },
+    {
+      name: 'any_fragrance: a right from a single 10 ml bottle still covers only its fragrance',
+      given: {
+        lines: [volume('g50', GUIDANCE, 50, 219_000)],
+        entitlements: [tenMlRight(7, TYGAR)],
+        settings: ANY_FRAGRANCE,
+      },
+      expected: { discount: null, alternatives: [], total: 244_000 },
     },
   ]);
 });

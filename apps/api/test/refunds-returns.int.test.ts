@@ -500,8 +500,9 @@ async function onHand(client: StaffClient) {
     const res = await client.admin.stock.list({ query: { page, pageSize: 50 } });
     if (res.status !== 200) throw new Error(`stock ${res.status}`);
     for (const row of res.body.rows) {
-      if (row.kind === 'discovery') discovery = row.onHand;
-      else volumes.set(row.volumeId!, row.onHand);
+      // the 5 × 10 ml set's row (the 5 × 5 ml set has its own, `discovery-5`, ADR 0042)
+      if (row.key === 'discovery') discovery = row.onHand;
+      else if (row.kind === 'volume') volumes.set(row.volumeId!, row.onHand);
     }
     if (page * res.body.pageSize >= res.body.total) break;
   }

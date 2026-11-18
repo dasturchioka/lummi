@@ -1,7 +1,7 @@
 'use client';
 
 import { isUzumUrl, STOCK_REASON_MAX, type AdminDiscoverySet } from '@lummi/contracts';
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_SETS, SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -31,21 +31,56 @@ function Saved({ text }: { text: string }) {
 }
 
 /**
- * The Discovery set (ADR 0009): its own boxes on hand (owner and manager), and the owner's price
- * (the builder set costs the same), five fragrances in order and photo. Every change is audited by
- * the API with the old and the new value.
+ * The Discovery sets (ADR 0009, 0042), the 5 × 10 ml and the 5 × 5 ml box, one block each: its own
+ * boxes on hand and a bottling from oil (owner and manager), and the owner's price (the builder set
+ * costs the 5 × 10 ml one's), five fragrances in order and photo. Every change is audited by the
+ * API with the old and the new value.
  *
- * From 1024 px: the stock over the photo on the left, the price and the composition on the right
- * (the longest card spans both rows, so neither left card is stretched). Phones: stock, price, photo.
+ * From 1024 px: the stock and the bottling over the photo on the left, the price and the
+ * composition on the right (the longest card spans the rows, so no left card is stretched).
+ * Phones: stock, bottling, price, photo.
  */
 export function SetsManager({
-  initial,
+  sets,
   options,
   owner,
   language,
   t,
 }: {
-  initial: AdminDiscoverySet;
+  sets: AdminDiscoverySet[];
+  options: Option[];
+  owner: boolean;
+  language: Language;
+  t: AdminMessages;
+}) {
+  const s = t.sets;
+  return (
+    <>
+      <PageHeader title={s.title} description={s.description} />
+      <div className="grid gap-10 lg:gap-12">
+        {sets.map((set) => (
+          <SetBlock
+            key={set.vialMl}
+            set={set}
+            options={options}
+            owner={owner}
+            language={language}
+            t={t}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function SetBlock({
+  set,
+  options,
+  owner,
+  language,
+  t,
+}: {
+  set: AdminDiscoverySet;
   options: Option[];
   owner: boolean;
   language: Language;
@@ -54,22 +89,25 @@ export function SetsManager({
   const router = useRouter();
   const [priceSaved, setPriceSaved] = useState(false);
   const s = t.sets;
-  const hidden = initial.composition.filter((c) => c.hidden);
+  const hidden = set.composition.filter((c) => c.hidden);
+  const headingId = `set-${set.vialMl}`;
   return (
-    <>
-      <PageHeader title={s.title} description={s.description} />
+    <section aria-labelledby={headingId} data-testid={`set-${set.vialMl}`}>
+      <h2 id={headingId} className="mb-4 font-name text-[24px] leading-[1.1] font-medium italic">
+        {fill(s.setTitle, { ml: String(set.vialMl) })}
+      </h2>
       {hidden.length > 0 && (
         <Notice title={s.hiddenWarning} className="mb-6">
           {hidden.map((c) => c.name).join(', ')}
         </Notice>
       )}
-      <div className="grid items-start gap-6 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
-        <StockCard set={initial} t={t} onSaved={() => router.refresh()} />
-        <Section title={s.priceTitle} className="lg:row-span-2">
+      <div className="grid items-start gap-6 lg:grid-cols-2 lg:grid-rows-[auto_auto_1fr]">
+        <StockCard set={set} t={t} onSaved={() => router.refresh()} />
+        <Section title={s.priceTitle} className="lg:row-span-3">
           {owner ? (
             <PriceForm
-              key={`${initial.price}-${initial.composition.map((c) => c.id).join()}`}
-              set={initial}
+              key={`${set.price}-${set.composition.map((c) => c.id).join()}`}
+              set={set}
               options={options}
               language={language}
               saved={priceSaved}
@@ -81,24 +119,114 @@ export function SetsManager({
               }}
             />
           ) : (
-            <ReadOnly set={initial} language={language} t={t} />
+            <ReadOnly set={set} language={language} t={t} />
           )}
         </Section>
+        <BottleCard set={set} t={t} onBottled={() => router.refresh()} />
         {owner && (
           <Section title={s.photoTitle}>
             <p className="-mt-2 text-small text-pretty text-muted-foreground">{s.photoHint}</p>
             <PhotoUpload
-              slot="discovery"
+              slot={DISCOVERY_SETS[set.vialMl].key}
               label={t.catalog.photo}
-              url="/api/admin/sets/discovery/photo"
-              hash={initial.photo}
+              url={`/api/admin/sets/discovery/photo?vialMl=${set.vialMl}`}
+              hash={set.photo}
               messages={t.catalog}
               onUploaded={() => router.refresh()}
             />
           </Section>
         )}
       </div>
-    </>
+    </section>
+  );
+}
+
+/**
+ * A set bottling (#79): boxes filled straight from the oil of the set's five, one vial of the set's
+ * size from each per box. The server takes the oil and adds the boxes, or names the fragrance
+ * whose oil is short.
+ */
+function BottleCard({
+  set,
+  t,
+  onBottled,
+}: {
+  set: AdminDiscoverySet;
+  t: AdminMessages;
+  onBottled: () => void;
+}) {
+  const s = t.sets;
+  const [value, setValue] = useState('');
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const quantity = Number(value);
+  const valid = /^\d{1,5}$/.test(value) && quantity > 0;
+  const complete = set.composition.length === SET_SIZE;
+  const id = `set-${set.vialMl}-bottle`;
+  return (
+    <Section title={s.bottleTitle}>
+      <p className="-mt-2 text-small text-pretty text-muted-foreground">
+        {fill(s.bottleHint, { ml: String(set.vialMl) })}
+      </p>
+      {!complete && <Notice title={s.notForSale} />}
+      <form
+        className="grid gap-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!valid || !complete) return;
+          setPending(true);
+          setResult(null);
+          const res = await browserApi.warehouse
+            .bottleSet({ params: { vialMl: set.vialMl }, body: { quantity } })
+            .catch(() => null);
+          setPending(false);
+          if (res?.status === 201) {
+            setValue('');
+            setResult({
+              ok: true,
+              text: fill(s.bottled, {
+                qty: String(quantity),
+                grams: String(res.body.oilGrams),
+              }),
+            });
+            onBottled();
+          } else if (res?.status === 409 && res.body.code === 'oil_short')
+            setResult({
+              ok: false,
+              text: fill(s.bottleShort, {
+                name: res.body.fragrance ?? '',
+                needed: String(res.body.neededGrams ?? ''),
+                balance: String(res.body.balanceGrams ?? ''),
+              }),
+            });
+          else setResult({ ok: false, text: t.errors.generic });
+        }}
+      >
+        <Field id={id} label={s.bottleQuantity}>
+          <Input
+            inputMode="numeric"
+            pattern="[0-9]+"
+            autoComplete="off"
+            enterKeyHint="done"
+            className="tabular-nums"
+            required
+            disabled={!complete}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setResult(null);
+            }}
+          />
+        </Field>
+        {result && !result.ok && <Notice title={result.text} />}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button type="submit" loading={pending} disabled={!valid || !complete}>
+            {s.bottleSubmit}
+          </Button>
+          {result?.ok && <Saved text={result.text} />}
+        </div>
+      </form>
+    </Section>
   );
 }
 
@@ -129,7 +257,10 @@ function StockCard({
     setPending(true);
     setState('idle');
     const res = await browserApi.sets
-      .setOnHand({ body: { onHand, expected, reason: reason.trim() } })
+      .setOnHand({
+        query: { vialMl: set.vialMl },
+        body: { onHand, expected, reason: reason.trim() },
+      })
       .catch(() => null);
     setPending(false);
     if (res?.status === 200) {
@@ -174,7 +305,7 @@ function StockCard({
           else void save(next, set.onHand);
         }}
       >
-        <Field id="set-on-hand" label={s.onHand} hint={s.onHandHint}>
+        <Field id={`set-${set.vialMl}-on-hand`} label={s.onHand} hint={s.onHandHint}>
           <Input
             inputMode="numeric"
             pattern="[0-9]+"
@@ -190,7 +321,7 @@ function StockCard({
             }}
           />
         </Field>
-        <Field id="set-on-hand-reason" label={st.reason}>
+        <Field id={`set-${set.vialMl}-on-hand-reason`} label={st.reason}>
           <Input
             autoComplete="off"
             maxLength={STOCK_REASON_MAX}
@@ -373,6 +504,7 @@ function PriceForm({
         setError(null);
         const res = await browserApi.sets
           .update({
+            query: { vialMl: set.vialMl },
             body: {
               price: Number(price),
               uzumUrl: uzumUrl.trim(),
@@ -394,9 +526,9 @@ function PriceForm({
     >
       {set.isPlaceholder && <Notice title={s.placeholderPrice} />}
       <Field
-        id="set-price"
+        id={`set-${set.vialMl}-price`}
         label={s.price}
-        hint={s.priceHint}
+        hint={s.priceHint[set.vialMl]}
         aside={
           readout && (
             <span className="text-small font-medium text-foreground tabular-nums">{readout}</span>
@@ -418,7 +550,7 @@ function PriceForm({
         />
       </Field>
       <Field
-        id="set-uzum"
+        id={`set-${set.vialMl}-uzum`}
         label={s.uzumUrl}
         hint={s.uzumHint}
         error={validUzum ? undefined : s.uzumInvalid}
@@ -444,7 +576,7 @@ function PriceForm({
           {picks.map((value, i) => {
             const repeated = Boolean(value) && picks.indexOf(value) !== i;
             const isHidden = byId.get(value)?.hidden ?? false;
-            const id = `set-pick-${i}`;
+            const id = `set-${set.vialMl}-pick-${i}`;
             const note = repeated ? s.duplicate : isHidden ? s.hiddenPick : null;
             return (
               <li key={i} className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2">

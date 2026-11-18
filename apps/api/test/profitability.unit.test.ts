@@ -26,6 +26,7 @@ const PRICING: PricingSettings = {
   },
   discountsApplyToMarkedDown: { upgradeRight: false, birthdayCoupon: false },
   fullSizeVolumesMl: [30, 50],
+  setDiscountScope: 'set_fragrances',
 };
 const GIFT = giftSampleCost(Object.values(OIL), S)!;
 

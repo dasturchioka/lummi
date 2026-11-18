@@ -472,22 +472,25 @@ export type Screen = {
 let savedSet: { price: unknown; onHand: unknown; ids: unknown[] } | undefined;
 const setsWorst: Pick<Screen, 'setup' | 'teardown'> = {
   setup: async ({ db }) => {
-    const [set] = (await db.query('select price, on_hand from discovery_set')).rows;
-    const items = await db.query('select fragrance_id from discovery_set_items order by position');
+    const [set] = (await db.query('select price, on_hand from discovery_set where vial_ml = 10'))
+      .rows;
+    const items = await db.query(
+      'select fragrance_id from discovery_set_items where vial_ml = 10 order by position',
+    );
     savedSet ??= {
       price: set?.price,
       onHand: set?.on_hand,
       ids: items.rows.map((r) => r.fragrance_id),
     };
     await db.query(
-      'update discovery_set set price = 1250000, on_hand = 1250, is_placeholder = true',
+      'update discovery_set set price = 1250000, on_hand = 1250, is_placeholder = true where vial_ml = 10',
     );
-    await db.query('delete from discovery_set_items');
+    await db.query('delete from discovery_set_items where vial_ml = 10');
     await db.query(
-      `insert into discovery_set_items (position, fragrance_id)
-       select 1, id from fragrances where name = $1
+      `insert into discovery_set_items (vial_ml, position, fragrance_id)
+       select 10, 1, id from fragrances where name = $1
        union all
-       select 1 + i, (select id from fragrances where slug = ($2::text[])[i])
+       select 10, 1 + i, (select id from fragrances where slug = ($2::text[])[i])
        from generate_subscripts($2::text[], 1) as i`,
       [
         WORST_NAME,
@@ -497,14 +500,14 @@ const setsWorst: Pick<Screen, 'setup' | 'teardown'> = {
   },
   teardown: async ({ db }) => {
     if (!savedSet) return;
-    await db.query('update discovery_set set price = $1, on_hand = $2', [
+    await db.query('update discovery_set set price = $1, on_hand = $2 where vial_ml = 10', [
       savedSet.price,
       savedSet.onHand,
     ]);
-    await db.query('delete from discovery_set_items');
+    await db.query('delete from discovery_set_items where vial_ml = 10');
     await db.query(
-      `insert into discovery_set_items (position, fragrance_id)
-       select i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
+      `insert into discovery_set_items (vial_ml, position, fragrance_id)
+       select 10, i, ($1::bigint[])[i] from generate_subscripts($1::bigint[], 1) as i`,
       [savedSet.ids],
     );
     savedSet = undefined;
@@ -1596,11 +1599,11 @@ export const screens: Screen[] = [
     as: 'owner',
     setup: async ({ db }) => {
       await db.query(
-        "update discovery_set set uzum_url = 'https://uzum.uz/ru/product/lummi-discovery-set'",
+        "update discovery_set set uzum_url = 'https://uzum.uz/ru/product/lummi-discovery-set' where vial_ml = 10",
       );
     },
     teardown: async ({ db }) => {
-      await db.query('update discovery_set set uzum_url = null');
+      await db.query('update discovery_set set uzum_url = null where vial_ml = 10');
     },
   },
   {

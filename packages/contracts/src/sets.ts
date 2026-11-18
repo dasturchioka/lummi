@@ -1,13 +1,24 @@
 import { z } from 'zod';
-import { CART_MAX_QTY, MAX_PRICE, SET_SIZE } from './constants';
+import { CART_MAX_QTY, DISCOVERY_VIAL_MLS, MAX_PRICE, SET_SIZE } from './constants';
 import { fragranceListItemSchema } from './catalog';
 import { uzumUrlSchema } from './uzum';
 
 /**
- * Sets (ADR 0009). The Discovery set is a product with its own price, photo and stock; a builder
- * set is any five different fragrances with 10 ml available, at the same price. Money is integer
- * so'm and comes from the server (ADR 0001).
+ * Sets (ADR 0009, 0042). Each Discovery set (5 × 10 ml, 5 × 5 ml) is a product with its own price,
+ * photo and stock; a builder set is any five different fragrances with 10 ml available, at the
+ * 5 × 10 ml set's price. Money is integer so'm and comes from the server (ADR 0001).
  */
+
+/** Which Discovery set: the ml of its vials (`DISCOVERY_VIAL_MLS`). */
+export const discoveryVialMlSchema = z.union([
+  z.literal(DISCOVERY_VIAL_MLS[0]),
+  z.literal(DISCOVERY_VIAL_MLS[1]),
+]);
+
+/** `?vialMl=5` names the 5 × 5 ml set; without it, the 5 × 10 ml one. */
+export const discoveryQuerySchema = z.object({
+  vialMl: z.coerce.number().pipe(discoveryVialMlSchema).default(10),
+});
 export const setFragranceSchema = z.object({
   /** Null for a fragrance hidden from the catalog: the box stays on sale, but it has no card to open. */
   slug: z.string().nullable(),
@@ -18,6 +29,7 @@ export const setFragranceSchema = z.object({
 export type SetFragrance = z.infer<typeof setFragranceSchema>;
 
 export const discoverySetSchema = z.object({
+  vialMl: discoveryVialMlSchema,
   price: z.number().int().nonnegative(),
   /** The set's own on hand minus its reserve. 0 = sold out. */
   available: z.number().int().nonnegative(),
@@ -43,6 +55,7 @@ export const setsErrorSchema = z.object({ code: z.enum(['unauthorized', 'not_fou
 
 export const addDiscoveryBodySchema = z.object({
   qty: z.number().int().min(1).max(CART_MAX_QTY).default(1),
+  vialMl: discoveryVialMlSchema.default(10),
 });
 
 /** Exactly five different slugs: a wrong count or a repeat is refused before it reaches the DB. */
@@ -63,6 +76,7 @@ export const addSetErrorSchema = z.object({
 /* ---- admin ---- */
 
 export const adminDiscoverySetSchema = z.object({
+  vialMl: discoveryVialMlSchema,
   price: z.number().int().nonnegative(),
   onHand: z.number().int().nonnegative(),
   reserved: z.number().int().nonnegative(),
@@ -77,7 +91,7 @@ export const adminDiscoverySetSchema = z.object({
 });
 export type AdminDiscoverySet = z.infer<typeof adminDiscoverySetSchema>;
 
-/** The owner's edit: the shared price of both sets and the five fragrances, in order. */
+/** The owner's edit of one Discovery set: its price (the 5 × 10 ml one's is the builder's too) and its five fragrances, in order. */
 export const discoverySetInputSchema = z.object({
   price: z.number().int().min(0).max(MAX_PRICE),
   /** Omitted keeps the link as it is; empty clears it. */

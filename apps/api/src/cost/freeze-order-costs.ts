@@ -34,23 +34,26 @@ export function costedItemOf(
 /**
  * An order's cost snapshot from its lines, the oil prices and the settings now (#77): each line
  * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel, by the
- * one builder `costSnapshot`. Pure.
+ * one builder `costSnapshot`. A first order's gift sample (#79, ADR 0042) is no goods: its line
+ * costs the calculator's `giftCost` for its own fragrance and goes into the order costs' gift
+ * sample. Pure.
  */
 export function orderCostSnapshot(
   order: Pick<OrderRow, 'itemsSubtotal' | 'discountAmount' | 'deliveryFee'>,
-  lines: readonly Pick<OrderLineRow, 'kind' | 'fragranceId' | 'ml' | 'setComposition' | 'qty'>[],
+  lines: readonly Pick<
+    OrderLineRow,
+    'kind' | 'fragranceId' | 'ml' | 'setComposition' | 'qty' | 'giftSample'
+  >[],
   oil: ReadonlyMap<number, { name: string; oilPrice: number | null }>,
   s: CostSettings,
   at: Date,
 ): { snapshot: OrderCostSnapshot; unitCosts: (number | null)[] } {
   return costSnapshot(
-    lines.map((l) => ({ item: costedItemOf(l), qty: l.qty })),
+    lines.map((l) => ({ item: costedItemOf(l), qty: l.qty, giftSample: l.giftSample })),
     {
       channel: 'miniapp',
       revenue: order.itemsSubtotal - order.discountAmount,
       deliveryPaid: order.deliveryFee,
-      // a gift sample goes in with #79; until then no order has one
-      giftSample: 0,
     },
     oil,
     s,

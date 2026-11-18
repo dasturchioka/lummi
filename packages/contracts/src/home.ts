@@ -57,8 +57,9 @@ const queueSchema = z.object({
 export type HomeQueueHead = z.infer<typeof queueSchema>;
 
 /** A stock row that needs a delivery: the Discovery set (no name, no ml) or a fragrance's Volume. */
+/** A volume, a Discovery set (its `ml` is its vial size), or the gift sample's 5 ml stock (#79). */
 export const homeStockItemSchema = z.object({
-  kind: z.enum(['volume', 'discovery']),
+  kind: z.enum(['volume', 'discovery', 'sample']),
   name: z.string().nullable(),
   ml: z.number().int().nullable(),
   available: count,

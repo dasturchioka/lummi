@@ -300,22 +300,22 @@ const LONG_FIVE_NAMES = [
 const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
 const tenMlOf = `ml = 10 and fragrance_id in (select id from fragrances where slug = any($1))`;
 async function worstSets(db: ShotDb) {
-  await db.query('update discovery_set set price = 1250000, on_hand = 120');
-  await db.query('delete from discovery_set_items');
+  await db.query('update discovery_set set price = 1250000, on_hand = 120 where vial_ml = 10');
+  await db.query('delete from discovery_set_items where vial_ml = 10');
   await db.query(
-    `insert into discovery_set_items (position, fragrance_id)
-     select i, (select id from fragrances where slug = ($1::text[])[i])
+    `insert into discovery_set_items (vial_ml, position, fragrance_id)
+     select 10, i, (select id from fragrances where slug = ($1::text[])[i])
      from generate_subscripts($1::text[], 1) as i`,
     [LONG_FIVE],
   );
   await db.query(`update volumes set on_hand = 120 where ${tenMlOf}`, [LONG_FIVE]);
 }
 async function bestSets(db: ShotDb) {
-  await db.query('update discovery_set set price = 299000, on_hand = 10');
-  await db.query('delete from discovery_set_items');
+  await db.query('update discovery_set set price = 299000, on_hand = 10 where vial_ml = 10');
+  await db.query('delete from discovery_set_items where vial_ml = 10');
   await db.query(
-    `insert into discovery_set_items (position, fragrance_id)
-     select row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
+    `insert into discovery_set_items (vial_ml, position, fragrance_id)
+     select 10, row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
   );
   for (const slug of [...LONG_FIVE, ...SOLD_FIVE]) await db.restore(slug);
 }

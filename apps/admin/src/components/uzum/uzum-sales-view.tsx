@@ -40,7 +40,10 @@ import { cn, fill } from '@/lib/utils';
 
 type U = AdminMessages['uzum'];
 
-/** A line's item as the form keeps it: a volume (`v:<id>`), the Discovery set (`set`), or none. */
+/**
+ * A line's item as the form keeps it: a volume (`v:<id>`), a Discovery set (`set:<vial ml>`), or
+ * none.
+ */
 type LineDraft = { key: number; item: string; qty: string; price: string };
 const blankLine = (key: number): LineDraft => ({ key, item: '', qty: '1', price: '' });
 
@@ -57,9 +60,11 @@ function percent(v: string): number | null {
   return n <= 100 ? n : null;
 }
 
-/** What a sale's line or a short line names: «Rain Tea 10 мл», or the Discovery set. */
-const itemName = (l: { name: string | null; ml: number | null }, u: U) =>
-  l.name === null ? u.set : `${l.name} ${fill(u.ml, { ml: String(l.ml ?? '') })}`;
+/** What a sale's line or a short line names: «Rain Tea 10 мл», or a Discovery set by its vial ml. */
+const itemName = (l: { name: string | null; ml: number }, u: U) =>
+  l.name === null
+    ? fill(u.setName, { ml: String(l.ml) })
+    : `${l.name} ${fill(u.ml, { ml: String(l.ml) })}`;
 
 /**
  * Uzum sales (#80): the form that records one (its bottles leave the shelf at once), the list of
@@ -182,8 +187,8 @@ function SaleForm({
       if (p === null || p < 1) wrong.add(`${l.key}.price`);
       if (l.item === '' || q === null || p === null) continue;
       out.push(
-        l.item === 'set'
-          ? { kind: 'discovery_set', qty: q, price: p }
+        l.item.startsWith('set:')
+          ? { kind: 'discovery_set', vialMl: l.item === 'set:5' ? 5 : 10, qty: q, price: p }
           : { kind: 'volume', volumeId: Number(l.item.slice(2)), qty: q, price: p },
       );
     }
@@ -295,7 +300,7 @@ function SaleForm({
                             ml: String(it.ml),
                             n: num(it.available),
                           })
-                        : fill(f.setOption, { n: num(it.available) })}
+                        : fill(f.setOption, { ml: String(it.vialMl), n: num(it.available) })}
                     </option>
                   ))}
                 </Select>
@@ -406,7 +411,8 @@ function SaleForm({
   );
 }
 
-const optionValue = (it: UzumSaleItem) => (it.kind === 'volume' ? `v:${it.volumeId}` : 'set');
+const optionValue = (it: UzumSaleItem) =>
+  it.kind === 'volume' ? `v:${it.volumeId}` : `set:${it.vialMl}`;
 
 function SalesList({
   sales,

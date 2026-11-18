@@ -169,7 +169,8 @@ async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Bu
             l.kind === 'volume'
               ? `${name}, ${l.ml} ${x.ml} × ${l.qty}`
               : `${name} (${o.detail.setOf}) × ${l.qty}`;
-          return l.promoGift ? `${o.detail.promoGift}: ${item}` : item;
+          if (l.promoGift) return `${o.detail.promoGift}: ${item}`;
+          return l.giftSample ? `${o.detail.giftSample}: ${item}` : item;
         })
         .join('\n'),
       // as the reports count them: a Promo gift at its regular price in both (ADR 0039)

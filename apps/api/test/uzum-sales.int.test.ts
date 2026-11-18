@@ -100,6 +100,8 @@ async function page(id: number): Promise<WarehouseFragrance> {
 }
 const onHand = async (volumeId: number) =>
   (await t.db.select().from(volumes).where(eq(volumes.id, volumeId)))[0]!.onHand;
+const setOnHand = async (vialMl: number) =>
+  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
 describe('recording an Uzum sale', () => {
@@ -181,31 +183,70 @@ describe('recording an Uzum sale', () => {
     expect(await onHand(C.vol[10]!)).toBe(19);
   });
 
-  it('sells the Discovery set from its own stock', async () => {
+  it('sells either Discovery set from its own stock, picked by its vial ml', async () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
     const res = await recorded(
-      sale({ lines: [{ kind: 'discovery_set', qty: 1, price: 299_000 }] }),
+      sale({
+        lines: [
+          { kind: 'discovery_set', vialMl: 10, qty: 1, price: 299_000 },
+          { kind: 'discovery_set', vialMl: 5, qty: 2, price: 99_000 },
+        ],
+      }),
     );
-    expect(res).toMatchObject({ units: 1, revenue: 299_000 });
-    expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(2);
+    expect(res).toMatchObject({ units: 3, revenue: 497_000 });
+    expect(res.lines.map((l) => [l.kind, l.name, l.ml, l.qty])).toEqual([
+      ['discovery_set', null, 10, 1],
+      ['discovery_set', null, 5, 2],
+    ]);
+    expect([await setOnHand(10), await setOnHand(5)]).toEqual([2, 1]);
+
+    // the void brings each set's boxes back to its own row
+    await voidSale(res.id);
+    expect([await setOnHand(10), await setOnHand(5)]).toEqual([3, 3]);
   });
 
-  it('judges the Discovery set through its one read: short of its five, none is available', async () => {
+  it('never sells a 5 ml bottle alone, and does not offer one', async () => {
+    const [five] = await t.db
+      .update(volumes)
+      .set({ onHand: 20 })
+      .where(and(eq(volumes.fragranceId, A.id), eq(volumes.ml, 5)))
+      .returning({ id: volumes.id });
+    const res = await record(
+      sale({ lines: [{ kind: 'volume', volumeId: five!.id, qty: 1, price: 30_000 }] }),
+    );
+    expect(res.status).toBe(422);
+    expect(res.status === 422 && res.body).toEqual({
+      code: 'invalid',
+      fields: ['lines.0.volumeId'],
+    });
+    expect(await onHand(five!.id)).toBe(20);
+    const list = await manager.client.admin.uzum.list({ query: {} });
+    expect(
+      list.status === 200 && list.body.items.some((i) => i.kind === 'volume' && i.ml === 5),
+    ).toBe(false);
+  });
+
+  it('judges a Discovery set through its one read: short of its five, none is available', async () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
-    const [first] = await t.db.select().from(discoverySetItems).orderBy(discoverySetItems.position);
-    await t.db.delete(discoverySetItems).where(eq(discoverySetItems.position, first!.position));
+    await t.db
+      .delete(discoverySetItems)
+      .where(and(eq(discoverySetItems.vialMl, 5), eq(discoverySetItems.position, 1)));
 
     const list = await manager.client.admin.uzum.list({ query: {} });
-    expect(list.status === 200 && list.body.items.at(-1)).toEqual({
-      kind: 'discovery_set',
-      available: 0,
-    });
-    const res = await record(sale({ lines: [{ kind: 'discovery_set', qty: 1, price: 299_000 }] }));
+    const sets =
+      list.status === 200 ? list.body.items.filter((i) => i.kind === 'discovery_set') : [];
+    expect(sets).toEqual([
+      { kind: 'discovery_set', vialMl: 10, available: 3 },
+      { kind: 'discovery_set', vialMl: 5, available: 0 },
+    ]);
+    const res = await record(
+      sale({ lines: [{ kind: 'discovery_set', vialMl: 5, qty: 1, price: 99_000 }] }),
+    );
     expect(res.status).toBe(409);
     expect(res.status === 409 && res.body.short).toEqual([
-      { kind: 'discovery_set', volumeId: null, name: null, ml: null, wanted: 1, available: 0 },
+      { kind: 'discovery_set', volumeId: null, name: null, ml: 5, wanted: 1, available: 0 },
     ]);
-    expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(3);
+    expect(await setOnHand(5)).toBe(3);
   });
 
   it('freezes the commission as the row keeps it, to two decimals', async () => {
@@ -306,9 +347,12 @@ describe('voiding an Uzum sale', () => {
 
   it("brings the Discovery set's boxes back to its own stock", async () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
-    const s = await recorded(sale({ lines: [{ kind: 'discovery_set', qty: 2, price: 299_000 }] }));
+    const s = await recorded(
+      sale({ lines: [{ kind: 'discovery_set', vialMl: 10, qty: 2, price: 299_000 }] }),
+    );
+    expect(await setOnHand(10)).toBe(1);
     await voidSale(s.id);
-    expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(3);
+    expect(await setOnHand(10)).toBe(3);
   });
 });
 

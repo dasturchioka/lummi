@@ -1,5 +1,5 @@
 {
-  "id": "36850df4-0bd6-4dbc-874f-6bbbfe32d5ca",
+  "id": "4416b9df-6630-4a7a-9079-14e446f0f90a",
   "prevId": "f50a9617-a271-4f58-a33d-c0f9322ea21e",
   "version": "7",
   "dialect": "postgresql",
@@ -444,6 +444,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "set_vial_ml": {
+          "name": "set_vial_ml",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "oil_mg": {
           "name": "oil_mg",
           "type": "integer",
@@ -509,6 +515,10 @@
         "bottlings_amounts_check": {
           "name": "bottlings_amounts_check",
           "value": "\"bottlings\".\"oil_mg\" >= 0 and \"bottlings\".\"ethanol_ml\" >= 0"
+        },
+        "bottlings_set_vial_ml_check": {
+          "name": "bottlings_set_vial_ml_check",
+          "value": "\"bottlings\".\"set_vial_ml\" is null or \"bottlings\".\"set_vial_ml\" in (5, 10)"
         }
       },
       "isRLSEnabled": false
@@ -1156,6 +1166,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "vial_ml": {
+          "name": "vial_ml",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "qty": {
           "name": "qty",
           "type": "integer",
@@ -1197,6 +1213,12 @@
           "columns": [
             {
               "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vial_ml",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1288,7 +1310,7 @@
         },
         "cart_lines_kind_check": {
           "name": "cart_lines_kind_check",
-          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null)\n        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null)\n        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5)"
+          "value": "(kind = 'volume' and volume_id is not null and fragrance_ids is null and vial_ml is null)\n        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null and vial_ml in (5, 10))\n        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5 and vial_ml is null)"
         }
       },
       "isRLSEnabled": false
@@ -1762,12 +1784,11 @@
       "name": "discovery_set",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "boolean",
+        "vial_ml": {
+          "name": "vial_ml",
+          "type": "smallint",
           "primaryKey": true,
-          "notNull": true,
-          "default": true
+          "notNull": true
         },
         "price": {
           "name": "price",
@@ -1815,9 +1836,9 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "discovery_set_one_row": {
-          "name": "discovery_set_one_row",
-          "value": "\"discovery_set\".\"id\""
+        "discovery_set_vial_ml_check": {
+          "name": "discovery_set_vial_ml_check",
+          "value": "\"discovery_set\".\"vial_ml\" in (5, 10)"
         },
         "discovery_set_money_check": {
           "name": "discovery_set_money_check",
@@ -1830,10 +1851,16 @@
       "name": "discovery_set_items",
       "schema": "",
       "columns": {
+        "vial_ml": {
+          "name": "vial_ml",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
         "position": {
           "name": "position",
           "type": "smallint",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true
         },
         "fragrance_id": {
@@ -1843,8 +1870,43 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "discovery_set_items_fragrance_idx": {
+          "name": "discovery_set_items_fragrance_idx",
+          "columns": [
+            {
+              "expression": "vial_ml",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fragrance_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
+        "discovery_set_items_vial_ml_discovery_set_vial_ml_fk": {
+          "name": "discovery_set_items_vial_ml_discovery_set_vial_ml_fk",
+          "tableFrom": "discovery_set_items",
+          "tableTo": "discovery_set",
+          "columnsFrom": [
+            "vial_ml"
+          ],
+          "columnsTo": [
+            "vial_ml"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "discovery_set_items_fragrance_id_fragrances_id_fk": {
           "name": "discovery_set_items_fragrance_id_fragrances_id_fk",
           "tableFrom": "discovery_set_items",
@@ -1859,16 +1921,16 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "discovery_set_items_fragrance_id_unique": {
-          "name": "discovery_set_items_fragrance_id_unique",
-          "nullsNotDistinct": false,
+      "compositePrimaryKeys": {
+        "discovery_set_items_vial_ml_position_pk": {
+          "name": "discovery_set_items_vial_ml_position_pk",
           "columns": [
-            "fragrance_id"
+            "vial_ml",
+            "position"
           ]
         }
       },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "discovery_set_items_position": {
@@ -3699,6 +3761,13 @@
           "notNull": true,
           "default": false
         },
+        "gift_sample": {
+          "name": "gift_sample",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "set_volume_ids": {
           "name": "set_volume_ids",
           "type": "bigint[]",
@@ -3816,6 +3885,10 @@
         "order_lines_promo_gift_check": {
           "name": "order_lines_promo_gift_check",
           "value": "not \"order_lines\".\"promo_gift\" or (\"order_lines\".\"unit_price\" = 0 and \"order_lines\".\"line_total\" = 0 and \"order_lines\".\"qty\" = 1)"
+        },
+        "order_lines_gift_sample_check": {
+          "name": "order_lines_gift_sample_check",
+          "value": "not \"order_lines\".\"gift_sample\" or (\"order_lines\".\"kind\"::text = 'volume' and not \"order_lines\".\"promo_gift\" and \"order_lines\".\"unit_price\" = 0 and \"order_lines\".\"regular_unit_price\" = 0 and \"order_lines\".\"line_total\" = 0 and \"order_lines\".\"qty\" = 1)"
         },
         "order_lines_unit_cost_check": {
           "name": "order_lines_unit_cost_check",
@@ -6488,12 +6561,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "uzum_sale_id": {
-          "name": "uzum_sale_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reason": {
           "name": "reason",
           "type": "text",
@@ -6589,19 +6656,6 @@
             "id"
           ],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "stock_moves_uzum_sale_id_uzum_sales_id_fk": {
-          "name": "stock_moves_uzum_sale_id_uzum_sales_id_fk",
-          "tableFrom": "stock_moves",
-          "tableTo": "uzum_sales",
-          "columnsFrom": [
-            "uzum_sale_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -6868,333 +6922,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.uzum_sale_lines": {
-      "name": "uzum_sale_lines",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "uzum_sale_lines_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "sale_id": {
-          "name": "sale_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "uzum_sale_line_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "volume_id": {
-          "name": "volume_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fragrance_id": {
-          "name": "fragrance_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ml": {
-          "name": "ml",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "qty": {
-          "name": "qty",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price": {
-          "name": "price",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "line_total": {
-          "name": "line_total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unit_cost": {
-          "name": "unit_cost",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "set_fragrance_ids": {
-          "name": "set_fragrance_ids",
-          "type": "bigint[]",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "uzum_sale_lines_position_idx": {
-          "name": "uzum_sale_lines_position_idx",
-          "columns": [
-            {
-              "expression": "sale_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "uzum_sale_lines_sale_id_uzum_sales_id_fk": {
-          "name": "uzum_sale_lines_sale_id_uzum_sales_id_fk",
-          "tableFrom": "uzum_sale_lines",
-          "tableTo": "uzum_sales",
-          "columnsFrom": [
-            "sale_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "uzum_sale_lines_volume_id_volumes_id_fk": {
-          "name": "uzum_sale_lines_volume_id_volumes_id_fk",
-          "tableFrom": "uzum_sale_lines",
-          "tableTo": "volumes",
-          "columnsFrom": [
-            "volume_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "uzum_sale_lines_item_check": {
-          "name": "uzum_sale_lines_item_check",
-          "value": "(\"uzum_sale_lines\".\"kind\" = 'volume') = (\"uzum_sale_lines\".\"volume_id\" is not null and \"uzum_sale_lines\".\"fragrance_id\" is not null)"
-        },
-        "uzum_sale_lines_amounts_check": {
-          "name": "uzum_sale_lines_amounts_check",
-          "value": "\"uzum_sale_lines\".\"qty\" > 0 and \"uzum_sale_lines\".\"price\" >= 0 and \"uzum_sale_lines\".\"line_total\" = \"uzum_sale_lines\".\"qty\" * \"uzum_sale_lines\".\"price\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.uzum_sales": {
-      "name": "uzum_sales",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "uzum_sales_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "sold_on": {
-          "name": "sold_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "uzum_order": {
-          "name": "uzum_order",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "commission_percent": {
-          "name": "commission_percent",
-          "type": "numeric(5, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "revenue": {
-          "name": "revenue",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "costs": {
-          "name": "costs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "uzum_sale_source",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "voided_at": {
-          "name": "voided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "void_reason": {
-          "name": "void_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "voided_by": {
-          "name": "voided_by",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "uzum_sales_standing_order_idx": {
-          "name": "uzum_sales_standing_order_idx",
-          "columns": [
-            {
-              "expression": "uzum_order",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"uzum_sales\".\"voided_at\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "uzum_sales_sold_on_idx": {
-          "name": "uzum_sales_sold_on_idx",
-          "columns": [
-            {
-              "expression": "sold_on",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "uzum_sales_created_by_staff_id_fk": {
-          "name": "uzum_sales_created_by_staff_id_fk",
-          "tableFrom": "uzum_sales",
-          "tableTo": "staff",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "uzum_sales_voided_by_staff_id_fk": {
-          "name": "uzum_sales_voided_by_staff_id_fk",
-          "tableFrom": "uzum_sales",
-          "tableTo": "staff",
-          "columnsFrom": [
-            "voided_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "uzum_sales_amounts_check": {
-          "name": "uzum_sales_amounts_check",
-          "value": "\"uzum_sales\".\"revenue\" >= 0 and \"uzum_sales\".\"commission_percent\" between 0 and 100"
-        },
-        "uzum_sales_void_check": {
-          "name": "uzum_sales_void_check",
-          "value": "(\"uzum_sales\".\"voided_at\" is null) = (\"uzum_sales\".\"void_reason\" is null) and (\"uzum_sales\".\"voided_at\" is null) = (\"uzum_sales\".\"voided_by\" is null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.volumes": {
       "name": "volumes",
       "schema": "",
@@ -7311,7 +7038,7 @@
       "checkConstraints": {
         "volumes_ml_check": {
           "name": "volumes_ml_check",
-          "value": "\"volumes\".\"ml\" in (10, 30, 50)"
+          "value": "\"volumes\".\"ml\" in (5, 10, 30, 50)"
         },
         "volumes_money_check": {
           "name": "volumes_money_check",
@@ -7606,9 +7333,7 @@
         "bottling",
         "sale",
         "returned",
-        "correction",
-        "uzum_sale",
-        "uzum_sale_voided"
+        "correction"
       ]
     },
     "public.theme": {
@@ -7643,22 +7368,6 @@
       "values": [
         "set",
         "single_10ml"
-      ]
-    },
-    "public.uzum_sale_line_kind": {
-      "name": "uzum_sale_line_kind",
-      "schema": "public",
-      "values": [
-        "volume",
-        "discovery_set"
-      ]
-    },
-    "public.uzum_sale_source": {
-      "name": "uzum_sale_source",
-      "schema": "public",
-      "values": [
-        "form",
-        "import"
       ]
     },
     "public.write_access": {

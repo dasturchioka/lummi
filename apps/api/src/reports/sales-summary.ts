@@ -93,6 +93,7 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
           lineTotal: orderLines.lineTotal,
           markedDown: orderLines.markedDown,
           unitCost: orderLines.unitCost,
+          giftSample: orderLines.giftSample,
         })
         .from(orderLines)
         .where(
@@ -150,6 +151,9 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
     // its Order costs (all but the goods), shared by the lines' net
     const other = costed ? sharedBy(o.profit!.cost - o.profit!.goods, nets) : null;
     its.forEach((l, i) => {
+      // a first order's gift sample is no sale (ADR 0042): its cost is in the order costs, which
+      // the paid lines share above, so it is no row of its own
+      if (l.giftSample) return;
       const net = nets[i]!;
       const cost = other ? l.unitCost! * l.qty + other[i]! : null;
       if (l.kind !== 'volume') {

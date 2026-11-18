@@ -1,5 +1,5 @@
 import type { FavouriteIds, FavouriteList } from '@lummi/contracts';
-import { DISCOVERY_FAVOURITE } from '@lummi/contracts/constants';
+import { DISCOVERY_FAVOURITE, SET_VIAL_ML } from '@lummi/contracts/constants';
 import { and, desc, eq, favourites, fragrances, type Db } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { CatalogService } from '../catalog/catalog.service';
@@ -85,7 +85,8 @@ export class FavouritesService {
     const k = await this.kept(customerId);
     const items = await this.catalog.listItems(k.fragrances.map((r) => r.id));
     if (!k.discoverySet) return { items, discoverySet: null };
-    const { price, available, soldOut, photo } = await this.sets.discovery();
+    // the heart is the 5 × 10 ml set's (#45); the 5 × 5 ml one has none yet (#79)
+    const { price, available, soldOut, photo } = await this.sets.discovery(SET_VIAL_ML);
     return { items, discoverySet: { price, available, soldOut, photo } };
   }
 }

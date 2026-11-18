@@ -52,12 +52,13 @@ export function UzumImport({ language, t }: { language: Language; t: AdminMessag
 
   const issueText = (i: UzumImportIssue) => {
     const p = i.params ?? {};
+    // a short line names a fragrance's bottle, or a Discovery set by its vial ml (`set`)
     const item =
-      i.code === 'stock_short'
-        ? p.ml === '' || p.ml === undefined
-          ? u.set
-          : `${p.name} ${fill(u.ml, { ml: String(p.ml) })}`
-        : '';
+      i.code !== 'stock_short'
+        ? ''
+        : p.set !== undefined
+          ? fill(u.setName, { ml: String(p.set) })
+          : `${p.name} ${fill(u.ml, { ml: String(p.ml) })}`;
     const text = fill(x.issues[i.code], {
       ...Object.fromEntries(Object.entries(p).map(([k, v]) => [k, String(v)])),
       item,

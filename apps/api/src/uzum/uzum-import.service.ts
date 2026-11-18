@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  NOT_SOLD_ALONE_ML,
   UZUM_IMPORT_ISSUE_CAP,
   UZUM_IMPORT_SALE_CAP,
   formatLocalDate,
@@ -13,6 +14,7 @@ import {
   and,
   asc,
   fragrances,
+  ne,
   inArray,
   isNull,
   uzumSales,
@@ -28,7 +30,6 @@ import { readCostSettings } from '../cost/cost-settings';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import {
-  DISCOVERY_NAME,
   planUzumImport,
   readUzumWorkbook,
   saleSummary,
@@ -213,16 +214,15 @@ function report(plan: UzumPlan, commission: number, token: string | null): UzumI
   };
 }
 
+/** A short line as the report says it: a fragrance's name and ml, or a Discovery set's vial ml. */
 const shortIssue = (s: UzumShortLine): UzumImportIssue => ({
   row: null,
   column: null,
   code: 'stock_short',
-  params: {
-    name: s.name ?? DISCOVERY_NAME,
-    ml: s.ml ?? '',
-    wanted: s.wanted,
-    available: s.available,
-  },
+  params:
+    s.kind === 'discovery_set'
+      ? { set: s.ml, wanted: s.wanted, available: s.available }
+      : { name: s.name ?? '', ml: s.ml, wanted: s.wanted, available: s.available },
 });
 
 /** The file's sales against what is available now (on hand less the reserve), without locks. */
@@ -230,9 +230,10 @@ async function stockIssues(
   tx: DbOrTx,
   sales: readonly PlannedUzumSale[],
 ): Promise<UzumImportIssue[]> {
-  const wanted = new Map<number | 'set', number>();
+  // a volume by its id, a Discovery set by its vial ml (as a string)
+  const wanted = new Map<number | string, number>();
   for (const l of sales.flatMap((s) => s.lines)) {
-    const key = l.kind === 'volume' ? l.volumeId : 'set';
+    const key = l.kind === 'volume' ? l.volumeId : String(l.vialMl);
     wanted.set(key, (wanted.get(key) ?? 0) + l.qty);
   }
   if (wanted.size === 0) return [];
@@ -240,14 +241,16 @@ async function stockIssues(
   const out: UzumShortLine[] = [];
   for (const [key, want] of wanted) {
     const item = items.find((i) =>
-      key === 'set' ? i.kind === 'discovery_set' : i.kind === 'volume' && i.volumeId === key,
+      typeof key === 'string'
+        ? i.kind === 'discovery_set' && String(i.vialMl) === key
+        : i.kind === 'volume' && i.volumeId === key,
     );
     if (!item || want <= item.available) continue;
     out.push({
       kind: item.kind,
       volumeId: item.kind === 'volume' ? item.volumeId : null,
       name: item.kind === 'volume' ? item.name : null,
-      ml: item.kind === 'volume' ? item.ml : null,
+      ml: item.kind === 'volume' ? item.ml : item.vialMl,
       wanted: want,
       available: item.available,
     });
@@ -269,6 +272,8 @@ async function readCatalog(tx: DbOrTx): Promise<UzumCatalogFragrance[]> {
   const vs = await tx
     .select({ id: volumes.id, fragranceId: volumes.fragranceId, ml: volumes.ml })
     .from(volumes)
+    // a 5 ml bottle is never sold alone (ADR 0042): the file can't name one
+    .where(ne(volumes.ml, NOT_SOLD_ALONE_ML))
     .orderBy(asc(volumes.ml));
   return fs.map((f) => ({
     ...f,

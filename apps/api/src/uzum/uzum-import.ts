@@ -1,5 +1,7 @@
 import {
+  DISCOVERY_VIAL_MLS,
   MAX_PRICE,
+  SET_VIAL_ML,
   UZUM_ORDER_MAX,
   UZUM_SALE_LINES_MAX,
   UZUM_SALE_QTY_MAX,
@@ -8,6 +10,8 @@ import {
   type UzumImportIssue,
   type UzumImportSale,
   type UzumSaleLineInput,
+  asDiscoveryVialMl,
+  type DiscoveryVialMl,
 } from '@lummi/contracts';
 import ExcelJS from 'exceljs';
 import { HEADER_FILL, cellText, type ColumnDef } from '../catalog-import/workbook';
@@ -40,10 +44,23 @@ export interface UzumCatalogFragrance {
   volumes: { id: number; ml: number }[];
 }
 
-/** The Discovery set as a file names it: «Discovery set», «Discovery», «Набор Discovery». */
+/** A Discovery set's name in the file: «Discovery set 5 × 10 мл», «Discovery set 5 × 5 мл» (ADR 0042). */
 export const DISCOVERY_NAME = 'Discovery set';
-const isDiscovery = (folded: string) =>
-  /^(набор\s+)?discovery(\s+(set|набор|to'plami?))?$/.test(folded);
+export const discoveryName = (vialMl: DiscoveryVialMl) => `${DISCOVERY_NAME} 5 × ${vialMl} мл`;
+
+/**
+ * A Discovery set as a file names it: «Discovery set», «Набор Discovery», «Discovery set 5 × 5 мл»,
+ * «discovery 5x10». Its vial ml from the name, else null (the «Объём, мл» cell decides); not a set
+ * at all: undefined.
+ */
+function discoveryOf(folded: string): DiscoveryVialMl | null | undefined {
+  const m =
+    /^(набор\s+)?discovery(\s+(set|набор|to'plami?))?(\s*5\s*[x×х*]\s*(5|10)\s*(мл|ml)?)?$/.exec(
+      folded,
+    );
+  if (!m) return undefined;
+  return m[5] ? asDiscoveryVialMl(Number(m[5])) : null;
+}
 
 /** Case, spaces and apostrophe spellings never make two names differ. */
 const fold = (s: string) =>
@@ -78,7 +95,7 @@ export async function writeUzumTemplate(catalog: readonly UzumCatalogFragrance[]
   items.getRow(1).eachCell((cell) => (cell.fill = HEADER_FILL));
   for (const f of [...catalog].sort((a, b) => a.name.localeCompare(b.name)))
     items.addRow([f.name, f.volumes.map((v) => v.ml).join(', ')]);
-  items.addRow([DISCOVERY_NAME, null]);
+  for (const ml of DISCOVERY_VIAL_MLS) items.addRow([discoveryName(ml), String(ml)]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
@@ -234,8 +251,13 @@ export function planUzumImport(
       issue(row, 'price', 'bad_number', { min: 1, max: MAX_PRICE });
     if (required('item')) {
       const name = fold(cells.item);
-      if (isDiscovery(name)) {
-        line = { kind: 'discovery_set', qty: qty ?? 1, price: price ?? 1 };
+      const set = discoveryOf(name);
+      if (set !== undefined) {
+        // the vial ml from the name, else from «Объём, мл» (empty: the 5 × 10 ml set)
+        const ml = set ?? (cells.ml === '' ? SET_VIAL_ML : wholeNumber(cells.ml));
+        const vialMl = DISCOVERY_VIAL_MLS.find((v) => v === ml);
+        if (vialMl === undefined) issue(row, 'ml', 'bad_ml', { name: cells.item, value: cells.ml });
+        else line = { kind: 'discovery_set', vialMl, qty: qty ?? 1, price: price ?? 1 };
       } else {
         const f = byName.get(name);
         if (!f) issue(row, 'item', 'unknown_item', { value: cells.item });

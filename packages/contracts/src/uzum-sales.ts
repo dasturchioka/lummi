@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
 import { MAX_PRICE } from './constants';
 import { orderCostSnapshotSchema } from './cost';
+import { discoveryVialMlSchema } from './sets';
 import { stockReasonSchema } from './warehouse';
 
 /*
@@ -26,10 +27,13 @@ const percent = z
   .max(100)
   .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'at most 2 decimals');
 
-/** A line of a sale: a fragrance's volume, or the Discovery set. */
+/**
+ * A line of a sale: a fragrance's volume (never a 5 ml bottle, which is not sold alone), or a
+ * Discovery set by the ml of its vials (ADR 0042).
+ */
 export const uzumSaleLineInputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('volume'), volumeId: z.number().int().positive(), qty, price }),
-  z.object({ kind: z.literal('discovery_set'), qty, price }),
+  z.object({ kind: z.literal('discovery_set'), vialMl: discoveryVialMlSchema, qty, price }),
 ]);
 export type UzumSaleLineInput = z.infer<typeof uzumSaleLineInputSchema>;
 
@@ -58,8 +62,9 @@ export const uzumSaleSchema = z.object({
       kind: z.enum(['volume', 'discovery_set']),
       volumeId: z.number().int().nullable(),
       fragranceId: z.number().int().nullable(),
-      /** The fragrance's name when the sale was recorded; null for the Discovery set. */
+      /** The fragrance's name when the sale was recorded; null for a Discovery set. */
       name: z.string().nullable(),
+      /** The bottle's ml, or a Discovery set's vial ml. */
       ml: z.number().int(),
       qty: z.number().int(),
       price: z.number().int(),
@@ -91,7 +96,10 @@ export const uzumSalesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
 });
 
-/** What the form can sell: every volume and the Discovery set, with what is available now. */
+/**
+ * What the form can sell: every volume sold alone (no 5 ml) and both Discovery sets, with what is
+ * available now.
+ */
 export const uzumSaleItemSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('volume'),
@@ -102,7 +110,11 @@ export const uzumSaleItemSchema = z.discriminatedUnion('kind', [
     available: z.number().int(),
     hidden: z.boolean(),
   }),
-  z.object({ kind: z.literal('discovery_set'), available: z.number().int() }),
+  z.object({
+    kind: z.literal('discovery_set'),
+    vialMl: discoveryVialMlSchema,
+    available: z.number().int(),
+  }),
 ]);
 export type UzumSaleItem = z.infer<typeof uzumSaleItemSchema>;
 
@@ -117,12 +129,15 @@ export const uzumSalesPageSchema = z.object({
 });
 export type UzumSalesPage = z.infer<typeof uzumSalesPageSchema>;
 
-/** A line the stock can't cover: what the sale wants of it and what is available. */
+/**
+ * A line the stock can't cover: what the sale wants of it and what is available. A Discovery set
+ * has no volume or name, and its vial ml as `ml`.
+ */
 export const uzumShortLineSchema = z.object({
   kind: z.enum(['volume', 'discovery_set']),
   volumeId: z.number().int().nullable(),
   name: z.string().nullable(),
-  ml: z.number().int().nullable(),
+  ml: z.number().int(),
   wanted: z.number().int(),
   available: z.number().int(),
 });

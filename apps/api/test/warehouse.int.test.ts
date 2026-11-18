@@ -130,7 +130,9 @@ describe('an oil receipt, then a bottling', () => {
     const after = await page(id);
     expect(after.oil.oilGrams).toBe(53.65);
     expect([10, 30, 50].map((ml) => onHand(after, ml) - onHand(before, ml))).toEqual([4, 2, 1]);
+    // the 5 ml too (ADR 0042): bottled like any volume, never sold alone
     expect(after.perBottle).toEqual([
+      { ml: 5, oilGrams: 1.545, ethanolMl: 3.605 },
       { ml: 10, oilGrams: 3.09, ethanolMl: 7.21 },
       { ml: 30, oilGrams: 9.27, ethanolMl: 21.63 },
       { ml: 50, oilGrams: 15.45, ethanolMl: 36.05 },
@@ -482,8 +484,9 @@ describe('who may do what', () => {
       importPercent: 3,
     });
     // oil: 1 000 g at 3 749.2 + 500 g at 1 983.375 = 4 740 887.5 for 1 500 g, all of it left;
-    // bottles at oil 3 950 so'm/g: 2 × (22 462 + 52 086 + 78 651) = 306 398
-    expect(p.oil.value).toEqual({ oil: 4_740_888, bottles: 306_398, total: 5_047_286 });
+    // bottles at oil 3 950 so'm/g, the 5 ml's (9 956, no box or card) too:
+    // 2 × (9 956 + 22 462 + 52 086 + 78 651) = 326 310
+    expect(p.oil.value).toEqual({ oil: 4_740_888, bottles: 326_310, total: 5_067_198 });
   });
 
   it('values the bottles at nothing known without an oil price', async () => {
@@ -634,6 +637,7 @@ describe('the Excel export', () => {
       'Аромат',
       'Масло, г',
       'Жидкость, л',
+      '5 мл, шт.',
       '10 мл, шт.',
       '30 мл, шт.',
       '50 мл, шт.',
@@ -655,7 +659,7 @@ describe('the Excel export', () => {
     expect(theirs.status).toBe(200);
     const mb = new ExcelJS.Workbook();
     await mb.xlsx.load(await theirs.arrayBuffer());
-    expect((mb.worksheets[0]!.getRow(1).values as unknown[]).slice(1)).toHaveLength(6);
+    expect((mb.worksheets[0]!.getRow(1).values as unknown[]).slice(1)).toHaveLength(7);
     // nor the invoice and supplier in the history sheet: the document cell of the oil receipt is empty
     const theirHistory = mb.worksheets[1]!;
     const documentColumn = (theirHistory.getRow(1).values as unknown[]).indexOf('Hujjat');

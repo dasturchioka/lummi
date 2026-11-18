@@ -10,7 +10,7 @@ import {
   toSettingIssues,
 } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/page-header';
 import { SettingEditor } from '@/components/setting-editor';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MetaLine } from '@/components/ui/meta-line';
 import { Notice } from '@/components/ui/notice';
+import { Select } from '@/components/ui/select';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import {
@@ -237,22 +238,26 @@ function SettingRow({
           if (dirty && !pending) void save();
         }}
       >
-        <SettingEditor
-          spec={spec}
-          draft={draft}
-          onChange={change}
-          meta={{
-            settingKey,
-            ariaLabel: label,
-            language,
-            t,
-            ...(unit ? { unit } : {}),
-            ...(def.unit ? { unitKind: def.unit } : {}),
-            ...(def.fields ? { fields: def.fields } : {}),
-            ...(def.optionLabels ? { optionLabels: def.optionLabels } : {}),
-            issues,
-          }}
-        />
+        {def.picker === 'fragrance' ? (
+          <FragrancePicker draft={draft} onChange={change} label={label} t={t} />
+        ) : (
+          <SettingEditor
+            spec={spec}
+            draft={draft}
+            onChange={change}
+            meta={{
+              settingKey,
+              ariaLabel: label,
+              language,
+              t,
+              ...(unit ? { unit } : {}),
+              ...(def.unit ? { unitKind: def.unit } : {}),
+              ...(def.fields ? { fields: def.fields } : {}),
+              ...(def.optionLabels ? { optionLabels: def.optionLabels } : {}),
+              issues,
+            }}
+          />
+        )}
         {saved.invalid && !dirty && <Notice title={t.settings.invalidStored} className="mt-3" />}
         {failure && <Notice title={failure} className="mt-3" />}
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -283,5 +288,61 @@ function SettingRow({
         </p>
       </form>
     </li>
+  );
+}
+
+/**
+ * A setting whose value is a fragrance (`picker: 'fragrance'`, the gift sample's, #79): a select of
+ * the catalog by name, 0 first under its own label. A stored fragrance that is gone from the
+ * catalog or hidden stays selected and says so, so a sample never stops without a word.
+ */
+function FragrancePicker({
+  draft,
+  onChange,
+  label,
+  t,
+}: {
+  draft: Draft;
+  onChange: (next: Draft) => void;
+  label: string;
+  t: AdminMessages;
+}) {
+  const p = t.settings.fragrancePicker;
+  const [options, setOptions] = useState<{ id: number; name: string; hidden: boolean }[] | null>(
+    null,
+  );
+  useEffect(() => {
+    let live = true;
+    browserApi.catalog.fragrances
+      .list({ query: {} })
+      .then((res) => {
+        if (live && res.status === 200)
+          setOptions(res.body.map((f) => ({ id: f.id, name: f.name, hidden: f.hidden })));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  const value = typeof draft === 'string' && draft.trim() !== '' ? draft.trim() : '0';
+  const chosen =
+    value === '0' || options === null ? null : options.find((o) => String(o.id) === value);
+  const warning = chosen === undefined ? p.missing : chosen?.hidden ? p.hidden : null;
+  return (
+    <div className="grid gap-3">
+      <Select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="0">{p.zero}</option>
+        {/* the stored one stays selectable while the list loads, or once it is gone */}
+        {value !== '0' && (options === null || chosen === undefined) && (
+          <option value={value}>{options === null ? p.loading : p.missing}</option>
+        )}
+        {options?.map((o) => (
+          <option key={o.id} value={String(o.id)}>
+            {o.hidden ? `${o.name} (${p.hiddenTag})` : o.name}
+          </option>
+        ))}
+      </Select>
+      {warning && <Notice title={warning} />}
+    </div>
   );
 }

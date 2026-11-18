@@ -109,6 +109,8 @@ export function displayValue(
   const suffix = unitText(key, t) ? ` ${unitText(key, t)}` : '';
   const inner = spec.kind === 'nullable' ? spec.inner : spec;
   if (value === null || value === undefined) return t.settings.notSet;
+  // a fragrance setting's 0 has its own words (`picker: 'fragrance'`)
+  if (meta.picker === 'fragrance' && value === 0) return t.settings.fragrancePicker.zero;
   switch (inner.kind) {
     case 'boolean':
       return value ? t.settings.on : t.settings.off;

@@ -31,7 +31,7 @@ import {
 import type { HeldEntitlement } from '../entitlements/entitlements';
 import { readPricingSettings } from '../pricing/pricing-settings';
 import { judgePromoCode } from '../promo/promo-codes';
-import { quote, volumePrice, type Entitlement } from '../pricing/quote';
+import { quote, rightCovers, volumePrice, type Entitlement } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 
 /**
@@ -58,7 +58,9 @@ export function rightEnd(openedAt: Date, validityDays: number): Date {
  * fragrance bought as a single 10 ml bottle opens one, however many of it were bought. The 10 ml
  * bottles inside a set are the set's, never single bottles. Percent and term come from the
  * source's settings now and stay on the right. A Promo gift's line counts too while
- * `promo.giftOpensUpgradeRights` is on (ADR 0039). Idempotent on the source line and unit.
+ * `promo.giftOpensUpgradeRights` is on (ADR 0039); a gift sample never does (ADR 0042). Both
+ * Discovery sets (5 × 10 ml and 5 × 5 ml) open set rights the same way. Idempotent on the source
+ * line and unit.
  */
 export async function openUpgradeRights(
   tx: DbOrTx,
@@ -89,6 +91,8 @@ export async function openUpgradeRights(
   for (const line of lines) {
     // a Promo gift (ADR 0039) opens rights like a bought line only while the setting says so
     if (line.promoGift && !s['promo.giftOpensUpgradeRights']) continue;
+    // a first order's gift sample (ADR 0042) is no bought bottle: it opens none
+    if (line.giftSample) continue;
     if (line.kind !== 'volume') {
       if (!s['upgradeRights.set.enabled'] || !line.setComposition) continue;
       for (let unit = 0; unit < line.qty; unit++)
@@ -293,8 +297,10 @@ export async function upgradeRightPrices(
   volumes: readonly VolumeRow[],
   now: Date,
 ): Promise<UpgradeRightPrice[]> {
+  const settings = await readPricingSettings(tx);
+  // what a right covers is `quote()`'s rule, the set-discount scope included (#79)
   const covering = (await activeUpgradeRights(tx, customerId, now)).filter((r) =>
-    r.fragrances.some((f) => f.fragranceId === fragranceId),
+    rightCovers(toEntitlement(r), fragranceId, settings),
   );
   if (covering.length === 0) return [];
   // an entered code the shop accepts wins in the cart (ADR 0002), so the right will not apply:
@@ -305,7 +311,6 @@ export async function upgradeRightPrices(
     .where(eq(carts.customerId, customerId));
   if (cart?.promoCode && (await judgePromoCode(tx, cart.promoCode, customerId, now)).promoCodeId)
     return [];
-  const settings = await readPricingSettings(tx);
   const out: UpgradeRightPrice[] = [];
   // every volume goes to `quote()`, which discounts only what `pricing.fullSizeVolumesMl` calls full size
   for (const v of volumes) {
@@ -351,6 +356,7 @@ export async function myUpgradeRights(
   now: Date,
 ): Promise<MyUpgradeRightDto[]> {
   const rights = await activeUpgradeRights(tx, customerId, now);
+  const { setDiscountScope } = await readPricingSettings(tx);
   const ids = [...new Set(rights.flatMap((r) => r.fragrances.map((f) => f.fragranceId)))];
   const onSale =
     ids.length === 0
@@ -375,6 +381,8 @@ export async function myUpgradeRights(
       source: r.source,
       sourceOrderNumber: numberOf.get(r.sourceOrderId)!,
       percent: r.percent,
+      // a set's right on any fragrance (#79): the card says so instead of naming the five
+      anyFragrance: r.source === 'set' && setDiscountScope === 'any_fragrance',
       fragrances: r.fragrances.map((f) => ({
         name: f.name,
         brand: f.brand,

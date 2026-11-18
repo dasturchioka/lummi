@@ -25,7 +25,7 @@ A LUMMI perfume, identified by its name and inspired by («по мотивам»
 _Avoid_: Product (too broad), SKU, aroma No., копия
 
 **Volume**:
-One bottle size of a fragrance (10, 30 or 50 ml) with its own price, stock and photo.
+One bottle size of a fragrance (10, 30 or 50 ml) with its own price, stock and photo. A fragrance also has a 5 ml volume, stocked and bottled but never sold alone: it fills the 5 × 5 ml Discovery set and is the Gift sample.
 _Avoid_: Variant, size, SKU
 
 **Note**:
@@ -45,15 +45,15 @@ A customer's rating (1–5) for a delivered order, with an optional comment and 
 _Avoid_: Feedback, testimonial, comment
 
 **Set**:
-Five different fragrances in 10 ml sold as one item at one price: the Discovery set or a builder set.
+Five different fragrances sold as one item at one price: a Discovery set (5 × 10 ml or 5 × 5 ml) or a builder set (5 × 10 ml).
 _Avoid_: Kit, bundle, sampler, gift box
 
 **Discovery set**:
-The ready-made set whose five fragrances the owner chooses; a pre-packed box.
+A ready-made set whose five fragrances the owner chooses; a pre-packed box. There are two, told apart by the ml of their vials: «Discovery set» (5 × 10 ml) and «Discovery set 5 × 5 мл», each with its own price, photo, composition and stock.
 _Avoid_: Starter set, sample set
 
 **Builder set**:
-A set whose five fragrances the customer picks; priced the same as the Discovery set.
+A set whose five fragrances the customer picks, 10 ml each; priced the same as the 5 × 10 ml Discovery set.
 _Avoid_: Custom set, own set
 
 ### Stock
@@ -79,7 +79,7 @@ Oil of one fragrance as a supplier's invoice reads: supplier, invoice number, th
 _Avoid_: Receipt (that is the shopper's payment proof), purchase, delivery, invoice (that is the supplier's paper)
 
 **Bottling**:
-Turning a fragrance's oil into bottles («Розлив» / «Quyish»): counts per volume, the oil they take by the cost model's formula with the filling loss, off the Oil balance, and the bottles onto On hand, in one step. Refused when the Oil balance holds less. Ethanol is costed, not counted.
+Turning a fragrance's oil into bottles («Розлив» / «Quyish»): counts per volume, the oil they take by the cost model's formula with the filling loss, off the Oil balance, and the bottles onto On hand, in one step. Refused when the Oil balance holds less. Ethanol is costed, not counted. A set bottling fills a Discovery set's boxes the same way from the oil of its five.
 _Avoid_: Filling (that is the per-bottle work cost), production, decanting
 
 **Stock move**:
@@ -109,8 +109,12 @@ A discount source the customer enters (or gets prefilled by a link); it carries 
 _Avoid_: Coupon, voucher
 
 **Promo gift**:
-The one item a gift promo code adds to the order free: a Volume or the Discovery set the owner chose, quantity 1 («Подарок по промокоду» / «Promokod sovgʻasi»). It is the order's one Discount: nothing comes off the paid items, and the reports count its regular price as the discount. Not a Gift order.
+The one item a gift promo code adds to the order free: a Volume or the 5 × 10 ml Discovery set the owner chose, quantity 1 («Подарок по промокоду» / «Promokod sovgʻasi»). It is the order's one Discount: nothing comes off the paid items, and the reports count its regular price as the discount. Not a Gift order, not a Gift sample.
 _Avoid_: Gift (that is the Gift order), free sample, bonus, present
+
+**Gift sample**:
+One 5 ml bottle a customer's first order gets free («Пробник в подарок» / «Sovgʻa namuna»): a line at 0 on a fragrance the server picks (a setting), reserved and handed over like any line. First order: the customer has no order that is not cancelled, so a cancelled first order does not spend it. Not a Discount: it rides with any, and its cost is an Order cost. Not a Promo gift.
+_Avoid_: Free sample, tester, bonus, Promo gift (that is a gift code's item)
 
 **Markdown**:
 A temporary lower price on a volume, shown with the regular price struck through. It is a price, not a discount.
@@ -133,7 +137,7 @@ _Avoid_: Completed, closed, successful order
 _Avoid_: Revenue (an Order profit's revenue is before Refunds), turnover, profit (see Order profit), выручка
 
 **Upgrade right**:
-A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances) or a delivered single 10 ml bottle (covers that fragrance).
+A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances, or any fragrance while the setting `entitlements.setDiscountScope` says so) or a delivered single 10 ml bottle (covers that fragrance).
 _Avoid_: Set discount right, loyalty discount, repeat-purchase discount
 
 **Birthday coupon**:

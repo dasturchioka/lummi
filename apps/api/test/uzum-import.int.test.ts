@@ -94,7 +94,12 @@ describe('the template', () => {
       .values.slice(2)
       .map((v) => String(v));
     expect(names).toContain(A.name);
-    expect(names).toContain('Discovery set');
+    // both Discovery sets (ADR 0042); a fragrance's 5 ml is never sold alone, so never listed
+    expect(names).toEqual(
+      expect.arrayContaining(['Discovery set 5 × 10 мл', 'Discovery set 5 × 5 мл']),
+    );
+    const rows = wb.getWorksheet('Ароматы')!.getSheetValues() as unknown[][];
+    expect(rows.find((r) => r?.[1] === A.name)?.[2]).toBe('10, 30, 50');
   });
 });
 
@@ -105,7 +110,8 @@ describe('the dry run', () => {
         ['2026-11-18', 'UZ-1', A.name, 10, 2, 69_000, null],
         ['2026-11-18', 'UZ-1', B.name.toUpperCase(), 30, 1, '189 000', null],
         ['2026-11-18', 'UZ-2', 'Nope Parfum', 10, 1, 69_000, null],
-        ['2026-11-18', 'UZ-3', A.name, 15, 1, 69_000, null],
+        // a 5 ml bottle is not sold alone
+        ['2026-11-18', 'UZ-3', A.name, 5, 1, 30_000, null],
         ['2026-11-25', 'UZ-4', A.name, 10, 1, 69_000, null],
         ['31.02.2026', 'UZ-5', A.name, 10, 1, 69_000, null],
         ['2026-11-18', 'UZ-6', A.name, 10, null, 69_000, null],
@@ -121,7 +127,7 @@ describe('the dry run', () => {
         code: 'unknown_item',
         params: { value: 'Nope Parfum' },
       },
-      { row: 5, column: 'Объём, мл', code: 'bad_ml', params: { name: A.name, value: '15' } },
+      { row: 5, column: 'Объём, мл', code: 'bad_ml', params: { name: A.name, value: '5' } },
       { row: 6, column: HEADERS[0], code: 'future_date', params: { value: '2026-11-25' } },
       { row: 7, column: HEADERS[0], code: 'bad_date', params: { value: '31.02.2026' } },
       { row: 8, column: 'Количество, шт.', code: 'required' },
@@ -186,11 +192,13 @@ describe('applying a file', () => {
     const bytes = await file([
       ['2026-11-18', 'UZ-1', A.name, 10, 2, 69_000, null],
       ['2026-11-18', 'UZ-1', B.name, 30, 1, 189_000, null],
-      // the Discovery set by its name, a day as Excel's «ДД.ММ.ГГГГ», its own commission
+      // a Discovery set by its bare name (the 5 × 10 ml) and by its full one, a day as Excel's
+      // «ДД.ММ.ГГГГ», its own commission
       ['17.11.2026', 'UZ-2', 'Discovery set', null, 1, 299_000, '15,5'],
+      ['17.11.2026', 'UZ-2', 'Discovery set 5 × 5 мл', null, 1, 99_000, '15,5'],
     ]);
     const report = await dryRun(bytes);
-    expect(report).toMatchObject({ saleTotal: 2, units: 4, revenue: 626_000, skipped: 0 });
+    expect(report).toMatchObject({ saleTotal: 2, units: 5, revenue: 725_000, skipped: 0 });
     expect(report.errors).toEqual([]);
     expect(report.token).toMatch(/^[a-f0-9]{64}$/);
 
@@ -198,13 +206,17 @@ describe('applying a file', () => {
     expect(res.status).toBe(201);
     expect((await res.json()) as UzumImportApplied).toEqual({
       recorded: 2,
-      units: 4,
-      revenue: 626_000,
+      units: 5,
+      revenue: 725_000,
       skipped: 0,
     });
     expect(await onHand(A.vol[10]!)).toBe(18);
     expect(await onHand(B.vol[30]!)).toBe(19);
-    expect((await t.db.select().from(discoverySet))[0]!.onHand).toBe(4);
+    const sets = await t.db.select().from(discoverySet).orderBy(discoverySet.vialMl);
+    expect(sets.map((x) => [x.vialMl, x.onHand])).toEqual([
+      [5, 4],
+      [10, 4],
+    ]);
     const rows = await t.db.select().from(uzumSales).orderBy(uzumSales.id);
     expect(rows.map((r) => [r.uzumOrder, r.soldOn, r.commissionPercent, r.source])).toEqual([
       ['UZ-1', '2026-11-18', 20.5, 'import'],

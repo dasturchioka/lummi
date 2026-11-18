@@ -125,6 +125,25 @@ export const bottlingResultSchema = z.object({
 });
 export type BottlingResult = z.infer<typeof bottlingResultSchema>;
 
+/**
+ * A set bottling (#79, ADR 0042): boxes of a Discovery set filled straight from its five
+ * fragrances' oil, one vial of the set's size from each per box.
+ */
+export const setBottlingBodySchema = z.object({
+  quantity: z.number().int().min(1).max(MAX_BOTTLING_QUANTITY),
+});
+export type SetBottlingBody = z.infer<typeof setBottlingBodySchema>;
+
+export const setBottlingResultSchema = z.object({
+  /** The oil it took from each of the five, filling loss included. */
+  oilGrams: z.number(),
+  /** The ethanol it took in all (costed, not stocked). */
+  ethanolMl: z.number().int(),
+  /** The set's boxes on hand after it. */
+  onHand: z.number().int(),
+});
+export type SetBottlingResult = z.infer<typeof setBottlingResultSchema>;
+
 /** A fragrance's oil, as the stock page and the fragrance's warehouse page show it. */
 export const fragranceOilSchema = z.object({
   fragranceId: z.number().int(),
@@ -161,6 +180,8 @@ export const stockMoveSchema = z.object({
   orderNumber: z.number().int().nullable(),
   /** Uzum's order number, for `uzum_sale` and `uzum_sale_voided` (#80). */
   uzumOrder: z.string().nullable(),
+  /** A set bottling's set (its vial ml) and boxes (#79); null for every other move. */
+  set: z.object({ vialMl: z.number().int(), quantity: z.number().int() }).nullable(),
   /** Where a `correction` came from: the stock page, the fragrance form or the Excel import. */
   source: z.enum(['stock', 'form', 'import']).nullable(),
 });
@@ -221,6 +242,8 @@ export const warehouseErrorSchema = z.object({
   fields: z.array(z.string()).optional(),
   /** With `oil_short`: what the operation needs, what the balance holds, and the shortfall, in grams. */
   neededGrams: z.number().optional(),
+  /** With `oil_short` from a set bottling: the fragrance whose oil is short. */
+  fragrance: z.string().optional(),
   balanceGrams: z.number().optional(),
   shortGrams: z.number().optional(),
 });
