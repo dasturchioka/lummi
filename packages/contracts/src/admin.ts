@@ -41,6 +41,8 @@ export const staffSchema = z.object({
   /** Signed in with a temporary password: only «Смените пароль» works until it is changed. */
   mustChangePassword: z.boolean(),
   name: z.string(),
+  /** Content hash of the avatar renditions (#67); null = the initial letter. */
+  photo: z.string().nullable(),
   role: staffRoleSchema,
   active: z.boolean(),
 });

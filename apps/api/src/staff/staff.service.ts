@@ -1,5 +1,6 @@
 import { and, asc, eq, ne, or, staff, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { deleteAvatarIfUnused } from '../avatar/avatar-cleanup';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { SettingsService } from '../settings/settings.service';
@@ -297,6 +298,14 @@ export class StaffService {
 
   /** Sessions go with the row (FK cascade). The audit entry keeps the name for the history. */
   async remove(actor: StaffRow, id: number): Promise<StaffOutcome> {
+    const res = await this.removeRow(actor, id);
+    if (res.ok && res.staff.photoHash) {
+      await deleteAvatarIfUnused(this.db, this.edges.files, res.staff.photoHash);
+    }
+    return res;
+  }
+
+  private async removeRow(actor: StaffRow, id: number): Promise<StaffOutcome> {
     return this.db.transaction(async (tx) => {
       const locked = await this.lockManager(tx, id);
       if (!locked.ok) return locked;

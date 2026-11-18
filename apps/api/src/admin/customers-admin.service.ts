@@ -157,6 +157,7 @@ export class CustomersAdminService {
       id: c.id,
       telegramId: c.telegramId,
       name: nameOf(c),
+      photo: c.photoHash,
       username: c.username,
       phone: c.phone,
       language: c.language,

@@ -1,5 +1,4 @@
-import { contract, type CustomerDto } from '@lummi/contracts';
-import type { CustomerRow } from '@lummi/db';
+import { contract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { ContactError, verifyContactProof } from '../auth/contact-proof';
@@ -7,25 +6,12 @@ import { CustomersService } from '../auth/customers.service';
 import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
 import { SessionService } from '../auth/session.service';
 import type { Edges } from '../edges';
+import { toCustomerDto } from './customer.dto';
 import { SettingsService } from '../settings/settings.service';
 import { EDGES, ENV } from '../tokens';
 import type { Env } from '../env';
 
-/** Public settings that ride on the customer (see customerSchema.config). */
-async function toDto(c: CustomerRow, settings: SettingsService): Promise<CustomerDto> {
-  return {
-    id: c.id,
-    telegramId: c.telegramId,
-    firstName: c.firstName,
-    lastName: c.lastName,
-    username: c.username,
-    language: c.language,
-    theme: c.theme,
-    phone: c.phone,
-    writeAccess: c.writeAccess,
-    config: { managerUsername: await settings.get('shop.managerUsername') },
-  };
-}
+const toDto = toCustomerDto;
 
 @Controller()
 @UseGuards(SessionGuard)

@@ -2,6 +2,7 @@ import { Controller, Get, Inject, NotFoundException, Param, Res } from '@nestjs/
 import type { Response } from 'express';
 import type { Edges } from '../edges';
 import { EDGES } from '../tokens';
+import { AVATAR_FILE } from '../avatar/avatar-pipeline';
 import { PHOTO_FILE, PUBLIC_PREFIX } from './photo-pipeline';
 
 /**
@@ -16,7 +17,7 @@ export class MediaController {
 
   @Get(':file')
   async photo(@Param('file') file: string, @Res() res: Response): Promise<void> {
-    if (!PHOTO_FILE.test(file)) throw new NotFoundException();
+    if (!PHOTO_FILE.test(file) && !AVATAR_FILE.test(file)) throw new NotFoundException();
     const data = await this.edges.files.get(`${PUBLIC_PREFIX}${file}`);
     if (!data) throw new NotFoundException();
     res

@@ -22,10 +22,45 @@ export type FileDownload =
  */
 export interface TelegramFiles {
   download(fileId: string, maxBytes: number): Promise<FileDownload>;
+  /**
+   * A profile photo by the `photo_url` of a signed initData (#67). Only Telegram's own https hosts
+   * are fetched, without following redirects; anything else is `unavailable`.
+   */
+  downloadUrl(url: string, maxBytes: number): Promise<FileDownload>;
+}
+
+/** Hosts a signed `photo_url` may point at (`t.me/i/userpic/...`, Telegram's CDNs). */
+export function isTelegramPhotoUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:' || url.port !== '' || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  return ['t.me', 'telegram.org', 'telesco.pe', 'telegram-cdn.org'].some(
+    (h) => host === h || host.endsWith(`.${h}`),
+  );
+}
+
+async function readCapped(res: Response, maxBytes: number): Promise<FileDownload> {
+  if (!res.ok || !res.body) return { kind: 'unavailable' };
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    total += chunk.length;
+    if (total > maxBytes) return { kind: 'too_large' };
+    chunks.push(chunk);
+  }
+  return { kind: 'ok', bytes: Buffer.concat(chunks) };
 }
 
 export class UnconfiguredTelegramFiles implements TelegramFiles {
   download(): Promise<FileDownload> {
+    return Promise.reject(new Error('TelegramFiles is not configured yet'));
+  }
+  downloadUrl(): Promise<FileDownload> {
     return Promise.reject(new Error('TelegramFiles is not configured yet'));
   }
 }
@@ -36,6 +71,20 @@ export class GrammyFiles implements TelegramFiles {
   private readonly log = new Logger('TelegramFiles');
   constructor(private readonly token: string) {
     this.api = new Api(token);
+  }
+
+  async downloadUrl(url: string, maxBytes: number): Promise<FileDownload> {
+    if (!isTelegramPhotoUrl(url)) return { kind: 'unavailable' };
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+        redirect: 'error',
+      });
+      return await readCapped(res, maxBytes);
+    } catch (e) {
+      this.log.warn(`photo_url download failed: ${describeError(e)}`);
+      return { kind: 'unavailable' };
+    }
   }
 
   async download(fileId: string, maxBytes: number): Promise<FileDownload> {

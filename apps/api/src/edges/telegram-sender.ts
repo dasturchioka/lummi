@@ -41,6 +41,11 @@ export interface TelegramSender {
   edit(message: EditedMessage): Promise<void>;
   /** Answer a tapped inline button (answerCallbackQuery), once per query: stops the spinner, with an optional toast. Best effort, never throws. */
   answerCallback(callbackQueryId: string, text?: string): Promise<void>;
+  /**
+   * The `file_id` of the user's current profile photo (getUserProfilePhotos, the largest size), or
+   * null when they have none or hide it. Never throws: a failure reads as no photo (#67).
+   */
+  profilePhotoFileId(telegramId: number): Promise<string | null>;
 }
 
 /** Telegram answered 403: the user blocked the bot, or the bot was removed from the chat. Never retried. */
@@ -92,6 +97,9 @@ export class UnconfiguredTelegramSender implements TelegramSender {
   answerCallback(): Promise<void> {
     return Promise.resolve();
   }
+  profilePhotoFileId(): Promise<string | null> {
+    return Promise.resolve(null);
+  }
 }
 
 /** The real sender: grammY Api with auto-retry (429 retry_after, 5xx) and a throttler (ADR 0021). */
@@ -107,6 +115,15 @@ export class GrammySender implements TelegramSender {
     await this.api
       .answerCallbackQuery(callbackQueryId, text ? { text } : {})
       .catch(() => undefined);
+  }
+
+  async profilePhotoFileId(telegramId: number): Promise<string | null> {
+    try {
+      const res = await this.api.getUserProfilePhotos(telegramId, { limit: 1 });
+      return res.photos[0]?.at(-1)?.file_id ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async edit(m: EditedMessage): Promise<void> {

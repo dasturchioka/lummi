@@ -27,6 +27,10 @@ export const customerSchema = z.object({
   phone: z.string().nullable(),
   /** The answer to the write-access request; null = not asked yet. */
   writeAccess: z.enum(['granted', 'refused']).nullable(),
+  /** Content hash of the profile photo (rendered 96/192/384 px WebP under `/media/public`); null = the monogram. */
+  photo: z.string().nullable(),
+  /** Telegram gave us a photo for this account, so «Взять из Telegram» is offered. */
+  telegramPhoto: z.boolean(),
   /** Public settings the Mini App needs; they ride on the customer so they refresh with it. */
   config: z.object({
     /** The manager's Telegram account, with `@`: the target of «Написать менеджеру». */

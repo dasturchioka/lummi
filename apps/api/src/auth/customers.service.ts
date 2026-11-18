@@ -31,6 +31,8 @@ export class CustomersService {
         firstName: user.first_name,
         lastName: user.last_name ?? null,
         username: user.username ?? null,
+        // the bot's /start has no photo_url: only the Mini App's signed one updates it
+        ...(user.photo_url === undefined ? {} : { telegramPhotoUrl: user.photo_url }),
       };
       const [created] = await tx
         .insert(customers)
