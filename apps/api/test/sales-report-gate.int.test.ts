@@ -100,7 +100,7 @@ describe('the 20-order report gate (TZ §10)', () => {
         net,
       })),
     );
-    expect(r.sets).toEqual(EXPECTED_SETS);
+    expect(r.sets.map(({ kind, units, net }) => ({ kind, units, net }))).toEqual(EXPECTED_SETS);
   });
 
   it('counts an order on its delivery day, so the days around the range hold the rest', async () => {
@@ -138,7 +138,14 @@ describe('the 20-order report gate (TZ §10)', () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await res.arrayBuffer());
     const [days, fragrances, volumes, sets] = wb.worksheets;
-    expect(wb.worksheets.map((s) => s.name)).toEqual(['По дням', 'Ароматы', 'Объёмы', 'Наборы']);
+    // the last sheet is profit (#77): these orders have no cost snapshot (no oil prices)
+    expect(wb.worksheets.map((s) => s.name)).toEqual([
+      'По дням',
+      'Ароматы',
+      'Объёмы',
+      'Наборы',
+      'Прибыль',
+    ]);
     const rows = (ws: ExcelJS.Worksheet) =>
       ws
         .getSheetValues()
@@ -169,15 +176,16 @@ describe('the 20-order report gate (TZ §10)', () => {
       ...EXPECTED_DAYS.map((e) => [day(e.day), ...figures(e)]),
       ['Итого', ...figures(EXPECTED_TOTALS)],
     ]);
+    // cost and profit stay blank without a cost snapshot (#77)
     expect(rows(fragrances!).map((r) => r.slice(2))).toEqual(
-      EXPECTED_FRAGRANCES.map((e) => [e.units, e.net]),
+      EXPECTED_FRAGRANCES.map((e) => [e.units, e.net, '', '']),
     );
     expect(rows(volumes!).map((r) => r.slice(2))).toEqual(
-      EXPECTED_VOLUMES.map((e) => [e.ml, e.units, e.net]),
+      EXPECTED_VOLUMES.map((e) => [e.ml, e.units, e.net, '', '']),
     );
     expect(rows(sets!)).toEqual([
-      ['Discovery set', 2, 557_143],
-      ['Свой набор', 3, 840_000],
+      ['Discovery set', 2, 557_143, '', ''],
+      ['Свой набор', 3, 840_000, '', ''],
     ]);
   });
 
@@ -193,6 +201,7 @@ describe('the 20-order report gate (TZ §10)', () => {
       'Atirlar',
       'Hajmlar',
       'Toʻplamlar',
+      'Foyda',
     ]);
     expect(wb.worksheets[0]!.getRow(1).getCell(7).value).toBe('Sof savdo');
   });

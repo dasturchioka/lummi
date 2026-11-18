@@ -57,19 +57,211 @@ const OTHER: CostSettings = {
 
 describe("bottle cost at the default settings (the calculator's P0)", () => {
   it.each([
-    [A, 5, { oil: 5720, ethanol: 541, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 0, insert: 0, base: 9761, defect: 195, total: 9956 }],
-    [A, 10, { oil: 11440, ethanol: 1082, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 22022, defect: 440, total: 22462 }],
-    [A, 30, { oil: 34321, ethanol: 3245, bottle: 6000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 51065, defect: 1021, total: 52086 }],
-    [A, 50, { oil: 57201, ethanol: 5408, bottle: 7000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 77109, defect: 1542, total: 78651 }],
-    [B, 5, { oil: 3113, ethanol: 541, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 0, insert: 0, base: 7154, defect: 143, total: 7297 }],
+    [
+      A,
+      5,
+      {
+        oil: 5720,
+        ethanol: 541,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 0,
+        insert: 0,
+        base: 9761,
+        defect: 195,
+        total: 9956,
+      },
+    ],
+    [
+      A,
+      10,
+      {
+        oil: 11440,
+        ethanol: 1082,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 22022,
+        defect: 440,
+        total: 22462,
+      },
+    ],
+    [
+      A,
+      30,
+      {
+        oil: 34321,
+        ethanol: 3245,
+        bottle: 6000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 51065,
+        defect: 1021,
+        total: 52086,
+      },
+    ],
+    [
+      A,
+      50,
+      {
+        oil: 57201,
+        ethanol: 5408,
+        bottle: 7000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 77109,
+        defect: 1542,
+        total: 78651,
+      },
+    ],
+    [
+      B,
+      5,
+      {
+        oil: 3113,
+        ethanol: 541,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 0,
+        insert: 0,
+        base: 7154,
+        defect: 143,
+        total: 7297,
+      },
+    ],
     // the parts round on their own: 16 808 + 336 shows 17 144, the total is 17 145
-    [B, 10, { oil: 6227, ethanol: 1082, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 16808, defect: 336, total: 17145 }],
-    [B, 30, { oil: 18681, ethanol: 3245, bottle: 6000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 35425, defect: 709, total: 36134 }],
-    [B, 50, { oil: 31135, ethanol: 5408, bottle: 7000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 51042, defect: 1021, total: 52063 }],
-    [C, 5, { oil: 13250, ethanol: 541, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 0, insert: 0, base: 17291, defect: 346, total: 17637 }],
-    [C, 10, { oil: 26501, ethanol: 1082, bottle: 2000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 37082, defect: 742, total: 37824 }],
-    [C, 30, { oil: 79502, ethanol: 3245, bottle: 6000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 96247, defect: 1925, total: 98172 }],
-    [C, 50, { oil: 132504, ethanol: 5408, bottle: 7000, label: 500, spray: 0, filling: 1000, box: 5000, insert: 1000, base: 152411, defect: 3048, total: 155459 }],
+    [
+      B,
+      10,
+      {
+        oil: 6227,
+        ethanol: 1082,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 16808,
+        defect: 336,
+        total: 17145,
+      },
+    ],
+    [
+      B,
+      30,
+      {
+        oil: 18681,
+        ethanol: 3245,
+        bottle: 6000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 35425,
+        defect: 709,
+        total: 36134,
+      },
+    ],
+    [
+      B,
+      50,
+      {
+        oil: 31135,
+        ethanol: 5408,
+        bottle: 7000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 51042,
+        defect: 1021,
+        total: 52063,
+      },
+    ],
+    [
+      C,
+      5,
+      {
+        oil: 13250,
+        ethanol: 541,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 0,
+        insert: 0,
+        base: 17291,
+        defect: 346,
+        total: 17637,
+      },
+    ],
+    [
+      C,
+      10,
+      {
+        oil: 26501,
+        ethanol: 1082,
+        bottle: 2000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 37082,
+        defect: 742,
+        total: 37824,
+      },
+    ],
+    [
+      C,
+      30,
+      {
+        oil: 79502,
+        ethanol: 3245,
+        bottle: 6000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 96247,
+        defect: 1925,
+        total: 98172,
+      },
+    ],
+    [
+      C,
+      50,
+      {
+        oil: 132504,
+        ethanol: 5408,
+        bottle: 7000,
+        label: 500,
+        spray: 0,
+        filling: 1000,
+        box: 5000,
+        insert: 1000,
+        base: 152411,
+        defect: 3048,
+        total: 155459,
+      },
+    ],
   ] as const)("oil %i so'm/g, %i ml", (oilPrice, ml, expected) => {
     expect(bottleCost(oilPrice, ml, defaultCostSettings())).toEqual(expected);
   });
@@ -78,12 +270,32 @@ describe("bottle cost at the default settings (the calculator's P0)", () => {
 describe('set cost at the default settings: five vials, one set box, one QR card, defect on top', () => {
   it('Discovery Set 5 × 5 ml', () => {
     expect(setCost(SET_PICK, 5, defaultCostSettings())).toEqual({
-      oil: 18464, ethanol: 2704, bottle: 10000, label: 2500, spray: 0, filling: 5000, box: 5000, insert: 1000, base: 44667, defect: 893, total: 45561,
+      oil: 18464,
+      ethanol: 2704,
+      bottle: 10000,
+      label: 2500,
+      spray: 0,
+      filling: 5000,
+      box: 5000,
+      insert: 1000,
+      base: 44667,
+      defect: 893,
+      total: 45561,
     });
   });
   it('Discovery Set 5 × 10 ml', () => {
     expect(setCost(SET_PICK, 10, defaultCostSettings())).toEqual({
-      oil: 36927, ethanol: 5408, bottle: 10000, label: 2500, spray: 0, filling: 5000, box: 5000, insert: 1000, base: 65835, defect: 1317, total: 67151,
+      oil: 36927,
+      ethanol: 5408,
+      bottle: 10000,
+      label: 2500,
+      spray: 0,
+      filling: 5000,
+      box: 5000,
+      insert: 1000,
+      base: 65835,
+      defect: 1317,
+      total: 67151,
     });
   });
 });
@@ -102,29 +314,145 @@ describe('gift sample: the average 5 ml vial over the fragrances, scaled to the 
 
 describe('every setting off its default: each value reaches its own part', () => {
   it.each([
-    [A, 5, { oil: 4610, ethanol: 2184, bottle: 2100, label: 600, spray: 800, filling: 1200, box: 0, insert: 0, base: 11494, defect: 345, total: 11839 }],
-    [A, 10, { oil: 9220, ethanol: 4368, bottle: 2500, label: 600, spray: 800, filling: 1200, box: 5100, insert: 1200, base: 24988, defect: 750, total: 25738 }],
-    [A, 30, { oil: 27660, ethanol: 13104, bottle: 6200, label: 600, spray: 800, filling: 1200, box: 6000, insert: 1200, base: 56764, defect: 1703, total: 58467 }],
-    [A, 50, { oil: 46099, ethanol: 21840, bottle: 7300, label: 600, spray: 800, filling: 1200, box: 7000, insert: 1200, base: 86039, defect: 2581, total: 88621 }],
-    [B, 30, { oil: 15055, ethanol: 13104, bottle: 6200, label: 600, spray: 800, filling: 1200, box: 6000, insert: 1200, base: 44159, defect: 1325, total: 45484 }],
-    [C, 50, { oil: 106787, ethanol: 21840, bottle: 7300, label: 600, spray: 800, filling: 1200, box: 7000, insert: 1200, base: 146727, defect: 4402, total: 151129 }],
+    [
+      A,
+      5,
+      {
+        oil: 4610,
+        ethanol: 2184,
+        bottle: 2100,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 0,
+        insert: 0,
+        base: 11494,
+        defect: 345,
+        total: 11839,
+      },
+    ],
+    [
+      A,
+      10,
+      {
+        oil: 9220,
+        ethanol: 4368,
+        bottle: 2500,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 5100,
+        insert: 1200,
+        base: 24988,
+        defect: 750,
+        total: 25738,
+      },
+    ],
+    [
+      A,
+      30,
+      {
+        oil: 27660,
+        ethanol: 13104,
+        bottle: 6200,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 6000,
+        insert: 1200,
+        base: 56764,
+        defect: 1703,
+        total: 58467,
+      },
+    ],
+    [
+      A,
+      50,
+      {
+        oil: 46099,
+        ethanol: 21840,
+        bottle: 7300,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 7000,
+        insert: 1200,
+        base: 86039,
+        defect: 2581,
+        total: 88621,
+      },
+    ],
+    [
+      B,
+      30,
+      {
+        oil: 15055,
+        ethanol: 13104,
+        bottle: 6200,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 6000,
+        insert: 1200,
+        base: 44159,
+        defect: 1325,
+        total: 45484,
+      },
+    ],
+    [
+      C,
+      50,
+      {
+        oil: 106787,
+        ethanol: 21840,
+        bottle: 7300,
+        label: 600,
+        spray: 800,
+        filling: 1200,
+        box: 7000,
+        insert: 1200,
+        base: 146727,
+        defect: 4402,
+        total: 151129,
+      },
+    ],
   ] as const)("bottle: oil %i so'm/g, %i ml", (oilPrice, ml, expected) => {
     expect(bottleCost(oilPrice, ml, OTHER)).toEqual(expected);
   });
 
   it('Discovery Set 5 × 5 ml takes its own box', () => {
     expect(setCost(SET_PICK, 5, OTHER)).toEqual({
-      oil: 14880, ethanol: 10920, bottle: 10500, label: 3000, spray: 4000, filling: 6000, box: 4000, insert: 1200, base: 54500, defect: 1635, total: 56135,
+      oil: 14880,
+      ethanol: 10920,
+      bottle: 10500,
+      label: 3000,
+      spray: 4000,
+      filling: 6000,
+      box: 4000,
+      insert: 1200,
+      base: 54500,
+      defect: 1635,
+      total: 56135,
     });
   });
   it('Discovery Set 5 × 10 ml takes its own box', () => {
     expect(setCost(SET_PICK, 10, OTHER)).toEqual({
-      oil: 29760, ethanol: 21840, bottle: 12500, label: 3000, spray: 4000, filling: 6000, box: 6500, insert: 1200, base: 84800, defect: 2544, total: 87344,
+      oil: 29760,
+      ethanol: 21840,
+      bottle: 12500,
+      label: 3000,
+      spray: 4000,
+      filling: 6000,
+      box: 6500,
+      insert: 1200,
+      base: 84800,
+      defect: 2544,
+      total: 87344,
     });
   });
 });
 
-describe('the registry defaults are the calculator\'s P0', () => {
+describe("the registry defaults are the calculator's P0", () => {
   it('maps every cost setting', () => {
     expect(defaultCostSettings()).toEqual({
       liquid: {
@@ -173,7 +501,9 @@ describe('the liquid a bottle takes (bottling draws on it, #76)', () => {
     // A, 50 ml: 3950 × 0.91 × 1.03 = 3702.335 so'm/g × 15.45 g = 57 201.1, the table's 57 201
     const s = defaultCostSettings();
     expect(landedOilPrice(A, s.liquid)).toBeCloseTo(3702.335, 6);
-    expect(Math.round(landedOilPrice(A, s.liquid) * liquidNeeded(50, s.liquid).oilGrams)).toBe(57_201);
+    expect(Math.round(landedOilPrice(A, s.liquid) * liquidNeeded(50, s.liquid).oilGrams)).toBe(
+      57_201,
+    );
   });
   it('density turns ml of oil into grams', () => {
     // 10 ml at 25 % oil, 0.95 g/ml, 4 % loss: 10 × 1.04 × 0.25 × 0.95 = 2.47 g; ethanol 10 × 1.04 × 0.75 = 7.8 ml
@@ -192,33 +522,47 @@ describe('orderCosts', () => {
   const delivery = { freeFrom: 250_000, customerFee: 25_000 };
   const s = defaultCostSettings();
   it('Mini App below the threshold: the customer pays the delivery fee', () => {
-    const c = orderCosts({ revenue: 189_000, goods: 52_086, channel: 'app', delivery, settings: s });
+    const c = orderCosts({
+      revenue: 189_000,
+      goods: 52_086,
+      channel: 'miniapp',
+      delivery,
+      settings: s,
+    });
     expect(c).toMatchObject({ mailer: 2_000, delivery: 0, commission: 0, ad: 3_000, gift: 0 });
     expect(c.tax).toBeCloseTo(1_890, 6);
-    expect(c.total).toBeCloseTo(52_086 + 2_000 + 3_000 + 1_890, 6);
-    expect(c.profit).toBeCloseTo(189_000 - c.total, 6);
+    expect(c.cost).toBeCloseTo(52_086 + 2_000 + 3_000 + 1_890, 6);
+    expect(c.profit).toBeCloseTo(189_000 - c.cost, 6);
     expect(c.margin).toBeCloseTo(c.profit / 189_000, 9);
   });
   it('Mini App from the threshold: BTS is ours, and a gift sample adds its cost', () => {
     const c = orderCosts({
       revenue: 300_000,
       goods: 52_086,
-      channel: 'app',
+      channel: 'miniapp',
       giftSample: 11_953,
       delivery,
       settings: s,
     });
     expect(c.delivery).toBe(25_000);
     expect(c.gift).toBe(11_953);
-    expect(c.total).toBeCloseTo(52_086 + 2_000 + 25_000 + 3_000 + 3_000 + 11_953, 6);
+    expect(c.cost).toBeCloseTo(52_086 + 2_000 + 25_000 + 3_000 + 3_000 + 11_953, 6);
   });
   it('Uzum: its commission, no mailer or delivery', () => {
-    const c = orderCosts({ revenue: 189_000, goods: 52_086, channel: 'uzum', delivery, settings: s });
+    const c = orderCosts({
+      revenue: 189_000,
+      goods: 52_086,
+      channel: 'uzum',
+      delivery,
+      settings: s,
+    });
     expect(c).toMatchObject({ mailer: 0, delivery: 0 });
     expect(c.commission).toBeCloseTo(38_745, 6);
     expect(c.profit).toBeCloseTo(189_000 - 52_086 - 38_745 - 3_000 - 1_890, 6);
   });
   it('no revenue: margin 0, not NaN', () => {
-    expect(orderCosts({ revenue: 0, goods: 0, channel: 'uzum', delivery, settings: s }).margin).toBe(0);
+    expect(
+      orderCosts({ revenue: 0, goods: 0, channel: 'uzum', delivery, settings: s }).margin,
+    ).toBe(0);
   });
 });

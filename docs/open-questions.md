@@ -146,3 +146,11 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **No tier** for Louis Vuitton Ink Mark, Moon Tale and Rain Tea (their supplier's receipt gives none). The owner sets it, or it stays empty.
 - **Oil + ethanol need not make 100 %**: the calculator does not check it, so neither do the settings; the hint says so.
 - **The gift sample's cost** is the calculator's average 5 ml vial over the fragrances given. With #79 the server picks the sample's fragrance, so its cost can be that fragrance's own vial: decide there.
+
+## Order profit and «Рентабельность» (ticket #77)
+- **Refunds and profit.** A refund is not taken off an order's profit (it stays in «Возвраты денег»): a partly refunded order shows the profit frozen at its payment. Should the report's profit subtract refunds too?
+- **The online-payment %** is taken of the items' revenue, as in the calculator; if the card or payment service charges on the whole transfer (delivery included), the base should be the amount due. 0 % today, so nothing changes yet.
+- **Uzum** is costed at our regular price with the Uzum commission (20.5 %), no mailer and no delivery, until real Uzum sales come (#80). Confirm Uzum prices are ours, or give them.
+- **One after-set discount per order.** In the simulator the «Скидка после набора» takes one Full size bottle (the dearest), as the shop does; the customer's calculator took 20 % off every 30 / 50 ml line. Confirm the shop's rule is what he wants to see.
+- **The margin floor** «Ниже 15 %» is the calculator's 15 %, now the setting `cost.order.lowMarginPercent`.
+- **The gift sample in an order** (#79): the snapshot has a gift-sample line, 0 until #79 says when a sample went in and which one.

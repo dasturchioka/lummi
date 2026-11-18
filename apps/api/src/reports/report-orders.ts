@@ -1,4 +1,11 @@
-import { formatLocalDate, promoGiftValue, tashkentDay, type Discount } from '@lummi/contracts';
+import {
+  formatLocalDate,
+  promoGiftValue,
+  tashkentDay,
+  type Discount,
+  type OrderProfit,
+  type OrderCostSnapshot,
+} from '@lummi/contracts';
 import { and, eq, gte, inArray, lte, or, orders, refunds, sql, type DbOrTx } from '@lummi/db';
 import { fulfilledAt, fulfilledOrder } from '../orders/fulfilled';
 import { rangeBounds, within, type TashkentRange } from './report-range';
@@ -22,6 +29,8 @@ export interface ReportOrder {
   /** The snapshot's own discount, what the order's lines share (a Promo gift's line costs 0). */
   snapshotDiscountAmount: number;
   delivery: number;
+  /** Its frozen profit (#77); null when it has none (no oil price, or paid before costs). */
+  profit: OrderProfit | null;
 }
 
 /**
@@ -56,6 +65,7 @@ const columns = {
   discount: orders.discount,
   discountAmount: orders.discountAmount,
   delivery: orders.deliveryFee,
+  snapshot: orders.costs,
 };
 
 /**
@@ -70,8 +80,12 @@ export function deliveredAt(at: Date | null, orderId: number): Date {
 /** A report's order: its money as `reportedMoney` counts it, the snapshot's discount kept beside. */
 function reportOrder({
   at,
+  snapshot,
   ...o
-}: { at: Date | null } & Omit<ReportOrder, 'deliveredAt' | 'snapshotDiscountAmount'>): ReportOrder {
+}: { at: Date | null; snapshot: OrderCostSnapshot | null } & Omit<
+  ReportOrder,
+  'deliveredAt' | 'snapshotDiscountAmount' | 'profit'
+>): ReportOrder {
   const money = reportedMoney({
     itemsSubtotal: o.items,
     discountAmount: o.discountAmount,
@@ -83,6 +97,7 @@ function reportOrder({
     discountAmount: money.discount,
     snapshotDiscountAmount: o.discountAmount,
     deliveredAt: deliveredAt(at, o.id),
+    profit: snapshot?.profit ?? null,
   };
 }
 

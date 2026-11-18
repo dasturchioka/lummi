@@ -975,6 +975,14 @@ export const settingDefinitions = {
       uz: 'Namuna 5 ml flakonga quyiladi.',
     },
   },
+  /** The «Рентабельность» table flags a sale whose margin is under this (#77; the calculator's 15 %). */
+  'cost.order.lowMarginPercent': costPercent('costOrder', 15, {
+    label: { ru: 'Низкая маржа: ниже, %', uz: 'Past marja: quyida, %' },
+    hint: {
+      ru: 'В таблице рентабельности такие позиции отмечены.',
+      uz: 'Rentabellik jadvalida bunday pozitsiyalar belgilanadi.',
+    },
+  }),
   // ---- Purchase planner (#78): the calculator's «Закупка» inputs. Gift samples, the ad per sale,
   // the dollar rate and the free-delivery threshold are the cost model's and pricing's own settings.
   'buy.oilKgPerFragrance': {

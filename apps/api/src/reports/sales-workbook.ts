@@ -5,11 +5,16 @@ import ExcelJS from 'exceljs';
 import { MONEY, sheet } from './report-workbook';
 
 const DAY = 'dd.mm.yyyy';
+const PERCENT = '0%';
+/** A row's cost or profit (#77): blank when its orders had no cost snapshot. */
+const known = (n: number | null) => (n === null ? '' : n);
 
 /**
  * The sales report as an Excel file (#42), in the admin's language: one sheet per table of the
  * page, every row (the page shows the top ten). It only lays out what `salesSummary` computed.
  * Money cells are numbers in whole so'm, days are real dates, so the owner can sum and sort.
+ * Profit (#77) adds a cost and a profit column to the fragrances, Volumes and sets, and a last
+ * sheet with the range's revenue, cost, profit and margin.
  */
 export async function salesWorkbook(report: SalesReport, language: Language): Promise<Buffer> {
   const t = adminMessages[language].admin.reports;
@@ -36,9 +41,18 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
     { header: t.excel.brand, key: 'brand', width: 24 },
     { header: t.units, key: 'units', width: 10 },
     { header: t.net, key: 'net', width: 18, numFmt: MONEY },
+    { header: t.excel.cost, key: 'cost', width: 16, numFmt: MONEY },
+    { header: t.excel.profit, key: 'profit', width: 16, numFmt: MONEY },
   ]);
   for (const r of report.fragrances)
-    fragrances.addRow({ name: r.name[language], brand: r.brand ?? '', units: r.units, net: r.net });
+    fragrances.addRow({
+      name: r.name[language],
+      brand: r.brand ?? '',
+      units: r.units,
+      net: r.net,
+      cost: known(r.cost),
+      profit: known(r.profit),
+    });
 
   const volumes = sheet(wb, t.volumes, [
     { header: t.excel.fragrance, key: 'name', width: 30 },
@@ -46,6 +60,8 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
     { header: t.excel.ml, key: 'ml', width: 10 },
     { header: t.units, key: 'units', width: 10 },
     { header: t.net, key: 'net', width: 18, numFmt: MONEY },
+    { header: t.excel.cost, key: 'cost', width: 16, numFmt: MONEY },
+    { header: t.excel.profit, key: 'profit', width: 16, numFmt: MONEY },
   ]);
   for (const r of report.volumes)
     volumes.addRow({
@@ -54,15 +70,36 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
       ml: r.ml,
       units: r.units,
       net: r.net,
+      cost: known(r.cost),
+      profit: known(r.profit),
     });
 
   const sets = sheet(wb, t.sets, [
     { header: t.excel.set, key: 'kind', width: 22 },
     { header: t.units, key: 'units', width: 10 },
     { header: t.net, key: 'net', width: 18, numFmt: MONEY },
+    { header: t.excel.cost, key: 'cost', width: 16, numFmt: MONEY },
+    { header: t.excel.profit, key: 'profit', width: 16, numFmt: MONEY },
   ]);
   for (const r of report.sets)
-    sets.addRow({ kind: t.setKinds[r.kind], units: r.units, net: r.net });
+    sets.addRow({
+      kind: t.setKinds[r.kind],
+      units: r.units,
+      net: r.net,
+      cost: known(r.cost),
+      profit: known(r.profit),
+    });
+
+  const p = report.profit;
+  const profit = sheet(wb, t.excel.profitSheet, [
+    { header: t.excel.orders, key: 'orders', width: 14 },
+    { header: t.excel.uncosted, key: 'uncosted', width: 16 },
+    { header: t.profit.revenue, key: 'revenue', width: 18, numFmt: MONEY },
+    { header: t.profit.cost, key: 'cost', width: 18, numFmt: MONEY },
+    { header: t.profit.profit, key: 'profit', width: 18, numFmt: MONEY },
+    { header: t.excel.margin, key: 'margin', width: 10, numFmt: PERCENT },
+  ]);
+  profit.addRow({ ...p, margin: known(p.margin) });
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

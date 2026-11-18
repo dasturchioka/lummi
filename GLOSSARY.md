@@ -110,7 +110,7 @@ _Avoid_: Completed, closed, successful order
 
 **Net sales**:
 «Чистые продажи»: the items before discount of Fulfilled orders, less their discounts and the Refunds sent for them. Delivery is never part of it. The average check leaves the Refunds out: items before discount less discounts, per Fulfilled order.
-_Avoid_: Revenue, turnover, profit (net sales less the unit cost and order costs), выручка
+_Avoid_: Revenue (an Order profit's revenue is before Refunds), turnover, profit (see Order profit), выручка
 
 **Upgrade right**:
 A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances) or a delivered single 10 ml bottle (covers that fragrance).
@@ -145,6 +145,18 @@ _Avoid_: Oil price (that is the invoice's, before the discount), net price, purc
 **Tier**:
 The oil grade a fragrance is bought at, as the invoice names it: TOP, PREMIUM or PREMIUM NEW. Admin only.
 _Avoid_: Category, class, level, quality
+
+**Order costs**:
+What a sale costs the shop besides its goods: on the Mini App the BTS mailer, BTS's charge less what the customer paid for delivery, and the online-payment %; on Uzum its commission %; on both the ad per sale, the tax % and a gift sample when one goes in («Расходы на заказ» / «Buyurtma xarajatlari»). Settings, computed by the server.
+_Avoid_: Expenses, overhead (rent and salaries are the planner's fixed costs), delivery fee (that is what the customer pays)
+
+**Order profit**:
+An order's revenue (items less the discount, without delivery) less its goods at Unit cost and its Order costs; its margin is profit ÷ revenue («Прибыль» / «Foyda»). Refunds are not taken off it.
+_Avoid_: Net sales (that is revenue less refunds), markup, margin (that is the ratio)
+
+**Cost snapshot**:
+An order's Unit cost per line and its Order costs as they were when its payment was confirmed, kept in the order: later Oil prices and settings never change its Order profit. None before the payment, and none while a line's fragrance has no Oil price.
+_Avoid_: Current cost, recalculated profit
 
 ### Delivery
 

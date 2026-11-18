@@ -65,7 +65,15 @@ import {
   searchResultSchema,
   similarResultSchema,
 } from './catalog';
-import { fragranceCostsSchema } from './cost';
+import {
+  adminOrderCostsSchema,
+  fragranceCostsSchema,
+  profitabilityErrorSchema,
+  profitabilityQuerySchema,
+  profitabilityQuoteBodySchema,
+  profitabilityQuoteSchema,
+  profitabilityTableSchema,
+} from './cost';
 import {
   catalogAdminErrorSchema,
   dictionaryInputSchema,
@@ -1562,6 +1570,19 @@ const adminOrders = c.router({
       summary:
         'Staff: the order page: snapshot, customer, receipts with verdicts, credit, history and audit',
     },
+    costs: {
+      method: 'GET',
+      path: '/admin/orders/:number/costs',
+      pathParams: orderNumber,
+      responses: {
+        200: adminOrderCostsSchema,
+        401: adminOrderErrorSchema,
+        403: adminOrderErrorSchema,
+        404: adminOrderErrorSchema,
+      },
+      summary:
+        "Owner only: the order's cost snapshot (#77), frozen at the payment's confirmation: each line's unit cost, the order costs, profit and margin; null before",
+    },
     fulfil: {
       method: 'POST',
       path: '/admin/orders/:number/fulfil',
@@ -1879,6 +1900,43 @@ const adminCampaigns = c.router({
   },
 });
 
+/**
+ * «Рентабельность» (#77): owner only. The table of every fragrance's volumes and the Discovery
+ * set, the calculator and the order simulator, from the cost model (ADR 0040) and the shop's own
+ * pricing. The Excel is a file: `GET /admin/profitability/export` (not in the contract).
+ */
+const adminProfitability = c.router({
+  profitability: {
+    table: {
+      method: 'GET',
+      path: '/admin/profitability',
+      query: profitabilityQuerySchema,
+      responses: {
+        200: profitabilityTableSchema,
+        400: z.unknown(),
+        401: profitabilityErrorSchema,
+        403: profitabilityErrorSchema,
+      },
+      summary:
+        'Owner only: one sale of each fragrance volume and of the Discovery set on the channel: price, unit cost, order costs, profit, margin and the loss / low-margin flag',
+    },
+    quote: {
+      method: 'POST',
+      path: '/admin/profitability/quote',
+      body: profitabilityQuoteBodySchema,
+      responses: {
+        200: profitabilityQuoteSchema,
+        400: z.unknown(),
+        401: profitabilityErrorSchema,
+        403: profitabilityErrorSchema,
+        404: profitabilityErrorSchema,
+      },
+      summary:
+        "Owner only: the calculator and the order simulator: the lines priced as the shop prices them, each unit cost part by part, delivery, the order costs and profit; 404 for a fragrance or volume that doesn't exist",
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
   ...adminOrders,
@@ -1892,6 +1950,7 @@ export const adminContract = c.router({
   ...adminReports,
   ...adminPurchasePlan,
   ...adminHome,
+  ...adminProfitability,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */

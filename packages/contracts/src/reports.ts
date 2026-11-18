@@ -60,6 +60,17 @@ export type SalesDay = z.infer<typeof salesDaySchema>;
 
 const name = z.object({ ru: z.string(), uz: z.string() });
 
+/**
+ * A row's share of profit (#77), from its orders' cost snapshots: each line at its frozen unit
+ * cost plus its share of its order's other costs (mailer, delivery, commission, ad, tax), shared
+ * by the lines' net. Both null when a line of the row comes from an order without costs.
+ */
+const rowProfit = {
+  cost: z.number().int().nullable(),
+  /** net − cost. */
+  profit: z.number().int().nullable(),
+};
+
 /** A fragrance's bottles sold (volume lines only; sets are their own rows). */
 export const fragranceSalesSchema = z.object({
   fragranceId: z.number().int(),
@@ -69,6 +80,7 @@ export const fragranceSalesSchema = z.object({
   units: count,
   /** Line totals less each line's share of its order's discount; refunds are not split over lines. */
   net: z.number().int(),
+  ...rowProfit,
 });
 export type FragranceSales = z.infer<typeof fragranceSalesSchema>;
 
@@ -85,8 +97,26 @@ export const setSalesSchema = z.object({
   kind: z.enum(SET_SALES_KINDS),
   units: count,
   net: z.number().int(),
+  ...rowProfit,
 });
 export type SetSales = z.infer<typeof setSalesSchema>;
+
+/**
+ * The range's profit (#77) over its orders with a cost snapshot: revenue (items − discount, before
+ * refunds), their costs (goods at unit cost and the order costs), profit and margin. An order
+ * without costs (a fragrance had no oil price, or it was paid before costs were recorded) is
+ * counted in `uncosted` and left out of these figures. Refunds are not in profit.
+ */
+export const salesProfitSchema = z.object({
+  orders: count,
+  uncosted: count,
+  revenue: som,
+  cost: z.number().int(),
+  profit: z.number().int(),
+  /** profit ÷ revenue; null without revenue. */
+  margin: z.number().nullable(),
+});
+export type SalesProfit = z.infer<typeof salesProfitSchema>;
 
 export const salesReportSchema = z.object({
   from: tashkentDaySchema,
@@ -95,6 +125,7 @@ export const salesReportSchema = z.object({
   days: z.array(salesDaySchema),
   /** The whole range (its average check over the range's orders). */
   totals: salesFiguresSchema,
+  profit: salesProfitSchema,
   /** Most units first, then most net. Every fragrance sold in the range. */
   fragrances: z.array(fragranceSalesSchema),
   /** Most units first, then most net. Every Volume sold in the range. */

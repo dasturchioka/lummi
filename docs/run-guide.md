@@ -112,6 +112,8 @@ rm oil-prices.json                 # the volume holds it now
 
 A new list later: copy it over the same path and run the seed step again (or wait for the next deploy). It fills only what is still empty; to change a price the owner set, edit it in the panel or the Excel file.
 
+**Order costs (#77).** The same seed step gives every paid order without a cost snapshot (orders paid before #77) its snapshot, with the oil prices and settings of that moment, and prints «order costs: N orders frozen». An order whose fragrance has no oil price yet is left for a later run. A frozen snapshot is never touched, so the step is safe on every deploy.
+
 Manual commands work only after one CI run (they need `docker-compose.yml` and `.deploy.env`). To run them before that: `scp docker-compose.yml lummi-deploy@<host>:/opt/lummi-staging/`, write `.deploy.env` with `IMAGE_TAG=<commit sha>` and `GHCR_OWNER=<owner>`, and `docker login ghcr.io -u <user>` with a read-only PAT (`read:packages`), then `docker logout ghcr.io` when done. The steps the job runs are:
 
 ```sh
