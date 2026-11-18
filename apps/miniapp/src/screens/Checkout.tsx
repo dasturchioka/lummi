@@ -174,7 +174,9 @@ function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }
     line.kind === 'volume'
       ? { ru: line.name, uz: line.name }
       : line.kind === 'discovery_set'
-        ? { ru: setsMessages.ru.sets.lineDiscovery, uz: setsMessages.uz.sets.lineDiscovery }
+        ? line.vialMl === 5
+          ? { ru: setsMessages.ru.sets.lineDiscovery5, uz: setsMessages.uz.sets.lineDiscovery5 }
+          : { ru: setsMessages.ru.sets.lineDiscovery, uz: setsMessages.uz.sets.lineDiscovery }
         : { ru: setsMessages.ru.sets.lineBuilder, uz: setsMessages.uz.sets.lineBuilder };
   return (
     <>

@@ -107,6 +107,10 @@ export function DiscoverySetView({
   const { t, language } = usePrefs();
   const s = useSetsText();
   const ready = set.fragrances.length === SET_SIZE;
+  // the 5 × 5 ml set (ADR 0042) has its own name and lead; the heart, the share link and the
+  // reviews stay the 5 × 10 ml one's for now
+  const five = set.vialMl === 5;
+  const title = five ? s.discovery5Title : s.discoveryTitle;
   return (
     <Screen
       tabBar={false}
@@ -140,11 +144,9 @@ export function DiscoverySetView({
             <button type="button" aria-label={t.card.back} onClick={onBack} className={DISC}>
               <ArrowLeftIcon size={20} />
             </button>
-            <PhotoActions
-              favourite={DISCOVERY_FAVOURITE}
-              name={s.discoveryTitle}
-              onShare={onShare}
-            />
+            {five ? null : (
+              <PhotoActions favourite={DISCOVERY_FAVOURITE} name={title} onShare={onShare} />
+            )}
           </div>
         </div>
 
@@ -152,10 +154,12 @@ export function DiscoverySetView({
         <header className="mt-5 flex flex-col">
           <p className="type-label text-muted">{t.home.discoveryLabel}</p>
           <h1 className="type-name-lg mt-1 text-balance text-ink [overflow-wrap:anywhere]">
-            {s.discoveryTitle}
+            {title}
           </h1>
           <LabelDivider />
-          <p className="type-body mt-3 text-pretty text-muted">{s.discoveryLead}</p>
+          <p className="type-body mt-3 text-pretty text-muted">
+            {five ? s.discovery5Lead : s.discoveryLead}
+          </p>
           <p className="mt-2 text-ink">
             <Money amount={set.price} />
           </p>
@@ -210,11 +214,20 @@ export function DiscoverySetView({
 
 /** `/sets/discovery`, also the target of the `set_discovery` deep link. */
 export function DiscoverySetScreen() {
+  return <DiscoveryScreenOf vialMl={10} />;
+}
+
+/** `/sets/discovery-5`: the 5 × 5 ml set (ADR 0042). */
+export function Discovery5SetScreen() {
+  return <DiscoveryScreenOf vialMl={5} />;
+}
+
+function DiscoveryScreenOf({ vialMl }: { vialMl: 10 | 5 }) {
   const router = useRouter();
   const open = useOpenFragrance();
   const s = useSetsText();
-  const query = useDiscoverySet();
-  const add = useAddDiscovery();
+  const query = useDiscoverySet(vialMl);
+  const add = useAddDiscovery(vialMl);
   const [note, setNote] = useNote();
   if (query.isError && !query.data)
     return (
@@ -231,11 +244,11 @@ export function DiscoverySetScreen() {
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
       onShare={() => void shareDiscovery(s.discoveryTitle)}
-      reviews={<ReviewsBlock target="discovery-set" />}
+      reviews={vialMl === 10 ? <ReviewsBlock target="discovery-set" /> : undefined}
       onBuyNow={() =>
         void router.navigate({
           to: '/checkout',
-          search: { item: buyNowParam({ kind: 'discovery_set' }) },
+          search: { item: buyNowParam({ kind: 'discovery_set', vialMl }) },
         })
       }
       onAdd={() =>

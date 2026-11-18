@@ -358,7 +358,11 @@ function Line({
                   className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
                   data-testid="set-name"
                 >
-                  {line.kind === 'discovery_set' ? s.lineDiscovery : s.lineBuilder}
+                  {line.kind === 'discovery_set'
+                    ? line.vialMl === 5
+                      ? s.lineDiscovery5
+                      : s.lineDiscovery
+                    : s.lineBuilder}
                 </p>
               </>
             )}
