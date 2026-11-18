@@ -4,12 +4,15 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importBtsPoints, type Snapshot } from '../bts/import-points';
 import { seedCatalog } from '../catalog/seed';
+import { seedOilPrices } from '../catalog/seed-oil-prices';
 import { seedCatalogIfEmpty } from '../catalog/seed-if-empty';
 import { LocalFileStore } from '../edges';
 
 /**
  * The deploy's seed step, safe to run on every deploy: seed data only, never overwrites.
  *   - catalog (67 fragrances, placeholder prices, photos): only while the catalog is empty;
+ *   - oil prices and tiers from the file at OIL_PRICES_FILE (#75, kept off the repository): only
+ *     where a fragrance has none; skipped without the variable or the file;
  *   - BTS pickup points: adds missing codes, never touches existing rows.
  * Content texts are seeded by the API at start. Needs DATABASE_URL and FILES_DIR.
  */
@@ -24,6 +27,8 @@ try {
     }),
   );
   console.log(seeded ? 'catalog: seeded' : 'catalog: already has data, left as it is');
+  // the cost model (#75): oil prices from OIL_PRICES_FILE where still empty, never overwritten
+  await seedOilPrices(db);
   const snapshot = JSON.parse(
     readFileSync(resolve(import.meta.dirname, '../bts/bts-points.snapshot.json'), 'utf8'),
   ) as Snapshot;

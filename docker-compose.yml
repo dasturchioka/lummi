@@ -27,6 +27,8 @@ x-api-env: &api-env
   # Only the userbot's network (ADR 0031, 0035): nothing on `lummi`, Caddy included, passes the check.
   INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,172.28.1.0/24
   FILES_DIR: /data/files
+  # The owner's oil price list for the seed (#75): a path inside the container, never committed.
+  OIL_PRICES_FILE: ${OIL_PRICES_FILE:-}
   API_HOST: 0.0.0.0
   API_PORT: '4000'
   LOG_LEVEL: ${LOG_LEVEL:-info}

@@ -68,6 +68,7 @@ The environment `staging` allows only `stage-1` and `main`; the deploy jobs also
 | `ADMIN_BOT_USERNAME` | bot name for the admin Login Widget (no `@`); read at run time |
 | `TYPESAFE_API_KEY` | receipt AI (required in production mode) |
 | `OPENAI_API_KEY` | optional fallback; may be empty |
+| `OIL_PRICES_FILE` | optional: the owner's oil price list (JSON, customer data, never in the repository) as a path inside the api container, e.g. `/data/files/private/oil-prices.json`; the seed fills empty oil prices from it on each deploy (#75). Empty: skipped |
 | `BOT_MODE`, `LOG_LEVEL` | optional; defaults `webhook`, `info` |
 | `COMPOSE_PROFILES` | `userbot` once the userbot is logged in (below); unset before |
 | `USERBOT_API_ID`, `USERBOT_API_HASH` | an app registered at my.telegram.org → API development tools (any account's; they name the app, not the account) |
