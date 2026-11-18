@@ -12,7 +12,7 @@ export function FlagBadge({ kind, children }: { kind: 'hit' | 'new'; children: R
       className={cn(
         'inline-flex h-5 shrink-0 items-center rounded-full pt-px pr-1.5 pl-2 font-display text-[10px] leading-none tracking-[0.2em] whitespace-nowrap uppercase',
         kind === 'hit'
-          ? 'bg-sage text-graphite'
+          ? 'bg-sage text-brand-graphite'
           : 'text-sage-ink shadow-[inset_0_0_0_1px_var(--sage)]',
       )}
     >

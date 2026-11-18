@@ -92,7 +92,7 @@ describe('favourites', () => {
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
     expect(res.body.items.map((i) => i.slug)).toEqual([c, b, a]);
-    expect(res.body.items[0]).toHaveProperty('fromPrice');
+    expect(res.body.items[0]).toHaveProperty('from');
     expect(res.body.items[0]).toHaveProperty('soldOut');
     expect(res.body.discoverySet).toBeNull();
 

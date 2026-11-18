@@ -104,6 +104,20 @@ export const settingDefinitions = {
       uz: 'Avval qoʻlda tanlanganlar, keyin xuddi shu oila va turdagilar, faqat mavjudlari.',
     },
   },
+  /** The real available count next to «В наличии» on the product page (#70): on or off. */
+  'catalog.showAvailableCount': {
+    schema: z.boolean(),
+    default: true,
+    area: 'shop',
+    label: {
+      ru: 'Показывать, сколько можно заказать',
+      uz: 'Nechta buyurtma qilish mumkinligini koʻrsatish',
+    },
+    hint: {
+      ru: 'Число на карточке товара под объёмами: «В наличии: 12 шт.» — остаток минус бронь. Выключено — просто «В наличии».',
+      uz: 'Mahsulot kartasida hajmlar ostida: «Sotuvda: 12 dona» — qoldiq minus bron. Oʻchiq boʻlsa — oddiy «Sotuvda bor».',
+    },
+  },
   /** The step-up line under the product page's volume tiles (#57): on or off. */
   'catalog.stepUp.enabled': {
     schema: z.boolean(),
@@ -1205,7 +1219,10 @@ export const settingDefinitions = {
     default: 60,
     area: 'shop',
     unit: 'none',
-    label: { ru: 'Завершить отзыв без ответа через, минут', uz: 'Javobsiz sharhni yakunlash, daqiqa' },
+    label: {
+      ru: 'Завершить отзыв без ответа через, минут',
+      uz: 'Javobsiz sharhni yakunlash, daqiqa',
+    },
     hint: {
       ru: 'Если покупатель оценил заказ, но не написал комментарий и не нажал «Готово», отзыв закрывается сам, и низкая оценка уходит менеджерам.',
       uz: 'Xaridor buyurtmani baholab, izoh yozmasa va «Tayyor» tugmasini bosmasa, sharh oʻzi yopiladi va past baho menejerlarga yuboriladi.',
