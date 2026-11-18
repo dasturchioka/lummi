@@ -12,7 +12,7 @@ import { Money } from './Money';
 /**
  * One fragrance in a list: the DESIGN.md product card with the card's label lockup (caps attribution
  * «ПО МОТИВАМ <BRAND>», the Cormorant italic name, the meta line, three key notes joined by « · »,
- * «69 000 сум · 10 мл»). Prices come from the server (`fromPrice`); nothing is computed here.
+ * «69 000 сум · 10 мл»). Prices come from the server (`from`); nothing is computed here.
  *
  * - `layout="grid"`: the 3:4 photo on top, for the catalog grid (two columns, ~170 px wide). The
  *   meta line keeps the badge and the type (no room for the family), the notes stop at two lines,
@@ -24,7 +24,7 @@ import { Money } from './Money';
  * The whole card is one button (`onSelect(slug)` opens the fragrance card; the caller owns
  * navigation), laid over the content rather than wrapping it. The heart (top-left of the photo,
  * #45) and the «+» (`AddButton`, bottom-right of the photo, #25) sit above it, never inside it.
- * The «+» stays off the price line, so a seven-digit price («1 250 000 soʻmdan») keeps its full
+ * The «+» stays off the price line, so a seven-digit price («1 250 000 soʻm · 50 ml») keeps its full
  * size and its own line on a 360 px phone (#15, #16 reviews). A compact row has no «+».
  */
 export interface FragranceListCardProps {
@@ -91,17 +91,17 @@ export function FragranceListCard({
   // width (the «+» is on the photo), so it never steps down.
   const price = item.soldOut ? (
     <span className="type-small text-muted">{t.list.soldOut}</span>
-  ) : item.fromPrice !== null ? (
+  ) : item.from !== null ? (
     <span className="flex flex-wrap items-baseline gap-x-2">
       <span className="type-price text-ink">
-        {fill(t.list.from, {
-          price: formatMoney(item.fromPrice, language),
-          ml: String(item.fromMl ?? ''),
+        {fill(t.list.priceWithVolume, {
+          price: formatMoney(item.from.price, language),
+          ml: String(item.from.ml),
         })}
       </span>
-      {item.fromRegularPrice !== null ? (
+      {item.from.regularPrice !== null ? (
         <s data-testid="regular-price" className="text-muted">
-          <Money amount={item.fromRegularPrice} size="small" />
+          <Money amount={item.from.regularPrice} size="small" />
         </s>
       ) : null}
     </span>

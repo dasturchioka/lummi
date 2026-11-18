@@ -358,7 +358,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 **The Italic Is Sacred Rule.** Cormorant Italic is for fragrance and set names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
 
-**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals. **Admin panel only (deviation, 2026-11-14, #42):** admin dense money tables (reports): one caption names the currency («Суммы в сумах» / «Summalar soʻmda»); cells are bare tabular numbers. Every other money display, in the admin too, keeps «сум» / «soʻm».
+**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". A list price names its volume: "69 000 сум · 10 мл" / "69 000 soʻm · 10 ml". Prices never wrap and always use tabular numerals. **Admin panel only (deviation, 2026-11-14, #42):** admin dense money tables (reports): one caption names the currency («Суммы в сумах» / «Summalar soʻmda»); cells are bare tabular numbers. Every other money display, in the admin too, keeps «сум» / «soʻm».
 
 **The Unbroken Date Rule.** UZ date phrases such as "2-dekabrgacha" are wrapped in no-wrap and never break across lines.
 
@@ -407,7 +407,7 @@ A 72px Stone disc holding a 28px line icon of what will live there (grid for the
 - **Corner Style:** 12px.
 - **Background:** Card White on Milk, or Graphite in dark.
 - **Shadow Strategy:** none (see Elevation).
-- **Product card:** 8 / 8 / 12 px padding. The 3:4 photo with the favourite heart (32 px Milk disc at 92%, top-left corner of the photo), then the label lockup with an 18 px rule and its meta line (badge inline at the start, the type, the family when there is room), 2–3 key notes joined by " · ", and a footer with the "from" price (when that volume is marked down, its regular price follows struck through in Price small, Muted Ink, as on the volume tiles); the "+" sits on the photo's bottom-right corner, so the price keeps the footer's full width and size, a seven-digit «1 249 000 soʻmdan» included on a 360 px phone (#25, after the #15 and #16 reviews). In the two-column grid (`FragranceListCard layout="grid"`) the family is left out, the notes stop at two lines, and the footer sits on the card's bottom edge so a row of cards lines up. The whole card is one button laid over the content; the heart and "+" are siblings above it, never inside it. A card with nothing in stock shows its photo at 55 % and «Нет в наличии» in place of the price. The search results use the same card as a row (96 px photo left, the lockup right).
+- **Product card:** 8 / 8 / 12 px padding. The 3:4 photo with the favourite heart (32 px Milk disc at 92%, top-left corner of the photo), then the label lockup with an 18 px rule and its meta line (badge inline at the start, the type, the family when there is room), 2–3 key notes joined by " · ", and a footer with the price and its volume, «69 000 сум · 10 мл» (when that volume is marked down, its regular price follows struck through in Price small, Muted Ink, as on the volume tiles); the "+" sits on the photo's bottom-right corner, so the price keeps the footer's full width and size, a seven-digit «1 249 000 soʻm · 50 ml» included on a 360 px phone (#25, after the #15 and #16 reviews). In the two-column grid (`FragranceListCard layout="grid"`) the family is left out, the notes stop at two lines, and the footer sits on the card's bottom edge so a row of cards lines up. The whole card is one button laid over the content; the heart and "+" are siblings above it, never inside it. A card with nothing in stock shows its photo at 55 % and «Нет в наличии» in place of the price. The search results use the same card as a row (96 px photo left, the lockup right).
 - **Compact rows** (cart items, set picker, suggestions): thumbnail plus label lockup without the Sage rule, separated by hairlines. A suggestion row is a 48 px thumbnail (6 px radius), the attribution, the name at 18 px and the price; pressed, it washes to Milk Field.
 
 ### Inputs / Fields
@@ -491,7 +491,7 @@ A row of figures as separate cards (`StatGrid`, `StatCard` in `components/ui/sta
 - **Do** build every fragrance mention from the Label Lockup: "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" in label caps above the Cormorant Italic name.
 - **Do** use the Sage thread for every progress or measure, and nothing else.
 - **Do** keep the label divider (hairline–diamond–hairline) for label lockups only: the product name block and the set-box lid.
-- **Do** format money as integer so'm with U+00A0 thousands ("149 000 сум" / "149 000 soʻm", "69 000 soʻmdan"), no-wrap and tabular.
+- **Do** format money as integer so'm with U+00A0 thousands ("149 000 сум" / "149 000 soʻm", "69 000 soʻm · 10 ml"), no-wrap and tabular.
 - **Do** keep UZ date phrases ("2-dekabrgacha") on one line.
 - **Do** draw icons as 24px-grid linear strokes at 1.5 px with round caps, in `currentColor`.
 - **Do** show the logo at 80 px wide or more (home: 16 px tall ≈ 107 px wide). Keep its trailing dot, and never add effects.

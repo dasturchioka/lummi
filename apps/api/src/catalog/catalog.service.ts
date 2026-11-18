@@ -140,7 +140,7 @@ const soldOut = (cards: readonly VolumeCard[]) => !cards.some((c) => c.available
 /**
  * THE lowest-price rule: the lowest effective price (a markdown counts while active, through
  * `toVolumeCard`) among the volumes with something available, or of the chosen volume. Null when
- * nothing is in stock. The card's «от …», the price filter and the price sorts all read this.
+ * nothing is in stock. The card's from-price, the price filter and the price sorts all read this.
  */
 function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | null {
   const prices = cards
@@ -150,7 +150,7 @@ function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | nu
 }
 
 /**
- * THE from-volume: the volume the card's «от …» prices (the lowest effective price among those
+ * THE from-volume: the volume the card's price and volume («69 000 сум · 10 мл») name (the lowest effective price among those
  * with something available). On a tie the marked-down one wins, so its struck regular price shows.
  */
 function fromVolume(cards: readonly VolumeCard[]): VolumeCard | null {
@@ -168,7 +168,7 @@ function listPhoto(cards: readonly VolumeCard[]): string | null {
 }
 
 function toListItem(e: CatalogEntry): FragranceListItem {
-  const from = fromVolume(e.cards);
+  const fv = fromVolume(e.cards);
   return {
     slug: e.slug,
     name: e.name,
@@ -178,9 +178,13 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     keyNotes: e.keyNotes,
     isHit: e.isHit,
     isNew: e.isNew,
-    fromPrice: from?.effectivePrice ?? null,
-    fromMl: from?.ml ?? null,
-    fromRegularPrice: from && from.salePrice !== null ? from.price : null,
+    from: fv
+      ? {
+          price: fv.effectivePrice,
+          ml: fv.ml,
+          regularPrice: fv.salePrice !== null ? fv.price : null,
+        }
+      : null,
     soldOut: soldOut(e.cards),
     photo: listPhoto(e.cards),
     volumes: e.cards,
@@ -477,7 +481,7 @@ export class CatalogService {
       readSettings(this.db, [
         'catalog.stepUp.enabled',
         'catalog.stepUp.minPercent',
-        'catalog.showStockCount',
+        'catalog.showAvailableCount',
       ]),
     ]);
     // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
@@ -510,7 +514,7 @@ export class CatalogService {
       upgradeRightPrices: rights,
       fullSizeMl: pricing.fullSizeVolumesMl,
       stepUps: offers,
-      showStockCount: step['catalog.showStockCount'],
+      showAvailableCount: step['catalog.showAvailableCount'],
     };
   }
 }

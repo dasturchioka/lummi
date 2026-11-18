@@ -92,9 +92,7 @@ describe('search', () => {
       keyNotes: { ru: ['ананас', 'берёза', 'мускус'], uz: expect.any(Array) },
       isHit: false,
       isNew: false,
-      fromPrice: 69_000,
-      fromMl: 10,
-      fromRegularPrice: null,
+      from: { price: 69_000, ml: 10, regularPrice: null },
       soldOut: false,
       photo: null,
       // the volumes as the card's tiles show them (the list «+» reads them, #25)
@@ -113,11 +111,14 @@ describe('search', () => {
 
   it('shows the price to start from (in-stock volumes only) and a sold-out fragrance without one', async () => {
     const [aventus] = await search('aventus');
-    expect(aventus).toMatchObject({ soldOut: false, fromPrice: 69_000 });
+    expect(aventus).toMatchObject({
+      soldOut: false,
+      from: { price: 69_000, ml: 10, regularPrice: null },
+    });
     const [row] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'aventus'));
     await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.fragranceId, row!.id));
     const [hit] = await search('aventus');
-    expect(hit).toMatchObject({ soldOut: true, fromPrice: null });
+    expect(hit).toMatchObject({ soldOut: true, from: null });
   });
 
   it('the result limit, the similarity floor and the weights are settings', async () => {

@@ -78,7 +78,7 @@ export const miniappMessages = defineMessages(
     },
     list: {
       /** The price with the volume it belongs to (#70): «69 000 сум · 10 мл». */
-      from: '{price} · {ml}\u00a0мл',
+      priceWithVolume: '{price} · {ml}\u00a0мл',
       soldOut: 'Нет в наличии',
       open: 'Открыть {name}',
       /** The list «+» with several volumes available asks which one (#25). */
@@ -174,7 +174,7 @@ export const miniappMessages = defineMessages(
       ml: 'мл',
       soldOut: 'нет в наличии',
       inStock: 'В наличии',
-      /** With the real count (setting `catalog.showStockCount`, #70). */
+      /** With the real count (setting `catalog.showAvailableCount`, #70). */
       inStockCount: 'В наличии: {count}\u00a0шт.',
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
@@ -392,7 +392,7 @@ export const miniappMessages = defineMessages(
       toCatalog: 'Katalogni ochish',
     },
     list: {
-      from: '{price} · {ml}\u00a0ml',
+      priceWithVolume: '{price} · {ml}\u00a0ml',
       soldOut: 'Sotuvda yoʻq',
       open: '{name}’ni ochish',
       chooseVolume: 'Hajmni tanlang',

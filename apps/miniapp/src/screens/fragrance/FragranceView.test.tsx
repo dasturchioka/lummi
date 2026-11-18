@@ -77,7 +77,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
   stepUps: [],
-  showStockCount: true,
+  showAvailableCount: true,
   ...over,
 });
 
@@ -143,7 +143,7 @@ describe('FragranceView', () => {
 
   it('shows plain «В наличии» when the owner hides the count', () => {
     language = 'ru';
-    show(card({ showStockCount: false }));
+    show(card({ showAvailableCount: false }));
     expect(document.querySelector('[data-availability="in-stock"]')?.textContent).toBe('В наличии');
   });
 

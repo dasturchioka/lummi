@@ -103,12 +103,12 @@ describe('GET /catalog/fragrances/:slug', () => {
     const flag = async () => {
       const res = await card('symphony');
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-      return res.body.showStockCount;
+      return res.body.showAvailableCount;
     };
     expect(await flag()).toBe(true);
     const owner = await t.ownerSession();
     const res = await owner.client.admin.settings.update({
-      params: { key: 'catalog.showStockCount' },
+      params: { key: 'catalog.showAvailableCount' },
       body: { value: false },
     });
     expect(res.status).toBe(200);

@@ -181,7 +181,7 @@ export function VolumeStatus({
 }: {
   volume: VolumeCard;
   stock?: boolean;
-  /** Setting `catalog.showStockCount`: «В наличии: 12 шт.», the server's real available count. */
+  /** Setting `catalog.showAvailableCount`: «В наличии: 12 шт.», the server's real available count. */
   showCount?: boolean;
 }) {
   const { t, language } = usePrefs();

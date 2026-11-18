@@ -105,17 +105,17 @@ export const settingDefinitions = {
     },
   },
   /** The real available count next to «В наличии» on the product page (#70): on or off. */
-  'catalog.showStockCount': {
+  'catalog.showAvailableCount': {
     schema: z.boolean(),
     default: true,
     area: 'shop',
     label: {
-      ru: 'Показывать остаток на карточке',
-      uz: 'Kartada qoldiqni koʻrsatish',
+      ru: 'Показывать, сколько можно заказать',
+      uz: 'Nechta buyurtma qilish mumkinligini koʻrsatish',
     },
     hint: {
-      ru: 'Под объёмами: «В наличии: 12 шт.», число — реальный остаток (на руках минус резерв). Выключено — просто «В наличии».',
-      uz: 'Hajmlar ostida: «Sotuvda: 12 dona», raqam — haqiqiy qoldiq (qoʻlda minus zaxira). Oʻchiq boʻlsa — oddiy «Sotuvda bor».',
+      ru: 'Число на карточке товара под объёмами: «В наличии: 12 шт.» — остаток минус бронь. Выключено — просто «В наличии».',
+      uz: 'Mahsulot kartasida hajmlar ostida: «Sotuvda: 12 dona» — qoldiq minus bron. Oʻchiq boʻlsa — oddiy «Sotuvda bor».',
     },
   },
   /** The step-up line under the product page's volume tiles (#57): on or off. */

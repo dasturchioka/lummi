@@ -13,7 +13,7 @@ import { VolumeStatus, VolumeTiles } from './VolumeTiles';
  * The list «+» with several volumes available asks which one (ticket #25): the fragrance as a
  * compact row, the card's own 10 / 30 / 50 ml tiles (mockup 03, price under each; a sold-out one
  * marked and not choosable; a markdown struck, with its row under the tiles as on the card), and
- * «В корзину · <price>» for the chosen one. It opens on the cheapest available, the card's «от …».
+ * «В корзину · <price>» for the chosen one. It opens on the cheapest available, the card's from-volume (`item.from`).
  * An add that fails says so here, above the button, where the shopper is looking (the shell's note
  * would sit under the dim); a volume found sold out turns its tile sold out at once and the choice
  * moves to the cheapest still available, or the button stands down. Loaded lazily, on the first press.
@@ -45,7 +45,7 @@ export function VolumeSheet({
       (best, v) => (!best || v.effectivePrice < best.effectivePrice ? v : best),
       undefined,
     );
-  const [chosen, setMl] = useState(cheapest?.ml);
+  const [chosen, setMl] = useState(item.from?.ml ?? cheapest?.ml);
   // a choice that ran out moves to the cheapest still available; none left keeps it, sold out
   const ml = volumes.some((v) => v.ml === chosen && v.available > 0)
     ? chosen
