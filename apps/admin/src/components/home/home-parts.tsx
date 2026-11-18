@@ -208,14 +208,17 @@ export function SalesStrip({
 
 // ---- the queue
 
-/** A stock row's name: «Blue Sapphire 30 мл», or the Discovery set. */
+/** A stock row's name: «Blue Sapphire 30 мл», a Discovery set, or the gift samples' 5 ml. */
 export function stockLabel(
-  item: { kind: 'volume' | 'discovery'; name: string | null; ml: number | null },
+  item: { kind: 'volume' | 'discovery' | 'sample'; name: string | null; ml: number | null },
   copy: HomeCopy,
 ) {
-  // a Discovery set's `ml` is its vial size (ADR 0042): the 5 × 5 ml box is told apart
+  // the gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's
+  if (item.kind === 'sample')
+    return item.name === null ? copy.samples : fill(copy.sample, { name: item.name });
+  // a Discovery set's `ml` is its vial size (ADR 0042)
   if (item.kind === 'discovery' || item.name === null)
-    return item.ml === 5 ? 'Discovery set 5 × 5' : 'Discovery set';
+    return fill(copy.discoverySet, { ml: String(item.ml ?? 10) });
   return fill(copy.ml, { name: item.name, ml: String(item.ml) });
 }
 

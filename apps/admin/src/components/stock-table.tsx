@@ -6,6 +6,7 @@ import {
   type StockLevel,
   type StockRow,
 } from '@lummi/contracts';
+import { asDiscoveryVialMl } from '@lummi/contracts/constants';
 import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import Link from 'next/link';
@@ -166,8 +167,8 @@ export function StockTable({
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const s = t.stock;
 
-  /** A Discovery set row's `ml` is its vial size (ADR 0042): 10 or 5. */
-  const setMl = (r: StockRow) => (r.ml === 5 ? 5 : 10);
+  /** A Discovery set row's `ml` is its vial size (ADR 0042). */
+  const setMl = (r: StockRow) => asDiscoveryVialMl(r.ml);
   const label = (r: StockRow) =>
     r.kind === 'discovery'
       ? `${s.discovery} ${fill(s.discoverySub, { ml: String(setMl(r)) })}`

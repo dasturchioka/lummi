@@ -1,4 +1,4 @@
-import type { StockList, StockQuery } from '@lummi/contracts';
+import type { GiftSampleStock, StockList, StockQuery } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Notice } from '@/components/ui/notice';
 import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
@@ -55,6 +56,7 @@ export function StockView({
           </Button>
         }
       />
+      {data.giftSample && <SampleNotice sample={data.giftSample} t={t} />}
       <Card className="mb-4 p-4 lg:p-5">
         <form
           method="get"
@@ -151,5 +153,25 @@ function PageLink({ href, children }: { href: string | null; children: React.Rea
     <Button variant="outline" size="sm" disabled>
       {children}
     </Button>
+  );
+}
+
+/**
+ * The gift sample's 5 ml stock running low or out, or its fragrance gone (#79): first orders then
+ * go without one, so it is said above the table, never silently.
+ */
+function SampleNotice({ sample, t }: { sample: GiftSampleStock; t: AdminMessages }) {
+  const s = t.stock;
+  if (!sample.missing && sample.level === 'ok') return null;
+  const n = { n: num(sample.available), name: sample.fragrance ?? '' };
+  const title = sample.missing
+    ? s.sampleMissing
+    : sample.level === 'zero'
+      ? fill(sample.fragrance ? s.sampleOutNamed : s.sampleOut, n)
+      : fill(sample.fragrance ? s.sampleLowNamed : s.sampleLow, n);
+  return (
+    <Notice title={title} className="mb-4">
+      {sample.missing ? null : s.sampleHint}
+    </Notice>
   );
 }

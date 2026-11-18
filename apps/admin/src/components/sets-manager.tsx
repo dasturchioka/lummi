@@ -1,7 +1,7 @@
 'use client';
 
 import { isUzumUrl, STOCK_REASON_MAX, type AdminDiscoverySet } from '@lummi/contracts';
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_SETS, SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -127,7 +127,7 @@ function SetBlock({
           <Section title={s.photoTitle}>
             <p className="-mt-2 text-small text-pretty text-muted-foreground">{s.photoHint}</p>
             <PhotoUpload
-              slot={set.vialMl === 10 ? 'discovery' : `discovery-${set.vialMl}`}
+              slot={DISCOVERY_SETS[set.vialMl].key}
               label={t.catalog.photo}
               url={`/api/admin/sets/discovery/photo?vialMl=${set.vialMl}`}
               hash={set.photo}
@@ -528,7 +528,7 @@ function PriceForm({
       <Field
         id={`set-${set.vialMl}-price`}
         label={s.price}
-        hint={set.vialMl === 10 ? s.priceHint : s.priceHint5}
+        hint={s.priceHint[set.vialMl]}
         aside={
           readout && (
             <span className="text-small font-medium text-foreground tabular-nums">{readout}</span>
