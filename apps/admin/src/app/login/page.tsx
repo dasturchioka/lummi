@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
-import { LanguageSwitch } from '@/components/language-switch';
 import { LoginForm } from '@/components/login-form';
 import { Logo } from '@/components/logo';
+import { PrefsSwitches } from '@/components/prefs-switches';
 import { getAdminMessages } from '@/lib/i18n';
+import { getTheme } from '@/lib/theme';
 import { getMe } from '@/lib/server-api';
 
 export default async function LoginPage() {
@@ -11,7 +12,12 @@ export default async function LoginPage() {
   return (
     <main className="flex min-h-dvh flex-col px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-end py-4">
-        <LanguageSwitch current={language} label={t.language} />
+        <PrefsSwitches
+          language={language}
+          theme={await getTheme()}
+          labels={{ language: t.language, theme: t.theme }}
+          words
+        />
       </div>
       <div className="mx-auto grid w-full max-w-[400px] flex-1 content-center gap-8 pb-[12vh]">
         <Logo className="mx-auto h-5" />

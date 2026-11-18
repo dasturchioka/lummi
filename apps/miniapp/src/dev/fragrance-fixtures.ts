@@ -80,6 +80,7 @@ const demo: FragranceCard = {
     { fromMl: 10, toMl: 30, saving: 58_000 },
     { fromMl: 30, toMl: 50, saving: 29_000 },
   ],
+  showAvailableCount: true,
 };
 
 const worst: FragranceCard = {
@@ -164,6 +165,7 @@ const worst: FragranceCard = {
   fullSizeMl: [30, 50],
   // 30 -> 50 ml costs more per ml than 30 ml itself: no step-up
   stepUps: [],
+  showAvailableCount: true,
 };
 
 /** A fragrance sold in one volume only (the others "simply absent"), all notes on one level. */
@@ -174,6 +176,7 @@ const one: FragranceCard = {
   notes: { top: [], heart: [], base: demo.notes.base },
   volumes: demo.volumes.filter((v) => v.ml === 50),
   stepUps: [],
+  showAvailableCount: true,
 };
 
 /** Nothing optional: no volumes yet, no notes, no family, no key notes. */
@@ -186,6 +189,7 @@ const empty: FragranceCard = {
   notes: { top: [], heart: [], base: [] },
   volumes: [],
   stepUps: [],
+  showAvailableCount: true,
 };
 
 export const FIXTURES = { demo, worst, one, empty } as const;

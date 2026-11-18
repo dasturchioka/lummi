@@ -2718,6 +2718,7 @@ export const adminMessages = defineMessages(
         },
       },
       language: 'Язык',
+      theme: { label: 'Тема', light: 'Светлая', dark: 'Тёмная' },
     },
   },
   {
@@ -5450,6 +5451,7 @@ export const adminMessages = defineMessages(
         },
       },
       language: 'Til',
+      theme: { label: 'Mavzu', light: 'Yorugʻ', dark: 'Qorongʻi' },
     },
   },
 );

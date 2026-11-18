@@ -175,12 +175,12 @@ describe('one lowest-price rule', () => {
     await sellOut('aventus', 10);
     const asc = await list({ limit: 100, sort: 'price_asc' });
     const card = asc.items.find((i) => i.slug === 'aventus')!;
-    expect(card.fromPrice).toBe(199_000);
+    expect(card.from).toEqual({ price: 199_000, ml: 30, regularPrice: null });
     expect(card.soldOut).toBe(false);
     // the filter and the sort judge the same number the card shows
     expect(await slugsOf({ priceMax: 150_000 })).not.toContain('aventus');
     expect(await slugsOf({ priceMin: 190_000, priceMax: 200_000 })).toEqual(['aventus']);
-    const order = asc.items.filter((i) => i.fromPrice !== null).map((i) => i.fromPrice!);
+    const order = asc.items.flatMap((i) => (i.from ? [i.from.price] : []));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(asc.items.at(-1)?.slug).toBe('aventus');
   });
@@ -188,7 +188,7 @@ describe('one lowest-price rule', () => {
   it('keeps no «от …» price when nothing is in stock', async () => {
     await sellOut('aventus');
     const card = (await list({ limit: 100 })).items.find((i) => i.slug === 'aventus')!;
-    expect(card).toMatchObject({ soldOut: true, fromPrice: null });
+    expect(card).toMatchObject({ soldOut: true, from: null });
   });
 });
 
@@ -219,20 +219,27 @@ describe('list photo and struck price', () => {
       .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
       .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 30)));
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
-    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 90_000 });
+    // 10 ml (60 000, regular) ties the marked-down 30 ml (60 000): the marked-down one is the from-volume
+    expect((await card('tygar')).from).toEqual({ price: 60_000, ml: 30, regularPrice: 90_000 });
   });
 
-  it('sets fromRegularPrice only while the from-volume is marked down', async () => {
+  it('from.ml is the volume from.price belongs to', async () => {
+    const c = await card('tygar');
+    const v = c.volumes.find((x) => x.available > 0 && x.effectivePrice === c.from?.price);
+    expect(c.from?.ml).toBe(v?.ml);
+  });
+
+  it('sets from.regularPrice only while the from-volume is marked down', async () => {
     await setPrice('tygar', 10, 80_000);
-    expect((await card('tygar')).fromRegularPrice).toBeNull();
+    expect((await card('tygar')).from?.regularPrice).toBeNull();
     await t.db
       .update(volumes)
       .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
       .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 10)));
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
-    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 80_000 });
+    expect(await card('tygar')).toMatchObject({ from: { price: 60_000, regularPrice: 80_000 } });
     t.edges.clock.set(new Date('2026-11-12T19:00:00Z'));
-    expect(await card('tygar')).toMatchObject({ fromPrice: 80_000, fromRegularPrice: null });
+    expect(await card('tygar')).toMatchObject({ from: { price: 80_000, regularPrice: null } });
   });
 });
 
@@ -260,7 +267,7 @@ describe('sorting', () => {
       .where(and(eq(volumes.fragranceId, id), eq(volumes.ml, 10)));
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
     expect((await slugsOf({ sort: 'price_asc' }))[0]).toBe('tygar');
-    expect((await list({ sort: 'price_asc', limit: 1 })).items[0]?.fromPrice).toBe(40_000);
+    expect((await list({ sort: 'price_asc', limit: 1 })).items[0]?.from?.price).toBe(40_000);
     t.edges.clock.set(new Date('2026-11-12T19:00:00Z'));
     expect(await cheapestThree('price_asc')).toEqual(['aventus', 'symphony', 'tygar']);
   });

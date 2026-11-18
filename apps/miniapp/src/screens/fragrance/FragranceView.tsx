@@ -381,7 +381,7 @@ export function FragranceView({
               onSelect={setMl}
               focusTick={focusTick}
             />
-            <VolumeStatus volume={volume} />
+            <VolumeStatus volume={volume} showCount={card.showAvailableCount} />
             {right ? <RightDeal right={right} fullSizeMl={card.fullSizeMl} /> : null}
             {stepUp ? (
               <StepUpRow

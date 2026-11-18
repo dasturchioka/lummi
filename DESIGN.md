@@ -289,7 +289,7 @@ The customer chose **Nurmuhammad's variant 2 with elements of variant 1** (`desi
 | Screen | Follow | Notes |
 |---|---|---|
 | Home | `design/approved` (variant 2 + search field and «Новинки» from variant 1) | Fabric-photo top block with the logo and «Ароматы, которые освещают» (dark fabric in the dark theme). The block is one 3:2 image slot (`FABRIC` in `Home.tsx`); until the photos arrive it shows Stone (Dark Block) with the hairline arcs of the brandbook cover. The slogan sits on one line under the logo in the Slogan role (Cormorant Italic, as the comp); UZ is the brandbook's «Lahzalaringizni yorituvchi iforlar». The row under it has a search disc (left) and the avatar (right) on Card White discs; until the city selector exists its centre stays empty. Below it the delivery city selector (centre) with search icon left and the profile avatar ("L." monogram disc) right. Then the search field «Название или нота», the dark Discovery set banner (the customer's box photo on the left third, the set on Graphite beside it, named as the comp does: «НАБОР» / «TOʻPLAM» in label caps over «Discovery set» in the Name role at 24 px; until the sets ticket adds the price, arrow and link, a «Скоро» pill holds their place), since #62 one **banner slider** in that slot: the Discovery set slide first, always, then every promo banner the owner has on, in the owner's order, in the same Graphite form (Manrope 600 title); see «Banner slider». Then «Популярное» with type chips over a two-column grid, and «Новинки» as a row with «Все →». No RU/UZ switch, no welcome screen. |
-| Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «от … сум», «+». |
+| Catalog | `design/approved` (variant 2 + filters and card details from variant 1) | Photo-circle type chips (Все / Homme / Femme / Unisex / Наборы). Filter chips Семейство / Объём / Цена / Сезон, the sort «Топ продаж ▾» and «Найдено: N». Two-column cards: heart, photo, type, name, 2–3 notes, «69 000 сум · 10 мл» (the from-volume's price with its volume, #70), «+». |
 | Fragrance card | `design/approved` (variant 2 + icon row from variant 1) | Large photo with back, heart and share. Name lockup, description, the characteristics icon row, volume tiles with price under each, notes pyramid, then the reviews block, then «Купить на Uzum». Dock: «В корзину · <цена>» and «Купить сейчас». |
 | Cart | `design/approved` (variant 2 + bin from variant 1) and the free-delivery block from `design/mockups` 04-cart | Lines with stepper and bin. Promo field with «Применить». Dark totals block (items, promo, delivery «Доставка BTS, <город>», «Итого») with «Оформить заказ» inside. The free-delivery Sage thread with «Подойдёт любой аромат 10 мл» suggestions sits above the lines, exactly as in our mockup (the customer asked for it). |
 | Tab bar | `design/approved` | Dark floating pill with labels: Главная, Каталог, Корзина, Заказы, Профиль. |
@@ -358,7 +358,7 @@ All three faces are self-hosted as woff2 with cyrillic, latin and latin-ext subs
 
 **The Italic Is Sacred Rule.** Cormorant Italic is for fragrance and set names, plus the slogan in the Home top block (customer-approved comp). Headings, prices, buttons and other marketing lines never use it.
 
-**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". The UZ "from" form is "69 000 soʻmdan". Prices never wrap and always use tabular numerals. **Admin panel only (deviation, 2026-11-14, #42):** admin dense money tables (reports): one caption names the currency («Суммы в сумах» / «Summalar soʻmda»); cells are bare tabular numbers. Every other money display, in the admin too, keeps «сум» / «soʻm».
+**The Integer So'm Rule.** Money is integer so'm with a no-break space (U+00A0) as the thousands separator, followed by the currency word: "149 000 сум" / "149 000 soʻm". A list price names its volume: "69 000 сум · 10 мл" / "69 000 soʻm · 10 ml". Prices never wrap and always use tabular numerals. **Admin panel only (deviation, 2026-11-14, #42):** admin dense money tables (reports): one caption names the currency («Суммы в сумах» / «Summalar soʻmda»); cells are bare tabular numbers. Every other money display, in the admin too, keeps «сум» / «soʻm».
 
 **The Unbroken Date Rule.** UZ date phrases such as "2-dekabrgacha" are wrapped in no-wrap and never break across lines.
 
@@ -407,7 +407,7 @@ A 72px Stone disc holding a 28px line icon of what will live there (grid for the
 - **Corner Style:** 12px.
 - **Background:** Card White on Milk, or Graphite in dark.
 - **Shadow Strategy:** none (see Elevation).
-- **Product card:** 8 / 8 / 12 px padding. The 3:4 photo with the favourite heart (32 px Milk disc at 92%, top-left corner of the photo), then the label lockup with an 18 px rule and its meta line (badge inline at the start, the type, the family when there is room), 2–3 key notes joined by " · ", and a footer with the "from" price (when that volume is marked down, its regular price follows struck through in Price small, Muted Ink, as on the volume tiles); the "+" sits on the photo's bottom-right corner, so the price keeps the footer's full width and size, a seven-digit «1 249 000 soʻmdan» included on a 360 px phone (#25, after the #15 and #16 reviews). In the two-column grid (`FragranceListCard layout="grid"`) the family is left out, the notes stop at two lines, and the footer sits on the card's bottom edge so a row of cards lines up. The whole card is one button laid over the content; the heart and "+" are siblings above it, never inside it. A card with nothing in stock shows its photo at 55 % and «Нет в наличии» in place of the price. The search results use the same card as a row (96 px photo left, the lockup right).
+- **Product card:** 8 / 8 / 12 px padding. The 3:4 photo with the favourite heart (32 px Milk disc at 92%, top-left corner of the photo), then the label lockup with an 18 px rule and its meta line (badge inline at the start, the type, the family when there is room), 2–3 key notes joined by " · ", and a footer with the price and its volume, «69 000 сум · 10 мл» (when that volume is marked down, its regular price follows struck through in Price small, Muted Ink, as on the volume tiles); the "+" sits on the photo's bottom-right corner, so the price keeps the footer's full width and size, a seven-digit «1 249 000 soʻm · 50 ml» included on a 360 px phone (#25, after the #15 and #16 reviews). In the two-column grid (`FragranceListCard layout="grid"`) the family is left out, the notes stop at two lines, and the footer sits on the card's bottom edge so a row of cards lines up. The whole card is one button laid over the content; the heart and "+" are siblings above it, never inside it. A card with nothing in stock shows its photo at 55 % and «Нет в наличии» in place of the price. The search results use the same card as a row (96 px photo left, the lockup right).
 - **Compact rows** (cart items, set picker, suggestions): thumbnail plus label lockup without the Sage rule, separated by hairlines. A suggestion row is a 48 px thumbnail (6 px radius), the attribution, the name at 18 px and the price; pressed, it washes to Milk Field.
 
 ### Inputs / Fields
@@ -484,6 +484,27 @@ A row of figures as separate cards (`StatGrid`, `StatCard` in `components/ui/sta
 - **States:** loading draws the trays with their heads and breathing card skeletons; a shop without any order keeps the trays, the first one holding a dashed slot («Заказов пока нет», «Новые заказы из приложения появятся здесь»); a shop whose orders are all closed before the 14 days says so over the board with «Все заказы — в списке»; nothing found says «По этим фильтрам заказов нет.»; a failed first load is the error plate with «Повторить».
 - **Motion:** only what changed on a refresh moves: a card new to its column settles in, a changed count or sum settles out of a 2 px blur. Reduced motion keeps fades only: no lift, no blur, and a dropped card's copy only fades where it was let go.
 
+### Admin dark (admin panel, #68)
+Light is the default. A Светлая / Тёмная switch (two segments, Sun and Moon, with the names in the sidebar and on the sign-in pages, icon only on the phone bar, same Milk Field track as RU/UZ) sits beside RU/UZ; the choice lives in the cookie `lummi_theme`, which the server renders into `<html data-theme>` (no flash) and into the browser bar colour. Tokens are derived from the Mini App's approved dark, under the same variable names, so components carry no second class. Graphite and Milk swap roles: primary buttons, the Now block, the board toast and the last timeline dot invert as in the Mini App. Sage is unchanged; Sage Ink lightens. No new hue: burgundy, rose gold and gold stay forbidden. `color-scheme: dark` gives native date inputs, selects and scrollbars a dark face.
+
+| Token | Light | Dark | Contrast (dark) |
+|---|---|---|---|
+| `--milk` (ground) | `#f5f2ec` | `#1d1c1a` | |
+| `--card-white` (cards, dialogs) | `#ffffff` | `#2a2a2a` | |
+| `--milk-field` (fields, tracks) | `#ece7df` | `#353330` | |
+| `--stone` (discs, quiet fills) | `#cfc6b8` | `#3d3a35` | |
+| `--graphite` (ink, primary fill) | `#2a2a2a` | `#f5f2ec` | 12.8:1 on card |
+| `--ink-muted` | `#67625b` | `#cfc6b8` | 8.5:1 on card, 7.4:1 on field |
+| `--ink-faint` (borders, disabled) | `#a39d94` | `#8a857c` | 3.9:1 on card |
+| `--sage` | `#9aa592` | `#9aa592` | |
+| `--sage-ink` | `#5c6855` | `#aeb8a6` | 7.0:1 on card |
+| `--sage-wash` | 18% Sage | 16% Sage | |
+| `--hairline` / `--hairline-strong` | Graphite 11% / 22% | Milk 10% / 22% | |
+| `--chart-bar` (quiet bars) | `#8f8a82` | `#8a857c` | 3.4:1 on white, 3.9:1 on card |
+| `--overlay` (dialog and sheet scrim) | Graphite 40% | black 55% | |
+
+Constants that do not follow the theme: `--brand-graphite`, `--brand-milk`, `--brand-stone` (the Mini App banner preview shows the light look in both themes), and the white plate behind a campaign QR code (a scanner needs dark on white). Photos, receipts and previews sit on `--milk-field`, never white. A unit test keeps every light token paired with a dark value.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -491,7 +512,7 @@ A row of figures as separate cards (`StatGrid`, `StatCard` in `components/ui/sta
 - **Do** build every fragrance mention from the Label Lockup: "ПО МОТИВАМ <BRAND>" / "<BRAND> asosida" in label caps above the Cormorant Italic name.
 - **Do** use the Sage thread for every progress or measure, and nothing else.
 - **Do** keep the label divider (hairline–diamond–hairline) for label lockups only: the product name block and the set-box lid.
-- **Do** format money as integer so'm with U+00A0 thousands ("149 000 сум" / "149 000 soʻm", "69 000 soʻmdan"), no-wrap and tabular.
+- **Do** format money as integer so'm with U+00A0 thousands ("149 000 сум" / "149 000 soʻm", "69 000 soʻm · 10 ml"), no-wrap and tabular.
 - **Do** keep UZ date phrases ("2-dekabrgacha") on one line.
 - **Do** draw icons as 24px-grid linear strokes at 1.5 px with round caps, in `currentColor`.
 - **Do** show the logo at 80 px wide or more (home: 16 px tall ≈ 107 px wide). Keep its trailing dot, and never add effects.

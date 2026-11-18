@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * Brandbook v2.0 tokens, exactly as DESIGN.md names them. The admin is light only.
+ * Brandbook v2.0 tokens, exactly as DESIGN.md names them. Light is the default; dark (Admin dark, #68) swaps the same variables under [data-theme='dark'].
  * Flat: depth comes from tone (Milk ground, white cards, Milk Field fills) and 1 px hairlines,
  * never from shadows. No red, burgundy or gold: errors are Graphite on a Milk Field plate.
  */
@@ -18,11 +18,39 @@
   --hairline: rgba(42, 42, 42, 0.11);
   --hairline-strong: rgba(42, 42, 42, 0.22);
   --sage-wash: rgba(154, 165, 146, 0.18);
+  --overlay: rgba(42, 42, 42, 0.4);
+  --chart-bar: #8f8a82; /* quiet chart bars: 3.4:1 on a white card */
+  /* brand constants: a surface that mimics the Mini App's light look in both admin themes */
+  --brand-graphite: #2a2a2a;
+  --brand-milk: #f5f2ec;
+  --brand-stone: #cfc6b8;
 
   --radius-card: 12px;
   --radius-button: 10px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/*
+ * Admin dark (#68, DESIGN.md "Admin dark"): the same variable names, derived from the Mini App's
+ * approved dark. Graphite and Milk swap roles (primary buttons, blocks and toasts invert as in
+ * the Mini App), so no component needs a second class. Sage stays, Sage Ink lightens for AA.
+ */
+:root[data-theme='dark'] {
+  --milk: #1d1c1a;
+  --stone: #3d3a35;
+  --graphite: #f5f2ec;
+  --sage: #9aa592;
+  --card-white: #2a2a2a;
+  --milk-field: #353330;
+  --ink-muted: #cfc6b8;
+  --ink-faint: #8a857c;
+  --sage-ink: #aeb8a6;
+  --hairline: rgba(245, 242, 236, 0.1);
+  --hairline-strong: rgba(245, 242, 236, 0.22);
+  --sage-wash: rgba(154, 165, 146, 0.16);
+  --overlay: rgba(0, 0, 0, 0.55);
+  --chart-bar: #8a857c; /* 3.9:1 on a Graphite card */
 }
 
 @theme inline {
@@ -43,6 +71,11 @@
   --color-sage: var(--sage);
   --color-sage-ink: var(--sage-ink);
   --color-sage-wash: var(--sage-wash);
+  --color-overlay: var(--overlay);
+  --color-chart-bar: var(--chart-bar);
+  --color-brand-graphite: var(--brand-graphite);
+  --color-brand-milk: var(--brand-milk);
+  --color-brand-stone: var(--brand-stone);
   --radius-card: var(--radius-card);
   --radius-button: var(--radius-button);
   --ease-out: var(--ease-out);
@@ -72,6 +105,9 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     caret-color: var(--graphite);
+  }
+  html[data-theme='dark'] {
+    color-scheme: dark;
   }
   ::selection {
     background: var(--stone);

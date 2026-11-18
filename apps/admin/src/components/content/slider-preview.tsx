@@ -22,8 +22,8 @@ export interface DiscoverySlide {
 function DiscoveryPreview({ set, language }: { set: DiscoverySlide; language: 'ru' | 'uz' }) {
   const h = miniappMessages[language].home;
   return (
-    <div className="flex min-h-[140px] w-full flex-1 overflow-hidden rounded-card bg-graphite text-milk">
-      <div className="relative grid w-[34%] shrink-0 place-items-center bg-stone">
+    <div className="flex min-h-[140px] w-full flex-1 overflow-hidden rounded-card bg-brand-graphite text-brand-milk">
+      <div className="relative grid w-[34%] shrink-0 place-items-center bg-brand-stone">
         {set.photo ? (
           <img
             src={photoUrl(set.photo, 400)}
@@ -32,7 +32,7 @@ function DiscoveryPreview({ set, language }: { set: DiscoverySlide; language: 'r
             decoding="async"
           />
         ) : (
-          <Package className="size-7 text-graphite/60" strokeWidth={1.5} aria-hidden />
+          <Package className="size-7 text-brand-graphite/60" strokeWidth={1.5} aria-hidden />
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-4 pr-4 pl-4">
@@ -51,7 +51,7 @@ function DiscoveryPreview({ set, language }: { set: DiscoverySlide; language: 'r
           <span className="text-[15px] font-semibold whitespace-nowrap tabular-nums">
             {formatMoney(set.price, language)}
           </span>
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-milk/20">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-milk/20">
             <ArrowRight className="size-4" strokeWidth={1.5} aria-hidden />
           </span>
         </div>
@@ -97,7 +97,7 @@ export function SliderPreview({
             {discovery ? (
               <DiscoveryPreview set={discovery} language={language} />
             ) : (
-              <div className="min-h-[140px] flex-1 rounded-card bg-graphite" />
+              <div className="min-h-[140px] flex-1 rounded-card bg-brand-graphite" />
             )}
           </li>
           {banners.map((x, i) => (

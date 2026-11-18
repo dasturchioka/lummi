@@ -58,7 +58,9 @@ export function PanelNav({
                     >
                       {icon}
                       <span className="min-w-0 truncate">{label}</span>
-                      <span className="ml-auto shrink-0 text-xs text-faint">{t.nav.soonTag}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                        {t.nav.soonTag}
+                      </span>
                     </span>
                   </li>
                 );
