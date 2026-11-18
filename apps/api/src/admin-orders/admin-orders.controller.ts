@@ -104,6 +104,16 @@ export class AdminOrdersController {
     });
   }
 
+  /** The order's profit (#77): the owner's, as reports are (ADR 0017); a manager gets 403. */
+  @TsRestHandler(adminContract.orders.costs)
+  @UseGuards(OwnerGuard)
+  costs() {
+    return tsRestHandler(adminContract.orders.costs, async ({ params }) => {
+      const costs = await this.orders.costs(params.number);
+      return costs ? { status: 200 as const, body: costs } : notFound;
+    });
+  }
+
   @TsRestHandler(adminContract.orders.fulfil)
   fulfil(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.orders.fulfil, async ({ params, body }) =>

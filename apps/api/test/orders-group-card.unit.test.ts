@@ -84,6 +84,7 @@ const order: OrderRow = {
   reserveReminderSentAt: null,
   reviewRequestedAt: null,
   reviewRequest: null,
+  costs: null,
   createdAt: new Date('2026-11-09T10:00:00Z'),
   updatedAt: new Date('2026-11-09T10:00:00Z'),
 };
@@ -108,6 +109,7 @@ const line = (position: number): OrderLineRow => ({
   promoGift: false,
   setVolumeIds: null,
   setComposition: null,
+  unitCost: null,
 });
 const data = (over: Partial<CardData> = {}): CardData => ({
   order,

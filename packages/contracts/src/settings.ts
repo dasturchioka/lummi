@@ -974,6 +974,14 @@ export const settingDefinitions = {
       uz: 'Namuna 5 ml flakonga quyiladi.',
     },
   },
+  /** The «Рентабельность» table flags a sale whose margin is under this (#77; the calculator's 15 %). */
+  'cost.order.lowMarginPercent': costPercent('costOrder', 15, {
+    label: { ru: 'Низкая маржа: ниже, %', uz: 'Past marja: quyida, %' },
+    hint: {
+      ru: 'В таблице рентабельности такие позиции отмечены.',
+      uz: 'Rentabellik jadvalida bunday pozitsiyalar belgilanadi.',
+    },
+  }),
   // ---- Bot and orders group
   // Orders group (spec Changes 2026-11-07). Null until the group is set up; the bot follows migrate_to_chat_id.
   'bot.groupChatId': {
