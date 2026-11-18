@@ -17,8 +17,42 @@ env:
   OWNER: ${{ github.repository_owner }}
 
 jobs:
-  check:
+  # #72: a stage-1 merge whose tree is exactly a ticket branch that already passed CI needs no second
+  # run of the whole suite (the minutes ran out once; the runner shares the staging VPS)
+  gate:
     if: github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, lummi]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      check: ${{ steps.tree.outputs.check }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tree=$(git rev-parse 'HEAD^{tree}')
+          # curl + jq: the runner host has no gh CLI
+          shas=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?status=success&per_page=40" |
+            jq -r '.workflow_runs[].head_sha' | sort -u)
+          for sha in $shas; do
+            git cat-file -e "$sha" 2>/dev/null || git fetch -q --depth=1 origin "$sha" 2>/dev/null || continue
+            if [ "$(git rev-parse "$sha^{tree}")" = "$tree" ]; then
+              echo "tree $tree already passed CI at $sha: no second check"
+              echo "check=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "check=true" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: gate
+    if: needs.gate.outputs.check == 'true'
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
@@ -29,7 +63,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, lummi]
     timeout-minutes: 40
     strategy:
       fail-fast: true
@@ -43,7 +77,7 @@ jobs:
           - { target: userbot, image: lummi-userbot }
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      # #72: the host's default builder and its own layer cache (no GitHub cache service)
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -65,16 +99,18 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}:${{ steps.meta.outputs.ref }}
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
   deploy:
-    needs: [check, images]
-    if: github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main'
+    needs: [gate, check, images]
+    # the check either passed or was skipped by the gate (its tree passed CI already)
+    if: >-
+      always() && (github.ref == 'refs/heads/stage-1' || github.ref == 'refs/heads/main') &&
+      needs.gate.result == 'success' && needs.images.result == 'success' &&
+      (needs.check.result == 'success' || (needs.check.result == 'skipped' && needs.gate.outputs.check == 'false'))
     permissions:
       contents: read
       packages: read
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, lummi]
     timeout-minutes: 20
     environment: staging
     steps:
@@ -83,15 +119,16 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        # in the job's temp dir, never the runner user's own ~/.ssh (#72: self-hosted)
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/ssh/id_deploy" && chmod 600 "$RUNNER_TEMP/ssh/id_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
       - name: Copy the Compose file
         env:
           TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
         run: |
-          scp -i ~/.ssh/id_deploy -o IdentitiesOnly=yes docker-compose.yml deploy/remote-deploy.sh "$TARGET:/opt/lummi-staging/"
+          scp -i "$RUNNER_TEMP/ssh/id_deploy" -o IdentitiesOnly=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" docker-compose.yml deploy/remote-deploy.sh "$TARGET:/opt/lummi-staging/"
       - name: Pull, migrate, seed, start
         env:
           TARGET: ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}
@@ -103,7 +140,7 @@ jobs:
           # The script runs from the copied file, not from stdin: `docker compose run` reads stdin and
           # would swallow the rest of a piped script (the first deploy stopped after migrating, exit 0).
           printf '%s\n' "$GHCR_TOKEN" |
-            ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes "$TARGET" \
+            ssh -i "$RUNNER_TEMP/ssh/id_deploy" -o IdentitiesOnly=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" "$TARGET" \
               "read -r GHCR_TOKEN; export GHCR_TOKEN; bash /opt/lummi-staging/remote-deploy.sh '$SHA' '$OWNER' '$GHCR_ACTOR' </dev/null"
       - name: Smoke test
         env:
@@ -111,3 +148,18 @@ jobs:
         run: |
           curl -fsS --retry 5 --retry-delay 5 "https://api.${DOMAIN}/health"
           curl -fsS -o /dev/null "https://${DOMAIN}/"
+      - name: Prune old lummi images
+        # only this project's images, never the other projects' on the shared VPS (#72); keeps what
+        # runs and this deploy's SHA
+        if: always()
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          inuse=$(docker ps --format '{{.Image}}')
+          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep "^ghcr.io/${OWNER}/lummi-" |
+            while read -r ref id; do
+              case "$ref" in *":$SHA"|*":stage-1"|*":main") continue ;; esac
+              echo "$inuse" | grep -qx "$ref" && continue
+              docker rmi "$ref" >/dev/null 2>&1 || true
+            done
+          docker image prune -f --filter "label=org.opencontainers.image.source=https://github.com/${OWNER}/lummi" >/dev/null 2>&1 || true
