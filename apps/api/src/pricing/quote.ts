@@ -1,5 +1,6 @@
 import type {
   Discount,
+  PromoGiftItem,
   PromoCodeInvalid,
   PromoCodeRefusal,
   Quote,
@@ -49,15 +50,26 @@ export type Entitlement =
     }
   | { type: 'birthday_coupon'; id: number; percent: number; maxAmount: number; expiresAt: Date };
 
+/**
+ * A gift code's free item (ADR 0039) as the caller found it: its regular price (the value reports
+ * count), and whether none is left after the cart's own lines took theirs.
+ */
+export interface PromoGiftInput {
+  item: PromoGiftItem;
+  regular: number;
+  soldOut: boolean;
+}
+
 /** An entered promo code that passed the checks needing the DB (exists, active, limits, new customer). */
 export type PromoCode = {
   code: string;
-  /** Checked against items before discount, without delivery. */
+  /** Checked against items before discount, without delivery (a gift excluded). */
   minOrderTotal: number | null;
   appliesToMarkedDown: boolean;
 } & (
   | { kind: 'percent'; percent: number; maxDiscount: number | null }
   | { kind: 'fixed'; amount: number }
+  | { kind: 'gift'; gift: PromoGiftInput }
 );
 
 /** An entered code the shop refused before pricing (unknown, expired, used up, ...): shown with its reason. */
@@ -306,7 +318,7 @@ function birthdayOption(
 /**
  * Promo code (ADR 0007): % of eligible items capped by the code's max, or min(fixed, eligible).
  * Its minimum is checked on items before discount, without delivery; a code that can't discount
- * this cart says why instead of blocking the order.
+ * this cart says why instead of blocking the order. A gift code is `giftOutcome`'s.
  */
 function promoOutcome(
   p: PromoCode,
@@ -314,6 +326,7 @@ function promoOutcome(
   itemsSubtotal: number,
   settings: PricingSettings,
 ): { option: DiscountOption | null; invalid: PromoCodeInvalid | null } {
+  if (p.kind === 'gift') return giftOutcome(p, itemsSubtotal, settings);
   if (p.minOrderTotal !== null && itemsSubtotal < p.minOrderTotal) {
     return { option: null, invalid: { reason: 'below_minimum', minOrderTotal: p.minOrderTotal } };
   }
@@ -333,6 +346,38 @@ function promoOutcome(
         p.kind === 'percent'
           ? { eligibleSubtotal: eligible, percent: p.percent, cap: p.maxDiscount }
           : { eligibleSubtotal: eligible, percent: 100, cap: p.amount },
+    },
+    invalid: null,
+  };
+}
+
+/**
+ * A gift code (ADR 0039): its item comes free, so nothing comes off the paid items (amount 0) and
+ * the threshold base is the paid items whatever the code's base setting. Refused when none of the
+ * gift is left («Подарок закончился», said first: adding items won't bring it back), when the paid
+ * items are below the minimum, or when nothing is paid for. Marked-down items change nothing.
+ */
+function giftOutcome(
+  p: Extract<PromoCode, { kind: 'gift' }>,
+  itemsSubtotal: number,
+  settings: PricingSettings,
+): { option: DiscountOption | null; invalid: PromoCodeInvalid | null } {
+  if (p.gift.soldOut) return { option: null, invalid: { reason: 'gift_sold_out' } };
+  if (p.minOrderTotal !== null && itemsSubtotal < p.minOrderTotal) {
+    return { option: null, invalid: { reason: 'below_minimum', minOrderTotal: p.minOrderTotal } };
+  }
+  if (itemsSubtotal === 0) return { option: null, invalid: { reason: 'no_eligible_items' } };
+  return {
+    option: {
+      discount: {
+        type: 'promo_code',
+        code: p.code,
+        amount: 0,
+        gift: { item: p.gift.item, value: p.gift.regular },
+      },
+      base: settings.thresholdBase.promoCode,
+      expiresAt: null,
+      growth: null,
     },
     invalid: null,
   };
@@ -444,6 +489,7 @@ function assertWholeInputs(input: QuoteInput): void {
   if (p && !('refused' in p)) {
     if (p.minOrderTotal !== null) assertSom(`promo ${p.code} minimum`, p.minOrderTotal);
     if (p.kind === 'fixed') assertSom(`promo ${p.code} amount`, p.amount);
+    else if (p.kind === 'gift') assertSom(`promo ${p.code} gift price`, p.gift.regular);
     else {
       assertPercent(`promo ${p.code} percent`, p.percent);
       if (p.maxDiscount !== null) assertSom(`promo ${p.code} max discount`, p.maxDiscount);

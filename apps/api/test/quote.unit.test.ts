@@ -122,6 +122,27 @@ function fixedPromo(code: string, amount: number, o: PromoOpts = {}): PromoCode 
   };
 }
 
+/** A gift code (ADR 0039): Rain Tea 10 ml (regular 69 000) unless told otherwise. */
+const RAIN_TEA_10 = { kind: 'volume', volumeId: 70 } as const;
+function giftPromo(
+  code: string,
+  o: {
+    item?: GiftItem;
+    regular?: number;
+    soldOut?: boolean;
+    minOrderTotal?: number;
+  } = {},
+): PromoCode {
+  return {
+    code,
+    kind: 'gift',
+    gift: { item: o.item ?? RAIN_TEA_10, regular: o.regular ?? 69_000, soldOut: o.soldOut ?? false },
+    minOrderTotal: o.minOrderTotal ?? null,
+    appliesToMarkedDown: false,
+  };
+}
+type GiftItem = Extract<PromoCode, { kind: 'gift' }>['gift']['item'];
+
 type DeepPartial<T> = T extends (infer U)[]
   ? DeepPartial<U>[]
   : T extends object
@@ -1494,6 +1515,186 @@ describe('quote(): one discount per order, chosen by ADR 0002', () => {
       },
     },
   ]);
+});
+
+describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', () => {
+  const g50 = volume('g50', GUIDANCE, 50, 219_000);
+  runTable([
+    {
+      name: 'a gift applies: nothing comes off the paid items, the discount carries the gift at its regular price',
+      given: { lines: [g50], promoCode: giftPromo('RAINTEA') },
+      expected: {
+        lines: [{ key: 'g50', lineTotal: 219_000 }],
+        itemsSubtotal: 219_000,
+        discount: {
+          type: 'promo_code',
+          code: 'RAINTEA',
+          amount: 0,
+          gift: { item: { kind: 'volume', volumeId: 70 }, value: 69_000 },
+        },
+        thresholdBaseAmount: 219_000,
+        amountToFreeDelivery: 31_000,
+        deliveryFee: 25_000,
+        total: 244_000,
+        promoCode: { code: 'RAINTEA', invalid: null },
+        withoutDiscount: { deliveryFee: 25_000, total: 244_000 },
+      },
+    },
+    {
+      name: 'the Discovery set as the gift',
+      given: {
+        lines: [g50],
+        promoCode: giftPromo('DISCOVERY', { item: { kind: 'discovery_set' }, regular: 199_000 }),
+      },
+      expected: {
+        itemsSubtotal: 219_000,
+        discount: { amount: 0, gift: { item: { kind: 'discovery_set' }, value: 199_000 } },
+        total: 244_000,
+      },
+    },
+    {
+      name: 'the minimum counts the paid items only: 219 000 + a 69 000 gift is still below 250 000',
+      given: { lines: [g50], promoCode: giftPromo('RAINTEA', { minOrderTotal: 250_000 }) },
+      expected: {
+        discount: null,
+        promoCode: { invalid: { reason: 'below_minimum', minOrderTotal: 250_000 } },
+        total: 244_000,
+      },
+    },
+    {
+      name: 'paid items at the minimum take the gift',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 125_000, { qty: 2 })],
+        promoCode: giftPromo('RAINTEA', { minOrderTotal: 250_000 }),
+      },
+      expected: { discount: { gift: { value: 69_000 } }, deliveryFee: 0, total: 250_000 },
+    },
+    {
+      name: 'a gift with none left refuses the code: «Подарок закончился», the order is priced without it',
+      given: { lines: [g50], promoCode: giftPromo('RAINTEA', { soldOut: true }) },
+      expected: {
+        discount: null,
+        promoCode: { code: 'RAINTEA', invalid: { reason: 'gift_sold_out' } },
+        total: 244_000,
+      },
+    },
+    {
+      name: 'a sold-out gift is said before the minimum: adding items will not bring it back',
+      given: {
+        lines: [g50],
+        promoCode: giftPromo('RAINTEA', { soldOut: true, minOrderTotal: 250_000 }),
+      },
+      expected: { discount: null, promoCode: { invalid: { reason: 'gift_sold_out' } } },
+    },
+    {
+      name: 'nothing paid for (every line sold out) takes no gift',
+      given: {
+        lines: [volume('g50', GUIDANCE, 50, 219_000, { soldOut: true })],
+        promoCode: giftPromo('RAINTEA'),
+      },
+      expected: {
+        discount: null,
+        promoCode: { invalid: { reason: 'no_eligible_items' } },
+        total: 0,
+      },
+    },
+    {
+      name: 'a marked-down item neither blocks nor changes the gift (it cuts no item’s price)',
+      given: {
+        lines: [
+          volume('g50', GUIDANCE, 50, 219_000, { markdown: { price: 175_000, endsAt: null } }),
+        ],
+        promoCode: giftPromo('RAINTEA'),
+      },
+      expected: {
+        lines: [{ key: 'g50', unitPrice: 175_000, markedDown: true, lineTotal: 175_000 }],
+        itemsSubtotal: 175_000,
+        discount: { type: 'promo_code', amount: 0, gift: { value: 69_000 } },
+        total: 200_000,
+      },
+    },
+    {
+      name: 'delivery: the gift adds nothing to the threshold base, so 240 000 paid still pays delivery',
+      given: {
+        lines: [volume('a', TYGAR, 50, 240_000)],
+        promoCode: giftPromo('RAINTEA'),
+      },
+      expected: {
+        itemsSubtotal: 240_000,
+        thresholdBaseAmount: 240_000,
+        amountToFreeDelivery: 10_000,
+        deliveryFee: 25_000,
+        total: 265_000,
+      },
+    },
+    {
+      name: 'delivery: under a "before" promo base the gift still adds nothing',
+      given: {
+        lines: [volume('a', TYGAR, 50, 240_000)],
+        promoCode: giftPromo('RAINTEA'),
+        settings: {
+          ...DEFAULTS,
+          thresholdBase: { ...DEFAULTS.thresholdBase, promoCode: 'before' },
+        },
+      },
+      expected: {
+        thresholdBase: 'before',
+        thresholdBaseAmount: 240_000,
+        amountToFreeDelivery: 10_000,
+        deliveryFee: 25_000,
+        total: 265_000,
+      },
+    },
+    {
+      name: 'delivery: paid items at the threshold ship free with the gift',
+      given: {
+        lines: [volume('g30', GUIDANCE, 30, 125_000, { qty: 2 })],
+        promoCode: giftPromo('RAINTEA'),
+      },
+      expected: { thresholdBaseAmount: 250_000, amountToFreeDelivery: 0, deliveryFee: 0, total: 250_000 },
+    },
+    {
+      name: 'an entered gift code wins over a better upgrade right, which is offered with what it saves',
+      given: {
+        lines: [g50],
+        entitlements: [setRight(7, [GUIDANCE])],
+        promoCode: giftPromo('RAINTEA'),
+      },
+      expected: {
+        discount: { type: 'promo_code', code: 'RAINTEA', amount: 0, gift: { value: 69_000 } },
+        total: 244_000,
+        alternatives: [
+          {
+            discount: { type: 'upgrade_right', id: 7, amount: 43_800 },
+            deliveryFee: 25_000,
+            total: 200_200,
+            cheaperBy: 43_800,
+          },
+        ],
+        staleChoice: false,
+      },
+    },
+    {
+      name: 'switching to the upgrade right drops the gift: one discount per order',
+      given: {
+        lines: [g50],
+        entitlements: [setRight(7, [GUIDANCE])],
+        promoCode: giftPromo('RAINTEA'),
+        choice: { type: 'upgrade_right', id: 7 },
+      },
+      expected: {
+        discount: { type: 'upgrade_right', id: 7, amount: 43_800 },
+        total: 200_200,
+        alternatives: [{ discount: { type: 'promo_code', code: 'RAINTEA', amount: 0 }, total: 244_000, cheaperBy: 0 }],
+      },
+    },
+  ]);
+
+  it('refuses a gift price with tiyin', () => {
+    expect(() =>
+      quote(input({ lines: [g50], promoCode: giftPromo('RAINTEA', { regular: 69_000.5 }) })),
+    ).toThrow(RangeError);
+  });
 });
 
 describe('quote(): integer so’m only (ADR 0016)', () => {

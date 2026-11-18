@@ -17,6 +17,18 @@ export type ThresholdBase = z.infer<typeof thresholdBaseSchema>;
 export const upgradeRightSourceSchema = z.enum(UPGRADE_RIGHT_SOURCES);
 export type UpgradeRightSource = z.infer<typeof upgradeRightSourceSchema>;
 
+/**
+ * What a gift promo code gives (ADR 0039): one Volume, or the Discovery set, quantity 1, free.
+ * `value` is its regular price: the customer pays 0 for it, the reports count it as the discount.
+ */
+export const promoGiftItemSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('volume'), volumeId: id }),
+  z.object({ kind: z.literal('discovery_set') }),
+]);
+export type PromoGiftItem = z.infer<typeof promoGiftItemSchema>;
+export const promoGiftSchema = z.object({ item: promoGiftItemSchema, value: som });
+export type PromoGift = z.infer<typeof promoGiftSchema>;
+
 /** The one Discount on an order and the discount source it comes from. */
 export const discountSchema = z.discriminatedUnion('type', [
   z.object({
@@ -30,9 +42,21 @@ export const discountSchema = z.discriminatedUnion('type', [
     lineKey: z.string(),
   }),
   z.object({ type: z.literal('birthday_coupon'), id, amount: som }),
-  z.object({ type: z.literal('promo_code'), code: z.string(), amount: som }),
+  z.object({
+    type: z.literal('promo_code'),
+    code: z.string(),
+    /** So'm off the paid items; 0 for a gift code, whose gift is a free line instead. */
+    amount: som,
+    /** A gift code's free item (ADR 0039); absent for a percent or fixed code. */
+    gift: promoGiftSchema.optional(),
+  }),
 ]);
 export type Discount = z.infer<typeof discountSchema>;
+
+/** The gift's regular price when the discount is a gift code, else 0: what reports add to both «Сумма до скидки» and «Скидка» (ADR 0039). */
+export function promoGiftValue(d: Discount | null | undefined): number {
+  return d?.type === 'promo_code' && d.gift ? d.gift.value : 0;
+}
 
 export const quoteLineSchema = z.object({
   /** The caller's line key (cart line id), echoed back. */
@@ -78,6 +102,8 @@ export type PromoCodeRefusal = z.infer<typeof promoCodeRefusalSchema>;
 export const promoCodeInvalidSchema = z.discriminatedUnion('reason', [
   z.object({ reason: z.literal('below_minimum'), minOrderTotal: som }),
   z.object({ reason: z.literal('no_eligible_items') }),
+  /** A gift code whose gift has none left after the cart's own lines (ADR 0039): «Подарок закончился». */
+  z.object({ reason: z.literal('gift_sold_out') }),
   z.object({ reason: promoCodeRefusalSchema }),
 ]);
 export type PromoCodeInvalid = z.infer<typeof promoCodeInvalidSchema>;
