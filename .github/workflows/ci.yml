@@ -28,6 +28,8 @@ jobs:
       - run: npm ci
       # Turbo's cache lives on the runner's disk across runs (#58, #72): a package whose inputs did
       # not change replays its lint, typecheck and test instead of running them again
-      - run: npx turbo run lint typecheck test --cache-dir="$HOME/.cache/turbo"
+      # two tasks at a time: the runner shares 4 vCPUs with other projects, and parallel jsdom suites
+      # starve each other into timeouts (#72)
+      - run: npx turbo run lint typecheck test --cache-dir="$HOME/.cache/turbo" --concurrency=2
       - run: npm run build -w @lummi/miniapp
       - run: npm run size -w @lummi/miniapp
