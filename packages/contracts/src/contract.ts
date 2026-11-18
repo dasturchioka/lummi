@@ -44,6 +44,7 @@ import {
   openCampaignResultSchema,
 } from './campaign';
 import {
+  adminPromoCodeRowSchema,
   adminPromoCodeSchema,
   applyPromoCodeBodySchema,
   promoAttemptsErrorSchema,
@@ -1391,11 +1392,12 @@ const adminPromo = c.router({
       method: 'GET',
       path: '/admin/promo-codes',
       responses: {
-        200: z.array(adminPromoCodeSchema),
+        200: z.array(adminPromoCodeRowSchema),
         401: promoErrorSchema,
         403: promoErrorSchema,
       },
-      summary: 'Owner only: every promo code with its uses (non-voided) and state, newest first',
+      summary:
+        'Owner only: every promo code with its uses (non-voided), state, and delivered orders and net sales over its life (marketing report rules), newest first',
     },
     get: {
       method: 'GET',

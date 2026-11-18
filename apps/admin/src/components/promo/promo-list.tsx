@@ -1,11 +1,11 @@
 'use client';
 
-import type { AdminPromoCode } from '@lummi/contracts';
-import type { Language } from '@lummi/i18n';
-import { Plus } from 'lucide-react';
+import type { AdminPromoCodeRow } from '@lummi/contracts';
+import { formatMoney, type Language } from '@lummi/i18n';
+import { ArrowUpRight, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { countOf } from '@/components/broadcasts/format';
+import { countOf, num } from '@/components/broadcasts/format';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/card';
 import { MetaLine } from '@/components/ui/meta-line';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
+import { cn, fill } from '@/lib/utils';
 import { CodeText } from './code-text';
 import { conditionsOf, discountOf, usesOf } from './terms';
 
@@ -28,15 +28,15 @@ export function PromoList({
   language,
   t,
 }: {
-  items: AdminPromoCode[];
+  items: AdminPromoCodeRow[];
   language: Language;
   t: AdminMessages;
 }) {
   const router = useRouter();
   const m = t.promo;
-  const open = (p: AdminPromoCode) => router.push(`/promo-codes/${p.id}`);
+  const open = (p: AdminPromoCodeRow) => router.push(`/promo-codes/${p.id}`);
 
-  const code = (p: AdminPromoCode) => (
+  const code = (p: AdminPromoCodeRow) => (
     <Link
       href={`/promo-codes/${p.id}`}
       onClick={(e) => e.stopPropagation()}
@@ -45,7 +45,7 @@ export function PromoList({
       <CodeText code={p.code} />
     </Link>
   );
-  const terms = (p: AdminPromoCode) => (
+  const terms = (p: AdminPromoCodeRow) => (
     <MetaLine
       className="mt-1 text-small text-muted-foreground"
       parts={[
@@ -56,13 +56,41 @@ export function PromoList({
       ]}
     />
   );
-  const state = (p: AdminPromoCode) => (
+  const state = (p: AdminPromoCodeRow) => (
     <Badge tone={p.state === 'active' ? 'sage' : 'neutral'}>{m.states[p.state]}</Badge>
   );
-  const uses = (p: AdminPromoCode) => (
+  const uses = (p: AdminPromoCodeRow) => (
     <span className={cn('font-semibold', p.uses === 0 && 'font-normal text-muted-foreground')}>
       {usesOf(p, t)}
     </span>
+  );
+
+  const delivered = (p: AdminPromoCodeRow) => (
+    <span
+      className={cn(
+        'font-semibold',
+        p.deliveredOrders === 0 && 'font-normal text-muted-foreground',
+      )}
+    >
+      {num(p.deliveredOrders)}
+    </span>
+  );
+  const net = (p: AdminPromoCodeRow) => (
+    <span className={cn('font-semibold', p.netSales === 0 && 'font-normal text-muted-foreground')}>
+      {formatMoney(p.netSales, language)}
+    </span>
+  );
+  // the marketing report for this code over the same days the figures count
+  const report = (p: AdminPromoCodeRow) => (
+    <Link
+      href={`/reports/marketing?from=${p.statsFrom}&to=${p.statsTo}&code=${encodeURIComponent(p.code)}`}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={fill(m.reportLabel, { code: p.code })}
+      className="inline-flex items-center gap-0.5 rounded-sm text-small text-muted-foreground underline-offset-[3px] transition-colors duration-150 hover:text-foreground hover:underline"
+    >
+      {m.report}
+      <ArrowUpRight className="size-3.5" strokeWidth={1.5} aria-hidden />
+    </Link>
   );
 
   const add = (
@@ -82,6 +110,7 @@ export function PromoList({
         <Card className="@container">
           <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
             {countOf(language, items.length, m.total)}
+            <span className="mt-1 block text-[13px] leading-snug">{m.statsHint}</span>
           </p>
           <ul className="divide-y divide-border @4xl:hidden">
             {items.map((p) => (
@@ -100,6 +129,15 @@ export function PromoList({
                     {m.columns.uses} {uses(p)}
                   </span>
                 </div>
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-small text-muted-foreground tabular-nums">
+                  <span>
+                    {m.columns.delivered} {delivered(p)}
+                  </span>
+                  <span className="[overflow-wrap:anywhere]">
+                    {m.columns.net} {net(p)}
+                  </span>
+                  {report(p)}
+                </div>
               </li>
             ))}
           </ul>
@@ -109,6 +147,8 @@ export function PromoList({
                 <TR>
                   <TH>{m.columns.code}</TH>
                   <TH className="w-px text-right">{m.columns.uses}</TH>
+                  <TH className="w-px text-right">{m.columns.delivered}</TH>
+                  <TH className="text-right">{m.columns.net}</TH>
                   <TH className="w-px">{m.columns.state}</TH>
                 </TR>
               </THead>
@@ -124,6 +164,13 @@ export function PromoList({
                       {terms(p)}
                     </TD>
                     <TD className="w-px pt-4 text-right whitespace-nowrap">{uses(p)}</TD>
+                    <TD className="w-px pt-4 text-right whitespace-nowrap tabular-nums">
+                      {delivered(p)}
+                    </TD>
+                    <TD className="pt-4 text-right tabular-nums">
+                      <div className="whitespace-nowrap">{net(p)}</div>
+                      <div className="mt-1">{report(p)}</div>
+                    </TD>
                     <TD className="w-px pt-3.5 whitespace-nowrap">{state(p)}</TD>
                   </TR>
                 ))}

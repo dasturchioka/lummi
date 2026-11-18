@@ -98,6 +98,53 @@ export async function holdUses(db: Sql, code: string, n: number) {
   );
 }
 
+/**
+ * What the list shows per code (#65): the delivered shot orders 9012 and 9013 held by LUMMI10,
+ * and 9006 held by the worst code with a nine-digit sale (987 654 321 so'm). Codes are made "now" and the shot orders are dated early November, so the codes'
+ * creation day moves back to 1 Nov while it runs. `remove` undoes all of it; idempotent.
+ */
+export async function shotPromoStats(db: Sql, what: 'add' | 'remove') {
+  const SALE = 987_654_321;
+  const ids = (
+    await db.query(`select id, number from orders where number = any($1)`, [[9006, 9012, 9013]])
+  ).rows;
+  const id = (n: number) => ids.find((r) => Number(r.number) === n)!.id;
+  await db.query(`delete from promo_code_uses where order_id = any($1)`, [
+    [id(9006), id(9012), id(9013)],
+  ]);
+  await db.query(
+    `update orders set items_subtotal = $2, total = $2 + delivery_fee - discount_amount,
+       amount_due = $2 + delivery_fee - discount_amount where id = $1`,
+    [id(9006), what === 'add' ? SALE : 0],
+  );
+  await db.query(`update promo_codes set created_at = $1`, [
+    what === 'add' ? '2026-11-01T00:00:00Z' : new Date().toISOString(),
+  ]);
+  if (what === 'remove') {
+    // the order's own figures come back from its lines
+    await db.query(
+      `update orders o set items_subtotal = l.s, total = l.s + o.delivery_fee - o.discount_amount,
+         amount_due = l.s + o.delivery_fee - o.discount_amount
+       from (select order_id, sum(line_total) s from order_lines group by order_id) l
+       where l.order_id = o.id and o.id = $1`,
+      [id(9006)],
+    );
+    return;
+  }
+  await db.query(
+    `insert into promo_code_uses (promo_code_id, order_id, customer_id)
+     select (select id from promo_codes where code = $2), o.id, o.customer_id
+     from orders o where o.id = any($1)`,
+    [[id(9012), id(9013)], 'LUMMI10'],
+  );
+  await db.query(
+    `insert into promo_code_uses (promo_code_id, order_id, customer_id)
+     select (select id from promo_codes where code = $2), o.id, o.customer_id
+     from orders o where o.id = $1`,
+    [id(9006), WORST_PROMO],
+  );
+}
+
 /** Drops the shot customer's orders, and with them their uses. */
 export async function forgetUses(db: Sql) {
   await db.query(

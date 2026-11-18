@@ -1,7 +1,12 @@
 import {
+  addDays,
+  formatLocalDate,
+  REPORT_MAX_DAYS,
+  tashkentDay,
   tashkentToUtc,
   utcToTashkent,
   type AdminPromoCode,
+  type AdminPromoCodeRow,
   type PromoCodeInput,
 } from '@lummi/contracts';
 import {
@@ -22,6 +27,7 @@ import { AuditService } from '../audit/audit.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
+import { marketingSummary } from '../reports/marketing-summary';
 import { promoState } from './promo-codes';
 
 export type PromoFailure = { ok: false; reason: 'not_found' | 'code_taken' | 'in_use' };
@@ -74,9 +80,33 @@ export class PromoAdminService {
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
   ) {}
 
-  async list(): Promise<AdminPromoCode[]> {
+  /**
+   * Every code with its uses and, over its whole life, the marketing report's delivered orders and
+   * net sales (#65): one `marketingSummary` over the oldest code's life, not a report per code, so
+   * the list and the report share one definition. A code's life runs from its creation day to
+   * today, at most the report's longest range; no orders in it is 0.
+   */
+  async list(): Promise<AdminPromoCodeRow[]> {
     const rows = await this.db.select().from(promoCodes).orderBy(desc(promoCodes.id));
-    return this.withUses(this.db, rows);
+    const withUses = await this.withUses(this.db, rows);
+    if (rows.length === 0) return [];
+    const today = tashkentDay(this.edges.clock.now());
+    const earliest = formatLocalDate(addDays(today, 1 - REPORT_MAX_DAYS));
+    const to = formatLocalDate(today);
+    const startOf = (r: PromoCodeRow) => {
+      const created = formatLocalDate(tashkentDay(r.createdAt));
+      return created > earliest ? created : earliest;
+    };
+    const from = rows.map(startOf).reduce((a, b) => (a < b ? a : b));
+    const report = await marketingSummary(this.db, { from, to });
+    const stats = new Map(report.promoCodes.map((p) => [p.promoCodeId, p]));
+    return withUses.map((p, i) => ({
+      ...p,
+      deliveredOrders: stats.get(p.id)?.orders ?? 0,
+      netSales: stats.get(p.id)?.net ?? 0,
+      statsFrom: startOf(rows[i]!),
+      statsTo: to,
+    }));
   }
 
   async get(id: number, tx: DbOrTx = this.db): Promise<AdminPromoCode | null> {

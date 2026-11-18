@@ -84,6 +84,20 @@ export const adminPromoCodeSchema = z.object({
 });
 export type AdminPromoCode = z.infer<typeof adminPromoCodeSchema>;
 
+/**
+ * A list row (#65): the code with what it brought over its whole life, by the marketing report's
+ * own rules (Fulfilled orders on their delivery day, refunds off the net). `statsFrom`..`statsTo`
+ * are the Tashkent days it was counted over (its creation day to today, at most the report's
+ * longest range): the report link filtered to the code opens the same range.
+ */
+export const adminPromoCodeRowSchema = adminPromoCodeSchema.extend({
+  deliveredOrders: z.number().int().nonnegative(),
+  netSales: z.number().int(),
+  statsFrom: z.string(),
+  statsTo: z.string(),
+});
+export type AdminPromoCodeRow = z.infer<typeof adminPromoCodeRowSchema>;
+
 export const promoErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid', 'code_taken', 'in_use']),
   fields: z.array(z.string()).optional(),
