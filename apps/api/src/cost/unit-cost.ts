@@ -154,8 +154,14 @@ export function defaultCostSettings(): CostSettings {
 
 const som = (x: number) => Math.round(x);
 
-/** Oil so'm per gram after the supplier discount and delivery to Termez (calculator `oilG`). */
-export function landedOilPrice(oilPrice: number, l: LiquidSettings): number {
+/**
+ * Oil so'm per gram after the supplier discount and delivery to Termez (calculator `oilG`). An oil
+ * receipt (#76) passes its own discount and import percent.
+ */
+export function landedOilPrice(
+  oilPrice: number,
+  l: Pick<LiquidSettings, 'oilDiscountPercent' | 'oilImportPercent'>,
+): number {
   return oilPrice * (1 - l.oilDiscountPercent / 100) * (1 + l.oilImportPercent / 100);
 }
 
@@ -169,6 +175,15 @@ export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number;
     oilGrams: ((filled * l.oilPercent) / 100) * l.oilDensity,
     ethanolMl: (filled * l.ethanolPercent) / 100,
   };
+}
+
+/**
+ * The ml of perfume `oilGrams` of oil can still be bottled into (unrounded): `liquidNeeded` read
+ * backwards, so the warehouse's litres are what a bottling can use (ADR 0041). The calculator's
+ * planner (`buyCalc`) takes the loss off as × (1 − loss) instead; the two differ by about 0.1 %.
+ */
+export function liquidFromOil(oilGrams: number, l: LiquidSettings): number {
+  return oilGrams / ((l.oilDensity * l.oilPercent) / 100) / (1 + l.fillingLossPercent / 100);
 }
 
 /** Ethanol and fixative, so'm per ml of perfume, before the filling loss. */
