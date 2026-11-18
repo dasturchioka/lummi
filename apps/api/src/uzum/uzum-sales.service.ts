@@ -206,21 +206,17 @@ export class UzumSalesService {
   private async write(tx: DbOrTx, actor: StaffRow, sales: readonly NewUzumSale[]) {
     const all = sales.flatMap((s) => s.lines);
     const volumeIds = [...new Set(all.flatMap((l) => (l.kind === 'volume' ? [l.volumeId] : [])))];
-    const known = volumeIds.length
-      ? await tx.select({ id: volumes.id }).from(volumes).where(inArray(volumes.id, volumeIds))
-      : [];
-    const knownIds = new Set(known.map((v) => v.id));
+    const withSet = all.some((l) => l.kind === 'discovery_set');
+    const locked = await lockShelves(tx, withSet, volumeIds);
+    // a volume that does not exist (or no longer does) is the caller's mistake, named by its path
     const fields = sales.flatMap((s, si) =>
       s.lines.flatMap((l, i) =>
-        l.kind === 'volume' && !knownIds.has(l.volumeId)
+        l.kind === 'volume' && !locked.volumes.has(l.volumeId)
           ? [sales.length === 1 ? `lines.${i}.volumeId` : `sales.${si}.lines.${i}.volumeId`]
           : [],
       ),
     );
     if (fields.length) throw new Refused({ ok: false, reason: 'invalid', fields });
-
-    const withSet = all.some((l) => l.kind === 'discovery_set');
-    const locked = await lockShelves(tx, withSet, volumeIds);
     await checkStock(tx, locked, all);
 
     const standing = await tx
