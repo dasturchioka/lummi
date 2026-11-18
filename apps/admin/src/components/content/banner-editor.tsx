@@ -34,6 +34,7 @@ import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { LangTabs } from './lang-tabs';
 import { BannerPreview } from './banner-preview';
+import { bannerTitle } from './banner-title';
 import { SliderPreview, type DiscoverySlide } from './slider-preview';
 
 /** The target list is `START_TARGETS` plus the fragrance link; a new target there shows up here with no edit. */
@@ -178,14 +179,24 @@ function Form({
           const S = l === 'ru' ? 'Ru' : 'Uz';
           return (
             <div key={l} hidden={lang !== l} lang={l} className="grid gap-4">
-              <Field id={`bn-title-${l}`} label={b.title} error={err(`title${S}`)}>
+              <Field
+                id={`bn-title-${l}`}
+                label={b.title}
+                hint={b.titleHint}
+                error={err(`title${S}`)}
+              >
                 <Input
                   value={draft[`title${S}` as keyof Draft]}
                   maxLength={60}
                   onChange={(e) => set(`title${S}` as keyof Draft, e.target.value as never)}
                 />
               </Field>
-              <Field id={`bn-sub-${l}`} label={b.subtitle} error={err(`subtitle${S}`)}>
+              <Field
+                id={`bn-sub-${l}`}
+                label={b.subtitle}
+                hint={b.subtitleHint}
+                error={err(`subtitle${S}`)}
+              >
                 {/* up to 160 characters: a field that grows, so the whole line stays in view */}
                 <Textarea
                   rows={2}
@@ -289,14 +300,15 @@ function Thumb({ hash, set = false }: { hash: string | null; set?: boolean }) {
   );
 }
 
-/** The slide number in front of a row, the same one the slider preview shows over the slide. */
+/**
+ * The slide number in front of a row, the same one the slider preview shows over the slide. A
+ * screen reader hears «Слайд 2» (visually hidden text), the eye sees the number.
+ */
 function SlideNumber({ n, label }: { n: number; label: string }) {
   return (
-    <span
-      aria-label={label}
-      className="grid size-7 shrink-0 place-items-center rounded-full bg-field text-[13px] font-semibold tabular-nums"
-    >
-      {n}
+    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-field text-[13px] font-semibold tabular-nums">
+      <span aria-hidden="true">{n}</span>
+      <span className="sr-only">{label}</span>
     </span>
   );
 }
@@ -328,12 +340,13 @@ export function BannerEditor({
   const [editing, setEditing] = useState<number | 'new' | null>(
     banners.length === 0 ? 'new' : null,
   );
-  const [busy, setBusy] = useState<string | null>(null);
+  /** The banner whose on / off switch is on its way. */
+  const [busy, setBusy] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [removing, setRemoving] = useState<AdminBanner | null>(null);
   // a move shows at once; the server's order replaces it when the page reloads
   const [moved, setMoved] = useState<{ ids: number[]; from: AdminBanner[] } | null>(null);
-  const refocus = useRef<string | null>(null);
+  const refocus = useRef<{ id: number; direction: BannerMoveDirection } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const byId = new Map(banners.map((x) => [x.id, x]));
   const on =
@@ -350,14 +363,14 @@ export function BannerEditor({
   // the other arrow when this one just became disabled at the end of the list), until the
   // server's order is in.
   useEffect(() => {
-    const key = refocus.current;
-    if (!key) return;
-    const [id, direction] = key.split(':');
-    const find = (d: string) =>
-      listRef.current?.querySelector<HTMLButtonElement>(`[data-move="${id}:${d}"]`);
-    const el = [find(direction!), find(direction === 'up' ? 'down' : 'up')].find(
-      (x) => x && !x.disabled,
-    );
+    const target = refocus.current;
+    if (!target) return;
+    const find = (d: BannerMoveDirection) =>
+      listRef.current?.querySelector<HTMLButtonElement>(
+        `[data-move-id="${target.id}"][data-move="${d}"]`,
+      );
+    const other = target.direction === 'up' ? 'down' : 'up';
+    const el = [find(target.direction), find(other)].find((x) => x && !x.disabled);
     if (el && document.activeElement !== el) el.focus();
     if (!moved || moved.from !== banners) refocus.current = null;
   }, [banners, moved]);
@@ -376,7 +389,7 @@ export function BannerEditor({
   };
 
   const toggle = async (x: AdminBanner) => {
-    setBusy(`${x.id}:toggle`);
+    setBusy(x.id);
     setNotice(null);
     const res = await browserApi.content.banners.setActive({
       params: { id: x.id },
@@ -396,7 +409,7 @@ export function BannerEditor({
     const ids = on.map((y) => y.id);
     [ids[i], ids[j]] = [ids[j]!, ids[i]!];
     setMoved({ ids, from: banners });
-    refocus.current = `${x.id}:${direction}`;
+    refocus.current = { id: x.id, direction };
     setNotice(null);
     const res = await browserApi.content.banners.move({
       params: { id: x.id },
@@ -416,7 +429,7 @@ export function BannerEditor({
     router.refresh();
   };
 
-  const title = (x: AdminBanner) => (language === 'uz' ? x.titleUz : x.titleRu) || b.untitled;
+  const title = (x: AdminBanner) => bannerTitle(x, language, b.untitled);
   const actions = (x: AdminBanner) => (
     <>
       <Button variant="outline" size="sm" onClick={() => open(x.id)}>
@@ -425,7 +438,7 @@ export function BannerEditor({
       <Button
         variant="ghost"
         size="sm"
-        loading={busy === `${x.id}:toggle`}
+        loading={busy === x.id}
         // at the cap a banner that is off cannot go on; the note above the list says why
         disabled={!x.active && full}
         onClick={() => void toggle(x)}
@@ -492,7 +505,8 @@ export function BannerEditor({
                         variant="outline"
                         size="sm"
                         className="w-9 px-0"
-                        data-move={`${x.id}:up`}
+                        data-move-id={x.id}
+                        data-move="up"
                         aria-label={`${b.moveUp}: ${title(x)}`}
                         title={b.moveUp}
                         disabled={i === 0}
@@ -504,7 +518,8 @@ export function BannerEditor({
                         variant="outline"
                         size="sm"
                         className="w-9 px-0"
-                        data-move={`${x.id}:down`}
+                        data-move-id={x.id}
+                        data-move="down"
                         aria-label={`${b.moveDown}: ${title(x)}`}
                         title={b.moveDown}
                         disabled={i === on.length - 1}

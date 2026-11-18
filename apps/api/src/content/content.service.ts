@@ -14,6 +14,7 @@ import {
 } from '@lummi/contracts';
 import {
   contentTexts,
+  desc,
   eq,
   asc,
   promoBanners,
@@ -201,11 +202,21 @@ export class ContentService {
 
   // ---- admin: banners ----
 
-  /** The active banners first, in slider order, then the others newest first. */
+  /**
+   * The active banners first, in slider order (position, then id, as `slider`), then the others
+   * newest first: an inactive row has no position in the order, so its id decides, descending.
+   */
   async listBanners(db: DbOrTx = this.db): Promise<AdminBanner[]> {
-    const [on, all] = await Promise.all([this.slider(db), db.select().from(promoBanners)]);
-    const off = all.filter((r) => !r.active).sort((a, b) => b.id - a.id);
-    return [...on, ...off].map(toAdminBanner);
+    const { active, position, id } = promoBanners;
+    const rows = await db
+      .select()
+      .from(promoBanners)
+      .orderBy(
+        desc(active),
+        sql`case when ${active} then ${position} end`,
+        sql`case when ${active} then ${id} else -${id} end`,
+      );
+    return rows.map(toAdminBanner);
   }
 
   async createBanner(actor: StaffRow, input: BannerInput): Promise<ContentOutcome<AdminBanner>> {
@@ -344,8 +355,10 @@ export class ContentService {
     });
   }
 
+  /** Under the slider lock too: deleting an active banner changes the slider. */
   async deleteBanner(actor: StaffRow, id: number): Promise<ContentOutcome<true>> {
     return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${BANNER_SLIDER_LOCK})`);
       const [old] = await tx.delete(promoBanners).where(eq(promoBanners.id, id)).returning();
       if (!old) return fail('not_found');
       await this.audit.record(tx, {

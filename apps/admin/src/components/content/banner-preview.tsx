@@ -13,7 +13,7 @@ export interface PreviewBanner {
  * Mirrors the Mini App's `PromoBanner` (`apps/miniapp/src/screens/home/PromoBanner.tsx`; Home, approved variant 2) at its phone width: the photo on the
  * left third, the text on the Graphite block, price line and arrow at the bottom. A drawing of
  * the same layout with the panel's own tokens, so the owner sees what customers will see: the
- * title and subtitle stop at three lines each there too.
+ * title and subtitle stop at two lines each there too (#62: no slide of the slider grows).
  */
 export function BannerPreview({
   banner,
@@ -42,10 +42,10 @@ export function BannerPreview({
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-4 pr-4 pl-4">
         <div>
-          <p className="line-clamp-3 text-[17px] leading-[1.35] font-semibold text-balance [overflow-wrap:anywhere]">
+          <p className="line-clamp-2 text-[17px] leading-[1.35] font-semibold text-balance [overflow-wrap:anywhere]">
             {keepNumbersTogether(banner.title)}
           </p>
-          <p className="mt-2 line-clamp-3 text-[14px] leading-normal text-pretty opacity-80 [overflow-wrap:anywhere]">
+          <p className="mt-2 line-clamp-2 text-[14px] leading-normal text-pretty opacity-80 [overflow-wrap:anywhere]">
             {keepNumbersTogether(banner.subtitle)}
           </p>
         </div>
@@ -54,7 +54,7 @@ export function BannerPreview({
             {banner.priceLine && keepNumbersTogether(banner.priceLine)}
           </span>
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-milk/20">
-            <ArrowRight className="size-[18px]" strokeWidth={1.5} aria-hidden />
+            <ArrowRight className="size-4" strokeWidth={1.5} aria-hidden />
           </span>
         </div>
       </div>

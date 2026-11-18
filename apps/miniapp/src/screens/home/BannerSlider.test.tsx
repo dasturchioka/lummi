@@ -80,6 +80,7 @@ describe('Home banner slider (#62)', () => {
     renderHome();
     const carousel = await screen.findByRole('region', { name: 'Предложения' });
     expect(carousel.getAttribute('aria-roledescription')).toBe('карусель');
+    expect(screen.getByTestId('banner-track').getAttribute('aria-live')).toBe('polite');
     const slides = within(carousel).getAllByRole('group');
     expect(slides.map((s) => s.getAttribute('aria-label'))).toEqual(['1 из 3', '2 из 3', '3 из 3']);
     expect(slides.every((s) => s.getAttribute('aria-roledescription') === 'слайд')).toBe(true);

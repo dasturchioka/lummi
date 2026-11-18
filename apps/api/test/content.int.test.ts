@@ -213,9 +213,12 @@ describe('banners', () => {
     const c = await banner({ titleRu: 'Третий', titleUz: 'Uchinchi' });
     for (const x of [b, a, c]) expect((await activate(x.id)).status).toBe(200);
     expect(await sliderIds()).toEqual([b.id, a.id, c.id]);
+    const d = await banner({ titleRu: 'Выключен раньше' });
+    const e = await banner({ titleRu: 'Выключен позже' });
+    // the admin list: the slides in slider order, then the banners that are off, newest first
     const list = await owner.client.admin.content.banners.list();
     if (list.status !== 200) throw new Error('list');
-    expect(list.body.filter((x) => x.active).map((x) => x.id)).toEqual([b.id, a.id, c.id]);
+    expect(list.body.map((x) => x.id)).toEqual([b.id, a.id, c.id, e.id, d.id]);
     // switching one on again changes nothing and writes nothing
     expect((await activate(a.id)).status).toBe(200);
     expect(await audits('content.banner_activated')).toHaveLength(3);

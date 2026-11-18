@@ -21,8 +21,8 @@ const SLIDE = 'flex w-full shrink-0 snap-start snap-always *:flex-1';
 
 /** The slide whose start is nearest the track's snap line. */
 function slideAt(track: HTMLElement): number {
-  const [first, second] = track.children as unknown as HTMLElement[];
-  if (!first || !second) return 0;
+  const [first, second] = [track.children[0], track.children[1]];
+  if (!(first instanceof HTMLElement) || !(second instanceof HTMLElement)) return 0;
   const stride = second.offsetLeft - first.offsetLeft;
   if (stride <= 0) return 0;
   return Math.min(track.children.length - 1, Math.max(0, Math.round(track.scrollLeft / stride)));
@@ -60,9 +60,9 @@ export function BannerSlider() {
 
   const show = (i: number) => {
     const el = track.current;
-    const first = el?.children[0] as HTMLElement | undefined;
-    const slide = el?.children[i] as HTMLElement | undefined;
-    if (!el || !first || !slide) return;
+    const first = el?.children[0];
+    const slide = el?.children[i];
+    if (!el || !(first instanceof HTMLElement) || !(slide instanceof HTMLElement)) return;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     el.scrollTo({
       left: slide.offsetLeft - first.offsetLeft,
@@ -80,7 +80,8 @@ export function BannerSlider() {
 
   return (
     <section aria-roledescription={t.home.carousel} aria-label={t.home.offers} data-slot="banners">
-      <div ref={track} className={TRACK} data-testid="banner-track">
+      {/* polite: it never moves on its own, so a slide brought in by a mark is announced (APG) */}
+      <div ref={track} className={TRACK} aria-live="polite" data-testid="banner-track">
         <div {...slide(1)}>
           <DiscoveryBanner />
         </div>

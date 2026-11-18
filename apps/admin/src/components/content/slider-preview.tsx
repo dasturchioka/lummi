@@ -5,6 +5,7 @@ import { ArrowRight, Package } from 'lucide-react';
 import { photoUrl } from '@/components/catalog/photo';
 import type { AdminMessages } from '@/lib/i18n';
 import { BannerPreview } from './banner-preview';
+import { bannerTitle } from './banner-title';
 
 /** What the Discovery slide shows: the set's price and the owner's photo (null: the shipped box photo). */
 export interface DiscoverySlide {
@@ -106,9 +107,7 @@ export function SliderPreview({
             >
               <p className={caption}>
                 <span className={number}>{i + 2}</span>
-                <span className="truncate">
-                  {(language === 'uz' ? x.titleUz : x.titleRu) || b.untitled}
-                </span>
+                <span className="truncate">{bannerTitle(x, language, b.untitled)}</span>
               </p>
               <BannerPreview
                 className="flex-1"

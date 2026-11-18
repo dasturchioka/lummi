@@ -826,7 +826,10 @@ export const adminMessages = defineMessages(
           cancel: 'Отмена',
           needsPhoto: 'Чтобы включить баннер, загрузите фото.',
           title: 'Заголовок',
+          titleHint: 'На баннере видно две строки, около 40 знаков. Длиннее обрежется многоточием.',
           subtitle: 'Подзаголовок',
+          subtitleHint:
+            'Видно две строки, около 55 знаков. Длиннее обрежется многоточием: главное — в начале.',
           priceLine: 'Строка с ценой',
           priceLineHint: 'Необязательно. Например: «от 99 000 сум».',
           target: 'Куда ведёт баннер',
@@ -3254,7 +3257,10 @@ export const adminMessages = defineMessages(
           cancel: 'Bekor qilish',
           needsPhoto: 'Bannerni yoqish uchun rasm yuklang.',
           title: 'Sarlavha',
+          titleHint: 'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
           subtitle: 'Qisqa matn',
+          subtitleHint:
+            'Ikki qator koʻrinadi, taxminan 55 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi: asosiysini boshida yozing.',
           priceLine: 'Narx qatori',
           priceLineHint: 'Majburiy emas. Masalan: «99 000 soʻmdan».',
           target: 'Banner qayerga olib boradi',
