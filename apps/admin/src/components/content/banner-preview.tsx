@@ -28,9 +28,9 @@ export function BannerPreview({
     <div
       role="img"
       aria-label={label}
-      className={`flex min-h-[140px] w-full max-w-[358px] overflow-hidden rounded-card bg-graphite text-milk ${className}`}
+      className={`flex min-h-[140px] w-full max-w-[358px] overflow-hidden rounded-card bg-brand-graphite text-brand-milk ${className}`}
     >
-      <div className="relative w-[34%] shrink-0 bg-stone">
+      <div className="relative w-[34%] shrink-0 bg-brand-stone">
         {banner.imageHash ? (
           <img
             src={photoUrl(banner.imageHash, 400)}
@@ -53,7 +53,7 @@ export function BannerPreview({
           <span className="text-[15px] leading-snug font-semibold text-pretty tabular-nums [overflow-wrap:anywhere]">
             {banner.priceLine && keepNumbersTogether(banner.priceLine)}
           </span>
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-milk/20">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-milk/20">
             <ArrowRight className="size-4" strokeWidth={1.5} aria-hidden />
           </span>
         </div>

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { THEME_COLOR, themeFrom } from './theme-cookie';
+import { THEME_COLOR, themeFrom } from './theme';
 
 const cookieJar = vi.hoisted(() => ({ theme: undefined as string | undefined }));
 vi.mock('next/headers', () => ({

@@ -8,3 +8,9 @@ export const THEME_COLOR: Record<Theme, string> = { light: '#f5f2ec', dark: '#1d
 export function themeFrom(value: string | undefined): Theme {
   return value === 'dark' ? 'dark' : 'light';
 }
+
+/** Server side: the theme the cookie chose, so the first paint is right. Client code never calls it. */
+export async function getTheme(): Promise<Theme> {
+  const { cookies } = await import('next/headers');
+  return themeFrom((await cookies()).get(THEME_COOKIE)?.value);
+}

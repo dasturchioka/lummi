@@ -4,9 +4,8 @@ import type { StaffDto } from '@lummi/contracts';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { LanguageSwitch } from '@/components/language-switch';
-import { ThemeSwitch } from '@/components/theme-switch';
-import type { Theme } from '@/lib/theme-cookie';
+import { PrefsSwitches } from '@/components/prefs-switches';
+import type { Theme } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import type { AdminMessages } from '@/lib/i18n';
 import { HomeLogo, NavScroller, PanelAccount, PanelNav } from './panel-nav';
@@ -34,10 +33,12 @@ export function MobileBar({
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-milk pr-1.5 pl-1 pt-[env(safe-area-inset-top)] box-content lg:hidden">
         <HomeLogo />
         <div className="flex items-center gap-1">
-          <div className="flex items-center gap-1">
-            <LanguageSwitch current={language} label={t.language} />
-            <ThemeSwitch current={theme} label={t.theme.label} names={t.theme} />
-          </div>
+          <PrefsSwitches
+            language={language}
+            theme={theme}
+            labels={{ language: t.language, theme: t.theme }}
+            className="gap-1"
+          />
           <DialogPrimitive.Trigger asChild>
             <Button variant="ghost" size="icon" aria-label={t.nav.menu}>
               <Menu className="size-[22px]" strokeWidth={1.5} aria-hidden />

@@ -19,6 +19,7 @@
   --hairline-strong: rgba(42, 42, 42, 0.22);
   --sage-wash: rgba(154, 165, 146, 0.18);
   --overlay: rgba(42, 42, 42, 0.4);
+  --chart-bar: #8f8a82; /* quiet chart bars: 3.4:1 on a white card */
   /* brand constants: a surface that mimics the Mini App's light look in both admin themes */
   --brand-graphite: #2a2a2a;
   --brand-milk: #f5f2ec;
@@ -49,6 +50,7 @@
   --hairline-strong: rgba(245, 242, 236, 0.22);
   --sage-wash: rgba(154, 165, 146, 0.16);
   --overlay: rgba(0, 0, 0, 0.55);
+  --chart-bar: #8a857c; /* 3.9:1 on a Graphite card */
 }
 
 @theme inline {
@@ -70,6 +72,7 @@
   --color-sage-ink: var(--sage-ink);
   --color-sage-wash: var(--sage-wash);
   --color-overlay: var(--overlay);
+  --color-chart-bar: var(--chart-bar);
   --color-brand-graphite: var(--brand-graphite);
   --color-brand-milk: var(--brand-milk);
   --color-brand-stone: var(--brand-stone);

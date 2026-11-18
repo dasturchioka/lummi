@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Cormorant_Garamond, Manrope, Tenor_Sans } from 'next/font/google';
-import { getAdminMessages, getLanguage, getTheme } from '@/lib/i18n';
-import { THEME_COLOR } from '@/lib/theme-cookie';
+import { getAdminMessages, getLanguage } from '@/lib/i18n';
+import { getTheme, THEME_COLOR } from '@/lib/theme';
 import './globals.css';
 
 const manrope = Manrope({ subsets: ['latin', 'cyrillic'], variable: '--font-manrope' });

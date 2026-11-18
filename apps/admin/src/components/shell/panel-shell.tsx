@@ -1,5 +1,6 @@
 import type { StaffDto } from '@lummi/contracts';
-import { type AdminMessages, getTheme } from '@/lib/i18n';
+import type { AdminMessages } from '@/lib/i18n';
+import { getTheme } from '@/lib/theme';
 import { MobileBar } from './mobile-bar';
 import { Sidebar } from './sidebar';
 
