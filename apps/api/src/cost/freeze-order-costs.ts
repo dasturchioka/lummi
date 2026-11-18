@@ -16,7 +16,7 @@ import {
   type OrderRow,
 } from '@lummi/db';
 import { readCostSettings } from './cost-settings';
-import { lineUnitCost, orderCosts, type CostedItem } from './order-costs';
+import { lineUnitCost, saleCosts, type CostedItem } from './order-costs';
 import type { CostSettings } from './unit-cost';
 
 /** What a line is, for its unit cost: its bottle, or its set's five fragrances at the vial size. */
@@ -59,7 +59,7 @@ export function orderCostSnapshot(
       costs:
         goods === null
           ? null
-          : orderCosts(
+          : saleCosts(
               {
                 channel: 'miniapp',
                 revenue: order.itemsSubtotal - order.discountAmount,
@@ -68,7 +68,7 @@ export function orderCostSnapshot(
                 // a gift sample goes in with #79; until then no order has one
                 giftSample: 0,
               },
-              s.order,
+              s,
             ),
       missing: [...missing].map((id) => oil.get(id)?.name ?? `#${id}`).sort(),
     },

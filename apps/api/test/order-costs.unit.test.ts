@@ -1,29 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { lineUnitCost, orderCosts } from '../src/cost/order-costs';
-import { defaultCostSettings, type OrderCostSettings } from '../src/cost/unit-cost';
+import { lineUnitCost, saleCosts } from '../src/cost/order-costs';
+import { defaultCostSettings, type CostSettings } from '../src/cost/unit-cost';
 
 /**
  * Seam 2 (ADR 0028): an order's costs and profit (#77), the customer's calculator's `orderCosts`.
- * Every expected figure is the calculator's own (`orderCosts(revenue, goods, chan, gift)` run on
+ * Every expected figure is the calculator's own (`saleCosts(revenue, goods, chan, gift)` run on
  * its `P0`, and once on other values), each rounded to whole so'm as it shows them. Goods are whole
  * so'm here, as an order freezes them (the unit cost's total, ADR 0040).
  */
 
-const P0 = defaultCostSettings().order;
-const OTHER: OrderCostSettings = {
+const P0 = defaultCostSettings();
+const OTHER: CostSettings = {
   ...P0,
-  mailer: 2500,
-  btsCharge: 30_000,
-  adPerSale: 4000,
-  taxPercent: 1.5,
-  onlinePaymentPercent: 2.5,
-  uzumCommissionPercent: 18.5,
+  order: {
+    ...P0.order,
+    mailer: 2500,
+    btsCharge: 30_000,
+    adPerSale: 4000,
+    taxPercent: 1.5,
+    onlinePaymentPercent: 2.5,
+    uzumCommissionPercent: 18.5,
+  },
 };
 
-describe("an order's costs (calculator `orderCosts`)", () => {
+describe("an order's costs (the cost model's `orderCosts`, with the order's own delivery fee)", () => {
   it('Mini App below the free-delivery threshold: the customer paid the delivery, so BTS costs nothing more', () => {
     expect(
-      orderCosts(
+      saleCosts(
         { channel: 'miniapp', revenue: 69_000, goods: 22_462, deliveryPaid: 25_000, giftSample: 0 },
         P0,
       ),
@@ -47,7 +50,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   });
 
   it('Mini App from the threshold: delivery is free for the customer, the shop pays BTS', () => {
-    const c = orderCosts(
+    const c = saleCosts(
       { channel: 'miniapp', revenue: 299_000, goods: 90_490, deliveryPaid: 0, giftSample: 0 },
       P0,
     );
@@ -56,7 +59,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   });
 
   it('Uzum: its commission, no mailer and no delivery', () => {
-    const c = orderCosts(
+    const c = saleCosts(
       { channel: 'uzum', revenue: 189_000, goods: 52_086, deliveryPaid: 25_000, giftSample: 0 },
       P0,
     );
@@ -74,7 +77,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   });
 
   it('a gift sample adds its cost', () => {
-    const c = orderCosts(
+    const c = saleCosts(
       {
         channel: 'miniapp',
         revenue: 69_000,
@@ -90,7 +93,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   it('other settings: percentages of revenue rounded half up, each on its own', () => {
     // the calculator: commission 1 749.75, tax 1 049.85, profit 33 228.4
     expect(
-      orderCosts(
+      saleCosts(
         { channel: 'miniapp', revenue: 69_990, goods: 22_462, deliveryPaid: 25_000, giftSample: 0 },
         OTHER,
       ),
@@ -107,7 +110,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
     });
     // Uzum: commission 12 948.15, tax 1 049.85, profit 29 530
     expect(
-      orderCosts(
+      saleCosts(
         { channel: 'uzum', revenue: 69_990, goods: 22_462, deliveryPaid: 0, giftSample: 0 },
         OTHER,
       ),
@@ -115,7 +118,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   });
 
   it('a delivery fee above the BTS charge is income: the delivery cost goes below zero', () => {
-    const c = orderCosts(
+    const c = saleCosts(
       { channel: 'miniapp', revenue: 69_000, goods: 22_462, deliveryPaid: 30_000, giftSample: 0 },
       P0,
     );
@@ -123,7 +126,7 @@ describe("an order's costs (calculator `orderCosts`)", () => {
   });
 
   it('no revenue (a 100 % code): no margin, the costs are a loss', () => {
-    const c = orderCosts(
+    const c = saleCosts(
       { channel: 'miniapp', revenue: 0, goods: 22_462, deliveryPaid: 25_000, giftSample: 0 },
       P0,
     );

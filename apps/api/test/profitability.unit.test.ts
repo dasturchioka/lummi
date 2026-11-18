@@ -36,7 +36,7 @@ function ctx(channel: SalesChannel, over: Partial<SaleContext> = {}): SaleContex
     giftSample: null,
     deliveryTariff: 25_000,
     pricing: PRICING,
-    order: S.order,
+    cost: S,
     now: new Date('2026-11-19T05:00:00Z'),
     ...over,
   };

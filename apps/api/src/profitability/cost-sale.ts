@@ -1,6 +1,6 @@
 import type { OrderCosts, ProfitabilityItem, SalesChannel, UnitCost } from '@lummi/contracts';
-import { orderCosts } from '../cost/order-costs';
-import type { OrderCostSettings } from '../cost/unit-cost';
+import { saleCosts } from '../cost/order-costs';
+import type { CostSettings } from '../cost/unit-cost';
 import { quote, type Entitlement, type Price, type PricingSettings } from '../pricing/quote';
 
 /** One line of a sale the owner makes up: what it sells, its price now and its unit cost. */
@@ -25,7 +25,7 @@ export interface SaleContext {
   /** The delivery tariff below the free-delivery threshold (Mini App). */
   deliveryTariff: number;
   pricing: PricingSettings;
-  order: OrderCostSettings;
+  cost: CostSettings;
   now: Date;
 }
 
@@ -97,7 +97,7 @@ export function costSale(lines: readonly SaleLine[], ctx: SaleContext): CostedSa
     deliveryFee: q.deliveryFee,
     amountToFreeDelivery: uzum ? 0 : q.amountToFreeDelivery,
     costs: known
-      ? orderCosts(
+      ? saleCosts(
           {
             channel: ctx.channel,
             revenue: q.itemsSubtotal - discount,
@@ -105,7 +105,7 @@ export function costSale(lines: readonly SaleLine[], ctx: SaleContext): CostedSa
             deliveryPaid: q.deliveryFee,
             giftSample: ctx.giftSample ?? 0,
           },
-          ctx.order,
+          ctx.cost,
         )
       : null,
   };

@@ -2,67 +2,63 @@ import type { OrderCosts, SalesChannel } from '@lummi/contracts';
 import {
   bottleCost,
   isBottleMl,
+  orderCosts,
   setCost,
   som,
   type CostSettings,
-  type OrderCostSettings,
   type SetVialMl,
 } from './unit-cost';
 
 /**
- * Order profit (#77): the customer's calculator's `orderCosts`, on whole so'm. The order freezes
- * it when its payment is confirmed (`freezeOrderCosts`); the «Рентабельность» page runs it on
- * sales it makes up. Pure: the caller brings the figures and the settings.
+ * Order profit (#77) on the cost model's one `orderCosts` (the calculator's, ADR 0040): the order
+ * freezes it when its payment is confirmed (`freezeOrderCosts`); the «Рентабельность» page runs it
+ * on sales it makes up. Pure: the caller brings the figures and the settings.
  */
-export interface OrderCostInput {
+export interface SaleCostInput {
   channel: SalesChannel;
   /** Items less the discount, whole so'm; delivery is not in it. */
   revenue: number;
   /** The goods at unit cost (each line's unit cost total × quantity), whole so'm. */
   goods: number;
-  /** What the customer paid for delivery (Mini App); Uzum has none. */
+  /** What the customer actually paid for delivery (Mini App), decided by the order or `quote()`. */
   deliveryPaid: number;
   /** A gift sample's cost when one went in, else 0. */
   giftSample: number;
 }
 
 /**
- * The calculator's order costs: on the Mini App the BTS mailer, BTS's charge less what the
- * customer paid for delivery (below zero when they paid more) and the online-payment % of revenue;
- * on Uzum its commission % instead, without mailer or delivery; on both the ad per sale, the tax %
- * of revenue and the gift sample. Each percentage is rounded to whole so'm on its own, half up,
- * so the figures shown add up to the total; profit = revenue − total, margin = profit ÷ revenue.
+ * A sale's costs and profit in whole so'm: `orderCosts` (mailer, BTS less the delivery the customer
+ * paid, online payment or Uzum commission, ad, tax, gift sample) with the delivery fee the order
+ * really has, not the calculator's guess from the threshold. Each figure is rounded to whole so'm
+ * half up; `total` is the unrounded total rounded (ADR 0040's rule: the parts may differ from it by
+ * a so'm), profit = revenue − total, so the figures the owner reads add up to the profit.
  */
-export function orderCosts(input: OrderCostInput, s: OrderCostSettings): OrderCosts {
+export function saleCosts(input: SaleCostInput, s: CostSettings): OrderCosts {
   const app = input.channel === 'miniapp';
-  const mailer = app ? s.mailer : 0;
-  const btsCharge = app ? s.btsCharge : 0;
-  const deliveryPaid = app ? input.deliveryPaid : 0;
-  const commissionPercent = app ? s.onlinePaymentPercent : s.uzumCommissionPercent;
-  const commission = som((input.revenue * commissionPercent) / 100);
-  const tax = som((input.revenue * s.taxPercent) / 100);
-  const total =
-    input.goods +
-    mailer +
-    (btsCharge - deliveryPaid) +
-    commission +
-    s.adPerSale +
-    tax +
-    input.giftSample;
+  const raw = orderCosts({
+    revenue: input.revenue,
+    goods: input.goods,
+    channel: app ? 'app' : 'uzum',
+    giftSample: input.giftSample,
+    // the fee is the order's own: never «free from» a threshold here, the order already decided
+    delivery: { freeFrom: Number.POSITIVE_INFINITY, customerFee: app ? input.deliveryPaid : 0 },
+    settings: s,
+  });
+  const total = som(raw.total);
   const profit = input.revenue - total;
   return {
     channel: input.channel,
     revenue: input.revenue,
     goods: input.goods,
-    mailer,
-    btsCharge,
-    deliveryPaid,
-    commissionPercent,
-    commission,
-    adPerSale: s.adPerSale,
-    taxPercent: s.taxPercent,
-    tax,
-    giftSample: input.giftSample,
+    mailer: som(raw.mailer),
+    btsCharge: app ? s.order.btsCharge : 0,
+    deliveryPaid: app ? input.deliveryPaid : 0,
+    commissionPercent: app ? s.order.onlinePaymentPercent : s.order.uzumCommissionPercent,
+    commission: som(raw.commission),
+    adPerSale: som(raw.ad),
+    taxPercent: s.order.taxPercent,
+    tax: som(raw.tax),
+    giftSample: som(raw.gift),
     total,
     profit,
     margin: input.revenue > 0 ? profit / input.revenue : null,

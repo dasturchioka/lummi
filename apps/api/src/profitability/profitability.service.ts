@@ -176,7 +176,7 @@ export class Profitability {
       giftSample: view.giftSample ? shop.giftSample : null,
       deliveryTariff: shop.deliveryTariff,
       pricing: shop.pricing,
-      order: shop.cost.order,
+      cost: shop.cost,
       now: this.edges.clock.now(),
     };
   }

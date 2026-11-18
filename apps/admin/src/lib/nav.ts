@@ -16,6 +16,7 @@ import {
   Package,
   ScrollText,
   ShoppingBag,
+  ShoppingBasket,
   SlidersHorizontal,
   TicketPercent,
   UserCog,
@@ -66,6 +67,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: 'catalog', icon: Droplet, href: '/catalog', roles: OWNER },
       { key: 'stock', icon: Warehouse, href: '/stock', roles: ALL },
+      { key: 'purchase', icon: ShoppingBasket, href: '/purchase', roles: OWNER },
       { key: 'sets', icon: Package, href: '/sets', roles: ALL },
       { key: 'content', icon: FileText, href: '/content', roles: OWNER },
     ],

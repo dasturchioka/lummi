@@ -105,6 +105,8 @@ import { PromoAdminService } from './promo/promo-admin.service';
 import { ProfitabilityController } from './profitability/profitability.controller';
 import { Profitability } from './profitability/profitability.service';
 import { ReportsController } from './reports/reports.controller';
+import { PurchasePlanController } from './cost/purchase-plan.controller';
+import { PurchasePlans } from './cost/purchase-plan.service';
 import { HomeController } from './home/home.controller';
 import { HomeService } from './home/home.service';
 import { MarketingReports } from './reports/marketing-reports.service';
@@ -177,6 +179,7 @@ export class AppModule {
         DiscountsController,
         ReportsController,
         ProfitabilityController,
+        PurchasePlanController,
         HomeController,
       ],
       providers: [
@@ -247,6 +250,7 @@ export class AppModule {
         CampaignsService,
         SalesReports,
         Profitability,
+        PurchasePlans,
         MarketingReports,
         HomeService,
         BirthdayService,

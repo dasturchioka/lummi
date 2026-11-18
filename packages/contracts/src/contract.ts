@@ -26,6 +26,11 @@ import {
   salesReportSchema,
 } from './reports';
 import { adminHomeSchema } from './home';
+import {
+  purchasePlanErrorSchema,
+  purchasePlanQuerySchema,
+  purchasePlanSchema,
+} from './purchase-plan';
 import { adminOrdersBoardQuerySchema, adminOrdersBoardSchema } from './admin-orders-board';
 import {
   addCartLineBodySchema,
@@ -1789,6 +1794,26 @@ const adminReports = c.router({
 });
 
 /**
+ * The purchase planner (#78): owner only. The Excel export is a file, outside the contract:
+ * `GET /admin/purchase-plan/export` with the same query and `lang`.
+ */
+const adminPurchasePlan = c.router({
+  purchasePlan: {
+    method: 'GET',
+    path: '/admin/purchase-plan',
+    query: purchasePlanQuerySchema,
+    responses: {
+      200: purchasePlanSchema,
+      400: z.unknown(),
+      401: purchasePlanErrorSchema,
+      403: purchasePlanErrorSchema,
+    },
+    summary:
+      "Owner only: the calculator's «Закупка» from the buy.* and cost settings and the catalog's oil prices and prices. Optional `kg` and `by` (`id:kg,…`) are what-if kilograms of oil, not stored",
+  },
+});
+
+/**
  * The admin Home (ticket #48): owner and manager alike, the owner's answer adding the sales strip
  * and the system line. One call per refresh.
  */
@@ -1923,6 +1948,7 @@ export const adminContract = c.router({
   ...adminReviews,
   ...adminBirthdayCoupons,
   ...adminReports,
+  ...adminPurchasePlan,
   ...adminHome,
   ...adminProfitability,
 });
