@@ -1,5 +1,4 @@
-import { contract, type CustomerDto } from '@lummi/contracts';
-import type { CustomerRow } from '@lummi/db';
+import { contract } from '@lummi/contracts';
 import { Controller, Inject, UseGuards } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { ContactError, verifyContactProof } from '../auth/contact-proof';
@@ -7,25 +6,10 @@ import { CustomersService } from '../auth/customers.service';
 import { SessionCustomerId, SessionGuard } from '../auth/session.guard';
 import { SessionService } from '../auth/session.service';
 import type { Edges } from '../edges';
+import { toCustomerDto } from './customer.dto';
 import { SettingsService } from '../settings/settings.service';
 import { EDGES, ENV } from '../tokens';
 import type { Env } from '../env';
-
-/** Public settings that ride on the customer (see customerSchema.config). */
-async function toDto(c: CustomerRow, settings: SettingsService): Promise<CustomerDto> {
-  return {
-    id: c.id,
-    telegramId: c.telegramId,
-    firstName: c.firstName,
-    lastName: c.lastName,
-    username: c.username,
-    language: c.language,
-    theme: c.theme,
-    phone: c.phone,
-    writeAccess: c.writeAccess,
-    config: { managerUsername: await settings.get('shop.managerUsername') },
-  };
-}
 
 @Controller()
 @UseGuards(SessionGuard)
@@ -43,7 +27,7 @@ export class MeController {
     return tsRestHandler(contract.me.get, async () => {
       const c = await this.customers.getById(customerId);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 
@@ -52,7 +36,7 @@ export class MeController {
     return tsRestHandler(contract.me.updatePreferences, async ({ body }) => {
       const c = await this.customers.updatePreferences(customerId, body);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 
@@ -98,7 +82,7 @@ export class MeController {
       return {
         status: 200 as const,
         body: {
-          customer: await toDto(done.customer, this.settings),
+          customer: await toCustomerDto(done.customer, this.settings),
           session: session
             ? { token: session.token, expiresAt: session.expiresAt.toISOString() }
             : null,
@@ -112,7 +96,7 @@ export class MeController {
     return tsRestHandler(contract.me.writeAccess, async ({ body }) => {
       const c = await this.customers.recordWriteAccess(customerId, body.allowed);
       if (!c) return { status: 401 as const, body: { code: 'unauthorized' as const } };
-      return { status: 200 as const, body: await toDto(c, this.settings) };
+      return { status: 200 as const, body: await toCustomerDto(c, this.settings) };
     });
   }
 }

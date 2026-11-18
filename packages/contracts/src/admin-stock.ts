@@ -75,6 +75,8 @@ export const adminCustomerSchema = z.object({
   id: z.number().int(),
   telegramId: z.number().int(),
   name: z.string(),
+  /** Content hash of the customer's profile photo (#67); null = the initial letter. */
+  photo: z.string().nullable(),
   username: z.string().nullable(),
   /** The account phone (E.164), from Telegram's shared contact; null until shared. */
   phone: z.string().nullable(),

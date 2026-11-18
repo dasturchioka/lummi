@@ -14,7 +14,7 @@ export async function createApp(deps: AppDeps): Promise<INestApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule.register(deps), {
     logger: deps.env.NODE_ENV === 'test' ? false : new PinoLogger('api'),
   });
-  // Photo uploads are raw image bytes (admin catalog); the cap is enforced again in the handler.
+  // Photo uploads are raw image bytes (admin catalog photos and banners, profile photos); the cap is enforced again in the handler.
   app.useBodyParser('raw', {
     type: ['image/jpeg', 'image/png', 'image/webp'],
     limit: MAX_PHOTO_BYTES + 1024,

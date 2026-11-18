@@ -7,6 +7,8 @@ const userSchema = z.object({
   last_name: z.string().optional(),
   username: z.string().optional(),
   language_code: z.string().optional(),
+  /** Telegram's own avatar URL; the server fetches it only when the customer asks (#67). */
+  photo_url: z.string().max(512).optional(),
 });
 export type InitDataUser = z.infer<typeof userSchema>;
 

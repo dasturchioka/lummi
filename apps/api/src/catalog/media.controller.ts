@@ -5,7 +5,8 @@ import { EDGES } from '../tokens';
 import { PHOTO_FILE, PUBLIC_PREFIX } from './photo-pipeline';
 
 /**
- * Product photos for development and tests. In production Caddy serves the same files on
+ * Product photos (never profile photos, which are personal data and have their own API route,
+ * `ProfilePhotoMediaController`) for development and tests. In production Caddy serves the same files on
  * `media.<domain>` with the same header (ADR 0020), from `FILES_DIR/public` only, never from
  * `FILES_DIR` itself: receipts live beside it under `private/` and are served only through the API
  * (#28). Names are content hashes, so a file never changes and may be cached forever.
