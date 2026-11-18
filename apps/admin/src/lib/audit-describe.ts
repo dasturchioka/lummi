@@ -250,13 +250,25 @@ function switchedOff(c: Ctx): string[] {
   });
 }
 
-/** A promo code's rule, as short as it reads: «10 %» or «50 000 сум». */
+/** A promo code's rule, as short as it reads: «10 %», «50 000 сум» or «подарок Rain Tea 10 мл». */
 function promoRule(c: Ctx): string | null {
   const percent = int(c.p.percent);
   const amount = int(c.p.amount);
+  const gift = giftName(c, c.p.gift);
   if (percent !== null) return fill(c.t.audit.detail.promoPercent, { percent: String(percent) });
   if (amount !== null) return money(c, amount);
+  if (gift !== null) return fill(c.t.audit.detail.promoGift, { gift });
   return null;
+}
+
+/** A gift code's gift as the payload carries it (ADR 0039): «Rain Tea 10 мл» or «Discovery set». */
+function giftName(c: Ctx, v: unknown): string | null {
+  if (!isRecord(v)) return null;
+  if (v.kind === 'discovery_set') return c.t.promo.giftDiscovery;
+  const ml = int(v.ml);
+  const name = str(v.name);
+  if (name === null || ml === null) return null;
+  return `${name} ${fill(c.t.promo.giftMl, { ml: String(ml) })}`;
 }
 
 /** A staff member's account changed: who it is. */
@@ -700,6 +712,7 @@ const describers: Record<string, Describer> = {
       'percent',
       'amount',
       'maxDiscount',
+      'gift',
       'expiresOn',
       'minOrderTotal',
       'totalLimit',
@@ -717,9 +730,16 @@ const describers: Record<string, Describer> = {
   },
   'promo.updated': (c) => {
     c.take('code', 'changed');
+    // a changed gift reads by its name, not as its fields
+    const changed = c.p.changed;
+    const gift = isRecord(changed) && Array.isArray(changed.gift) ? changed.gift : null;
+    const named =
+      gift && isRecord(changed)
+        ? { ...changed, gift: gift.map((g) => giftName(c, g) ?? '—') }
+        : changed;
     return [
       fill(c.t.audit.detail.code, { code: str(c.p.code) ?? '—' }),
-      ...changedLines(c, c.p.changed),
+      ...changedLines(c, named),
     ];
   },
   'promo.deleted': (c) => (

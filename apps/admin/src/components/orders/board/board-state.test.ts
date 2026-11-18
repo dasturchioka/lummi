@@ -28,6 +28,7 @@ const card = (
     city: 'Самарканд',
     region: { ru: 'Самаркандская область', uz: 'Samarqand viloyati' },
     isGift: false,
+    promoGift: false,
   }) satisfies AdminBoardCardDto;
 
 /** A board of the given cards, every column counted from them. */

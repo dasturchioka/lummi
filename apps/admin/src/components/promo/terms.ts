@@ -7,6 +7,7 @@ import { fill } from '@/lib/utils';
 type Terms = Pick<
   AdminPromoCode,
   | 'kind'
+  | 'gift'
   | 'percent'
   | 'amount'
   | 'maxDiscount'
@@ -17,9 +18,20 @@ type Terms = Pick<
   | 'appliesToMarkedDown'
 >;
 
-/** «−10 %, не больше 30 000 сум» or «−50 000 сум»: what the code takes off the items. */
+/** A gift code's item as the panel names it: «Rain Tea 10 мл» or «Discovery set» (ADR 0039). */
+export function giftLabel(gift: NonNullable<AdminPromoCode['gift']>, t: AdminMessages): string {
+  return gift.kind === 'discovery_set'
+    ? t.promo.giftDiscovery
+    : `${gift.name} ${fill(t.promo.giftMl, { ml: String(gift.ml) })}`;
+}
+
+/**
+ * «−10 %, не больше 30 000 сум», «−50 000 сум» or «Подарок: Rain Tea 10 мл»: what the code takes
+ * off the items, or adds to the order.
+ */
 export function discountOf(p: Terms, t: AdminMessages, language: Language): string {
   const m = t.promo;
+  if (p.kind === 'gift') return p.gift ? fill(m.giftOff, { gift: giftLabel(p.gift, t) }) : m.gift;
   if (p.kind === 'fixed') return `−${formatMoney(p.amount ?? 0, language)}`;
   const off = fill(m.percentOff, { n: String(p.percent ?? 0) });
   return p.maxDiscount === null

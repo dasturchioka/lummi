@@ -1,6 +1,6 @@
 import type { AdminOrderListItemDto } from '@lummi/contracts';
 import { formatMoney, formatPhone, plural, type Language } from '@lummi/i18n';
-import { Gift } from 'lucide-react';
+import { Gift, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { Pager } from '@/components/pager';
@@ -60,6 +60,12 @@ export function OrdersList({ t, language, items, total, page, pageSize, filters 
           <span key="gift" className="inline-flex items-center gap-1 whitespace-nowrap">
             <Gift className="size-3.5" strokeWidth={1.5} aria-hidden />
             {o.gift}
+          </span>
+        ),
+        it.promoGift && (
+          <span key="promo-gift" className="inline-flex items-center gap-1 whitespace-nowrap">
+            <Ticket className="size-3.5" strokeWidth={1.5} aria-hidden />
+            {o.promoGift}
           </span>
         ),
       ]}

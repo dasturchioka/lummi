@@ -5,7 +5,7 @@ import type { AdminBoardCardDto, OrderPaymentFilter, OrderStatus } from '@lummi/
 import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { Ellipsis, Gift } from 'lucide-react';
+import { Ellipsis, Gift, Ticket } from 'lucide-react';
 import Link from 'next/link';
 import type { MouseEvent, TouchEvent } from 'react';
 import { MetaLine } from '@/components/ui/meta-line';
@@ -106,6 +106,12 @@ export function CardBody({
             <span key="gift" className="inline-flex items-center gap-1 whitespace-nowrap">
               <Gift className="size-3.5" strokeWidth={1.5} aria-hidden />
               {o.gift}
+            </span>
+          ),
+          card.promoGift && (
+            <span key="promo-gift" className="inline-flex items-center gap-1 whitespace-nowrap">
+              <Ticket className="size-3.5" strokeWidth={1.5} aria-hidden />
+              {o.promoGift}
             </span>
           ),
         ]}

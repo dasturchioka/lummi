@@ -303,6 +303,9 @@ export function LinesSection({ page, t, language }: Props) {
         {o.lines.map((l, i) => (
           <li key={i} className="flex gap-4 py-3 first:pt-0">
             <div className="min-w-0 flex-1">
+              {l.promoGift && (
+                <p className="text-small font-medium text-sage-ink">{d.promoGift}</p>
+              )}
               <p className="font-medium break-words">{l.name[language]}</p>
               <MetaLine
                 className="text-small text-muted-foreground"
@@ -338,7 +341,8 @@ export function LinesSection({ page, t, language }: Props) {
               <p className="font-semibold whitespace-nowrap">
                 {formatMoney(l.lineTotal, language)}
               </p>
-              {l.markedDown && (
+              {/* a gift code's gift is free; its regular price, struck, is what reports count */}
+              {(l.markedDown || l.promoGift) && (
                 <s className="block text-small whitespace-nowrap text-muted-foreground">
                   {formatMoney(l.regularUnitPrice, language)}
                 </s>
@@ -352,7 +356,8 @@ export function LinesSection({ page, t, language }: Props) {
           <dt className="text-muted-foreground">{d.items}</dt>
           <dd className="whitespace-nowrap">{formatMoney(o.itemsSubtotal, language)}</dd>
         </div>
-        {discount && (
+        {/* a gift code takes nothing off: its free line above says what it gave (ADR 0039) */}
+        {discount && !(discount.type === 'promo_code' && discount.gift) && (
           <div className="flex justify-between gap-4">
             <dt className="min-w-0 text-muted-foreground">
               {d.discount}
@@ -363,6 +368,14 @@ export function LinesSection({ page, t, language }: Props) {
               </span>
             </dt>
             <dd className="whitespace-nowrap text-sage-ink">{minus(discount.amount, language)}</dd>
+          </div>
+        )}
+        {discount?.type === 'promo_code' && discount.gift && (
+          <div className="flex justify-between gap-4">
+            <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
+              {fill(d.promoGiftSource, { code: discount.code })}
+            </dt>
+            <dd className="whitespace-nowrap text-sage-ink">{formatMoney(0, language)}</dd>
           </div>
         )}
         <div className="flex justify-between gap-4">

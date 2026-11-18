@@ -6,6 +6,7 @@ import {
   BOARD_STATUSES,
   CREDIT_OPTIONS_LIMIT,
   formatLocalDate,
+  promoGiftOf,
   tashkentDay,
   type AdminBoardCardDto,
   type AdminOrdersBoardDto,
@@ -268,6 +269,7 @@ export class AdminOrdersService {
           recipient: { name: o.recipientName, phone: o.recipientPhone },
           region: { ru: o.regionNameRu, uz: o.regionNameUz },
           isGift: o.isGift,
+          promoGift: promoGiftOf(o.discount) !== null,
           refunded,
         };
       },
@@ -371,6 +373,7 @@ export class AdminOrdersService {
               city: o.pointCity,
               region: { ru: o.regionNameRu, uz: o.regionNameUz },
               isGift: o.isGift,
+              promoGift: promoGiftOf(o.discount) !== null,
             })),
         };
       }),

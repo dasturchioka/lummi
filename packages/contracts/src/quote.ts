@@ -53,9 +53,14 @@ export const discountSchema = z.discriminatedUnion('type', [
 ]);
 export type Discount = z.infer<typeof discountSchema>;
 
+/** A gift code's gift when the discount is one (ADR 0039), else null. */
+export function promoGiftOf(d: Discount | null | undefined): PromoGift | null {
+  return d?.type === 'promo_code' && d.gift ? d.gift : null;
+}
+
 /** The gift's regular price when the discount is a gift code, else 0: what reports add to both «Сумма до скидки» and «Скидка» (ADR 0039). */
 export function promoGiftValue(d: Discount | null | undefined): number {
-  return d?.type === 'promo_code' && d.gift ? d.gift.value : 0;
+  return promoGiftOf(d)?.value ?? 0;
 }
 
 export const quoteLineSchema = z.object({
