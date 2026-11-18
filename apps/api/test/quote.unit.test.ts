@@ -136,7 +136,11 @@ function giftPromo(
   return {
     code,
     kind: 'gift',
-    gift: { item: o.item ?? RAIN_TEA_10, regular: o.regular ?? 69_000, soldOut: o.soldOut ?? false },
+    gift: {
+      item: o.item ?? RAIN_TEA_10,
+      regular: o.regular ?? 69_000,
+      soldOut: o.soldOut ?? false,
+    },
     minOrderTotal: o.minOrderTotal ?? null,
     appliesToMarkedDown: false,
   };
@@ -1651,7 +1655,12 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
         lines: [volume('g30', GUIDANCE, 30, 125_000, { qty: 2 })],
         promoCode: giftPromo('RAINTEA'),
       },
-      expected: { thresholdBaseAmount: 250_000, amountToFreeDelivery: 0, deliveryFee: 0, total: 250_000 },
+      expected: {
+        thresholdBaseAmount: 250_000,
+        amountToFreeDelivery: 0,
+        deliveryFee: 0,
+        total: 250_000,
+      },
     },
     {
       name: 'an entered gift code wins over a better upgrade right, which is offered with what it saves',
@@ -1685,7 +1694,13 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
       expected: {
         discount: { type: 'upgrade_right', id: 7, amount: 43_800 },
         total: 200_200,
-        alternatives: [{ discount: { type: 'promo_code', code: 'RAINTEA', amount: 0 }, total: 244_000, cheaperBy: 0 }],
+        alternatives: [
+          {
+            discount: { type: 'promo_code', code: 'RAINTEA', amount: 0 },
+            total: 244_000,
+            cheaperBy: 0,
+          },
+        ],
       },
     },
   ]);

@@ -218,7 +218,13 @@ describe('the card text', () => {
               amountDue: 244_000,
             },
             lines: [
-              { ...line(0), qty: 1, unitPrice: 219_000, regularUnitPrice: 219_000, lineTotal: 219_000 },
+              {
+                ...line(0),
+                qty: 1,
+                unitPrice: 219_000,
+                regularUnitPrice: 219_000,
+                lineTotal: 219_000,
+              },
               {
                 ...line(1),
                 nameRu: 'Rain Tea',

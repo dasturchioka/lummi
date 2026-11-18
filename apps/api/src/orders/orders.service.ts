@@ -732,7 +732,11 @@ function giftLine(orderId: number, position: number, g: GiftView) {
     nameRu: dictionaries.ru.sets.lineDiscovery,
     nameUz: dictionaries.uz.sets.lineDiscovery,
     ml: 10,
-    setComposition: g.items.map((i) => ({ fragranceId: i.fragranceId, name: i.name, brand: i.brand })),
+    setComposition: g.items.map((i) => ({
+      fragranceId: i.fragranceId,
+      name: i.name,
+      brand: i.brand,
+    })),
   };
 }
 

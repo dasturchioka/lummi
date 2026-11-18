@@ -101,7 +101,10 @@ async function giftsOf(tx: DbOrTx, rows: PromoCodeRow[]): Promise<Map<number, Gi
       const v = r.giftVolumeId === null ? undefined : byVolume.get(r.giftVolumeId);
       if (!v) return [r.id, null];
       const ml = v.ml as 10 | 30 | 50;
-      return [r.id, { kind: 'volume', fragranceId: v.fragranceId, ml, name: v.name, brand: v.brand }];
+      return [
+        r.id,
+        { kind: 'volume', fragranceId: v.fragranceId, ml, name: v.name, brand: v.brand },
+      ];
     }),
   );
 }

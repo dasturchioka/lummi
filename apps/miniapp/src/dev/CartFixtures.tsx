@@ -280,7 +280,14 @@ const withGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
   ...noChoice,
   promoGift:
     gift === 'volume'
-      ? { kind: 'volume', photo: PHOTO[10], slug: 'rain-tea', name: 'Rain Tea', brand: 'Bvlgari', ml: 10 }
+      ? {
+          kind: 'volume',
+          photo: PHOTO[10],
+          slug: 'rain-tea',
+          name: 'Rain Tea',
+          brand: 'Bvlgari',
+          ml: 10,
+        }
       : gift === 'discovery_set'
         ? {
             kind: 'discovery_set',

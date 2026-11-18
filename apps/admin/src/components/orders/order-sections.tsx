@@ -303,9 +303,7 @@ export function LinesSection({ page, t, language }: Props) {
         {o.lines.map((l, i) => (
           <li key={i} className="flex gap-4 py-3 first:pt-0">
             <div className="min-w-0 flex-1">
-              {l.promoGift && (
-                <p className="text-small font-medium text-sage-ink">{d.promoGift}</p>
-              )}
+              {l.promoGift && <p className="text-small font-medium text-sage-ink">{d.promoGift}</p>}
               <p className="font-medium break-words">{l.name[language]}</p>
               <MetaLine
                 className="text-small text-muted-foreground"

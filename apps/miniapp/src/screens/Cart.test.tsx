@@ -248,24 +248,39 @@ describe('CartView: the discount switch (#39)', () => {
 
 describe('CartView: a gift code’s gift (ADR 0039)', () => {
   it.each([
-    ['ru', 'Подарок по промокоду', '0 сум', 'Промокод применён: подарок в заказе', 'Промокод RAINTEA'],
-    ['uz', 'Promokod sovgʻasi', '0 soʻm', 'Promokod qoʻllandi: sovgʻa buyurtmada', 'Promokod RAINTEA'],
-  ] as const)('lists it under the lines at 0, with no stepper (%s)', (lang, label, zero, applied, source) => {
-    language = lang;
-    render(<CartView cart={CART_FIXTURES['promo-gift']} />);
-    const gift = screen.getByTestId('promo-gift-line');
-    expect(read(gift)).toContain('Rain Tea');
-    expect(read(gift)).toContain(label);
-    expect(read(gift)).toContain(zero);
-    expect(within(gift).queryByRole('button')).toBeNull();
-    // it is not a cart line: the paid lines are what they were
-    expect(screen.getAllByTestId('cart-line')).toHaveLength(CART_FIXTURES.plain.lines.length);
-    // the totals: nothing off the items, the gift's row at 0 under its code
-    const bare = (x: string) => x.replace(/\s/g, '');
-    expect(bare(read(screen.getByTestId('discount-row')))).toBe(bare(`${label}${zero}${source}`));
-    expect(read(screen.getByTestId('totals'))).not.toContain('−');
-    expect(screen.getByText(applied)).not.toBeNull();
-  });
+    [
+      'ru',
+      'Подарок по промокоду',
+      '0 сум',
+      'Промокод применён: подарок в заказе',
+      'Промокод RAINTEA',
+    ],
+    [
+      'uz',
+      'Promokod sovgʻasi',
+      '0 soʻm',
+      'Promokod qoʻllandi: sovgʻa buyurtmada',
+      'Promokod RAINTEA',
+    ],
+  ] as const)(
+    'lists it under the lines at 0, with no stepper (%s)',
+    (lang, label, zero, applied, source) => {
+      language = lang;
+      render(<CartView cart={CART_FIXTURES['promo-gift']} />);
+      const gift = screen.getByTestId('promo-gift-line');
+      expect(read(gift)).toContain('Rain Tea');
+      expect(read(gift)).toContain(label);
+      expect(read(gift)).toContain(zero);
+      expect(within(gift).queryByRole('button')).toBeNull();
+      // it is not a cart line: the paid lines are what they were
+      expect(screen.getAllByTestId('cart-line')).toHaveLength(CART_FIXTURES.plain.lines.length);
+      // the totals: nothing off the items, the gift's row at 0 under its code
+      const bare = (x: string) => x.replace(/\s/g, '');
+      expect(bare(read(screen.getByTestId('discount-row')))).toBe(bare(`${label}${zero}${source}`));
+      expect(read(screen.getByTestId('totals'))).not.toContain('−');
+      expect(screen.getByText(applied)).not.toBeNull();
+    },
+  );
 
   it('the Discovery set as the gift names its five', () => {
     render(<CartView cart={CART_FIXTURES['promo-gift-set']} />);

@@ -653,7 +653,9 @@ export function CartView({
           ),
         )}
         {/* a gift code's free item (ADR 0039): not a cart line, so no stepper and no removal */}
-        {data.promoGift ? <OrderLine line={promoGiftLine(data.promoGift, s.lineDiscovery)} /> : null}
+        {data.promoGift ? (
+          <OrderLine line={promoGiftLine(data.promoGift, s.lineDiscovery)} />
+        ) : null}
       </Card>
       <PromoField
         stored={data.promoCode}

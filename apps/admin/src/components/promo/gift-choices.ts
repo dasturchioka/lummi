@@ -12,6 +12,10 @@ export async function giftChoicesOf(
   const res = await api.catalog.fragrances.list({ query: {} });
   if (res.status !== 200) return [];
   return res.body
-    .map((f) => ({ id: f.id, name: f.name, volumes: f.volumes.map((v) => v.ml).sort((a, b) => a - b) }))
+    .map((f) => ({
+      id: f.id,
+      name: f.name,
+      volumes: f.volumes.map((v) => v.ml).sort((a, b) => a - b),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

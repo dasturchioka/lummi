@@ -737,10 +737,7 @@ const describers: Record<string, Describer> = {
       gift && isRecord(changed)
         ? { ...changed, gift: gift.map((g) => giftName(c, g) ?? '—') }
         : changed;
-    return [
-      fill(c.t.audit.detail.code, { code: str(c.p.code) ?? '—' }),
-      ...changedLines(c, named),
-    ];
+    return [fill(c.t.audit.detail.code, { code: str(c.p.code) ?? '—' }), ...changedLines(c, named)];
   },
   'promo.deleted': (c) => (
     c.take('code'),

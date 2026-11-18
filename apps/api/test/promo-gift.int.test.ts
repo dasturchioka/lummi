@@ -217,10 +217,7 @@ describe('admin: a gift code names one volume or the Discovery set', () => {
       body: giftCode({ gift: { kind: 'discovery_set' } }),
     });
     expect(edited).toMatchObject({ status: 200, body: { gift: { kind: 'discovery_set' } } });
-    const [change] = await t.db
-      .select()
-      .from(auditLog)
-      .where(eq(auditLog.action, 'promo.updated'));
+    const [change] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'promo.updated'));
     expect(change!.payload).toMatchObject({
       code: 'RAINTEA',
       changed: { gift: [{ kind: 'volume', ml: 10 }, { kind: 'discovery_set' }] },
@@ -292,7 +289,10 @@ describe('the cart: the gift is listed at 0 while the code applies', () => {
     const cart = await s.apply('RAINTEA');
     expect(cart.promoGift).toMatchObject({ kind: 'discovery_set' });
     expect(cart.promoGift?.kind === 'discovery_set' && cart.promoGift.fragrances).toHaveLength(5);
-    expect(cart.quote.discount).toMatchObject({ amount: 0, gift: { item: { kind: 'discovery_set' } } });
+    expect(cart.quote.discount).toMatchObject({
+      amount: 0,
+      gift: { item: { kind: 'discovery_set' } },
+    });
   });
 });
 

@@ -26,10 +26,7 @@ export function OrderLine({ line }: { line: OrderLineView }) {
   const { t, language } = usePrefs();
   const o = useOrdersText();
   return (
-    <li
-      className="flex gap-3 p-3"
-      data-testid={line.promoGift ? 'promo-gift-line' : 'order-line'}
-    >
+    <li className="flex gap-3 p-3" data-testid={line.promoGift ? 'promo-gift-line' : 'order-line'}>
       {/* top-aligned: a set's five names make the row taller than its thumbnail */}
       <Thumb
         photo={line.photo}

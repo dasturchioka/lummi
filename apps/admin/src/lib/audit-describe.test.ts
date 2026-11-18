@@ -491,7 +491,10 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     {
       code: 'RAINTEA',
       changed: {
-        gift: [{ kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea' }, { kind: 'discovery_set' }],
+        gift: [
+          { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea' },
+          { kind: 'discovery_set' },
+        ],
       },
     },
     {},

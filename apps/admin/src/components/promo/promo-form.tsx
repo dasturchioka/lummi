@@ -161,8 +161,7 @@ export function PromoForm({
   const messageFor = (field: string, code: string | undefined) => {
     if (field === 'code') return code === 'required' ? m.errors.required : m.errors.codeFormat;
     // a fragrance without its volume reads as «choose the volume», not as no gift at all
-    if (field === 'gift')
-      return draft.gift.startsWith('f') ? m.errors.giftVolume : m.errors.gift;
+    if (field === 'gift') return draft.gift.startsWith('f') ? m.errors.giftVolume : m.errors.gift;
     if (code === 'required') return m.errors.required;
     return field === 'percent' ? m.errors.percent : m.errors.number;
   };
