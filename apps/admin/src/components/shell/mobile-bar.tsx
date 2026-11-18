@@ -4,7 +4,7 @@ import type { StaffDto } from '@lummi/contracts';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { PrefsSwitches } from '@/components/prefs-switches';
+import { LanguageSwitch } from '@/components/prefs-switches';
 import type { Theme } from '@/lib/theme';
 import { Button } from '@/components/ui/button';
 import type { AdminMessages } from '@/lib/i18n';
@@ -33,12 +33,7 @@ export function MobileBar({
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-milk pr-1.5 pl-1 pt-[env(safe-area-inset-top)] box-content lg:hidden">
         <HomeLogo />
         <div className="flex items-center gap-1">
-          <PrefsSwitches
-            language={language}
-            theme={theme}
-            labels={{ language: t.language, theme: t.theme }}
-            className="gap-1"
-          />
+          <LanguageSwitch language={language} label={t.language} />
           <DialogPrimitive.Trigger asChild>
             <Button variant="ghost" size="icon" aria-label={t.nav.menu}>
               <Menu className="size-[22px]" strokeWidth={1.5} aria-hidden />
@@ -64,7 +59,7 @@ export function MobileBar({
           <NavScroller
             className="px-3 pt-1 pb-3"
             footerClassName="mx-3"
-            footer={<PanelAccount member={member} t={t} />}
+            footer={<PanelAccount member={member} theme={theme} t={t} />}
           >
             <PanelNav role={member.role} t={t} onNavigate={close} />
           </NavScroller>
