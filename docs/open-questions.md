@@ -146,3 +146,10 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **No tier** for Louis Vuitton Ink Mark, Moon Tale and Rain Tea (their supplier's receipt gives none). The owner sets it, or it stays empty.
 - **Oil + ethanol need not make 100 %**: the calculator does not check it, so neither do the settings; the hint says so.
 - **The gift sample's cost** is the calculator's average 5 ml vial over the fragrances given. With #79 the server picks the sample's fragrance, so its cost can be that fragrance's own vial: decide there.
+
+## Raw-material warehouse (ticket #76, ADR 0041)
+- **Should an oil receipt update the fragrance's oil price** (and supplier, invoice) to the latest invoice? Now it does not: the owner changes the oil price in the fragrance form, and unit costs follow that price.
+- **The low-oil threshold** `stock.lowOilLitres` defaults to 1 litre of perfume (about 310 g of oil at 30 %). Our default; the owner sets it.
+- **Ethanol is not stocked**, only costed per bottling. Does the owner want an ethanol balance too?
+- **Stock value** takes the oil at the average landed price of the fragrance's standing receipts. Does the owner value it another way (the latest invoice, FIFO)?
+- **History before launch:** counts made before the warehouse shipped are not in the history; the first lines are what happens after it.

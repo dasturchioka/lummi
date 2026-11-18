@@ -70,6 +70,22 @@ _Avoid_: Booking, hold, allocation
 On hand minus reserve: what a customer can still order.
 _Avoid_: Stock, in stock
 
+**Oil balance**:
+The grams of a fragrance's perfume oil in the warehouse («Масло» / «Moy»), kept to the milligram: up with an Oil receipt, down with a Bottling. The stock page also reads it as the litres of perfume it still makes, the filling loss taken off. The shop sells bottles, never oil.
+_Avoid_: Oil stock, liquid stock, остаток масла (in code), raw material
+
+**Oil receipt**:
+Oil of one fragrance as a supplier's invoice reads: supplier, invoice number, the day, grams, so'm per gram before the discount, the discount and the delivery to Termez for that invoice («Приход масла» / «Moy kirimi»). It adds to the Oil balance; it is corrected or voided with a reason, never deleted. Not the shopper's payment Receipt.
+_Avoid_: Receipt (that is the shopper's payment proof), purchase, delivery, invoice (that is the supplier's paper)
+
+**Bottling**:
+Turning a fragrance's oil into bottles («Розлив» / «Quyish»): counts per volume, the oil they take by the cost model's formula with the filling loss, off the Oil balance, and the bottles onto On hand, in one step. Refused when the Oil balance holds less. Ethanol is costed, not counted.
+_Avoid_: Filling (that is the per-bottle work cost), production, decanting
+
+**Stock move**:
+One line of a fragrance's warehouse history («История» / «Tarix»): an Oil receipt, its correction or void, a Bottling, bottles leaving at BTS handover or coming back, or a manual count with its reason. Written with the change it records.
+_Avoid_: Transaction, movement log, audit entry (that is the audit log's)
+
 ### Money
 
 **Quote**:
