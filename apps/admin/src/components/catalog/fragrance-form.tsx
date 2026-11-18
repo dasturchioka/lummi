@@ -3,6 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   DEFAULT_LONGEVITY,
+  FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
   MAX_SIMILAR,
   SEASONS,
@@ -12,6 +13,7 @@ import {
   fragranceInputSchema,
   type DictionaryItem,
   type FragranceAdmin,
+  type FragranceCosts,
   type FragranceInput,
 } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
@@ -38,6 +40,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
+import { CostBlock } from './cost-block';
 import { PhotoUpload } from './photo-upload';
 
 type Level = 'top' | 'heart' | 'base';
@@ -86,6 +89,10 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
       internalRemark: '',
       aliases: [],
       uzumUrl: '',
+      oilPrice: null,
+      tier: null,
+      oilSupplier: '',
+      oilInvoice: '',
       isHit: false,
       isNew: false,
       hidden: false,
@@ -98,6 +105,8 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
     ...f,
     internalRemark: f.internalRemark ?? '',
     uzumUrl: f.uzumUrl ?? '',
+    oilSupplier: f.oilSupplier ?? '',
+    oilInvoice: f.oilInvoice ?? '',
     keyNotesRu: [0, 1, 2].map((i) => f.keyNotesRu[i] ?? ''),
     keyNotesUz: [0, 1, 2].map((i) => f.keyNotesUz[i] ?? ''),
     volumes,
@@ -147,6 +156,8 @@ const priceEcho = (v: unknown, language: Language) =>
  */
 export function FragranceForm({
   initial,
+  costs = null,
+  costsFailed = false,
   families,
   notes,
   others,
@@ -154,6 +165,10 @@ export function FragranceForm({
   t,
 }: {
   initial: FragranceAdmin | null;
+  /** The saved volumes' unit costs (ADR 0040); refreshed with the page after a save. */
+  costs?: FragranceCosts | null;
+  /** The costs request failed (the cost block offers «Повторить»). */
+  costsFailed?: boolean;
   families: DictionaryItem[];
   notes: DictionaryItem[];
   others: { id: number; name: string }[];
@@ -686,6 +701,51 @@ export function FragranceForm({
               );
             })}
           </div>
+        </Section>
+
+        <Section title={c.sectionCost}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field
+              id="f-oil-price"
+              label={c.oilPrice}
+              hint={c.oilPriceHint}
+              error={errors.oilPrice ? c.errors.oilPrice : undefined}
+            >
+              <Input
+                inputMode="numeric"
+                className="tabular-nums"
+                {...reg('oilPrice', { setValueAs: numOrNull })}
+              />
+            </Field>
+            <Field id="f-tier" label={c.tier} error={err(errors.tier)}>
+              <Select {...reg('tier', { setValueAs: (x: unknown) => (x ? x : null) })}>
+                <option value="">{c.noTier}</option>
+                {FRAGRANCE_TIERS.map((x) => (
+                  <option key={x} value={x}>
+                    {c.options.tier[x]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="f-oil-supplier" label={c.oilSupplier} error={err(errors.oilSupplier)}>
+              <Input {...reg('oilSupplier')} />
+            </Field>
+            <Field
+              id="f-oil-invoice"
+              label={c.oilInvoice}
+              hint={c.oilInvoiceHint}
+              error={err(errors.oilInvoice)}
+            >
+              <Input {...reg('oilInvoice')} />
+            </Field>
+          </div>
+          <CostBlock
+            costs={costs}
+            failed={costsFailed}
+            saved={!!initial}
+            language={language}
+            t={t}
+          />
         </Section>
 
         <Section title={c.sectionFlags}>

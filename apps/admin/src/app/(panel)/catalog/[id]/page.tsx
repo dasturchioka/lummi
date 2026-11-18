@@ -7,8 +7,9 @@ export default async function EditFragrancePage({ params }: { params: Promise<{ 
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) notFound();
   const api = await serverApi();
-  const [one, families, notes, all] = await Promise.all([
+  const [one, costs, families, notes, all] = await Promise.all([
     api.catalog.fragrances.get({ params: { id } }),
+    api.catalog.fragrances.costs({ params: { id } }),
     api.catalog.families.list(),
     api.catalog.notes.list(),
     api.catalog.fragrances.list({ query: {} }),
@@ -22,6 +23,8 @@ export default async function EditFragrancePage({ params }: { params: Promise<{ 
     <FragranceForm
       key={one.body.id}
       initial={one.body}
+      costs={costs.status === 200 ? costs.body : null}
+      costsFailed={costs.status !== 200}
       families={families.body}
       notes={notes.body}
       others={all.body.filter((f) => f.id !== id).map((f) => ({ id: f.id, name: f.name }))}

@@ -68,6 +68,7 @@ The environment `staging` allows only `stage-1` and `main`; the deploy jobs also
 | `ADMIN_BOT_USERNAME` | bot name for the admin Login Widget (no `@`); read at run time |
 | `TYPESAFE_API_KEY` | receipt AI (required in production mode) |
 | `OPENAI_API_KEY` | optional fallback; may be empty |
+| `OIL_PRICES_FILE` | optional: the owner's oil price list (JSON, customer data, never in the repository) as a path inside the api container, e.g. `/data/files/private/oil-prices.json`; the seed fills empty oil prices from it on each deploy (#75). Empty: skipped |
 | `BOT_MODE`, `LOG_LEVEL` | optional; defaults `webhook`, `info` |
 | `COMPOSE_PROFILES` | `userbot` once the userbot is logged in (below); unset before |
 | `USERBOT_API_ID`, `USERBOT_API_HASH` | an app registered at my.telegram.org → API development tools (any account's; they name the app, not the account) |
@@ -97,6 +98,19 @@ $dc run --rm -T api node --import tsx src/cli/set-owner-password.ts --login <log
 **Sign-in locks.** Five wrong passwords for one login within 15 minutes, or twenty from one address, close sign-in for that login or address for 15 minutes (Настройки → «Вход и сессии»: every number is a setting). To lift a lock at once, `$dc exec postgres psql -U lummi -d lummi -c "delete from login_throttles"`.
 
 The seed step (`src/cli/seed-staging.ts`) loads the 67-fragrance catalog (placeholder prices, photos, Discovery set) only while the catalog is empty, and adds missing BTS points; a second run changes nothing.
+
+**Oil prices (#75).** The owner's oil price list (a JSON list of `{ name, tier, oilPrice, supplier, invoice }`) is customer data and is never committed. Put it into the files volume's `private/` (never served; backed up like the receipts), point `OIL_PRICES_FILE` at it, and run the seed step once; every later deploy runs it again. It fills only the fields a fragrance has empty and never overwrites what the owner set. A missing or unreadable file, or a bad row, is logged and skipped, never a failed deploy.
+
+```sh
+cd /opt/lummi-staging && dc='docker compose --env-file .env --env-file .deploy.env'
+chmod 644 oil-prices.json          # the api runs as `node`; the copy lands owned by root
+$dc cp oil-prices.json api:/data/files/private/oil-prices.json
+echo 'OIL_PRICES_FILE=/data/files/private/oil-prices.json' >> .env
+$dc run --rm -T api node --import tsx src/cli/seed-staging.ts   # fills now; prints «oil prices: …»
+rm oil-prices.json                 # the volume holds it now
+```
+
+A new list later: copy it over the same path and run the seed step again (or wait for the next deploy). It fills only what is still empty; to change a price the owner set, edit it in the panel or the Excel file.
 
 Manual commands work only after one CI run (they need `docker-compose.yml` and `.deploy.env`). To run them before that: `scp docker-compose.yml lummi-deploy@<host>:/opt/lummi-staging/`, write `.deploy.env` with `IMAGE_TAG=<commit sha>` and `GHCR_OWNER=<owner>`, and `docker login ghcr.io -u <user>` with a read-only PAT (`read:packages`), then `docker logout ghcr.io` when done. The steps the job runs are:
 

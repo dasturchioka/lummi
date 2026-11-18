@@ -19,8 +19,9 @@ import {
 /**
  * Rebuilds the seed workbook `apps/api/seed/LUMMI_Katalog.xlsx` from the customer's guide
  * (`materials/catalog/`): the 67 fragrances in the import template, with placeholder prices and
- * stock (docs/catalog-sample.md) and longevity «до 24 часов». The file is committed; this script
- * is how it was made and how it is remade when the guide changes:
+ * stock (docs/catalog-sample.md) and longevity «до 24 часов». The cost columns (#75) stay empty:
+ * the oil prices come from the file at OIL_PRICES_FILE (`seedOilPrices`). The workbook is
+ * committed; this script is how it was made and how it is remade when the guide changes:
  *   npm run seed:workbook -w @lummi/api
  * The seed (and the customer, as their example) then use the workbook through the import.
  */
@@ -103,6 +104,12 @@ const data: CatalogData = {
       isHit: false,
       isNew: false,
       hidden: false,
+      // the cost columns stay empty: oil prices are the customer's and never in the repository;
+      // the seed takes them from OIL_PRICES_FILE (#75)
+      oilPrice: null,
+      tier: null,
+      oilSupplier: '',
+      oilInvoice: '',
     };
     return {
       draft,

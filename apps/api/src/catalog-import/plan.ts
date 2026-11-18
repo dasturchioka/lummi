@@ -1,5 +1,6 @@
 import {
   KEY_NOTE_COUNT,
+  MAX_OIL_PRICE,
   MAX_ON_HAND,
   MAX_PRICE,
   dictionaryInputSchema,
@@ -332,6 +333,22 @@ export function planImport(
     const inFile = fileFragrances.get(code) ?? null;
     let draft = inFile?.draft ?? existing?.draft;
     if (!draft) continue; // a bad fragrance row: its errors are already listed
+    if (existing) {
+      // A cost column the file leaves out keeps what is stored; so does the seed, over a value
+      // the owner already set (ADR 0040).
+      const keep = <K extends 'oilPrice' | 'tier' | 'oilSupplier' | 'oilInvoice'>(k: K) => {
+        const stored = existing.draft[k];
+        const set = stored !== null && stored !== '';
+        return raw.absent.includes(k) || (opts.seed && set) ? stored : draft![k];
+      };
+      draft = {
+        ...draft,
+        oilPrice: keep('oilPrice'),
+        tier: keep('tier'),
+        oilSupplier: keep('oilSupplier'),
+        oilInvoice: keep('oilInvoice'),
+      };
+    }
     if (opts.seed && existing) {
       draft = {
         ...draft,
@@ -512,6 +529,17 @@ function parseFragrance(
     family = refs.familyNames.get(c.family.trim().toLowerCase()) ?? null;
     if (!family) bad('family', 'unknown_family', { value: c.family.trim() });
   }
+  let oilPrice: number | null = null;
+  if (c.oilPrice.trim() !== '') {
+    oilPrice = integer(c.oilPrice);
+    if (oilPrice === null || oilPrice < 1) bad('oilPrice', 'bad_number', { value: c.oilPrice });
+    else if (oilPrice > MAX_OIL_PRICE) bad('oilPrice', 'too_big', { max: MAX_OIL_PRICE });
+  }
+  let tier: keyof typeof LABELS.tier | null = null;
+  if (c.tier.trim() !== '') {
+    tier = parseLabel('tier', c.tier);
+    if (!tier) bad('tier', 'bad_option', { value: c.tier.trim(), options: labelsOf('tier').join(', ') });
+  }
   const similar: string[] = [];
   for (const raw of splitList(c.similar, /[,;]/)) {
     const s = normaliseCode(raw);
@@ -547,6 +575,10 @@ function parseFragrance(
     isHit: flag('isHit'),
     isNew: flag('isNew'),
     hidden: flag('hidden'),
+    oilPrice,
+    tier,
+    oilSupplier: c.oilSupplier.trim(),
+    oilInvoice: c.oilInvoice.trim(),
   };
   if (!ok) return null;
   const d = normDraft(draft as FragranceDraft);
@@ -574,6 +606,10 @@ function parseFragrance(
     internalRemark: d.internalRemark || null,
     aliases: d.aliases,
     uzumUrl: d.uzumUrl || null,
+    oilPrice: d.oilPrice,
+    tier: d.tier,
+    oilSupplier: d.oilSupplier || null,
+    oilInvoice: d.oilInvoice || null,
     isHit: d.isHit,
     isNew: d.isNew,
     hidden: d.hidden,

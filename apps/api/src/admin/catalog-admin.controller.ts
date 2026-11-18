@@ -51,6 +51,16 @@ export class CatalogAdminController {
     });
   }
 
+  @TsRestHandler(adminContract.catalog.fragrances.costs)
+  costs() {
+    return tsRestHandler(adminContract.catalog.fragrances.costs, async ({ params }) => {
+      const c = await this.catalog.costs(params.id);
+      return c
+        ? { status: 200 as const, body: c }
+        : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
+  }
+
   @TsRestHandler(adminContract.catalog.fragrances.create)
   create(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.catalog.fragrances.create, async ({ body }) => {

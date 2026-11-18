@@ -1,6 +1,7 @@
 import type { Discount } from '@lummi/contracts';
 import {
   CAMPAIGN_SOURCES,
+  FRAGRANCE_TIERS,
   LINE_KINDS,
   ORDER_ACTIONS,
   ORDER_ACTOR_TYPES,
@@ -441,6 +442,8 @@ export const seasonEnum = pgEnum('season', [
 ]);
 export const timeOfDayEnum = pgEnum('time_of_day', ['day', 'evening', 'day_evening', 'everyday']);
 export const noteLevelEnum = pgEnum('note_level', ['top', 'heart', 'base']);
+/** The oil grade on the supplier's invoice (ADR 0040). */
+export const fragranceTierEnum = pgEnum('fragrance_tier', FRAGRANCE_TIERS);
 export const VOLUMES_ML = [10, 30, 50] as const;
 
 /** Fragrance families from the customer's guide (29 composite families), RU/UZ. */
@@ -497,6 +500,15 @@ export const fragrances = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     uzumUrl: text('uzum_url'),
+    /**
+     * The cost model (ADR 0040), admin only: the oil's so'm per gram on the supplier's invoice,
+     * before the supplier discount. Null: not known yet, so no cost is computed.
+     */
+    oilPrice: integer('oil_price'),
+    tier: fragranceTierEnum('tier'),
+    /** Who sold the oil and on which invoice, as the owner writes them. */
+    oilSupplier: text('oil_supplier'),
+    oilInvoice: text('oil_invoice'),
     isHit: boolean('is_hit').notNull().default(false),
     isNew: boolean('is_new').notNull().default(false),
     hidden: boolean('hidden').notNull().default(false),
@@ -508,6 +520,7 @@ export const fragrances = pgTable(
       'fragrances_three_key_notes',
       sql`cardinality(${t.keyNotesRu}) = 3 and cardinality(${t.keyNotesUz}) = 3`,
     ),
+    check('fragrances_oil_price_check', sql`${t.oilPrice} is null or ${t.oilPrice} > 0`),
   ],
 );
 

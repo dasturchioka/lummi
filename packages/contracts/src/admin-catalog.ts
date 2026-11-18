@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { uzumUrlSchema } from './uzum';
 import {
+  FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
+  MAX_OIL_PRICE,
   MAX_PRICE,
   NOTE_LEVELS,
   SEASONS,
@@ -78,6 +80,11 @@ export const fragranceInputSchema = z
     internalRemark: optionalText(1000),
     aliases: z.array(text(80)).max(20),
     uzumUrl: uzumUrlSchema.nullable(),
+    /** The cost model (ADR 0040): so'm per gram on the oil invoice, before the supplier discount. */
+    oilPrice: z.number().int().min(1).max(MAX_OIL_PRICE).nullable(),
+    tier: z.enum(FRAGRANCE_TIERS).nullable(),
+    oilSupplier: optionalText(120),
+    oilInvoice: optionalText(120),
     isHit: z.boolean(),
     isNew: z.boolean(),
     hidden: z.boolean(),
@@ -144,6 +151,10 @@ export const fragranceAdminSchema = z.object({
   internalRemark: z.string().nullable(),
   aliases: z.array(z.string()),
   uzumUrl: z.string().nullable(),
+  oilPrice: z.number().int().nullable(),
+  tier: z.enum(FRAGRANCE_TIERS).nullable(),
+  oilSupplier: z.string().nullable(),
+  oilInvoice: z.string().nullable(),
   isHit: z.boolean(),
   isNew: z.boolean(),
   hidden: z.boolean(),
