@@ -345,6 +345,18 @@ export const settingDefinitions = {
       uz: 'Mavjud miqdor shu sondan oshmasa, ombor qatori ajratib koʻrsatiladi. Nol har doim ajratiladi.',
     },
   },
+  /** The low-oil warning on the stock page (#76, ADR 0041): litres of perfume the oil still makes. */
+  'stock.lowOilLitres': {
+    schema: z.number().min(0).max(1000),
+    default: 1,
+    area: 'shop',
+    unit: 'none',
+    label: { ru: 'Мало масла: запас жидкости, л', uz: 'Moy kam: suyuqlik zaxirasi, l' },
+    hint: {
+      ru: 'Аромат помечается «Мало масла», когда его масла хватит не больше чем на столько литров духов (потери при розливе учтены). 0 — только когда масла нет совсем.',
+      uz: 'Moyidan shu litrdan koʻp boʻlmagan atir chiqsa, ifor «Moy kam» deb belgilanadi (quyishdagi yoʻqotish hisobga olingan). 0 — faqat moy umuman qolmaganda.',
+    },
+  },
   /**
    * The largest Receipt a shopper may upload (TZ §4: «JPG, PNG, PDF, ≤ 10 MB»; ADR 0020), up to
    * the technical bound `RECEIPT_UPLOAD_MAX_MB`.

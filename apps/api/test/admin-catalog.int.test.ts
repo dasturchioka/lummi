@@ -480,7 +480,7 @@ describe('permissions (ADR 0017)', () => {
     const vol = f.volumes[0]!;
     const res = await manager.client.admin.onHand.set({
       params: { id: vol.id },
-      body: { onHand: 12 },
+      body: { onHand: 12, reason: 'Пересчёт' },
     });
     expect(res.status === 200 && res.body).toMatchObject({
       onHand: 12,
@@ -499,7 +499,7 @@ describe('permissions (ADR 0017)', () => {
 
     const ownerRes = await owner.client.admin.onHand.set({
       params: { id: vol.id },
-      body: { onHand: 0 },
+      body: { onHand: 0, reason: 'Пересчёт' },
     });
     expect(ownerRes.status === 200 && ownerRes.body.available).toBe(0);
     expect((await audits('catalog.on_hand_changed')).map((r) => r.actorId)).toEqual([
@@ -515,7 +515,12 @@ describe('permissions (ADR 0017)', () => {
     expect(await send('PATCH', path, { onHand: -1 }, manager)).toBe(400);
     expect(await send('PATCH', path, { onHand: 1.5 }, manager)).toBe(400);
     expect(
-      (await manager.client.admin.onHand.set({ params: { id: 9999 }, body: { onHand: 1 } })).status,
+      (
+        await manager.client.admin.onHand.set({
+          params: { id: 9999 },
+          body: { onHand: 1, reason: 'Пересчёт' },
+        })
+      ).status,
     ).toBe(404);
   });
 
@@ -734,7 +739,10 @@ describe('on hand and a stale form (ADR 0010)', () => {
   it("keeps a manager's count when the owner saves a form loaded before it", async () => {
     const f = await created();
     const vol = f.volumes[0]!;
-    await manager.client.admin.onHand.set({ params: { id: vol.id }, body: { onHand: 12 } });
+    await manager.client.admin.onHand.set({
+      params: { id: vol.id },
+      body: { onHand: 12, reason: 'Пересчёт' },
+    });
     // the owner's form still carries the old count, 5, and did not touch it
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
@@ -750,7 +758,10 @@ describe('on hand and a stale form (ADR 0010)', () => {
   it('refuses with 409 when the owner changes a count that moved meanwhile', async () => {
     const f = await created();
     const vol = f.volumes[0]!;
-    await manager.client.admin.onHand.set({ params: { id: vol.id }, body: { onHand: 12 } });
+    await manager.client.admin.onHand.set({
+      params: { id: vol.id },
+      body: { onHand: 12, reason: 'Пересчёт' },
+    });
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
       body: editBody(f, 8, 5),
@@ -800,7 +811,7 @@ describe('on hand and a stale form (ADR 0010)', () => {
     const f = await created();
     const res = await manager.client.admin.onHand.set({
       params: { id: f.volumes[0]!.id },
-      body: { onHand: 0 },
+      body: { onHand: 0, reason: 'Пересчёт' },
     });
     expect(res.status === 200 && res.body).toMatchObject({ belowReserve: false, available: 0 });
   });

@@ -535,7 +535,7 @@ const describers: Record<string, Describer> = {
   'catalog.fragrance_hidden': fragranceOf,
   'catalog.fragrance_unhidden': fragranceOf,
   'catalog.on_hand_changed': (c) => {
-    c.take('fragrance', 'ml', 'onHand');
+    c.take('fragrance', 'ml', 'onHand', 'reason');
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(c.t.audit.detail.stock, {
@@ -544,6 +544,7 @@ const describers: Record<string, Describer> = {
         old: onHandText(c, pair[0]),
         new: onHandText(c, pair[1]),
       }),
+      str(c.p.reason) && fill(c.t.audit.detail.reason, { reason: str(c.p.reason)! }),
     ];
   },
   'catalog.photo_uploaded': (c) => {
@@ -574,6 +575,120 @@ const describers: Record<string, Describer> = {
       below > 0 && fill(c.t.audit.detail.belowReserve, { n: String(below) }),
     ];
   },
+  // the raw-material warehouse (#76)
+  'warehouse.oil_received': (c) => {
+    c.take(
+      'fragrance',
+      'supplier',
+      'invoice',
+      'receivedOn',
+      'grams',
+      'pricePerGram',
+      'discountPercent',
+      'importPercent',
+      'fromDraft',
+    );
+    const d = c.t.audit.detail;
+    return [
+      c.p.fromDraft === true && d.fromDraft,
+      fill(d.oilReceived, {
+        name: str(c.p.fragrance) ?? d.unknownName,
+        grams: valueText(c, c.p.grams),
+        invoice: str(c.p.invoice) ?? '—',
+        supplier: str(c.p.supplier) ?? '—',
+      }),
+      str(c.p.receivedOn) &&
+        fill(d.field, { label: label(c.t, 'receivedOn'), value: valueText(c, c.p.receivedOn) }),
+      int(c.p.pricePerGram) !== null &&
+        fill(d.oilPrice, {
+          price: money(c, int(c.p.pricePerGram)!),
+          discount: valueText(c, c.p.discountPercent),
+          import: valueText(c, c.p.importPercent),
+        }),
+    ];
+  },
+  'warehouse.oil_receipt_corrected': (c) => {
+    const { fragrance, invoice, reason, ...diff } = c.p;
+    c.take(...Object.keys(c.p));
+    const d = c.t.audit.detail;
+    return [
+      fill(d.oilReceiptCorrected, {
+        name: str(fragrance) ?? d.unknownName,
+        invoice: str(invoice) ?? '—',
+      }),
+      ...diffPairs(c, diff).map(cap),
+      str(reason) && fill(d.reason, { reason: str(reason)! }),
+    ];
+  },
+  'warehouse.oil_receipt_voided': (c) => {
+    c.take('fragrance', 'supplier', 'invoice', 'grams', 'reason');
+    const d = c.t.audit.detail;
+    return [
+      fill(d.oilReceiptVoided, {
+        name: str(c.p.fragrance) ?? d.unknownName,
+        grams: valueText(c, c.p.grams),
+        invoice: str(c.p.invoice) ?? '—',
+      }),
+      str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
+    ];
+  },
+  'warehouse.bottled': (c) => {
+    c.take(
+      'fragrance',
+      'lines',
+      'oilGrams',
+      'ethanolMl',
+      'oilPercent',
+      'oilDensity',
+      'fillingLossPercent',
+    );
+    const d = c.t.audit.detail;
+    const lines = Array.isArray(c.p.lines) ? c.p.lines.filter(isRecord) : [];
+    return [
+      fill(d.bottled, {
+        name: str(c.p.fragrance) ?? targetName(c) ?? d.unknownName,
+        lines: lines
+          .map((l) =>
+            fill(d.bottledLine, { ml: String(l.ml ?? '—'), qty: valueText(c, l.quantity) }),
+          )
+          .join(', '),
+      }),
+      fill(d.bottledOil, { grams: valueText(c, c.p.oilGrams), ml: valueText(c, c.p.ethanolMl) }),
+    ];
+  },
+  'warehouse.oil_receipt_drafts_created': (c) => {
+    c.take('count', 'grams', 'fragrances');
+    const names = Array.isArray(c.p.fragrances)
+      ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(c.t.audit.detail.oilReceiptDrafts, {
+        count: String(int(c.p.count) ?? names.length),
+        grams: valueText(c, c.p.grams),
+      }),
+      names.length > 0 && clip(names.join(', ')),
+    ];
+  },
+  'warehouse.oil_receipt_draft_discarded': (c) => {
+    c.take('fragrance', 'grams');
+    const d = c.t.audit.detail;
+    return [
+      fill(d.draftDiscarded, {
+        name: str(c.p.fragrance) ?? d.unknownName,
+        grams: valueText(c, c.p.grams),
+      }),
+    ];
+  },
+  'warehouse.exported': (c) => {
+    c.take('fragrances', 'moves');
+    return [
+      fill(c.t.audit.detail.warehouseExported, {
+        fragrances: String(int(c.p.fragrances) ?? 0),
+        moves: String(int(c.p.moves) ?? 0),
+      }),
+    ];
+  },
+
   'orders.exported': (c) => {
     c.take('filters', 'count');
     return [fill(c.t.audit.detail.exported, { count: String(int(c.p.count) ?? 0) })];
@@ -611,10 +726,11 @@ const describers: Record<string, Describer> = {
     ];
   },
   'sets.discovery_on_hand_changed': (c) => {
-    c.take('onHand');
+    c.take('onHand', 'reason');
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(c.t.audit.detail.onHand, { old: onHandText(c, pair[0]), new: onHandText(c, pair[1]) }),
+      str(c.p.reason) && fill(c.t.audit.detail.reason, { reason: str(c.p.reason)! }),
     ];
   },
   'sets.discovery_photo_uploaded': (c) => (c.take('photo'), [c.t.audit.detail.photo]),

@@ -296,6 +296,108 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     ['Tygar, 30 ml: qoldiq 5 → 3'],
   ],
   [
+    'catalog.on_hand_changed',
+    { fragrance: 'Tygar', ml: 30, onHand: [5, 3], reason: 'Разбился флакон' },
+    {},
+    ['Tygar, 30 мл: остаток 5 → 3', 'Причина: Разбился флакон'],
+    [],
+  ],
+  [
+    'warehouse.oil_received',
+    {
+      fragrance: 'Tygar',
+      supplier: 'Test Oils',
+      invoice: 'INV-1',
+      receivedOn: '2026-11-17',
+      grams: 1500,
+      pricePerGram: 4000,
+      discountPercent: 9,
+      importPercent: 3,
+    },
+    {},
+    [
+      'Tygar: приход масла 1 500 г, накладная INV-1, Test Oils',
+      'Дата прихода: 17 ноября',
+      'Цена 4 000 сум за 1 г, скидка 9 %, доставка 3 %',
+    ],
+    [],
+  ],
+  [
+    'warehouse.oil_receipt_corrected',
+    { fragrance: 'Tygar', invoice: 'INV-1', reason: 'Опечатка', grams: [100, 120] },
+    {},
+    ['Tygar: исправлен приход, накладная INV-1', 'Граммы: 100 → 120', 'Причина: Опечатка'],
+    ['Tygar: kirim tuzatildi, yuk xati INV-1', 'Grammlar: 100 → 120', 'Sabab: Опечатка'],
+  ],
+  [
+    'warehouse.oil_receipt_voided',
+    { fragrance: 'Tygar', supplier: 'Test Oils', invoice: 'INV-1', grams: 100, reason: 'Дубль' },
+    {},
+    ['Tygar: отменён приход 100 г, накладная INV-1', 'Причина: Дубль'],
+    [],
+  ],
+  [
+    'warehouse.bottled',
+    {
+      fragrance: 'Tygar',
+      lines: [
+        { ml: 10, quantity: 4 },
+        { ml: 50, quantity: 1 },
+      ],
+      oilGrams: 27.81,
+      ethanolMl: 65,
+      oilPercent: 30,
+      oilDensity: 1,
+      fillingLossPercent: 3,
+    },
+    {},
+    ['Tygar: розлив 10 мл × 4, 50 мл × 1', 'Масла 27,81 г, спирта 65 мл'],
+    ['Tygar: quyish 10 ml × 4, 50 ml × 1', '27,81 g moy, 65 ml spirt'],
+  ],
+  [
+    'warehouse.oil_received',
+    {
+      fragrance: 'Tygar',
+      supplier: 'Test Oils',
+      invoice: 'INV-2',
+      receivedOn: '2026-11-18',
+      grams: 980,
+      pricePerGram: 3950,
+      discountPercent: 9,
+      importPercent: 3,
+      fromDraft: true,
+    },
+    {},
+    [
+      'Подтверждён черновик из плана закупки',
+      'Tygar: приход масла 980 г, накладная INV-2, Test Oils',
+      'Дата прихода: 18 ноября',
+      'Цена 3 950 сум за 1 г, скидка 9 %, доставка 3 %',
+    ],
+    [],
+  ],
+  [
+    'warehouse.oil_receipt_drafts_created',
+    { count: 2, grams: 3500, fragrances: ['Tygar', 'Ombre Leather'] },
+    {},
+    ['Черновики приходов по плану закупки: 2, всего 3 500 г', 'Tygar, Ombre Leather'],
+    ['Xarid rejasi boʻyicha kirim qoralamalari: 2, jami 3 500 g', 'Tygar, Ombre Leather'],
+  ],
+  [
+    'warehouse.oil_receipt_draft_discarded',
+    { fragrance: 'Tygar', grams: 1000 },
+    {},
+    ['Tygar: удалён черновик прихода 1 000 г'],
+    [],
+  ],
+  [
+    'warehouse.exported',
+    { fragrances: 67, moves: 12 },
+    {},
+    ['Ароматов в файле: 67, записей истории: 12'],
+    [],
+  ],
+  [
     'catalog.photo_uploaded',
     { ml: 30, fragranceId: 1, photo: ['a', 'b'] },
     { targetName: 'Tygar' },
@@ -554,6 +656,16 @@ describe('audit details read as text (#63)', () => {
     expect(say(e, 'ru')).toEqual(ruLines.map(flat));
     if (uzLines.length || ruLines.length === 0) expect(say(e, 'uz')).toEqual(uzLines.map(flat));
     for (const line of say(e, 'uz')) expect(line).not.toMatch(/[{}[\]"]/);
+  });
+
+  it('names every warehouse action and target in both languages (#76)', () => {
+    const actions = apiActions().filter((a) => a.startsWith('warehouse.'));
+    expect(actions.length).toBeGreaterThanOrEqual(7);
+    for (const lang of [ru, uz]) {
+      for (const a of actions) expect(lang.audit.actions, a).toHaveProperty([a]);
+      for (const target of ['oil_receipt', 'warehouse'])
+        expect(lang.audit.targets, target).toHaveProperty([target]);
+    }
   });
 
   it('every action the API writes has a describer (read from the API source)', () => {

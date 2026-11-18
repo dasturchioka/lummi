@@ -1,12 +1,14 @@
 import type { StockLevel, StockList, StockQuery, StockRow } from '@lummi/contracts';
-import { asc, eq, fragrances, sql, volumes, type Db, type DbOrTx } from '@lummi/db';
+import { asc, eq, fragrances, sql, volumes, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { loadDiscovery } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
+import { isOwner } from '../staff/staff.guard';
 import { DB } from '../tokens';
 import { containsIgnoringApostrophes } from '../util/apostrophe-match';
+import { fragranceOils, readOilContext } from '../warehouse/fragrance-oil';
 
 /**
  * The stock page's read side (#27): on hand, reserve and available per volume and for the
@@ -92,11 +94,19 @@ export async function stockRows(
   return { volumes: rows, discovery };
 }
 
-/** The stock page's filters, one rule for the page and the Home's link to it. */
+/**
+ * The stock page's filters, one rule for the page and the Home's link to it. `oilLevelOf` gives a
+ * fragrance's low-oil level (#76) for the `oilLow` filter; the Discovery set has no oil.
+ */
 export function matchesStockQuery(
   r: StockRow,
   query: Pick<StockQuery, 'filter' | 'visibility'>,
+  oilLevelOf?: (fragranceId: number) => StockLevel | undefined,
 ): boolean {
+  if (query.filter === 'oilLow') {
+    const level = r.fragranceId === null ? undefined : oilLevelOf?.(r.fragranceId);
+    if (level === undefined || level === 'ok') return false;
+  }
   if (query.filter === 'zero' && r.level !== 'zero') return false;
   if (query.filter === 'low' && r.level === 'ok') return false;
   if (query.visibility === 'hidden' && !r.hidden) return false;
@@ -108,13 +118,16 @@ export function matchesStockQuery(
 export class StockAdminService {
   constructor(@Inject(DB) private readonly db: Db) {}
 
-  async list(query: StockQuery): Promise<StockList> {
+  /** The page's rows and each fragrance's oil (#76); stock values for the owner only (ADR 0041). */
+  async list(query: StockQuery, viewer: StaffRow): Promise<StockList> {
     const { 'stock.lowAvailableThreshold': lowThreshold } = await readSettings(this.db, [
       'stock.lowAvailableThreshold',
     ]);
     const q = query.q?.trim();
     const { volumes: rows, discovery } = await stockRows(this.db, lowThreshold, q);
-    const matching = (r: StockRow) => matchesStockQuery(r, query);
+    const ctx = await readOilContext(this.db, isOwner(viewer));
+    const oil = await fragranceOils(this.db, [...new Set(rows.map((r) => r.fragranceId!))], ctx);
+    const matching = (r: StockRow) => matchesStockQuery(r, query, (id) => oil.get(id)?.level);
     const shown = rows.filter(matching);
 
     // pages hold whole fragrances (the rows are in name order, a fragrance's volumes together)
@@ -129,6 +142,8 @@ export class StockAdminService {
 
     return {
       lowThreshold,
+      lowOilLitres: ctx.lowOilLitres,
+      oil: [...onPage].map((id) => oil.get(id!)!),
       rows: pageRows,
       total: fragranceIds.length,
       page: query.page,

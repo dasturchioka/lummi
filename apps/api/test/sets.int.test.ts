@@ -350,7 +350,9 @@ describe('admin: the Discovery set', () => {
   });
 
   it('lets a manager count the boxes, audited', async () => {
-    const res = await manager.client.admin.sets.setOnHand({ body: { onHand: 7 } });
+    const res = await manager.client.admin.sets.setOnHand({
+      body: { onHand: 7, reason: 'Пересчёт' },
+    });
     expect(res.status === 200 && res.body.onHand).toBe(7);
     const [row] = await t.db
       .select()

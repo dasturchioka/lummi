@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { uzumUrlSchema } from './uzum';
+import { stockReasonSchema } from './warehouse';
 import {
   FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
@@ -210,6 +211,8 @@ export const onHandBodySchema = z.object({
    * write is refused with 409 `on_hand_changed` and the current count (a concurrent edit).
    */
   expected: z.number().int().min(0).optional(),
+  /** Why the count changed (a recount, breakage…): kept in the history and the audit (#76). */
+  reason: stockReasonSchema,
 });
 
 /** Dictionary entries (families and notes): RU/UZ names and aliases. */

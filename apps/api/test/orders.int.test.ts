@@ -408,7 +408,7 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     const manager = await t.managerSession();
     const res = await manager.client.admin.onHand.set({
       params: { id: v.id },
-      body: { onHand: 2 },
+      body: { onHand: 2, reason: 'Пересчёт' },
     });
     expect(res.status === 200 && res.body).toMatchObject({
       onHand: 2,
@@ -778,7 +778,7 @@ describe('retries and repeats', () => {
     try {
       const res = await manager.client.admin.onHand.set({
         params: { id: v.id },
-        body: { onHand: 5 },
+        body: { onHand: 5, reason: 'Пересчёт' },
       });
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ code: 'try_again' });

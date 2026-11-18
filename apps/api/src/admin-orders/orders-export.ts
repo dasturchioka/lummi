@@ -1,6 +1,5 @@
 import {
   promoGiftOf,
-  utcToTashkent,
   type AdminOrdersExportFilters,
   type AdminOrdersExportParams,
   type Discount,
@@ -26,7 +25,7 @@ import ExcelJS from 'exceljs';
 import { AuditService } from '../audit/audit.service';
 import { customerName, PAID_BY } from '../orders/order-read';
 import { reportedMoney } from '../reports/report-orders';
-import { MONEY, sheet } from '../reports/report-workbook';
+import { MONEY, sheet, tashkentWallClock } from '../reports/report-workbook';
 import { DB } from '../tokens';
 import { listedOrders, orderFilters } from './admin-orders.service';
 
@@ -185,10 +184,4 @@ async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Bu
   }
   ws.getColumn('items').alignment = { wrapText: true, vertical: 'top' };
   return Buffer.from(await wb.xlsx.writeBuffer());
-}
-
-/** An instant as the Tashkent wall clock in an Excel date cell (Excel dates carry no zone). */
-function tashkentWallClock(instant: Date): Date {
-  const t = utcToTashkent(instant);
-  return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }

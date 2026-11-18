@@ -1,6 +1,6 @@
 import type { StockList, StockQuery } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
@@ -43,7 +43,18 @@ export function StockView({
   const pageText = fill(s.page, { page: num(data.page), pages: num(pages) });
   return (
     <>
-      <PageHeader title={s.title} description={s.description} />
+      <PageHeader
+        title={s.title}
+        description={s.description}
+        actions={
+          <Button asChild variant="outline">
+            <a href={`/api/admin/warehouse/export?lang=${language}`} download>
+              <Download strokeWidth={1.5} aria-hidden />
+              {s.exportExcel}
+            </a>
+          </Button>
+        }
+      />
       <Card className="mb-4 p-4 lg:p-5">
         <form
           method="get"
@@ -65,6 +76,7 @@ export function StockView({
               <option value="">{s.showAll}</option>
               <option value="low">{s.showLow}</option>
               <option value="zero">{s.showZero}</option>
+              <option value="oilLow">{s.showOilLow}</option>
             </Select>
           </Field>
           <Field id="f-visibility" label={s.fragrances}>
@@ -102,7 +114,9 @@ export function StockView({
       ) : (
         <StockTable
           rows={data.rows}
+          oil={data.oil}
           lowThreshold={data.lowThreshold}
+          lowOilLitres={data.lowOilLitres}
           total={data.total}
           language={language}
           t={t}

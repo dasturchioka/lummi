@@ -1,4 +1,11 @@
+import { utcToTashkent } from '@lummi/contracts';
 import type ExcelJS from 'exceljs';
+
+/** An instant as the Tashkent wall clock in an Excel date cell (Excel dates carry no zone). */
+export function tashkentWallClock(instant: Date): Date {
+  const t = utcToTashkent(instant);
+  return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
+}
 
 /** Whole so'm with a thousands separator. */
 export const MONEY = '#,##0';

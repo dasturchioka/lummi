@@ -56,6 +56,9 @@ import { CustomersAdminController } from './admin/customers-admin.controller';
 import { StockAdminController } from './admin/stock-admin.controller';
 import { CustomersAdminService } from './admin/customers-admin.service';
 import { StockAdminService } from './admin/stock-admin.service';
+import { WarehouseController } from './warehouse/warehouse.controller';
+import { WarehouseExport } from './warehouse/warehouse-export';
+import { WarehouseService } from './warehouse/warehouse.service';
 import { SetsAdminService } from './admin/sets-admin.service';
 import { ReviewsAdminController, ReviewsController } from './reviews/reviews.controller';
 import { ReviewsBot } from './reviews/reviews-bot';
@@ -164,6 +167,7 @@ export class AppModule {
         OnHandController,
         SetsAdminController,
         StockAdminController,
+        WarehouseController,
         CustomersAdminController,
         ContentController,
         ContentAdminController,
@@ -222,6 +226,8 @@ export class AppModule {
         CatalogImportService,
         SetsAdminService,
         StockAdminService,
+        WarehouseService,
+        WarehouseExport,
         CustomersAdminService,
         ContentService,
         SearchService,

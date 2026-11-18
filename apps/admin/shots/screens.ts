@@ -1514,7 +1514,7 @@ export const screens: Screen[] = [
       const res = await page.request.patch(
         new URL(`/api/admin/volumes/${v10.id}/on-hand`, page.url()).href,
         {
-          data: { onHand: v10.onHand + 1 },
+          data: { onHand: v10.onHand + 1, reason: 'Пересчёт' },
         },
       );
       if (!res.ok()) throw new Error(`on hand change failed: ${res.status()}`);

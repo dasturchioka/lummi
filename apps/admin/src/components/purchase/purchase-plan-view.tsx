@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
+import { OilReceiptDraftsButton } from '@/components/purchase/oil-receipt-drafts-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -212,6 +213,9 @@ export function PurchasePlanView({
             <div className="px-4 pt-4 sm:px-5 sm:pt-5">
               <h2 className={HEADING}>{p.tableTitle}</h2>
               <p className="mt-2 text-small text-muted-foreground">{p.tableHint}</p>
+              <div className="mt-3">
+                <OilReceiptDraftsButton rows={plan.rows} t={t} />
+              </div>
             </div>
             <Table className="mt-2">
               <THead>

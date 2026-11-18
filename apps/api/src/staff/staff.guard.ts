@@ -54,6 +54,9 @@ export class StaffGuard implements CanActivate {
   }
 }
 
+/** The owner's role, one spelling for every owner-only check (guards, owner-only figures). */
+export const isOwner = (member: Pick<StaffRow, 'role'>): boolean => member.role === 'owner';
+
 /**
  * Owner-only endpoints (card details, settings, promo codes, campaign links, broadcasts, staff):
  * `@UseGuards(StaffGuard, OwnerGuard)`. Order matters; OwnerGuard reads what StaffGuard resolved.
@@ -63,7 +66,7 @@ export class OwnerGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const member = context.switchToHttp().getRequest<StaffRequest>().staff;
     if (!member) throw new UnauthorizedException({ code: 'unauthorized' });
-    if (member.role !== 'owner') throw new ForbiddenException({ code: 'forbidden' });
+    if (!isOwner(member)) throw new ForbiddenException({ code: 'forbidden' });
     return true;
   }
 }

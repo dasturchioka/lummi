@@ -140,7 +140,7 @@ describe('an on-hand edit', () => {
     const { id } = await volumeRow(slug!, 10);
     const res = await manager.client.admin.onHand.set({
       params: { id },
-      body: { onHand: 12, expected: 20 },
+      body: { onHand: 12, expected: 20, reason: 'Пересчёт' },
     });
     expect(res.status === 200 && res.body).toMatchObject({
       onHand: 12,
@@ -160,7 +160,7 @@ describe('an on-hand edit', () => {
     const { id } = await volumeRow(slug!, 10);
     const res = await owner.client.admin.onHand.set({
       params: { id },
-      body: { onHand: 1, expected: 20 },
+      body: { onHand: 1, expected: 20, reason: 'Пересчёт' },
     });
     expect(res.status === 200 && res.body).toMatchObject({
       onHand: 1,
@@ -174,10 +174,13 @@ describe('an on-hand edit', () => {
   it('answers 409 with the current count when it moved meanwhile, and writes nothing', async () => {
     const [slug] = await slugsOf(t, 1);
     const { id } = await volumeRow(slug!, 10);
-    await owner.client.admin.onHand.set({ params: { id }, body: { onHand: 8 } });
+    await owner.client.admin.onHand.set({
+      params: { id },
+      body: { onHand: 8, reason: 'Пересчёт' },
+    });
     const res = await manager.client.admin.onHand.set({
       params: { id },
-      body: { onHand: 15, expected: 20 },
+      body: { onHand: 15, expected: 20, reason: 'Пересчёт' },
     });
     expect(res.status).toBe(409);
     expect(res.status === 409 && res.body).toEqual({ code: 'on_hand_changed', current: 8 });
@@ -186,7 +189,7 @@ describe('an on-hand edit', () => {
     // the editor retries from the value it was shown
     const retry = await manager.client.admin.onHand.set({
       params: { id },
-      body: { onHand: 15, expected: 8 },
+      body: { onHand: 15, expected: 8, reason: 'Пересчёт' },
     });
     expect(retry.status).toBe(200);
   });
@@ -195,8 +198,14 @@ describe('an on-hand edit', () => {
     const [slug] = await slugsOf(t, 1);
     const { id } = await volumeRow(slug!, 10);
     const [a, b] = await Promise.all([
-      owner.client.admin.onHand.set({ params: { id }, body: { onHand: 7, expected: 20 } }),
-      manager.client.admin.onHand.set({ params: { id }, body: { onHand: 9, expected: 20 } }),
+      owner.client.admin.onHand.set({
+        params: { id },
+        body: { onHand: 7, expected: 20, reason: 'Пересчёт' },
+      }),
+      manager.client.admin.onHand.set({
+        params: { id },
+        body: { onHand: 9, expected: 20, reason: 'Пересчёт' },
+      }),
     ]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     const winner = a.status === 200 ? 7 : 9;
@@ -207,7 +216,10 @@ describe('an on-hand edit', () => {
   it('still takes an edit without `expected` (the older callers)', async () => {
     const [slug] = await slugsOf(t, 1);
     const { id } = await volumeRow(slug!, 10);
-    const res = await manager.client.admin.onHand.set({ params: { id }, body: { onHand: 4 } });
+    const res = await manager.client.admin.onHand.set({
+      params: { id },
+      body: { onHand: 4, reason: 'Пересчёт' },
+    });
     expect(res.status).toBe(200);
   });
 });
@@ -222,16 +234,22 @@ describe('the Discovery set follows the same rules', () => {
     if (checkout.status !== 200) throw new Error('checkout');
     await client.orders.create({ body: orderBody(point.id, checkout.body.quote.total) });
 
-    const ok = await manager.client.admin.sets.setOnHand({ body: { onHand: 10, expected: 5 } });
+    const ok = await manager.client.admin.sets.setOnHand({
+      body: { onHand: 10, expected: 5, reason: 'Пересчёт' },
+    });
     expect(ok.status === 200 && ok.body).toMatchObject({ onHand: 10, reserved: 2, available: 8 });
     expect(await discoveryRow()).toMatchObject({ onHand: 10, available: 8, belowReserve: false });
 
-    const stale = await owner.client.admin.sets.setOnHand({ body: { onHand: 20, expected: 5 } });
+    const stale = await owner.client.admin.sets.setOnHand({
+      body: { onHand: 20, expected: 5, reason: 'Пересчёт' },
+    });
     expect(stale.status).toBe(409);
     expect(stale.status === 409 && stale.body).toEqual({ code: 'on_hand_changed', current: 10 });
     expect((await discoveryRow()).onHand).toBe(10);
 
-    const below = await owner.client.admin.sets.setOnHand({ body: { onHand: 1, expected: 10 } });
+    const below = await owner.client.admin.sets.setOnHand({
+      body: { onHand: 1, expected: 10, reason: 'Пересчёт' },
+    });
     expect(below.status).toBe(200);
     expect(await discoveryRow()).toMatchObject({ onHand: 1, reserved: 2, belowReserve: true });
     const rows = await audits('sets.discovery_on_hand_changed');

@@ -168,8 +168,14 @@ const BOTTLE_MLS: readonly number[] = [5, 10, 30, 50] satisfies BottleMl[];
 /** A volume the model knows a bottle for. */
 export const isBottleMl = (ml: number): ml is BottleMl => BOTTLE_MLS.includes(ml);
 
-/** Oil so'm per gram after the supplier discount and delivery to Termez (calculator `oilG`). */
-export function landedOilPrice(oilPrice: number, l: LiquidSettings): number {
+/**
+ * Oil so'm per gram after the supplier discount and delivery to Termez (calculator `oilG`). An oil
+ * receipt (#76) passes its own discount and import percent.
+ */
+export function landedOilPrice(
+  oilPrice: number,
+  l: Pick<LiquidSettings, 'oilDiscountPercent' | 'oilImportPercent'>,
+): number {
   return oilPrice * (1 - l.oilDiscountPercent / 100) * (1 + l.oilImportPercent / 100);
 }
 
@@ -194,6 +200,16 @@ export function liquidNeeded(
     oilGrams: oilShare(liquid, l) * l.oilDensity,
     ethanolMl: (liquid * l.ethanolPercent) / 100,
   };
+}
+
+/**
+ * The ml of perfume `oilGrams` of oil can still be bottled into (unrounded): `liquidNeeded` read
+ * backwards (the grams over what one ml takes), so the warehouse's litres are what a bottling can
+ * use (ADR 0041). The calculator's planner (`buyCalc`) takes the loss off as × (1 − loss) instead;
+ * the two differ by about 0.1 %.
+ */
+export function liquidFromOil(oilGrams: number, l: LiquidSettings): number {
+  return oilGrams / liquidNeeded(1, l).oilGrams;
 }
 
 type Parts = Omit<UnitCost, 'base' | 'defect' | 'total'>;

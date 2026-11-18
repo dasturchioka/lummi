@@ -154,3 +154,10 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **One after-set discount per order.** In the simulator the «Скидка после набора» takes one Full size bottle (the dearest), as the shop does; the customer's calculator took 20 % off every 30 / 50 ml line. Confirm the shop's rule is what he wants to see.
 - **The margin floor** «Ниже 15 %» is the calculator's 15 %, now the setting `cost.order.lowMarginPercent`.
 - **The gift sample in an order** (#79): the snapshot has a gift-sample line, 0 until #79 says when a sample went in and which one.
+
+## Raw-material warehouse (ticket #76, ADR 0041)
+- **Should an oil receipt update the fragrance's oil price** (and supplier, invoice) to the latest invoice? Now it does not: the owner changes the oil price in the fragrance form, and unit costs follow that price.
+- **The low-oil threshold** `stock.lowOilLitres` defaults to 1 litre of perfume (about 310 g of oil at 30 %). Our default; the owner sets it.
+- **Ethanol is not stocked**, only costed per bottling. Does the owner want an ethanol balance too?
+- **Stock value** takes the oil at the average landed price of the fragrance's standing receipts. Does the owner value it another way (the latest invoice, FIFO)?
+- **History before launch:** counts made before the warehouse shipped are not in the history; the first lines are what happens after it.
