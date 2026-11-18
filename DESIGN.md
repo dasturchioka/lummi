@@ -484,6 +484,27 @@ A row of figures as separate cards (`StatGrid`, `StatCard` in `components/ui/sta
 - **States:** loading draws the trays with their heads and breathing card skeletons; a shop without any order keeps the trays, the first one holding a dashed slot («Заказов пока нет», «Новые заказы из приложения появятся здесь»); a shop whose orders are all closed before the 14 days says so over the board with «Все заказы — в списке»; nothing found says «По этим фильтрам заказов нет.»; a failed first load is the error plate with «Повторить».
 - **Motion:** only what changed on a refresh moves: a card new to its column settles in, a changed count or sum settles out of a 2 px blur. Reduced motion keeps fades only: no lift, no blur, and a dropped card's copy only fades where it was let go.
 
+### Admin dark (admin panel, #68)
+Light is the default. A Светлая / Тёмная switch (two segments, Sun and Moon, with the names in the sidebar and on the sign-in pages, icon only on the phone bar, same Milk Field track as RU/UZ) sits beside RU/UZ; the choice lives in the cookie `lummi_theme`, which the server renders into `<html data-theme>` (no flash) and into the browser bar colour. Tokens are derived from the Mini App's approved dark, under the same variable names, so components carry no second class. Graphite and Milk swap roles: primary buttons, the Now block, the board toast and the last timeline dot invert as in the Mini App. Sage is unchanged; Sage Ink lightens. No new hue: burgundy, rose gold and gold stay forbidden. `color-scheme: dark` gives native date inputs, selects and scrollbars a dark face.
+
+| Token | Light | Dark | Contrast (dark) |
+|---|---|---|---|
+| `--milk` (ground) | `#f5f2ec` | `#1d1c1a` | |
+| `--card-white` (cards, dialogs) | `#ffffff` | `#2a2a2a` | |
+| `--milk-field` (fields, tracks) | `#ece7df` | `#353330` | |
+| `--stone` (discs, quiet fills) | `#cfc6b8` | `#3d3a35` | |
+| `--graphite` (ink, primary fill) | `#2a2a2a` | `#f5f2ec` | 12.8:1 on card |
+| `--ink-muted` | `#67625b` | `#cfc6b8` | 8.5:1 on card, 7.4:1 on field |
+| `--ink-faint` (borders, disabled) | `#a39d94` | `#8a857c` | 3.9:1 on card |
+| `--sage` | `#9aa592` | `#9aa592` | |
+| `--sage-ink` | `#5c6855` | `#aeb8a6` | 7.0:1 on card |
+| `--sage-wash` | 18% Sage | 16% Sage | |
+| `--hairline` / `--hairline-strong` | Graphite 11% / 22% | Milk 10% / 22% | |
+| `--chart-bar` (quiet bars) | `#8f8a82` | `#8a857c` | 3.4:1 on white, 3.9:1 on card |
+| `--overlay` (dialog and sheet scrim) | Graphite 40% | black 55% | |
+
+Constants that do not follow the theme: `--brand-graphite`, `--brand-milk`, `--brand-stone` (the Mini App banner preview shows the light look in both themes), and the white plate behind a campaign QR code (a scanner needs dark on white). Photos, receipts and previews sit on `--milk-field`, never white. A unit test keeps every light token paired with a dark value.
+
 ## Do's and Don'ts
 
 ### Do:

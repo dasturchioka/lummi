@@ -153,7 +153,7 @@ export function SalesStrip({
             key={d.day}
             className={cn(
               'min-h-0.5 flex-1 rounded-t-[2px]',
-              i === days.length - 1 ? 'bg-sage' : 'bg-stone',
+              i === days.length - 1 ? 'bg-sage' : 'bg-chart-bar',
             )}
             style={{ height: `${Math.round((Math.max(0, d.net) / top) * 100)}%` }}
           />

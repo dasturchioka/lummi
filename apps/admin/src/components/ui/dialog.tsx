@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
  * 640 px up. `AlertDialog*` is the same surface for confirmations: no dismiss on outside click,
  * focus starts on Cancel.
  */
-const overlayClass = 'motion-overlay fixed inset-0 z-50 bg-graphite/40';
+const overlayClass = 'motion-overlay fixed inset-0 z-50 bg-overlay';
 const contentClass = cn(
   'motion-dialog fixed z-50 flex max-h-[90dvh] flex-col overflow-y-auto overscroll-contain bg-card text-foreground outline-none',
   'inset-x-0 bottom-0 rounded-t-card px-5 pt-6 pb-[max(20px,env(safe-area-inset-bottom))]',
