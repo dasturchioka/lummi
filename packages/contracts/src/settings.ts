@@ -18,6 +18,7 @@ export const SETTING_AREAS = [
   'costLiquid',
   'costPackaging',
   'costOrder',
+  'purchase',
   'search',
   'auth',
   'ai',
@@ -994,6 +995,71 @@ export const settingDefinitions = {
     hint: {
       ru: 'Пробник разливается во флакон 5 мл.',
       uz: 'Namuna 5 ml flakonga quyiladi.',
+    },
+  },
+  // ---- Purchase planner (#78): the calculator's «Закупка» inputs. Gift samples, the ad per sale,
+  // the dollar rate and the free-delivery threshold are the cost model's and pricing's own settings.
+  'buy.oilKgPerFragrance': {
+    schema: z.number().min(0).max(1000),
+    default: 1,
+    area: 'purchase',
+    unit: 'none',
+    label: { ru: 'Масла каждого аромата, кг', uz: 'Har bir hid uchun moy, kg' },
+    hint: {
+      ru: 'Для всех ароматов; отдельному аромату можно задать своё на странице «Закупка». 0 — не закупать.',
+      uz: 'Barcha hidlar uchun; alohida hidga «Xarid» sahifasida oʻz qiymatini berish mumkin. 0 — xarid qilinmaydi.',
+    },
+  },
+  'buy.share10Ml': costPercent('purchase', 30, {
+    label: { ru: 'Разлив в 10 мл, % жидкости', uz: '10 ml ga quyish, suyuqlik %' },
+    hint: {
+      ru: 'Доли 10 / 30 / 50 мл считаются от их суммы, она не обязана быть 100.',
+      uz: '10 / 30 / 50 ml ulushlari ularning yigʻindisidan hisoblanadi, 100 boʻlishi shart emas.',
+    },
+  }),
+  'buy.share30Ml': costPercent('purchase', 40, {
+    label: { ru: 'Разлив в 30 мл, % жидкости', uz: '30 ml ga quyish, suyuqlik %' },
+  }),
+  'buy.share50Ml': costPercent('purchase', 30, {
+    label: { ru: 'Разлив в 50 мл, % жидкости', uz: '50 ml ga quyish, suyuqlik %' },
+  }),
+  'buy.avgDiscountPercent': costPercent('purchase', 15, {
+    label: { ru: 'Средняя скидка с продаж, %', uz: 'Sotuvlardan oʻrtacha chegirma, %' },
+    hint: {
+      ru: 'Сколько в среднем теряете с цены из-за купонов, акций и распродаж.',
+      uz: 'Kupon, aksiya va chegirmalar tufayli narxdan oʻrtacha qancha yoʻqotasiz.',
+    },
+  }),
+  'buy.uzumSharePercent': costPercent('purchase', 30, {
+    label: { ru: 'Доля продаж через Uzum, %', uz: 'Uzum orqali sotuvlar ulushi, %' },
+  }),
+  'buy.soldPercent': costPercent('purchase', 70, {
+    label: {
+      ru: 'Сколько закупки продастся за год, %',
+      uz: 'Xaridning yil davomida necha foizi sotiladi, %',
+    },
+  }),
+  'buy.staffCount': {
+    schema: z.number().int().min(0).max(1000),
+    default: 2,
+    area: 'purchase',
+    unit: 'none',
+    label: { ru: 'Сотрудников', uz: 'Xodimlar soni' },
+  },
+  'buy.staffSalary': costSom('purchase', 3_000_000, {
+    label: { ru: 'Зарплата одного, сум/мес', uz: 'Bittasining oyligi, soʻm/oy' },
+  }),
+  'buy.rent': costSom('purchase', 3_000_000, {
+    label: { ru: 'Аренда склада, сум/мес', uz: 'Ombor ijarasi, soʻm/oy' },
+  }),
+  'buy.otherUsd': {
+    schema: z.number().min(0).max(1_000_000),
+    default: 300,
+    area: 'purchase',
+    unit: 'none',
+    label: {
+      ru: 'Прочее (серверы, программист), $/мес',
+      uz: 'Boshqa (serverlar, dasturchi), $/oy',
     },
   },
   // ---- Bot and orders group
