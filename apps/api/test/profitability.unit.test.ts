@@ -110,9 +110,9 @@ describe("one bottle's profit equals the calculator's «Все ароматы» 
 
   it.each(cases)('%s', (_key, scent, ml, channel, [plain, gift, afterSet]) => {
     const line = bottle(scent, ml);
-    expect(costSale([line], ctx(channel)).costs?.profit).toBe(plain);
-    expect(costSale([line], ctx(channel, { giftSample: GIFT })).costs?.profit).toBe(gift);
-    expect(costSale([line], ctx(channel, { afterSetDiscountPercent: 20 })).costs?.profit).toBe(
+    expect(costSale([line], ctx(channel)).profit?.profit).toBe(plain);
+    expect(costSale([line], ctx(channel, { giftSample: GIFT })).profit?.profit).toBe(gift);
+    expect(costSale([line], ctx(channel, { afterSetDiscountPercent: 20 })).profit?.profit).toBe(
       afterSet,
     );
   });
@@ -126,14 +126,14 @@ describe("one bottle's profit equals the calculator's «Все ароматы» 
 describe('the Discovery set: its five vials, one box and one card, at its own price', () => {
   it('on the Mini App (from the free-delivery threshold) and on Uzum', () => {
     // the calculator: Discovery Set 5×10 мл, 299 000, these five
-    expect(costSale([SET], ctx('miniapp')).costs).toMatchObject({
+    expect(costSale([SET], ctx('miniapp')).profit).toMatchObject({
       revenue: 299_000,
       goods: 90_490,
       deliveryPaid: 0,
       btsCharge: 25_000,
       profit: 175_520,
     });
-    expect(costSale([SET], ctx('uzum')).costs?.profit).toBe(141_225);
+    expect(costSale([SET], ctx('uzum')).profit?.profit).toBe(141_225);
     // no after-set discount on a set (sets are never Full size)
     expect(costSale([SET], ctx('miniapp', { afterSetDiscountPercent: 20 })).discount).toBe(0);
   });
@@ -148,7 +148,7 @@ describe('the order simulator prices as the shop does', () => {
     const above = costSale([bottle('A', 50), bottle('B', 10)], ctx('miniapp'));
     expect([above.deliveryFee, above.amountToFreeDelivery]).toEqual([0, 0]);
     // the calculator's order screen: 318 000, goods 78 650.75 + 17 144.62, profit 189 024.63
-    expect(above.costs).toMatchObject({
+    expect(above.profit).toMatchObject({
       revenue: 318_000,
       goods: 78_651 + 17_145,
       profit: 189_024,
@@ -161,7 +161,7 @@ describe('the order simulator prices as the shop does', () => {
       ctx('miniapp', { afterSetDiscountPercent: 20 }),
     );
     expect(sale.discount).toBe(49_800);
-    expect(sale.costs?.revenue).toBe(189_000 + 249_000 - 49_800);
+    expect(sale.profit?.revenue).toBe(189_000 + 249_000 - 49_800);
   });
 
   it('Uzum has no delivery and no markdown', () => {
@@ -170,7 +170,7 @@ describe('the order simulator prices as the shop does', () => {
       price: { regular: 189_000, markdown: { price: 150_000, endsAt: null } },
     };
     const uzum = costSale([marked], ctx('uzum'));
-    expect([uzum.lines[0]!.unitPrice, uzum.deliveryFee, uzum.costs?.mailer]).toEqual([
+    expect([uzum.lines[0]!.unitPrice, uzum.deliveryFee, uzum.profit?.mailer]).toEqual([
       189_000, 0, 0,
     ]);
     expect(costSale([marked], ctx('miniapp')).lines[0]!.unitPrice).toBe(150_000);
@@ -179,7 +179,7 @@ describe('the order simulator prices as the shop does', () => {
   it('a line without a unit cost leaves the sale without costs', () => {
     const unknown: SaleLine = { ...bottle('A', 30), unitCost: null };
     const sale = costSale([bottle('B', 10), unknown], ctx('miniapp'));
-    expect(sale.costs).toBeNull();
+    expect(sale.profit).toBeNull();
     expect(sale.itemsSubtotal).toBe(69_000 + 189_000);
   });
 });

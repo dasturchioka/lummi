@@ -38,7 +38,13 @@ try {
   const r = await importBtsPoints(db, snapshot);
   console.log(`BTS points: ${r.inserted} added, ${r.updated} updated, ${r.unchanged} unchanged`);
   // after the oil prices, so an order waiting for one gets its costs as soon as it is there
-  console.log(`order costs: ${await freezeMissingOrderCosts(db, new Date())} orders frozen`);
+  const costs = await freezeMissingOrderCosts(db, new Date());
+  console.log(
+    `order costs: ${costs.frozen} frozen, ${costs.waiting} waiting for an oil price` +
+      (costs.uncostable.length
+        ? `, without a cost for good (a line with nothing to cost): № ${costs.uncostable.join(', ')}`
+        : ''),
+  );
 } finally {
   await pool.end();
 }

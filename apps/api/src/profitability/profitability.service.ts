@@ -1,9 +1,15 @@
-import type {
-  ProfitabilityQuote,
-  ProfitabilityQuoteBody,
-  ProfitabilityRow,
-  ProfitabilityTable,
-  SalesChannel,
+import {
+  PROFITABILITY_VOLUMES,
+  SET_SIZE,
+  SET_VIAL_ML,
+  type ProfitabilityQuote,
+  type ProfitabilityQuoteBody,
+  type ProfitabilityRow,
+  type ProfitabilitySummary,
+  type ProfitabilityTable,
+  type ProfitabilityVolume,
+  type SalesChannel,
+  type UnitCost,
 } from '@lummi/contracts';
 import {
   asc,
@@ -26,14 +32,12 @@ import {
 } from '../cost/unit-cost';
 import type { Edges } from '../edges';
 import { readPricingSettings } from '../pricing/pricing-settings';
+import { roundedAverage } from '../reports/report-range';
 import { volumePrice } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { costSale, type SaleContext, type SaleLine } from './cost-sale';
 import { profitabilityWorkbook } from './profitability-workbook';
-
-/** The Discovery set's vials are 10 ml (ADR 0009); the 5 × 5 ml set comes with #79. */
-const SET_VIAL_ML = 10;
 
 export interface ProfitabilityView {
   channel: SalesChannel;
@@ -88,10 +92,7 @@ export class Profitability {
           ml: v.ml,
           qty: 1,
           price: volumePrice(v),
-          unitCost:
-            f.oilPrice !== null && isBottleMl(v.ml)
-              ? bottleCost(f.oilPrice, v.ml, shop.cost)
-              : null,
+          unitCost: bottleUnitCost(f.oilPrice, v.ml, shop.cost),
         };
         rows.push(this.row(line, f.hidden, ctx, shop, unknownGift));
       }
@@ -106,6 +107,8 @@ export class Profitability {
       lowMarginPercent: shop.lowMarginPercent,
       giftSampleCost: shop.giftSample,
       rows,
+      summaries: PROFITABILITY_VOLUMES.map((volume) => summaryOf(volume, rows)),
+      set: { size: SET_SIZE, vialMl: SET_VIAL_ML },
     };
   }
 
@@ -136,8 +139,7 @@ export class Profitability {
         ml: v.ml,
         qty,
         price: volumePrice(v),
-        unitCost:
-          f.oilPrice !== null && isBottleMl(v.ml) ? bottleCost(f.oilPrice, v.ml, shop.cost) : null,
+        unitCost: bottleUnitCost(f.oilPrice, v.ml, shop.cost),
       });
     }
     const ctx = this.context(shop, body);
@@ -161,7 +163,7 @@ export class Profitability {
       deliveryFee: sale.deliveryFee,
       freeDeliveryThreshold: shop.pricing.freeDeliveryThreshold,
       amountToFreeDelivery: sale.amountToFreeDelivery,
-      costs: giftUnknown(shop, body) ? null : sale.costs,
+      profit: giftUnknown(shop, body) ? null : sale.profit,
       missing: [...missing].sort(),
     };
   }
@@ -192,9 +194,9 @@ export class Profitability {
   ): ProfitabilityRow {
     const sale = costSale([line], ctx);
     const priced = sale.lines[0]!;
-    const costs = unknownGift ? null : sale.costs;
-    const profit = costs?.profit ?? null;
-    const margin = costs?.margin ?? null;
+    const sold = unknownGift ? null : sale.profit;
+    const profit = sold?.profit ?? null;
+    const margin = sold?.margin ?? null;
     return {
       kind: line.item.kind,
       fragranceId: line.item.kind === 'volume' ? line.item.fragranceId : null,
@@ -206,7 +208,7 @@ export class Profitability {
       markedDown: priced.markedDown,
       discount: sale.discount,
       unitCost: line.unitCost?.total ?? null,
-      orderCosts: costs ? costs.total - costs.goods : null,
+      orderCosts: sold ? sold.cost - sold.goods : null,
       profit,
       margin,
       flag:
@@ -227,6 +229,34 @@ export class Profitability {
       accessMode: 'read only',
     });
   }
+}
+
+/** One bottle at unit cost (ADR 0040); null without an oil price. */
+function bottleUnitCost(oilPrice: number | null, ml: number, s: CostSettings): UnitCost | null {
+  return oilPrice !== null && isBottleMl(ml) ? bottleCost(oilPrice, ml, s) : null;
+}
+
+/** A volume filter's figures: its rows, their average profit (`roundedAverage`) and the marks. */
+function summaryOf(volume: ProfitabilityVolume, all: ProfitabilityRow[]): ProfitabilitySummary {
+  const rows = all.filter((r) =>
+    volume === 'all'
+      ? true
+      : volume === 'set'
+        ? r.kind === 'discovery_set'
+        : r.kind === 'volume' && String(r.ml) === volume,
+  );
+  const known = rows.flatMap((r) => (r.profit === null ? [] : [r.profit]));
+  return {
+    volume,
+    rows: rows.length,
+    averageProfit: roundedAverage(
+      known.reduce((a, b) => a + b, 0),
+      known.length,
+    ),
+    loss: rows.filter((r) => r.flag === 'loss').length,
+    low: rows.filter((r) => r.flag === 'low').length,
+    noOil: rows.filter((r) => r.unitCost === null).length,
+  };
 }
 
 /** The gift sample is asked for but costs nothing known (no fragrance has an oil price). */

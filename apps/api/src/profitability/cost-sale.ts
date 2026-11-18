@@ -1,5 +1,5 @@
-import type { OrderCosts, ProfitabilityItem, SalesChannel, UnitCost } from '@lummi/contracts';
-import { saleCosts } from '../cost/order-costs';
+import type { OrderProfit, ProfitabilityItem, SalesChannel, UnitCost } from '@lummi/contracts';
+import { saleProfit } from '../cost/order-costs';
 import type { CostSettings } from '../cost/unit-cost';
 import { quote, type Entitlement, type Price, type PricingSettings } from '../pricing/quote';
 
@@ -36,7 +36,7 @@ export interface CostedSale {
   deliveryFee: number;
   amountToFreeDelivery: number;
   /** Null when a line has no unit cost. */
-  costs: OrderCosts | null;
+  profit: OrderProfit | null;
 }
 
 /** The made-up right of the after-set discount: one id, no expiry within the sale. */
@@ -96,8 +96,8 @@ export function costSale(lines: readonly SaleLine[], ctx: SaleContext): CostedSa
     discount,
     deliveryFee: q.deliveryFee,
     amountToFreeDelivery: uzum ? 0 : q.amountToFreeDelivery,
-    costs: known
-      ? saleCosts(
+    profit: known
+      ? saleProfit(
           {
             channel: ctx.channel,
             revenue: q.itemsSubtotal - discount,

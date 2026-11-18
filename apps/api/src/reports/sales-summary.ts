@@ -12,7 +12,7 @@ import {
   type VolumeSales,
 } from '@lummi/contracts';
 import { asc, inArray, orderLines, type Db, type DbOrTx } from '@lummi/db';
-import { sharedBy } from './cost-shares';
+import { sharedBy } from './shares';
 import { discountShares } from './discount-shares';
 import { countedRefunds, deliveredIn } from './report-orders';
 import { isReportRange, roundedAverage, type TashkentRange } from './report-range';
@@ -128,9 +128,9 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
     // the snapshot's own discount: a Promo gift's line costs 0 and takes no share, so its net is 0
     const shares = discountShares(its, o.discount, o.snapshotDiscountAmount);
     const nets = its.map((l, i) => l.lineTotal - shares[i]!);
-    const costed = o.costs !== null && its.every((l) => l.unitCost !== null);
-    // the order's costs besides its goods, shared by the lines' net
-    const other = costed ? sharedBy(o.costs!.total - o.costs!.goods, nets) : null;
+    const costed = o.profit !== null && its.every((l) => l.unitCost !== null);
+    // its Order costs (all but the goods), shared by the lines' net
+    const other = costed ? sharedBy(o.profit!.cost - o.profit!.goods, nets) : null;
     its.forEach((l, i) => {
       const net = nets[i]!;
       const cost = other ? l.unitCost! * l.qty + other[i]! : null;
@@ -257,17 +257,17 @@ function addCost(
 
 /** The range's profit over the orders with a cost snapshot (#77); the rest are `uncosted`. */
 function profitOf(
-  sold: readonly { costs: { revenue: number; total: number } | null }[],
+  sold: readonly { profit: { revenue: number; cost: number } | null }[],
 ): SalesProfit {
   const p = { orders: 0, uncosted: 0, revenue: 0, cost: 0 };
   for (const o of sold) {
-    if (!o.costs) {
+    if (!o.profit) {
       p.uncosted += 1;
       continue;
     }
     p.orders += 1;
-    p.revenue += o.costs.revenue;
-    p.cost += o.costs.total;
+    p.revenue += o.profit.revenue;
+    p.cost += o.profit.cost;
   }
   const profit = p.revenue - p.cost;
   return { ...p, profit, margin: p.revenue > 0 ? profit / p.revenue : null };

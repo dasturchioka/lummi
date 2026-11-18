@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { OrderCosts, PromoCodeInput } from '@lummi/contracts';
+import type { OrderProfit, PromoCodeInput } from '@lummi/contracts';
 import { and, eq, fragrances, orderLines, orders, volumes } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -102,7 +102,7 @@ const DEFAULTS = {
   adPerSale: 3000,
   taxPercent: 1,
   giftSample: 0,
-} as const satisfies Partial<OrderCosts>;
+} as const satisfies Partial<OrderProfit>;
 
 describe("an order's profit, frozen when its payment is confirmed", () => {
   it('Mini App below free delivery: the customer paid the 25 000, so BTS costs the shop nothing more', async () => {
@@ -111,13 +111,13 @@ describe("an order's profit, frozen when its payment is confirmed", () => {
     expect(o.costs).toEqual({
       at: expect.any(String),
       missing: [],
-      costs: {
+      profit: {
         ...DEFAULTS,
         revenue: 189_000,
         goods: 52_086,
         deliveryPaid: 25_000,
         tax: 1890,
-        total: 58_976,
+        cost: 58_976,
         // the calculator: «Все ароматы», 30 мл, Мини-апп
         profit: 130_024,
         margin: 130_024 / 189_000,
@@ -132,13 +132,13 @@ describe("an order's profit, frozen when its payment is confirmed", () => {
       { slug: A.slug, ml: 10 },
     ]);
     expect(o.deliveryFee).toBe(0);
-    expect(o.costs!.costs).toMatchObject({
+    expect(o.costs!.profit).toMatchObject({
       revenue: 318_000,
       goods: 78_651 + 22_462,
       deliveryPaid: 0,
       btsCharge: 25_000,
       tax: 3180,
-      total: 134_293,
+      cost: 134_293,
       profit: 183_707,
     });
     expect(await unitCosts(o.id)).toEqual([78_651, 22_462]);
@@ -163,12 +163,12 @@ describe("an order's profit, frozen when its payment is confirmed", () => {
     expect((await owner.client.admin.promoCodes.create({ body: gift })).status).toBe(201);
     const o = await paidOrder([{ slug: A.slug, ml: 30 }], { code: 'GIFT10' });
     expect(await unitCosts(o.id)).toEqual([52_086, 17_145]);
-    expect(o.costs!.costs).toMatchObject({
+    expect(o.costs!.profit).toMatchObject({
       revenue: 189_000,
       goods: 52_086 + 17_145,
       deliveryPaid: 25_000,
       tax: 1890,
-      total: 76_121,
+      cost: 76_121,
       profit: 112_879,
     });
   });
@@ -178,7 +178,7 @@ describe("an order's profit, frozen when its payment is confirmed", () => {
       { slug: A.slug, ml: 10 },
       { slug: C.slug, ml: 10 },
     ]);
-    expect(o.costs).toMatchObject({ costs: null, missing: [C.name] });
+    expect(o.costs).toMatchObject({ profit: null, missing: [C.name] });
     expect(await unitCosts(o.id)).toEqual([22_462, null]);
   });
 
@@ -202,10 +202,10 @@ describe("an order's profit, frozen when its payment is confirmed", () => {
 
     const after = await costsOf(first.number);
     expect(after.body).toEqual(before.body);
-    expect(after.status === 200 && after.body.snapshot?.costs?.profit).toBe(130_024);
+    expect(after.status === 200 && after.body.snapshot?.profit?.profit).toBe(130_024);
 
     const next = await paidOrder([{ slug: A.slug, ml: 30 }], { user: vali });
-    expect(next.costs!.costs).toMatchObject({ adPerSale: 5000, taxPercent: 2, tax: 3780 });
+    expect(next.costs!.profit).toMatchObject({ adPerSale: 5000, taxPercent: 2, tax: 3780 });
     expect((await unitCosts(next.id))[0]).not.toBe(52_086);
   });
 });
@@ -235,6 +235,8 @@ describe("the order page's profit block", () => {
 });
 
 describe('orders paid before costs were recorded', () => {
+  const backfill = () => freezeMissingOrderCosts(t.db, t.edges.clock.now());
+
   it('get theirs frozen once, on deploy, with the prices and settings of then', async () => {
     const o = await paidOrder([{ slug: A.slug, ml: 30 }]);
     // as an order paid before #77 reads: no snapshot, no unit costs
@@ -245,22 +247,33 @@ describe('orders paid before costs were recorded', () => {
     await client.cart.addLine({ body: { slug: A.slug, ml: 10, qty: 1 } });
     const unpaid = await placeOrder(t, client);
 
-    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(1);
-    expect((await orderRow(t, o.number)).costs?.costs?.profit).toBe(130_024);
+    expect(await backfill()).toEqual({ frozen: 1, waiting: 0, uncostable: [] });
+    expect((await orderRow(t, o.number)).costs?.profit?.profit).toBe(130_024);
     expect(await unitCosts(o.id)).toEqual([52_086]);
     expect((await orderRow(t, unpaid.number)).costs).toBeNull();
-    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(0);
+    expect(await backfill()).toEqual({ frozen: 0, waiting: 0, uncostable: [] });
   });
 
   it('wait for a missing oil price instead of freezing without costs for good', async () => {
     const o = await paidOrder([{ slug: C.slug, ml: 10 }]);
     await t.db.update(orders).set({ costs: null }).where(eq(orders.id, o.id));
-    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(0);
+    expect(await backfill()).toEqual({ frozen: 0, waiting: 1, uncostable: [] });
     expect((await orderRow(t, o.number)).costs).toBeNull();
     // the owner types C's oil price (B's, made up): the next deploy freezes it
     await t.db.update(fragrances).set({ oilPrice: OIL_B }).where(eq(fragrances.id, C.id));
-    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(1);
+    expect(await backfill()).toEqual({ frozen: 1, waiting: 0, uncostable: [] });
     expect(await unitCosts(o.id)).toEqual([17_145]);
+  });
+
+  it('freeze an order with a line that has nothing to cost once, without a profit, and name it', async () => {
+    const o = await paidOrder([{ slug: A.slug, ml: 10 }]);
+    await t.db.update(orders).set({ costs: null }).where(eq(orders.id, o.id));
+    // a volume line without its fragrance: no unit cost can ever come
+    await t.db.update(orderLines).set({ fragranceId: null }).where(eq(orderLines.orderId, o.id));
+    expect(await backfill()).toEqual({ frozen: 0, waiting: 0, uncostable: [o.number] });
+    expect((await orderRow(t, o.number)).costs).toMatchObject({ profit: null, missing: [] });
+    // never retried
+    expect(await backfill()).toEqual({ frozen: 0, waiting: 0, uncostable: [] });
   });
 });
 
@@ -302,8 +315,8 @@ describe('the sales report: revenue, cost, profit and margin', () => {
     ];
     for (const o of placed) await fulfilTo(t, o.number, 'delivered');
     const costed = (await Promise.all(placed.map((o) => orderRow(t, o.number))))
-      .map((o) => o.costs?.costs)
-      .filter((c): c is OrderCosts => !!c);
+      .map((o) => o.costs?.profit)
+      .filter((c): c is OrderProfit => !!c);
     expect(costed).toHaveLength(3);
 
     const res = await owner.client.admin.reports.sales({
@@ -311,14 +324,14 @@ describe('the sales report: revenue, cost, profit and margin', () => {
     });
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
-    const sum = (f: (c: OrderCosts) => number) => costed.reduce((s, c) => s + f(c), 0);
+    const sum = (f: (c: OrderProfit) => number) => costed.reduce((s, c) => s + f(c), 0);
     const revenue = sum((c) => c.revenue);
     const profit = sum((c) => c.profit);
     expect(res.body.profit).toEqual({
       orders: 3,
       uncosted: 1,
       revenue,
-      cost: sum((c) => c.total),
+      cost: sum((c) => c.cost),
       profit,
       margin: profit / revenue,
     });

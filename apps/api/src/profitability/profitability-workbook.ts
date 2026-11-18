@@ -42,7 +42,13 @@ export async function profitabilityWorkbook(
   const blank = (n: number | null) => (n === null ? '' : n);
   for (const r of table.rows) {
     ws.addRow({
-      name: r.kind === 'discovery_set' ? t.discoverySetFull : r.name,
+      name:
+        r.kind === 'discovery_set'
+          ? fill(t.discoverySetFull, {
+              n: String(table.set.size),
+              ml: String(table.set.vialMl),
+            })
+          : r.name,
       brand: r.brand ?? '',
       ml: r.ml,
       price: r.price,

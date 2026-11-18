@@ -16,7 +16,8 @@ import {
   type OrderRow,
 } from '@lummi/db';
 import { readCostSettings } from './cost-settings';
-import { lineUnitCost, saleCosts, type CostedItem } from './order-costs';
+import { PAID_BY } from '../orders/order-read';
+import { lineUnitCost, saleProfit, type CostedItem } from './order-costs';
 import type { CostSettings } from './unit-cost';
 
 /** What a line is, for its unit cost: its bottle, or its set's five fragrances at the vial size. */
@@ -33,8 +34,9 @@ export function costedItemOf(
 /**
  * An order's cost snapshot from its lines, the oil prices and the settings now (#77): each line
  * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel. Pure.
- * The goods are known only when every line's unit cost is: otherwise `costs` is null and
- * `missing` names the fragrances without an oil price (ADR 0040: no oil price, no cost).
+ * The goods are known only when every line's unit cost is: otherwise `profit` is null and
+ * `missing` names the fragrances without an oil price (ADR 0040: no oil price, no cost); empty, a
+ * line had nothing to cost (no fragrance, or a size the model has no cost for).
  */
 export function orderCostSnapshot(
   order: Pick<OrderRow, 'itemsSubtotal' | 'discountAmount' | 'deliveryFee'>,
@@ -56,10 +58,10 @@ export function orderCostSnapshot(
   return {
     snapshot: {
       at: at.toISOString(),
-      costs:
+      profit:
         goods === null
           ? null
-          : saleCosts(
+          : saleProfit(
               {
                 channel: 'miniapp',
                 revenue: order.itemsSubtotal - order.discountAmount,
@@ -80,16 +82,16 @@ export function orderCostSnapshot(
  * Freezes the order's costs in the caller's transaction (the payment confirmation, the one door):
  * each line's unit cost into `order_lines.unit_cost`, the snapshot into `orders.costs`. Later oil
  * prices and settings never touch them. An order already frozen keeps its snapshot. With
- * `onlyWhenKnown` (the backfill) an order a fragrance has no oil price for is left without one, so
- * a later run can still freeze it; returns whether it wrote one.
+ * `waitForOilPrices` (the backfill) an order a fragrance has no oil price for is left without one,
+ * so a later run can still freeze it. Returns the snapshot it wrote, or null.
  */
 export async function freezeOrderCosts(
   tx: DbOrTx,
   order: OrderRow,
   at: Date,
-  opts: { onlyWhenKnown?: boolean } = {},
-): Promise<boolean> {
-  if (order.costs) return false;
+  opts: { waitForOilPrices?: boolean } = {},
+): Promise<OrderCostSnapshot | null> {
+  if (order.costs) return null;
   const lines = await tx
     .select()
     .from(orderLines)
@@ -117,39 +119,47 @@ export async function freezeOrderCosts(
     await readCostSettings(tx),
     at,
   );
-  if (opts.onlyWhenKnown && snapshot.costs === null) return false;
+  if (opts.waitForOilPrices && snapshot.missing.length > 0) return null;
   for (const [i, l] of lines.entries()) {
     if (unitCosts[i] === null) continue;
     await tx.update(orderLines).set({ unitCost: unitCosts[i] }).where(eq(orderLines.id, l.id));
   }
   await tx.update(orders).set({ costs: snapshot }).where(eq(orders.id, order.id));
-  return true;
+  return snapshot;
 }
 
 /**
  * Orders paid before costs were recorded (#77 shipped after them) get theirs frozen now, with the
  * oil prices and settings of now: every order with a payment confirmation in its history and no
- * snapshot, once every line has a unit cost (an order waiting for an oil price is left for a later
- * run, rather than frozen without costs for good). Idempotent; run by the deploy's seed step.
- * Returns how many it froze.
+ * snapshot. One waiting for a fragrance's oil price is left for a later run (`waiting`) rather
+ * than frozen without costs for good; one with a line that has nothing to cost (no fragrance) can
+ * never be costed, so it is frozen without a profit once and named in `uncostable`, never retried.
+ * Idempotent; run by the deploy's seed step.
  */
-export async function freezeMissingOrderCosts(db: Db, now: Date): Promise<number> {
+export async function freezeMissingOrderCosts(
+  db: Db,
+  now: Date,
+): Promise<{ frozen: number; waiting: number; uncostable: number[] }> {
   const due = await db
     .select()
     .from(orders)
     .where(
       and(
         isNull(orders.costs),
-        sql`exists (select 1 from ${orderEvents} e where e.order_id = ${orders.id} and e.action = 'confirm_payment')`,
+        sql`exists (select 1 from ${orderEvents} e where e.order_id = ${orders.id} and e.action = ${PAID_BY})`,
       ),
     )
     .orderBy(asc(orders.id));
-  let frozen = 0;
+  const out = { frozen: 0, waiting: 0, uncostable: [] as number[] };
   for (const o of due) {
     await db.transaction(async (tx) => {
       const [locked] = await tx.select().from(orders).where(eq(orders.id, o.id)).for('update');
-      if (locked && (await freezeOrderCosts(tx, locked, now, { onlyWhenKnown: true }))) frozen += 1;
+      if (!locked) return;
+      const snapshot = await freezeOrderCosts(tx, locked, now, { waitForOilPrices: true });
+      if (!snapshot) out.waiting += 1;
+      else if (snapshot.profit) out.frozen += 1;
+      else out.uncostable.push(locked.number);
     });
   }
-  return frozen;
+  return out;
 }

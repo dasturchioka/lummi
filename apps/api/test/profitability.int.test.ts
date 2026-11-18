@@ -157,7 +157,7 @@ describe('the calculator and the order simulator', () => {
       discount: 37_800,
       deliveryFee: 25_000,
     });
-    expect(res.body.costs?.profit).toBe(92_602);
+    expect(res.body.profit?.profit).toBe(92_602);
   });
 
   it('several lines: delivery from the threshold, and fragrances without an oil price named', async () => {
@@ -176,7 +176,7 @@ describe('the calculator and the order simulator', () => {
       itemsSubtotal: 318_000,
       deliveryFee: 0,
       amountToFreeDelivery: 0,
-      costs: { goods: 78_651 + 17_145, profit: 189_024 },
+      profit: { goods: 78_651 + 17_145, profit: 189_024 },
       missing: [],
     });
     const [noOil] = await t.db.select().from(fragrances).where(eq(fragrances.id, ids[6]!));
@@ -190,7 +190,7 @@ describe('the calculator and the order simulator', () => {
     });
     expect(unknown.status === 200 && unknown.body).toMatchObject({
       itemsSubtotal: 138_000,
-      costs: null,
+      profit: null,
       missing: [noOil!.name],
     });
   });

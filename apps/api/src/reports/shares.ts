@@ -1,10 +1,10 @@
 /**
- * Shares a whole `amount` of so'm over lines by their `weights` (non-negative whole numbers), so a
- * report row can carry its part of an order's costs (#77). Each line gets `amount × weight ÷ Σ`
- * rounded toward zero; the so'm left over go one each to the largest remainders, the earlier line
- * first on a tie (the largest remainder method, as `discountShares`). The shares always add up to
- * `amount` exactly; a negative amount is shared by its size and keeps its sign. With no weight at
- * all (an order that brought in nothing) the first line takes it all.
+ * The one largest-remainder rule of the reports: a whole `amount` of so'm shared over lines by
+ * their `weights` (non-negative whole numbers). Each line gets `amount × weight ÷ Σ` rounded toward
+ * zero; the so'm left over go one each to the largest remainders, the earlier line first on a tie.
+ * The shares always add up to `amount` exactly; a line of weight 0 gets nothing; a negative amount
+ * is shared by its size and keeps its sign. With no weight at all the first line takes it all.
+ * `discountShares` shares an order's discount with it, the sales report an order's costs (#77).
  */
 export function sharedBy(amount: number, weights: readonly number[]): number[] {
   const shares = weights.map(() => 0);

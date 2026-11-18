@@ -1,4 +1,4 @@
-import type { OrderCosts, SalesChannel } from '@lummi/contracts';
+import type { OrderProfit, SalesChannel } from '@lummi/contracts';
 import {
   bottleCost,
   isBottleMl,
@@ -30,22 +30,22 @@ export interface SaleCostInput {
  * A sale's costs and profit in whole so'm: `orderCosts` (mailer, BTS less the delivery the customer
  * paid, online payment or Uzum commission, ad, tax, gift sample) with the delivery fee the order
  * really has, not the calculator's guess from the threshold. Each figure is rounded to whole so'm
- * half up; `total` is the unrounded total rounded (ADR 0040's rule: the parts may differ from it by
- * a so'm), profit = revenue − total, so the figures the owner reads add up to the profit.
+ * half up; `cost` is the unrounded cost rounded (ADR 0040's rule: the parts may differ from it by
+ * a so'm), profit = revenue − cost, so the figures the owner reads add up to the profit.
  */
-export function saleCosts(input: SaleCostInput, s: CostSettings): OrderCosts {
+export function saleProfit(input: SaleCostInput, s: CostSettings): OrderProfit {
   const app = input.channel === 'miniapp';
   const raw = orderCosts({
     revenue: input.revenue,
     goods: input.goods,
-    channel: app ? 'app' : 'uzum',
+    channel: input.channel,
     giftSample: input.giftSample,
     // the fee is the order's own: never «free from» a threshold here, the order already decided
     delivery: { freeFrom: Number.POSITIVE_INFINITY, customerFee: app ? input.deliveryPaid : 0 },
     settings: s,
   });
-  const total = som(raw.total);
-  const profit = input.revenue - total;
+  const cost = som(raw.cost);
+  const profit = input.revenue - cost;
   return {
     channel: input.channel,
     revenue: input.revenue,
@@ -59,7 +59,7 @@ export function saleCosts(input: SaleCostInput, s: CostSettings): OrderCosts {
     taxPercent: s.order.taxPercent,
     tax: som(raw.tax),
     giftSample: som(raw.gift),
-    total,
+    cost,
     profit,
     margin: input.revenue > 0 ? profit / input.revenue : null,
   };

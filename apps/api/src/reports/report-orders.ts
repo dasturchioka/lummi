@@ -3,7 +3,7 @@ import {
   promoGiftValue,
   tashkentDay,
   type Discount,
-  type OrderCosts,
+  type OrderProfit,
   type OrderCostSnapshot,
 } from '@lummi/contracts';
 import { and, eq, gte, inArray, lte, or, orders, refunds, sql, type DbOrTx } from '@lummi/db';
@@ -29,8 +29,8 @@ export interface ReportOrder {
   /** The snapshot's own discount, what the order's lines share (a Promo gift's line costs 0). */
   snapshotDiscountAmount: number;
   delivery: number;
-  /** The frozen costs (#77); null when the order has none (no oil price, or paid before them). */
-  costs: OrderCosts | null;
+  /** Its frozen profit (#77); null when it has none (no oil price, or paid before costs). */
+  profit: OrderProfit | null;
 }
 
 /**
@@ -84,7 +84,7 @@ function reportOrder({
   ...o
 }: { at: Date | null; snapshot: OrderCostSnapshot | null } & Omit<
   ReportOrder,
-  'deliveredAt' | 'snapshotDiscountAmount' | 'costs'
+  'deliveredAt' | 'snapshotDiscountAmount' | 'profit'
 >): ReportOrder {
   const money = reportedMoney({
     itemsSubtotal: o.items,
@@ -97,7 +97,7 @@ function reportOrder({
     discountAmount: money.discount,
     snapshotDiscountAmount: o.discountAmount,
     deliveredAt: deliveredAt(at, o.id),
-    costs: snapshot?.costs ?? null,
+    profit: snapshot?.profit ?? null,
   };
 }
 

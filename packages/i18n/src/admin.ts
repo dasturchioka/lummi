@@ -2892,7 +2892,8 @@ export const adminMessages = defineMessages(
         set: 'Набор',
         ml: '{ml} мл',
         discoverySet: 'Discovery set',
-        discoverySetFull: 'Discovery set, 5 × 10 мл',
+        discoverySetFull: 'Discovery set, {n} × {ml} мл',
+        setVolume: '{n} × {ml} мл',
         columns: {
           name: 'Аромат',
           ml: 'Объём',
@@ -2965,7 +2966,7 @@ export const adminMessages = defineMessages(
           ad: 'Реклама',
           tax: 'Налог {percent} %',
           giftSample: 'Пробник в подарок',
-          total: 'Расходы всего',
+          cost: 'Расходы всего',
           profit: 'Прибыль',
           margin: 'маржа',
         },
@@ -2980,6 +2981,7 @@ export const adminMessages = defineMessages(
             'Зафиксировано {at} при подтверждении оплаты: новые цены масла и настройки на заказ не влияют.',
           line: '{name} × {qty}',
           unknownLine: 'нет цены масла',
+          uncostable: 'Себестоимость не посчитать: в заказе есть позиция без аромата.',
           failed: 'Не удалось загрузить прибыль.',
         },
         excel: {
@@ -5903,7 +5905,8 @@ export const adminMessages = defineMessages(
         set: 'Toʻplam',
         ml: '{ml} ml',
         discoverySet: 'Discovery set',
-        discoverySetFull: 'Discovery set, 5 × 10 ml',
+        discoverySetFull: 'Discovery set, {n} × {ml} ml',
+        setVolume: '{n} × {ml} ml',
         columns: {
           name: 'Atir',
           ml: 'Hajm',
@@ -5976,7 +5979,7 @@ export const adminMessages = defineMessages(
           ad: 'Reklama',
           tax: 'Soliq {percent} %',
           giftSample: 'Sovgʻa namunasi',
-          total: 'Jami xarajatlar',
+          cost: 'Jami xarajatlar',
           profit: 'Foyda',
           margin: 'marja',
         },
@@ -5991,6 +5994,7 @@ export const adminMessages = defineMessages(
             '{at} da toʻlov tasdiqlanganda qayd etilgan: yangi moy narxlari va sozlamalar buyurtmaga taʼsir qilmaydi.',
           line: '{name} × {qty}',
           unknownLine: 'moy narxi yoʻq',
+          uncostable: 'Tannarxni hisoblab boʻlmaydi: buyurtmada atirsiz pozitsiya bor.',
           failed: 'Foydani yuklab boʻlmadi.',
         },
         excel: {

@@ -286,7 +286,7 @@ export class PaymentConfirmation {
     if (moved.kind !== 'done')
       throw new Error(`order ${order.number}: confirm_payment answered ${moved.kind}`);
     // the cost snapshot (#77): the order's profit as the oil prices and settings make it now
-    await freezeOrderCosts(tx, moved.order, moved.event.createdAt);
+    const costs = await freezeOrderCosts(tx, moved.order, moved.event.createdAt);
     if (receipt) {
       await tx
         .update(receipts)
@@ -295,7 +295,7 @@ export class PaymentConfirmation {
     }
     return {
       kind: 'confirmed',
-      order: moved.order,
+      order: { ...moved.order, costs: costs ?? moved.order.costs },
       event: moved.event,
       offShopCard,
       differenceTiyin,
