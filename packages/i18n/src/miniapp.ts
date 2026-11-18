@@ -77,7 +77,8 @@ export const miniappMessages = defineMessages(
       toCatalog: 'Открыть каталог',
     },
     list: {
-      from: 'от {price}',
+      /** The price with the volume it belongs to (#70): «69 000 сум · 10 мл». */
+      priceWithVolume: '{price} · {ml}\u00a0мл',
       soldOut: 'Нет в наличии',
       open: 'Открыть {name}',
       /** The list «+» with several volumes available asks which one (#25). */
@@ -173,6 +174,8 @@ export const miniappMessages = defineMessages(
       ml: 'мл',
       soldOut: 'нет в наличии',
       inStock: 'В наличии',
+      /** With the real count (setting `catalog.showAvailableCount`, #70). */
+      inStockCount: 'В наличии: {count}\u00a0шт.',
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
       // {amount} is drawn in Sage Ink; no-break spaces keep «30 мл» and the amount whole
@@ -389,7 +392,7 @@ export const miniappMessages = defineMessages(
       toCatalog: 'Katalogni ochish',
     },
     list: {
-      from: '{price}dan',
+      priceWithVolume: '{price} · {ml}\u00a0ml',
       soldOut: 'Sotuvda yoʻq',
       open: '{name}’ni ochish',
       chooseVolume: 'Hajmni tanlang',
@@ -479,6 +482,7 @@ export const miniappMessages = defineMessages(
       ml: 'ml',
       soldOut: 'sotuvda yoʻq',
       inStock: 'Sotuvda bor',
+      inStockCount: 'Sotuvda: {count}\u00a0dona',
       unavailable: 'Sotuvda yoʻq',
       saleUntil: '{date}',
       // {amount} is drawn in Sage Ink; no-break spaces keep «30 ml» and the amount whole

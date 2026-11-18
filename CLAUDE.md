@@ -75,7 +75,7 @@ AI payment verification matches receipts against credit notifications from the *
   - **Tenor Sans**: UPPERCASE, tracking +200…+300; logo and screen titles at 22–26 px.
   - **Manrope**: 400/500/600, Cyrillic + Uzbek Latin; body text 400 at 14–15 px, buttons and prices 600 at 15–16 px.
   - **Cormorant Garamond Italic**: fragrance and set names, plus the Home slogan (customer-approved comp), 20–24 px.
-- Product name block: a small Tenor Sans caps line "ПО МОТИВАМ <BRAND>" above the Cormorant Italic name, then the notes joined with " · ", then "от 99 000 сум". See `materials/brandbook/pages/bb-08.png`.
+- Product name block: a small Tenor Sans caps line "ПО МОТИВАМ <BRAND>" above the Cormorant Italic name, then the notes joined with " · ", then "99 000 сум · 10 мл" (the price with the volume it belongs to). See `materials/brandbook/pages/bb-08.png`.
 - Logo: the trailing dot is part of the mark. Clear space = height of the "L". Minimum on screen: logo 80 px, monogram "L." 32 px. The avatar/app icon is the "L." monogram on Stone (`logo-pack/LUMMI_avatar_stone.svg`).
 - **Light by default; dark is a Profile option.** The customer approved the design on 2026-11-07: «тёмная тема варианта 2 — как дополнительная, по умолчанию — светлая». The app opens light whatever Telegram's theme is; the customer switches to dark in Profile and the choice is saved per customer. Dark uses our derived tokens (Graphite surfaces, Milk text, Sage accent), now approved through variant 2.
 - **Layout follows `design/approved/`**: dark floating tab bar (Главная / Каталог / Корзина / Заказы / Профиль), no welcome screen, RU/UZ switch only in Profile. Details in `DESIGN.md` → "Approved layout".
