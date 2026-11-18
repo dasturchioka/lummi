@@ -25,7 +25,7 @@ import { useVisiblePoll } from '@/lib/use-visible-poll';
 import { fill } from '@/lib/utils';
 import type { OrderFilters } from '../orders-filters';
 import { BoardCard, CardBody, type Target } from './board-card';
-import { BoardColumn, BoardRail, type Carry } from './board-column';
+import { BoardColumn, type Carry } from './board-column';
 import { BoardDialogs } from './board-dialogs';
 import {
   boardAnnouncements,
@@ -41,12 +41,17 @@ import { BoardVoice, FunnelLine, SkeletonColumn } from './board-parts';
 import { arrivals, moveKind, moveLabel, withMoves } from './board-state';
 import { useBoardMoves } from './use-board-moves';
 
-/** The funnel, as columns from the start: «Ожидает оплаты» … «Доставлен». */
+/** The funnel's steps: «Ожидает оплаты» … «Доставлен». */
 const FUNNEL_COLUMNS: OrderStatus[] = BOARD_STATUSES.filter(
   (s) => s !== 'cancelled' && s !== 'returned',
 );
-/** The closed outcomes: folded into rails until opened. */
-const RAIL_STATUSES: OrderStatus[] = ['cancelled', 'returned'];
+/** The closed outcomes, after the funnel. */
+const OUTCOME_COLUMNS: OrderStatus[] = ['cancelled', 'returned'];
+/**
+ * Every column, the same width and form, none folded (#66, Nurmuhammad 2026-11-17: like Reveo's
+ * funnel, one view): the funnel's steps, then the closed outcomes at the end.
+ */
+const COLUMNS: OrderStatus[] = [...FUNNEL_COLUMNS, ...OUTCOME_COLUMNS];
 
 const TEXT_LINK =
   'font-medium text-foreground underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current';
@@ -89,7 +94,6 @@ export function OrdersBoard({
   const [failed, setFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [arrived, setArrived] = useState<Set<number>>(() => new Set());
-  const [expanded, setExpanded] = useState<OrderStatus[]>([]);
   const [carried, setCarried] = useState<AdminBoardCardDto | null>(null);
   const [overStatus, setOverStatus] = useState<OrderStatus | null>(null);
   const [landed, setLanded] = useState(false);
@@ -215,21 +219,9 @@ export function OrdersBoard({
       inline: 'start',
       block: 'nearest',
     });
-  const toggle = (s: OrderStatus) => {
-    if (expanded.includes(s)) setExpanded((e) => e.filter((x) => x !== s));
-    else {
-      setExpanded((e) => [...e, s]);
-      requestAnimationFrame(() =>
-        columnEls.current
-          .get(s)
-          ?.scrollIntoView({ behavior: 'auto', inline: 'nearest', block: 'nearest' }),
-      );
-    }
-  };
 
   const { ref: frame, height } = useFillHeight();
-  const shown = [...FUNNEL_COLUMNS, ...RAIL_STATUSES.filter((s) => expanded.includes(s))];
-  const { ref: scroller, layout } = useColumnLayout(shown.length);
+  const { ref: scroller, layout } = useColumnLayout(COLUMNS.length);
   /** Marks the edges the board continues past, for their fade (globals.css). */
   const markEdges = useCallback(() => {
     const el = scroller.current;
@@ -244,22 +236,6 @@ export function OrdersBoard({
   const updated = board ? utcToTashkent(new Date(board.at)) : null;
   const pad = (n: number) => String(n).padStart(2, '0');
 
-  const rails = RAIL_STATUSES.filter((s) => !expanded.includes(s)).map((s) => {
-    const c = column(s);
-    return c ? (
-      <BoardRail
-        key={s}
-        column={c}
-        carry={carryOf(s)}
-        onOpen={() => toggle(s)}
-        language={language}
-        t={t}
-      />
-    ) : (
-      <div key={s} className="skeleton h-full w-11 shrink-0 rounded-card" />
-    );
-  });
-
   const renderColumn = (s: OrderStatus) => {
     const c = column(s);
     if (!c || !board) return null;
@@ -272,7 +248,6 @@ export function OrdersBoard({
         language={language}
         t={t}
         listHref={listFor(s)}
-        onCollapse={RAIL_STATUSES.includes(s) ? () => toggle(s) : undefined}
         columnRef={(el) => {
           if (el) columnEls.current.set(s, el);
           else columnEls.current.delete(s);
@@ -339,6 +314,7 @@ export function OrdersBoard({
     >
       <FunnelLine
         statuses={FUNNEL_COLUMNS}
+        outcomes={OUTCOME_COLUMNS}
         column={column}
         name={statusName}
         label={b.funnel}
@@ -386,25 +362,19 @@ export function OrdersBoard({
           setOverStatus(null);
         }}
       >
-        <div className="flex min-h-0 flex-1 gap-2">
-          <div
-            ref={scroller}
-            onScroll={markEdges}
-            className="board-scroller -mx-4 flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
-            data-carrying={carried ? '' : undefined}
-          >
-            {columns
-              ? shown.map(renderColumn)
-              : FUNNEL_COLUMNS.map((s) => (
-                  <SkeletonColumn key={s} name={statusName(s)} width={width} />
-                ))}
-            {!wide && rails}
-            {/* the room after the last column, so the scroll also ends on a whole column */}
-            {layout && layout.endPad > 0 && (
-              <div aria-hidden className="shrink-0" style={{ width: layout.endPad - 8 }} />
-            )}
-          </div>
-          {wide && rails}
+        <div
+          ref={scroller}
+          onScroll={markEdges}
+          className="board-scroller -mx-4 flex min-h-0 min-w-0 flex-1 gap-2 overflow-x-auto overflow-y-hidden px-4 pb-1 sm:mx-0 sm:px-0"
+          data-carrying={carried ? '' : undefined}
+        >
+          {columns
+            ? COLUMNS.map(renderColumn)
+            : COLUMNS.map((s) => <SkeletonColumn key={s} name={statusName(s)} width={width} />)}
+          {/* the room after the last column, so the scroll also ends on a whole column */}
+          {layout && layout.endPad > 0 && (
+            <div aria-hidden className="shrink-0" style={{ width: layout.endPad - 8 }} />
+          )}
         </div>
         <DragOverlay
           modifiers={[keepOnScreen]}

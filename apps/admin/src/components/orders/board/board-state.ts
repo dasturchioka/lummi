@@ -119,7 +119,7 @@ export const secondsIn = (since: string, at: string) =>
 /**
  * From 640 px: columns at least this wide, so a card reads without crowding (#59; it was 156 and
  * five columns at 1280 were cramped), 8 px apart, and the next one peeking in by 24 px. At 1280
- * three whole funnel columns fit beside the rails; the rest is a sideways scroll.
+ * three whole columns fit; the rest is a sideways scroll (#66: no rails, every column alike).
  */
 const MIN_COLUMN = 264;
 const MAX_COLUMN = 320;

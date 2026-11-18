@@ -33,7 +33,7 @@ export const statusOf = (data: unknown) =>
 
 /**
  * Keyboard carrying hops from column to column: the arrows go to the next column the order may
- * go to (or back home), never 25 px at a time; the rails count as columns.
+ * go to (or back home), never 25 px at a time.
  */
 export const columnHop: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
   const { collisionRect, droppableRects, droppableContainers } = context;
@@ -64,15 +64,11 @@ export const columnHop: KeyboardCoordinateGetter = (event, { context, currentCoo
 };
 
 /**
- * Under the pointer: a rail wins over a column beside it; nothing under the pointer is no target
- * at all. The keyboard (no pointer) takes the column the card overlaps.
+ * Under the pointer: the column the pointer is over; nothing under the pointer is no target at
+ * all. The keyboard (no pointer) takes the column the card overlaps.
  */
-export const collide: CollisionDetection = (args) => {
-  if (!args.pointerCoordinates) return rectIntersection(args);
-  const hits = pointerWithin(args);
-  const rail = hits.find((h) => String(h.id).startsWith('rail:'));
-  return rail ? [rail] : hits;
-};
+export const collide: CollisionDetection = (args) =>
+  args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args);
 
 /**
  * The carried card stays on the screen: on a phone a card nearly as wide as the screen would
