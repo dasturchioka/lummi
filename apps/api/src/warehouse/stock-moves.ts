@@ -15,7 +15,7 @@ export interface StockMoveInput {
   oilMg?: number;
   /** Signed change of bottles on hand, by ml. */
   bottles?: Record<number, number>;
-  receiptId?: number;
+  oilReceiptId?: number;
   bottlingId?: number;
   orderId?: number;
   reason?: string | null;
@@ -30,7 +30,7 @@ export async function recordStockMove(tx: DbOrTx, m: StockMoveInput): Promise<vo
     bottles: Object.fromEntries(
       Object.entries(m.bottles ?? {}).filter(([, change]) => change !== 0),
     ),
-    receiptId: m.receiptId ?? null,
+    oilReceiptId: m.oilReceiptId ?? null,
     bottlingId: m.bottlingId ?? null,
     orderId: m.orderId ?? null,
     reason: m.reason ?? null,

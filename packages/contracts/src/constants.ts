@@ -40,14 +40,14 @@ export type FragranceTier = (typeof FRAGRANCE_TIERS)[number];
 export const MAX_OIL_PRICE = 1_000_000;
 
 /**
- * What changed a fragrance's stock, one row of its warehouse history (ADR 0041): an oil receipt,
- * its correction or void, a bottling, bottles leaving at BTS handover (`sale`) or coming back
+ * What changed a fragrance's stock, one row of its warehouse history (ADR 0041): an oil receipt
+ * (`oil_receipt`), its correction or void, a bottling, bottles leaving at BTS handover (`sale`) or coming back
  * (`returned`: a parcel back, a return to stock), and a manual count (`correction`).
  */
 export const STOCK_MOVE_KINDS = [
-  'receipt',
-  'receipt_corrected',
-  'receipt_voided',
+  'oil_receipt',
+  'oil_receipt_corrected',
+  'oil_receipt_voided',
   'bottling',
   'sale',
   'returned',

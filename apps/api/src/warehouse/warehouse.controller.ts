@@ -36,7 +36,7 @@ function failure(f: WarehouseFailure) {
 
 /**
  * The raw-material warehouse (#76, ADR 0041). Stock is the manager's work too (ADR 0017): the page,
- * bottling and the export. Receipts carry the shop's purchase prices and are the owner's.
+ * bottling and the export. Oil receipts carry the shop's purchase prices and are the owner's.
  */
 @Controller()
 @UseGuards(StaffGuard)
@@ -56,38 +56,38 @@ export class WarehouseController {
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.receive)
+  @TsRestHandler(adminContract.warehouse.receiveOil)
   @UseGuards(OwnerGuard)
-  receive(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.receive, async ({ params, body }) => {
-      const res = await this.warehouse.receive(actor, params.id, body);
+  receiveOil(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.receiveOil, async ({ params, body }) => {
+      const res = await this.warehouse.receiveOil(actor, params.id, body);
       return res.ok ? { status: 201 as const, body: res.value } : failure(res);
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.correctReceipt)
+  @TsRestHandler(adminContract.warehouse.correctOilReceipt)
   @UseGuards(OwnerGuard)
-  correctReceipt(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.correctReceipt, async ({ params, body }) => {
-      const res = await this.warehouse.correctReceipt(actor, params.id, body);
+  correctOilReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.correctOilReceipt, async ({ params, body }) => {
+      const res = await this.warehouse.correctOilReceipt(actor, params.id, body);
       return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.voidReceipt)
+  @TsRestHandler(adminContract.warehouse.voidOilReceipt)
   @UseGuards(OwnerGuard)
-  voidReceipt(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.voidReceipt, async ({ params, body }) => {
-      const res = await this.warehouse.voidReceipt(actor, params.id, body.reason);
+  voidOilReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.voidOilReceipt, async ({ params, body }) => {
+      const res = await this.warehouse.voidOilReceipt(actor, params.id, body.reason);
       return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.draftReceipts)
+  @TsRestHandler(adminContract.warehouse.draftOilReceipts)
   @UseGuards(OwnerGuard)
-  draftReceipts(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.draftReceipts, async ({ body }) => {
-      const res = await this.warehouse.draftReceipts(actor, body);
+  draftOilReceipts(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.draftOilReceipts, async ({ body }) => {
+      const res = await this.warehouse.draftOilReceipts(actor, body);
       if (res.ok) return { status: 201 as const, body: res.value };
       return res.reason === 'invalid'
         ? { status: 422 as const, body: { code: 'invalid' as const, fields: res.fields } }
@@ -95,20 +95,20 @@ export class WarehouseController {
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.confirmReceipt)
+  @TsRestHandler(adminContract.warehouse.confirmOilReceipt)
   @UseGuards(OwnerGuard)
-  confirmReceipt(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.confirmReceipt, async ({ params, body }) => {
-      const res = await this.warehouse.confirmReceipt(actor, params.id, body);
+  confirmOilReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.confirmOilReceipt, async ({ params, body }) => {
+      const res = await this.warehouse.confirmOilReceipt(actor, params.id, body);
       return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.discardReceipt)
+  @TsRestHandler(adminContract.warehouse.discardOilReceipt)
   @UseGuards(OwnerGuard)
-  discardReceipt(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.discardReceipt, async ({ params }) => {
-      const res = await this.warehouse.discardReceipt(actor, params.id);
+  discardOilReceipt(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.discardOilReceipt, async ({ params }) => {
+      const res = await this.warehouse.discardOilReceipt(actor, params.id);
       return res.ok ? { status: 200 as const, body: res.value } : failure(res);
     });
   }

@@ -1,5 +1,5 @@
 {
-  "id": "0a9128eb-cd83-45e1-bee6-b41f5582cf6e",
+  "id": "3e3d331a-f0bc-4e96-ae26-189655df91aa",
   "prevId": "1a939809-d8e5-4a3c-91c4-fd1ca3a130eb",
   "version": "7",
   "dialect": "postgresql",
@@ -498,7 +498,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -3174,7 +3174,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },
@@ -6454,8 +6454,8 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "receipt_id": {
-          "name": "receipt_id",
+        "oil_receipt_id": {
+          "name": "oil_receipt_id",
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
@@ -6527,35 +6527,20 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "stock_moves_created_idx": {
-          "name": "stock_moves_created_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
-        "stock_moves_receipt_id_oil_receipts_id_fk": {
-          "name": "stock_moves_receipt_id_oil_receipts_id_fk",
+        "stock_moves_oil_receipt_id_oil_receipts_id_fk": {
+          "name": "stock_moves_oil_receipt_id_oil_receipts_id_fk",
           "tableFrom": "stock_moves",
           "tableTo": "oil_receipts",
           "columnsFrom": [
-            "receipt_id"
+            "oil_receipt_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "stock_moves_bottling_id_bottlings_id_fk": {
@@ -6568,7 +6553,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         },
         "stock_moves_order_id_orders_id_fk": {
@@ -7253,9 +7238,9 @@
       "name": "stock_move_kind",
       "schema": "public",
       "values": [
-        "receipt",
-        "receipt_corrected",
-        "receipt_voided",
+        "oil_receipt",
+        "oil_receipt_corrected",
+        "oil_receipt_voided",
         "bottling",
         "sale",
         "returned",

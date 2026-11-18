@@ -1842,7 +1842,7 @@ export const oilReceipts = pgTable(
     id: id(),
     fragranceId: bigint('fragrance_id', { mode: 'number' })
       .notNull()
-      .references(() => fragrances.id, { onDelete: 'cascade' }),
+      .references(() => fragrances.id, { onDelete: 'restrict' }),
     supplier: text('supplier').notNull(),
     invoice: text('invoice').notNull(),
     /** The day the oil came in, a Tashkent date. */
@@ -1887,7 +1887,7 @@ export const bottlings = pgTable(
     id: id(),
     fragranceId: bigint('fragrance_id', { mode: 'number' })
       .notNull()
-      .references(() => fragrances.id, { onDelete: 'cascade' }),
+      .references(() => fragrances.id, { onDelete: 'restrict' }),
     /** Bottles per volume, as the form sent them: `[{ ml, quantity }]`. */
     lines: jsonb('lines').$type<{ ml: number; quantity: number }[]>().notNull(),
     oilMg: integer('oil_mg').notNull(),
@@ -1914,16 +1914,22 @@ export const stockMoves = pgTable(
   {
     id: id(),
     /**
-     * No foreign key on purpose: a key check would take a share lock on the fragrance row, and the
-     * BTS handover writes a move while holding volume locks, the reverse of a bottling's order
-     * (fragrance, then volumes). Fragrances are never deleted.
+     * No foreign key on purpose. The fragrance form and the catalog import take `FOR UPDATE` on
+     * the fragrance, then lock its volumes; the BTS handover locks volumes and then writes a move.
+     * A key check here would take a share lock on the fragrance row that the form's `FOR UPDATE`
+     * blocks, while the form waits for the handover's volume locks: a deadlock. Fragrances are
+     * never deleted, so nothing is lost.
      */
     fragranceId: bigint('fragrance_id', { mode: 'number' }).notNull(),
     kind: stockMoveKindEnum('kind').notNull(),
     oilMg: integer('oil_mg').notNull().default(0),
     bottles: jsonb('bottles').$type<Record<string, number>>().notNull().default({}),
-    receiptId: bigint('receipt_id', { mode: 'number' }).references(() => oilReceipts.id),
-    bottlingId: bigint('bottling_id', { mode: 'number' }).references(() => bottlings.id),
+    oilReceiptId: bigint('oil_receipt_id', { mode: 'number' }).references(() => oilReceipts.id, {
+      onDelete: 'restrict',
+    }),
+    bottlingId: bigint('bottling_id', { mode: 'number' }).references(() => bottlings.id, {
+      onDelete: 'restrict',
+    }),
     orderId: bigint('order_id', { mode: 'number' }).references(() => orders.id),
     reason: text('reason'),
     details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
@@ -1931,9 +1937,6 @@ export const stockMoves = pgTable(
     actorId: bigint('actor_id', { mode: 'number' }),
     createdAt: createdAt(),
   },
-  (t) => [
-    index('stock_moves_fragrance_idx').on(t.fragranceId, t.id),
-    index('stock_moves_created_idx').on(t.createdAt),
-  ],
+  (t) => [index('stock_moves_fragrance_idx').on(t.fragranceId, t.id)],
 );
 export type StockMoveRow = typeof stockMoves.$inferSelect;

@@ -45,8 +45,8 @@ export function oilLevel(litres: number, lowLitres: number): StockLevel {
   return litres <= lowLitres ? 'low' : 'ok';
 }
 
-/** What a receipt's oil cost, as typed from the invoice. */
-export interface ReceiptPrice {
+/** What an oil receipt's oil cost, as typed from the invoice. */
+export interface OilReceiptPrice {
   oilMg: number;
   /** So'm per gram before the supplier discount. */
   pricePerGram: number;
@@ -55,14 +55,14 @@ export interface ReceiptPrice {
   importPercent: number;
 }
 
-const landed = (r: ReceiptPrice) =>
+const landed = (r: OilReceiptPrice) =>
   landedOilPrice(r.pricePerGram, {
     oilDiscountPercent: r.discountPercent,
     oilImportPercent: r.importPercent,
   });
 
-/** A receipt's landed so'm per gram and its total, each rounded once from the unrounded price. */
-export function receiptCost(r: ReceiptPrice): { landedPerGram: number; total: number } {
+/** An oil receipt's landed so'm per gram and its total, each rounded once from the unrounded price. */
+export function oilReceiptCost(r: OilReceiptPrice): { landedPerGram: number; total: number } {
   const perGram = landed(r);
   return {
     landedPerGram: Math.round(perGram),
@@ -71,13 +71,13 @@ export function receiptCost(r: ReceiptPrice): { landedPerGram: number; total: nu
 }
 
 /**
- * The oil balance at cost: the balance at the average landed price of the receipts still
+ * The oil balance at cost: the balance at the average landed price of the oil receipts still
  * standing (each weighted by its grams). Whole so'm.
  */
-export function oilValue(balanceMg: number, receipts: readonly ReceiptPrice[]): number {
+export function oilValue(balanceMg: number, oilReceipts: readonly OilReceiptPrice[]): number {
   if (balanceMg <= 0) return 0;
-  const grams = receipts.reduce((a, r) => a + gramsFromMg(r.oilMg), 0);
+  const grams = oilReceipts.reduce((a, r) => a + gramsFromMg(r.oilMg), 0);
   if (grams <= 0) return 0;
-  const cost = receipts.reduce((a, r) => a + landed(r) * gramsFromMg(r.oilMg), 0);
+  const cost = oilReceipts.reduce((a, r) => a + landed(r) * gramsFromMg(r.oilMg), 0);
   return Math.round((cost / grams) * gramsFromMg(balanceMg));
 }

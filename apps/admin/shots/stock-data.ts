@@ -174,7 +174,7 @@ const showEditor = (page: Page) =>
     .first()
     .evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
-/** Oil for the first fragrance (#76): one made-up receipt of 250 g and its stock move. */
+/** Oil for the first fragrance (#76): one made-up oil receipt of 250 g and its stock move. */
 async function someOil(db: ShotSql) {
   await db.query('update fragrances set oil_mg = 250000 where id = 1');
   await db.query(
@@ -183,8 +183,8 @@ async function someOil(db: ShotSql) {
      values (1, 'Test Oils', 'INV-0001', '2026-11-17', 250000, 4000, 9, 3)`,
   );
   await db.query(
-    `insert into stock_moves (fragrance_id, kind, oil_mg, receipt_id, details, actor_type)
-     select 1, 'receipt', 250000, max(id), '{"invoice":"INV-0001","supplier":"Test Oils"}', 'system'
+    `insert into stock_moves (fragrance_id, kind, oil_mg, oil_receipt_id, details, actor_type)
+     select 1, 'oil_receipt', 250000, max(id), '{"invoice":"INV-0001","supplier":"Test Oils"}', 'system'
      from oil_receipts`,
   );
 }

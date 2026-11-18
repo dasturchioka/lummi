@@ -1,4 +1,4 @@
-import { utcToTashkent } from '@lummi/contracts';
+import { formatLocalDate, tashkentDay } from '@lummi/contracts';
 import { notFound, redirect } from 'next/navigation';
 import { WarehouseView } from '@/components/warehouse/warehouse-view';
 import { getAdminMessages } from '@/lib/i18n';
@@ -14,12 +14,10 @@ export default async function WarehousePage({ params }: { params: Promise<{ id: 
   if (res.status === 404) notFound();
   if (res.status !== 200) throw new Error(`warehouse failed to load: ${res.status}`);
   const { t, language } = await getAdminMessages();
-  const d = utcToTashkent(new Date());
-  const pad = (n: number) => String(n).padStart(2, '0');
   return (
     <WarehouseView
       data={res.body}
-      today={`${d.year}-${pad(d.month)}-${pad(d.day)}`}
+      today={formatLocalDate(tashkentDay(new Date()))}
       language={language}
       t={t}
     />

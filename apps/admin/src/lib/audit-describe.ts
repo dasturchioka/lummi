@@ -607,12 +607,12 @@ const describers: Record<string, Describer> = {
         }),
     ];
   },
-  'warehouse.receipt_corrected': (c) => {
+  'warehouse.oil_receipt_corrected': (c) => {
     const { fragrance, invoice, reason, ...diff } = c.p;
     c.take(...Object.keys(c.p));
     const d = c.t.audit.detail;
     return [
-      fill(d.receiptCorrected, {
+      fill(d.oilReceiptCorrected, {
         name: str(fragrance) ?? d.unknownName,
         invoice: str(invoice) ?? '—',
       }),
@@ -620,11 +620,11 @@ const describers: Record<string, Describer> = {
       str(reason) && fill(d.reason, { reason: str(reason)! }),
     ];
   },
-  'warehouse.receipt_voided': (c) => {
+  'warehouse.oil_receipt_voided': (c) => {
     c.take('fragrance', 'supplier', 'invoice', 'grams', 'reason');
     const d = c.t.audit.detail;
     return [
-      fill(d.receiptVoided, {
+      fill(d.oilReceiptVoided, {
         name: str(c.p.fragrance) ?? d.unknownName,
         grams: valueText(c, c.p.grams),
         invoice: str(c.p.invoice) ?? '—',
@@ -656,20 +656,20 @@ const describers: Record<string, Describer> = {
       fill(d.bottledOil, { grams: valueText(c, c.p.oilGrams), ml: valueText(c, c.p.ethanolMl) }),
     ];
   },
-  'warehouse.receipt_drafts_created': (c) => {
+  'warehouse.oil_receipt_drafts_created': (c) => {
     c.take('count', 'grams', 'fragrances');
     const names = Array.isArray(c.p.fragrances)
       ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
       : [];
     return [
-      fill(c.t.audit.detail.receiptDrafts, {
+      fill(c.t.audit.detail.oilReceiptDrafts, {
         count: String(int(c.p.count) ?? names.length),
         grams: valueText(c, c.p.grams),
       }),
       names.length > 0 && clip(names.join(', ')),
     ];
   },
-  'warehouse.receipt_draft_discarded': (c) => {
+  'warehouse.oil_receipt_draft_discarded': (c) => {
     c.take('fragrance', 'grams');
     const d = c.t.audit.detail;
     return [

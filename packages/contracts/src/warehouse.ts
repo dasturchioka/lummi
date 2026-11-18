@@ -14,7 +14,7 @@ import { MAX_OIL_PRICE, STOCK_MOVE_KINDS } from './constants';
 export const OIL_LEVELS = ['zero', 'low', 'ok'] as const;
 
 /** The most oil one receipt may hold: a tonne. */
-export const MAX_RECEIPT_GRAMS = 1_000_000;
+export const MAX_OIL_RECEIPT_GRAMS = 1_000_000;
 /** The most bottles of one volume one bottling may make. */
 export const MAX_BOTTLING_QUANTITY = 10_000;
 export const STOCK_REASON_MAX = 200;
@@ -39,7 +39,7 @@ export const oilReceiptInputSchema = z.object({
   grams: z
     .number()
     .positive()
-    .max(MAX_RECEIPT_GRAMS)
+    .max(MAX_OIL_RECEIPT_GRAMS)
     .refine(hasAtMostDecimals(3), 'at most 3 decimals'),
   /** So'm per gram before the supplier discount, as the invoice reads. */
   pricePerGram: z.number().int().min(1).max(MAX_OIL_PRICE),
@@ -75,7 +75,7 @@ export const oilReceiptSchema = oilReceiptInputSchema.extend({
 export type OilReceipt = z.infer<typeof oilReceiptSchema>;
 
 /** «Buy this» on the purchase plan (#78): a draft receipt per fragrance, the plan's grams. */
-export const receiptDraftsBodySchema = z.object({
+export const oilReceiptDraftsBodySchema = z.object({
   lines: z
     .array(
       z.object({
@@ -83,7 +83,7 @@ export const receiptDraftsBodySchema = z.object({
         grams: z
           .number()
           .positive()
-          .max(MAX_RECEIPT_GRAMS)
+          .max(MAX_OIL_RECEIPT_GRAMS)
           .refine(hasAtMostDecimals(3), 'at most 3 decimals'),
       }),
     )
@@ -94,9 +94,9 @@ export const receiptDraftsBodySchema = z.object({
       'one line per fragrance',
     ),
 });
-export type ReceiptDraftsBody = z.infer<typeof receiptDraftsBodySchema>;
-export const receiptDraftsResultSchema = z.object({ created: z.number().int() });
-export const receiptDiscardedSchema = z.object({ discarded: z.literal(true) });
+export type OilReceiptDraftsBody = z.infer<typeof oilReceiptDraftsBodySchema>;
+export const oilReceiptDraftsResultSchema = z.object({ created: z.number().int() });
+export const oilReceiptDiscardedSchema = z.object({ discarded: z.literal(true) });
 
 /** A bottling: how many bottles of each volume the oil goes into. */
 export const bottlingBodySchema = z.object({
@@ -186,9 +186,9 @@ export const warehouseFragranceSchema = z.object({
     z.object({ ml: z.number().int(), oilGrams: z.number(), ethanolMl: z.number() }),
   ),
   /** The receipts, newest first: the owner's only (null for a manager), voided ones included. */
-  receipts: z.array(oilReceiptSchema).nullable(),
+  oilReceipts: z.array(oilReceiptSchema).nullable(),
   /** The receipt form's starting values (owner only): the discount and import settings, the fragrance's supplier and oil price. */
-  receiptDefaults: z
+  oilReceiptDefaults: z
     .object({
       supplier: z.string().nullable(),
       pricePerGram: z.number().int().nullable(),

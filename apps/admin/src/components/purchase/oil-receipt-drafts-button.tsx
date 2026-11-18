@@ -14,7 +14,7 @@ import { fill } from '@/lib/utils';
  * price. The drafts hold no oil; the owner confirms each on the fragrance's warehouse page as the
  * invoice reads. The server prices them; the page sends only which fragrance and how many grams.
  */
-export function ReceiptDraftsButton({
+export function OilReceiptDraftsButton({
   rows,
   t,
 }: {
@@ -32,7 +32,7 @@ export function ReceiptDraftsButton({
 
   async function create() {
     setPending(true);
-    const res = await browserApi.warehouse.draftReceipts({ body: { lines } }).catch(() => null);
+    const res = await browserApi.warehouse.draftOilReceipts({ body: { lines } }).catch(() => null);
     setPending(false);
     setState(res?.status === 201 ? { kind: 'done', n: res.body.created } : { kind: 'failed' });
   }

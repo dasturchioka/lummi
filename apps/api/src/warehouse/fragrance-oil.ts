@@ -3,7 +3,7 @@ import { and, fragrances, inArray, isNull, oilReceipts, volumes, type DbOrTx } f
 import { readCostSettings } from '../cost/cost-settings';
 import { bottleCost, isBottleMl, liquidFromOil, type CostSettings } from '../cost/unit-cost';
 import { readSettings } from '../settings/settings.service';
-import { gramsFromMg, oilLevel, oilValue, type ReceiptPrice } from './oil';
+import { gramsFromMg, oilLevel, oilValue, type OilReceiptPrice } from './oil';
 
 /** Grams and litres go out to three decimals: a milligram, a millilitre. */
 export const round3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -26,21 +26,21 @@ export async function readOilContext(tx: DbOrTx, withValue: boolean): Promise<Oi
 /**
  * One fragrance's oil as the panel shows it: the balance, the litres of perfume it still makes
  * (the cost model's formula read backwards), the low-oil level, and for the owner the stock at
- * cost: the oil at the average landed price of its standing receipts, the bottles on hand at
+ * cost: the oil at the average landed price of its standing oil receipts, the bottles on hand at
  * their unit cost (unknown without an oil price).
  */
 export function fragranceOil(
   f: { id: number; oilMg: number; oilPrice: number | null },
-  receipts: readonly ReceiptPrice[],
+  oilReceipts: readonly OilReceiptPrice[],
   vols: readonly { ml: number; onHand: number }[],
   ctx: OilContext,
-  /** Draft receipts waiting for the owner (#78). */
+  /** Draft oil receipts waiting for the owner (#78). */
   drafts = 0,
 ): FragranceOil {
   const litres = liquidFromOil(gramsFromMg(f.oilMg), ctx.costs.liquid) / 1000;
   let value: FragranceOil['value'] = null;
   if (ctx.withValue) {
-    const oil = oilValue(f.oilMg, receipts);
+    const oil = oilValue(f.oilMg, oilReceipts);
     const counted = vols.filter((v) => v.onHand > 0);
     const bottles =
       counted.length === 0
@@ -77,7 +77,7 @@ export async function fragranceOils(
     .select({ id: fragrances.id, oilMg: fragrances.oilMg, oilPrice: fragrances.oilPrice })
     .from(fragrances)
     .where(inArray(fragrances.id, list));
-  const receipts = ctx.withValue
+  const live = ctx.withValue
     ? await tx
         .select({
           fragranceId: oilReceipts.fragranceId,
@@ -101,10 +101,10 @@ export async function fragranceOils(
       f.id,
       fragranceOil(
         f,
-        receipts.filter((r) => r.fragranceId === f.id && !r.draft),
+        live.filter((r) => r.fragranceId === f.id && !r.draft),
         vols.filter((v) => v.fragranceId === f.id),
         ctx,
-        receipts.filter((r) => r.fragranceId === f.id && r.draft).length,
+        live.filter((r) => r.fragranceId === f.id && r.draft).length,
       ),
     ]),
   );

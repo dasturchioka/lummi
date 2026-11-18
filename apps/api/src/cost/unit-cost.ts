@@ -195,11 +195,12 @@ export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number;
 
 /**
  * The ml of perfume `oilGrams` of oil can still be bottled into (unrounded): `liquidNeeded` read
- * backwards, so the warehouse's litres are what a bottling can use (ADR 0041). The calculator's
- * planner (`buyCalc`) takes the loss off as × (1 − loss) instead; the two differ by about 0.1 %.
+ * backwards (the grams over what one ml takes), so the warehouse's litres are what a bottling can
+ * use (ADR 0041). The calculator's planner (`buyCalc`) takes the loss off as × (1 − loss) instead;
+ * the two differ by about 0.1 %.
  */
 export function liquidFromOil(oilGrams: number, l: LiquidSettings): number {
-  return oilGrams / l.oilDensity / (l.oilPercent / 100) / (1 + l.fillingLossPercent / 100);
+  return oilGrams / liquidNeeded(1, l).oilGrams;
 }
 
 type Parts = Omit<UnitCost, 'base' | 'defect' | 'total'>;

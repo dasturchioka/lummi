@@ -5,7 +5,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
-import { ReceiptDraftsButton } from '@/components/purchase/receipt-drafts-button';
+import { OilReceiptDraftsButton } from '@/components/purchase/oil-receipt-drafts-button';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -214,7 +214,7 @@ export function PurchasePlanView({
               <h2 className={HEADING}>{p.tableTitle}</h2>
               <p className="mt-2 text-small text-muted-foreground">{p.tableHint}</p>
               <div className="mt-3">
-                <ReceiptDraftsButton rows={plan.rows} t={t} />
+                <OilReceiptDraftsButton rows={plan.rows} t={t} />
               </div>
             </div>
             <Table className="mt-2">

@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  MAX_BOTTLING_QUANTITY,
+  MAX_OIL_RECEIPT_GRAMS,
   OIL_TEXT_MAX,
   STOCK_REASON_MAX,
   WAREHOUSE_HISTORY_LIMIT,
@@ -54,7 +56,7 @@ const grams3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
  * A fragrance's warehouse page (#76, ADR 0041): its oil and bottles, the bottling form, the
- * owner's receipts, and the history. Every figure is the API's; the bottling preview multiplies
+ * owner's oil receipts, and the history. Every figure is the API's; the bottling preview multiplies
  * the server's per-bottle oil by the counts typed, and the server takes the real amount.
  */
 export function WarehouseView({
@@ -64,13 +66,13 @@ export function WarehouseView({
   t,
 }: {
   data: WarehouseFragrance;
-  /** Tashkent's today, `YYYY-MM-DD`: the receipt form's date. */
+  /** Tashkent's today, `YYYY-MM-DD`: the oil receipt form's date. */
   today: string;
   language: Language;
   t: AdminMessages;
 }) {
   const w = t.warehouse;
-  const owner = data.receipts !== null;
+  const owner = data.oilReceipts !== null;
   return (
     <>
       <PageHeader
@@ -89,15 +91,15 @@ export function WarehouseView({
           <BottlesSection data={data} w={w} />
         </div>
         <BottlingSection data={data} w={w} />
-        {owner && data.receiptDefaults && (
-          <ReceiptSection
+        {owner && data.oilReceiptDefaults && (
+          <OilReceiptSection
             fragranceId={data.fragranceId}
-            defaults={data.receiptDefaults}
+            defaults={data.oilReceiptDefaults}
             today={today}
             w={w}
           />
         )}
-        {owner && <ReceiptsSection receipts={data.receipts!} language={language} w={w} />}
+        {owner && <OilReceiptsSection oilReceipts={data.oilReceipts!} language={language} w={w} />}
         <HistorySection history={data.history} w={w} />
       </div>
     </>
@@ -221,7 +223,8 @@ function BottlingSection({ data, w }: { data: WarehouseFragrance; w: W }) {
   );
 
   async function submit() {
-    if (!valid || lines.some((l) => l.quantity > 10_000)) return setState({ kind: 'invalid' });
+    if (!valid || lines.some((l) => l.quantity > MAX_BOTTLING_QUANTITY))
+      return setState({ kind: 'invalid' });
     if (lines.length === 0) return setState({ kind: 'empty' });
     setPending(true);
     const res = await browserApi.warehouse
@@ -316,13 +319,13 @@ function BottlingSection({ data, w }: { data: WarehouseFragrance; w: W }) {
   );
 }
 
-/** The receipt form's fields as typed (strings), shared by a new receipt and a correction. */
-type ReceiptDraft = Record<keyof OilReceiptInput, string>;
+/** The oil receipt form's fields as typed (strings), shared by a new oil receipt and a correction. */
+type OilReceiptDraft = Record<keyof OilReceiptInput, string>;
 type DraftKey = keyof OilReceiptInput;
 
 /** The draft as the API takes it, or the fields to fix. */
 function readDraft(
-  d: ReceiptDraft,
+  d: OilReceiptDraft,
 ): { ok: true; value: OilReceiptInput } | { ok: false; bad: Set<string> } {
   const bad = new Set<string>();
   const text = (k: 'supplier' | 'invoice') => {
@@ -339,7 +342,7 @@ function readDraft(
     supplier: text('supplier'),
     invoice: text('invoice'),
     receivedOn: d.receivedOn,
-    grams: number('grams', (n) => n > 0 && n <= 1_000_000),
+    grams: number('grams', (n) => n > 0 && n <= MAX_OIL_RECEIPT_GRAMS),
     pricePerGram: number('pricePerGram', (n) => Number.isInteger(n) && n >= 1),
     discountPercent: number('discountPercent', (n) => n >= 0 && n <= 100),
     importPercent: number('importPercent', (n) => n >= 0 && n <= 100),
@@ -348,7 +351,7 @@ function readDraft(
   return bad.size ? { ok: false, bad } : { ok: true, value };
 }
 
-function ReceiptFields({
+function OilReceiptFields({
   idPrefix,
   draft,
   bad,
@@ -356,12 +359,12 @@ function ReceiptFields({
   w,
 }: {
   idPrefix: string;
-  draft: ReceiptDraft;
+  draft: OilReceiptDraft;
   bad: Set<string>;
-  onChange: (d: ReceiptDraft) => void;
+  onChange: (d: OilReceiptDraft) => void;
   w: W;
 }) {
-  const r = w.receipt;
+  const r = w.oilReceipt;
   const input = (k: DraftKey) => {
     const numeric = !['supplier', 'invoice', 'receivedOn'].includes(k);
     return (
@@ -392,20 +395,20 @@ function ReceiptFields({
   );
 }
 
-function ReceiptSection({
+function OilReceiptSection({
   fragranceId,
   defaults,
   today,
   w,
 }: {
   fragranceId: number;
-  defaults: NonNullable<WarehouseFragrance['receiptDefaults']>;
+  defaults: NonNullable<WarehouseFragrance['oilReceiptDefaults']>;
   today: string;
   w: W;
 }) {
-  const r = w.receipt;
+  const r = w.oilReceipt;
   const router = useRouter();
-  const blank = (): ReceiptDraft => ({
+  const blank = (): OilReceiptDraft => ({
     supplier: defaults.supplier ?? '',
     invoice: '',
     receivedOn: today,
@@ -414,7 +417,7 @@ function ReceiptSection({
     discountPercent: String(defaults.discountPercent),
     importPercent: String(defaults.importPercent),
   });
-  const [draft, setDraft] = useState<ReceiptDraft>(blank);
+  const [draft, setDraft] = useState<OilReceiptDraft>(blank);
   const [bad, setBad] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [state, setState] = useState<{ kind: 'idle' | 'failed' } | { kind: 'done'; grams: number }>(
@@ -427,7 +430,7 @@ function ReceiptSection({
     setBad(new Set());
     setPending(true);
     const res = await browserApi.warehouse
-      .receive({ params: { id: fragranceId }, body: read.value })
+      .receiveOil({ params: { id: fragranceId }, body: read.value })
       .catch(() => null);
     setPending(false);
     if (res?.status === 201) {
@@ -447,8 +450,8 @@ function ReceiptSection({
           void submit();
         }}
       >
-        <ReceiptFields
-          idPrefix="receipt"
+        <OilReceiptFields
+          idPrefix="oil-receipt"
           draft={draft}
           bad={bad}
           onChange={(d) => {
@@ -479,30 +482,30 @@ function ReceiptSection({
   );
 }
 
-function ReceiptsSection({
-  receipts,
+function OilReceiptsSection({
+  oilReceipts,
   language,
   w,
 }: {
-  receipts: OilReceipt[];
+  oilReceipts: OilReceipt[];
   language: Language;
   w: W;
 }) {
-  const rs = w.receipts;
+  const rs = w.oilReceipts;
   const [correcting, setCorrecting] = useState<OilReceipt | null>(null);
   const [voiding, setVoiding] = useState<OilReceipt | null>(null);
   const [discarding, setDiscarding] = useState<OilReceipt | null>(null);
   const money = (n: number) => formatMoney(n, language);
   return (
     <Section title={rs.title}>
-      {receipts.length === 0 ? (
+      {oilReceipts.length === 0 ? (
         <p className="text-sm text-muted-foreground">{rs.empty}</p>
       ) : (
         <ul className="-my-2 divide-y divide-border">
-          {receipts.map((r) => (
+          {oilReceipts.map((r) => (
             <li
               key={r.id}
-              data-testid={`receipt-${r.id}`}
+              data-testid={`oil-receipt-${r.id}`}
               className={cn(
                 'grid gap-1 py-3 sm:grid-cols-[1fr_auto] sm:items-start sm:gap-4',
                 r.voided && 'text-muted-foreground',
@@ -564,57 +567,57 @@ function ReceiptsSection({
         </ul>
       )}
       {correcting && (
-        <CorrectDialog receipt={correcting} onClose={() => setCorrecting(null)} w={w} />
+        <CorrectDialog oilReceipt={correcting} onClose={() => setCorrecting(null)} w={w} />
       )}
-      {voiding && <VoidDialog receipt={voiding} onClose={() => setVoiding(null)} w={w} />}
+      {voiding && <VoidDialog oilReceipt={voiding} onClose={() => setVoiding(null)} w={w} />}
       {discarding && (
-        <DiscardDialog receipt={discarding} onClose={() => setDiscarding(null)} w={w} />
+        <DiscardDialog oilReceipt={discarding} onClose={() => setDiscarding(null)} w={w} />
       )}
     </Section>
   );
 }
 
-/** What a refused correction or void says: the oil went into bottles, or the receipt is voided. */
+/** What a refused correction or void says: the oil went into bottles, or the oil receipt is voided. */
 function refusal(res: { status: number; body: unknown } | null, w: W): string {
   const body = (res?.body ?? {}) as { code?: string; neededGrams?: number; balanceGrams?: number };
   if (res?.status === 409 && body.code === 'oil_short')
-    return fill(w.receipts.short, {
+    return fill(w.oilReceipts.short, {
       needed: num(body.neededGrams ?? 0),
       balance: num(body.balanceGrams ?? 0),
     });
-  if (res?.status === 409 && body.code === 'voided') return w.receipts.alreadyVoided;
+  if (res?.status === 409 && body.code === 'voided') return w.oilReceipts.alreadyVoided;
   if (res?.status === 409 && (body.code === 'not_draft' || body.code === 'draft'))
-    return w.receipts.notDraft;
+    return w.oilReceipts.notDraft;
   if (res?.status === 409) return w.tryAgain;
   return w.failed;
 }
 
 function CorrectDialog({
-  receipt,
+  oilReceipt,
   onClose,
   w,
 }: {
-  receipt: OilReceipt;
+  oilReceipt: OilReceipt;
   onClose: () => void;
   w: W;
 }) {
-  const rs = w.receipts;
+  const rs = w.oilReceipts;
   const router = useRouter();
-  const [draft, setDraft] = useState<ReceiptDraft>({
-    supplier: receipt.supplier,
-    invoice: receipt.invoice,
-    receivedOn: receipt.receivedOn,
-    grams: String(receipt.grams),
-    pricePerGram: String(receipt.pricePerGram),
-    discountPercent: String(receipt.discountPercent),
-    importPercent: String(receipt.importPercent),
+  const [draft, setDraft] = useState<OilReceiptDraft>({
+    supplier: oilReceipt.supplier,
+    invoice: oilReceipt.invoice,
+    receivedOn: oilReceipt.receivedOn,
+    grams: String(oilReceipt.grams),
+    pricePerGram: String(oilReceipt.pricePerGram),
+    discountPercent: String(oilReceipt.discountPercent),
+    importPercent: String(oilReceipt.importPercent),
   });
   const [reason, setReason] = useState('');
   const [bad, setBad] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** A draft is confirmed as the invoice reads (no reason); a receipt is corrected with one. */
-  const confirming = receipt.draft;
+  /** A draft is confirmed as the invoice reads (no reason); an oil receipt is corrected with one. */
+  const confirming = oilReceipt.draft;
 
   async function save() {
     const read = readDraft(draft);
@@ -625,9 +628,12 @@ function CorrectDialog({
     setPending(true);
     const res = await (
       confirming
-        ? browserApi.warehouse.confirmReceipt({ params: { id: receipt.id }, body: read.value })
-        : browserApi.warehouse.correctReceipt({
-            params: { id: receipt.id },
+        ? browserApi.warehouse.confirmOilReceipt({
+            params: { id: oilReceipt.id },
+            body: read.value,
+          })
+        : browserApi.warehouse.correctOilReceipt({
+            params: { id: oilReceipt.id },
             body: { ...read.value, reason: reason.trim() },
           })
     ).catch(() => null);
@@ -645,7 +651,7 @@ function CorrectDialog({
         <DialogDescription>
           {confirming
             ? rs.confirmText
-            : [receipt.invoice, receipt.supplier].filter(Boolean).join(' · ')}
+            : [oilReceipt.invoice, oilReceipt.supplier].filter(Boolean).join(' · ')}
         </DialogDescription>
         <form
           className="mt-5 grid gap-4"
@@ -654,8 +660,8 @@ function CorrectDialog({
             void save();
           }}
         >
-          <ReceiptFields
-            idPrefix={`fix-${receipt.id}`}
+          <OilReceiptFields
+            idPrefix={`fix-${oilReceipt.id}`}
             draft={draft}
             bad={bad}
             onChange={(d) => {
@@ -665,7 +671,7 @@ function CorrectDialog({
             w={w}
           />
           {!confirming && (
-            <Field id={`fix-${receipt.id}-reason`} label={rs.reason}>
+            <Field id={`fix-${oilReceipt.id}-reason`} label={rs.reason}>
               <Input
                 autoComplete="off"
                 maxLength={STOCK_REASON_MAX}
@@ -680,7 +686,7 @@ function CorrectDialog({
           )}
           {bad.size > 0 && (
             <p role="alert" className="text-xs font-medium">
-              {w.receipt.invalid}
+              {w.oilReceipt.invalid}
             </p>
           )}
           {error && <Notice title={error} />}
@@ -698,8 +704,16 @@ function CorrectDialog({
   );
 }
 
-function VoidDialog({ receipt, onClose, w }: { receipt: OilReceipt; onClose: () => void; w: W }) {
-  const rs = w.receipts;
+function VoidDialog({
+  oilReceipt,
+  onClose,
+  w,
+}: {
+  oilReceipt: OilReceipt;
+  onClose: () => void;
+  w: W;
+}) {
+  const rs = w.oilReceipts;
   const router = useRouter();
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
@@ -709,7 +723,7 @@ function VoidDialog({ receipt, onClose, w }: { receipt: OilReceipt; onClose: () 
     if (!reason.trim()) return;
     setPending(true);
     const res = await browserApi.warehouse
-      .voidReceipt({ params: { id: receipt.id }, body: { reason: reason.trim() } })
+      .voidOilReceipt({ params: { id: oilReceipt.id }, body: { reason: reason.trim() } })
       .catch(() => null);
     setPending(false);
     if (res?.status === 200) {
@@ -721,12 +735,12 @@ function VoidDialog({ receipt, onClose, w }: { receipt: OilReceipt; onClose: () 
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
       <AlertDialogContent>
-        <AlertDialogTitle>{fill(rs.voidTitle, { invoice: receipt.invoice })}</AlertDialogTitle>
+        <AlertDialogTitle>{fill(rs.voidTitle, { invoice: oilReceipt.invoice })}</AlertDialogTitle>
         <AlertDialogDescription>
-          {fill(rs.voidText, { grams: num(receipt.grams) })}
+          {fill(rs.voidText, { grams: num(oilReceipt.grams) })}
         </AlertDialogDescription>
         <div className="mt-5 grid gap-3">
-          <Field id={`void-${receipt.id}-reason`} label={rs.reason}>
+          <Field id={`void-${oilReceipt.id}-reason`} label={rs.reason}>
             <Input
               autoComplete="off"
               maxLength={STOCK_REASON_MAX}
@@ -753,15 +767,15 @@ function VoidDialog({ receipt, onClose, w }: { receipt: OilReceipt; onClose: () 
 }
 
 function DiscardDialog({
-  receipt,
+  oilReceipt,
   onClose,
   w,
 }: {
-  receipt: OilReceipt;
+  oilReceipt: OilReceipt;
   onClose: () => void;
   w: W;
 }) {
-  const rs = w.receipts;
+  const rs = w.oilReceipts;
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -769,7 +783,7 @@ function DiscardDialog({
   async function discard() {
     setPending(true);
     const res = await browserApi.warehouse
-      .discardReceipt({ params: { id: receipt.id } })
+      .discardOilReceipt({ params: { id: oilReceipt.id } })
       .catch(() => null);
     setPending(false);
     if (res?.status === 200) {

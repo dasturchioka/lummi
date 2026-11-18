@@ -227,8 +227,7 @@ export const dictionaryInputSchema = z.object({
  */
 export const noteInputSchema = dictionaryInputSchema.superRefine((v, ctx) => {
   for (const path of ['nameRu', 'nameUz'] as const) {
-    if (v[path].includes(','))
-      ctx.addIssue({ code: 'custom', path: [path], message: 'comma_in_note' });
+    if (v[path].includes(',')) ctx.addIssue({ code: 'custom', path: [path], message: 'comma_in_note' });
   }
 });
 export type DictionaryInput = z.infer<typeof dictionaryInputSchema>;

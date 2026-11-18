@@ -1,11 +1,11 @@
-import { utcToTashkent } from '@lummi/contracts';
 import { asc, fragrances, sql, volumes, VOLUMES_ML, type Db, type StaffRow } from '@lummi/db';
 import { fill, type Language } from '@lummi/i18n';
 import { adminMessages } from '@lummi/i18n/admin';
 import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { AuditService } from '../audit/audit.service';
-import { MONEY, sheet, type Column } from '../reports/report-workbook';
+import { MONEY, sheet, tashkentWallClock, type Column } from '../reports/report-workbook';
+import { isOwner } from '../staff/staff.guard';
 import { DB } from '../tokens';
 import { fragranceOils, readOilContext } from './fragrance-oil';
 import { stockHistory } from './warehouse.service';
@@ -27,7 +27,7 @@ export class WarehouseExport {
    * entry is written in it.
    */
   async workbook(actor: StaffRow, language: Language): Promise<Buffer> {
-    const withValue = actor.role === 'owner';
+    const withValue = isOwner(actor);
     return this.db.transaction(
       async (tx) => {
         const ctx = await readOilContext(tx, withValue);
@@ -43,7 +43,7 @@ export class WarehouseExport {
         const counts = await tx
           .select({ fragranceId: volumes.fragranceId, ml: volumes.ml, onHand: volumes.onHand })
           .from(volumes);
-        const history = await stockHistory(tx, null);
+        const history = await stockHistory(tx, null, withValue);
         await this.audit.record(tx, {
           actor: { type: 'staff', id: actor.id },
           action: 'warehouse.exported',
@@ -129,10 +129,4 @@ export class WarehouseExport {
       { isolationLevel: 'repeatable read' },
     );
   }
-}
-
-/** An instant as the Tashkent wall clock in an Excel date cell (Excel dates carry no zone). */
-function tashkentWallClock(instant: Date): Date {
-  const t = utcToTashkent(instant);
-  return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }

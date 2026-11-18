@@ -5,6 +5,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { loadDiscovery } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
+import { isOwner } from '../staff/staff.guard';
 import { DB } from '../tokens';
 import { containsIgnoringApostrophes } from '../util/apostrophe-match';
 import { fragranceOils, readOilContext } from '../warehouse/fragrance-oil';
@@ -124,7 +125,7 @@ export class StockAdminService {
     ]);
     const q = query.q?.trim();
     const { volumes: rows, discovery } = await stockRows(this.db, lowThreshold, q);
-    const ctx = await readOilContext(this.db, viewer.role === 'owner');
+    const ctx = await readOilContext(this.db, isOwner(viewer));
     const oil = await fragranceOils(this.db, [...new Set(rows.map((r) => r.fragranceId!))], ctx);
     const matching = (r: StockRow) => matchesStockQuery(r, query, (id) => oil.get(id)?.level);
     const shown = rows.filter(matching);

@@ -135,8 +135,7 @@ export const adminMessages = defineMessages(
         locked: 'Слишком много неудачных попыток',
         lockedHint: 'Вход закрыт до {time}. Попробуйте снова после этого времени.',
         loginTaken: 'Такой логин уже занят. Выберите другой.',
-        inactiveMember:
-          'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
+        inactiveMember: 'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
         ownRole: 'Свою роль менять нельзя: попросите другого владельца.',
         lastOwner: 'В магазине должен остаться хотя бы один действующий владелец.',
         telegramOnly:
@@ -364,7 +363,8 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Сотрудники',
-        description: 'Кто может входить в панель и что кому открыто.',
+        description:
+          'Кто может входить в панель и что кому открыто.',
         add: 'Добавить сотрудника',
         addTitle: 'Новый сотрудник',
         roleChoice: 'Роль',
@@ -777,6 +777,13 @@ export const adminMessages = defineMessages(
           'catalog.note_updated': 'Изменена нота',
           'catalog.import_applied': 'Импорт каталога из Excel',
           'orders.exported': 'Выгрузка заказов в Excel',
+          'warehouse.oil_received': 'Приход масла',
+          'warehouse.oil_receipt_corrected': 'Исправлен приход масла',
+          'warehouse.oil_receipt_voided': 'Отменён приход масла',
+          'warehouse.oil_receipt_drafts_created': 'Черновики приходов масла по плану закупки',
+          'warehouse.oil_receipt_draft_discarded': 'Удалён черновик прихода масла',
+          'warehouse.bottled': 'Розлив',
+          'warehouse.exported': 'Выгрузка склада в Excel',
           'sets.discovery_changed': 'Изменён Discovery set: цена или состав',
           'sets.discovery_on_hand_changed': 'Изменён остаток Discovery set',
           'sets.discovery_photo_uploaded': 'Загружено фото Discovery set',
@@ -812,6 +819,8 @@ export const adminMessages = defineMessages(
           family: 'Семейство',
           note: 'Нота',
           discovery_set: 'Discovery set',
+          oil_receipt: 'Приход масла',
+          warehouse: 'Склад',
           promo_banner: 'Баннер',
           content_text: 'Текст',
           info_page: 'Инфо-страница',
@@ -893,13 +902,13 @@ export const adminMessages = defineMessages(
           onHand: 'Остаток: {old} → {new}',
           oilReceived: '{name}: приход масла {grams} г, накладная {invoice}, {supplier}',
           oilPrice: 'Цена {price} за 1 г, скидка {discount} %, доставка {import} %',
-          receiptCorrected: '{name}: исправлен приход, накладная {invoice}',
-          receiptVoided: '{name}: отменён приход {grams} г, накладная {invoice}',
+          oilReceiptCorrected: '{name}: исправлен приход, накладная {invoice}',
+          oilReceiptVoided: '{name}: отменён приход {grams} г, накладная {invoice}',
           bottled: '{name}: розлив {lines}',
           bottledLine: '{ml} мл × {qty}',
           bottledOil: 'Масла {grams} г, спирта {ml} мл',
           warehouseExported: 'Ароматов в файле: {fragrances}, записей истории: {moves}',
-          receiptDrafts: 'Черновики приходов по плану закупки: {count}, всего {grams} г',
+          oilReceiptDrafts: 'Черновики приходов по плану закупки: {count}, всего {grams} г',
           draftDiscarded: '{name}: удалён черновик прихода {grams} г',
           fromDraft: 'Подтверждён черновик из плана закупки',
           banner: 'Баннер «{title}»',
@@ -1321,8 +1330,7 @@ export const adminMessages = defineMessages(
           'Считается по сохранённой цене масла и настройкам себестоимости. Прибыль — цена минус себестоимость, без расходов на заказ: пакета, доставки, рекламы, налога.',
         costSettings: 'Настройки себестоимости',
         costAfterSave: 'Себестоимость каждого объёма появится здесь после сохранения аромата.',
-        costNoOil:
-          'Укажите цену масла и сохраните аромат: здесь появится себестоимость каждого объёма.',
+        costNoOil: 'Укажите цену масла и сохраните аромат: здесь появится себестоимость каждого объёма.',
         landedOil: 'Масло после скидки поставщика и доставки: {price} за 1 г',
         costParts: {
           oil: 'Масло',
@@ -1784,13 +1792,7 @@ export const adminMessages = defineMessages(
           many: '{total} промокодов',
           other: '{total} промокода',
         },
-        columns: {
-          code: 'Код',
-          uses: 'Использовано',
-          fulfilled: 'Выданные заказы',
-          net: 'Чистые продажи',
-          state: 'Состояние',
-        },
+        columns: { code: 'Код', uses: 'Использовано', fulfilled: 'Выданные заказы', net: 'Чистые продажи', state: 'Состояние' },
         report: 'Отчёт по коду',
         reportLabel: 'Отчёт по коду {code}: маркетинг',
         statsHint:
@@ -1828,8 +1830,7 @@ export const adminMessages = defineMessages(
         amountHint: 'Не больше суммы подходящих товаров: итог не уходит в минус.',
         /** A gift code's free item (ADR 0039): a fragrance and its volume, or the Discovery set. */
         gift: 'Подарок',
-        giftHint:
-          'Добавляется к заказу бесплатно, 1 шт. Если подарка нет в наличии, код не применяется.',
+        giftHint: 'Добавляется к заказу бесплатно, 1 шт. Если подарка нет в наличии, код не применяется.',
         giftChoose: 'Выберите аромат или набор',
         giftDiscovery: 'Discovery set',
         giftVolume: 'Объём',
@@ -2534,7 +2535,7 @@ export const adminMessages = defineMessages(
           empty: 'Укажите хотя бы один флакон.',
           invalid: 'Целое число от 0 до 10 000.',
         },
-        receipt: {
+        oilReceipt: {
           title: 'Приход масла',
           text: 'Как в накладной поставщика. Граммы добавятся к остатку масла.',
           supplier: 'Поставщик',
@@ -2548,7 +2549,7 @@ export const adminMessages = defineMessages(
           done: 'Приход записан: +{grams} г',
           invalid: 'Проверьте отмеченные поля.',
         },
-        receipts: {
+        oilReceipts: {
           title: 'Приходы масла',
           empty: 'Приходов пока нет.',
           line: '{grams} г · {price} за 1 г · скидка {discount}% · доставка {import}%',
@@ -2588,9 +2589,9 @@ export const adminMessages = defineMessages(
           limit: 'Здесь последние {n} записей, все — в Excel.',
         },
         kinds: {
-          receipt: 'Приход масла',
-          receipt_corrected: 'Приход исправлен',
-          receipt_voided: 'Приход отменён',
+          oil_receipt: 'Приход масла',
+          oil_receipt_corrected: 'Приход исправлен',
+          oil_receipt_voided: 'Приход отменён',
           bottling: 'Розлив',
           sale: 'Передан в BTS',
           returned: 'Вернулся на склад',
@@ -3380,7 +3381,8 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Xodimlar',
-        description: 'Panelga kim kira oladi va kimga nima ochiq.',
+        description:
+          'Panelga kim kira oladi va kimga nima ochiq.',
         add: 'Xodim qoʻshish',
         addTitle: 'Yangi xodim',
         roleChoice: 'Rol',
@@ -3404,7 +3406,8 @@ export const adminMessages = defineMessages(
           'Lotin harflari, raqamlar, nuqta, _ va -; 3 dan 32 belgigacha. Katta-kichik harf farqi yoʻq.',
         noLogin: 'loginsiz',
         password: 'Vaqtinchalik parol',
-        passwordHint: 'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
+        passwordHint:
+          'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
         pendingPassword: 'parol almashtirilishi kutilmoqda',
         addedTitle: 'Xodim qoʻshildi',
         addedText:
@@ -3800,6 +3803,13 @@ export const adminMessages = defineMessages(
           'catalog.note_updated': 'Nota oʻzgartirildi',
           'catalog.import_applied': 'Katalog Exceldan import qilindi',
           'orders.exported': 'Buyurtmalar Excelga yuklab olindi',
+          'warehouse.oil_received': 'Moy kirimi',
+          'warehouse.oil_receipt_corrected': 'Moy kirimi tuzatildi',
+          'warehouse.oil_receipt_voided': 'Moy kirimi bekor qilindi',
+          'warehouse.oil_receipt_drafts_created': 'Xarid rejasi boʻyicha moy kirimi qoralamalari',
+          'warehouse.oil_receipt_draft_discarded': 'Moy kirimi qoralamasi oʻchirildi',
+          'warehouse.bottled': 'Quyish',
+          'warehouse.exported': 'Ombor Excelga yuklab olindi',
           'sets.discovery_changed': 'Discovery set oʻzgartirildi: narx yoki tarkib',
           'sets.discovery_on_hand_changed': 'Discovery set qoldigʻi oʻzgartirildi',
           'sets.discovery_photo_uploaded': 'Discovery set rasmi yuklandi',
@@ -3835,6 +3845,8 @@ export const adminMessages = defineMessages(
           family: 'Oila',
           note: 'Nota',
           discovery_set: 'Discovery set',
+          oil_receipt: 'Moy kirimi',
+          warehouse: 'Ombor',
           promo_banner: 'Banner',
           content_text: 'Matn',
           info_page: 'Ma’lumot sahifasi',
@@ -3916,13 +3928,13 @@ export const adminMessages = defineMessages(
           onHand: 'Qoldiq: {old} → {new}',
           oilReceived: '{name}: {grams} g moy kirimi, yuk xati {invoice}, {supplier}',
           oilPrice: '1 g narxi {price}, chegirma {discount} %, yetkazish {import} %',
-          receiptCorrected: '{name}: kirim tuzatildi, yuk xati {invoice}',
-          receiptVoided: '{name}: {grams} g kirim bekor qilindi, yuk xati {invoice}',
+          oilReceiptCorrected: '{name}: kirim tuzatildi, yuk xati {invoice}',
+          oilReceiptVoided: '{name}: {grams} g kirim bekor qilindi, yuk xati {invoice}',
           bottled: '{name}: quyish {lines}',
           bottledLine: '{ml} ml × {qty}',
           bottledOil: '{grams} g moy, {ml} ml spirt',
           warehouseExported: 'Fayldagi atirlar: {fragrances}, tarix yozuvlari: {moves}',
-          receiptDrafts: 'Xarid rejasi boʻyicha kirim qoralamalari: {count}, jami {grams} g',
+          oilReceiptDrafts: 'Xarid rejasi boʻyicha kirim qoralamalari: {count}, jami {grams} g',
           draftDiscarded: '{name}: {grams} g kirim qoralamasi oʻchirildi',
           fromDraft: 'Xarid rejasidagi qoralama tasdiqlandi',
           banner: '«{title}» banneri',
@@ -4158,8 +4170,7 @@ export const adminMessages = defineMessages(
           cancel: 'Bekor qilish',
           needsPhoto: 'Bannerni yoqish uchun rasm yuklang.',
           title: 'Sarlavha',
-          titleHint:
-            'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
+          titleHint: 'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
           subtitle: 'Qisqa matn',
           subtitleHint:
             'Ikki qator koʻrinadi, taxminan 55 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi: asosiysini boshida yozing.',
@@ -4352,8 +4363,7 @@ export const adminMessages = defineMessages(
           'Saqlangan moy narxi va tannarx sozlamalari boʻyicha hisoblanadi. Foyda — narx minus tannarx, buyurtma xarajatlarisiz: paket, yetkazib berish, reklama, soliq.',
         costSettings: 'Tannarx sozlamalari',
         costAfterSave: 'Har bir hajmning tannarxi ifor saqlangandan keyin shu yerda chiqadi.',
-        costNoOil:
-          'Moy narxini kiriting va iforni saqlang: bu yerda har bir hajmning tannarxi chiqadi.',
+        costNoOil: 'Moy narxini kiriting va iforni saqlang: bu yerda har bir hajmning tannarxi chiqadi.',
         landedOil: 'Yetkazib beruvchi chegirmasi va yetkazishdan keyin moy: 1 g uchun {price}',
         costParts: {
           oil: 'Moy',
@@ -4822,13 +4832,7 @@ export const adminMessages = defineMessages(
           many: '{total} ta promokod',
           other: '{total} ta promokod',
         },
-        columns: {
-          code: 'Kod',
-          uses: 'Foydalanilgan',
-          fulfilled: 'Yetkazilgan buyurtmalar',
-          net: 'Sof savdo',
-          state: 'Holat',
-        },
+        columns: { code: 'Kod', uses: 'Foydalanilgan', fulfilled: 'Yetkazilgan buyurtmalar', net: 'Sof savdo', state: 'Holat' },
         report: 'Kod hisoboti',
         reportLabel: '{code} kodi hisoboti: marketing',
         statsHint:
@@ -5568,7 +5572,7 @@ export const adminMessages = defineMessages(
           empty: 'Kamida bitta flakon kiriting.',
           invalid: '0 dan 10 000 gacha butun son.',
         },
-        receipt: {
+        oilReceipt: {
           title: 'Moy kirimi',
           text: 'Yetkazib beruvchining yuk xatidagidek. Grammlar moy qoldigʻiga qoʻshiladi.',
           supplier: 'Yetkazib beruvchi',
@@ -5582,7 +5586,7 @@ export const adminMessages = defineMessages(
           done: 'Kirim yozildi: +{grams} g',
           invalid: 'Belgilangan maydonlarni tekshiring.',
         },
-        receipts: {
+        oilReceipts: {
           title: 'Moy kirimlari',
           empty: 'Hozircha kirim yoʻq.',
           line: '{grams} g · 1 g {price} · chegirma {discount}% · yetkazish {import}%',
@@ -5622,9 +5626,9 @@ export const adminMessages = defineMessages(
           limit: 'Bu yerda oxirgi {n} ta yozuv, hammasi Excelda.',
         },
         kinds: {
-          receipt: 'Moy kirimi',
-          receipt_corrected: 'Kirim tuzatildi',
-          receipt_voided: 'Kirim bekor qilindi',
+          oil_receipt: 'Moy kirimi',
+          oil_receipt_corrected: 'Kirim tuzatildi',
+          oil_receipt_voided: 'Kirim bekor qilindi',
           bottling: 'Quyish',
           sale: 'BTSga topshirildi',
           returned: 'Omborga qaytdi',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultCostSettings, liquidFromOil, type LiquidSettings } from '../src/cost/unit-cost';
-import { bottlingNeeds, oilLevel, oilValue, receiptCost } from '../src/warehouse/oil';
+import { bottlingNeeds, oilLevel, oilValue, oilReceiptCost } from '../src/warehouse/oil';
 
 /**
  * Seam 2 (ADR 0028): the warehouse's arithmetic (ADR 0041) on top of the cost model's one liquid
@@ -87,14 +87,19 @@ describe('what a receipt cost', () => {
   it('is the invoice price less the discount plus the delivery to Termez, per gram and in all', () => {
     // 4 000 × 0.91 × 1.03 = 3 749.2 so'm per gram; × 1 500 g = 5 623 800
     expect(
-      receiptCost({ oilMg: 1_500_000, pricePerGram: 4000, discountPercent: 9, importPercent: 3 }),
+      oilReceiptCost({
+        oilMg: 1_500_000,
+        pricePerGram: 4000,
+        discountPercent: 9,
+        importPercent: 3,
+      }),
     ).toEqual({ landedPerGram: 3749, total: 5_623_800 });
   });
 
   it('rounds the total once, half up, from the unrounded price per gram', () => {
     // 2 150 × 0.9 × 1.025 = 1 983.375 so'm/g; × 0.5 g = 991.6875 → 992 (per gram shows 1 983)
     expect(
-      receiptCost({ oilMg: 500, pricePerGram: 2150, discountPercent: 10, importPercent: 2.5 }),
+      oilReceiptCost({ oilMg: 500, pricePerGram: 2150, discountPercent: 10, importPercent: 2.5 }),
     ).toEqual({ landedPerGram: 1983, total: 992 });
   });
 });

@@ -37,7 +37,7 @@ import { slugify } from '../catalog/slug';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
-import { retryTransientOnce, TryAgainError } from '../util/transient';
+import { retryOrTryAgain } from '../util/transient';
 import { recordCountChanges, recordStockMove } from '../warehouse/stock-moves';
 
 export type Failure = {
@@ -58,14 +58,8 @@ const fail = (reason: Failure['reason'], fields?: string[]): Failure => ({
  * A transaction that locks volume rows, retried once on a deadlock or serialization failure
  * (checkout locks the same rows); a second one is the clean `try_again` instead of a 500.
  */
-async function transient<T>(run: () => Promise<Outcome<T>>): Promise<Outcome<T>> {
-  try {
-    return await retryTransientOnce(run);
-  } catch (e) {
-    if (e instanceof TryAgainError) return fail('try_again');
-    throw e;
-  }
-}
+const transient = <T>(run: () => Promise<Outcome<T>>): Promise<Outcome<T>> =>
+  retryOrTryAgain(run, fail('try_again'));
 
 /** 23505, whether Drizzle wrapped the driver error or not. */
 export function isUniqueViolation(e: unknown): boolean {
@@ -259,12 +253,7 @@ export class CatalogAdminService {
       .from(volumes)
       .where(eq(volumes.fragranceId, id))
       .orderBy(asc(volumes.ml));
-    return fragranceCosts(
-      f.oilPrice,
-      vols,
-      await readCostSettings(this.db),
-      this.edges.clock.now(),
-    );
+    return fragranceCosts(f.oilPrice, vols, await readCostSettings(this.db), this.edges.clock.now());
   }
 
   async create(actor: StaffRow, raw: FragranceInput): Promise<Outcome<FragranceAdmin>> {

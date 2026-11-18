@@ -1,4 +1,4 @@
-CREATE TYPE "public"."stock_move_kind" AS ENUM('receipt', 'receipt_corrected', 'receipt_voided', 'bottling', 'sale', 'returned', 'correction');--> statement-breakpoint
+CREATE TYPE "public"."stock_move_kind" AS ENUM('oil_receipt', 'oil_receipt_corrected', 'oil_receipt_voided', 'bottling', 'sale', 'returned', 'correction');--> statement-breakpoint
 CREATE TABLE "bottlings" (
 	"id" bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "bottlings_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1),
 	"fragrance_id" bigint NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE "stock_moves" (
 	"kind" "stock_move_kind" NOT NULL,
 	"oil_mg" integer DEFAULT 0 NOT NULL,
 	"bottles" jsonb DEFAULT '{}'::jsonb NOT NULL,
-	"receipt_id" bigint,
+	"oil_receipt_id" bigint,
 	"bottling_id" bigint,
 	"order_id" bigint,
 	"reason" text,
@@ -45,13 +45,12 @@ CREATE TABLE "stock_moves" (
 );
 --> statement-breakpoint
 ALTER TABLE "fragrances" ADD COLUMN "oil_mg" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE "bottlings" ADD CONSTRAINT "bottlings_fragrance_id_fragrances_id_fk" FOREIGN KEY ("fragrance_id") REFERENCES "public"."fragrances"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "oil_receipts" ADD CONSTRAINT "oil_receipts_fragrance_id_fragrances_id_fk" FOREIGN KEY ("fragrance_id") REFERENCES "public"."fragrances"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "stock_moves" ADD CONSTRAINT "stock_moves_receipt_id_oil_receipts_id_fk" FOREIGN KEY ("receipt_id") REFERENCES "public"."oil_receipts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "stock_moves" ADD CONSTRAINT "stock_moves_bottling_id_bottlings_id_fk" FOREIGN KEY ("bottling_id") REFERENCES "public"."bottlings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "bottlings" ADD CONSTRAINT "bottlings_fragrance_id_fragrances_id_fk" FOREIGN KEY ("fragrance_id") REFERENCES "public"."fragrances"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oil_receipts" ADD CONSTRAINT "oil_receipts_fragrance_id_fragrances_id_fk" FOREIGN KEY ("fragrance_id") REFERENCES "public"."fragrances"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stock_moves" ADD CONSTRAINT "stock_moves_oil_receipt_id_oil_receipts_id_fk" FOREIGN KEY ("oil_receipt_id") REFERENCES "public"."oil_receipts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stock_moves" ADD CONSTRAINT "stock_moves_bottling_id_bottlings_id_fk" FOREIGN KEY ("bottling_id") REFERENCES "public"."bottlings"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "stock_moves" ADD CONSTRAINT "stock_moves_order_id_orders_id_fk" FOREIGN KEY ("order_id") REFERENCES "public"."orders"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "bottlings_fragrance_idx" ON "bottlings" USING btree ("fragrance_id","id");--> statement-breakpoint
 CREATE INDEX "oil_receipts_fragrance_idx" ON "oil_receipts" USING btree ("fragrance_id","id");--> statement-breakpoint
 CREATE INDEX "stock_moves_fragrance_idx" ON "stock_moves" USING btree ("fragrance_id","id");--> statement-breakpoint
-CREATE INDEX "stock_moves_created_idx" ON "stock_moves" USING btree ("created_at");--> statement-breakpoint
 ALTER TABLE "fragrances" ADD CONSTRAINT "fragrances_oil_mg_check" CHECK ("fragrances"."oil_mg" >= 0);

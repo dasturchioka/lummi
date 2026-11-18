@@ -58,7 +58,7 @@ async function page(id: number, as: StaffSession = owner): Promise<WarehouseFrag
   return res.body;
 }
 async function receive(id: number, over: Partial<OilReceiptInput> = {}) {
-  const res = await owner.client.admin.warehouse.receive({
+  const res = await owner.client.admin.warehouse.receiveOil({
     params: { id },
     body: { ...RECEIPT, ...over },
   });
@@ -207,14 +207,14 @@ describe('correcting and voiding a receipt', () => {
   it('moves the balance by the change in grams, and a void takes the receipt off', async () => {
     const id = await fragranceId();
     const r = await receive(id);
-    const fixed = await owner.client.admin.warehouse.correctReceipt({
+    const fixed = await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 150, pricePerGram: 4100, reason: 'Опечатка в граммах' },
     });
     expect(fixed.status === 200 && fixed.body).toMatchObject({ grams: 150, pricePerGram: 4100 });
     expect((await page(id)).oil.oilGrams).toBe(150);
 
-    const voided = await owner.client.admin.warehouse.voidReceipt({
+    const voided = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: r.id },
       body: { reason: 'Накладная ошибочная' },
     });
@@ -225,12 +225,12 @@ describe('correcting and voiding a receipt', () => {
     expect((await page(id)).oil.oilGrams).toBe(0);
 
     // a voided receipt stays voided
-    const again = await owner.client.admin.warehouse.voidReceipt({
+    const again = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: r.id },
       body: { reason: 'Ещё раз' },
     });
     expect(again.status === 409 && again.body).toEqual({ code: 'voided' });
-    const late = await owner.client.admin.warehouse.correctReceipt({
+    const late = await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, reason: 'Поздно' },
     });
@@ -241,7 +241,7 @@ describe('correcting and voiding a receipt', () => {
     const id = await fragranceId();
     const r = await receive(id);
     await bottle(id, [{ ml: 50, quantity: 2 }]); // 30.9 g: 69.1 g left
-    const voided = await owner.client.admin.warehouse.voidReceipt({
+    const voided = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: r.id },
       body: { reason: 'Накладная ошибочная' },
     });
@@ -251,7 +251,7 @@ describe('correcting and voiding a receipt', () => {
       balanceGrams: 69.1,
       shortGrams: 30.9,
     });
-    const fixed = await owner.client.admin.warehouse.correctReceipt({
+    const fixed = await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 20, reason: 'Опечатка' },
     });
@@ -267,7 +267,7 @@ describe('correcting and voiding a receipt', () => {
   it('needs a reason', async () => {
     const id = await fragranceId();
     const r = await receive(id);
-    const res = await fetch(`${t.baseUrl}/admin/warehouse/receipts/${r.id}/void`, {
+    const res = await fetch(`${t.baseUrl}/admin/warehouse/oil-receipts/${r.id}/void`, {
       method: 'POST',
       headers: { cookie: owner.cookie, 'content-type': 'application/json' },
       body: JSON.stringify({ reason: '  ' }),
@@ -278,7 +278,7 @@ describe('correcting and voiding a receipt', () => {
 
 describe('draft receipts from the purchase plan (#78)', () => {
   async function drafts(lines: { fragranceId: number; grams: number }[], as = owner) {
-    return as.client.admin.warehouse.draftReceipts({ body: { lines } });
+    return as.client.admin.warehouse.draftOilReceipts({ body: { lines } });
   }
 
   it("creates drafts at the fragrance's oil price and the settings' percents, touching no balance", async () => {
@@ -301,7 +301,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
 
     const pa = await page(ida);
     expect(pa.oil).toMatchObject({ oilGrams: 0 });
-    expect(pa.receipts).toEqual([
+    expect(pa.oilReceipts).toEqual([
       expect.objectContaining({
         draft: true,
         grams: 1000,
@@ -315,7 +315,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
       }),
     ]);
     expect(pa.history).toEqual([]);
-    expect((await page(idb)).receipts?.[0]).toMatchObject({
+    expect((await page(idb)).oilReceipts?.[0]).toMatchObject({
       draft: true,
       supplier: '',
       grams: 2500,
@@ -324,7 +324,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
     const list = await owner.client.admin.stock.list({ query: { pageSize: 50 } });
     if (list.status !== 200) throw new Error('stock');
     expect(list.body.oil.find((o) => o.fragranceId === ida)?.drafts).toBe(1);
-    const [audit] = await audits('warehouse.receipt_drafts_created');
+    const [audit] = await audits('warehouse.oil_receipt_drafts_created');
     expect(audit).toMatchObject({ actorId: owner.staff.id });
     expect(audit?.payload).toMatchObject({ count: 2, grams: 3500 });
   });
@@ -333,8 +333,8 @@ describe('draft receipts from the purchase plan (#78)', () => {
     const id = await fragranceId();
     await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
     await drafts([{ fragranceId: id, grams: 1000 }]);
-    const draft = (await page(id)).receipts![0]!;
-    const done = await owner.client.admin.warehouse.confirmReceipt({
+    const draft = (await page(id)).oilReceipts![0]!;
+    const done = await owner.client.admin.warehouse.confirmOilReceipt({
       params: { id: draft.id },
       body: { ...RECEIPT, grams: 980 },
     });
@@ -346,12 +346,12 @@ describe('draft receipts from the purchase plan (#78)', () => {
     const p = await page(id);
     expect(p.oil.oilGrams).toBe(980);
     expect(p.history.map((m) => [m.kind, m.oilGrams, m.invoice])).toEqual([
-      ['receipt', 980, 'INV-0001'],
+      ['oil_receipt', 980, 'INV-0001'],
     ]);
     const [received] = await audits('warehouse.oil_received');
     expect(received?.payload).toMatchObject({ grams: 980, fromDraft: true });
 
-    const again = await owner.client.admin.warehouse.confirmReceipt({
+    const again = await owner.client.admin.warehouse.confirmOilReceipt({
       params: { id: draft.id },
       body: RECEIPT,
     });
@@ -362,26 +362,26 @@ describe('draft receipts from the purchase plan (#78)', () => {
     const id = await fragranceId();
     await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
     await drafts([{ fragranceId: id, grams: 1000 }]);
-    const draft = (await page(id)).receipts![0]!;
+    const draft = (await page(id)).oilReceipts![0]!;
     expect((await page(id)).oil.value?.oil).toBe(0);
-    const fixed = await owner.client.admin.warehouse.correctReceipt({
+    const fixed = await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: draft.id },
       body: { ...RECEIPT, reason: 'x' },
     });
     expect(fixed.status === 409 && fixed.body).toEqual({ code: 'draft' });
-    const voided = await owner.client.admin.warehouse.voidReceipt({
+    const voided = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: draft.id },
       body: { reason: 'x' },
     });
     expect(voided.status === 409 && voided.body).toEqual({ code: 'draft' });
 
-    const gone = await owner.client.admin.warehouse.discardReceipt({ params: { id: draft.id } });
+    const gone = await owner.client.admin.warehouse.discardOilReceipt({ params: { id: draft.id } });
     expect(gone.status === 200 && gone.body).toEqual({ discarded: true });
-    expect((await page(id)).receipts).toEqual([]);
-    expect(await audits('warehouse.receipt_draft_discarded')).toHaveLength(1);
+    expect((await page(id)).oilReceipts).toEqual([]);
+    expect(await audits('warehouse.oil_receipt_draft_discarded')).toHaveLength(1);
 
     const real = await receive(id);
-    const keep = await owner.client.admin.warehouse.discardReceipt({ params: { id: real.id } });
+    const keep = await owner.client.admin.warehouse.discardOilReceipt({ params: { id: real.id } });
     expect(keep.status === 409 && keep.body).toEqual({ code: 'not_draft' });
   });
 
@@ -396,7 +396,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
       code: 'invalid',
       fields: ['lines.0.fragranceId', 'lines.1.fragranceId'],
     });
-    expect((await page(id)).receipts).toEqual([]);
+    expect((await page(id)).oilReceipts).toEqual([]);
     expect((await drafts([{ fragranceId: id, grams: 1 }], manager)).status).toBe(403);
   });
 });
@@ -405,12 +405,12 @@ describe('the audit', () => {
   it('names the actor of every receipt, correction, void and bottling', async () => {
     const id = await fragranceId();
     const r = await receive(id);
-    await owner.client.admin.warehouse.correctReceipt({
+    await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 120, reason: 'Довесили' },
     });
     await bottle(id, [{ ml: 10, quantity: 2 }]);
-    await owner.client.admin.warehouse.voidReceipt({
+    await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: (await receive(id, { invoice: 'INV-0002' })).id },
       body: { reason: 'Дубль' },
     });
@@ -422,7 +422,7 @@ describe('the audit', () => {
       invoice: 'INV-0001',
       supplier: 'Test Oils',
     });
-    const [corrected] = await audits('warehouse.receipt_corrected');
+    const [corrected] = await audits('warehouse.oil_receipt_corrected');
     expect(corrected).toMatchObject({ actorId: owner.staff.id, targetType: 'oil_receipt' });
     expect(corrected?.payload).toMatchObject({ reason: 'Довесили', grams: [100, 120] });
     const [bottled] = await audits('warehouse.bottled');
@@ -432,20 +432,34 @@ describe('the audit', () => {
       oilGrams: 6.18,
       ethanolMl: 14,
     });
-    const [voided] = await audits('warehouse.receipt_voided');
+    const [voided] = await audits('warehouse.oil_receipt_voided');
     expect(voided?.payload).toMatchObject({ reason: 'Дубль', grams: 100, invoice: 'INV-0002' });
   });
 });
 
 describe('who may do what', () => {
-  it('keeps receipts and values to the owner; a manager bottles and reads the oil', async () => {
+  it('keeps oil receipts and values to the owner; a manager bottles and reads the oil', async () => {
     const id = await fragranceId();
-    const refused = await manager.client.admin.warehouse.receive({ params: { id }, body: RECEIPT });
+    const refused = await manager.client.admin.warehouse.receiveOil({
+      params: { id },
+      body: RECEIPT,
+    });
     expect(refused.status).toBe(403);
     await receive(id);
     const seen = await page(id, manager);
-    expect(seen).toMatchObject({ receipts: null, receiptDefaults: null });
+    expect(seen).toMatchObject({ oilReceipts: null, oilReceiptDefaults: null });
     expect(seen.oil).toMatchObject({ oilGrams: 100, value: null });
+    // the history says oil came in, but not from whom or on which invoice
+    expect(seen.history[0]).toMatchObject({
+      kind: 'oil_receipt',
+      oilGrams: 100,
+      invoice: null,
+      supplier: null,
+    });
+    expect((await page(id)).history[0]).toMatchObject({
+      invoice: 'INV-0001',
+      supplier: 'Test Oils',
+    });
     expect((await bottle(id, [{ ml: 10, quantity: 1 }], manager)).status).toBe(201);
     expect((await t.client.admin.warehouse.get({ params: { id } })).status).toBe(401);
   });
@@ -460,8 +474,8 @@ describe('who may do what', () => {
     await receive(id, { grams: 1000 });
     await receive(id, { grams: 500, pricePerGram: 2150, discountPercent: 10, importPercent: 2.5 });
     const p = await page(id);
-    expect(p.receipts?.map((r) => r.grams)).toEqual([500, 1000]);
-    expect(p.receiptDefaults).toEqual({
+    expect(p.oilReceipts?.map((r) => r.grams)).toEqual([500, 1000]);
+    expect(p.oilReceiptDefaults).toEqual({
       supplier: 'Test Oils',
       pricePerGram: 3950,
       discountPercent: 9,
@@ -486,7 +500,7 @@ describe('the history', () => {
     const [slug] = await slugsOf(t, 1);
     const id = await fragranceId(slug);
     const r = await receive(id);
-    await owner.client.admin.warehouse.correctReceipt({
+    await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 110, reason: 'Довесили' },
     });
@@ -515,8 +529,8 @@ describe('the history', () => {
       ['sale', 0, [{ ml: 10, change: -2 }]],
       ['correction', 0, [{ ml: 10, change: -1 }]],
       ['bottling', -9.27, [{ ml: 10, change: 3 }]],
-      ['receipt_corrected', 10, []],
-      ['receipt', 100, []],
+      ['oil_receipt_corrected', 10, []],
+      ['oil_receipt', 100, []],
     ]);
     expect(history[0]).toMatchObject({ orderNumber: order.number, actorName: manager.staff.name });
     expect(history[2]).toMatchObject({
@@ -642,6 +656,12 @@ describe('the Excel export', () => {
     const mb = new ExcelJS.Workbook();
     await mb.xlsx.load(await theirs.arrayBuffer());
     expect((mb.worksheets[0]!.getRow(1).values as unknown[]).slice(1)).toHaveLength(6);
+    // nor the invoice and supplier in the history sheet: the document cell of the oil receipt is empty
+    const theirHistory = mb.worksheets[1]!;
+    const documentColumn = (theirHistory.getRow(1).values as unknown[]).indexOf('Hujjat');
+    expect(documentColumn).toBeGreaterThan(0);
+    const cells = [2, 3].map((n) => theirHistory.getRow(n).getCell(documentColumn).value ?? '');
+    expect(cells).toEqual(['', '']);
     expect(await audits('warehouse.exported')).toHaveLength(2);
   });
 });

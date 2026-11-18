@@ -51,6 +51,19 @@ export async function retryTransientOnce<T>(run: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * `retryTransientOnce` for a service that answers with an outcome: a second transient failure
+ * becomes `tryAgain` (the caller's 409 `try_again`) instead of a thrown error.
+ */
+export async function retryOrTryAgain<T>(run: () => Promise<T>, tryAgain: T): Promise<T> {
+  try {
+    return await retryTransientOnce(run);
+  } catch (e) {
+    if (e instanceof TryAgainError) return tryAgain;
+    throw e;
+  }
+}
+
+/**
  * The unique index a write ran into (SQLSTATE 23505), or null for any other error, whether or not
  * Drizzle wrapped the driver error.
  */

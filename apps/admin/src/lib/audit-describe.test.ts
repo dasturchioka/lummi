@@ -323,14 +323,14 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     [],
   ],
   [
-    'warehouse.receipt_corrected',
+    'warehouse.oil_receipt_corrected',
     { fragrance: 'Tygar', invoice: 'INV-1', reason: 'Опечатка', grams: [100, 120] },
     {},
     ['Tygar: исправлен приход, накладная INV-1', 'Граммы: 100 → 120', 'Причина: Опечатка'],
     ['Tygar: kirim tuzatildi, yuk xati INV-1', 'Grammlar: 100 → 120', 'Sabab: Опечатка'],
   ],
   [
-    'warehouse.receipt_voided',
+    'warehouse.oil_receipt_voided',
     { fragrance: 'Tygar', supplier: 'Test Oils', invoice: 'INV-1', grams: 100, reason: 'Дубль' },
     {},
     ['Tygar: отменён приход 100 г, накладная INV-1', 'Причина: Дубль'],
@@ -377,14 +377,14 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     [],
   ],
   [
-    'warehouse.receipt_drafts_created',
+    'warehouse.oil_receipt_drafts_created',
     { count: 2, grams: 3500, fragrances: ['Tygar', 'Ombre Leather'] },
     {},
     ['Черновики приходов по плану закупки: 2, всего 3 500 г', 'Tygar, Ombre Leather'],
     ['Xarid rejasi boʻyicha kirim qoralamalari: 2, jami 3 500 g', 'Tygar, Ombre Leather'],
   ],
   [
-    'warehouse.receipt_draft_discarded',
+    'warehouse.oil_receipt_draft_discarded',
     { fragrance: 'Tygar', grams: 1000 },
     {},
     ['Tygar: удалён черновик прихода 1 000 г'],
@@ -656,6 +656,16 @@ describe('audit details read as text (#63)', () => {
     expect(say(e, 'ru')).toEqual(ruLines.map(flat));
     if (uzLines.length || ruLines.length === 0) expect(say(e, 'uz')).toEqual(uzLines.map(flat));
     for (const line of say(e, 'uz')) expect(line).not.toMatch(/[{}[\]"]/);
+  });
+
+  it('names every warehouse action and target in both languages (#76)', () => {
+    const actions = apiActions().filter((a) => a.startsWith('warehouse.'));
+    expect(actions.length).toBeGreaterThanOrEqual(7);
+    for (const lang of [ru, uz]) {
+      for (const a of actions) expect(lang.audit.actions, a).toHaveProperty([a]);
+      for (const target of ['oil_receipt', 'warehouse'])
+        expect(lang.audit.targets, target).toHaveProperty([target]);
+    }
   });
 
   it('every action the API writes has a describer (read from the API source)', () => {

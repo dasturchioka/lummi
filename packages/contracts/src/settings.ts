@@ -72,11 +72,7 @@ function costSom<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; min?: number },
 ) {
   return {
-    schema: z
-      .number()
-      .int()
-      .min(meta.min ?? 0)
-      .max(MAX_PRICE),
+    schema: z.number().int().min(meta.min ?? 0).max(MAX_PRICE),
     default: def,
     area,
     unit: 'sum' as const,
@@ -92,10 +88,7 @@ function costPercent<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; max?: number },
 ) {
   return {
-    schema: z
-      .number()
-      .min(0)
-      .max(meta.max ?? 100),
+    schema: z.number().min(0).max(meta.max ?? 100),
     default: def,
     area,
     unit: 'none' as const,
@@ -871,10 +864,7 @@ export const settingDefinitions = {
     max: 50,
   }),
   'cost.liquid.oilImportPercent': costPercent('costLiquid', 3, {
-    label: {
-      ru: 'Доставка масла до Термеза, % к цене',
-      uz: 'Moyni Termizgacha yetkazish, narxga %',
-    },
+    label: { ru: 'Доставка масла до Термеза, % к цене', uz: 'Moyni Termizgacha yetkazish, narxga %' },
     hint: {
       ru: 'Добавляется к цене масла после скидки поставщика.',
       uz: 'Yetkazib beruvchi chegirmasidan keyingi moy narxiga qoʻshiladi.',
