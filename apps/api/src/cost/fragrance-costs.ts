@@ -1,11 +1,12 @@
 import type { FragranceCosts, VolumeCost } from '@lummi/contracts';
 import { activeMarkdown, volumePrice } from '../pricing/quote';
-import { bottleCost, landedOilPrice, type BottleMl, type CostSettings } from './unit-cost';
+import { bottleCost, isBottleMl, landedOilPrice, som, type CostSettings } from './unit-cost';
 
 /**
  * The catalog page's cost block (ADR 0040): each volume's unit cost against its price and, while
  * one is active, its markdown price. Profit here is price less unit cost, before any order costs
- * (mailer, delivery, ads, tax): those belong to an order (#77). No oil price, no cost.
+ * (mailer, delivery, ads, tax): those belong to an order (#77). No oil price, no cost. Rounding
+ * is the model's one rule (`som`).
  */
 export function fragranceCosts(
   oilPrice: number | null,
@@ -14,7 +15,7 @@ export function fragranceCosts(
   now: Date,
 ): FragranceCosts {
   const volumes = vols.map((v): VolumeCost => {
-    const cost = oilPrice === null ? null : bottleCost(oilPrice, v.ml as BottleMl, s);
+    const cost = oilPrice === null || !isBottleMl(v.ml) ? null : bottleCost(oilPrice, v.ml, s);
     const markdownPrice = activeMarkdown(volumePrice(v), now);
     const profit = (price: number | null) =>
       cost === null || price === null ? null : price - cost.total;
@@ -35,7 +36,7 @@ export function fragranceCosts(
   });
   return {
     oilPrice,
-    landedOilPrice: oilPrice === null ? null : Math.round(landedOilPrice(oilPrice, s.liquid)),
+    landedOilPrice: oilPrice === null ? null : som(landedOilPrice(oilPrice, s.liquid)),
     volumes,
   };
 }

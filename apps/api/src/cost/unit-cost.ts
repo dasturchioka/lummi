@@ -5,10 +5,10 @@ import { settingDefinitions, type SettingKey, type UnitCost } from '@lummi/contr
  * catalog page, bottling #76, order profit #77, the planner #78, the 5 ml set and gift sample #79)
  * comes here with the settings read once (`readCostSettings`) and a fragrance's oil price.
  *
- * Rounding, stated once: the arithmetic is the calculator's own, in the same order, on unrounded
- * numbers; each figure of the result is then rounded to whole so'm, half up (`Math.round`), exactly
- * as the calculator shows it. `total` is the unrounded total rounded, so the rounded parts can
- * differ from it by a so'm or two.
+ * Rounding, stated once (`som`): the arithmetic is the calculator's own on unrounded numbers, one
+ * formula for every filled bottle (`vial`); each figure of the result is then rounded to whole so'm,
+ * half up, exactly as the calculator shows it. `total` is the unrounded total rounded, so the
+ * rounded parts can differ from it by a so'm or two.
  */
 
 /** A bottle size the cost is known for: 5 ml exists for sets and samples only (#79). */
@@ -152,66 +152,78 @@ export function defaultCostSettings(): CostSettings {
   );
 }
 
-const som = (x: number) => Math.round(x);
+/**
+ * The one rounding rule of the model: unrounded so'm to whole so'm, half up, as the calculator
+ * shows its figures. Every cost figure that leaves this module passes through it once.
+ */
+export const som = (x: number): number => Math.round(x);
+
+const BOTTLE_MLS: readonly number[] = [5, 10, 30, 50] satisfies BottleMl[];
+/** A volume the model knows a bottle for. */
+export const isBottleMl = (ml: number): ml is BottleMl => BOTTLE_MLS.includes(ml);
 
 /** Oil so'm per gram after the supplier discount and delivery to Termez (calculator `oilG`). */
 export function landedOilPrice(oilPrice: number, l: LiquidSettings): number {
   return oilPrice * (1 - l.oilDiscountPercent / 100) * (1 + l.oilImportPercent / 100);
 }
 
-/**
- * What filling `ml` of perfume uses up, the filling loss included: grams of oil and ml of ethanol
- * (unrounded). The oil part of `bottleCost` is these grams at the landed price.
- */
-export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number; ethanolMl: number } {
-  const filled = ml * (1 + l.fillingLossPercent / 100);
-  return {
-    oilGrams: ((filled * l.oilPercent) / 100) * l.oilDensity,
-    ethanolMl: (filled * l.ethanolPercent) / 100,
-  };
-}
-
+/** Ml of perfume a fill of `ml` uses up, the filling loss included. */
+const filled = (ml: number, l: LiquidSettings) => ml * (1 + l.fillingLossPercent / 100);
+/** Ml of oil in `liquidMl` of perfume. The cost and the consumption both read it. */
+const oilShare = (liquidMl: number, l: LiquidSettings) => (liquidMl * l.oilPercent) / 100;
 /** Ethanol and fixative, so'm per ml of perfume, before the filling loss. */
 const ethanolPerMl = (l: LiquidSettings) =>
-  (l.ethanolPerLitre / 1000) * l.ethanolPercent / 100 + l.fixativePerMl;
+  ((l.ethanolPerLitre / 1000) * l.ethanolPercent) / 100 + l.fixativePerMl;
 
 /**
- * The cost of one bottle of a fragrance (calculator `unit`): liquid for the volume plus the
- * filling loss, bottle, label, spray, filling work, box and QR card (neither for 5 ml), then the
- * defect percent on the whole. `oilPrice` is so'm per gram before the supplier discount.
+ * What filling `ml` of perfume uses up, the filling loss included: grams of oil and ml of ethanol
+ * (unrounded). The oil part of a bottle's cost is these grams at the landed price.
  */
-export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): UnitCost {
-  const { liquid: l, packaging: p } = s;
-  const oilMl = landedOilPrice(oilPrice, l) * l.oilDensity;
-  const raw = {
-    oil: ((oilMl * l.oilPercent) / 100) * ml * (1 + l.fillingLossPercent / 100),
-    ethanol: ethanolPerMl(l) * ml * (1 + l.fillingLossPercent / 100),
-    bottle: p.bottle[ml],
-    label: p.label,
-    spray: p.spray,
-    filling: p.filling,
-    box: ml === 5 ? 0 : p.box[ml],
-    insert: ml === 5 ? 0 : p.insert,
+export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number; ethanolMl: number } {
+  const liquid = filled(ml, l);
+  return {
+    oilGrams: oilShare(liquid, l) * l.oilDensity,
+    ethanolMl: (liquid * l.ethanolPercent) / 100,
   };
-  return withDefect(raw, p.defectPercent);
 }
 
 type Parts = Omit<UnitCost, 'base' | 'defect' | 'total'>;
 type VialParts = Omit<Parts, 'box' | 'insert'>;
 
-/** A bottle inside a set or a sample (calculator `vial`): liquid, bottle, label, spray, filling; unrounded. */
-function vial(oilPrice: number, ml: SetVialMl, s: CostSettings): VialParts {
+/**
+ * One filled bottle without its box and card (calculator `vial`): liquid, bottle, label, spray,
+ * filling work; unrounded. A bottle, a set's vials and a sample are all built from it.
+ */
+function vial(oilPrice: number, ml: BottleMl, s: CostSettings): VialParts {
   const { liquid: l, packaging: p } = s;
-  const oilMl = landedOilPrice(oilPrice, l) * l.oilDensity;
-  const k = ml * (1 + l.fillingLossPercent / 100);
+  /** So'm per ml of oil. */
+  const oilPerMl = landedOilPrice(oilPrice, l) * l.oilDensity;
+  const liquid = filled(ml, l);
   return {
-    oil: ((oilMl * l.oilPercent) / 100) * k,
-    ethanol: ethanolPerMl(l) * k,
+    oil: oilPerMl * oilShare(liquid, l),
+    ethanol: ethanolPerMl(l) * liquid,
     bottle: p.bottle[ml],
     label: p.label,
     spray: p.spray,
     filling: p.filling,
   };
+}
+
+/**
+ * The cost of one bottle of a fragrance (calculator `unit`): the filled bottle (`vial`) plus its
+ * box and QR card (neither for 5 ml), then the defect percent on the whole. `oilPrice` is so'm per
+ * gram before the supplier discount.
+ */
+export function bottleCost(oilPrice: number, ml: BottleMl, s: CostSettings): UnitCost {
+  const p = s.packaging;
+  return withDefect(
+    {
+      ...vial(oilPrice, ml, s),
+      box: ml === 5 ? 0 : p.box[ml],
+      insert: ml === 5 ? 0 : p.insert,
+    },
+    p.defectPercent,
+  );
 }
 
 /**
