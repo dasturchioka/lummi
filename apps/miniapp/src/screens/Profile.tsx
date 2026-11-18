@@ -1,3 +1,4 @@
+import { lazy, Suspense, useState } from 'react';
 import { formatPhone } from '@lummi/i18n';
 import { favouritesMessages } from '@lummi/i18n/favourites';
 import { useRouter } from '@tanstack/react-router';
@@ -9,13 +10,17 @@ import { useRegistration } from '../lib/registration';
 import { CardList, ListRow } from '../ui/Card';
 import { ChevronIcon, ContrastIcon, GlobeIcon, HeartIcon, PhoneIcon } from '../ui/icons';
 import { Monogram } from '../ui/Logo';
+import { AvatarImage } from '../ui/AvatarImage';
 import { Screen } from '../ui/Screen';
 import { ScreenHeader } from '../ui/ScreenHeader';
 import { Segmented } from '../ui/Segmented';
 import { Skeleton } from '../ui/Skeleton';
 import { ErrorState } from '../ui/States';
 
+const PhotoSheet = lazy(() => import('../profile/PhotoSheet'));
+
 export function Profile() {
+  const [photoOpen, setPhotoOpen] = useState(false);
   const { ensurePhone } = useRegistration();
   const router = useRouter();
   const pages = useInfoPages().data;
@@ -34,13 +39,21 @@ export function Profile() {
   return (
     <Screen>
       <ScreenHeader title={t.profile.title} />
+      {photoOpen ? (
+        <Suspense fallback={null}>
+          <PhotoSheet open onOpenChange={setPhotoOpen} />
+        </Suspense>
+      ) : null}
       <div className="mb-6 flex min-h-14 items-center gap-4">
-        <div
-          aria-hidden="true"
-          className="grid size-14 shrink-0 place-items-center rounded-pill bg-block text-ink"
+        <button
+          type="button"
+          aria-label={t.profile.photoEdit}
+          onClick={() => setPhotoOpen(true)}
+          className="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-pill bg-block text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95"
         >
           <Monogram size={30} />
-        </div>
+          <AvatarImage photo={customer?.photo} sizes="56px" />
+        </button>
         {customer ? (
           <div className="min-w-0">
             {/* Telegram names run to 64 + 64 characters: wrap to two lines, never cut mid-name. */}

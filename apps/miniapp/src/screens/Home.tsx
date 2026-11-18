@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { DeliveryRow } from '../delivery/DeliveryRow';
 import { usePrefs } from '../lib/prefs';
 import { SearchIcon } from '../ui/icons-core';
+import { AvatarImage } from '../ui/AvatarImage';
 import { Logo, Monogram } from '../ui/Logo';
 import { Screen } from '../ui/Screen';
 import { SearchField } from '../ui/SearchField';
@@ -101,7 +102,7 @@ const DISC =
 
 /** Home, no welcome screen (approved design): the top block, then the Milk sheet over its edge. */
 export function Home() {
-  const { t } = usePrefs();
+  const { t, customer } = usePrefs();
   return (
     <Screen bleed>
       <TopBlock />
@@ -121,8 +122,13 @@ export function Home() {
             <SearchIcon size={20} />
           </Link>
           <DeliveryRow />
-          <Link to="/profile" aria-label={t.tabs.profile} className={DISC}>
+          <Link
+            to="/profile"
+            aria-label={t.tabs.profile}
+            className={`${DISC} relative overflow-hidden`}
+          >
             <Monogram size={22} />
+            <AvatarImage photo={customer?.photo} sizes="44px" />
           </Link>
         </div>
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
