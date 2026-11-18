@@ -102,6 +102,8 @@ import { CampaignsAdminController, CampaignsController } from './campaigns/campa
 import { CampaignsService } from './campaigns/campaigns.service';
 import { PromoAdminController } from './promo/promo-admin.controller';
 import { PromoAdminService } from './promo/promo-admin.service';
+import { ProfitabilityController } from './profitability/profitability.controller';
+import { Profitability } from './profitability/profitability.service';
 import { ReportsController } from './reports/reports.controller';
 import { HomeController } from './home/home.controller';
 import { HomeService } from './home/home.service';
@@ -174,6 +176,7 @@ export class AppModule {
         CampaignsAdminController,
         DiscountsController,
         ReportsController,
+        ProfitabilityController,
         HomeController,
       ],
       providers: [
@@ -243,6 +246,7 @@ export class AppModule {
         Refunds,
         CampaignsService,
         SalesReports,
+        Profitability,
         MarketingReports,
         HomeService,
         BirthdayService,
