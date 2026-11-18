@@ -166,6 +166,6 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 - **The 5 × 5 ml set's photo and five fragrances:** it starts with the 5 × 10 ml set's five and the app's box photo until the owner uploads his own. Does it hold the same five as the 5 × 10 ml box or its own?
 - **The 5 × 5 ml set has no heart, share link or reviews block yet**, and a gift promo code can name only the 5 × 10 ml set. Wanted for it too?
-- **Which fragrance is the sample:** our default is the one with the most 5 ml bottles available (0 in «Пробник: аромат»); the owner can name one by the number in its panel address. A named fragrance out of 5 ml gives no sample (not another one). Confirm.
+- **Which fragrance is the sample:** our default is the one with the most 5 ml bottles available; the owner can pick one by name in «Настройки → Магазин». A chosen fragrance out of 5 ml gives no sample (not another one), with a warning on the stock page and the Home. Confirm. The warning threshold `giftSample.lowStock` (10 bottles) is ours.
 - **«First order»:** a customer with no order that is not cancelled. An unpaid order that expires counts as cancelled, so the next order gets the sample; a returned one does not. Confirm.
 - **The after-set discount on any fragrance** (`entitlements.setDiscountScope`) stays on «Аромат из набора» (TZ) until the owner switches it.
