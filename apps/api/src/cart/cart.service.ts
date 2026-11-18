@@ -45,7 +45,7 @@ import {
   loadCartQuote,
   loadQuote,
   readCartLines,
-  appliedGift,
+  appliedPromoGift,
   toLineDto,
   type BuilderLineView,
   type StoredLine,
@@ -86,7 +86,7 @@ export class CartService {
       city,
       entitlements,
       promoCodeId,
-      gift,
+      promoGift,
     } = await loadCartQuote(tx, now, customerId);
     const choice = cartState?.discountChoice ?? null;
     if (choice && (q.staleChoice || declinesNothing(choice, entitlements, promoCodeId)))
@@ -116,7 +116,7 @@ export class CartService {
           )
         : [],
       promoCode: cartState?.promoCode ?? null,
-      promoGift: appliedGift(q, gift),
+      promoGift: appliedPromoGift(q, promoGift),
       discountOptions: discountOptionsOf(q, entitlements),
       lapsedDiscount:
         q.staleChoice && choice ? await lapsedDiscountOf(tx, customerId, choice) : null,

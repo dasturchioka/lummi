@@ -246,6 +246,7 @@ export const miniappMessages = defineMessages(
           below_minimum: 'Промокод действует на заказ от {amount}.',
           no_eligible_items: 'Промокод не действует на товары со скидкой.',
           gift_sold_out: 'Подарок закончился.',
+          gift_needs_items: 'Подарок добавляется к заказу с ароматами в наличии.',
         },
         /** What the shopper can do about each reason, under it in Muted Ink (the cart only). */
         next: {
@@ -258,6 +259,7 @@ export const miniappMessages = defineMessages(
           below_minimum: 'Добавьте ароматов до этой суммы — и он применится.',
           no_eligible_items: 'Добавьте аромат по обычной цене — и он применится.',
           gift_sold_out: 'Заказ можно оформить и без него.',
+          gift_needs_items: 'Добавьте аромат в наличии — и подарок появится.',
         },
         tooMany: 'Слишком много попыток.',
         tooManyNext: 'До следующей попытки — {time}.',
@@ -556,6 +558,7 @@ export const miniappMessages = defineMessages(
           below_minimum: 'Promokod {amount}dan boshlab buyurtmaga amal qiladi.',
           no_eligible_items: 'Promokod chegirmadagi mahsulotlarga amal qilmaydi.',
           gift_sold_out: 'Sovgʻa tugadi.',
+          gift_needs_items: 'Sovgʻa mavjud iforli buyurtmaga qoʻshiladi.',
         },
         next: {
           unknown: 'Yozilishini tekshiring.',
@@ -567,6 +570,7 @@ export const miniappMessages = defineMessages(
           below_minimum: 'Shu summagacha ifor qoʻshing — promokod qoʻllanadi.',
           no_eligible_items: 'Oddiy narxdagi ifor qoʻshing — promokod qoʻllanadi.',
           gift_sold_out: 'Buyurtmani usiz ham rasmiylashtirish mumkin.',
+          gift_needs_items: 'Mavjud ifor qoʻshing — sovgʻa paydo boʻladi.',
         },
         tooMany: 'Urinishlar juda koʻp.',
         tooManyNext: 'Keyingi urinishgacha — {time}.',

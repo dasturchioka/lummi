@@ -8,7 +8,7 @@ import { PromoAdminService, type PromoFailure } from './promo-admin.service';
 const notFound = { status: 404 as const, body: { code: 'not_found' as const } };
 function failure(f: PromoFailure) {
   if (f.reason === 'not_found') return notFound;
-  // the gift names no volume the catalog has (ADR 0039)
+  // the Promo gift names no volume the catalog has (ADR 0039)
   if (f.reason === 'invalid')
     return { status: 422 as const, body: { code: f.reason, fields: f.fields ?? [] } };
   return { status: 409 as const, body: { code: f.reason } };

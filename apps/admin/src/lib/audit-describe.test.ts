@@ -480,7 +480,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
       kind: 'gift',
       percent: null,
       amount: null,
-      gift: { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea', brand: 'Bvlgari' },
+      promoGift: { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea', brand: 'Bvlgari' },
     },
     {},
     ['Код RAINTEA: подарок Rain Tea 10 мл'],
@@ -491,7 +491,7 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     {
       code: 'RAINTEA',
       changed: {
-        gift: [
+        promoGift: [
           { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea' },
           { kind: 'discovery_set' },
         ],

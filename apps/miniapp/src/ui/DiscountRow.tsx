@@ -1,4 +1,4 @@
-import type { Discount } from '@lummi/contracts';
+import { promoGiftOf, type Discount } from '@lummi/contracts';
 import { Fragment, type ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
 import { Figure } from './Figure';
@@ -54,7 +54,7 @@ export function DiscountRow({
 }) {
   const { t } = usePrefs();
   // a gift code takes nothing off: its row names the gift and costs 0 (ADR 0039)
-  const gift = discount.type === 'promo_code' && discount.gift !== undefined;
+  const gift = promoGiftOf(discount) !== null;
   return (
     <div
       className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 ${was ? 'text-totals-ink/60' : 'text-totals-accent'}`}

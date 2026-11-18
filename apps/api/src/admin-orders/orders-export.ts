@@ -1,5 +1,5 @@
 import {
-  promoGiftValue,
+  promoGiftOf,
   utcToTashkent,
   type AdminOrdersExportFilters,
   type AdminOrdersExportParams,
@@ -25,6 +25,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { AuditService } from '../audit/audit.service';
 import { customerName, PAID_BY } from '../orders/order-read';
+import { reportedMoney } from '../reports/report-orders';
 import { MONEY, sheet } from '../reports/report-workbook';
 import { DB } from '../tokens';
 import { listedOrders, orderFilters } from './admin-orders.service';
@@ -109,7 +110,7 @@ function discountSource(d: Discount | null, language: Language): string {
   const detail = adminMessages[language].admin.orders.detail;
   const src = detail.discountSource;
   if (d.type !== 'promo_code') return src[d.type];
-  return fill(d.gift ? detail.promoGiftSource : src.promo_code, { code: d.code });
+  return fill(promoGiftOf(d) ? detail.promoGiftSource : src.promo_code, { code: d.code });
 }
 
 /** The workbook: one sheet, in the admin's language; money cells are numbers in whole so'm. */
@@ -172,9 +173,9 @@ async function ordersWorkbook(rows: ExportRow[], language: Language): Promise<Bu
           return l.promoGift ? `${o.detail.promoGift}: ${item}` : item;
         })
         .join('\n'),
-      // a gift code's gift at its regular price in both, as the reports count it (ADR 0039)
-      subtotal: ord.itemsSubtotal + promoGiftValue(ord.discount),
-      discount: ord.discountAmount + promoGiftValue(ord.discount),
+      // as the reports count them: a Promo gift at its regular price in both (ADR 0039)
+      subtotal: reportedMoney(ord).itemsBeforeDiscount,
+      discount: reportedMoney(ord).discount,
       discountSource: discountSource(ord.discount, language),
       delivery: ord.deliveryFee,
       total: ord.total,

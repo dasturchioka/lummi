@@ -462,7 +462,7 @@ describe('a gift code’s gift (ADR 0039)', () => {
             type: 'promo_code',
             code: 'RAINTEA',
             amount: 0,
-            gift: { item: { kind: 'volume', volumeId: 7 }, value: 69_000 },
+            promoGift: { item: { kind: 'volume', volumeId: 7 }, value: 69_000 },
           },
           deliveryFee: 25_000,
           total: 244_000,

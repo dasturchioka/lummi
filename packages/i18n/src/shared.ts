@@ -9,6 +9,8 @@ export const sharedMessages = defineMessages(
       loading: 'Загрузка',
       close: 'Закрыть',
     },
+    /** A Promo gift as every surface names it (ADR 0039): `promoGiftLabel`. */
+    promoGift: { volume: '{name} {ml} мл', discovery: 'Discovery set' },
     errors: {
       generic: 'Что-то пошло не так. Попробуйте ещё раз.',
       sessionExpired: 'Сессия истекла. Откройте приложение заново.',
@@ -23,6 +25,7 @@ export const sharedMessages = defineMessages(
       loading: 'Yuklanmoqda',
       close: 'Yopish',
     },
+    promoGift: { volume: '{name} {ml} ml', discovery: 'Discovery set' },
     errors: {
       generic: 'Nimadir xato ketdi. Qaytadan urinib koʻring.',
       sessionExpired: 'Seans tugadi. Ilovani qaytadan oching.',

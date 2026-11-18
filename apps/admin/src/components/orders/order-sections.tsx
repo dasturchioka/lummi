@@ -1,5 +1,6 @@
 import {
   CANCEL_REASONS,
+  promoGiftOf,
   RECEIPT_REJECT_REASONS,
   WAITING_RECEIPT_VERDICTS,
   type AdminOrderDto,
@@ -355,7 +356,7 @@ export function LinesSection({ page, t, language }: Props) {
           <dd className="whitespace-nowrap">{formatMoney(o.itemsSubtotal, language)}</dd>
         </div>
         {/* a gift code takes nothing off: its free line above says what it gave (ADR 0039) */}
-        {discount && !(discount.type === 'promo_code' && discount.gift) && (
+        {discount && !promoGiftOf(discount) && (
           <div className="flex justify-between gap-4">
             <dt className="min-w-0 text-muted-foreground">
               {d.discount}
@@ -368,12 +369,14 @@ export function LinesSection({ page, t, language }: Props) {
             <dd className="whitespace-nowrap text-sage-ink">{minus(discount.amount, language)}</dd>
           </div>
         )}
-        {discount?.type === 'promo_code' && discount.gift && (
+        {discount?.type === 'promo_code' && promoGiftOf(discount) && (
           <div className="flex justify-between gap-4">
             <dt className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
               {fill(d.promoGiftSource, { code: discount.code })}
             </dt>
-            <dd className="whitespace-nowrap text-sage-ink">{formatMoney(0, language)}</dd>
+            <dd className="whitespace-nowrap text-sage-ink">
+              {formatMoney(discount.amount, language)}
+            </dd>
           </div>
         )}
         <div className="flex justify-between gap-4">

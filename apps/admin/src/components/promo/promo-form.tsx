@@ -35,7 +35,7 @@ import { CodeText } from './code-text';
 import { discountOf } from './terms';
 
 /** A fragrance a gift code may give, with the volumes it is sold in (ADR 0039). */
-export interface GiftChoice {
+export interface PromoGiftChoice {
   id: number;
   name: string;
   volumes: number[];
@@ -48,10 +48,10 @@ const DISCOVERY = 'discovery';
 interface Draft {
   code: string;
   kind: PromoKind;
-  /** A gift code's item: `discovery`, `f<fragrance id>`, or '' (none chosen). */
-  gift: string;
-  /** The gift fragrance's volume in ml, as text; '' until chosen. */
-  giftMl: string;
+  /** A gift code's Promo gift: `discovery`, `f<fragrance id>`, or '' (none chosen). */
+  promoGift: string;
+  /** The Promo gift fragrance's volume in ml, as text; '' until chosen. */
+  promoGiftMl: string;
   percent: string;
   amount: string;
   maxDiscount: string;
@@ -72,8 +72,12 @@ function toDraft(p: AdminPromoCode | null): Draft {
   return {
     code: p?.code ?? '',
     kind: p?.kind ?? 'percent',
-    gift: !p?.gift ? '' : p.gift.kind === 'discovery_set' ? DISCOVERY : `f${p.gift.fragranceId}`,
-    giftMl: p?.gift?.kind === 'volume' ? String(p.gift.ml) : '',
+    promoGift: !p?.promoGift
+      ? ''
+      : p.promoGift.kind === 'discovery_set'
+        ? DISCOVERY
+        : `f${p.promoGift.fragranceId}`,
+    promoGiftMl: p?.promoGift?.kind === 'volume' ? String(p.promoGift.ml) : '',
     percent: text(p?.percent ?? null),
     amount: text(p?.amount ?? null),
     maxDiscount: text(p?.maxDiscount ?? null),
@@ -91,11 +95,11 @@ function toDraft(p: AdminPromoCode | null): Draft {
 const number = (s: string) => (s.trim() === '' ? null : Number(s.replace(/\s/g, '')));
 
 /** The chosen gift as the API takes it; null until both the fragrance and its volume are picked. */
-function giftOf(d: Draft): PromoCodeInput['gift'] {
-  if (d.gift === DISCOVERY) return { kind: 'discovery_set' };
-  const ml = Number(d.giftMl);
-  if (!d.gift.startsWith('f') || (ml !== 10 && ml !== 30 && ml !== 50)) return null;
-  return { kind: 'volume', fragranceId: Number(d.gift.slice(1)), ml };
+function chosenPromoGift(d: Draft): PromoCodeInput['promoGift'] {
+  if (d.promoGift === DISCOVERY) return { kind: 'discovery_set' };
+  const ml = Number(d.promoGiftMl);
+  if (!d.promoGift.startsWith('f') || (ml !== 10 && ml !== 30 && ml !== 50)) return null;
+  return { kind: 'volume', fragranceId: Number(d.promoGift.slice(1)), ml };
 }
 
 /**
@@ -111,7 +115,7 @@ function toInput(d: Draft): PromoCodeInput {
     percent: percent ? number(d.percent) : null,
     amount: d.kind === 'fixed' ? number(d.amount) : null,
     maxDiscount: percent ? number(d.maxDiscount) : null,
-    gift: gift ? giftOf(d) : null,
+    promoGift: gift ? chosenPromoGift(d) : null,
     expiresOn: d.expiresOn === '' ? null : d.expiresOn,
     minOrderTotal: number(d.minOrderTotal),
     totalLimit: number(d.totalLimit),
@@ -135,13 +139,13 @@ function moneyEcho(s: string, language: Language): string | undefined {
  */
 export function PromoForm({
   initial,
-  giftChoices,
+  promoGiftChoices,
   language,
   t,
 }: {
   initial: AdminPromoCode | null;
   /** The fragrances a gift code may give, by name. */
-  giftChoices: GiftChoice[];
+  promoGiftChoices: PromoGiftChoice[];
   language: Language;
   t: AdminMessages;
 }) {
@@ -161,7 +165,8 @@ export function PromoForm({
   const messageFor = (field: string, code: string | undefined) => {
     if (field === 'code') return code === 'required' ? m.errors.required : m.errors.codeFormat;
     // a fragrance without its volume reads as «choose the volume», not as no gift at all
-    if (field === 'gift') return draft.gift.startsWith('f') ? m.errors.giftVolume : m.errors.gift;
+    if (field === 'promoGift')
+      return draft.promoGift.startsWith('f') ? m.errors.giftVolume : m.errors.gift;
     if (code === 'required') return m.errors.required;
     return field === 'percent' ? m.errors.percent : m.errors.number;
   };
@@ -206,7 +211,7 @@ export function PromoForm({
       setBanner({ kind: 'error', text: m.codeTaken });
     } else if (res?.status === 422) {
       // the gift's volume left the catalog while the form was open
-      setErrors({ gift: m.errors.gift });
+      setErrors({ promoGift: m.errors.gift });
       setBanner({ kind: 'error', text: m.fixErrors });
     } else setBanner({ kind: 'error', text: m.failed });
   };
@@ -247,14 +252,14 @@ export function PromoForm({
   const percent = draft.kind === 'percent';
   const giftKind = draft.kind === 'gift';
   const preview = toInput(draft);
-  const giftFragrance = draft.gift.startsWith('f')
-    ? giftChoices.find((f) => `f${f.id}` === draft.gift)
+  const giftFragrance = draft.promoGift.startsWith('f')
+    ? promoGiftChoices.find((f) => `f${f.id}` === draft.promoGift)
     : undefined;
   // the preview names the gift as the list will
-  const previewGift: AdminPromoCode['gift'] =
-    preview.gift?.kind === 'volume'
-      ? { ...preview.gift, name: giftFragrance?.name ?? '', brand: '' }
-      : preview.gift;
+  const previewGift: AdminPromoCode['promoGift'] =
+    preview.promoGift?.kind === 'volume'
+      ? { ...preview.promoGift, name: giftFragrance?.name ?? '', brand: '' }
+      : preview.promoGift;
   const used = saved?.everUsed ?? false;
   return (
     // fields focused by a failed save scroll clear of the top bar and the sticky save bar
@@ -334,20 +339,20 @@ export function PromoForm({
                   className="content-start"
                   label={m.gift}
                   hint={m.giftHint}
-                  error={errors.gift}
+                  error={errors.promoGift}
                 >
                   <Select
-                    value={draft.gift}
+                    value={draft.promoGift}
                     onChange={(e) => {
                       const next = e.target.value;
-                      const f = giftChoices.find((c) => `f${c.id}` === next);
-                      set('gift', next);
+                      const f = promoGiftChoices.find((c) => `f${c.id}` === next);
+                      set('promoGift', next);
                       // keep the volume when the new fragrance has it, else the only one it has
                       setDraft((d) => ({
                         ...d,
-                        giftMl:
-                          f && f.volumes.includes(Number(d.giftMl))
-                            ? d.giftMl
+                        promoGiftMl:
+                          f && f.volumes.includes(Number(d.promoGiftMl))
+                            ? d.promoGiftMl
                             : f?.volumes.length === 1
                               ? String(f.volumes[0])
                               : '',
@@ -356,7 +361,7 @@ export function PromoForm({
                   >
                     <option value="">{m.giftChoose}</option>
                     <option value={DISCOVERY}>{m.giftDiscovery}</option>
-                    {giftChoices.map((f) => (
+                    {promoGiftChoices.map((f) => (
                       <option key={f.id} value={`f${f.id}`}>
                         {f.name}
                       </option>
@@ -365,7 +370,10 @@ export function PromoForm({
                 </Field>
                 {giftFragrance && (
                   <Field id="p-gift-ml" className="content-start" label={m.giftVolume}>
-                    <Select value={draft.giftMl} onChange={(e) => set('giftMl', e.target.value)}>
+                    <Select
+                      value={draft.promoGiftMl}
+                      onChange={(e) => set('promoGiftMl', e.target.value)}
+                    >
                       <option value="">{m.giftVolumeChoose}</option>
                       {giftFragrance.volumes.map((ml) => (
                         <option key={ml} value={String(ml)}>
@@ -388,7 +396,7 @@ export function PromoForm({
             >
               {m.preview}
               <span className="font-semibold text-foreground tabular-nums">
-                {discountOf({ ...preview, gift: previewGift }, t, language)}
+                {discountOf({ ...preview, promoGift: previewGift }, t, language)}
               </span>
             </p>
           )}

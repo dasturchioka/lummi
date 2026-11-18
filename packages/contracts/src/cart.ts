@@ -60,11 +60,14 @@ export const promoGiftLineSchema = z.discriminatedUnion('kind', [
     name: z.string(),
     brand: z.string(),
     ml: z.union([z.literal(10), z.literal(30), z.literal(50)]),
+    /** What the shopper pays for it: always 0, said by the server (ADR 0001). */
+    lineTotal: z.literal(0),
   }),
   z.object({
     kind: z.literal('discovery_set'),
     photo: z.string().nullable(),
     fragrances: setFragrances,
+    lineTotal: z.literal(0),
   }),
 ]);
 export type PromoGiftLineDto = z.infer<typeof promoGiftLineSchema>;

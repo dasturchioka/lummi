@@ -27,7 +27,7 @@ import type { PromoCode, RefusedPromoCode } from '../pricing/quote';
  */
 export type PromoTerms =
   | Exclude<PromoCode, { kind: 'gift' }>
-  | (Omit<Extract<PromoCode, { kind: 'gift' }>, 'gift'> & { giftItem: PromoGiftItem });
+  | (Omit<Extract<PromoCode, { kind: 'gift' }>, 'promoGift'> & { promoGiftItem: PromoGiftItem });
 
 /** What the cart's quote gets for the entered code, and the code's id when it passed. */
 export interface JudgedPromoCode {
@@ -108,9 +108,10 @@ function terms(p: PromoCodeRow): PromoTerms {
     appliesToMarkedDown: p.appliesToMarkedDown,
   };
   if (p.kind === 'gift') {
-    if (p.giftDiscoverySet) return { ...common, kind: 'gift', giftItem: { kind: 'discovery_set' } };
+    if (p.giftDiscoverySet)
+      return { ...common, kind: 'gift', promoGiftItem: { kind: 'discovery_set' } };
     if (p.giftVolumeId === null) throw new Error(`promo ${p.code}: a gift code without a gift`);
-    return { ...common, kind: 'gift', giftItem: { kind: 'volume', volumeId: p.giftVolumeId } };
+    return { ...common, kind: 'gift', promoGiftItem: { kind: 'volume', volumeId: p.giftVolumeId } };
   }
   if (p.kind === 'fixed') {
     if (p.amount === null) throw new Error(`promo ${p.code}: a fixed code without an amount`);
@@ -124,7 +125,10 @@ function terms(p: PromoCodeRow): PromoTerms {
  * The gift the code in the customer's cart names, read without a lock (ADR 0039): checkout locks
  * its stock row with the others before it locks the code; null for no code or another kind.
  */
-export async function enteredGift(tx: DbOrTx, customerId: number): Promise<PromoGiftItem | null> {
+export async function enteredPromoGift(
+  tx: DbOrTx,
+  customerId: number,
+): Promise<PromoGiftItem | null> {
   const [row] = await tx
     .select({ volumeId: promoCodes.giftVolumeId, discovery: promoCodes.giftDiscoverySet })
     .from(promoCodes)

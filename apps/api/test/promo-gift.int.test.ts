@@ -17,6 +17,7 @@ import {
   volumes,
 } from '@lummi/db';
 import ExcelJS from 'exceljs';
+import pg from 'pg';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -78,7 +79,7 @@ function giftCode(over: Partial<PromoCodeInput> = {}): PromoCodeInput {
     percent: null,
     amount: null,
     maxDiscount: null,
-    gift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10 },
+    promoGift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10 },
     expiresOn: null,
     minOrderTotal: null,
     totalLimit: null,
@@ -171,13 +172,20 @@ async function usesOf(code = 'RAINTEA') {
 }
 
 /** Paid by its receipt and a credit, then moved by a manager through `path`. */
-async function payAndMove(number: number, until: 'handed_to_bts' | 'delivered') {
+async function payAndMove(
+  number: number,
+  until: 'handed_to_bts' | 'delivered',
+  /** Where it stands now; unpaid (the default) is paid by a receipt and a credit first. */
+  from: 'payment_confirmed' | 'handed_to_bts' = 'payment_confirmed',
+) {
   const [row] = await t.db.select().from(orders).where(eq(orders.number, number));
-  const sent = await t.app
-    .get(ReceiptsService)
-    .submit(row!.customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
-  if (sent.kind !== 'submitted') throw new Error(`receipt ${sent.kind}`);
-  await payWithCredit(t, row!, sent.receipt.id);
+  if (from === 'payment_confirmed') {
+    const sent = await t.app
+      .get(ReceiptsService)
+      .submit(row!.customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
+    if (sent.kind !== 'submitted') throw new Error(`receipt ${sent.kind}`);
+    await payWithCredit(t, row!, sent.receipt.id);
+  }
   const machine = t.app.get(OrderStatusService);
   const manager = { type: 'staff' as const, id: (await t.managerSession()).staff.id };
   const path = [
@@ -186,10 +194,10 @@ async function payAndMove(number: number, until: 'handed_to_bts' | 'delivered') 
     ['assembling', 'hand_to_bts', { trackingNumber: 'BTS 4471 0098' }],
     ['handed_to_bts', 'deliver', undefined],
   ] as const;
-  for (const [from, action, payload] of path) {
-    const out = await machine.transition(row!.id, action, manager, from, payload as never);
+  for (const [status, action, payload] of path.slice(path.findIndex(([x]) => x === from))) {
+    if (status === until) return row!;
+    const out = await machine.transition(row!.id, action, manager, status, payload as never);
     expect(out.kind, action).toBe('done');
-    if (from === until) return row!;
   }
   return row!;
 }
@@ -203,24 +211,24 @@ describe('admin: a gift code names one volume or the Discovery set', () => {
       percent: null,
       amount: null,
       maxDiscount: null,
-      gift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10, name: expect.any(String) },
+      promoGift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10, name: expect.any(String) },
     });
     const [entry] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'promo.created'));
     expect(entry!.payload).toMatchObject({
       code: 'RAINTEA',
       kind: 'gift',
-      gift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10 },
+      promoGift: { kind: 'volume', fragranceId: giftFragranceId, ml: 10 },
     });
 
     const edited = await owner.client.admin.promoCodes.update({
       params: { id: created.id },
-      body: giftCode({ gift: { kind: 'discovery_set' } }),
+      body: giftCode({ promoGift: { kind: 'discovery_set' } }),
     });
-    expect(edited).toMatchObject({ status: 200, body: { gift: { kind: 'discovery_set' } } });
+    expect(edited).toMatchObject({ status: 200, body: { promoGift: { kind: 'discovery_set' } } });
     const [change] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'promo.updated'));
     expect(change!.payload).toMatchObject({
       code: 'RAINTEA',
-      changed: { gift: [{ kind: 'volume', ml: 10 }, { kind: 'discovery_set' }] },
+      changed: { promoGift: [{ kind: 'volume', ml: 10 }, { kind: 'discovery_set' }] },
     });
   });
 
@@ -232,14 +240,17 @@ describe('admin: a gift code names one volume or the Discovery set', () => {
         headers: { cookie: owner.cookie, 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-    expect((await post(giftCode({ gift: null }))).status).toBe(400);
+    expect((await post(giftCode({ promoGift: null }))).status).toBe(400);
     expect((await post(giftCode({ amount: 10_000 }))).status).toBe(400);
     expect((await post(giftCode({ maxDiscount: 10_000 }))).status).toBe(400);
     expect((await post(giftCode({ kind: 'percent', percent: 10 }))).status).toBe(400);
     const unknown = await owner.client.admin.promoCodes.create({
-      body: giftCode({ gift: { kind: 'volume', fragranceId: 999_999, ml: 10 } }),
+      body: giftCode({ promoGift: { kind: 'volume', fragranceId: 999_999, ml: 10 } }),
     });
-    expect(unknown).toMatchObject({ status: 422, body: { code: 'invalid', fields: ['gift'] } });
+    expect(unknown).toMatchObject({
+      status: 422,
+      body: { code: 'invalid', fields: ['promoGift'] },
+    });
   });
 });
 
@@ -256,7 +267,7 @@ describe('the cart: the gift is listed at 0 while the code applies', () => {
         type: 'promo_code',
         code: 'RAINTEA',
         amount: 0,
-        gift: { item: { kind: 'volume' }, value: 69_000 },
+        promoGift: { item: { kind: 'volume' }, value: 69_000 },
       },
       deliveryFee: 25_000,
       total: 244_000,
@@ -283,7 +294,7 @@ describe('the cart: the gift is listed at 0 while the code applies', () => {
 
   it('the Discovery set as the gift', async () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
-    await createGift({ gift: { kind: 'discovery_set' } });
+    await createGift({ promoGift: { kind: 'discovery_set' } });
     const s = await shopper();
     await s.add(paid, 50);
     const cart = await s.apply('RAINTEA');
@@ -291,7 +302,7 @@ describe('the cart: the gift is listed at 0 while the code applies', () => {
     expect(cart.promoGift?.kind === 'discovery_set' && cart.promoGift.fragrances).toHaveLength(5);
     expect(cart.quote.discount).toMatchObject({
       amount: 0,
-      gift: { item: { kind: 'discovery_set' } },
+      promoGift: { item: { kind: 'discovery_set' } },
     });
   });
 });
@@ -307,7 +318,7 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
     const order = await placeOrder(s);
     expect(order).toMatchObject({
       itemsSubtotal: 219_000,
-      discount: { type: 'promo_code', code: 'RAINTEA', amount: 0, gift: { value: 69_000 } },
+      discount: { type: 'promo_code', code: 'RAINTEA', amount: 0, promoGift: { value: 69_000 } },
       deliveryFee: 25_000,
       total: 244_000,
     });
@@ -347,6 +358,86 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
     await payAndMove(order.number, 'handed_to_bts');
     expect((await volumeOf(giftSlug, 10)).onHand).toBe(4);
     expect(await s.available(giftSlug, 10)).toBe(4);
+
+    // delivered, then repeated: only the bought 50 ml goes back into the cart
+    await payAndMove(order.number, 'delivered', 'handed_to_bts');
+    const repeated = await s.client.orders.repeat({ params: { number: order.number } });
+    expect(repeated.status).toBe(200);
+    if (repeated.status !== 200) return;
+    expect(repeated.body.result).toMatchObject({ added: 1, of: 1 });
+    expect(repeated.body.result.lines.map((l) => [l.ml, l.ordered, l.added])).toEqual([[50, 1, 1]]);
+    expect(
+      repeated.body.cart.lines.map((l) => (l.kind === 'volume' ? [l.slug, l.ml] : null)),
+    ).toEqual([[paid, 50]]);
+  });
+
+  it('the Discovery set as the gift: reserved from its own stock, back on cancel, off on hand at handover', async () => {
+    await t.db.update(discoverySet).set({ onHand: 3 });
+    await createGift({ promoGift: { kind: 'discovery_set' } });
+    const s = await shopper();
+    const discovery = async () => {
+      const res = await s.client.sets.discovery();
+      if (res.status !== 200) throw new Error(`discovery ${res.status}`);
+      return res.body.available;
+    };
+    await s.add(paid, 50);
+    await s.apply('RAINTEA');
+    const cancelled = await placeOrder(s);
+    expect(cancelled.lines[1]).toMatchObject({
+      kind: 'discovery_set',
+      promoGift: true,
+      unitPrice: 0,
+      lineTotal: 0,
+      regularUnitPrice: expect.any(Number),
+    });
+    expect(cancelled.lines[1]!.setComposition).toHaveLength(5);
+    expect(await discovery()).toBe(2);
+    const res = await s.client.orders.cancel({
+      params: { number: cancelled.number },
+      body: { expectedStatus: 'awaiting_payment' },
+    });
+    expect(res.status).toBe(200);
+    expect(await discovery()).toBe(3);
+
+    await s.add(paid, 50);
+    await s.apply('RAINTEA');
+    const kept = await placeOrder(s);
+    await payAndMove(kept.number, 'handed_to_bts');
+    const [box] = await t.db.select({ onHand: discoverySet.onHand }).from(discoverySet);
+    expect(box!.onHand).toBe(2);
+    expect(await discovery()).toBe(2);
+  });
+
+  it('two orders racing for the last gift unit: exactly one gets it, the other 409 with «Подарок закончился»', async () => {
+    await createGift();
+    await setOnHand(giftSlug, 10, 1);
+    const first = await shopper(ali);
+    const second = await shopper(vali, '998901112233');
+    // different paid bottles: only the gift's stock row orders the two
+    await first.add(paid, 50);
+    await second.add(paid, 30);
+    await first.apply('RAINTEA');
+    await second.apply('RAINTEA');
+    const bodies = [await orderBody(first), await orderBody(second)] as const;
+    // the first that writes its lines holds the gift's row; the other waits on it, then sees the reserve
+    const results = await whileTableLocked('order_lines', 2, () =>
+      Promise.all([
+        first.client.orders.create({ body: bodies[0] }),
+        second.client.orders.create({ body: bodies[1] }),
+      ]),
+    );
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(results.find((r) => r.status === 409)).toMatchObject({
+      body: {
+        code: 'total_changed',
+        checkout: {
+          promoGift: null,
+          quote: { discount: null, promoCode: { invalid: { reason: 'gift_sold_out' } } },
+        },
+      },
+    });
+    const giftLines = await t.db.select().from(orderLines).where(eq(orderLines.promoGift, true));
+    expect(giftLines).toHaveLength(1);
   });
 
   it('a gift sold out between the quote and the order is 409 with the code refused; never an order without it', async () => {
@@ -381,7 +472,7 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
     const body = await orderBody(s);
     await owner.client.admin.promoCodes.update({
       params: { id: created.id },
-      body: giftCode({ gift: { kind: 'volume', fragranceId: giftFragranceId, ml: 30 } }),
+      body: giftCode({ promoGift: { kind: 'volume', fragranceId: giftFragranceId, ml: 30 } }),
     });
     const res = await s.client.orders.create({ body });
     expect(res).toMatchObject({ status: 409, body: { code: 'total_changed' } });
@@ -475,5 +566,53 @@ describe('the snapshot line is a promo gift and nothing else', () => {
     await placeOrder(s);
     const lines = await t.db.select().from(orderLines).orderBy(orderLines.position);
     expect(lines.map((l) => l.promoGift)).toEqual([false, true]);
+  });
+});
+
+async function whileTableLocked<T>(table: string, waiters: number, run: () => Promise<T>) {
+  const locker = new pg.Client({ connectionString: t.env.DATABASE_URL });
+  await locker.connect();
+  try {
+    await locker.query('begin');
+    await locker.query(`lock table ${table} in exclusive mode`);
+    const pending = run();
+    for (const deadline = Date.now() + 10_000; ;) {
+      const { rows } = await locker.query<{ n: number }>(
+        `select count(*)::int as n from pg_stat_activity
+         where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()`,
+      );
+      if (rows[0]!.n >= waiters) break;
+      if (Date.now() > deadline)
+        throw new Error(`only ${rows[0]!.n} of ${waiters} sessions reached a lock`);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    await locker.query('commit');
+    return await pending;
+  } finally {
+    await locker.end();
+  }
+}
+
+describe('a delivered Promo gift opens Upgrade rights while `promo.giftOpensUpgradeRights` is on', () => {
+  it.each([
+    [true, 1],
+    [false, 0],
+  ] as const)('switched on = %s: a gift Discovery set opens %i right(s)', async (on, rights) => {
+    const set = await owner.client.admin.settings.update({
+      params: { key: 'promo.giftOpensUpgradeRights' },
+      body: { value: on },
+    });
+    expect(set.status).toBe(200);
+    await t.db.update(discoverySet).set({ onHand: 3 });
+    await createGift({ promoGift: { kind: 'discovery_set' } });
+    const s = await shopper();
+    await s.add(paid, 50);
+    await s.apply('RAINTEA');
+    const order = await placeOrder(s);
+    await payAndMove(order.number, 'delivered');
+    const listed = await s.client.me.discounts();
+    expect(listed.status === 200 && listed.body.upgradeRights).toHaveLength(rights);
+    if (listed.status === 200 && rights > 0)
+      expect(listed.body.upgradeRights[0]).toMatchObject({ source: 'set' });
   });
 });

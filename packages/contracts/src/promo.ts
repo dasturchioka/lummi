@@ -47,8 +47,8 @@ export const promoCodeInputSchema = z
     percent: z.number().int().min(1).max(100).nullable(),
     amount: som(1).nullable(),
     maxDiscount: som(1).nullable(),
-    /** A gift code's free item; null for the other kinds. */
-    gift: promoGiftInputSchema.nullable().default(null),
+    /** A gift code's Promo gift; null for the other kinds. */
+    promoGift: promoGiftInputSchema.nullable().default(null),
     expiresOn: tashkentDaySchema.nullable(),
     minOrderTotal: som(1).nullable(),
     totalLimit: z.number().int().min(1).max(1_000_000).nullable(),
@@ -60,7 +60,8 @@ export const promoCodeInputSchema = z
   .superRefine((v, ctx) => {
     const issue = (path: string, message: string) =>
       ctx.addIssue({ code: 'custom', path: [path], message });
-    if (v.kind !== 'gift' && v.gift !== null) issue('gift', 'only_a_gift_code_has_a_gift');
+    if (v.kind !== 'gift' && v.promoGift !== null)
+      issue('promoGift', 'only_a_gift_code_has_a_promo_gift');
     if (v.kind === 'percent') {
       if (v.percent === null) issue('percent', 'required');
       if (v.amount !== null) issue('amount', 'percent_code_has_no_amount');
@@ -69,7 +70,7 @@ export const promoCodeInputSchema = z
       if (v.percent !== null) issue('percent', 'fixed_code_has_no_percent');
       if (v.maxDiscount !== null) issue('maxDiscount', 'fixed_code_has_no_cap');
     } else {
-      if (v.gift === null) issue('gift', 'required');
+      if (v.promoGift === null) issue('promoGift', 'required');
       if (v.percent !== null) issue('percent', 'gift_code_has_no_percent');
       if (v.amount !== null) issue('amount', 'gift_code_has_no_amount');
       if (v.maxDiscount !== null) issue('maxDiscount', 'gift_code_has_no_cap');
@@ -88,8 +89,8 @@ export const adminPromoCodeSchema = z.object({
   percent: z.number().int().nullable(),
   amount: z.number().int().nullable(),
   maxDiscount: z.number().int().nullable(),
-  /** A gift code's free item, named for the list row («Rain Tea 10 мл»); null for the other kinds. */
-  gift: z
+  /** A gift code's Promo gift, named for the list row («Rain Tea 10 мл»); null for the other kinds. */
+  promoGift: z
     .discriminatedUnion('kind', [
       z.object({
         kind: z.literal('volume'),

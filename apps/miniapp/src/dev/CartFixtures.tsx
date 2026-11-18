@@ -273,7 +273,7 @@ const withCode = (invalid: PromoCodeInvalid | null, code = 'BLOGER10'): CartDto 
  * A gift code (ADR 0039): its free Rain Tea 10 ml listed under the lines at 0, nothing off the
  * items; or the Discovery set; or its gift gone («Подарок закончился»).
  */
-const withGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
+const withPromoGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
   ...plain,
   lines: PHOTOGRAPHED,
   promoCode: 'RAINTEA',
@@ -287,11 +287,13 @@ const withGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
           name: 'Rain Tea',
           brand: 'Bvlgari',
           ml: 10,
+          lineTotal: 0,
         }
       : gift === 'discovery_set'
         ? {
             kind: 'discovery_set',
             photo: null,
+            lineTotal: 0,
             fragrances: ['Symphony', 'Tygar', 'Megamare', 'Erba Pura', 'Oud Wood'].map((name) => ({
               slug: name.toLowerCase().replace(' ', '-'),
               name,
@@ -308,7 +310,7 @@ const withGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
             type: 'promo_code',
             code: 'RAINTEA',
             amount: 0,
-            gift: {
+            promoGift: {
               item: gift === 'volume' ? { kind: 'volume', volumeId: 7 } : { kind: 'discovery_set' },
               value: gift === 'volume' ? 69_000 : 299_000,
             },
@@ -482,9 +484,9 @@ export const CART_FIXTURES = {
   'worst-nudge': worstNudge,
   unavailable,
   'promo-applied': withCode(null),
-  'promo-gift': withGift('volume'),
-  'promo-gift-set': withGift('discovery_set'),
-  'promo-gift-sold-out': withGift('sold_out'),
+  'promo-gift': withPromoGift('volume'),
+  'promo-gift-set': withPromoGift('discovery_set'),
+  'promo-gift-sold-out': withPromoGift('sold_out'),
   ...promoFixtures,
   'promo-worst': promoWorst,
   'promo-full': promoFull,

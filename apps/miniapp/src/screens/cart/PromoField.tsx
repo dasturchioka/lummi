@@ -1,4 +1,4 @@
-import type { Quote } from '@lummi/contracts';
+import { promoGiftOf, type Quote } from '@lummi/contracts';
 import { normalizePromoCode } from '@lummi/contracts/constants';
 import { fill, formatMoney } from '@lummi/i18n';
 import { useEffect, useRef, useState } from 'react';
@@ -101,7 +101,7 @@ export function PromoField({
     status = {
       tone: 'ok',
       // a gift code takes nothing off: its gift joins the order (ADR 0039)
-      text: discount.gift
+      text: promoGiftOf(discount)
         ? p.appliedGift
         : fill(p.applied, { amount: formatMoney(discount.amount, language) }),
     };

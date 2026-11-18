@@ -37,7 +37,7 @@ describe.each(['ru', 'uz'] as const)('the promo form’s gift type (%s, ADR 0039
 
   it('offers «Подарок» as a type: the gift picker replaces the amount and the cap', () => {
     const { container } = render(
-      <PromoForm initial={null} giftChoices={choices} language={language} t={t} />,
+      <PromoForm initial={null} promoGiftChoices={choices} language={language} t={t} />,
     );
     expect([...select(m.kind).options].map((o) => o.textContent)).toContain(m.kinds.gift);
     expect(screen.queryByLabelText(m.percent)).not.toBeNull();
@@ -77,7 +77,7 @@ describe.each(['ru', 'uz'] as const)('the promo form’s gift type (%s, ADR 0039
   });
 
   it('says what is missing when saved without a gift or its volume', () => {
-    render(<PromoForm initial={null} giftChoices={choices} language={language} t={t} />);
+    render(<PromoForm initial={null} promoGiftChoices={choices} language={language} t={t} />);
     fireEvent.change(screen.getByLabelText(m.code), { target: { value: 'RAINTEA' } });
     choose(m.kind, 'gift');
     fireEvent.submit(select(m.kind).closest('form')!);
@@ -95,7 +95,7 @@ describe.each(['ru', 'uz'] as const)('the promo form’s gift type (%s, ADR 0039
       percent: null,
       amount: null,
       maxDiscount: null,
-      gift: { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea', brand: 'Bvlgari' },
+      promoGift: { kind: 'volume', fragranceId: 7, ml: 10, name: 'Rain Tea', brand: 'Bvlgari' },
       expiresOn: null,
       minOrderTotal: null,
       totalLimit: null,

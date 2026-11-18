@@ -6,7 +6,14 @@ import type { OrderLineView } from '../orders/OrderLine';
  * промокоду». The Discovery set takes its name in the shopper's language, as a set line does.
  */
 export function promoGiftLine(gift: PromoGiftLineDto, discoveryName: string): OrderLineView {
-  const common = { photo: gift.photo, qty: 1, lineTotal: 0, markedDown: false, promoGift: true };
+  // the 0 is the server's (ADR 0001): the DTO says what the gift costs
+  const common = {
+    photo: gift.photo,
+    qty: 1,
+    lineTotal: gift.lineTotal,
+    markedDown: false,
+    promoGift: true,
+  };
   if (gift.kind === 'volume')
     return {
       ...common,

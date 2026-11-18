@@ -1,5 +1,8 @@
 import {
   normalizeRecipientPhone,
+  promoGiftOf,
+  samePromoGift,
+  samePromoGiftItem,
   type BuyNowItem,
   type CheckoutConflictCode,
   type CheckoutDto,
@@ -9,6 +12,7 @@ import {
   type OrderInputError,
   type OrderLineDto,
   type OrdersPageDto,
+  type PromoGiftItem,
 } from '@lummi/contracts';
 import {
   and,
@@ -40,11 +44,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { attributedLinkId } from '../campaigns/attribution';
 import {
-  appliedGift,
+  appliedPromoGift,
   loadQuote,
   readCartLines,
   toLineDto,
-  type GiftView,
+  type PromoGiftView,
   type LineSource,
   type StoredLine,
 } from '../cart/load-cart';
@@ -52,6 +56,7 @@ import { readDiscoverySet } from '../sets/sets';
 import { toRegionDto } from '../delivery/dto';
 import { defaultSavedPoint, listSavedPoints, rememberPoint } from '../delivery/saved-points';
 import { buyNowLine } from './buy-now';
+import { lineGiftLabel } from './promo-gift';
 import { isPlausibleBirthDate, recordBirthDate } from '../birthday/birthday.service';
 import {
   EntitlementLostError,
@@ -63,10 +68,10 @@ import type { Env } from '../env';
 import { cancellationOf } from '../order-status/history';
 import { OutboxService } from '../outbox/outbox.service';
 import { readShopCard } from '../payment/shop-card.service';
-import { enteredGift, lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
+import { enteredPromoGift, lockEnteredPromoCode, recordPromoUse } from '../promo/promo-codes';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
-import { retryTransientOnce, TryAgainError } from '../util/transient';
+import { RetryableConflictError, retryTransientOnce, TryAgainError } from '../util/transient';
 
 export type CheckoutOutcome =
   | { kind: 'ok'; checkout: CheckoutDto }
@@ -93,15 +98,13 @@ export function sameDiscount(a: Discount | null, b: Discount | null): boolean {
     return (
       b.type === 'promo_code' &&
       a.code === b.code &&
-      JSON.stringify(a.gift ?? null) === JSON.stringify(b.gift ?? null)
+      samePromoGift(a.promoGift ?? null, b.promoGift ?? null)
     );
   return 'id' in b && a.id === b.id;
 }
 
-/** The gift the code names changed between checkout's read and its lock (ADR 0039): run it again. */
-class GiftMovedError extends Error {
-  /** Read as a serialization failure, so `retryTransientOnce` runs the transaction once more. */
-  readonly code = '40001';
+/** The Promo gift the code names changed between checkout's read and its lock (ADR 0039): run it again. */
+class PromoGiftMovedError extends RetryableConflictError {
   constructor() {
     super('the gift promo code changed its gift while checkout locked its stock');
   }
@@ -177,7 +180,7 @@ export class OrdersService {
     const item = source.kind === 'lines' ? loaded.lines[0] : undefined;
     return {
       quote: loaded.quote,
-      promoGift: appliedGift(loaded.quote, loaded.gift),
+      promoGift: appliedPromoGift(loaded.quote, loaded.promoGift),
       itemCount: loaded.lines.filter((l) => !l.soldOut).reduce((n, l) => n + l.qty, 0),
       region: region ? toRegionDto(region) : null,
       deliveryCity: loaded.city,
@@ -304,13 +307,13 @@ export class OrdersService {
       } else wanted = source.lines;
       // A gift code's item (ADR 0039) is stock like a line: read without a lock here, its row locked
       // with the others below, and checked again once the code itself is locked.
-      const gift = source.kind === 'cart' ? await enteredGift(tx, c.id) : null;
-      if (wanted.some((w) => w.kind === 'discovery_set') || gift?.kind === 'discovery_set')
+      const promoGift = source.kind === 'cart' ? await enteredPromoGift(tx, c.id) : null;
+      if (wanted.some((w) => w.kind === 'discovery_set') || promoGift?.kind === 'discovery_set')
         await readDiscoverySet(tx, true);
       // a volume line locks its volume; a builder line the 10 ml of each of its five
       const lockVolumes = [
         ...wanted.flatMap((w) => w.volumeId ?? []),
-        ...(gift?.kind === 'volume' ? [gift.volumeId] : []),
+        ...(promoGift?.kind === 'volume' ? [promoGift.volumeId] : []),
       ];
       const lockFragrances = [
         ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
@@ -342,12 +345,12 @@ export class OrdersService {
       });
       const { quote } = loaded;
       // the gift the quote judged is the one whose stock is locked, or the owner moved it meanwhile
-      if (loaded.gift) {
-        const judged =
-          loaded.gift.kind === 'volume'
-            ? { kind: 'volume', volumeId: loaded.gift.volumeId }
+      if (loaded.promoGift) {
+        const judged: PromoGiftItem =
+          loaded.promoGift.kind === 'volume'
+            ? { kind: 'volume', volumeId: loaded.promoGift.volumeId }
             : { kind: 'discovery_set' };
-        if (JSON.stringify(judged) !== JSON.stringify(gift)) throw new GiftMovedError();
+        if (!samePromoGiftItem(judged, promoGift)) throw new PromoGiftMovedError();
       }
       const bought = loaded.lines.filter((l) => !l.soldOut);
       const conflict = async (code: CheckoutConflictCode) =>
@@ -491,8 +494,8 @@ export class OrdersService {
             };
           }),
           // A gift code's item (ADR 0039): one more line at 0, its regular price kept as its value.
-          ...(quote.discount?.type === 'promo_code' && quote.discount.gift && loaded.gift
-            ? [giftLine(order.id, bought.length, loaded.gift)]
+          ...(promoGiftOf(quote.discount) && loaded.promoGift
+            ? [promoGiftLine(order.id, bought.length, loaded.promoGift)]
             : []),
         ])
         .returning();
@@ -632,15 +635,9 @@ export class OrdersService {
     const dict = dictionaries[c.language];
     const t = dict.bot;
     const url = this.env.MINIAPP_URL ? orderUrl(this.env.MINIAPP_URL, order.number) : null;
-    // a gift code's gift (ADR 0039) is named, so the shopper knows it is in the parcel
-    const gift = lines.find((l) => l.promoGift);
-    const giftName = !gift
-      ? null
-      : gift.kind === 'volume'
-        ? `${gift.nameRu} ${gift.ml} ${dict.admin.orders.export.ml}`
-        : c.language === 'uz'
-          ? gift.nameUz
-          : gift.nameRu;
+    // a gift code's Promo gift (ADR 0039) is named, so the shopper knows it is in the parcel
+    const promoGift = lines.find((l) => l.promoGift);
+    const promoGiftName = promoGift ? lineGiftLabel(promoGift, c.language) : null;
     const created = fill(t.orderCreated, {
       number: String(order.number),
       amount: formatMoney(order.amountDue, c.language),
@@ -648,7 +645,9 @@ export class OrdersService {
     });
     return {
       chatId: c.telegramId,
-      text: giftName ? `${created}\n\n${fill(t.orderCreatedGift, { gift: giftName })}` : created,
+      text: promoGiftName
+        ? `${created}\n\n${fill(t.orderCreatedGift, { gift: promoGiftName })}`
+        : created,
       options: url
         ? { reply_markup: { inline_keyboard: [[{ text: t.openOrder, web_app: { url } }]] } }
         : {},
@@ -702,7 +701,7 @@ export function orderUrl(miniAppUrl: string, number: number): string {
  * `regular_unit_price`, quantity 1, flagged. A volume holds its reserve like any volume line; the
  * Discovery set its own stock, with its five fragrances as given (ADR 0009).
  */
-function giftLine(orderId: number, position: number, g: GiftView) {
+function promoGiftLine(orderId: number, position: number, g: PromoGiftView) {
   const base = {
     orderId,
     position,

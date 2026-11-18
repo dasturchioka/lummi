@@ -136,7 +136,7 @@ function giftPromo(
   return {
     code,
     kind: 'gift',
-    gift: {
+    promoGift: {
       item: o.item ?? RAIN_TEA_10,
       regular: o.regular ?? 69_000,
       soldOut: o.soldOut ?? false,
@@ -145,7 +145,7 @@ function giftPromo(
     appliesToMarkedDown: false,
   };
 }
-type GiftItem = Extract<PromoCode, { kind: 'gift' }>['gift']['item'];
+type GiftItem = Extract<PromoCode, { kind: 'gift' }>['promoGift']['item'];
 
 type DeepPartial<T> = T extends (infer U)[]
   ? DeepPartial<U>[]
@@ -1534,7 +1534,7 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
           type: 'promo_code',
           code: 'RAINTEA',
           amount: 0,
-          gift: { item: { kind: 'volume', volumeId: 70 }, value: 69_000 },
+          promoGift: { item: { kind: 'volume', volumeId: 70 }, value: 69_000 },
         },
         thresholdBaseAmount: 219_000,
         amountToFreeDelivery: 31_000,
@@ -1552,7 +1552,7 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
       },
       expected: {
         itemsSubtotal: 219_000,
-        discount: { amount: 0, gift: { item: { kind: 'discovery_set' }, value: 199_000 } },
+        discount: { amount: 0, promoGift: { item: { kind: 'discovery_set' }, value: 199_000 } },
         total: 244_000,
       },
     },
@@ -1571,7 +1571,7 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
         lines: [volume('g30', GUIDANCE, 30, 125_000, { qty: 2 })],
         promoCode: giftPromo('RAINTEA', { minOrderTotal: 250_000 }),
       },
-      expected: { discount: { gift: { value: 69_000 } }, deliveryFee: 0, total: 250_000 },
+      expected: { discount: { promoGift: { value: 69_000 } }, deliveryFee: 0, total: 250_000 },
     },
     {
       name: 'a gift with none left refuses the code: «Подарок закончился», the order is priced without it',
@@ -1591,14 +1591,14 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
       expected: { discount: null, promoCode: { invalid: { reason: 'gift_sold_out' } } },
     },
     {
-      name: 'nothing paid for (every line sold out) takes no gift',
+      name: 'nothing paid for (every line sold out) takes no gift, and says the gift needs items',
       given: {
         lines: [volume('g50', GUIDANCE, 50, 219_000, { soldOut: true })],
         promoCode: giftPromo('RAINTEA'),
       },
       expected: {
         discount: null,
-        promoCode: { invalid: { reason: 'no_eligible_items' } },
+        promoCode: { invalid: { reason: 'gift_needs_items' } },
         total: 0,
       },
     },
@@ -1613,7 +1613,7 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
       expected: {
         lines: [{ key: 'g50', unitPrice: 175_000, markedDown: true, lineTotal: 175_000 }],
         itemsSubtotal: 175_000,
-        discount: { type: 'promo_code', amount: 0, gift: { value: 69_000 } },
+        discount: { type: 'promo_code', amount: 0, promoGift: { value: 69_000 } },
         total: 200_000,
       },
     },
@@ -1670,7 +1670,7 @@ describe('quote(): a gift code adds a free line, not a price cut (ADR 0039)', ()
         promoCode: giftPromo('RAINTEA'),
       },
       expected: {
-        discount: { type: 'promo_code', code: 'RAINTEA', amount: 0, gift: { value: 69_000 } },
+        discount: { type: 'promo_code', code: 'RAINTEA', amount: 0, promoGift: { value: 69_000 } },
         total: 244_000,
         alternatives: [
           {
