@@ -18,7 +18,8 @@ jobs:
     concurrency:
       group: ${{ github.event_name == 'push' && github.ref != 'refs/heads/stage-1' && github.ref != 'refs/heads/main' && format('ci-{0}', github.ref) || format('ci-run-{0}', github.run_id) }}
       cancel-in-progress: true
-    timeout-minutes: 40
+    # the shared 4-vCPU VPS runs the suite several times slower than GitHub's runner did (#72)
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       # no `cache: npm`: on this runner ~/.npm persists between runs
