@@ -4,6 +4,7 @@ import { OrderReviewSection } from '@/components/reviews/order-review';
 import {
   FULFIL_ACTIONS,
   staffMay,
+  type AdminOrderCostsDto,
   type AdminOrderDto,
   type AdminReceiptDto,
   type FulfilAction,
@@ -46,6 +47,7 @@ import {
   PaymentSection,
   ReceiptsSection,
 } from './order-sections';
+import { OrderProfitSection } from './order-profit';
 
 type Dialog =
   | { kind: 'reject'; receipt: AdminReceiptDto; key: number }
@@ -99,10 +101,13 @@ type MoveResponse = Awaited<ReturnType<typeof browserApi.orders.fulfil>>;
  */
 export function OrderPage({
   initial,
+  costs,
   t,
   language,
 }: {
   initial: AdminOrderDto;
+  /** The order's profit (#77): the owner's only; null on a manager's page. */
+  costs?: AdminOrderCostsDto | null;
   t: AdminMessages;
   language: Language;
 }) {
@@ -328,6 +333,7 @@ export function OrderPage({
           <CustomerSection page={page} t={t} language={language} />
           <DeliverySection page={page} t={t} language={language} />
           <PaymentSection page={page} t={t} language={language} />
+          {costs && <OrderProfitSection page={page} initial={costs} t={t} language={language} />}
           <CommentSection page={page} t={t} language={language} />
           <GiftSection page={page} t={t} language={language} />
           <OrderReviewSection review={page.review} t={t} />

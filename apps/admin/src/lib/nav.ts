@@ -1,6 +1,7 @@
 import type { StaffDto } from '@lummi/contracts';
 import {
   BanknoteArrowDown,
+  Calculator,
   Cake,
   ChartColumn,
   CircleUserRound,
@@ -82,6 +83,7 @@ export const NAV: NavGroup[] = [
     key: 'manage',
     items: [
       { key: 'reports', icon: ChartColumn, href: '/reports', roles: OWNER },
+      { key: 'profitability', icon: Calculator, href: '/profitability', roles: OWNER },
       { key: 'shopCard', icon: CreditCard, href: '/shop-card', roles: OWNER },
       { key: 'settings', icon: SlidersHorizontal, href: '/settings', roles: OWNER },
       { key: 'audit', icon: ScrollText, href: '/audit', roles: OWNER },

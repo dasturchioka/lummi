@@ -2,15 +2,19 @@ import type {
   FragranceSales,
   SalesDay,
   SalesFigures,
+  SalesProfit,
   SalesReport,
   VolumeSales,
 } from '@lummi/contracts';
 import { formatCalendarDate, formatMoney, plural, type Language } from '@lummi/i18n';
 import {
   BanknoteArrowUp,
+  Coins,
   Download,
+  Percent,
   ReceiptText,
   ShoppingBag,
+  TrendingUp,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -27,8 +31,8 @@ import { num } from '@/lib/setting-copy';
 import { cn, fill } from '@/lib/utils';
 import { HowCounted, ReportRange, ReportTabs } from './report-chrome';
 
-/** How the top lists rank: most units (the API's order) or most net. */
-export type TopOrder = 'units' | 'net';
+/** How the top lists rank: most units (the API's order), most net, or most profit (#77). */
+export type TopOrder = 'units' | 'net' | 'profit';
 /** Rows each top list shows; the Excel export has them all. */
 const TOP_ROWS = 10;
 
@@ -89,7 +93,7 @@ export function SalesReportView({
         range={data}
         asked={asked}
         invalid={invalid}
-        keep={top === 'net' ? { top: 'net' } : undefined}
+        keep={top !== 'units' ? { top } : undefined}
       />
 
       {!sold ? (
@@ -97,6 +101,7 @@ export function SalesReportView({
       ) : (
         <div className="grid gap-4 lg:gap-6">
           <Totals r={r} totals={data.totals} money={money} />
+          <Profit r={r} profit={data.profit} language={language} money={money} />
           <Days r={r} language={language} data={data} money={money} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className={HEADING}>{r.topTitle}</h2>
@@ -144,6 +149,11 @@ export function SalesReportView({
                       {fill(r.unitsCount, { n: num(s.units) })}
                     </span>
                     <span className="font-semibold whitespace-nowrap">{money(s.net)}</span>
+                    {s.profit !== null && s.units > 0 && (
+                      <span className="block text-small whitespace-nowrap text-muted-foreground">
+                        {fill(r.profitShort, { amount: money(s.profit) })}
+                      </span>
+                    )}
                   </span>
                 </li>
               ))}
@@ -212,6 +222,65 @@ function Totals({
       <HowCounted r={r} className="px-1">
         <p>{r.periodHint}</p>
         <p>{r.netHint}</p>
+      </HowCounted>
+    </section>
+  );
+}
+
+/**
+ * The range's profit (#77) as figure cards under the sales figures: revenue, cost, profit and
+ * margin over the orders with a cost snapshot; how many were left out says so under them.
+ */
+function Profit({
+  r,
+  profit,
+  language,
+  money,
+}: {
+  r: Copy;
+  profit: SalesProfit;
+  language: Language;
+  money: (n: number) => string;
+}) {
+  const f = r.profit;
+  const cards: { key: string; icon: LucideIcon; label: string; value: string }[] = [
+    { key: 'revenue', icon: Coins, label: f.revenue, value: money(profit.revenue) },
+    { key: 'cost', icon: ReceiptText, label: f.cost, value: money(profit.cost) },
+    { key: 'profit', icon: TrendingUp, label: f.profit, value: money(profit.profit) },
+    {
+      key: 'margin',
+      icon: Percent,
+      label: f.margin,
+      value: profit.margin === null ? '—' : `${Math.round(profit.margin * 100)}\u00a0%`,
+    },
+  ];
+  return (
+    <section aria-labelledby="report-profit" className="@container" data-profit>
+      <h2 id="report-profit" className={cn(HEADING, 'mb-3 px-1')}>
+        {f.title}
+      </h2>
+      {profit.orders === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">{f.none}</p>
+      ) : (
+        <StatGrid>
+          {cards.map((c) => (
+            <StatCard
+              key={c.key}
+              icon={c.icon}
+              label={c.label}
+              value={<StatAmount text={c.value} />}
+            />
+          ))}
+        </StatGrid>
+      )}
+      {profit.uncosted > 0 && (
+        <p className="mt-3 px-1 text-small text-pretty text-muted-foreground">
+          {plural(language, profit.uncosted, f.uncosted)}
+        </p>
+      )}
+      <HowCounted r={r} className="px-1">
+        <p>{f.hint}</p>
+        <p>{f.rowsHint}</p>
       </HowCounted>
     </section>
   );
@@ -421,9 +490,19 @@ function DayBlock({
   );
 }
 
-/** The top list in the chosen order: the API's (most units, then net), or most net, then units. */
+/**
+ * The top list in the chosen order: the API's (most units, then net), most net then units, or
+ * most profit (a row without costs last) then net.
+ */
 function sortTop<R extends FragranceSales>(rows: R[], by: TopOrder): R[] {
-  return by === 'units' ? rows : [...rows].sort((a, b) => b.net - a.net || b.units - a.units);
+  if (by === 'units') return rows;
+  if (by === 'net') return [...rows].sort((a, b) => b.net - a.net || b.units - a.units);
+  return [...rows].sort(
+    (a, b) =>
+      (a.profit === null ? 1 : 0) - (b.profit === null ? 1 : 0) ||
+      (b.profit ?? 0) - (a.profit ?? 0) ||
+      b.net - a.net,
+  );
 }
 
 /** «По штукам · По сумме»: links, so the choice lives in the URL with the range. */
@@ -432,7 +511,7 @@ function TopSwitch({ r, data, top }: { r: Copy; data: SalesReport; top: TopOrder
     `/reports?${new URLSearchParams({
       from: data.from,
       to: data.to,
-      ...(o === 'net' ? { top: 'net' } : {}),
+      ...(o !== 'units' ? { top: o } : {}),
     })}`;
   return (
     <div
@@ -444,6 +523,7 @@ function TopSwitch({ r, data, top }: { r: Copy; data: SalesReport; top: TopOrder
         [
           ['units', r.byUnits],
           ['net', r.byNet],
+          ['profit', r.byProfit],
         ] as const
       ).map(([o, label]) => (
         <Link
@@ -509,7 +589,12 @@ function TopList<R extends FragranceSales>({
               <span className="text-right tabular-nums">
                 {(by === 'net'
                   ? [money(row.net), fill(r.unitsCount, { n: num(row.units) })]
-                  : [fill(r.unitsCount, { n: num(row.units) }), money(row.net)]
+                  : by === 'profit'
+                    ? [
+                        row.profit === null ? '—' : money(row.profit),
+                        fill(r.unitsCount, { n: num(row.units) }),
+                      ]
+                    : [fill(r.unitsCount, { n: num(row.units) }), money(row.net)]
                 ).map((text, k) => (
                   <span
                     key={k}
