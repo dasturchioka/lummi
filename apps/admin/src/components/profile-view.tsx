@@ -5,6 +5,7 @@ import { formatTime, type Language } from '@lummi/i18n';
 import { Check, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { ProfilePhoto } from '@/components/profile-photo';
 import { PageHeader } from '@/components/page-header';
 import { CopyField } from '@/components/password-fields';
 import { PasswordChangeForm } from '@/components/password-change-form';
@@ -62,6 +63,10 @@ export function ProfileView({
               {member.login ?? <span className="text-muted-foreground">{p.noLogin}</span>}
             </dd>
           </dl>
+        </Section>
+
+        <Section title={p.photoTitle}>
+          <ProfilePhoto member={member} t={t} />
         </Section>
 
         <Section title={p.passwordTitle}>

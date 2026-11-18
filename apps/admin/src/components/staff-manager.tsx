@@ -1,5 +1,6 @@
 'use client';
 
+import { Avatar } from '@/components/avatar';
 import { normalizeLogin, STAFF_LOGIN_PATTERN, type StaffDto } from '@lummi/contracts';
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -205,6 +206,7 @@ export function StaffManager({
                     key={s.id}
                     className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-4 @xl:px-5"
                   >
+                    <Avatar name={s.name} photo={s.photo} />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold [overflow-wrap:anywhere]">
                         {s.name}
@@ -245,17 +247,22 @@ export function StaffManager({
                   {initial.map((s) => (
                     <TR key={s.id}>
                       <TD className="min-w-64 [overflow-wrap:anywhere]">
-                        <p className="font-semibold">
-                          {s.name}
-                          {you(s)}
-                        </p>
-                        <p className="mt-0.5 text-[13px] text-muted-foreground">
-                          {t.roles[s.role]}
-                        </p>
-                        <p className="mt-0.5 max-w-[34ch] text-[13px] text-pretty text-muted-foreground">
-                          {opensFor(s.role, t)}
-                        </p>
-                        {s.id !== meId && <div className="-ml-3 mt-1">{roleButton(s)}</div>}
+                        <div className="flex items-start gap-3">
+                          <Avatar name={s.name} photo={s.photo} />
+                          <div className="min-w-0">
+                            <p className="font-semibold">
+                              {s.name}
+                              {you(s)}
+                            </p>
+                            <p className="mt-0.5 text-[13px] text-muted-foreground">
+                              {t.roles[s.role]}
+                            </p>
+                            <p className="mt-0.5 max-w-[34ch] text-[13px] text-pretty text-muted-foreground">
+                              {opensFor(s.role, t)}
+                            </p>
+                            {s.id !== meId && <div className="-ml-3 mt-1">{roleButton(s)}</div>}
+                          </div>
+                        </div>
                       </TD>
                       <TD className="min-w-40">
                         <p className="whitespace-nowrap">

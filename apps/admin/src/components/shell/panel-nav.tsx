@@ -4,6 +4,7 @@ import type { StaffDto } from '@lummi/contracts';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { Avatar } from '@/components/avatar';
 import { Logo } from '@/components/logo';
 import { SignOutButton } from '@/components/sign-out-button';
 import type { AdminMessages } from '@/lib/i18n';
@@ -140,22 +141,9 @@ export function NavScroller({
 
 /** Who is signed in, and sign-out: the foot of the sidebar and of the menu sheet. */
 export function PanelAccount({ member, t }: { member: StaffDto; t: AdminMessages }) {
-  // first letters of the first two words that have one ("@dilnoza" -> "D", "Ж" -> "Ж")
-  const initials = member.name
-    .split(/\s+/)
-    .map((w) => w.match(/\p{L}/u)?.[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
   return (
     <div className="flex min-w-0 items-center gap-3 pl-3">
-      <span
-        aria-hidden
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-stone text-[13px] font-semibold"
-      >
-        {initials}
-      </span>
+      <Avatar name={member.name} photo={member.photo} />
       <div className="min-w-0 flex-1 leading-tight">
         <p className="truncate text-sm font-semibold" title={member.name}>
           {member.name}

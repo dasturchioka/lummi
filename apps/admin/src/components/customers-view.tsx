@@ -1,4 +1,5 @@
 import type { AdminCustomer, AdminCustomersPage, CustomersQuery } from '@lummi/contracts';
+import { Avatar } from '@/components/avatar';
 import { formatMoney, formatPhone, plural, type Language } from '@lummi/i18n';
 import { ChevronLeft, ChevronRight, Send } from 'lucide-react';
 import Link from 'next/link';
@@ -136,12 +137,15 @@ export function CustomersView({
                 data-testid={`customer-block-${row.id}`}
                 className="grid gap-1 px-4 py-3.5"
               >
-                <Link
-                  href={`/customers/${row.id}`}
-                  className="font-semibold leading-snug [overflow-wrap:anywhere] underline-offset-[3px] hover:underline"
-                >
-                  {row.name}
-                </Link>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar name={row.name} photo={row.photo} />
+                  <Link
+                    href={`/customers/${row.id}`}
+                    className="min-w-0 font-semibold leading-snug [overflow-wrap:anywhere] underline-offset-[3px] hover:underline"
+                  >
+                    {row.name}
+                  </Link>
+                </div>
                 <p className="text-small tabular-nums">
                   {c.orders}: <span className="font-semibold">{num(row.ordersCount)}</span> ·{' '}
                   {c.spent}{' '}
@@ -184,12 +188,15 @@ export function CustomersView({
                 {data.items.map((row) => (
                   <TR key={row.id} data-testid={`customer-row-${row.id}`}>
                     <TD className="min-w-[13rem] max-w-[20rem]">
-                      <Link
-                        href={`/customers/${row.id}`}
-                        className="font-semibold break-words hover:underline underline-offset-[3px]"
-                      >
-                        {row.name}
-                      </Link>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar name={row.name} photo={row.photo} />
+                        <Link
+                          href={`/customers/${row.id}`}
+                          className="min-w-0 font-semibold break-words hover:underline underline-offset-[3px]"
+                        >
+                          {row.name}
+                        </Link>
+                      </div>
                     </TD>
                     <TD className="min-w-[11rem] max-w-[16rem]">
                       <TelegramLink c={row} t={t} />
