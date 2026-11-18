@@ -136,7 +136,11 @@ _Avoid_: Price, cost price of the order (that is the order's goods plus order co
 
 **Oil price**:
 So'm per gram of a fragrance's perfume oil as the supplier's invoice reads, before the supplier discount. The discount and the delivery to Termez are settings applied on top.
-_Avoid_: Oil cost, landed price (that is after the discount and delivery), price per ml
+_Avoid_: Oil cost, Landed oil price (that is after the discount and delivery), price per ml
+
+**Landed oil price**:
+What a gram of a fragrance's oil really costs the shop: its Oil price less the supplier discount, plus the delivery to Termez (both settings). The oil in a Unit cost is costed at it; the fragrance page shows it («Масло после скидки поставщика и доставки»). Computed by the server, never stored.
+_Avoid_: Oil price (that is the invoice's, before the discount), net price, purchase price
 
 **Tier**:
 The oil grade a fragrance is bought at, as the invoice names it: TOP, PREMIUM or PREMIUM NEW. Admin only.

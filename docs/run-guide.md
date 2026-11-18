@@ -99,6 +99,19 @@ $dc run --rm -T api node --import tsx src/cli/set-owner-password.ts --login <log
 
 The seed step (`src/cli/seed-staging.ts`) loads the 67-fragrance catalog (placeholder prices, photos, Discovery set) only while the catalog is empty, and adds missing BTS points; a second run changes nothing.
 
+**Oil prices (#75).** The owner's oil price list (a JSON list of `{ name, tier, oilPrice, supplier, invoice }`) is customer data and is never committed. Put it into the files volume's `private/` (never served; backed up like the receipts), point `OIL_PRICES_FILE` at it, and run the seed step once; every later deploy runs it again. It fills only the fields a fragrance has empty and never overwrites what the owner set. A missing or unreadable file, or a bad row, is logged and skipped, never a failed deploy.
+
+```sh
+cd /opt/lummi-staging && dc='docker compose --env-file .env --env-file .deploy.env'
+chmod 644 oil-prices.json          # the api runs as `node`; the copy lands owned by root
+$dc cp oil-prices.json api:/data/files/private/oil-prices.json
+echo 'OIL_PRICES_FILE=/data/files/private/oil-prices.json' >> .env
+$dc run --rm -T api node --import tsx src/cli/seed-staging.ts   # fills now; prints «oil prices: …»
+rm oil-prices.json                 # the volume holds it now
+```
+
+A new list later: copy it over the same path and run the seed step again (or wait for the next deploy). It fills only what is still empty; to change a price the owner set, edit it in the panel or the Excel file.
+
 Manual commands work only after one CI run (they need `docker-compose.yml` and `.deploy.env`). To run them before that: `scp docker-compose.yml lummi-deploy@<host>:/opt/lummi-staging/`, write `.deploy.env` with `IMAGE_TAG=<commit sha>` and `GHCR_OWNER=<owner>`, and `docker login ghcr.io -u <user>` with a read-only PAT (`read:packages`), then `docker logout ghcr.io` when done. The steps the job runs are:
 
 ```sh
