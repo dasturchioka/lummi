@@ -23,10 +23,15 @@ async function card(slug: string) {
 }
 
 describe('seed', () => {
-  it('loads all 67 fragrances, 29 families and three flagged placeholder volumes each', async () => {
+  it('loads all 67 fragrances, 29 families, three flagged placeholder volumes each and a 5 ml', async () => {
     expect(await t.db.select().from(fragrances)).toHaveLength(67);
     expect(await t.db.select().from(families)).toHaveLength(29);
-    const vols = await t.db.select().from(volumes);
+    const all = await t.db.select().from(volumes);
+    // the 5 ml (ADR 0042): stocked, never sold, so no price and nothing on hand until bottled
+    const fives = all.filter((v) => v.ml === 5);
+    expect(fives).toHaveLength(67);
+    expect(fives.every((v) => v.price === 0 && v.onHand === 0 && !v.isPlaceholder)).toBe(true);
+    const vols = all.filter((v) => v.ml !== 5);
     expect(vols).toHaveLength(67 * 3);
     expect(vols.every((v) => v.isPlaceholder && v.onHand === 20)).toBe(true);
     expect(vols.filter((v) => v.ml === 30).every((v) => v.price === 149_000)).toBe(true);

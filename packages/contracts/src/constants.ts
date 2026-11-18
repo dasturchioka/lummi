@@ -29,6 +29,7 @@ export const SILLAGES = ['medium', 'noticeable', 'strong'] as const;
 export const SEASONS = ['spring_summer', 'autumn_winter', 'all_year', 'spring_autumn'] as const;
 export const TIMES_OF_DAY = ['day', 'evening', 'day_evening', 'everyday'] as const;
 export const NOTE_LEVELS = ['top', 'heart', 'base'] as const;
+/** The volumes the shop sells (5 ml is stocked but never sold alone: `SAMPLE_ML`). */
 export const VOLUMES_ML = [10, 30, 50] as const;
 /**
  * The oil grade a fragrance is bought at, as the supplier's invoice names it (ADR 0040): admin
@@ -74,10 +75,23 @@ export const LINE_KINDS = ['volume', 'builder_set', 'discovery_set'] as const;
 export type LineKind = (typeof LINE_KINDS)[number];
 export type SetLineKind = Exclude<LineKind, 'volume'>;
 
-/** Both kinds of set hold exactly this many different fragrances, 10 ml each (ADR 0009). */
+/** Every kind of set holds exactly this many different fragrances (ADR 0009). */
 export const SET_SIZE = 5;
-/** The ml of a set's vials (ADR 0009); the 5 × 5 ml set comes with #79. */
+/** The ml of a builder set's vials and of the first Discovery set, «Discovery Set 5×10 мл» (ADR 0009). */
 export const SET_VIAL_ML = 10;
+/**
+ * The Discovery sets by the ml of their vials (ADR 0042): «Discovery Set 5×10 мл» and «Discovery
+ * Set 5×5 мл». Each is its own product with its own price, photo, composition and stock.
+ */
+export const DISCOVERY_VIAL_MLS = [10, 5] as const;
+export type DiscoveryVialMl = (typeof DISCOVERY_VIAL_MLS)[number];
+/**
+ * The 5 ml bottle (ADR 0042): stocked and costed, bottled from oil, but never sold on its own; it
+ * goes into the 5 × 5 ml set and is the gift sample of a first order.
+ */
+export const SAMPLE_ML = 5;
+/** Every bottle size a fragrance is stocked in: the sold ones and the 5 ml. */
+export const STOCK_VOLUMES_ML = [SAMPLE_ML, ...VOLUMES_ML] as const;
 
 /**
  * What opens an Upgrade right (ADR 0003): a delivered set, or a delivered single bottle of

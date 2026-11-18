@@ -168,12 +168,14 @@ export class ReviewsService {
    * the Discovery set, or a builder set. A published review shows on all of them (spec 2026-11-07).
    */
   private orderHas(target: Target): SQL {
+    // the 5 × 10 ml set's card (the 5 × 5 ml one shows no reviews yet, ADR 0042)
     if (target.kind === 'discovery')
-      return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'discovery_set')`;
+      return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'discovery_set' and ol.ml = 10)`;
     if (target.kind === 'builder')
       return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'builder_set')`;
+    // a gift sample came free with the order (ADR 0042): it is not what the review is about
     return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and (
-      ol.fragrance_id = ${target.id}
+      (ol.fragrance_id = ${target.id} and not ol.gift_sample)
       or exists (select 1 from jsonb_array_elements(ol.set_composition) e where (e->>'fragranceId')::bigint = ${target.id})
     ))`;
   }

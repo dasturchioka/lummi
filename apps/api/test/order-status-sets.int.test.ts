@@ -35,7 +35,9 @@ const staff = async (): Promise<TransitionActor> => ({
   id: (await t.managerSession()).staff.id,
 });
 
-const discoveryOnHand = async () => (await t.db.select().from(discoverySet))[0]!.onHand;
+/** The 5 × 10 ml set's boxes on hand. */
+const discoveryOnHand = async () =>
+  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, 10)))[0]!.onHand;
 const tenMlOnHand = async (slugs: string[]) =>
   Promise.all(
     slugs.map(async (s) => {

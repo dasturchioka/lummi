@@ -9,11 +9,13 @@ export async function readPricingSettings(tx: DbOrTx): Promise<PricingSettings> 
     'pricing.thresholdBase',
     'pricing.discountsApplyToMarkedDown',
     'pricing.fullSizeVolumesMl',
+    'entitlements.setDiscountScope',
   ]);
   return {
     freeDeliveryThreshold: s['pricing.freeDeliveryThreshold'],
     thresholdBase: s['pricing.thresholdBase'],
     discountsApplyToMarkedDown: s['pricing.discountsApplyToMarkedDown'],
     fullSizeVolumesMl: s['pricing.fullSizeVolumesMl'],
+    setDiscountScope: s['entitlements.setDiscountScope'],
   };
 }

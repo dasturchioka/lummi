@@ -9,6 +9,7 @@ import type {
   VolumeInput,
 } from '@lummi/contracts';
 import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
+import { SAMPLE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -19,6 +20,7 @@ import {
   fragrances,
   inArray,
   notes,
+  sellableVolume,
   sql,
   volumes,
   type Db,
@@ -151,9 +153,13 @@ export class CatalogAdminService {
       .select()
       .from(volumes)
       .where(
-        inArray(
-          volumes.fragranceId,
-          rows.map((r) => r.id),
+        and(
+          inArray(
+            volumes.fragranceId,
+            rows.map((r) => r.id),
+          ),
+          // the form's volumes: the 5 ml has no price and is counted on the stock page (ADR 0042)
+          sellableVolume(),
         ),
       )
       .orderBy(asc(volumes.ml));
@@ -187,7 +193,11 @@ export class CatalogAdminService {
         .from(fragranceSimilar)
         .where(eq(fragranceSimilar.fragranceId, id))
         .orderBy(asc(fragranceSimilar.position)),
-      db.select().from(volumes).where(eq(volumes.fragranceId, id)).orderBy(asc(volumes.ml)),
+      db
+        .select()
+        .from(volumes)
+        .where(and(eq(volumes.fragranceId, id), sellableVolume()))
+        .orderBy(asc(volumes.ml)),
     ]);
     const reserved = await reservedByVolume(
       db,
@@ -251,7 +261,8 @@ export class CatalogAdminService {
     const vols = await this.db
       .select()
       .from(volumes)
-      .where(eq(volumes.fragranceId, id))
+      // price against cost: the 5 ml has no price (ADR 0042)
+      .where(and(eq(volumes.fragranceId, id), sellableVolume()))
       .orderBy(asc(volumes.ml));
     return fragranceCosts(f.oilPrice, vols, await readCostSettings(this.db), this.edges.clock.now());
   }
@@ -299,6 +310,9 @@ export class CatalogAdminService {
     const id = row!.id;
     await this.writeLinks(tx, id, input);
     for (const v of input.volumes) await this.insertVolume(tx, id, v, opts.placeholder);
+    // the 5 ml bottle (ADR 0042): stocked and bottled for the 5 × 5 ml set and the gift sample,
+    // never sold, so it has no price and no place in the form
+    await tx.insert(volumes).values({ fragranceId: id, ml: SAMPLE_ML, price: 0, onHand: 0 });
     // the first counts are a correction from the form or the import (#76); the seed writes none
     if (actor)
       await this.recordFormCounts(

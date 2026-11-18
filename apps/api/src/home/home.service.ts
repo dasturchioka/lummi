@@ -226,7 +226,8 @@ export class HomeService {
       'stock.lowAvailableThreshold',
     ]);
     const { volumes, discovery } = await stockRows(this.db, threshold);
-    const rows = [discovery, ...volumes].filter((r) =>
+    // the filter leaves the 5 ml out: it is not sold alone (ADR 0042)
+    const rows = [...discovery, ...volumes].filter((r) =>
       matchesStockQuery(r, { filter: 'low', visibility: 'visible' }),
     );
     return rows

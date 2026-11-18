@@ -125,6 +125,9 @@ export const discountsMessages = defineMessages(
         set: 'На один полный флакон {volumes} мл любого аромата из набора. В корзине применится сама.',
         single_10ml: 'На один полный флакон {volumes} мл этого аромата. В корзине применится сама.',
       },
+      /** A set's right while it covers any fragrance (#79). */
+      rightTermsAny:
+        'На один полный флакон {volumes} мл любого аромата. В корзине применится сама.',
     },
   },
   {
@@ -224,6 +227,8 @@ export const discountsMessages = defineMessages(
         set: 'Toʻplamdagi istalgan iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
         single_10ml: 'Shu iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
       },
+      rightTermsAny:
+        'Istalgan iforning bitta toʻliq {volumes} ml flakoniga. Savatda oʻzi qoʻllanadi.',
     },
   },
 );

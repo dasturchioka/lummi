@@ -52,8 +52,9 @@ async function volumeRow(slug: string, ml: number, as: StaffSession = manager) {
   const rows = (await list(as)).rows;
   return { id, row: rows.find((r) => r.volumeId === id && r.ml === ml)! };
 }
+/** The 5 × 10 ml set's row (its key is the one it had before the 5 × 5 ml set). */
 async function discoveryRow() {
-  return (await list()).rows.find((r) => r.kind === 'discovery')!;
+  return (await list()).rows.find((r) => r.key === 'discovery')!;
 }
 
 /** Reserves `qty` of a fragrance's 10 ml for a shopper. */
@@ -102,7 +103,8 @@ describe('the rows', () => {
     expect(lowThreshold).toBe(3);
     const count = await t.db.select().from(volumes);
     expect(rows.filter((r) => r.kind === 'volume')).toHaveLength(count.length);
-    expect(rows.filter((r) => r.kind === 'discovery')).toHaveLength(1);
+    // both Discovery sets (ADR 0042), each with its own row
+    expect(rows.filter((r) => r.kind === 'discovery').map((r) => r.ml)).toEqual([10, 5]);
 
     const reserved = await reservedByVolume(
       t.db,
@@ -118,7 +120,7 @@ describe('the rows', () => {
       onHand: 20,
       available: 18,
     });
-    expect((await discoveryRow()).reserved).toBe(await reservedDiscovery(t.db));
+    expect((await discoveryRow()).reserved).toBe(await reservedDiscovery(t.db, 10));
   });
 
   it("reports the Discovery set's own reserve, not a 10 ml one", async () => {
@@ -270,7 +272,7 @@ describe('paging (by fragrance)', () => {
     expect(one.rows[0]?.kind).toBe('discovery');
     const volumesOnPage = one.rows.filter((r) => r.kind === 'volume');
     expect(ids(volumesOnPage)).toHaveLength(5);
-    expect(volumesOnPage).toHaveLength(15); // every volume of those five, none split off
+    expect(volumesOnPage).toHaveLength(20); // every volume of those five (5 ml too), none split off
     const two = await page(manager, { pageSize: '5', page: '2' });
     expect(two.rows.some((r) => r.kind === 'discovery')).toBe(false);
     expect(ids(two.rows).filter((id) => ids(volumesOnPage).includes(id))).toEqual([]);
@@ -377,6 +379,7 @@ describe('filters and search', () => {
       rows.every((r) => r.name === null || r.name.toLowerCase().includes(f!.name.toLowerCase())),
     ).toBe(true);
     expect((await list(manager, { q: 'discovery' })).rows.map((r) => r.kind)).toEqual([
+      'discovery',
       'discovery',
     ]);
     expect((await list(manager, { q: 'zzzzqqq' })).rows).toEqual([]);

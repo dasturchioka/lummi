@@ -38,12 +38,14 @@ beforeEach(async () => {
         .where(and(eq(volumes.fragranceId, id), eq(volumes.ml, ml)));
   await t.db
     .insert(discoverySet)
-    .values({ id: true, price: 299_000 })
-    .onConflictDoUpdate({ target: discoverySet.id, set: { price: 299_000 } });
-  await t.db.delete(discoverySetItems);
+    .values({ vialMl: 10, price: 299_000 })
+    .onConflictDoUpdate({ target: discoverySet.vialMl, set: { price: 299_000 } });
+  await t.db.delete(discoverySetItems).where(eq(discoverySetItems.vialMl, 10));
   await t.db
     .insert(discoverySetItems)
-    .values(ids.slice(0, 5).map((fragranceId, i) => ({ position: i + 1, fragranceId })));
+    .values(
+      ids.slice(0, 5).map((fragranceId, i) => ({ vialMl: 10, position: i + 1, fragranceId })),
+    );
 });
 
 const table = (query: Record<string, string> = {}, who: StaffSession = owner) =>

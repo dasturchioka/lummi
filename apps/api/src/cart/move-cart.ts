@@ -18,11 +18,11 @@ export async function moveCartData(
     select ${toId}, volume_id, qty from cart_lines where customer_id = ${fromId} and kind = 'volume'
     on conflict (customer_id, volume_id) do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
   `);
-  // set lines (ADR 0009): the Discovery set adds up, and so do builder sets of the same five
+  // set lines (ADR 0009): each Discovery set adds up, and so do builder sets of the same five
   await tx.execute(sql`
-    insert into cart_lines (customer_id, kind, qty)
-    select ${toId}, kind, qty from cart_lines where customer_id = ${fromId} and kind = 'discovery_set'
-    on conflict (customer_id) where kind = 'discovery_set' do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
+    insert into cart_lines (customer_id, kind, vial_ml, qty)
+    select ${toId}, kind, vial_ml, qty from cart_lines where customer_id = ${fromId} and kind = 'discovery_set'
+    on conflict (customer_id, vial_ml) where kind = 'discovery_set' do update set qty = least(cart_lines.qty + excluded.qty, ${CART_MAX_QTY})
   `);
   await tx.execute(sql`
     insert into cart_lines (customer_id, kind, fragrance_ids, qty)

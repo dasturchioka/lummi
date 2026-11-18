@@ -576,6 +576,28 @@ export const settingDefinitions = {
       uz: 'Toʻplam yetkazilgan kundan Toshkent vaqti bilan hisoblanadi; chegirma oxirgi kun oxirigacha amal qiladi.',
     },
   },
+  /**
+   * What a right from a set covers (#79, ADR 0042): a full-size bottle of one of the set's five
+   * (TZ §3.4, the default) or of any fragrance (the owner's calculator). Read by `quote()` when it
+   * prices, so a change applies to rights already open too.
+   */
+  'entitlements.setDiscountScope': {
+    schema: z.enum(['set_fragrances', 'any_fragrance']),
+    default: 'set_fragrances',
+    area: 'pricing',
+    label: {
+      ru: 'Скидка за набор: на какие ароматы',
+      uz: 'Toʻplam uchun chegirma: qaysi iforlarga',
+    },
+    hint: {
+      ru: 'На полный флакон (30 или 50 мл) аромата из набора или любого аромата. Действует и для уже открытых скидок.',
+      uz: 'Toʻplamdagi ifor yoki istalgan iforning toʻliq flakoniga (30 yoki 50 ml). Ochilgan chegirmalarga ham amal qiladi.',
+    },
+    optionLabels: {
+      set_fragrances: { ru: 'Аромат из набора', uz: 'Toʻplamdagi ifor' },
+      any_fragrance: { ru: 'Любой аромат', uz: 'Istalgan ifor' },
+    },
+  },
   /** A delivered single 10 ml bottle opens a right on that fragrance (ADR 0003; off until the owner decides). */
   'upgradeRights.single10ml.enabled': {
     schema: z.boolean(),
@@ -985,6 +1007,33 @@ export const settingDefinitions = {
     hint: {
       ru: 'Пробник разливается во флакон 5 мл.',
       uz: 'Namuna 5 ml flakonga quyiladi.',
+    },
+  },
+  /**
+   * The gift sample (#79, ADR 0042): a customer's first order gets one 5 ml bottle free while this
+   * is on and one is in stock. Not a discount: it rides with any. Its fill is `cost.order.giftSampleMl`.
+   */
+  'giftSample.enabled': {
+    schema: z.boolean(),
+    default: true,
+    area: 'costOrder',
+    label: { ru: 'Пробник 5 мл в первый заказ', uz: 'Birinchi buyurtmaga 5 ml namuna' },
+    hint: {
+      ru: 'Первый заказ клиента получает бесплатный пробник, пока есть флаконы 5 мл. Это не скидка: он идёт с любой скидкой.',
+      uz: 'Mijozning birinchi buyurtmasiga 5 ml flakonlar bor ekan, bepul namuna qoʻshiladi. Bu chegirma emas: istalgan chegirma bilan birga beriladi.',
+    },
+  },
+  /** Which fragrance the sample is: 0 = the one with the most 5 ml bottles available, else a fragrance id. */
+  'giftSample.fragranceId': {
+    schema: z.number().int().min(0),
+    default: 0,
+    area: 'costOrder',
+    unit: 'none',
+    hideBounds: true,
+    label: { ru: 'Пробник: аромат', uz: 'Namuna: ifor' },
+    hint: {
+      ru: '0 — аромат, которого больше всего во флаконах 5 мл. Иначе номер аромата: число в адресе его страницы в панели (/catalog/12 → 12). Если его 5 мл закончились, пробника нет.',
+      uz: '0 — 5 ml flakonlari eng koʻp qolgan ifor. Aks holda iforning raqami: paneldagi sahifasi manzilidagi son (/catalog/12 → 12). Uning 5 ml’i tugasa, namuna berilmaydi.',
     },
   },
   /** The «Рентабельность» table flags a sale whose margin is under this (#77; the calculator's 15 %). */

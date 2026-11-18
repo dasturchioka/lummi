@@ -403,7 +403,10 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
     await s.apply('RAINTEA');
     const kept = await placeOrder(s);
     await payAndMove(kept.number, 'handed_to_bts');
-    const [box] = await t.db.select({ onHand: discoverySet.onHand }).from(discoverySet);
+    const [box] = await t.db
+      .select({ onHand: discoverySet.onHand })
+      .from(discoverySet)
+      .where(eq(discoverySet.vialMl, 10));
     expect(box!.onHand).toBe(2);
     expect(await discovery()).toBe(2);
   });

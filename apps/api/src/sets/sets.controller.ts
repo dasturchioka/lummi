@@ -11,9 +11,9 @@ export class SetsController {
 
   @TsRestHandler(contract.sets.discovery)
   discovery() {
-    return tsRestHandler(contract.sets.discovery, async () => ({
+    return tsRestHandler(contract.sets.discovery, async ({ query }) => ({
       status: 200 as const,
-      body: await this.sets.discovery(),
+      body: await this.sets.discovery(query.vialMl),
     }));
   }
 

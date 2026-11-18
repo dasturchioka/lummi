@@ -32,7 +32,7 @@ export class CartController {
   @TsRestHandler(contract.cart.addDiscovery)
   addDiscovery(@SessionCustomerId() customerId: number) {
     return tsRestHandler(contract.cart.addDiscovery, async ({ body }) => {
-      const res = await this.cart.addDiscovery(customerId, body.qty);
+      const res = await this.cart.addDiscovery(customerId, body.vialMl, body.qty);
       if (res.result !== 'ok') return { status: 409 as const, body: { code: 'sold_out' as const } };
       return { status: 200 as const, body: await this.cart.get(customerId) };
     });

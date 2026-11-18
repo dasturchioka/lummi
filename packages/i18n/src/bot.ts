@@ -18,6 +18,8 @@ export const botMessages = defineMessages(
         'Заказ № {number} оформлен ✨\nСумма к оплате: {amount}\nАроматы забронированы до {until}. Статус заказа всегда виден в разделе «Заказы».',
       /** A gift code's gift (ADR 0039), under «Заказ оформлен»: «Rain Tea 10 мл» or the set's name. */
       orderCreatedGift: 'Подарок по промокоду: {gift} — уже в заказе.',
+      /** A first order's gift sample (ADR 0042), under «Заказ оформлен». */
+      orderCreatedSample: 'В подарок к первому заказу: пробник {name} {ml} мл.',
       openOrder: 'Открыть заказ',
       writeManager: 'Написать менеджеру',
       /** Before the reserve ends while the order still waits for a receipt (setting `orders.reserveReminderSeconds`). */
@@ -253,6 +255,7 @@ export const botMessages = defineMessages(
       orderCreated:
         '№ {number} buyurtma rasmiylashtirildi ✨\nToʻlov summasi: {amount}\nAtirlar {until} gacha band qilindi. Buyurtma holati doim «Buyurtmalar» boʻlimida koʻrinadi.',
       orderCreatedGift: 'Promokod sovgʻasi: {gift} — buyurtmaga qoʻshildi.',
+      orderCreatedSample: 'Birinchi buyurtmaga sovgʻa: {name} {ml} ml namunasi.',
       openOrder: 'Buyurtmani ochish',
       writeManager: 'Menejerga yozish',
       reserveReminder:

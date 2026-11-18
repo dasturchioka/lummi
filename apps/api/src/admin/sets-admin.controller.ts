@@ -1,6 +1,14 @@
-import { adminContract } from '@lummi/contracts';
+import { adminContract, discoveryQuerySchema } from '@lummi/contracts';
 import type { StaffRow } from '@lummi/db';
-import { Controller, Inject, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Inject,
+  Put,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Request } from 'express';
 import { photoFailure, readPhotoBody } from '../catalog/photo-upload';
@@ -15,16 +23,22 @@ export class SetsAdminController {
 
   @TsRestHandler(adminContract.sets.get)
   get() {
-    return tsRestHandler(adminContract.sets.get, async () => ({
+    return tsRestHandler(adminContract.sets.get, async ({ query }) => ({
       status: 200 as const,
-      body: await this.sets.get(),
+      body: await this.sets.get(query.vialMl),
     }));
   }
 
   @TsRestHandler(adminContract.sets.setOnHand)
   setOnHand(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.sets.setOnHand, async ({ body }) => {
-      const res = await this.sets.setOnHand(actor, body.onHand, body.expected, body.reason);
+    return tsRestHandler(adminContract.sets.setOnHand, async ({ query, body }) => {
+      const res = await this.sets.setOnHand(
+        actor,
+        query.vialMl,
+        body.onHand,
+        body.expected,
+        body.reason,
+      );
       return res.ok
         ? { status: 200 as const, body: res.value }
         : {
@@ -37,19 +51,21 @@ export class SetsAdminController {
   @UseGuards(OwnerGuard)
   @TsRestHandler(adminContract.sets.update)
   update(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.sets.update, async ({ body }) => {
-      const res = await this.sets.update(actor, body);
+    return tsRestHandler(adminContract.sets.update, async ({ query, body }) => {
+      const res = await this.sets.update(actor, query.vialMl, body);
       return res.ok
         ? { status: 200 as const, body: res.value }
         : { status: 422 as const, body: { code: 'invalid' as const, fields: res.fields } };
     });
   }
 
-  /** Raw image bytes, judged by magic bytes like the bottle photos (ADR 0020). */
+  /** Raw image bytes, judged by magic bytes like the bottle photos (ADR 0020); `?vialMl=5` for the 5 × 5 ml set. */
   @UseGuards(OwnerGuard)
   @Put('admin/sets/discovery/photo')
-  async photo(@CurrentStaff() actor: StaffRow, @Req() req: Request) {
-    const res = await this.sets.setPhoto(actor, readPhotoBody(req.body));
+  async photo(@CurrentStaff() actor: StaffRow, @Req() req: Request, @Query() query: unknown) {
+    const parsed = discoveryQuerySchema.safeParse(query);
+    if (!parsed.success) throw new BadRequestException();
+    const res = await this.sets.setPhoto(actor, parsed.data.vialMl, readPhotoBody(req.body));
     if (res.ok) return { photo: res.value };
     throw photoFailure(res.reason);
   }

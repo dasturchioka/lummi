@@ -8,6 +8,7 @@ import {
   type RepeatResultDto,
   type RepeatShortReason,
 } from '@lummi/contracts';
+import type { DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -19,6 +20,7 @@ import {
   notInArray,
   orderLines,
   orders,
+  sellableVolume,
   sql,
   volumes,
   type Db,
@@ -42,6 +44,7 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
 import {
+  asDiscoveryVialMl,
   loadCartQuote,
   loadQuote,
   readCartLines,
@@ -189,7 +192,15 @@ export class CartService {
         .select({ id: volumes.id, onHand: volumes.onHand })
         .from(volumes)
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-        .where(and(eq(fragrances.slug, slug), eq(fragrances.hidden, false), eq(volumes.ml, ml)));
+        .where(
+          and(
+            eq(fragrances.slug, slug),
+            eq(fragrances.hidden, false),
+            eq(volumes.ml, ml),
+            // a 5 ml bottle is never sold alone (ADR 0042)
+            sellableVolume(),
+          ),
+        );
       if (!v) return 'not_found' as const;
       const reserved = await reservedByVolume(tx, [v.id]);
       const left = available(v.onHand, reserved.get(v.id) ?? 0);
@@ -201,12 +212,16 @@ export class CartService {
   }
 
   /** Adds the Discovery set; the total on the line never passes the set's own stock. */
-  async addDiscovery(customerId: number, qty: number): Promise<AddSetOutcome> {
+  async addDiscovery(
+    customerId: number,
+    vialMl: DiscoveryVialMl,
+    qty: number,
+  ): Promise<AddSetOutcome> {
     return this.db.transaction(async (tx) => {
-      const { available: left } = await loadDiscovery(tx);
+      const { available: left } = await loadDiscovery(tx, vialMl);
       if (left === 0) return { result: 'sold_out' } as const;
       await this.touch(tx, customerId);
-      await this.grow(tx, customerId, { kind: 'discovery_set' }, qty, left);
+      await this.grow(tx, customerId, { kind: 'discovery_set', vialMl }, qty, left);
       return { result: 'ok' } as const;
     });
   }
@@ -251,8 +266,15 @@ export class CartService {
       const old = await tx
         .select()
         .from(orderLines)
-        // a gift code's free line came with that code (ADR 0039): it is not bought again
-        .where(and(eq(orderLines.orderId, order.id), eq(orderLines.promoGift, false)))
+        // a gift code's free line came with that code (ADR 0039), a gift sample with the first
+        // order (ADR 0042): neither is bought again
+        .where(
+          and(
+            eq(orderLines.orderId, order.id),
+            eq(orderLines.promoGift, false),
+            eq(orderLines.giftSample, false),
+          ),
+        )
         .orderBy(asc(orderLines.position));
       // the cart row first, like every cart write: a concurrent add or change waits for this one
       await this.touch(tx, customerId);
@@ -261,9 +283,17 @@ export class CartService {
       // The old lines after every cart line (ids above the cart's), as the cart would hold them.
       const after = Math.max(0, ...cart.map((l) => l.lineId)) + 1;
       const wanted = old.map((l, i): StoredLine => {
-        const line = { lineId: after + i, qty: l.qty, volumeId: null, fragranceIds: null };
+        const line = {
+          lineId: after + i,
+          qty: l.qty,
+          volumeId: null,
+          fragranceIds: null,
+          vialMl: null,
+        };
         if (l.kind === 'volume') return { ...line, kind: 'volume', volumeId: l.volumeId };
-        if (l.kind === 'discovery_set') return { ...line, kind: 'discovery_set' };
+        // a Discovery line's ml is its set's vial size (ADR 0042)
+        if (l.kind === 'discovery_set')
+          return { ...line, kind: 'discovery_set', vialMl: asDiscoveryVialMl(l.ml) };
         const ids = (l.setComposition ?? []).map((f) => f.fragranceId).sort((a, b) => a - b);
         return { ...line, kind: 'builder_set', fragranceIds: ids };
       });
@@ -326,7 +356,7 @@ export class CartService {
     customerId: number,
     line:
       | { kind: 'volume'; volumeId: number | null }
-      | { kind: 'discovery_set' }
+      | { kind: 'discovery_set'; vialMl: DiscoveryVialMl | null }
       | { kind: 'builder_set'; fragranceIds: number[] | null },
     qty: number,
     left: number = CART_MAX_QTY,
@@ -342,9 +372,9 @@ export class CartService {
     else if (line.kind === 'discovery_set')
       await tx
         .insert(cartLines)
-        .values({ ...values, kind: 'discovery_set' })
+        .values({ ...values, kind: 'discovery_set', vialMl: line.vialMl })
         .onConflictDoUpdate({
-          target: [cartLines.customerId],
+          target: [cartLines.customerId, cartLines.vialMl],
           targetWhere: sql`kind = 'discovery_set'`,
           set,
         });
@@ -567,11 +597,11 @@ function progress(q: {
   return Math.min(99, Math.floor((q.thresholdBaseAmount * 100) / q.freeDeliveryThreshold));
 }
 
-/** Two stored lines hold the same thing: the same volume, the Discovery set, or the same five. */
+/** Two stored lines hold the same thing: the same volume, the same Discovery set, or the same five. */
 function sameLine(a: StoredLine, b: StoredLine): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'volume') return a.volumeId === b.volumeId;
-  if (a.kind === 'discovery_set') return true;
+  if (a.kind === 'discovery_set') return a.vialMl === b.vialMl;
   return (a.fragranceIds ?? []).join(',') === (b.fragranceIds ?? []).join(',');
 }
 

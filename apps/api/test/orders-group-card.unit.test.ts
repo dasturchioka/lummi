@@ -107,6 +107,7 @@ const line = (position: number): OrderLineRow => ({
   qty: 99,
   lineTotal: 19_701_000,
   promoGift: false,
+  giftSample: false,
   setVolumeIds: null,
   setComposition: null,
   unitCost: null,

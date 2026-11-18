@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { SET_SIZE } from '@lummi/contracts/constants';
+import { DISCOVERY_VIAL_MLS, SET_SIZE } from '@lummi/contracts/constants';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, asc, discoverySet, discoverySetItems, eq, fragrances, sql, volumes, type Db, type DbOrTx } from '@lummi/db';
+import { and, asc, discoverySet, discoverySetItems, eq, fragrances, volumes, type Db, type DbOrTx } from '@lummi/db';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService } from '../admin/catalog-admin.service';
 import { CatalogImportService } from '../catalog-import/catalog-import.service';
@@ -57,24 +57,32 @@ export interface SeedOptions {
 }
 
 /**
- * The Discovery set (ADR 0009) starts as the first five fragrances with 10 boxes in stock, both
- * ours (the composition is the owner's to choose, the boxes his to count). Only while the owner
- * has not set a composition, so a re-run never undoes his choice.
+ * Each Discovery set (ADR 0009, 0042) starts as the first five fragrances with 10 boxes in stock,
+ * both ours (the composition is the owner's to choose, the boxes his to count). Only while the
+ * owner has not set that set's composition, so a re-run never undoes his choice.
  */
 async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
-  const [has] = await tx.select().from(discoverySetItems).limit(1);
-  if (has || fragranceIds.length < SET_SIZE) return;
-  await tx
-    .insert(discoverySetItems)
-    .values(
-      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({ position: i + 1, fragranceId })),
+  if (fragranceIds.length < SET_SIZE) return;
+  for (const vialMl of DISCOVERY_VIAL_MLS) {
+    const [has] = await tx
+      .select()
+      .from(discoverySetItems)
+      .where(eq(discoverySetItems.vialMl, vialMl))
+      .limit(1);
+    if (has) continue;
+    await tx.insert(discoverySetItems).values(
+      fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({
+        vialMl,
+        position: i + 1,
+        fragranceId,
+      })),
     );
-  await tx
-    .update(discoverySet)
-    .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
-    .where(sql`id and is_placeholder and on_hand = 0`);
+    await tx
+      .update(discoverySet)
+      .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
+      .where(and(eq(discoverySet.vialMl, vialMl), eq(discoverySet.onHand, 0)));
+  }
 }
-
 
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
   const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);

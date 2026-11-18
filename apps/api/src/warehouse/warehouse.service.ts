@@ -6,15 +6,18 @@ import {
   type OilReceiptCorrection,
   type OilReceiptInput,
   type OilReceiptDraftsBody,
+  type SetBottlingResult,
   type StockMove,
   type WarehouseFragrance,
 } from '@lummi/contracts';
 import { formatLocalDate, tashkentDay } from '@lummi/contracts';
+import { SET_SIZE, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
   bottlings,
   desc,
+  discoverySet,
   eq,
   fragrances,
   inArray,
@@ -41,17 +44,24 @@ import { retryOrTryAgain } from '../util/transient';
 import { fragranceOil, readOilContext, round3 } from './fragrance-oil';
 import { bottlingNeeds, gramsFromMg, mgFromGrams, oilReceiptCost } from './oil';
 import { recordStockMove } from './stock-moves';
+import { discoveryTarget, readComposition, readDiscoverySet } from '../sets/sets';
 
 export type WarehouseFailure =
   | { ok: false; reason: 'not_found' | 'voided' | 'draft' | 'not_draft' | 'try_again' }
   | { ok: false; reason: 'invalid'; fields: string[] }
-  /** The oil balance holds less than the operation takes. */
-  | { ok: false; reason: 'oil_short'; neededMg: number; balanceMg: number };
+  /** The oil balance holds less than the operation takes (a set bottling names the fragrance). */
+  | { ok: false; reason: 'oil_short'; neededMg: number; balanceMg: number; fragrance?: string };
 export type WarehouseOutcome<T> = { ok: true; value: T } | WarehouseFailure;
 
 const notFound = { ok: false, reason: 'not_found' } as const;
-const short = (neededMg: number, balanceMg: number) =>
-  ({ ok: false, reason: 'oil_short', neededMg, balanceMg }) as const;
+const short = (neededMg: number, balanceMg: number, fragrance?: string) =>
+  ({
+    ok: false,
+    reason: 'oil_short',
+    neededMg,
+    balanceMg,
+    ...(fragrance === undefined ? {} : { fragrance }),
+  }) as const;
 
 /** A deadlock or serialization failure is run once more, then answered as `try_again`. */
 const transient = <T>(run: () => Promise<WarehouseOutcome<T>>): Promise<WarehouseOutcome<T>> =>
@@ -458,6 +468,17 @@ export class WarehouseService {
     );
   }
 
+  /** A set bottling (`bottleDiscoverySet`), retried once on a deadlock. */
+  async bottleSet(
+    actor: StaffRow,
+    vialMl: DiscoveryVialMl,
+    quantity: number,
+  ): Promise<WarehouseOutcome<SetBottlingResult>> {
+    return transient(() =>
+      this.db.transaction((tx) => bottleDiscoverySet(tx, this.audit, actor, vialMl, quantity)),
+    );
+  }
+
   /**
    * A bottling: the oil the counts take (the cost model's `liquidNeeded`, filling loss included,
    * at the settings of now) leaves the balance and the bottles join on hand, in one transaction.
@@ -541,6 +562,90 @@ export class WarehouseService {
   }
 }
 
+/**
+ * A set bottling (#79, ADR 0042): `quantity` boxes of a Discovery set filled straight from the oil
+ * of its five fragrances, one vial of the set's size from each per box, by the cost model's
+ * `liquidNeeded` with the filling loss (as a bottling of that volume would take). In one
+ * transaction: the set's row is locked first (as checkout and the handover take it), then its
+ * five fragrances in ascending id (`FOR NO KEY UPDATE`, the warehouse's lock); each one's oil
+ * falls with a stock move and a bottling row, and the set's boxes on hand rise. Refused with the
+ * first short fragrance named when any balance holds less, and while the set is not five.
+ */
+export async function bottleDiscoverySet(
+  tx: DbOrTx,
+  audit: AuditService,
+  actor: StaffRow,
+  vialMl: DiscoveryVialMl,
+  quantity: number,
+): Promise<WarehouseOutcome<SetBottlingResult>> {
+  const set = await readDiscoverySet(tx, vialMl, true);
+  const composition = await readComposition(tx, vialMl);
+  if (composition.length !== SET_SIZE)
+    return { ok: false, reason: 'invalid', fields: ['composition'] } as const;
+  const five = await tx
+    .select({ id: fragrances.id, name: fragrances.name, oilMg: fragrances.oilMg })
+    .from(fragrances)
+    .where(
+      inArray(
+        fragrances.id,
+        composition.map((f) => f.id),
+      ),
+    )
+    .orderBy(asc(fragrances.id))
+    .for('no key update');
+  const { liquid } = await readCostSettings(tx);
+  const line = { ml: vialMl, quantity };
+  const need = bottlingNeeds([line], liquid);
+  // in the set's own order, so the first short one named is the one the owner sees first
+  const byId = new Map(five.map((f) => [f.id, f]));
+  for (const { id } of composition) {
+    const f = byId.get(id)!;
+    if (need.oilMg > f.oilMg) return short(need.oilMg, f.oilMg, f.name);
+  }
+  const actorRef = { type: 'staff' as const, id: actor.id };
+  for (const f of five) {
+    await tx
+      .update(fragrances)
+      .set({ oilMg: f.oilMg - need.oilMg })
+      .where(eq(fragrances.id, f.id));
+    const [b] = await tx
+      .insert(bottlings)
+      .values({ fragranceId: f.id, lines: [line], oilMg: need.oilMg, ethanolMl: need.ethanolMl })
+      .returning({ id: bottlings.id });
+    await recordStockMove(tx, {
+      fragranceId: f.id,
+      kind: 'bottling',
+      actor: actorRef,
+      oilMg: -need.oilMg,
+      bottlingId: b!.id,
+      details: { ethanolMl: need.ethanolMl, set: { vialMl, quantity } },
+    });
+  }
+  const onHand = set.onHand + quantity;
+  await tx.update(discoverySet).set({ onHand }).where(eq(discoverySet.vialMl, vialMl));
+  await audit.record(tx, {
+    actor: actorRef,
+    action: 'warehouse.set_bottled',
+    targetType: 'discovery_set',
+    targetId: discoveryTarget(vialMl),
+    payload: {
+      vialMl,
+      quantity,
+      onHand: [set.onHand, onHand],
+      fragrances: composition.map((f) => f.name),
+      oilGrams: gramsFromMg(need.oilMg),
+      ethanolMl: need.ethanolMl * SET_SIZE,
+      oilPercent: liquid.oilPercent,
+      oilDensity: liquid.oilDensity,
+      fillingLossPercent: liquid.fillingLossPercent,
+    },
+  });
+  return {
+    ok: true,
+    value: { oilGrams: gramsFromMg(need.oilMg), ethanolMl: need.ethanolMl * SET_SIZE, onHand },
+  } as const;
+}
+
 /** The fragrance row under the warehouse's lock; null when there is none. */
 async function lockFragrance(tx: DbOrTx, id: number) {
   const [f] = await tx
@@ -589,7 +694,12 @@ export async function stockHistory(
     .orderBy(desc(stockMoves.id));
   const rows = limit === undefined ? await q : await q.limit(limit);
   return rows.map(({ move: m, staffName, orderNumber }) => {
-    const d = m.details as { invoice?: string; supplier?: string; source?: StockMove['source'] };
+    const d = m.details as {
+      invoice?: string;
+      supplier?: string;
+      source?: StockMove['source'];
+      set?: { vialMl: number; quantity: number };
+    };
     return {
       id: m.id,
       fragranceId: m.fragranceId,
@@ -604,6 +714,7 @@ export async function stockHistory(
       invoice: withOilReceipts ? (d.invoice ?? null) : null,
       supplier: withOilReceipts ? (d.supplier ?? null) : null,
       orderNumber: orderNumber ?? null,
+      set: d.set ?? null,
       source: d.source ?? null,
     };
   });

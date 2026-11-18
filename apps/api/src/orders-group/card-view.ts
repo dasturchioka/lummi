@@ -186,10 +186,11 @@ function cardText(
     '',
   );
 
-  // The Promo gift (ADR 0039) is said apart from the bought lines, so no squeeze ever drops it:
-  // staff must see what goes into the parcel. It costs nothing, so it stands in the discount's row.
+  // The Promo gift (ADR 0039) and the gift sample (ADR 0042) are said apart from the bought lines,
+  // so no squeeze ever drops them: staff must see what goes into the parcel. They cost nothing,
+  // so the Promo gift stands in the discount's row and the sample under it.
   const sorted = [...d.lines].sort((a, b) => a.position - b.position);
-  const bought = sorted.filter((l) => !l.promoGift);
+  const bought = sorted.filter((l) => !l.promoGift && !l.giftSample);
   const shown = squeeze.lines === null ? bought : bought.slice(0, squeeze.lines);
   for (const l of shown) {
     const name = escapeHtml(language === 'uz' ? l.nameUz : l.nameRu);
@@ -206,6 +207,10 @@ function cardText(
     out.push(`• ${label}: ${escapeHtml(lineGiftLabel(l, language))}`);
     if (l.setComposition)
       out.push(`   ${escapeHtml(l.setComposition.map((f) => f.name).join(', '))}`);
+  }
+  for (const l of sorted.filter((x) => x.giftSample)) {
+    const name = escapeHtml(language === 'uz' ? l.nameUz : l.nameRu);
+    out.push(`• ${admin.detail.giftSample}: ${name}, ${l.ml} ${unitMl(language)}`);
   }
   if (o.discount && !gift) {
     const source = fill(admin.detail.discountSource[o.discount.type], {

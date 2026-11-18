@@ -784,6 +784,7 @@ export const adminMessages = defineMessages(
           'warehouse.oil_receipt_drafts_created': 'Черновики приходов масла по плану закупки',
           'warehouse.oil_receipt_draft_discarded': 'Удалён черновик прихода масла',
           'warehouse.bottled': 'Розлив',
+          'warehouse.set_bottled': 'Розлив набора',
           'warehouse.exported': 'Выгрузка склада в Excel',
           'sets.discovery_changed': 'Изменён Discovery set: цена или состав',
           'sets.discovery_on_hand_changed': 'Изменён остаток Discovery set',
@@ -908,6 +909,9 @@ export const adminMessages = defineMessages(
           bottled: '{name}: розлив {lines}',
           bottledLine: '{ml} мл × {qty}',
           bottledOil: 'Масла {grams} г, спирта {ml} мл',
+          /** A set bottling (#79): the boxes, and the oil from each of its five. */
+          setBottled: 'Discovery set 5 × {ml} мл: розлив {qty} шт., было {old}, стало {new}',
+          setBottledOil: 'Масла по {grams} г у каждого: {names}; спирта {ml} мл',
           warehouseExported: 'Ароматов в файле: {fragrances}, записей истории: {moves}',
           oilReceiptDrafts: 'Черновики приходов по плану закупки: {count}, всего {grams} г',
           draftDiscarded: '{name}: удалён черновик прихода {grams} г',
@@ -2069,6 +2073,8 @@ export const adminMessages = defineMessages(
           /** A gift code's free line (ADR 0039), and the discount it stands for. */
           promoGift: 'Подарок по промокоду',
           promoGiftSource: 'Подарок по промокоду {code}',
+          /** A first order's gift sample (ADR 0042): its line at 0. */
+          giftSample: 'Пробник в подарок к первому заказу',
           deliveryFee: 'Доставка',
           free: 'Бесплатно',
           total: 'Итого',
@@ -2393,10 +2399,12 @@ export const adminMessages = defineMessages(
       sets: {
         title: 'Наборы',
         description:
-          'Discovery set: готовая коробка из пяти ароматов по 10 мл. Свой набор клиент собирает сам из пяти разных ароматов, пока у каждого есть 10 мл, по той же цене.',
-        stockTitle: 'Остаток Discovery set',
+          'Discovery set: готовые коробки из пяти ароматов по 10 мл и по 5 мл, у каждой своя цена, состав и остаток. Свой набор клиент собирает сам из пяти разных ароматов, пока у каждого есть 10 мл, по цене коробки 5 × 10 мл.',
+        /** Each set's heading on the page (ADR 0042). */
+        setTitle: 'Discovery set 5 × {ml} мл',
+        stockTitle: 'Остаток коробок',
         onHand: 'На складе, шт.',
-        onHandHint: 'Собранные коробки. Остаток 10 мл отдельных ароматов не меняется.',
+        onHandHint: 'Собранные коробки. Остаток флаконов отдельных ароматов не меняется.',
         reserved: 'В резерве',
         available: 'Доступно',
         saveOnHand: 'Сохранить остаток',
@@ -2405,6 +2413,7 @@ export const adminMessages = defineMessages(
         priceOnly: 'Цену и состав меняет только владелец.',
         price: 'Цена набора, сум',
         priceHint: 'Одна цена для Discovery set и для набора, который клиент собирает сам.',
+        priceHint5: 'Своя цена этой коробки. Свой набор клиента стоит как коробка 5 × 10 мл.',
         uzumUrl: 'Ссылка на Discovery set в Uzum Market',
         uzumHint:
           'Адрес начинается с https://. Пусто — кнопка «Купить на Uzum» на экране набора скрыта.',
@@ -2423,6 +2432,14 @@ export const adminMessages = defineMessages(
         notForSale: 'Пока в составе меньше пяти ароматов, набор не продаётся.',
         hiddenWarning:
           'В составе есть аромат, скрытый из каталога. Коробка продаётся, клиенты видят его только по названию, без карточки.',
+        /** A set bottling (#79): boxes filled straight from the five oils. */
+        bottleTitle: 'Розлив из масла',
+        bottleHint:
+          'Коробки наполняются из масла пяти ароматов состава: по флакону {ml} мл каждого на коробку. Масло списывается со склада, коробки прибавляются к остатку.',
+        bottleQuantity: 'Коробок, шт.',
+        bottleSubmit: 'Разлить',
+        bottled: 'Разлито {qty} шт., масла по {grams} г у каждого аромата.',
+        bottleShort: 'Не хватает масла: {name}. Нужно {needed} г, на складе {balance} г.',
         failed: 'Не удалось сохранить. Попробуйте ещё раз.',
         invalidComposition: 'Аромат не найден. Обновите страницу.',
       },
@@ -2460,7 +2477,7 @@ export const adminMessages = defineMessages(
         available: 'Доступно',
         state: 'Состояние',
         discovery: 'Discovery set',
-        discoverySub: 'Коробка 5 × 10 мл',
+        discoverySub: 'Коробка 5 × {ml} мл',
         ml: '{ml} мл',
         hiddenTag: 'скрыт из каталога',
         zero: 'Нет в наличии',
@@ -2604,6 +2621,8 @@ export const adminMessages = defineMessages(
           import: 'Импорт из Excel',
         },
         order: 'Заказ № {number}',
+        /** A set bottling's move (#79): the set and its boxes. */
+        setBottling: 'Discovery set 5 × {ml} мл, {qty} шт.',
         export: {
           sheet: 'Склад',
           historySheet: 'История',
@@ -3952,6 +3971,7 @@ export const adminMessages = defineMessages(
           'warehouse.oil_receipt_drafts_created': 'Xarid rejasi boʻyicha moy kirimi qoralamalari',
           'warehouse.oil_receipt_draft_discarded': 'Moy kirimi qoralamasi oʻchirildi',
           'warehouse.bottled': 'Quyish',
+          'warehouse.set_bottled': 'Toʻplamni quyish',
           'warehouse.exported': 'Ombor Excelga yuklab olindi',
           'sets.discovery_changed': 'Discovery set oʻzgartirildi: narx yoki tarkib',
           'sets.discovery_on_hand_changed': 'Discovery set qoldigʻi oʻzgartirildi',
@@ -4076,6 +4096,8 @@ export const adminMessages = defineMessages(
           bottled: '{name}: quyish {lines}',
           bottledLine: '{ml} ml × {qty}',
           bottledOil: '{grams} g moy, {ml} ml spirt',
+          setBottled: 'Discovery set 5 × {ml} ml: {qty} dona quyildi, edi {old}, boʻldi {new}',
+          setBottledOil: 'Har biridan {grams} g moy: {names}; {ml} ml spirt',
           warehouseExported: 'Fayldagi atirlar: {fragrances}, tarix yozuvlari: {moves}',
           oilReceiptDrafts: 'Xarid rejasi boʻyicha kirim qoralamalari: {count}, jami {grams} g',
           draftDiscarded: '{name}: {grams} g kirim qoralamasi oʻchirildi',
@@ -5245,6 +5267,7 @@ export const adminMessages = defineMessages(
           },
           promoGift: 'Promokod sovgʻasi',
           promoGiftSource: '{code} promokodi sovgʻasi',
+          giftSample: 'Birinchi buyurtmaga sovgʻa namuna',
           deliveryFee: 'Yetkazish',
           free: 'Bepul',
           total: 'Jami',
@@ -5572,10 +5595,11 @@ export const adminMessages = defineMessages(
       sets: {
         title: 'Toʻplamlar',
         description:
-          'Discovery set: 10 ml’dan beshta atirdan iborat tayyor quti. Oʻz toʻplamini mijoz oʻzi yigʻadi: har birida 10 ml bor beshta turli atir, narxi bir xil.',
-        stockTitle: 'Discovery set qoldigʻi',
+          'Discovery set: 10 ml’dan va 5 ml’dan beshta atirdan iborat tayyor qutilar, har birining oʻz narxi, tarkibi va qoldigʻi bor. Oʻz toʻplamini mijoz oʻzi yigʻadi: har birida 10 ml bor beshta turli atir, 5 × 10 ml quti narxida.',
+        setTitle: 'Discovery set 5 × {ml} ml',
+        stockTitle: 'Qutilar qoldigʻi',
         onHand: 'Omborda, dona',
-        onHandHint: 'Yigʻilgan qutilar. Alohida atirlarning 10 ml qoldigʻi oʻzgarmaydi.',
+        onHandHint: 'Yigʻilgan qutilar. Alohida atirlar flakonlarining qoldigʻi oʻzgarmaydi.',
         reserved: 'Zaxirada',
         available: 'Mavjud',
         saveOnHand: 'Qoldiqni saqlash',
@@ -5584,6 +5608,7 @@ export const adminMessages = defineMessages(
         priceOnly: 'Narx va tarkibni faqat egasi oʻzgartiradi.',
         price: 'Toʻplam narxi, soʻm',
         priceHint: 'Discovery set va mijoz oʻzi yigʻadigan toʻplam uchun bitta narx.',
+        priceHint5: 'Bu qutining oʻz narxi. Mijozning oʻz toʻplami 5 × 10 ml quti narxida.',
         uzumUrl: 'Discovery setning Uzum Market havolasi',
         uzumHint:
           'Manzil https:// bilan boshlanadi. Boʻsh qoldirilsa, toʻplam ekranidagi «Uzum’da sotib olish» tugmasi yashiriladi.',
@@ -5602,6 +5627,13 @@ export const adminMessages = defineMessages(
         notForSale: 'Tarkibda beshtadan kam atir boʻlsa, toʻplam sotilmaydi.',
         hiddenWarning:
           'Tarkibda katalogdan yashirilgan atir bor. Quti sotiladi, mijozlar uni faqat nomi bilan koʻradi, kartochkasiz.',
+        bottleTitle: 'Moydan quyish',
+        bottleHint:
+          'Qutilar tarkibdagi beshta atir moyidan toʻldiriladi: har bir qutiga har biridan {ml} ml flakon. Moy ombordan hisobdan chiqariladi, qutilar qoldiqqa qoʻshiladi.',
+        bottleQuantity: 'Qutilar, dona',
+        bottleSubmit: 'Quyish',
+        bottled: '{qty} dona quyildi, har bir atirdan {grams} g moy.',
+        bottleShort: 'Moy yetmaydi: {name}. {needed} g kerak, omborda {balance} g.',
         failed: 'Saqlab boʻlmadi. Yana urinib koʻring.',
         invalidComposition: 'Atir topilmadi. Sahifani yangilang.',
       },
@@ -5639,7 +5671,7 @@ export const adminMessages = defineMessages(
         available: 'Mavjud',
         state: 'Holat',
         discovery: 'Discovery set',
-        discoverySub: '5 × 10 ml quti',
+        discoverySub: '5 × {ml} ml quti',
         ml: '{ml} ml',
         hiddenTag: 'katalogdan yashirilgan',
         zero: 'Mavjud emas',
@@ -5783,6 +5815,7 @@ export const adminMessages = defineMessages(
           import: 'Exceldan import',
         },
         order: '№ {number} buyurtma',
+        setBottling: 'Discovery set 5 × {ml} ml, {qty} dona',
         export: {
           sheet: 'Ombor',
           historySheet: 'Tarix',

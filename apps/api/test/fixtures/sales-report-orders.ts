@@ -971,11 +971,18 @@ async function setUpShop(t: TestApp): Promise<FixtureCatalog> {
       catalog.volumeId[`${letter}${ml}`] = v!.id;
     }
   }
-  await t.db.update(discoverySet).set({ price: SET_PRICE, onHand: 10, isPlaceholder: false });
-  await t.db.delete(discoverySetItems);
   await t.db
-    .insert(discoverySetItems)
-    .values(LETTERS.map((l, i) => ({ position: i + 1, fragranceId: catalog.fragranceId[l] })));
+    .update(discoverySet)
+    .set({ price: SET_PRICE, onHand: 10, isPlaceholder: false })
+    .where(eq(discoverySet.vialMl, 10));
+  await t.db.delete(discoverySetItems).where(eq(discoverySetItems.vialMl, 10));
+  await t.db.insert(discoverySetItems).values(
+    LETTERS.map((l, i) => ({
+      vialMl: 10,
+      position: i + 1,
+      fragranceId: catalog.fragranceId[l],
+    })),
+  );
   await t.db.update(regions).set({ deliveryTariff: 25_000 });
 
   const owner = await t.ownerSession();

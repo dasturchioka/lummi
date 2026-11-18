@@ -199,6 +199,8 @@ export const orderLineSchema = z.object({
   lineTotal: som,
   /** A gift code's free item (ADR 0039): unit price and total 0, «Подарок по промокоду». */
   promoGift: z.boolean(),
+  /** The first order's gift sample (ADR 0042): a 5 ml bottle at 0, «Пробник в подарок». */
+  giftSample: z.boolean(),
   /** A set's five fragrances (ADR 0009); null for a single volume. */
   setComposition: z.array(z.object({ name: z.string(), brand: z.string() })).nullable(),
 });

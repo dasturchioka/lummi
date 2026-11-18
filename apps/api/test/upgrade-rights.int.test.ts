@@ -803,6 +803,7 @@ describe('«Мои скидки» lists open rights with their fragrances and da
         source: 'set',
         sourceOrderNumber: builderOrder,
         percent: 20,
+        anyFragrance: false,
         fragrances: expect.any(Array),
         lastDay: '2026-11-20',
         daysLeft: 10,
@@ -812,6 +813,7 @@ describe('«Мои скидки» lists open rights with their fragrances and da
         source: 'set',
         sourceOrderNumber: discoveryOrder,
         percent: 20,
+        anyFragrance: false,
         fragrances: box.body.fragrances.map((f) => ({
           name: f.name,
           brand: f.brand,

@@ -3,6 +3,7 @@ import { asc, eq, fragrances, sql, volumes, type Db, type DbOrTx, type StaffRow 
 import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
+import { DISCOVERY_VIAL_MLS, SAMPLE_ML } from '@lummi/contracts/constants';
 import { loadDiscovery } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
 import { isOwner } from '../staff/staff.guard';
@@ -33,15 +34,16 @@ export const stockLevel = (availableNow: number, lowThreshold: number): StockLev
   availableNow === 0 ? 'zero' : availableNow <= lowThreshold ? 'low' : 'ok';
 
 /**
- * Every stock row as the stock page shows it: each fragrance's volumes (name order, a fragrance's
- * volumes together; `q` narrows by name), and the Discovery set's own row. The stock page pages
- * them; the admin Home (#48) counts those with nothing left or running low.
+ * Every stock row as the stock page shows it: each fragrance's volumes, 5 ml included (name order,
+ * a fragrance's volumes together; `q` narrows by name), and each Discovery set's own row (its `ml`
+ * is its vial size, ADR 0042). The stock page pages them; the admin Home (#48) counts those with
+ * nothing left or running low.
  */
 export async function stockRows(
   db: DbOrTx,
   lowThreshold: number,
   q?: string,
-): Promise<{ volumes: StockRow[]; discovery: StockRow }> {
+): Promise<{ volumes: StockRow[]; discovery: StockRow[] }> {
   const volumeRows = await db
     .select({
       volumeId: volumes.id,
@@ -76,27 +78,33 @@ export async function stockRows(
       level: stockLevel(available(r.onHand, held), lowThreshold),
     };
   });
-  const set = await loadDiscovery(db);
-  const discovery: StockRow = {
-    kind: 'discovery',
-    key: 'discovery',
-    volumeId: null,
-    fragranceId: null,
-    name: null,
-    hidden: false,
-    ml: null,
-    onHand: set.row.onHand,
-    reserved: set.reserved,
-    available: set.available,
-    belowReserve: belowReserve(set.row.onHand, set.reserved),
-    level: stockLevel(set.available, lowThreshold),
-  };
+  const discovery: StockRow[] = [];
+  for (const vialMl of DISCOVERY_VIAL_MLS) {
+    const set = await loadDiscovery(db, vialMl);
+    discovery.push({
+      kind: 'discovery',
+      // the 5 × 10 ml set keeps the key it had before the 5 × 5 ml one (#79)
+      key: vialMl === 10 ? 'discovery' : `discovery-${vialMl}`,
+      volumeId: null,
+      fragranceId: null,
+      name: null,
+      hidden: false,
+      ml: vialMl,
+      onHand: set.row.onHand,
+      reserved: set.reserved,
+      available: set.available,
+      belowReserve: belowReserve(set.row.onHand, set.reserved),
+      level: stockLevel(set.available, lowThreshold),
+    });
+  }
   return { volumes: rows, discovery };
 }
 
 /**
  * The stock page's filters, one rule for the page and the Home's link to it. `oilLevelOf` gives a
- * fragrance's low-oil level (#76) for the `oilLow` filter; the Discovery set has no oil.
+ * fragrance's low-oil level (#76) for the `oilLow` filter; the Discovery set has no oil. «Нет в
+ * наличии» and «Мало» are about what the shop sells: a 5 ml bottle (ADR 0042) is listed with its
+ * level but never matches them, or every fragrance would until its samples are bottled.
  */
 export function matchesStockQuery(
   r: StockRow,
@@ -107,6 +115,12 @@ export function matchesStockQuery(
     const level = r.fragranceId === null ? undefined : oilLevelOf?.(r.fragranceId);
     if (level === undefined || level === 'ok') return false;
   }
+  if (
+    (query.filter === 'zero' || query.filter === 'low') &&
+    r.kind === 'volume' &&
+    r.ml === SAMPLE_ML
+  )
+    return false;
   if (query.filter === 'zero' && r.level !== 'zero') return false;
   if (query.filter === 'low' && r.level === 'ok') return false;
   if (query.visibility === 'hidden' && !r.hidden) return false;
@@ -136,9 +150,9 @@ export class StockAdminService {
     const onPage = new Set(fragranceIds.slice(first, first + query.pageSize));
     const pageRows = shown.filter((r) => onPage.has(r.fragranceId));
 
-    // the Discovery set is the one row that is not a fragrance: first on page 1, when it matches
-    if (query.page === 1 && (!q || matchesDiscoveryLabel(q)) && matching(discovery))
-      pageRows.unshift(discovery);
+    // the Discovery sets are the rows that are not a fragrance: first on page 1, when they match
+    if (query.page === 1 && (!q || matchesDiscoveryLabel(q)))
+      pageRows.unshift(...discovery.filter(matching));
 
     return {
       lowThreshold,
