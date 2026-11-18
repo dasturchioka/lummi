@@ -59,14 +59,20 @@ export function OrderProfitSection({
           <p className="text-sm text-pretty text-muted-foreground">
             {page.payment === 'paid' ? b.noSnapshot : b.notYet}
           </p>
-        ) : !snapshot.costs ? (
-          <Notice title={fill(t.profitability.noCost, { names: snapshot.missing.join(', ') })} />
+        ) : !snapshot.profit ? (
+          <Notice
+            title={
+              snapshot.missing.length
+                ? fill(t.profitability.noCost, { names: snapshot.missing.join(', ') })
+                : b.uncostable
+            }
+          />
         ) : (
           <>
             <dl className="grid gap-1.5 text-sm">
               <Row
                 label={t.profitability.costs.revenue}
-                value={money(snapshot.costs.revenue)}
+                value={money(snapshot.profit.revenue)}
                 strong
               />
               {page.order.lines.map((l, i) => {
@@ -85,8 +91,8 @@ export function OrderProfitSection({
                 );
               })}
             </dl>
-            <OrderCostRows costs={snapshot.costs} language={language} t={t} />
-            <ProfitLine costs={snapshot.costs} language={language} t={t} />
+            <OrderCostRows sale={snapshot.profit} language={language} t={t} />
+            <ProfitLine sale={snapshot.profit} language={language} t={t} />
           </>
         )}
         {snapshot && (

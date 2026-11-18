@@ -6,7 +6,8 @@ import { Card } from '@/components/ui/card';
 import type { AdminMessages } from '@/lib/i18n';
 import { cn, fill } from '@/lib/utils';
 import { percentValue } from './cost-rows';
-import { hrefOf, VOLUME_FILTERS, type View } from './view';
+import { PROFITABILITY_VOLUMES } from '@lummi/contracts';
+import { hrefOf, type View } from './view';
 
 /*
  * Every choice on «Рентабельность» (#77) goes to the URL, and the server answers with the figures:
@@ -139,7 +140,7 @@ export function ProfitabilityControls({
           <Segmented
             label={p.volume}
             current={view.ml}
-            items={VOLUME_FILTERS.map((k) => ({
+            items={PROFITABILITY_VOLUMES.map((k) => ({
               key: k,
               label: k === 'all' ? p.all : k === 'set' ? p.set : fill(p.ml, { ml: k }),
             }))}

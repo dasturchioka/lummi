@@ -1,4 +1,4 @@
-import type { ProfitabilityQuote, SalesChannel } from '@lummi/contracts';
+import { SET_SIZE, type ProfitabilityQuote, type SalesChannel } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Card } from '@/components/ui/card';
 import { MetaLine } from '@/components/ui/meta-line';
@@ -14,7 +14,7 @@ type Line = ProfitabilityQuote['lines'][number];
 function lineName(l: Line, t: AdminMessages) {
   const p = t.profitability;
   return l.item.kind === 'discovery_set'
-    ? p.discoverySetFull
+    ? fill(p.discoverySetFull, { n: String(SET_SIZE), ml: String(l.ml) })
     : `${l.name}, ${fill(p.ml, { ml: String(l.ml) })}`;
 }
 
@@ -99,11 +99,11 @@ export function CalculatorResult({
               )}
             </dl>
           </section>
-          {quote.costs && (
+          {quote.profit && (
             <section className="grid gap-3">
               <h3 className={HEADING}>{c.orderCosts}</h3>
               <OrderCostRows
-                costs={quote.costs}
+                sale={quote.profit}
                 language={language}
                 t={t}
                 goodsLabel={c.unitCost}
@@ -112,9 +112,9 @@ export function CalculatorResult({
           )}
         </div>
       </div>
-      {quote.costs && (
+      {quote.profit && (
         <ProfitLine
-          costs={quote.costs}
+          sale={quote.profit}
           lowMarginPercent={lowMarginPercent}
           language={language}
           t={t}
@@ -189,14 +189,14 @@ export function OrderResult({
         </p>
         {afterSetDiscount && <p className="text-small text-muted-foreground">{o.afterSetNote}</p>}
       </section>
-      {quote.costs ? (
+      {quote.profit ? (
         <>
           <section className="grid gap-3">
             <h2 className={HEADING}>{p.calculator.orderCosts}</h2>
-            <OrderCostRows costs={quote.costs} language={language} t={t} />
+            <OrderCostRows sale={quote.profit} language={language} t={t} />
           </section>
           <ProfitLine
-            costs={quote.costs}
+            sale={quote.profit}
             lowMarginPercent={lowMarginPercent}
             language={language}
             t={t}

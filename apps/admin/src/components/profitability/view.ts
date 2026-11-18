@@ -1,4 +1,10 @@
-import type { SalesChannel } from '@lummi/contracts';
+import {
+  PROFITABILITY_MAX_LINES,
+  PROFITABILITY_MAX_QTY,
+  PROFITABILITY_VOLUMES,
+  type ProfitabilityVolume,
+  type SalesChannel,
+} from '@lummi/contracts';
 
 /*
  * The «Рентабельность» page's view lives in its URL (#77), so a reload, a link from a table row to
@@ -7,8 +13,7 @@ import type { SalesChannel } from '@lummi/contracts';
 
 export const TABS = ['table', 'calculator', 'order'] as const;
 export type Tab = (typeof TABS)[number];
-export const VOLUME_FILTERS = ['all', '10', '30', '50', 'set'] as const;
-export type VolumeFilter = (typeof VOLUME_FILTERS)[number];
+export type VolumeFilter = ProfitabilityVolume;
 export const SORT_KEYS = ['name', 'price', 'cost', 'orderCosts', 'profit', 'margin'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 
@@ -31,11 +36,6 @@ export interface View {
 
 /** One simulator line: a fragrance's volume or the Discovery set, and how many. */
 export type SimLine = { item: { fragrance: number; ml: number } | 'set'; qty: number };
-
-/** The simulator's most lines (the API takes 30). */
-export const MAX_LINES = 30;
-/** The simulator's most units on a line (the API takes 99). */
-export const MAX_QTY = 99;
 
 export const DEFAULT_VIEW: View = {
   tab: 'table',
@@ -67,7 +67,7 @@ export function readView(sp: Search): View {
     channel: one(sp.channel) === 'uzum' ? 'uzum' : 'miniapp',
     afterSetDiscount: one(sp.afterSetDiscount) === '1',
     giftSample: one(sp.giftSample) === '1',
-    ml: pick(VOLUME_FILTERS, one(sp.ml), DEFAULT_VIEW.ml),
+    ml: pick(PROFITABILITY_VOLUMES, one(sp.ml), DEFAULT_VIEW.ml),
     sort: pick(SORT_KEYS, one(sp.sort), DEFAULT_VIEW.sort),
     dir: one(sp.dir) === 'asc' ? 'asc' : one(sp.dir) === 'desc' ? 'desc' : DEFAULT_VIEW.dir,
     fragrance: positive(one(sp.fragrance)),
@@ -81,9 +81,9 @@ export function readView(sp: Search): View {
 function readLines(v: string | undefined): SimLine[] {
   if (!v) return [];
   const out: SimLine[] = [];
-  for (const part of v.split(',').slice(0, MAX_LINES)) {
+  for (const part of v.split(',').slice(0, PROFITABILITY_MAX_LINES)) {
     const bits = part.split(':');
-    const qty = Math.min(positive(bits.at(-1)) ?? 1, MAX_QTY);
+    const qty = Math.min(positive(bits.at(-1)) ?? 1, PROFITABILITY_MAX_QTY);
     if (bits[0] === 'set' && bits.length === 2) out.push({ item: 'set', qty });
     else if (bits.length === 3) {
       const fragrance = positive(bits[0]);

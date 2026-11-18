@@ -25,6 +25,7 @@ import { Notice } from '@/components/ui/notice';
 import { getAdminMessages } from '@/lib/i18n';
 import type { Search } from '@/lib/list-page';
 import { serverApi } from '@/lib/server-api';
+import { fill } from '@/lib/utils';
 
 /** The fragrances the calculator and the simulator offer, by name, with the volumes they sell. */
 function optionsOf(table: ProfitabilityTable): FragranceOption[] {
@@ -89,7 +90,6 @@ export default async function ProfitabilityPage({
   if (res.status !== 200) throw new Error(`profitability failed to load: ${res.status}`);
   const table = res.body;
   const options = optionsOf(table);
-  const setAvailable = table.rows.some((r) => r.kind === 'discovery_set');
 
   // the calculator opens on the first fragrance's largest volume until one is chosen
   const first = options[0];
@@ -110,6 +110,9 @@ export default async function ProfitabilityPage({
 
   const { language, t } = await getAdminMessages();
   const p = t.profitability;
+  const setLabel = table.rows.some((r) => r.kind === 'discovery_set')
+    ? fill(p.discoverySetFull, { n: String(table.set.size), ml: String(table.set.vialMl) })
+    : null;
   const exportHref = `/api/admin/profitability/export?${new URLSearchParams({
     ...tableQuery(view),
     lang: language,
@@ -147,7 +150,7 @@ export default async function ProfitabilityPage({
       {view.tab === 'calculator' && (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
           <Card className="p-4 sm:p-5">
-            <CalculatorPicker options={options} setAvailable={setAvailable} t={t} />
+            <CalculatorPicker options={options} setLabel={setLabel} t={t} />
           </Card>
           <Dimmed>
             {stale ? (
@@ -171,7 +174,7 @@ export default async function ProfitabilityPage({
             <h2 className="mb-4 font-display text-[13px] leading-[1.35] tracking-[0.2em] uppercase">
               {p.order.title}
             </h2>
-            <OrderLinesEditor options={options} setAvailable={setAvailable} t={t} />
+            <OrderLinesEditor options={options} setLabel={setLabel} t={t} />
           </Card>
           <Dimmed>
             {stale ? (

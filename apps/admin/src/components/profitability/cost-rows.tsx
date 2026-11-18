@@ -1,4 +1,4 @@
-import type { OrderCosts, UnitCost } from '@lummi/contracts';
+import type { OrderProfit, UnitCost } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Badge } from '@/components/ui/badge';
 import type { AdminMessages } from '@/lib/i18n';
@@ -90,17 +90,17 @@ export function UnitCostRows({
 }
 
 /**
- * A sale's or an order's costs in the calculator's order: goods, mailer, BTS (less what the
- * customer paid), the commission, ad, tax, the gift sample, then the total. Each row the channel
+ * A sale's or an order's costs in the calculator's order: goods, then its Order costs (mailer, BTS
+ * less what the customer paid, the commission, ad, tax, the gift sample), then the whole cost. Each row the channel
  * has no part in is left out (no mailer or BTS on Uzum, no online payment at 0 %).
  */
 export function OrderCostRows({
-  costs,
+  sale,
   language,
   t,
   goodsLabel,
 }: {
-  costs: OrderCosts;
+  sale: OrderProfit;
   language: Language;
   t: AdminMessages;
   /** The goods row's label when the goods are one unit («Себестоимость»). */
@@ -108,39 +108,39 @@ export function OrderCostRows({
 }) {
   const p = t.profitability.costs;
   const money = (n: number) => formatMoney(n, language);
-  const app = costs.channel === 'miniapp';
-  const delivery = costs.btsCharge - costs.deliveryPaid;
+  const app = sale.channel === 'miniapp';
+  const delivery = sale.btsCharge - sale.deliveryPaid;
   return (
     <dl className="grid gap-1.5 text-sm">
-      <Row label={goodsLabel ?? p.goods} value={money(costs.goods)} />
-      {app && <Row label={p.mailer} value={money(costs.mailer)} />}
+      <Row label={goodsLabel ?? p.goods} value={money(sale.goods)} />
+      {app && <Row label={p.mailer} value={money(sale.mailer)} />}
       {app && (
         <Row
           label={p.delivery}
           value={money(delivery)}
           note={fill(p.deliveryParts, {
-            charge: money(costs.btsCharge),
-            paid: money(costs.deliveryPaid),
+            charge: money(sale.btsCharge),
+            paid: money(sale.deliveryPaid),
           })}
         />
       )}
-      {(costs.commission !== 0 || !app) && (
+      {(sale.commission !== 0 || !app) && (
         <Row
           label={fill(app ? p.commissionMiniapp : p.commissionUzum, {
-            percent: percentValue(costs.commissionPercent),
+            percent: percentValue(sale.commissionPercent),
           })}
-          value={money(costs.commission)}
+          value={money(sale.commission)}
         />
       )}
-      <Row label={p.ad} value={money(costs.adPerSale)} />
+      <Row label={p.ad} value={money(sale.adPerSale)} />
       <Row
-        label={fill(p.tax, { percent: percentValue(costs.taxPercent) })}
-        value={money(costs.tax)}
+        label={fill(p.tax, { percent: percentValue(sale.taxPercent) })}
+        value={money(sale.tax)}
       />
-      {costs.giftSample !== 0 && <Row label={p.giftSample} value={money(costs.giftSample)} />}
+      {sale.giftSample !== 0 && <Row label={p.giftSample} value={money(sale.giftSample)} />}
       <Row
-        label={p.total}
-        value={money(costs.total)}
+        label={p.cost}
+        value={money(sale.cost)}
         strong
         className="mt-1.5 border-t border-border pt-2.5"
       />
@@ -154,30 +154,30 @@ export function OrderCostRows({
  * gets the quiet badge.
  */
 export function ProfitLine({
-  costs,
+  sale,
   lowMarginPercent,
   language,
   t,
 }: {
-  costs: OrderCosts;
+  sale: OrderProfit;
   /** The table's floor; without it no low-margin badge. */
   lowMarginPercent?: number;
   language: Language;
   t: AdminMessages;
 }) {
   const p = t.profitability;
-  const loss = costs.profit < 0;
+  const loss = sale.profit < 0;
   const low =
     !loss &&
     lowMarginPercent !== undefined &&
-    costs.margin !== null &&
-    costs.margin * 100 < lowMarginPercent;
+    sale.margin !== null &&
+    sale.margin * 100 < lowMarginPercent;
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 rounded-button bg-field px-4 py-3">
       <div className="min-w-0">
         <p className="text-small text-muted-foreground">{p.costs.profit}</p>
         <p className="text-[22px] leading-tight font-semibold whitespace-nowrap tabular-nums">
-          {formatMoney(costs.profit, language)}
+          {formatMoney(sale.profit, language)}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -187,11 +187,11 @@ export function ProfitLine({
             {fill(p.flags.low, { percent: percentValue(lowMarginPercent!) })}
           </Badge>
         )}
-        {costs.margin !== null && (
+        {sale.margin !== null && (
           <p className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">
             {p.costs.margin}{' '}
             <span className="text-[17px] font-semibold text-foreground">
-              {percent(costs.margin)}
+              {percent(sale.margin)}
             </span>
           </p>
         )}

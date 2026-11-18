@@ -65,16 +65,15 @@ export function ProfitabilityTableView({
   const money = (n: number) => formatMoney(n, language);
   if (data.rows.length === 0) return <EmptyState title={p.empty}>{p.emptyText}</EmptyState>;
   const rows = rowsOf(data, view, p.discoverySet);
-  const known = rows.filter((r) => r.profit !== null);
-  const average = known.length
-    ? Math.round(known.reduce((s, r) => s + r.profit!, 0) / known.length)
-    : null;
+  // the filter's figures as the API counted them (the server owns money)
+  const summary = data.summaries.find((x) => x.volume === view.ml);
   const floor = percentValue(data.lowMarginPercent);
-  const count = (f: (r: ProfitabilityRow) => boolean) => num(rows.filter(f).length);
 
   const name = (r: ProfitabilityRow) => (r.kind === 'discovery_set' ? p.discoverySet : r.name);
   const volume = (r: ProfitabilityRow) =>
-    r.kind === 'discovery_set' ? '5 × 10' : fill(p.ml, { ml: String(r.ml) });
+    r.kind === 'discovery_set'
+      ? fill(p.setVolume, { n: String(data.set.size), ml: String(data.set.vialMl) })
+      : fill(p.ml, { ml: String(r.ml) });
   const calculatorHref = (r: ProfitabilityRow) =>
     r.kind === 'discovery_set'
       ? hrefOf(view, { tab: 'calculator', set: true })
@@ -134,38 +133,40 @@ export function ProfitabilityTableView({
 
   return (
     <div className="grid gap-3">
-      <MetaLine
-        className="px-1 text-small text-muted-foreground"
-        parts={[
-          `${p.summary.rows} ${num(rows.length)}`,
-          average !== null && (
+      {summary && (
+        <MetaLine
+          className="px-1 text-small text-muted-foreground"
+          parts={[
+            `${p.summary.rows} ${num(summary.rows)}`,
+            summary.averageProfit !== null && (
+              <>
+                {p.summary.average}{' '}
+                <span className="font-semibold text-foreground tabular-nums">
+                  {money(summary.averageProfit)}
+                </span>
+              </>
+            ),
             <>
-              {p.summary.average}{' '}
-              <span className="font-semibold text-foreground tabular-nums">{money(average)}</span>
-            </>
-          ),
-          <>
-            {p.summary.loss}{' '}
-            <span className="font-semibold text-foreground tabular-nums">
-              {count((r) => r.flag === 'loss')}
-            </span>
-          </>,
-          <>
-            {fill(p.summary.low, { percent: floor })}{' '}
-            <span className="font-semibold text-foreground tabular-nums">
-              {count((r) => r.flag === 'low')}
-            </span>
-          </>,
-          rows.some((r) => r.unitCost === null) && (
-            <>
-              {p.summary.noOil}{' '}
+              {p.summary.loss}{' '}
               <span className="font-semibold text-foreground tabular-nums">
-                {count((r) => r.unitCost === null)}
+                {num(summary.loss)}
               </span>
-            </>
-          ),
-        ]}
-      />
+            </>,
+            <>
+              {fill(p.summary.low, { percent: floor })}{' '}
+              <span className="font-semibold text-foreground tabular-nums">{num(summary.low)}</span>
+            </>,
+            summary.noOil > 0 && (
+              <>
+                {p.summary.noOil}{' '}
+                <span className="font-semibold text-foreground tabular-nums">
+                  {num(summary.noOil)}
+                </span>
+              </>
+            ),
+          ]}
+        />
+      )}
 
       {rows.length === 0 ? (
         <Card className="p-5 text-sm text-muted-foreground">{p.noneInFilter}</Card>

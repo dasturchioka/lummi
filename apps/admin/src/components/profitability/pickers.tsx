@@ -7,7 +7,8 @@ import { Select } from '@/components/ui/select';
 import type { AdminMessages } from '@/lib/i18n';
 import { cn, fill } from '@/lib/utils';
 import { FIELD_LABEL, Segmented, useViewNav } from './controls';
-import { MAX_LINES, MAX_QTY, type FragranceOption, type SimLine } from './view';
+import { PROFITABILITY_MAX_LINES, PROFITABILITY_MAX_QTY } from '@lummi/contracts';
+import { type FragranceOption, type SimLine } from './view';
 
 /** The value of the Discovery set in a fragrance select (fragrance ids are positive numbers). */
 const SET = 'set';
@@ -16,7 +17,7 @@ function FragranceSelect({
   id,
   value,
   options,
-  setAvailable,
+  setLabel,
   onChange,
   t,
   ariaLabel,
@@ -24,7 +25,8 @@ function FragranceSelect({
   id?: string;
   value: string;
   options: readonly FragranceOption[];
-  setAvailable: boolean;
+  /** The Discovery set's label, or null when the shop has none. */
+  setLabel: string | null;
   onChange: (value: string) => void;
   t: AdminMessages;
   ariaLabel?: string;
@@ -33,7 +35,7 @@ function FragranceSelect({
   return (
     <Select id={id} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
       {value === '' && <option value="">{p.calculator.pick}</option>}
-      {setAvailable && <option value={SET}>{p.discoverySetFull}</option>}
+      {setLabel !== null && <option value={SET}>{setLabel}</option>}
       {options.map((o) => (
         <option key={o.id} value={String(o.id)}>
           {o.name}
@@ -49,11 +51,12 @@ function FragranceSelect({
  */
 export function CalculatorPicker({
   options,
-  setAvailable,
+  setLabel,
   t,
 }: {
   options: readonly FragranceOption[];
-  setAvailable: boolean;
+  /** The Discovery set's label, or null when the shop has none. */
+  setLabel: string | null;
   t: AdminMessages;
 }) {
   const p = t.profitability;
@@ -74,7 +77,7 @@ export function CalculatorPicker({
         <FragranceSelect
           value={value}
           options={options}
-          setAvailable={setAvailable}
+          setLabel={setLabel}
           onChange={pickFragrance}
           t={t}
         />
@@ -107,11 +110,12 @@ export function CalculatorPicker({
  */
 export function OrderLinesEditor({
   options,
-  setAvailable,
+  setLabel,
   t,
 }: {
   options: readonly FragranceOption[];
-  setAvailable: boolean;
+  /** The Discovery set's label, or null when the shop has none. */
+  setLabel: string | null;
   t: AdminMessages;
 }) {
   const p = t.profitability;
@@ -128,7 +132,7 @@ export function OrderLinesEditor({
       ? { item: last.item, qty: 1 }
       : first
         ? { item: { fragrance: first.id, ml: first.mls[0]! }, qty: 1 }
-        : setAvailable
+        : setLabel !== null
           ? { item: 'set', qty: 1 }
           : null;
     if (line) go({ lines: [...lines, line] });
@@ -166,7 +170,7 @@ export function OrderLinesEditor({
                   ariaLabel={`${label}: ${p.calculator.fragrance}`}
                   value={l.item === 'set' ? SET : fragrance ? String(fragrance.id) : ''}
                   options={options}
-                  setAvailable={setAvailable}
+                  setLabel={setLabel}
                   onChange={(v) => pickFragrance(i, v)}
                   t={t}
                 />
@@ -214,7 +218,7 @@ export function OrderLinesEditor({
                   <button
                     type="button"
                     className={step}
-                    disabled={l.qty >= MAX_QTY}
+                    disabled={l.qty >= PROFITABILITY_MAX_QTY}
                     aria-label={`${o.qty} +1`}
                     onClick={() => set(i, { ...l, qty: l.qty + 1 })}
                   >
@@ -232,7 +236,7 @@ export function OrderLinesEditor({
           variant="outline"
           size="sm"
           onClick={add}
-          disabled={lines.length >= MAX_LINES || (!first && !setAvailable)}
+          disabled={lines.length >= PROFITABILITY_MAX_LINES || (!first && setLabel === null)}
         >
           <Plus strokeWidth={1.5} aria-hidden />
           {o.add}
