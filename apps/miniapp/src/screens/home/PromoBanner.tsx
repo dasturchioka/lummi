@@ -8,8 +8,8 @@ import { usePrefs } from '../../lib/prefs';
 import { ArrowRightIcon } from '../../ui/icons';
 
 /**
- * The owner's promo banner, in its own slot under the Discovery set banner, drawn in the same
- * Graphite form (approved variant 2): the photo on the left third, the text on the dark block
+ * An owner's promo banner, a slide of the Home banner slider after the Discovery set, drawn in the
+ * same Graphite form (approved variant 2): the photo on the left third, the text on the dark block
  * beside it. The whole banner is one link that opens its `startapp` target through the same route
  * table as a deep link.
  */
@@ -28,6 +28,7 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
     <a
       data-slot="promo"
       href={to}
+      draggable={false}
       onClick={(e) => {
         e.preventDefault();
         void router.navigate({ to });
@@ -41,6 +42,8 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
             srcSet={photoSrcSet(banner.imageHash)}
             sizes="140px"
             alt=""
+            // never the first slide: it loads as the slider nears it
+            loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}
             className="absolute inset-0 size-full object-cover object-[center_top]"

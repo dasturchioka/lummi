@@ -25,6 +25,12 @@ export const miniappMessages = defineMessages(
       discoveryTitle: 'Discovery set',
       discoveryText: 'Пять ароматов по 10 мл',
       filterLabel: 'Тип аромата',
+      // the banner slider (#62): its name, the screen reader's words for it, the position dots
+      offers: 'Предложения',
+      carousel: 'карусель',
+      slide: 'слайд',
+      slideOf: '{n} из {total}',
+      showSlide: 'Показать слайд {n} из {total}',
     },
     /** The catalog screen: type chips, the four filters, the sort and the counter. */
     catalog: {
@@ -328,6 +334,11 @@ export const miniappMessages = defineMessages(
       discoveryTitle: 'Discovery set',
       discoveryText: '10 ml li beshta ifor',
       filterLabel: 'Ifor turi',
+      offers: 'Takliflar',
+      carousel: 'karusel',
+      slide: 'slayd',
+      slideOf: '{total} tadan {n}',
+      showSlide: '{n}-slaydni koʻrsatish, jami {total}',
     },
     catalog: {
       title: 'Katalog',
