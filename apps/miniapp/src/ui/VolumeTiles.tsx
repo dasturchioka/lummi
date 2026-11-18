@@ -170,10 +170,20 @@ export function VolumeTiles({
  * Under the tiles, for the chosen volume that can be bought: «В наличии» with a Sage dot and,
  * during a markdown, a row that names the volume it belongs to («10 мл · −20% · до 15 ноября»;
  * ADR 0008: no timer). A sold-out volume shows nothing here: its tile and the dock already say it.
+ * `showCount`: the real available count after it («В наличии: 12 шт.»).
  * `stock={false}` (the list «+» sheet, where only what is in stock can be chosen): the markdown
  * row alone.
  */
-export function VolumeStatus({ volume, stock = true }: { volume: VolumeCard; stock?: boolean }) {
+export function VolumeStatus({
+  volume,
+  stock = true,
+  showCount = false,
+}: {
+  volume: VolumeCard;
+  stock?: boolean;
+  /** Setting `catalog.showStockCount`: «В наличии: 12 шт.», the server's real available count. */
+  showCount?: boolean;
+}) {
   const { t, language } = usePrefs();
   if (volume.available === 0 || (!stock && volume.salePrice === null)) return null;
   const until =
@@ -185,7 +195,9 @@ export function VolumeStatus({ volume, stock = true }: { volume: VolumeCard; sto
       {stock ? (
         <span className="flex items-center gap-2" data-availability="in-stock">
           <span aria-hidden="true" className="size-1.5 shrink-0 rounded-pill bg-sage" />
-          {t.card.inStock}
+          {showCount
+            ? fill(t.card.inStockCount, { count: String(volume.available) })
+            : t.card.inStock}
         </span>
       ) : null}
       {volume.salePrice !== null ? (

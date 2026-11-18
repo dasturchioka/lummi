@@ -219,7 +219,20 @@ describe('list photo and struck price', () => {
       .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
       .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 30)));
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
-    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 90_000 });
+    expect(await card('tygar')).toMatchObject({
+      fromPrice: 60_000,
+      fromMl: 30,
+      fromRegularPrice: 90_000,
+    });
+  });
+
+  it('fromMl is the volume fromPrice belongs to, and null when sold out', async () => {
+    const c = await card('tygar');
+    const v = c.volumes.find((x) => x.available > 0 && x.effectivePrice === c.fromPrice);
+    expect(c.fromMl).toBe(v?.ml);
+    expect(
+      (await list({ limit: 100 })).items.filter((i) => i.soldOut).every((i) => i.fromMl === null),
+    ).toBe(true);
   });
 
   it('sets fromRegularPrice only while the from-volume is marked down', async () => {

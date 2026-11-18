@@ -99,6 +99,22 @@ describe('GET /catalog/fragrances/:slug', () => {
     expect(await stepsOf('symphony')).toEqual([]);
   });
 
+  it('carries the stock-count setting (#70), default on', async () => {
+    const flag = async () => {
+      const res = await card('symphony');
+      if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+      return res.body.showStockCount;
+    };
+    expect(await flag()).toBe(true);
+    const owner = await t.ownerSession();
+    const res = await owner.client.admin.settings.update({
+      params: { key: 'catalog.showStockCount' },
+      body: { value: false },
+    });
+    expect(res.status).toBe(200);
+    expect(await flag()).toBe(false);
+  });
+
   it('answers 404 for an unknown slug and for a hidden fragrance, 401 without a session', async () => {
     expect((await card('no-such-scent')).status).toBe(404);
     await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, 'tygar'));

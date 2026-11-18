@@ -12,7 +12,7 @@ import { Money } from './Money';
 /**
  * One fragrance in a list: the DESIGN.md product card with the card's label lockup (caps attribution
  * «ПО МОТИВАМ <BRAND>», the Cormorant italic name, the meta line, three key notes joined by « · »,
- * «от … сум»). Prices come from the server (`fromPrice`); nothing is computed here.
+ * «69 000 сум · 10 мл»). Prices come from the server (`fromPrice`); nothing is computed here.
  *
  * - `layout="grid"`: the 3:4 photo on top, for the catalog grid (two columns, ~170 px wide). The
  *   meta line keeps the badge and the type (no room for the family), the notes stop at two lines,
@@ -94,7 +94,10 @@ export function FragranceListCard({
   ) : item.fromPrice !== null ? (
     <span className="flex flex-wrap items-baseline gap-x-2">
       <span className="type-price text-ink">
-        {fill(t.list.from, { price: formatMoney(item.fromPrice, language) })}
+        {fill(t.list.from, {
+          price: formatMoney(item.fromPrice, language),
+          ml: String(item.fromMl ?? ''),
+        })}
       </span>
       {item.fromRegularPrice !== null ? (
         <s data-testid="regular-price" className="text-muted">

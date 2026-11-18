@@ -99,6 +99,8 @@ export const fragranceCardSchema = z.object({
    * upgrade right prices (`upgradeRightPrices`). Empty while switched off.
    */
   stepUps: z.array(stepUpSchema),
+  /** Setting `catalog.showStockCount`: the status line under the tiles shows the real available count («В наличии: 12 шт.»). */
+  showStockCount: z.boolean(),
 });
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;
 
@@ -119,6 +121,8 @@ export const fragranceListItemSchema = z.object({
   isNew: z.boolean(),
   /** The lowest price to pay over the volumes in stock (a markdown counts while active); null when nothing is in stock. */
   fromPrice: z.number().int().nullable(),
+  /** The volume `fromPrice` belongs to (the one from-volume rule); null with it. The list price reads «69 000 сум · 10 мл». */
+  fromMl: z.number().int().nullable(),
   /** The from-volume's regular price, set only while that volume is marked down (struck through on the card). */
   fromRegularPrice: z.number().int().nullable(),
   /** Every volume is out of stock. */

@@ -77,6 +77,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
   upgradeRightPrices: [],
   fullSizeMl: [30, 50],
   stepUps: [],
+  showStockCount: true,
   ...over,
 });
 
@@ -125,6 +126,25 @@ describe('FragranceView', () => {
       'Нет в наличии',
     );
     expect(screen.getByRole('radio', { name: /50/ }).getAttribute('data-sold-out')).toBe('true');
+  });
+
+  it('shows the real available count for the chosen volume, RU and UZ (#70)', () => {
+    const status = () => document.querySelector('[data-availability="in-stock"]')?.textContent;
+    language = 'ru';
+    const { unmount } = show(card());
+    expect(status()).toMatch(/^В наличии: 20\sшт\.$/);
+    fireEvent.click(screen.getByRole('radio', { name: /30/ }));
+    expect(status()).toMatch(/^В наличии: 5\sшт\.$/);
+    unmount();
+    language = 'uz';
+    show(card());
+    expect(status()).toMatch(/^Sotuvda: 20\sdona$/);
+  });
+
+  it('shows plain «В наличии» when the owner hides the count', () => {
+    language = 'ru';
+    show(card({ showStockCount: false }));
+    expect(document.querySelector('[data-availability="in-stock"]')?.textContent).toBe('В наличии');
   });
 
   it('strikes the regular price and shows the badge and end date while a markdown is active', () => {

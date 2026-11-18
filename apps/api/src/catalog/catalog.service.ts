@@ -179,6 +179,7 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     isHit: e.isHit,
     isNew: e.isNew,
     fromPrice: from?.effectivePrice ?? null,
+    fromMl: from?.ml ?? null,
     fromRegularPrice: from && from.salePrice !== null ? from.price : null,
     soldOut: soldOut(e.cards),
     photo: listPhoto(e.cards),
@@ -473,7 +474,11 @@ export class CatalogService {
     const [rights, pricing, step] = await Promise.all([
       upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
       readPricingSettings(this.db),
-      readSettings(this.db, ['catalog.stepUp.enabled', 'catalog.stepUp.minPercent']),
+      readSettings(this.db, [
+        'catalog.stepUp.enabled',
+        'catalog.stepUp.minPercent',
+        'catalog.showStockCount',
+      ]),
     ]);
     // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
     // the right's price there, so «+N сум» would contradict them (the right's strip nudges then)
@@ -505,6 +510,7 @@ export class CatalogService {
       upgradeRightPrices: rights,
       fullSizeMl: pricing.fullSizeVolumesMl,
       stepUps: offers,
+      showStockCount: step['catalog.showStockCount'],
     };
   }
 }

@@ -54,6 +54,7 @@ const item = (volumes: VolumeCard[]): FragranceListItem => ({
   isHit: false,
   isNew: false,
   fromPrice: 69_000,
+  fromMl: 10,
   fromRegularPrice: null,
   soldOut: false,
   photo: null,
