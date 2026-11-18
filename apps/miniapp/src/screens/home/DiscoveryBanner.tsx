@@ -6,20 +6,24 @@ import { Money } from '../../ui/Money';
 import { SetPhoto } from '../../ui/SetPhoto';
 
 /**
- * The dark Discovery set banner (approved variant 2): the box photo on the left, the set on the
- * dark block beside it, named as the brand names a product: «НАБОР» in small caps over
- * «Discovery set» in the Cormorant italic. The whole banner opens the set; the price is the
- * server's (the owner's photo replaces the shipped box photo once uploaded).
+ * The dark Discovery set banner (approved variant 2), the first slide of the Home banner slider:
+ * the box photo on the left, the set on the dark block beside it, named as the brand names a
+ * product: «НАБОР» in small caps over «Discovery set» in the Cormorant italic. The price is the
+ * server's (the owner's photo replaces the shipped box photo once uploaded). The whole banner
+ * opens the catalog on «Наборы» / «Toʻplamlar», where the Discovery set stands beside the
+ * builder (review 2026-11-17), not the set's own page.
  */
 export function DiscoveryBanner() {
   const { t } = usePrefs();
   const set = useDiscoverySet().data;
   return (
     <Link
-      to="/sets/discovery"
+      to="/catalog"
+      search={{ type: 'sets' }}
+      draggable={false}
       data-slot="discovery"
       aria-label={`${t.home.discoveryLabel}: ${t.home.discoveryTitle}`}
-      className="flex min-h-[140px] overflow-hidden rounded-card bg-totals text-totals-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98]"
+      className="flex min-h-[140px] w-full overflow-hidden rounded-card bg-totals text-totals-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.98]"
     >
       <div aria-hidden="true" className="relative w-[34%] shrink-0 bg-photo">
         <SetPhoto hash={set?.photo ?? null} sizes="140px" eager />

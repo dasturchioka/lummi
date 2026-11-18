@@ -1,4 +1,4 @@
-import type { BannerInput } from '@lummi/contracts';
+import { ACTIVE_BANNERS_MAX, type BannerInput } from '@lummi/contracts';
 import { auditLog, eq, promoBanners, infoPages, settings } from '@lummi/db';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -51,38 +51,53 @@ async function banner(over: Partial<BannerInput> = {}) {
   return res.body;
 }
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
+const activate = (id: number) =>
+  owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
+const move = (id: number, direction: 'up' | 'down') =>
+  owner.client.admin.content.banners.move({ params: { id }, body: { direction } });
+/** The slides after the Discovery set, as a customer's Home gets them. */
+async function sliderIds() {
+  const { client } = await t.signIn();
+  const res = await client.content.home();
+  if (res.status !== 200) throw new Error(`home: ${res.status}`);
+  return res.body.banners.map((b) => b.id);
+}
 
 describe('customer content endpoints', () => {
-  it('answers null banner and the seeded slogan before anything is set up', async () => {
+  it('answers no banners and the seeded slogan before anything is set up', async () => {
     const { client } = await t.signIn();
     const home = await client.content.home();
     expect(home).toMatchObject({
       status: 200,
       body: {
-        banner: null,
+        banners: [],
         slogan: { ru: 'Ароматы, которые освещают', uz: 'Lahzalaringizni yorituvchi iforlar' },
       },
     });
   });
 
-  it('shows the active banner, RU and UZ, without any admin field', async () => {
-    const b = await banner();
-    await owner.client.admin.content.banners.setActive({
-      params: { id: b.id },
-      body: { active: true },
-    });
+  it('shows every active banner in the owner’s order, RU and UZ, without any admin field; inactive ones are left out', async () => {
+    const a = await banner();
+    const off = await banner({ titleRu: 'Черновик', titleUz: 'Qoralama' });
+    const b = await banner({ titleRu: 'Второй', titleUz: 'Ikkinchi', target: 'p_tygar' });
+    expect((await activate(a.id)).status).toBe(200);
+    expect((await activate(b.id)).status).toBe(200);
     const { client } = await t.signIn();
     const res = await client.content.home();
     expect(res.status).toBe(200);
     if (res.status !== 200) return;
-    expect(res.body.banner).toMatchObject({
-      id: b.id,
+    expect(res.body.banners.map((x) => x.id)).toEqual([a.id, b.id]);
+    expect(res.body.banners.map((x) => x.id)).not.toContain(off.id);
+    expect(res.body.banners[0]).toMatchObject({
+      id: a.id,
       titleRu: 'Осенняя подборка',
       titleUz: 'Kuzgi tanlov',
       target: 'catalog',
     });
-    expect(res.body.banner?.imageHash).toMatch(/^[a-f0-9]{16}$/);
-    expect(res.body.banner).not.toHaveProperty('active');
+    expect(res.body.banners[1]).toMatchObject({ titleUz: 'Ikkinchi', target: 'p_tygar' });
+    expect(res.body.banners[0]?.imageHash).toMatch(/^[a-f0-9]{16}$/);
+    expect(res.body.banners[0]).not.toHaveProperty('active');
+    expect(res.body.banners[0]).not.toHaveProperty('position');
   });
 
   it('lists the six pages in order, drafts included and flagged, and reads one by slug', async () => {
@@ -170,6 +185,7 @@ describe('owner-only editing', () => {
       m.banners.create({ body: bannerInput() }),
       m.banners.update({ params: { id: 1 }, body: bannerInput() }),
       m.banners.setActive({ params: { id: 1 }, body: { active: true } }),
+      m.banners.move({ params: { id: 1 }, body: { direction: 'up' } }),
       m.banners.remove({ params: { id: 1 } }),
       m.slogan.get(),
       m.slogan.set({ body: { ru: 'a', uz: 'b' } }),
@@ -191,65 +207,140 @@ describe('owner-only editing', () => {
 });
 
 describe('banners', () => {
-  it('keeps at most one active: activating one switches the other off', async () => {
+  it('keeps several banners on at once: switching one on leaves the others on and puts it last', async () => {
     const a = await banner();
     const b = await banner({ titleRu: 'Другой баннер', titleUz: 'Boshqa banner' });
-    const act = (id: number) =>
-      owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
-    expect((await act(a.id)).status).toBe(200);
-    expect((await act(b.id)).status).toBe(200);
+    const c = await banner({ titleRu: 'Третий', titleUz: 'Uchinchi' });
+    for (const x of [b, a, c]) expect((await activate(x.id)).status).toBe(200);
+    expect(await sliderIds()).toEqual([b.id, a.id, c.id]);
+    const d = await banner({ titleRu: 'Выключен раньше' });
+    const e = await banner({ titleRu: 'Выключен позже' });
+    // the admin list: the slides in slider order, then the banners that are off, newest first
     const list = await owner.client.admin.content.banners.list();
-    expect(list.status === 200 && list.body.filter((x) => x.active).map((x) => x.id)).toEqual([
-      b.id,
-    ]);
-    const [row] = await audits('content.banner_activated').then((r) =>
-      r.filter((x) => x.targetId === String(b.id)),
-    );
-    expect(row?.payload).toMatchObject({ switchedOff: [a.id] });
+    if (list.status !== 200) throw new Error('list');
+    expect(list.body.map((x) => x.id)).toEqual([b.id, a.id, c.id, e.id, d.id]);
+    // switching one on again changes nothing and writes nothing
+    expect((await activate(a.id)).status).toBe(200);
+    expect(await audits('content.banner_activated')).toHaveLength(3);
   });
 
-  it('audits and touches only the banner that was active, with three banners', async () => {
+  it('audits switching on and off with the banner’s name and the slider after it; no switchedOff', async () => {
     const a = await banner();
-    const b = await banner();
-    const c = await banner();
-    const act = (id: number) =>
-      owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
-    await act(a.id);
-    const [cBefore] = await t.db.select().from(promoBanners).where(eq(promoBanners.id, c.id));
-    await act(b.id);
-    const [row] = (await audits('content.banner_activated')).filter(
+    const b = await banner({ titleRu: 'Другой баннер', titleUz: 'Boshqa banner' });
+    await activate(a.id);
+    await activate(b.id);
+    const [on] = (await audits('content.banner_activated')).filter(
       (x) => x.targetId === String(b.id),
     );
-    expect(row?.payload).toMatchObject({ switchedOff: [a.id] });
-    const [cAfter] = await t.db.select().from(promoBanners).where(eq(promoBanners.id, c.id));
-    expect(cAfter?.updatedAt).toEqual(cBefore?.updatedAt);
+    expect(on).toMatchObject({ actorId: owner.staff.id, targetType: 'promo_banner' });
+    expect(on?.payload).toEqual({
+      title: 'Другой баннер',
+      slider: [
+        { id: a.id, title: 'Осенняя подборка' },
+        { id: b.id, title: 'Другой баннер' },
+      ],
+    });
+    expect(on?.payload).not.toHaveProperty('switchedOff');
+    const offRes = await owner.client.admin.content.banners.setActive({
+      params: { id: a.id },
+      body: { active: false },
+    });
+    expect(offRes.status).toBe(200);
+    const [off] = await audits('content.banner_deactivated');
+    expect(off?.payload).toEqual({
+      title: 'Осенняя подборка',
+      slider: [{ id: b.id, title: 'Другой баннер' }],
+    });
+    expect(await sliderIds()).toEqual([b.id]);
+    // switched on again, it comes back as the last slide
+    await activate(a.id);
+    expect(await sliderIds()).toEqual([b.id, a.id]);
   });
 
-  it('two activations at once end with exactly one active banner and no error', async () => {
-    const a = await banner();
-    const b = await banner();
-    const c = await banner();
-    const act = (id: number) =>
-      owner.client.admin.content.banners.setActive({ params: { id }, body: { active: true } });
-    for (const first of [
-      [a.id, b.id],
-      [b.id, c.id],
-      [c.id, a.id],
-    ] as const) {
-      const results = await Promise.all(first.map(act));
-      expect(results.map((r) => r.status)).toEqual([200, 200]);
-      const active = await t.db.select().from(promoBanners).where(eq(promoBanners.active, true));
-      expect(active).toHaveLength(1);
+  it(`switches on at most ${ACTIVE_BANNERS_MAX}: one more is refused (422 limit) until one goes off`, async () => {
+    const on = [];
+    for (let i = 0; i < ACTIVE_BANNERS_MAX; i++) {
+      const x = await banner({ titleRu: `Баннер ${i + 1}` });
+      expect((await activate(x.id)).status).toBe(200);
+      on.push(x.id);
     }
+    const extra = await banner({ titleRu: 'Лишний' });
+    expect(await activate(extra.id)).toMatchObject({ status: 422, body: { fields: ['limit'] } });
+    expect(await sliderIds()).toEqual(on);
+    await owner.client.admin.content.banners.setActive({
+      params: { id: on[0]! },
+      body: { active: false },
+    });
+    expect((await activate(extra.id)).status).toBe(200);
+    expect(await sliderIds()).toEqual([...on.slice(1), extra.id]);
   });
 
-  it('is enforced by the database, not only by the service', async () => {
+  it('activations at once never pass the cap and never share a place', async () => {
+    const all = [];
+    for (let i = 0; i < ACTIVE_BANNERS_MAX + 2; i++) all.push(await banner());
+    const results = await Promise.all(all.map((x) => activate(x.id)));
+    expect(results.filter((r) => r.status === 200)).toHaveLength(ACTIVE_BANNERS_MAX);
+    expect(results.filter((r) => r.status === 422)).toHaveLength(2);
+    const rows = await t.db.select().from(promoBanners).where(eq(promoBanners.active, true));
+    expect(new Set(rows.map((r) => r.position)).size).toBe(ACTIVE_BANNERS_MAX);
+  });
+
+  it('moves an active banner up or down, keeps the order for Home, and audits the move with names', async () => {
+    const a = await banner({ titleRu: 'Первый' });
+    const b = await banner({ titleRu: 'Второй' });
+    const c = await banner({ titleRu: 'Третий' });
+    for (const x of [a, b, c]) await activate(x.id);
+    const res = await move(c.id, 'up');
+    expect(res.status).toBe(200);
+    if (res.status !== 200) return;
+    expect(res.body.filter((x) => x.active).map((x) => x.id)).toEqual([a.id, c.id, b.id]);
+    expect(await sliderIds()).toEqual([a.id, c.id, b.id]);
+    const [row] = await audits('content.banner_moved');
+    expect(row).toMatchObject({
+      actorId: owner.staff.id,
+      targetType: 'promo_banner',
+      targetId: String(c.id),
+    });
+    expect(row?.payload).toEqual({
+      title: 'Третий',
+      direction: 'up',
+      before: [
+        { id: a.id, title: 'Первый' },
+        { id: b.id, title: 'Второй' },
+        { id: c.id, title: 'Третий' },
+      ],
+      after: [
+        { id: a.id, title: 'Первый' },
+        { id: c.id, title: 'Третий' },
+        { id: b.id, title: 'Второй' },
+      ],
+    });
+    await move(a.id, 'down');
+    expect(await sliderIds()).toEqual([c.id, a.id, b.id]);
+    // the order survives switching another banner off and on (it comes back last)
+    await owner.client.admin.content.banners.setActive({
+      params: { id: c.id },
+      body: { active: false },
+    });
+    await activate(c.id);
+    expect(await sliderIds()).toEqual([a.id, b.id, c.id]);
+  });
+
+  it('moving the first slide up or the last down changes nothing and writes nothing', async () => {
     const a = await banner();
     const b = await banner();
-    await t.db.update(promoBanners).set({ active: true }).where(eq(promoBanners.id, a.id));
-    await expect(
-      t.db.update(promoBanners).set({ active: true }).where(eq(promoBanners.id, b.id)),
-    ).rejects.toThrow();
+    await activate(a.id);
+    await activate(b.id);
+    expect((await move(a.id, 'up')).status).toBe(200);
+    expect((await move(b.id, 'down')).status).toBe(200);
+    expect(await sliderIds()).toEqual([a.id, b.id]);
+    expect(await audits('content.banner_moved')).toHaveLength(0);
+  });
+
+  it('refuses to move a banner that is off (422 active) or unknown (404)', async () => {
+    const a = await banner();
+    expect(await move(a.id, 'up')).toMatchObject({ status: 422, body: { fields: ['active'] } });
+    expect((await move(a.id + 100, 'up')).status).toBe(404);
   });
 
   it('refuses to activate a banner without a photo', async () => {
@@ -336,17 +427,18 @@ describe('banners', () => {
     expect(await audits('content.banner_photo_uploaded')).toHaveLength(1);
   });
 
-  it('deletes a banner, and Home falls back to no banner', async () => {
+  it('deletes a banner, and Home keeps the other slides', async () => {
+    const a = await banner();
     const b = await banner();
-    await owner.client.admin.content.banners.setActive({
-      params: { id: b.id },
-      body: { active: true },
-    });
-    const del = await owner.client.admin.content.banners.remove({ params: { id: b.id } });
+    await activate(a.id);
+    await activate(b.id);
+    const del = await owner.client.admin.content.banners.remove({ params: { id: a.id } });
     expect(del.status).toBe(200);
+    expect(await sliderIds()).toEqual([b.id]);
+    await owner.client.admin.content.banners.remove({ params: { id: b.id } });
     const { client } = await t.signIn();
-    expect(await client.content.home()).toMatchObject({ body: { banner: null } });
-    expect(await audits('content.banner_deleted')).toHaveLength(1);
+    expect(await client.content.home()).toMatchObject({ body: { banners: [] } });
+    expect(await audits('content.banner_deleted')).toHaveLength(2);
   });
 });
 

@@ -1436,34 +1436,29 @@ export const orderCardPrompts = pgTable(
 export type OrderCardPromptRow = typeof orderCardPrompts.$inferSelect;
 
 /**
- * The Home promo banner (ticket #21). Several may be kept as drafts, at most one is active: the
- * partial unique index is what enforces it. It sits in its own slot under the Discovery set
- * banner, which it never replaces; with none active Home shows only the Discovery banner.
+ * The Home promo banners (ticket #21; a slider since #62). Every active banner is a slide of the
+ * Home banner slider, after the Discovery set slide, in `position` order (ties by id); at most
+ * `ACTIVE_BANNERS_MAX` are active at once. Switching one on puts it last; the owner moves it
+ * up or down. An inactive banner's `position` means nothing until it is switched on again.
  * `image_hash` names a rendition set of the photo pipeline (`public/<hash>-<w>.webp`).
  */
-export const promoBanners = pgTable(
-  'promo_banners',
-  {
-    id: id(),
-    imageHash: text('image_hash'),
-    titleRu: text('title_ru').notNull(),
-    titleUz: text('title_uz').notNull(),
-    subtitleRu: text('subtitle_ru').notNull(),
-    subtitleUz: text('subtitle_uz').notNull(),
-    priceLineRu: text('price_line_ru'),
-    priceLineUz: text('price_line_uz'),
-    /** A `startapp` value (`catalog`, `p_<slug>`, ...); the Mini App maps it to a route. */
-    target: text('target').notNull().default('catalog'),
-    active: boolean('active').notNull().default(false),
-    createdAt: createdAt(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex('promo_banners_one_active_idx')
-      .on(t.active)
-      .where(sql`${t.active}`),
-  ],
-);
+export const promoBanners = pgTable('promo_banners', {
+  id: id(),
+  imageHash: text('image_hash'),
+  titleRu: text('title_ru').notNull(),
+  titleUz: text('title_uz').notNull(),
+  subtitleRu: text('subtitle_ru').notNull(),
+  subtitleUz: text('subtitle_uz').notNull(),
+  priceLineRu: text('price_line_ru'),
+  priceLineUz: text('price_line_uz'),
+  /** A `startapp` value (`catalog`, `p_<slug>`, ...); the Mini App maps it to a route. */
+  target: text('target').notNull().default('catalog'),
+  active: boolean('active').notNull().default(false),
+  /** The slide's place among the active banners (ascending). */
+  position: integer('position').notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Editable one-line texts by key (today only `home.slogan`), RU/UZ. */
 export const contentTexts = pgTable('content_texts', {

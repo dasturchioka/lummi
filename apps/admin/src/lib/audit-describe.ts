@@ -217,6 +217,27 @@ const onHandText = (c: Ctx, v: unknown) => (typeof v === 'number' ? String(v) : 
 const bannerName = (title: string | null, id: unknown) =>
   title ? quote(title) : String(id ?? '—');
 
+/**
+ * The slider since #62: `{id, title}` slides after the Discovery set. The Discovery set is slide 1
+ * (as the admin list and preview number them), so a banner at index i is slide i + 2.
+ */
+type BannerRef = { id: unknown; title: string | null };
+const bannerRefs = (v: unknown): BannerRef[] | null =>
+  Array.isArray(v)
+    ? v.map((x) => (isRecord(x) ? { id: x.id, title: str(x.title) } : { id: x, title: null }))
+    : null;
+const slideOf = (list: BannerRef[], id: unknown) => {
+  const i = list.findIndex((r) => String(r.id) === String(id));
+  return i < 0 ? null : i + 2;
+};
+/** «Слайдер: Discovery set, «Зима», «Лето»»: the order a customer swipes after the change. */
+const sliderLine = (c: Ctx, list: BannerRef[]) =>
+  fill(c.t.audit.detail.slider, {
+    list: ['Discovery set', ...list.map((r) => bannerName(r.title, r.id))].join(', '),
+  });
+/** This entry's banner: the audit read's name (panel language), else the payload's, else its number. */
+const thisBanner = (c: Ctx) => bannerName(targetName(c) ?? str(c.p.title), c.e.targetId);
+
 /** `switchedOff`: banner numbers (legacy) or `{id, title}` objects; each reads as one line. */
 function switchedOff(c: Ctx): string[] {
   const list = c.p.switchedOff;
@@ -589,17 +610,45 @@ const describers: Record<string, Describer> = {
       ...changedLines(c, c.p.changed),
     ];
   },
+  // #62 writes `{title, slider}`; an older entry has `switchedOff` (the one-active rule)
   'content.banner_activated': (c) => {
-    const lines = [
-      fill(c.t.audit.detail.bannerOn, { name: bannerName(targetName(c), c.e.targetId) }),
+    const d = c.t.audit.detail;
+    c.take('title', 'slider');
+    const name = thisBanner(c);
+    const slider = bannerRefs(c.p.slider);
+    const n = slider && slideOf(slider, c.e.targetId);
+    return [
+      n
+        ? fill(d.bannerOnAt, { name, n: String(n), total: String(slider.length + 1) })
+        : fill(d.bannerOn, { name }),
+      slider && sliderLine(c, slider),
+      ...switchedOff(c),
     ];
-    return [...lines, ...switchedOff(c)];
   },
   'content.banner_deactivated': (c) => {
-    const lines = [
-      fill(c.t.audit.detail.bannerOff, { name: bannerName(targetName(c), c.e.targetId) }),
+    c.take('title', 'slider');
+    const slider = bannerRefs(c.p.slider);
+    return [
+      fill(c.t.audit.detail.bannerOff, { name: thisBanner(c) }),
+      slider && sliderLine(c, slider),
+      ...switchedOff(c),
     ];
-    return [...lines, ...switchedOff(c)];
+  },
+  'content.banner_moved': (c) => {
+    const d = c.t.audit.detail;
+    c.take('title', 'direction', 'before', 'after');
+    const name = thisBanner(c);
+    const after = bannerRefs(c.p.after);
+    const from = slideOf(bannerRefs(c.p.before) ?? [], c.e.targetId);
+    const to = after && slideOf(after, c.e.targetId);
+    const up =
+      c.p.direction === 'up' || (c.p.direction === undefined && !!from && !!to && to < from);
+    return [
+      from && to
+        ? fill(up ? d.bannerUp : d.bannerDown, { name, from: String(from), to: String(to) })
+        : fill(d.banner, { title: targetName(c) ?? str(c.p.title) ?? d.unknownName }),
+      after && sliderLine(c, after),
+    ];
   },
   'content.banner_deleted': (c) => {
     c.take('title', 'wasActive');

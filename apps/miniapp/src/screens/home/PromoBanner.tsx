@@ -8,8 +8,8 @@ import { usePrefs } from '../../lib/prefs';
 import { ArrowRightIcon } from '../../ui/icons';
 
 /**
- * The owner's promo banner, in its own slot under the Discovery set banner, drawn in the same
- * Graphite form (approved variant 2): the photo on the left third, the text on the dark block
+ * An owner's promo banner, a slide of the Home banner slider after the Discovery set, drawn in the
+ * same Graphite form (approved variant 2): the photo on the left third, the text on the dark block
  * beside it. The whole banner is one link that opens its `startapp` target through the same route
  * table as a deep link.
  */
@@ -28,6 +28,7 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
     <a
       data-slot="promo"
       href={to}
+      draggable={false}
       onClick={(e) => {
         e.preventDefault();
         void router.navigate({ to });
@@ -41,6 +42,8 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
             srcSet={photoSrcSet(banner.imageHash)}
             sizes="140px"
             alt=""
+            // never the first slide: it loads as the slider nears it
+            loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}
             className="absolute inset-0 size-full object-cover object-[center_top]"
@@ -49,11 +52,12 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
       </div>
       <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-4 pr-4 pl-4">
         <div>
-          {/* at most 3 + 3 lines, so a banner at its field limits stays a banner (the admin preview clamps alike) */}
-          <h2 className="type-heading line-clamp-3 text-balance [overflow-wrap:anywhere]">
+          {/* at most 2 + 2 lines: a banner at its field limits stays the Discovery slide's height,
+              so no slide of the slider grows an empty band (the admin preview clamps alike) */}
+          <h2 className="type-heading line-clamp-2 text-balance [overflow-wrap:anywhere]">
             {title}
           </h2>
-          <p className="type-body mt-2 line-clamp-3 text-pretty opacity-80 [overflow-wrap:anywhere]">
+          <p className="type-body mt-2 line-clamp-2 text-pretty opacity-80 [overflow-wrap:anywhere]">
             {subtitle}
           </p>
         </div>
@@ -69,7 +73,7 @@ export default function PromoBanner({ banner }: { banner: Banner }) {
             aria-hidden="true"
             className="grid size-8 shrink-0 place-items-center rounded-pill bg-bar-ink/20"
           >
-            <ArrowRightIcon size={18} />
+            <ArrowRightIcon size={16} />
           </span>
         </div>
       </div>

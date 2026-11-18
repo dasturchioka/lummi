@@ -377,6 +377,78 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     ['Баннер «Зима» выключен'],
     [],
   ],
+  // #62: the slider after the change, Discovery set as slide 1; a move names both places
+  [
+    'content.banner_activated',
+    {
+      title: 'Лето',
+      slider: [
+        { id: 5, title: 'Зима' },
+        { id: 2, title: 'Лето' },
+      ],
+    },
+    {},
+    ['Баннер «Лето» включён · на Главной: слайд 3 из 3', 'Слайдер: Discovery set, «Зима», «Лето»'],
+    [
+      '«Лето» banneri yoqildi · Bosh sahifada: 3 tadan 3-slayd',
+      'Slayder: Discovery set, «Зима», «Лето»',
+    ],
+  ],
+  [
+    'content.banner_deactivated',
+    { title: 'Лето', slider: [{ id: 5, title: 'Зима' }] },
+    {},
+    ['Баннер «Лето» выключен', 'Слайдер: Discovery set, «Зима»'],
+    ['«Лето» banneri oʻchirildi', 'Slayder: Discovery set, «Зима»'],
+  ],
+  [
+    'content.banner_deactivated',
+    { title: 'Лето', slider: [] },
+    {},
+    ['Баннер «Лето» выключен', 'Слайдер: Discovery set'],
+    ['«Лето» banneri oʻchirildi', 'Slayder: Discovery set'],
+  ],
+  [
+    'content.banner_moved',
+    {
+      title: 'Лето',
+      direction: 'up',
+      before: [
+        { id: 5, title: 'Зима' },
+        { id: 7, title: 'Осень' },
+        { id: 2, title: 'Лето' },
+      ],
+      after: [
+        { id: 5, title: 'Зима' },
+        { id: 2, title: 'Лето' },
+        { id: 7, title: 'Осень' },
+      ],
+    },
+    {},
+    ['Баннер «Лето» поднят: место 4 → 3', 'Слайдер: Discovery set, «Зима», «Лето», «Осень»'],
+    [
+      '«Лето» banneri yuqoriga surildi: 4-oʻrin → 3-oʻrin',
+      'Slayder: Discovery set, «Зима», «Лето», «Осень»',
+    ],
+  ],
+  [
+    'content.banner_moved',
+    {
+      title: 'Лето',
+      direction: 'down',
+      before: [
+        { id: 2, title: 'Лето' },
+        { id: 5, title: 'Зима' },
+      ],
+      after: [
+        { id: 5, title: 'Зима' },
+        { id: 2, title: 'Лето' },
+      ],
+    },
+    { targetName: 'Лето', targetNameUz: 'Yoz', targetType: 'promo_banner' },
+    ['Баннер «Лето» опущен: место 2 → 3', 'Слайдер: Discovery set, «Зима», «Лето»'],
+    ['«Yoz» banneri pastga surildi: 2-oʻrin → 3-oʻrin', 'Slayder: Discovery set, «Зима», «Лето»'],
+  ],
   [
     'content.banner_deleted',
     { title: 'Зима', wasActive: true },

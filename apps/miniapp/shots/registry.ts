@@ -852,18 +852,115 @@ interface ShotBanner {
   titleUz: string;
   subtitleRu: string;
   subtitleUz: string;
-  priceLineRu: string;
-  priceLineUz: string;
+  priceLineRu: string | null;
+  priceLineUz: string | null;
 }
-/** An active promo banner whose photo is a seeded bottle photo (the photo set already exists). */
-async function promoBanner(db: ShotDb, b: ShotBanner) {
+/**
+ * Active promo banners, the slider's slides after the Discovery set in this order (#62), each
+ * with a seeded bottle photo of its own (the photo sets already exist).
+ */
+async function promoBanners(db: ShotDb, list: ShotBanner[]) {
   await clearBanners(db);
-  await db.query(
-    `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active)
-     values ((select photo_hash from volumes where photo_hash is not null order by id limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true)`,
-    [b.titleRu, b.titleUz, b.subtitleRu, b.subtitleUz, b.priceLineRu, b.priceLineUz],
-  );
+  for (const [i, b] of list.entries()) {
+    await db.query(
+      `insert into promo_banners (image_hash, title_ru, title_uz, subtitle_ru, subtitle_uz, price_line_ru, price_line_uz, target, active, position)
+       values ((select photo_hash from volumes where photo_hash is not null order by id offset $8 limit 1), $1, $2, $3, $4, $5, $6, 'catalog', true, $7)`,
+      [
+        b.titleRu,
+        b.titleUz,
+        b.subtitleRu,
+        b.subtitleUz,
+        b.priceLineRu,
+        b.priceLineUz,
+        i + 1,
+        i * 7,
+      ],
+    );
+  }
 }
+const promoBanner = (db: ShotDb, b: ShotBanner) => promoBanners(db, [b]);
+/**
+ * Waits for the slider's `count` slides (Home content arrives on its own request), then, for
+ * `n` > 1, brings slide `n` in through its position mark as a tap does and waits for the snap.
+ * The photos of the slide in view are loaded before the capture.
+ */
+const slide =
+  (count: number, n = 1): NonNullable<ScreenDef['act']> =>
+  async ({ page }) => {
+    const track = page.getByTestId('banner-track');
+    await track
+      .locator(':scope > [role="group"]')
+      .nth(count - 1)
+      .waitFor({ state: 'attached' });
+    if (n > 1) {
+      await page
+        .getByTestId('banner-dots')
+        .getByRole('button')
+        .nth(n - 1)
+        .click();
+      await page.waitForFunction((i) => {
+        const el = document.querySelector<HTMLElement>('[data-testid="banner-track"]');
+        const first = el?.children[0] as HTMLElement | undefined;
+        const target = el?.children[i] as HTMLElement | undefined;
+        if (!el || !first || !target) return false;
+        return Math.abs(el.scrollLeft - (target.offsetLeft - first.offsetLeft)) < 1;
+      }, n - 1);
+    }
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll<HTMLImageElement>('[data-testid="banner-track"] img')]
+        .filter((img) => {
+          const r = img.getBoundingClientRect();
+          return r.width > 0 && r.right > 0 && r.left < window.innerWidth;
+        })
+        .every((img) => img.complete),
+    );
+  };
+/** Three promo slides as an owner would write them, with and without a price line. */
+const THREE_BANNERS: ShotBanner[] = [
+  {
+    titleRu: 'Осенняя подборка',
+    titleUz: 'Kuzgi tanlov',
+    subtitleRu: 'Тёплые, древесные ароматы на вечер',
+    subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
+    priceLineRu: 'от 69 000 сум',
+    priceLineUz: '69 000 soʻmdan',
+  },
+  {
+    titleRu: 'Соберите свой набор',
+    titleUz: 'Oʻz toʻplamingizni yigʻing',
+    subtitleRu: 'Пять ароматов по 10 мл, которые выберете вы',
+    subtitleUz: 'Oʻzingiz tanlagan 10 ml li beshta ifor',
+    priceLineRu: null,
+    priceLineUz: null,
+  },
+  {
+    titleRu: 'Подарок к празднику',
+    titleUz: 'Bayramga sovgʻa',
+    subtitleRu: 'Упакуем аромат и вложим открытку с вашими словами',
+    subtitleUz: 'Iforni qadoqlaymiz va soʻzlaringiz bilan tabriknoma qoʻshamiz',
+    priceLineRu: 'от 149 000 сум',
+    priceLineUz: '149 000 soʻmdan',
+  },
+];
+/** The worst case (break-ui): the cap of five promo slides, every one long, one unbroken word. */
+const WORST_BANNERS: ShotBanner[] = [
+  LIMIT_BANNER,
+  {
+    titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
+    titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
+    subtitleRu:
+      'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
+    subtitleUz:
+      'Bir necha qatorga choʻziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
+    priceLineRu: 'от 1 234 567 сум за набор',
+    priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
+  },
+  ...THREE_BANNERS.map((b, i) => ({
+    ...b,
+    titleRu: `${b.titleRu}: только до конца месяца, ${i + 3} из 5`,
+    titleUz: `${b.titleUz}: faqat oy oxirigacha, beshtadan ${i + 3}`,
+  })),
+];
 const clearBanners = async (db: ShotDb) => void (await db.query(`delete from promo_banners`));
 const sloganAtLimit = longSlogan();
 
@@ -2571,22 +2668,17 @@ export const screens: ScreenDef[] = [
     },
   },
   { id: 'profile-no-phone', path: '/profile', user: NO_PHONE_USER },
-  // Content (#21): the owner's promo banner on Home (the plain `home` shot is the Discovery fallback).
+  // Content (#21): the owner's promo banner on Home, since #62 the second slide of the banner
+  // slider (the plain `home` shot is the slider with the Discovery slide alone, no marks).
   {
     id: 'home-promo',
     path: '/',
     setup: async ({ api, db }) => {
       await forgetCity(api);
       await flagHome(db);
-      await promoBanner(db, {
-        titleRu: 'Осенняя подборка',
-        titleUz: 'Kuzgi tanlov',
-        subtitleRu: 'Тёплые, древесные ароматы на вечер',
-        subtitleUz: 'Kechqurun uchun iliq, yogʻochli iforlar',
-        priceLineRu: 'от 69 000 сум',
-        priceLineUz: '69 000 soʻmdan',
-      });
+      await promoBanner(db, THREE_BANNERS[0]!);
     },
+    act: slide(2, 2),
     teardown: async ({ db }) => {
       await unflagHome(db);
       await clearBanners(db);
@@ -2599,21 +2691,77 @@ export const screens: ScreenDef[] = [
     setup: async ({ api, db }) => {
       await forgetCity(api);
       await flagHome(db);
-      await promoBanner(db, {
-        titleRu: 'Сверхдлинноеназваниеакциидляпроверкипереноса',
-        titleUz: 'Juda uzun nomli aksiya sarlavhasi tekshiruv uchun',
-        subtitleRu:
-          'Очень длинный подзаголовок, который занимает несколько строк и проверяет, что блок не ломается',
-        subtitleUz:
-          'Bir necha qatorga cho‘ziladigan juda uzun qisqa matn, blok buzilmasligini tekshiradi',
-        priceLineRu: 'от 1 234 567 сум за набор',
-        priceLineUz: '1 234 567 soʻmdan toʻplam uchun',
-      });
+      await promoBanner(db, WORST_BANNERS[1]!);
     },
+    act: slide(2, 2),
     teardown: async ({ db }) => {
       await unflagHome(db);
       await clearBanners(db);
     },
+  },
+  // The banner slider (#62): the Discovery slide and three promo slides, as Home opens (the
+  // Discovery slide in view, the next one peeking in, four marks) and with the second promo
+  // slide brought in by its mark.
+  {
+    id: 'home-slider',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanners(db, THREE_BANNERS);
+    },
+    act: slide(4),
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  {
+    id: 'home-slider-third',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await flagHome(db);
+      await promoBanners(db, THREE_BANNERS);
+    },
+    act: slide(4, 3),
+    teardown: async ({ db }) => {
+      await unflagHome(db);
+      await clearBanners(db);
+    },
+  },
+  // Worst case (break-ui): six slides, the cap, every promo slide long: the Discovery slide
+  // stretches to the tallest, six marks; then the last slide; then the narrowest phone.
+  {
+    id: 'home-slider-worst',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanners(db, WORST_BANNERS);
+    },
+    act: slide(6),
+    teardown: ({ db }) => clearBanners(db),
+  },
+  {
+    id: 'home-slider-worst-last',
+    path: '/',
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanners(db, WORST_BANNERS);
+    },
+    act: slide(6, 6),
+    teardown: ({ db }) => clearBanners(db),
+  },
+  {
+    id: 'home-slider-worst-360',
+    path: '/',
+    width: 360,
+    setup: async ({ api, db }) => {
+      await forgetCity(api);
+      await promoBanners(db, WORST_BANNERS);
+    },
+    act: slide(6, 2),
+    teardown: ({ db }) => clearBanners(db),
   },
   // Info pages (#21): the long RU/UZ texts, a short one, and an unknown slug.
   { id: 'info-faq', path: '/info/faq', fullPage: true },
@@ -2651,6 +2799,7 @@ export const screens: ScreenDef[] = [
       await forgetCity(api);
       await promoBanner(db, LIMIT_BANNER);
     },
+    act: slide(2, 2),
     teardown: ({ db }) => clearBanners(db),
   },
   // the narrowest phone, with the banner and the slogan at their limits (one slogan line)
@@ -2663,6 +2812,7 @@ export const screens: ScreenDef[] = [
       await promoBanner(db, LIMIT_BANNER);
       await sloganAtLimit.setup({ db });
     },
+    act: slide(2, 2),
     teardown: async ({ db }) => {
       await clearBanners(db);
       await sloganAtLimit.teardown({ db });

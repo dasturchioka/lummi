@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { INFO_PAGE_SLUGS, isStartTarget } from './constants';
 
 /**
- * Content (ticket #21): the Home promo banner, the Home slogan and the info pages, RU/UZ.
+ * Content (ticket #21): the Home promo banners, the Home slogan and the info pages, RU/UZ.
  * Customer reads return RU/UZ pairs and the Mini App picks by language. The API normalises Uzbek
  * apostrophes on save. Page bodies are rich text (`@lummi/rich-text`), never HTML.
  */
@@ -17,6 +17,12 @@ const optionalText = (max: number) => z.string().trim().max(max).nullable();
  */
 export const SLOGAN_MAX = { ru: 32, uz: 38 } as const;
 export const PAGE_BODY_MAX = 20_000;
+/**
+ * How many promo banners can be on at once (#62). With the Discovery set slide first, the Home
+ * slider holds at most six slides: a customer still swipes through all of them, and the position
+ * dots stay a short row. A constant, like the field limits, not a setting.
+ */
+export const ACTIVE_BANNERS_MAX = 5;
 
 export const contentErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid']),
@@ -46,11 +52,11 @@ export const sloganResponseSchema = z.object({ slogan: sloganSchema.nullable() }
 
 /**
  * What Home needs from the owner, in one response so the slogan never swaps in after the first
- * paint: the active promo banner (null: none, Home shows only the Discovery set banner) and the
- * saved slogan.
+ * paint: the active promo banners in the owner's order (the slides after the Discovery set slide;
+ * empty: the slider shows only the Discovery set) and the saved slogan.
  */
 export const homeContentSchema = z.object({
-  banner: promoBannerSchema.nullable(),
+  banners: z.array(promoBannerSchema),
   slogan: sloganSchema.nullable(),
 });
 export type HomeContent = z.infer<typeof homeContentSchema>;
@@ -112,6 +118,9 @@ export const adminBannerSchema = promoBannerSchema.extend({
 });
 export type AdminBanner = z.infer<typeof adminBannerSchema>;
 export const bannerActiveBodySchema = z.object({ active: z.boolean() });
+/** One step toward the first slide (`up`) or the last (`down`) among the active banners. */
+export const bannerMoveBodySchema = z.object({ direction: z.enum(['up', 'down']) });
+export type BannerMoveDirection = z.infer<typeof bannerMoveBodySchema>['direction'];
 
 export const sloganInputSchema = z.object({
   ru: text(SLOGAN_MAX.ru),

@@ -8,10 +8,12 @@ import { serverApi } from '@/lib/server-api';
 
 export default async function ContentPage() {
   const api = await serverApi();
-  const [banners, slogan, pages] = await Promise.all([
+  const [banners, slogan, pages, set] = await Promise.all([
     api.content.banners.list(),
     api.content.slogan.get(),
     api.content.pages.list(),
+    // the slider preview's first slide; the page still works without it
+    api.sets.get(),
   ]);
   if (banners.status === 401) redirect('/login');
   if (banners.status === 403) redirect('/'); // owner only
@@ -23,7 +25,12 @@ export default async function ContentPage() {
     <>
       <PageHeader title={t.content.title} description={t.content.description} />
       <div className="grid gap-4">
-        <BannerEditor banners={banners.body} t={t} language={language} />
+        <BannerEditor
+          banners={banners.body}
+          discovery={set.status === 200 ? { price: set.body.price, photo: set.body.photo } : null}
+          t={t}
+          language={language}
+        />
         <SloganEditor slogan={slogan.body.slogan ?? { ru: '', uz: '' }} t={t} />
         <PagesList pages={pages.body} t={t} language={language} />
       </div>

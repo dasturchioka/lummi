@@ -10,12 +10,11 @@ import { SearchField } from '../ui/SearchField';
 import { GridSkeleton } from '../ui/GridSkeleton';
 import { Skeleton } from '../ui/Skeleton';
 import { useHomeContent } from '../content/home';
-import { DiscoveryBanner } from './home/DiscoveryBanner';
+import { BannerSlider } from './home/BannerSlider';
 
 /** Below the fold: its own chunk, so the first screen carries less code. */
 const Popular = lazy(() => import('./home/Popular'));
 const Novelties = lazy(() => import('./home/Novelties'));
-const PromoBanner = lazy(() => import('./home/PromoBanner'));
 
 /**
  * The fabric photos of the top block (approved variant 2), one per theme: files in `public/home/`,
@@ -96,20 +95,6 @@ function PopularSkeleton() {
   );
 }
 
-/**
- * The owner's promo banner, in its own slot under the Discovery set banner (which always stays:
- * it is the approved variant 2's own card). Nothing is reserved while the answer is on its way or
- * when no banner is on, so Home without a promo looks exactly as approved.
- */
-function PromoSlot() {
-  const active = useHomeContent().data?.banner;
-  return active ? (
-    <Suspense fallback={<Skeleton className="min-h-[140px] w-full" rounded="card" />}>
-      <PromoBanner banner={active} />
-    </Suspense>
-  ) : null;
-}
-
 // shrink-0: a long delivery city truncates in the middle; the discs never squeeze into pills
 const DISC =
   'grid size-11 shrink-0 place-items-center rounded-pill bg-card text-ink transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-95';
@@ -142,8 +127,7 @@ export function Home() {
         </div>
         <div className="mt-4 flex flex-col gap-[var(--section)] pb-4">
           <SearchField />
-          <DiscoveryBanner />
-          <PromoSlot />
+          <BannerSlider />
           <Suspense fallback={<PopularSkeleton />}>
             <Popular />
           </Suspense>
