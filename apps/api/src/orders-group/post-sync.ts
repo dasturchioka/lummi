@@ -54,14 +54,6 @@ export interface PostSource<Row extends SyncedRow> {
   receipt(row: Row): Promise<{ bytes: Uint8Array | null; caption: string } | null>;
 }
 
-/** Another delivery is bringing the same post up to date; this one is retried after it. */
-export class PostBusyError extends Error {
-  constructor(what: string) {
-    super(`${what}: being updated by another delivery`);
-    this.name = 'PostBusyError';
-  }
-}
-
 /**
  * A post in the orders group kept in step with its row (ADR 0034): the order's card (#37) and a
  * receipt's manual-review post (#51) both go through here. Every change bumps the row's version
@@ -117,9 +109,12 @@ export class PostSync<Row extends SyncedRow> {
       )
       .returning();
     if (!claimed) {
-      const [exists] = await this.db.select({ v: t.version }).from(t).where(this.ofKey(key));
-      if (!exists) return;
-      throw new PostBusyError(this.label(key));
+      // Another delivery holds the lease. This one is done: its change committed (version bumped)
+      // before it was queued, and every holder is a delivery of this method, which releases the
+      // lease only if the version is still the one it drew, else goes round again. So the holder
+      // draws what this delivery was asked to. A holder that crashes or throws leaves its own
+      // outbox row unsent, which is retried (a throw) or requeued after the lease window (a crash).
+      return;
     }
     const mine = and(this.ofKey(key), eq(t.syncingAt, claim));
     try {

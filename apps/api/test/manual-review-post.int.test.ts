@@ -6,6 +6,7 @@ import { formatMoney, formatPhone } from '@lummi/i18n';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import type { ReceiptJudgeInput, ReceiptJudgement } from '../src/edges';
+import { OutboxService } from '../src/outbox/outbox.service';
 import { SettingsService } from '../src/settings/settings.service';
 import type { SentMessage } from './fakes';
 import { orderBody, samarkandPoint, shopper, whileLockedUntil } from './harness/orders';
@@ -114,6 +115,8 @@ const receiptNow = async (id: number) =>
 async function settled() {
   await vi.waitFor(
     async () => {
+      // a row left unstamped (a failed hand-off to the queue) is handed over again
+      await t.app.get(OutboxService).dispatch();
       expect(await t.db.select().from(credits).where(isNull(credits.eventHandledAt))).toEqual([]);
       const counts = await checks.getJobCounts('waiting', 'active', 'delayed', 'prioritized');
       expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(0);
