@@ -1707,6 +1707,25 @@ export const screens: ScreenDef[] = [
   { id: 'catalog-worst-360', path: '/catalog', ...worstData, width: 360, fullPage: true },
   { id: 'catalog-sets', path: '/catalog?type=sets' },
   {
+    // #61: the 50 ml photo, the 10 ml marked down (struck regular price), the type chips with icons
+    id: 'polish-catalog-markdown',
+    path: '/catalog',
+    setup: async ({ db }) => db.markdown('symphony', 10, 55_000, 5),
+    teardown: async ({ db }) => db.restore('symphony'),
+  },
+  {
+    // #61: the 60-character name, seven-digit prices, the from-volume marked down, at 360 px
+    id: 'polish-worst-360',
+    path: '/catalog',
+    width: 360,
+    fullPage: true,
+    setup: async ({ db }) => {
+      await longElysium(db);
+      await db.markdown('elysium-pour-homme-parfum', 10, 990_000, 3);
+    },
+    teardown: shortElysium,
+  },
+  {
     // One fragrance sold out in every volume: its card says «Нет в наличии» in place of the price.
     id: 'catalog-sold-out',
     path: '/catalog',

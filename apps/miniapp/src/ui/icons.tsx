@@ -139,3 +139,14 @@ export const HeartIcon = (p: P) => (
     {...p}
   />
 );
+
+/** Type chips: Homme (Mars), Femme (Venus), Unisex (two rings); «Все» uses `GridIcon`. */
+export const MarsIcon = (p: P) => (
+  <Icon d="M10.5 20a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM14.5 9.5 20 4M15 4h5v5" {...p} />
+);
+export const VenusIcon = (p: P) => (
+  <Icon d="M12 14a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM12 14v7M8.8 17.5h6.4" {...p} />
+);
+export const UnisexIcon = (p: P) => (
+  <Icon d="M9 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM15 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z" {...p} />
+);

@@ -91,20 +91,31 @@ export function FragranceListCard({
   const price = item.soldOut ? (
     <span className="type-small text-muted">{t.list.soldOut}</span>
   ) : item.fromPrice !== null ? (
-    <span className="type-price text-ink">
-      {fill(t.list.from, { price: formatMoney(item.fromPrice, language) })}
+    <span className="flex flex-wrap items-baseline gap-x-2">
+      <span className="type-price text-ink">
+        {fill(t.list.from, { price: formatMoney(item.fromPrice, language) })}
+      </span>
+      {item.fromRegularPrice !== null ? (
+        <s data-testid="regular-price" className="type-price-sm text-muted">
+          {formatMoney(item.fromRegularPrice, language)}
+        </s>
+      ) : null}
     </span>
   ) : null;
 
   const lockup = (
     <>
       {/* Balanced: «ПО МОТИВАМ / LOUIS VUITTON», never «ПО МОТИВАМ LOUIS / VUITTON» on a wide row. */}
-      <span className="type-label text-balance text-muted [overflow-wrap:anywhere]">
+      <span className="type-label-sm text-balance text-muted [overflow-wrap:anywhere]">
         {attribution(t.card.basedOn, item.brand)}
       </span>
       <span
-        className={`type-name text-pretty text-ink [overflow-wrap:anywhere] ${
-          compact ? 'mt-px text-[18px]' : 'mt-0.5'
+        className={`text-pretty text-ink [overflow-wrap:anywhere] ${
+          compact
+            ? 'type-name mt-px text-[18px]'
+            : grid
+              ? 'type-name mt-0.5 text-[22px]'
+              : 'type-name-lg mt-0.5'
         }`}
       >
         {item.name}

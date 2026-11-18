@@ -35,7 +35,7 @@ export default function Popular() {
       />
     );
 
-  const options = typeChipOptions(TYPE_FILTERS, t.catalog.types, page?.facets.typePhotos);
+  const options = typeChipOptions(TYPE_FILTERS, t.catalog.types);
 
   let body;
   if (!page) {
