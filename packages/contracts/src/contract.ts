@@ -157,6 +157,7 @@ import {
   adminInfoPageSchema,
   bannerActiveBodySchema,
   bannerInputSchema,
+  bannerMoveBodySchema,
   contentErrorSchema,
   homeContentSchema,
   infoPageErrorSchema,
@@ -374,7 +375,7 @@ export const contract = c.router({
       path: '/content/home',
       responses: { 200: homeContentSchema, 401: authErrorSchema },
       summary:
-        'Home content in one answer: the active promo banner (null: Home shows the Discovery set banner) and the saved slogan in RU and UZ (null: the built-in one)',
+        "Home content in one answer: the active promo banners in the owner's order, the slides after the Discovery set slide (empty: the slider shows only the Discovery set), and the saved slogan in RU and UZ (null: the built-in one)",
     },
     pages: {
       method: 'GET',
@@ -885,7 +886,8 @@ const adminCore = c.router({
           401: contentErrorSchema,
           403: contentErrorSchema,
         },
-        summary: 'Owner only: every promo banner, the active one first',
+        summary:
+          'Owner only: every promo banner, the active ones first in slider order, then the rest newest first',
       },
       create: {
         method: 'POST',
@@ -926,7 +928,22 @@ const adminCore = c.router({
           422: contentErrorSchema,
         },
         summary:
-          'Owner only: make a banner the active one (the previous one is switched off) or switch it off',
+          'Owner only: switch a banner on (it becomes the last slide; it needs a photo, and at most ACTIVE_BANNERS_MAX are on: 422 `limit`) or off; the others stay as they are',
+      },
+      move: {
+        method: 'PUT',
+        path: '/admin/content/banners/:id/move',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        body: bannerMoveBodySchema,
+        responses: {
+          200: z.array(adminBannerSchema),
+          401: contentErrorSchema,
+          403: contentErrorSchema,
+          404: contentErrorSchema,
+          422: contentErrorSchema,
+        },
+        summary:
+          'Owner only: move an active banner one slide up or down (an inactive one: 422 `active`; the first up or the last down changes nothing); answers the list',
       },
       remove: {
         method: 'DELETE',

@@ -1,26 +1,26 @@
-import type {
-  AdminBanner,
-  CONTENT_PLACEHOLDERS,
-  AdminInfoPage,
-  BannerInput,
-  HomeContent,
-  InfoPage,
-  InfoPageInput,
-  InfoPageListItem,
-  PromoBanner,
-  Slogan,
+import {
+  ACTIVE_BANNERS_MAX,
+  type AdminBanner,
+  type CONTENT_PLACEHOLDERS,
+  type AdminInfoPage,
+  type BannerInput,
+  type BannerMoveDirection,
+  type HomeContent,
+  type InfoPage,
+  type InfoPageInput,
+  type InfoPageListItem,
+  type PromoBanner,
+  type Slogan,
 } from '@lummi/contracts';
 import {
-  and,
   contentTexts,
-  desc,
   eq,
   asc,
   promoBanners,
   infoPages,
-  ne,
   sql,
   type Db,
+  type DbOrTx,
   type PromoBannerRow,
   type InfoPageRow,
   type StaffRow,
@@ -49,8 +49,11 @@ const fail = (reason: ContentFailure['reason'], fields?: string[]): ContentFailu
 });
 
 export const SLOGAN_KEY = 'home.slogan';
-/** Serialises banner activations, so two at once end with exactly one active banner. */
-const BANNER_ACTIVATION_LOCK = 7_210_021;
+/**
+ * Serialises every change to the slider (on, off, move), so two at once never pass
+ * `ACTIVE_BANNERS_MAX` or take the same place. Taken before any row lock, so they never deadlock.
+ */
+const BANNER_SLIDER_LOCK = 7_210_021;
 const emptyToNull = (s: string | null) => (s === null || s.trim() === '' ? null : s.trim());
 
 /**
@@ -105,6 +108,8 @@ function toPromo(r: PromoBannerRow): PromoBanner {
     target: r.target,
   };
 }
+/** A banner as the audit names it: its id and RU title, as `content.banner_created` does. */
+const bannerRef = (r: PromoBannerRow) => ({ id: r.id, title: r.titleRu });
 const toAdminBanner = (r: PromoBannerRow): AdminBanner => ({
   ...toPromo(r),
   active: r.active,
@@ -143,15 +148,19 @@ export class ContentService {
 
   // ---- customer reads ----
 
-  /** The active banner and the saved slogan, read together for Home. */
+  /** The slider's promo slides (the active banners in order) and the saved slogan, read together for Home. */
   async home(): Promise<HomeContent> {
-    const [banner, slogan] = await Promise.all([this.activeBanner(), this.slogan()]);
-    return { banner, slogan };
+    const [banners, slogan] = await Promise.all([this.slider(this.db), this.slogan()]);
+    return { banners: banners.map(toPromo), slogan };
   }
 
-  private async activeBanner(): Promise<PromoBanner | null> {
-    const [row] = await this.db.select().from(promoBanners).where(eq(promoBanners.active, true));
-    return row ? toPromo(row) : null;
+  /** The active banners in slider order: `position`, then id (rows from before #62 all share 0). */
+  private slider(db: DbOrTx) {
+    return db
+      .select()
+      .from(promoBanners)
+      .where(eq(promoBanners.active, true))
+      .orderBy(asc(promoBanners.position), asc(promoBanners.id));
   }
 
   async slogan(): Promise<Slogan | null> {
@@ -192,12 +201,11 @@ export class ContentService {
 
   // ---- admin: banners ----
 
-  async listBanners(): Promise<AdminBanner[]> {
-    const rows = await this.db
-      .select()
-      .from(promoBanners)
-      .orderBy(desc(promoBanners.active), desc(promoBanners.id));
-    return rows.map(toAdminBanner);
+  /** The active banners first, in slider order, then the others newest first. */
+  async listBanners(db: DbOrTx = this.db): Promise<AdminBanner[]> {
+    const [on, all] = await Promise.all([this.slider(db), db.select().from(promoBanners)]);
+    const off = all.filter((r) => !r.active).sort((a, b) => b.id - a.id);
+    return [...on, ...off].map(toAdminBanner);
   }
 
   async createBanner(actor: StaffRow, input: BannerInput): Promise<ContentOutcome<AdminBanner>> {
@@ -250,16 +258,18 @@ export class ContentService {
     });
   }
 
-  /** Activating switches the previous banner off in the same transaction; the partial unique index backs it. */
+  /**
+   * Switching on makes the banner the last slide (it needs a photo, and at most
+   * `ACTIVE_BANNERS_MAX` are on); switching off takes it out. The other banners stay as they are.
+   * The audit names the banner and the slider after the change.
+   */
   async setBannerActive(
     actor: StaffRow,
     id: number,
     active: boolean,
   ): Promise<ContentOutcome<AdminBanner>> {
     return this.db.transaction(async (tx) => {
-      // One activation at a time: with no banner active there is no row to lock, and two
-      // switches in opposite directions would otherwise wait on each other's rows.
-      if (active) await tx.execute(sql`select pg_advisory_xact_lock(${BANNER_ACTIVATION_LOCK})`);
+      await tx.execute(sql`select pg_advisory_xact_lock(${BANNER_SLIDER_LOCK})`);
       const [old] = await tx
         .select()
         .from(promoBanners)
@@ -268,28 +278,69 @@ export class ContentService {
       if (!old) return fail('not_found');
       if (old.active === active) return { ok: true, value: toAdminBanner(old) } as const;
       if (active && !old.imageHash) return fail('invalid', ['image']);
-      let replaced: number[] = [];
-      if (active) {
-        const off = await tx
-          .update(promoBanners)
-          .set({ active: false, updatedAt: new Date() })
-          .where(and(ne(promoBanners.id, id), eq(promoBanners.active, true)))
-          .returning({ id: promoBanners.id, active: promoBanners.active });
-        replaced = off.map((r) => r.id);
-      }
+      const slider = await this.slider(tx);
+      if (active && slider.length >= ACTIVE_BANNERS_MAX) return fail('invalid', ['limit']);
+      const position = active ? (slider.at(-1)?.position ?? 0) + 1 : old.position;
       const [row] = await tx
         .update(promoBanners)
-        .set({ active, updatedAt: new Date() })
+        .set({ active, position, updatedAt: new Date() })
         .where(eq(promoBanners.id, id))
         .returning();
+      const after = active ? [...slider, row!] : slider.filter((r) => r.id !== id);
       await this.audit.record(tx, {
         actor: { type: 'staff', id: actor.id },
         action: active ? 'content.banner_activated' : 'content.banner_deactivated',
         targetType: 'promo_banner',
         targetId: id,
-        payload: { switchedOff: replaced },
+        payload: { title: old.titleRu, slider: after.map(bannerRef) },
       });
       return { ok: true, value: toAdminBanner(row!) } as const;
+    });
+  }
+
+  /**
+   * Moves an active banner one slide toward the first (`up`) or the last (`down`). The slides
+   * are renumbered 1..n, so rows that shared a position get their own. The first up or the last
+   * down changes nothing and writes nothing. Answers the list as `listBanners` does.
+   */
+  async moveBanner(
+    actor: StaffRow,
+    id: number,
+    direction: BannerMoveDirection,
+  ): Promise<ContentOutcome<AdminBanner[]>> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${BANNER_SLIDER_LOCK})`);
+      const [target] = await tx.select().from(promoBanners).where(eq(promoBanners.id, id));
+      if (!target) return fail('not_found');
+      if (!target.active) return fail('invalid', ['active']);
+      const before = await this.slider(tx);
+      const from = before.findIndex((r) => r.id === id);
+      const to = direction === 'up' ? from - 1 : from + 1;
+      if (to < 0 || to >= before.length) {
+        return { ok: true, value: await this.listBanners(tx) } as const;
+      }
+      const after = [...before];
+      [after[from], after[to]] = [after[to]!, after[from]!];
+      for (const [i, r] of after.entries()) {
+        if (r.position === i + 1) continue;
+        await tx
+          .update(promoBanners)
+          .set({ position: i + 1 })
+          .where(eq(promoBanners.id, r.id));
+      }
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'content.banner_moved',
+        targetType: 'promo_banner',
+        targetId: id,
+        payload: {
+          title: target.titleRu,
+          direction,
+          before: before.map(bannerRef),
+          after: after.map(bannerRef),
+        },
+      });
+      return { ok: true, value: await this.listBanners(tx) } as const;
     });
   }
 

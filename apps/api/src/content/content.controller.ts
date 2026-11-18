@@ -85,6 +85,14 @@ export class ContentAdminController {
     });
   }
 
+  @TsRestHandler(adminContract.content.banners.move)
+  moveBanner(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.content.banners.move, async ({ params, body }) => {
+      const res = await this.content.moveBanner(actor, params.id, body.direction);
+      return res.ok ? { status: 200 as const, body: res.value } : failure(res);
+    });
+  }
+
   @TsRestHandler(adminContract.content.banners.remove)
   removeBanner(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.content.banners.remove, async ({ params }) => {
