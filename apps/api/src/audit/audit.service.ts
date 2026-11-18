@@ -13,6 +13,11 @@ export interface AuditEntry {
   targetType: string;
   targetId?: string | number | null;
   payload?: Record<string, unknown>;
+  /**
+   * When it happened, from the `Clock` edge. Only for entries something counts by time (the
+   * profile-photo throttle): left out, the database stamps the entry itself.
+   */
+  at?: Date;
 }
 
 @Injectable()
@@ -26,6 +31,7 @@ export class AuditService {
       targetType: entry.targetType,
       targetId: entry.targetId == null ? null : String(entry.targetId),
       payload: entry.payload ?? {},
+      ...(entry.at ? { createdAt: entry.at } : {}),
     });
   }
 }

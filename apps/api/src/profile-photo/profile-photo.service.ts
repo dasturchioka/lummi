@@ -120,6 +120,8 @@ export class ProfilePhotoService {
         await this.audit.record(tx, {
           actor: { type: owner.kind, id: owner.id },
           action: `${owner.kind}.photo_changed`,
+          // the throttle counts these against the same clock (a database stamp drifts from it)
+          at: this.edges.clock.now(),
           targetType: owner.kind,
           targetId: owner.id,
           payload: { photo: [row.photoKey, next], source },

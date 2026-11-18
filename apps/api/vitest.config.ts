@@ -15,7 +15,8 @@ export default defineConfig({
           name: 'integration',
           include: ['test/**/*.int.test.ts'],
           globalSetup: ['test/harness/global-setup.ts'],
-          testTimeout: 30_000,
+          // the shared self-hosted CI runner is several times slower than a laptop (#72)
+          testTimeout: process.env.CI ? 90_000 : 30_000,
           hookTimeout: 120_000,
         },
       },
