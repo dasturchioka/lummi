@@ -31,7 +31,7 @@ export class StaffController {
   @TsRestHandler(adminContract.staff.create)
   create(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.staff.create, async ({ body }) => {
-      const res = await this.staff.addManager(actor, body);
+      const res = await this.staff.addMember(actor, body);
       if (res.ok) return { status: 201 as const, body: toStaffDto(res.staff) };
       if ('minLength' in res) return passwordRefused(res);
       return { status: 409 as const, body: { code: 'login_taken' as const } };
@@ -60,6 +60,15 @@ export class StaffController {
   update(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.staff.update, async ({ params, body }) => {
       const res = await this.staff.setActive(actor, params.id, body.active);
+      if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
+      return failure(res.reason);
+    });
+  }
+
+  @TsRestHandler(adminContract.staff.setRole)
+  setRole(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.staff.setRole, async ({ params, body }) => {
+      const res = await this.staff.setRole(actor, params.id, body.role);
       if (res.ok) return { status: 200 as const, body: toStaffDto(res.staff) };
       return failure(res.reason);
     });

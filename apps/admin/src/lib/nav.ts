@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { AdminMessages } from './i18n';
+import { fill } from './utils';
 
 type Role = StaffDto['role'];
 type NavKey = Exclude<
@@ -98,6 +99,24 @@ export function navFor(role: Role): NavGroup[] {
   return NAV.map((g) => ({ ...g, items: g.items.filter((i) => i.roles.includes(role)) })).filter(
     (g) => g.items.length > 0,
   );
+}
+
+/**
+ * What a role opens, for the staff page: section labels straight from `NAV`, so a role change in
+ * the table above shows up in the copy. Home and the member's own profile are every role's, so
+ * they are left out. An owner's line is only what a manager can't open («всё это и ещё: …»).
+ */
+export function opensFor(role: Role, t: AdminMessages): string {
+  const keys = (r: Role) =>
+    NAV.flatMap((g) => g.items)
+      .filter((i) => i.roles.includes(r) && i.key !== 'home' && i.key !== 'profile')
+      .map((i) => i.key);
+  const own = keys(role);
+  const shared = role === 'owner' ? new Set(keys('manager')) : new Set<NavKey>();
+  const labels = own.filter((k) => !shared.has(k)).map((k) => t.nav[k]);
+  return fill(role === 'owner' ? t.staff.opensOwner : t.staff.opensManager, {
+    sections: labels.join(', '),
+  });
 }
 
 /** The item whose route owns `pathname` (longest prefix wins; `/` only matches itself). */

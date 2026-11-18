@@ -122,6 +122,8 @@ export const adminMessages = defineMessages(
         locked: 'Слишком много неудачных попыток',
         lockedHint: 'Вход закрыт до {time}. Попробуйте снова после этого времени.',
         loginTaken: 'Такой логин уже занят. Выберите другой.',
+        ownRole: 'Свою роль менять нельзя: попросите другого владельца.',
+        lastOwner: 'В магазине должен остаться хотя бы один действующий владелец.',
         telegramOnly:
           'Telegram — единственный способ входа этого менеджера. Сначала выдайте ему логин и пароль: «Сбросить пароль».',
         weakPassword: 'Пароль короче {min} символов.',
@@ -348,9 +350,21 @@ export const adminMessages = defineMessages(
       staff: {
         title: 'Сотрудники',
         description:
-          'Кто может входить в панель. Менеджеры работают с заказами, складом и пунктами BTS, остальное доступно только владельцу.',
-        add: 'Добавить менеджера',
-        addTitle: 'Новый менеджер',
+          'Кто может входить в панель и что кому открыто. Менеджеры работают с заказами, складом и пунктами BTS, остальное доступно только владельцу.',
+        add: 'Добавить сотрудника',
+        addTitle: 'Новый сотрудник',
+        roleChoice: 'Роль',
+        opensManager: 'Открыто: {sections}',
+        opensOwner: 'Всё, что у менеджера, и ещё: {sections}',
+        changeRole: 'Сменить роль',
+        roleToOwnerTitle: 'Сделать владельцем?',
+        roleToOwnerText:
+          '{name} получит доступ ко всему: настройки, карта для оплаты, промокоды, рассылки и сотрудники. Это можно отменить в любой момент.',
+        roleToManagerTitle: 'Сделать менеджером?',
+        roleToManagerText:
+          '{name} сразу потеряет доступ к разделам владельца. Открытые окна панели обновятся при следующем действии.',
+        roleToOwner: 'Сделать владельцем',
+        roleToManager: 'Сделать менеджером',
         addSubmit: 'Добавить',
         signIn: 'Вход',
         telegram: 'Telegram',
@@ -359,9 +373,9 @@ export const adminMessages = defineMessages(
         loginHint: 'Латиница, цифры, точка, _ и -; от 3 до 32 символов. Регистр не важен.',
         noLogin: 'без логина',
         password: 'Временный пароль',
-        passwordHint: 'Не короче {min} символов. При первом входе менеджер сменит его на свой.',
+        passwordHint: 'Не короче {min} символов. При первом входе сотрудник сменит его на свой.',
         pendingPassword: 'ждёт смены пароля',
-        addedTitle: 'Менеджер добавлен',
+        addedTitle: 'Сотрудник добавлен',
         addedText:
           'Передайте {name} логин и временный пароль. Сотрудник задаст свой пароль при первом входе.',
         done: 'Готово',
@@ -378,7 +392,7 @@ export const adminMessages = defineMessages(
         unlinkText:
           'Кнопки в группе заказов перестанут узнавать {name}, и вход через Telegram закроется, пока Telegram не привяжут снова. Вход по паролю останется.',
         name: 'Имя',
-        nameHint: 'Под этим именем действия менеджера попадут в журнал.',
+        nameHint: 'Под этим именем действия сотрудника попадут в журнал.',
         role: 'Роль',
         status: 'Статус',
         actions: 'Действия',
@@ -2536,6 +2550,8 @@ export const adminMessages = defineMessages(
         locked: 'Muvaffaqiyatsiz urinishlar juda koʻp',
         lockedHint: 'Kirish {time} gacha yopiq. Shu vaqtdan keyin qayta urinib koʻring.',
         loginTaken: 'Bu login band. Boshqasini tanlang.',
+        ownRole: 'Oʻz rolingizni almashtirib boʻlmaydi: boshqa egasidan soʻrang.',
+        lastOwner: 'Doʻkonda kamida bitta faol egasi qolishi kerak.',
         telegramOnly:
           'Telegram bu menejerning yagona kirish usuli. Avval unga login va parol bering: «Parolni tiklash».',
         weakPassword: 'Parol {min} belgidan qisqa.',
@@ -2760,9 +2776,21 @@ export const adminMessages = defineMessages(
       staff: {
         title: 'Xodimlar',
         description:
-          'Panelga kim kira oladi. Menejerlar buyurtmalar, ombor va BTS punktlari bilan ishlaydi, qolgani faqat egasi uchun.',
-        add: 'Menejer qoʻshish',
-        addTitle: 'Yangi menejer',
+          'Panelga kim kira oladi va kimga nima ochiq. Menejerlar buyurtmalar, ombor va BTS punktlari bilan ishlaydi, qolgani faqat egasi uchun.',
+        add: 'Xodim qoʻshish',
+        addTitle: 'Yangi xodim',
+        roleChoice: 'Rol',
+        opensManager: 'Ochiq: {sections}',
+        opensOwner: 'Menejerdagi hammasi va yana: {sections}',
+        changeRole: 'Rolni almashtirish',
+        roleToOwnerTitle: 'Egasi qilinsinmi?',
+        roleToOwnerText:
+          '{name} hamma narsaga kira oladi: sozlamalar, toʻlov kartasi, promokodlar, ommaviy xabarlar va xodimlar. Buni istalgan vaqtda bekor qilish mumkin.',
+        roleToManagerTitle: 'Menejer qilinsinmi?',
+        roleToManagerText:
+          '{name} egasi boʻlimlariga darhol kira olmay qoladi. Ochiq panel oynalari keyingi amalda yangilanadi.',
+        roleToOwner: 'Egasi qilish',
+        roleToManager: 'Menejer qilish',
         addSubmit: 'Qoʻshish',
         signIn: 'Kirish',
         telegram: 'Telegram',
@@ -2771,9 +2799,9 @@ export const adminMessages = defineMessages(
         loginHint: 'Lotin harflari, raqamlar, nuqta, _ va -; 3 dan 32 belgigacha. Katta-kichik harf farqi yoʻq.',
         noLogin: 'loginsiz',
         password: 'Vaqtinchalik parol',
-        passwordHint: 'Kamida {min} belgi. Birinchi kirishda menejer uni oʻz paroliga almashtiradi.',
+        passwordHint: 'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
         pendingPassword: 'parol almashtirilishi kutilmoqda',
-        addedTitle: 'Menejer qoʻshildi',
+        addedTitle: 'Xodim qoʻshildi',
         addedText:
           '{name} uchun login va vaqtinchalik parol tayyor. Ularni menejerga bering: xodim birinchi kirishda oʻz parolini oʻrnatadi.',
         done: 'Tayyor',
@@ -2790,7 +2818,7 @@ export const adminMessages = defineMessages(
         unlinkText:
           'Telegram qayta bogʻlanmaguncha buyurtmalar guruhidagi tugmalar xodimni ({name}) tanimaydi va Telegram orqali kirish yopiladi. Parol bilan kirish qoladi.',
         name: 'Ism',
-        nameHint: 'Menejerning amallari jurnalga shu ism bilan yoziladi.',
+        nameHint: 'Xodimning amallari jurnalga shu ism bilan yoziladi.',
         role: 'Rol',
         status: 'Holat',
         actions: 'Amallar',

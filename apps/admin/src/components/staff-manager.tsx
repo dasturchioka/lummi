@@ -34,14 +34,18 @@ import { Notice } from '@/components/ui/notice';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
+import { opensFor } from '@/lib/nav';
 import { fill } from '@/lib/utils';
 
-type Confirm = { kind: 'deactivate' | 'remove' | 'unlink'; member: StaffDto };
+type Confirm = {
+  kind: 'deactivate' | 'remove' | 'unlink' | 'toOwner' | 'toManager';
+  member: StaffDto;
+};
 type ErrorText = (status: number, code?: string) => string;
 
 /**
- * Owner-only staff page (ADR 0017, 0038): the list (a table on wide cards, a list below that),
- * «Добавить менеджера» and «Сбросить пароль» in dialogs that end on the login and temporary
+ * Owner-only staff page (ADR 0017, 0038): the list (a table on wide cards, a list below that)
+ * with each member's role and what it opens, «Добавить сотрудника» (a role choice) and «Сбросить пароль» in dialogs that end on the login and temporary
  * password shown once, and a confirmation before a manager is switched off, removed or loses
  * their Telegram. Switching a manager back on needs no confirmation.
  */
@@ -69,13 +73,17 @@ export function StaffManager({
   const errorText: ErrorText = (status, code) =>
     code === 'telegram_only'
       ? t.errors.telegramOnly
-      : code === 'login_taken'
-        ? t.errors.loginTaken
-        : status === 409
-          ? t.errors.conflict
-          : status === 403
-            ? t.errors.forbidden
-            : t.errors.generic;
+      : code === 'own_role'
+        ? t.errors.ownRole
+        : code === 'last_owner'
+          ? t.errors.lastOwner
+          : code === 'login_taken'
+            ? t.errors.loginTaken
+            : status === 409
+              ? t.errors.conflict
+              : status === 403
+                ? t.errors.forbidden
+                : t.errors.generic;
 
   const ask = (kind: Confirm['kind'], member: StaffDto) => {
     setRowError(null);
@@ -106,8 +114,14 @@ export function StaffManager({
       {label}
     </Button>
   );
+  const roleButton = (s: StaffDto) =>
+    action(t.staff.changeRole, () => ask(s.role === 'owner' ? 'toManager' : 'toOwner', s));
   const actions = (s: StaffDto, table = false) => {
-    if (s.role !== 'manager' || s.id === meId) return null;
+    if (s.id === meId) return null;
+    // in the table «Сменить роль» sits under the name (it needs the room there), not in a column
+    const changeRole = !table && roleButton(s);
+    // the other actions are for managers; an owner is demoted first
+    if (s.role !== 'manager') return changeRole || null;
     const reset = action(t.staff.resetPassword, () => {
       setRowError(null);
       setResetting(s);
@@ -124,6 +138,7 @@ export function StaffManager({
       <>
         {reset}
         {unlink}
+        {changeRole}
         {toggle}
         {remove}
       </>
@@ -202,6 +217,9 @@ export function StaffManager({
                         className="mt-0.5 text-[13px] text-muted-foreground"
                         parts={[t.roles[s.role], s.login ?? t.staff.noLogin, telegram(s)]}
                       />
+                      <p className="mt-0.5 text-[13px] text-pretty text-muted-foreground">
+                        {opensFor(s.role, t)}
+                      </p>
                       {pending(s) && <p className="mt-0.5">{pending(s)}</p>}
                     </div>
                     <div className="shrink-0">{status(s)}</div>
@@ -227,7 +245,7 @@ export function StaffManager({
                 <TBody>
                   {initial.map((s) => (
                     <TR key={s.id}>
-                      <TD className="[overflow-wrap:anywhere]">
+                      <TD className="min-w-64 [overflow-wrap:anywhere]">
                         <p className="font-semibold">
                           {s.name}
                           {you(s)}
@@ -235,6 +253,10 @@ export function StaffManager({
                         <p className="mt-0.5 text-[13px] text-muted-foreground">
                           {t.roles[s.role]}
                         </p>
+                        <p className="mt-0.5 max-w-[34ch] text-[13px] text-pretty text-muted-foreground">
+                          {opensFor(s.role, t)}
+                        </p>
+                        {s.id !== meId && <div className="-ml-3 mt-1">{roleButton(s)}</div>}
                       </TD>
                       <TD className="[overflow-wrap:anywhere]">
                         <p>
@@ -264,7 +286,7 @@ export function StaffManager({
 
       <Dialog open={adding} onOpenChange={setAdding}>
         {addKey > 0 && (
-          <AddManagerContent
+          <AddMemberContent
             key={addKey}
             t={t}
             minLength={minLength}
@@ -326,6 +348,16 @@ function ConfirmContent({
       action: t.staff.deactivate,
     },
     unlink: { title: t.staff.unlinkTitle, text: t.staff.unlinkText, action: t.staff.unlink },
+    toOwner: {
+      title: t.staff.roleToOwnerTitle,
+      text: t.staff.roleToOwnerText,
+      action: t.staff.roleToOwner,
+    },
+    toManager: {
+      title: t.staff.roleToManagerTitle,
+      text: t.staff.roleToManagerText,
+      action: t.staff.roleToManager,
+    },
   }[kind];
 
   const run = async () => {
@@ -337,7 +369,12 @@ function ConfirmContent({
         ? browserApi.staff.remove({ params })
         : kind === 'unlink'
           ? browserApi.staff.unlinkTelegram({ params })
-          : browserApi.staff.update({ params, body: { active: false } });
+          : kind === 'toOwner' || kind === 'toManager'
+            ? browserApi.staff.setRole({
+                params,
+                body: { role: kind === 'toOwner' ? 'owner' : 'manager' },
+              })
+            : browserApi.staff.update({ params, body: { active: false } });
     const res = await call.catch(() => null);
     setPending(false);
     if (res?.status === 200) onDone();
@@ -394,8 +431,8 @@ function Handover({
   );
 }
 
-/** «Добавить менеджера»: the form with a password already generated, then the handover. */
-function AddManagerContent({
+/** «Добавить сотрудника»: the form (role choice, a password already generated), then the handover. */
+function AddMemberContent({
   t,
   minLength,
   errorText,
@@ -409,6 +446,7 @@ function AddManagerContent({
   const [name, setName] = useState('');
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState(() => newTemporaryPassword(minLength));
+  const [role, setRole] = useState<StaffDto['role']>('manager');
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<{ login?: string; password?: string; form?: string }>({});
   const [added, setAdded] = useState<{ name: string; login: string; password: string } | null>(
@@ -424,7 +462,7 @@ function AddManagerContent({
     if (Object.keys(found).length) return;
     setPending(true);
     const res = await browserApi.staff
-      .create({ body: { name, login: normalizeLogin(login), password } })
+      .create({ body: { name, login: normalizeLogin(login), password, role } })
       .catch(() => null);
     setPending(false);
     if (res?.status === 201) {
@@ -485,6 +523,32 @@ function AddManagerContent({
                 onChange={(e) => setLogin(e.target.value)}
               />
             </Field>
+            <fieldset className="grid gap-1">
+              <legend className="mb-1.5 text-[12.5px] font-medium text-muted-foreground">
+                {t.staff.roleChoice}
+              </legend>
+              {(['manager', 'owner'] as const).map((r) => (
+                <label
+                  key={r}
+                  className="-mx-2.5 flex cursor-pointer touch-manipulation items-start gap-3 rounded-button px-2.5 py-2 transition-colors duration-150 select-none hover:bg-milk active:bg-field"
+                >
+                  <input
+                    type="radio"
+                    name="staff-role"
+                    value={r}
+                    checked={role === r}
+                    onChange={() => setRole(r)}
+                    className="mt-0.5 size-[18px] shrink-0 accent-graphite"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium">{t.roles[r]}</span>
+                    <span className="block text-[13px] text-pretty text-muted-foreground">
+                      {opensFor(r, t)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
             <TemporaryPasswordField
               id="staff-password"
               value={password}

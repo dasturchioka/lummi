@@ -41,7 +41,13 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
+    if (
+      await page
+        .getByRole('listbox')
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();
@@ -333,6 +339,13 @@ export const SHOT_STAFF: ShotStaff[] = [
   },
   { telegramId: null, login: 'malika', name: 'Malika Yusupova', role: 'manager', active: true },
   {
+    telegramId: 990000005,
+    login: 'sevinch',
+    name: 'Sevinch Rustamova',
+    role: 'owner',
+    active: true,
+  },
+  {
     telegramId: null,
     login: 'bekzod',
     name: 'Bekzod Rahimov',
@@ -519,6 +532,14 @@ function resetButton(page: Page, t: AdminMessages) {
     .locator('main li:visible, main tr:visible')
     .filter({ hasText: RESET_TARGET.name })
     .getByRole('button', { name: t.staff.resetPassword, exact: true });
+}
+
+/** «Сменить роль» on one member's row, in whichever layout the width shows. */
+function roleButton(page: Page, t: AdminMessages, member: ShotStaff) {
+  return page
+    .locator('main li:visible, main tr:visible')
+    .filter({ hasText: member.name })
+    .getByRole('button', { name: t.staff.changeRole, exact: true });
 }
 
 /** A normal day on the orders board (#52): the Home's day and a dozen fresh orders (board-data.ts). */
@@ -842,6 +863,31 @@ export const screens: Screen[] = [
       await dialog.getByLabel(t.staff.password).fill(SHOT_TEMPORARY);
       await dialog.getByRole('button', { name: t.staff.resetSubmit, exact: true }).click();
       await dialog.getByText(t.staff.resetDoneTitle, { exact: true }).waitFor();
+    },
+  },
+  {
+    // #64: the change-role confirmation, up (a manager becomes an owner) and down
+    id: 'staff-role',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await roleButton(page, t, SHOT_STAFF[1]!).click();
+      await page.getByRole('alertdialog').waitFor();
+    },
+  },
+  {
+    id: 'staff-role-demote',
+    path: '/staff',
+    as: 'owner',
+    fullPage: false,
+    act: async ({ page, t }) => {
+      await roleButton(
+        page,
+        t,
+        SHOT_STAFF.find((s) => s.login === 'sevinch')!,
+      ).click();
+      await page.getByRole('alertdialog').waitFor();
     },
   },
   {
