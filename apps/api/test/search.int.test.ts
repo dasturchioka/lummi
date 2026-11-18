@@ -93,6 +93,7 @@ describe('search', () => {
       isHit: false,
       isNew: false,
       fromPrice: 69_000,
+      fromRegularPrice: null,
       soldOut: false,
       photo: null,
       // the volumes as the card's tiles show them (the list «+» reads them, #25)

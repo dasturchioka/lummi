@@ -119,9 +119,11 @@ export const fragranceListItemSchema = z.object({
   isNew: z.boolean(),
   /** The lowest price to pay over the volumes in stock (a markdown counts while active); null when nothing is in stock. */
   fromPrice: z.number().int().nullable(),
+  /** The from-volume's regular price, set only while that volume is marked down (struck through on the card). */
+  fromRegularPrice: z.number().int().nullable(),
   /** Every volume is out of stock. */
   soldOut: z.boolean(),
-  /** Content hash of the smallest volume's photo set (`<media>/<hash>-<width>.webp`). */
+  /** Content hash of the 50 ml volume's photo set (else the largest volume that has one) (`<media>/<hash>-<width>.webp`). */
   photo: z.string().nullable(),
   /**
    * Every volume in 10 / 30 / 50 order, as the card's tiles show them: the list card's «+» adds
@@ -180,13 +182,6 @@ export const catalogResultSchema = z.object({
     families: z.array(z.object({ id: z.number().int(), name: bilingualSchema })),
     /** Lowest and highest from-price over the visible catalog, so'm; null when nothing is priced. */
     price: z.object({ min: z.number().int(), max: z.number().int() }).nullable(),
-    /** The bottle photo hash on each type chip: the top seller of that type that has a photo. */
-    typePhotos: z.object({
-      all: z.string().nullable(),
-      homme: z.string().nullable(),
-      femme: z.string().nullable(),
-      unisex: z.string().nullable(),
-    }),
   }),
 });
 export type CatalogResult = z.infer<typeof catalogResultSchema>;

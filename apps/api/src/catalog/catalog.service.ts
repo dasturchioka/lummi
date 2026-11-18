@@ -149,6 +149,21 @@ function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | nu
   return prices.length ? Math.min(...prices) : null;
 }
 
+/** The from-volume's regular price when that volume is marked down, else null (ADR 0008). */
+function fromRegularPrice(cards: readonly VolumeCard[]): number | null {
+  const from = lowestPrice(cards);
+  if (from === null) return null;
+  const c = cards.find((x) => x.available > 0 && x.effectivePrice === from);
+  return c && c.salePrice !== null ? c.price : null;
+}
+
+/** The list photo: the 50 ml bottle, else the largest volume that has a photo. */
+function listPhoto(cards: readonly VolumeCard[]): string | null {
+  const withPhoto = cards.filter((c) => c.photo);
+  const pick = withPhoto.find((c) => c.ml === 50) ?? withPhoto.sort((a, b) => b.ml - a.ml)[0];
+  return pick?.photo ?? null;
+}
+
 function toListItem(e: CatalogEntry): FragranceListItem {
   return {
     slug: e.slug,
@@ -160,8 +175,9 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     isHit: e.isHit,
     isNew: e.isNew,
     fromPrice: lowestPrice(e.cards),
+    fromRegularPrice: fromRegularPrice(e.cards),
     soldOut: soldOut(e.cards),
-    photo: e.cards[0]?.photo ?? null,
+    photo: listPhoto(e.cards),
     volumes: e.cards,
   };
 }
@@ -348,15 +364,6 @@ export class CatalogService {
       const p = lowestPrice(e.cards);
       return p === null ? [] : [p];
     });
-    const byId = new Map(all.map((e) => [e.id, e]));
-    const photoOfTop = (type?: FragranceListItem['type']) => {
-      for (const id of rank) {
-        const e = byId.get(id);
-        const photo = e && (!type || e.type === type) ? e.cards[0]?.photo : undefined;
-        if (photo) return photo;
-      }
-      return null;
-    };
     return {
       items: page.map(toListItem),
       total: kept.length,
@@ -365,12 +372,6 @@ export class CatalogService {
           .filter((f) => present.has(f.id))
           .map((f) => ({ id: f.id, name: { ru: f.ru, uz: f.uz } })),
         price: prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : null,
-        typePhotos: {
-          all: photoOfTop(),
-          homme: photoOfTop('homme'),
-          femme: photoOfTop('femme'),
-          unisex: photoOfTop('unisex'),
-        },
       },
     };
   }
