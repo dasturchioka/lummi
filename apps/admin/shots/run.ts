@@ -222,7 +222,8 @@ async function seedStaff() {
     const res = await call(`/admin/settings/${key}`, 'PUT', { value });
     if (res.status !== 200) throw new Error(`could not set ${key}: ${res.status}`);
   }
-  for (const member of SHOT_STAFF.filter((s) => s.role === 'manager')) {
+  // the first owner came from the CLI; any other owner and every manager through the API
+  for (const member of SHOT_STAFF.filter((s) => s !== owner)) {
     let row =
       list.find((s) => s.login === member.login) ??
       list.find((s) => member.telegramId !== null && s.telegramId === member.telegramId);
@@ -231,6 +232,7 @@ async function seedStaff() {
         name: member.name,
         login: member.login,
         password: SHOT_PASSWORD,
+        role: member.role,
       });
       if (res.status !== 201) throw new Error(`could not add ${member.name}: ${res.status}`);
       row = (await res.json()) as typeof row & object;

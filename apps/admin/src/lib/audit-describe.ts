@@ -290,6 +290,16 @@ const describers: Record<string, Describer> = {
       }),
     ];
   },
+  'staff.role_changed': (c) => {
+    c.take('name', 'login', 'from', 'to');
+    return [
+      fill(c.t.audit.detail.roleChanged, {
+        name: staffName(c),
+        from: roleName(c, c.p.from),
+        to: roleName(c, c.p.to),
+      }),
+    ];
+  },
   'staff.removed': (c) => {
     c.take('name', 'login', 'role', 'telegramId');
     return [

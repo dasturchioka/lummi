@@ -102,7 +102,7 @@ import {
   settingStateSchema,
   updateSettingBodySchema,
   changePasswordBodySchema,
-  createManagerBodySchema,
+  createStaffBodySchema,
   devLoginBodySchema,
   lockedErrorSchema,
   loginWidgetBodySchema,
@@ -110,6 +110,7 @@ import {
   passwordLoginBodySchema,
   passwordPolicySchema,
   resetPasswordBodySchema,
+  setStaffRoleBodySchema,
   staffSchema,
   telegramLinkSchema,
   updateStaffBodySchema,
@@ -739,7 +740,7 @@ const adminCore = c.router({
     create: {
       method: 'POST',
       path: '/admin/staff',
-      body: createManagerBodySchema,
+      body: createStaffBodySchema,
       responses: {
         201: staffSchema,
         401: adminErrorSchema,
@@ -748,7 +749,7 @@ const adminCore = c.router({
         422: passwordErrorSchema,
       },
       summary:
-        'Owner only: add a manager with a login and a temporary password (changed at the first sign-in); 409 login_taken, 422 weak_password',
+        'Owner only: add a manager (or an owner, `role`) with a login and a temporary password (changed at the first sign-in); 409 login_taken, 422 weak_password',
     },
     update: {
       method: 'PATCH',
@@ -763,6 +764,21 @@ const adminCore = c.router({
         409: adminErrorSchema,
       },
       summary: 'Owner only: deactivate (revokes sessions) or reactivate a manager',
+    },
+    setRole: {
+      method: 'PATCH',
+      path: '/admin/staff/:id/role',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: setStaffRoleBodySchema,
+      responses: {
+        200: staffSchema,
+        401: adminErrorSchema,
+        403: adminErrorSchema,
+        404: adminErrorSchema,
+        409: adminErrorSchema,
+      },
+      summary:
+        "Owner only: change a member's role, effective at once (guards read the role per request); 409 own_role for yourself, last_owner when no other active owner would remain, inactive for promoting a switched-off member",
     },
     remove: {
       method: 'DELETE',

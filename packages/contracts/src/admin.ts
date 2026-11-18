@@ -62,6 +62,9 @@ export const adminErrorSchema = z.object({
     'login_required',
     'already_linked',
     'telegram_only',
+    'own_role',
+    'last_owner',
+    'inactive',
   ]),
 });
 
@@ -79,12 +82,16 @@ export const passwordErrorSchema = z.object({
 });
 
 /** The owner adds a manager with a temporary password (generated in the panel, or typed). */
-export const createManagerBodySchema = z.object({
+export const createStaffBodySchema = z.object({
   name: z.string().trim().min(1).max(120),
   login: staffLoginSchema,
   password: passwordSchema,
+  /** The role the member starts with; a manager unless the owner picks Owner (#64). */
+  role: staffRoleSchema.default('manager'),
 });
 export const updateStaffBodySchema = z.object({ active: z.boolean() });
+/** Changing a member's role (#64). */
+export const setStaffRoleBodySchema = z.object({ role: staffRoleSchema });
 
 /** «Сбросить пароль»: a new temporary password; a manager without a login gets one with it. */
 export const resetPasswordBodySchema = z.object({

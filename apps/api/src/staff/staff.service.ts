@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, staff, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
+import { and, asc, eq, ne, or, staff, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
@@ -9,7 +9,14 @@ import { hashPassword, verifyPassword } from './password';
 import { StaffSessionService } from './staff-session.service';
 
 export type StaffRefusal =
-  'not_found' | 'conflict' | 'login_taken' | 'login_required' | 'telegram_only';
+  | 'not_found'
+  | 'conflict'
+  | 'login_taken'
+  | 'login_required'
+  | 'telegram_only'
+  | 'own_role'
+  | 'last_owner'
+  | 'inactive';
 
 /** A new password refused (ADR 0038); `minLength` is the setting, for the message. */
 export type PasswordRefusal = {
@@ -59,12 +66,12 @@ export class StaffService {
   }
 
   /**
-   * The panel only ever adds managers; owners come from the server CLI. The password is
-   * temporary: the manager changes it at the first sign-in.
+   * The first owner comes from the server CLI; after that an owner adds managers or other owners
+   * (spec, 2026-11-18). The password is temporary: the member changes it at the first sign-in.
    */
-  async addManager(
+  async addMember(
     actor: StaffRow,
-    input: { name: string; login: string; password: string },
+    input: { name: string; login: string; password: string; role: StaffRow['role'] },
   ): Promise<StaffOutcome | PasswordRefusal> {
     const minLength = await this.minPasswordLength();
     if (input.password.length < minLength) return { ok: false, reason: 'weak_password', minLength };
@@ -77,7 +84,7 @@ export class StaffService {
           login: input.login,
           passwordHash,
           mustChangePassword: true,
-          role: 'manager',
+          role: input.role,
         })
         .onConflictDoNothing({ target: staff.login })
         .returning();
@@ -216,6 +223,55 @@ export class StaffService {
     });
   }
 
+  /**
+   * Changes a member's role. The guards read the role from the row on every request, so the
+   * member's open sessions follow at once; no session is revoked. Refused: your own role, and a
+   * demotion that would leave no other active owner (rows locked, so two owners demoting each
+   * other at once can't both pass), and promoting a switched-off member.
+   */
+  async setRole(actor: StaffRow, id: number, role: StaffRow['role']): Promise<StaffOutcome> {
+    if (actor.id === id) return { ok: false, reason: 'own_role' };
+    return this.db.transaction(async (tx) => {
+      // the target and every owner, locked in id order: the actor's standing and the owner count
+      // are read inside the lock, so a concurrent demotion can't slip past either check
+      const rows = await tx
+        .select()
+        .from(staff)
+        .where(or(eq(staff.id, id), eq(staff.role, 'owner')))
+        .orderBy(asc(staff.id))
+        .for('update');
+      const target = rows.find((s) => s.id === id);
+      if (!target) return { ok: false, reason: 'not_found' } as const;
+      if (
+        role === 'manager' &&
+        target.role === 'owner' &&
+        !rows.some((s) => s.id !== id && s.role === 'owner' && s.active)
+      ) {
+        return { ok: false, reason: 'last_owner' } as const;
+      }
+      // the actor must still be an active owner now, not only when the request was admitted
+      if (!rows.some((s) => s.id === actor.id && s.role === 'owner' && s.active)) {
+        return { ok: false, reason: 'conflict' } as const;
+      }
+      if (target.role === role) return { ok: true, staff: target } as const;
+      // a switched-off member can't be made an owner (switch them on first)
+      if (role === 'owner' && !target.active) return { ok: false, reason: 'inactive' } as const;
+      const [updated] = await tx
+        .update(staff)
+        .set({ role, updatedAt: this.edges.clock.now() })
+        .where(eq(staff.id, id))
+        .returning();
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'staff.role_changed',
+        targetType: 'staff',
+        targetId: id,
+        payload: { name: target.name, login: target.login, from: target.role, to: role },
+      });
+      return { ok: true, staff: updated as StaffRow } as const;
+    });
+  }
+
   /** Deactivation and the revocation of every session of that manager commit together. */
   async setActive(actor: StaffRow, id: number, active: boolean): Promise<StaffOutcome> {
     return this.db.transaction(async (tx) => {
@@ -270,7 +326,7 @@ export class StaffService {
     return row !== undefined;
   }
 
-  /** Locks the row for the rest of the transaction; the panel only ever changes managers. */
+  /** Locks the row for the rest of the transaction; reset, switch-off, unlink and remove take managers only. */
   private async lockManager(tx: DbOrTx, id: number): Promise<StaffOutcome> {
     const [target] = await tx.select().from(staff).where(eq(staff.id, id)).for('update');
     if (!target) return { ok: false, reason: 'not_found' };
