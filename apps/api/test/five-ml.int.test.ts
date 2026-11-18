@@ -349,6 +349,92 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
   });
 });
 
+describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => {
+  /** The return dialog's lines (positions in order) as the page offers them. */
+  async function returnLines(number: number) {
+    const manager = await t.managerSession();
+    const page = await manager.client.admin.orders.get({ params: { number } });
+    if (page.status !== 200 || !page.body.returnPreview) throw new Error('no return preview');
+    return { manager, lines: page.body.returnPreview.lines.map((l) => l.position) };
+  }
+
+  it('a 5 × 5 ml set flagged back goes onto its own shelf, never the 5 × 10 ml one', async () => {
+    await setSetOnHand(5, 4);
+    await setSetOnHand(10, 4);
+    const client = await shopper(t, ali, '998901234567');
+    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    const o = await order(client);
+    const id = await walkTo(o.number, 'handed_to_bts');
+    await walkToDelivered(id);
+    expect(await setOnHand(5)).toBe(3);
+    const { manager, lines } = await returnLines(o.number);
+    const res = await manager.client.admin.orders.return({
+      params: { number: o.number },
+      body: {
+        expectedStatus: 'delivered',
+        reason: 'Вернули коробку',
+        lines: lines.map((position) => ({ position, backToStock: true })),
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(await setOnHand(5)).toBe(4);
+    expect(await setOnHand(10)).toBe(4);
+  });
+
+  it('a gift sample is a line of the return like any: back on hand when flagged, off when not', async () => {
+    const [a, b] = await slugsOf(t, 2);
+    await setFiveMl(b!, 2);
+    const client = await shopper(t, ali, '998901234567');
+    await add(client, a!, 30);
+    const o = await order(client);
+    const id = await walkTo(o.number, 'handed_to_bts');
+    await walkToDelivered(id);
+    expect((await fiveMl(b!)).onHand).toBe(1);
+    const { manager, lines } = await returnLines(o.number);
+    expect(lines).toEqual([0, 1]); // the bottle, then the sample
+    const res = await manager.client.admin.orders.return({
+      params: { number: o.number },
+      body: {
+        expectedStatus: 'delivered',
+        reason: 'Вернули посылку',
+        lines: [
+          { position: 0, backToStock: true },
+          { position: 1, backToStock: true },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    expect((await fiveMl(b!)).onHand).toBe(2);
+    // a returned first order had its sample: the next order is no first order
+    await add(client, a!, 30);
+    expect((await order(client)).lines.some((l) => l.giftSample)).toBe(false);
+  });
+
+  it('a gift sample left unflagged stays off the shelf', async () => {
+    const [a, b] = await slugsOf(t, 2);
+    await setFiveMl(b!, 2);
+    const client = await shopper(t, ali, '998901234567');
+    await add(client, a!, 30);
+    const o = await order(client);
+    const id = await walkTo(o.number, 'handed_to_bts');
+    await walkToDelivered(id);
+    const { manager } = await returnLines(o.number);
+    const res = await manager.client.admin.orders.return({
+      params: { number: o.number },
+      body: {
+        expectedStatus: 'delivered',
+        reason: 'Пробник открыт',
+        lines: [
+          { position: 0, backToStock: true },
+          { position: 1, backToStock: false },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    expect((await fiveMl(b!)).onHand).toBe(1);
+  });
+});
+
 describe('a set bottling fills boxes straight from the five oils (ADR 0042)', () => {
   it('takes one vial of oil from each of the five per box and adds the boxes', async () => {
     const five = await compositionOf(5);

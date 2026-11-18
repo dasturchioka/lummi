@@ -531,6 +531,8 @@ describe('permissions (ADR 0017)', () => {
       res.status === 200 &&
         res.body.rows.filter((s) => s.kind === 'volume').map((s) => [s.ml, s.onHand, s.available]),
     ).toEqual([
+      // the 5 ml the form adds (ADR 0042): counted here for samples and bottling, never sold
+      [5, 0, 0],
       [10, 5, 5],
       [30, 5, 5],
     ]);
