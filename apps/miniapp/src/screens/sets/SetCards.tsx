@@ -73,9 +73,6 @@ export function SetCards() {
   return (
     <ul aria-label={s.setsLabel} className="flex flex-col gap-2">
       <li>
-        <DiscoveryCard />
-      </li>
-      <li>
         <button
           type="button"
           data-testid="builder-card"
@@ -104,6 +101,9 @@ export function SetCards() {
             <ChevronIcon size={16} />
           </span>
         </button>
+      </li>
+      <li>
+        <DiscoveryCard />
       </li>
     </ul>
   );

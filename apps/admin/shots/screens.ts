@@ -559,7 +559,7 @@ async function carry(page: Page, number: number, to: string) {
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x + 12, y + 4, { steps: 3 });
-  const target = page.locator(`[data-column="${to}"], [data-rail="${to}"]`).first();
+  const target = page.locator(`[data-column="${to}"]`).first();
   const width = page.viewportSize()!.width;
   let box = await target.boundingBox();
   if (!box || box.x + box.width > width) {
@@ -1994,7 +1994,10 @@ export const screens: Screen[] = [
     fullPage: false,
     act: async ({ page }) => {
       await boardLoaded({ page } as ScreenContext);
-      await page.locator('[data-rail="cancelled"]').click();
+      // #66: the closed outcomes are ordinary columns at the end; scroll the board to them
+      await page
+        .locator('[data-column="returned"]')
+        .evaluate((el) => el.scrollIntoView({ inline: 'end', block: 'nearest' }));
       await page.locator('[data-column="cancelled"] [data-order]').first().waitFor();
       await page.waitForTimeout(200);
     },

@@ -12,18 +12,22 @@ import { cn } from '@/lib/utils';
  */
 
 /**
- * The funnel line: the funnel's statuses with their counts, chevrons between them. A press
- * scrolls its column to the board's left edge. One line that scrolls on phones and wraps where the
- * screen is too narrow for it. The closed outcomes carry their counts on their rails.
+ * The funnel line: the funnel's statuses with their counts, chevrons between them, then the closed
+ * outcomes after a hairline (they end the funnel, they are not a step of it). A press scrolls its
+ * column to the board's left edge. One line that scrolls on phones and wraps where the screen is
+ * too narrow for it.
  */
 export function FunnelLine({
   statuses,
+  outcomes = [],
   column,
   name,
   label,
   onJump,
 }: {
   statuses: readonly OrderStatus[];
+  /** The closed outcomes, after the funnel's steps (#66). */
+  outcomes?: readonly OrderStatus[];
   column: (s: OrderStatus) => AdminBoardColumnDto | undefined;
   name: (s: OrderStatus) => string;
   label: string;
@@ -35,16 +39,20 @@ export function FunnelLine({
       className="-mx-1 mb-2 overflow-x-auto [scrollbar-width:none] max-sm:-mr-4 max-sm:pr-4"
     >
       <ol className="flex items-center whitespace-nowrap sm:flex-wrap">
-        {statuses.map((s, i) => {
+        {[...statuses, ...outcomes].map((s, i) => {
           const c = column(s);
+          const outcome = i >= statuses.length;
           return (
             <li key={s} className="flex items-center">
-              {i > 0 && (
+              {i > 0 && !outcome && (
                 <ChevronRight
                   aria-hidden
                   className="size-3.5 shrink-0 text-faint"
                   strokeWidth={1.5}
                 />
+              )}
+              {i === statuses.length && i > 0 && (
+                <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-border-strong" />
               )}
               <button
                 type="button"

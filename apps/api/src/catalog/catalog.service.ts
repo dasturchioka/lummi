@@ -149,7 +149,26 @@ function lowestPrice(cards: readonly VolumeCard[], volume?: number): number | nu
   return prices.length ? Math.min(...prices) : null;
 }
 
+/**
+ * THE from-volume: the volume the card's «от …» prices (the lowest effective price among those
+ * with something available). On a tie the marked-down one wins, so its struck regular price shows.
+ */
+function fromVolume(cards: readonly VolumeCard[]): VolumeCard | null {
+  const from = lowestPrice(cards);
+  if (from === null) return null;
+  const tied = cards.filter((c) => c.available > 0 && c.effectivePrice === from);
+  return tied.find((c) => c.salePrice !== null) ?? tied[0] ?? null;
+}
+
+/** The list photo: the 50 ml bottle, else the largest volume that has a photo. */
+function listPhoto(cards: readonly VolumeCard[]): string | null {
+  const withPhoto = cards.filter((c) => c.photo);
+  const pick = withPhoto.find((c) => c.ml === 50) ?? withPhoto.sort((a, b) => b.ml - a.ml)[0];
+  return pick?.photo ?? null;
+}
+
 function toListItem(e: CatalogEntry): FragranceListItem {
+  const from = fromVolume(e.cards);
   return {
     slug: e.slug,
     name: e.name,
@@ -159,9 +178,10 @@ function toListItem(e: CatalogEntry): FragranceListItem {
     keyNotes: e.keyNotes,
     isHit: e.isHit,
     isNew: e.isNew,
-    fromPrice: lowestPrice(e.cards),
+    fromPrice: from?.effectivePrice ?? null,
+    fromRegularPrice: from && from.salePrice !== null ? from.price : null,
     soldOut: soldOut(e.cards),
-    photo: e.cards[0]?.photo ?? null,
+    photo: listPhoto(e.cards),
     volumes: e.cards,
   };
 }
@@ -348,15 +368,6 @@ export class CatalogService {
       const p = lowestPrice(e.cards);
       return p === null ? [] : [p];
     });
-    const byId = new Map(all.map((e) => [e.id, e]));
-    const photoOfTop = (type?: FragranceListItem['type']) => {
-      for (const id of rank) {
-        const e = byId.get(id);
-        const photo = e && (!type || e.type === type) ? e.cards[0]?.photo : undefined;
-        if (photo) return photo;
-      }
-      return null;
-    };
     return {
       items: page.map(toListItem),
       total: kept.length,
@@ -365,12 +376,6 @@ export class CatalogService {
           .filter((f) => present.has(f.id))
           .map((f) => ({ id: f.id, name: { ru: f.ru, uz: f.uz } })),
         price: prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : null,
-        typePhotos: {
-          all: photoOfTop(),
-          homme: photoOfTop('homme'),
-          femme: photoOfTop('femme'),
-          unisex: photoOfTop('unisex'),
-        },
       },
     };
   }

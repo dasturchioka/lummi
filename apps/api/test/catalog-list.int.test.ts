@@ -139,16 +139,6 @@ describe('GET /catalog/fragrances: the list', () => {
     // facets describe the catalog, not the current filter
     expect(res.facets.families.length).toBe(29);
     expect(res.facets.price).toEqual({ min: 69_000, max: 69_000 });
-    // the seed in tests has no photos; a chip photo is the top seller's of that type
-    expect(res.facets.typePhotos).toEqual({ all: null, homme: null, femme: null, unisex: null });
-    const [tygar] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'tygar'));
-    await t.db
-      .update(volumes)
-      .set({ photoHash: 'abc123' })
-      .where(eq(volumes.fragranceId, tygar!.id));
-    const photos = (await list()).facets.typePhotos;
-    expect(photos.all).toBe('abc123');
-    expect(photos[tygar!.type]).toBe('abc123');
     await setPrice('tygar', 10, 55_000);
     expect((await list()).facets.price?.min).toBe(55_000);
     // a family whose only fragrances are hidden is not offered
@@ -199,6 +189,50 @@ describe('one lowest-price rule', () => {
     await sellOut('aventus');
     const card = (await list({ limit: 100 })).items.find((i) => i.slug === 'aventus')!;
     expect(card).toMatchObject({ soldOut: true, fromPrice: null });
+  });
+});
+
+describe('list photo and struck price', () => {
+  const card = async (slug: string) =>
+    (await list({ limit: 100 })).items.find((i) => i.slug === slug)!;
+  const setPhoto = async (slug: string, ml: number, photoHash: string | null) =>
+    t.db
+      .update(volumes)
+      .set({ photoHash })
+      .where(and(eq(volumes.fragranceId, await idOf(slug)), eq(volumes.ml, ml)));
+
+  it('shows the 50 ml photo, else the largest volume that has one', async () => {
+    expect((await card('tygar')).photo).toBeNull();
+    await setPhoto('tygar', 10, 'p10');
+    expect((await card('tygar')).photo).toBe('p10');
+    await setPhoto('tygar', 30, 'p30');
+    expect((await card('tygar')).photo).toBe('p30');
+    await setPhoto('tygar', 50, 'p50');
+    expect((await card('tygar')).photo).toBe('p50');
+  });
+
+  it('on a tie in effective price the marked-down volume is the from-volume', async () => {
+    await setPrice('tygar', 10, 60_000);
+    await setPrice('tygar', 30, 90_000);
+    await t.db
+      .update(volumes)
+      .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
+      .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 30)));
+    t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
+    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 90_000 });
+  });
+
+  it('sets fromRegularPrice only while the from-volume is marked down', async () => {
+    await setPrice('tygar', 10, 80_000);
+    expect((await card('tygar')).fromRegularPrice).toBeNull();
+    await t.db
+      .update(volumes)
+      .set({ salePrice: 60_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
+      .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 10)));
+    t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
+    expect(await card('tygar')).toMatchObject({ fromPrice: 60_000, fromRegularPrice: 80_000 });
+    t.edges.clock.set(new Date('2026-11-12T19:00:00Z'));
+    expect(await card('tygar')).toMatchObject({ fromPrice: 80_000, fromRegularPrice: null });
   });
 });
 

@@ -133,18 +133,18 @@ describe('a fresh board', () => {
 });
 
 describe('column width from 640 px', () => {
-  it('three roomy funnel columns beside the rails at 1280, the next one peeking in', () => {
-    // 1280: 952 px of content less the rails (2 × 44 + 8 + 8) leaves 848
-    const { width } = columnLayout(848, 7);
+  it('three roomy columns at 1280, the next one peeking in (#66: all nine columns alike)', () => {
+    // 1280: 952 px of content, the whole of it for the columns
+    const { width } = columnLayout(952, 9);
     expect(width).toBeGreaterThanOrEqual(264);
-    expect(3 * (width + 8) + 24).toBeLessThanOrEqual(848);
-    expect(4 * (width + 8)).toBeGreaterThan(848);
+    expect(3 * (width + 8) + 24).toBeLessThanOrEqual(952);
+    expect(4 * (width + 8)).toBeGreaterThan(952);
   });
 
   it('the scroll ends on a whole column too: the room after the last one completes the view', () => {
-    const room = 848;
-    const { width, endPad } = columnLayout(room, 7);
-    const content = 7 * width + 6 * 8 + endPad;
+    const room = 952;
+    const { width, endPad } = columnLayout(room, 9);
+    const content = 9 * width + 8 * 8 + endPad;
     expect((content - room) % (width + 8)).toBe(0);
   });
 

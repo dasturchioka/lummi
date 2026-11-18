@@ -131,3 +131,6 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **The owner's age key pair.** The owner (or Sardor with him) generates it on his own computer and sends only the public `age1...` line; the private file is kept offline in two places. Confirm who holds it and that he has tested a decrypt.
 - **Developer's Telegram id** for `ops.developerChatId`, and the account for the external uptime monitor (customer's or ours).
 - **Second location setup.** It needs a user for the VPS with the restricted `rrsync` keys (or the rotation script), and a cron for `offsite-rotate.sh`; receipts there are `age`-encrypted per file, the public photos are plain.
+
+## Home fabric photo (ticket #61)
+- **Larger original of the fabric photo.** The light-theme Home hero uses the 884 × 708 PNG from the chat (2026-11-17); the slot asks for 1170 px wide, so it is upscaled a little on 3x phones. Ask the customer for a larger original, and for a dark-theme photo if he wants one.
