@@ -818,6 +818,9 @@ const bottlesText = (m: StockMove, w: W) =>
 /** Where it came from: the order, the invoice, or where a count was typed. */
 function documentText(m: StockMove, w: W): string | null {
   if (m.orderNumber !== null) return fill(w.order, { number: String(m.orderNumber) });
+  // a set bottling (#79): the oil went into that set's boxes
+  if (m.set !== null)
+    return fill(w.setBottling, { ml: String(m.set.vialMl), qty: String(m.set.quantity) });
   if (m.invoice !== null) return [m.supplier, m.invoice].filter(Boolean).join(', ');
   if (m.source !== null) return w.sources[m.source];
   return null;

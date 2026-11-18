@@ -305,6 +305,9 @@ export function LinesSection({ page, t, language }: Props) {
           <li key={i} className="flex gap-4 py-3 first:pt-0">
             <div className="min-w-0 flex-1">
               {l.promoGift && <p className="text-small font-medium text-sage-ink">{d.promoGift}</p>}
+              {l.giftSample && (
+                <p className="text-small font-medium text-sage-ink">{d.giftSample}</p>
+              )}
               <p className="font-medium break-words">{l.name[language]}</p>
               <MetaLine
                 className="text-small text-muted-foreground"

@@ -213,9 +213,10 @@ export function stockLabel(
   item: { kind: 'volume' | 'discovery'; name: string | null; ml: number | null },
   copy: HomeCopy,
 ) {
-  return item.kind === 'discovery' || item.name === null
-    ? 'Discovery set'
-    : fill(copy.ml, { name: item.name, ml: String(item.ml) });
+  // a Discovery set's `ml` is its vial size (ADR 0042): the 5 × 5 ml box is told apart
+  if (item.kind === 'discovery' || item.name === null)
+    return item.ml === 5 ? 'Discovery set 5 × 5' : 'Discovery set';
+  return fill(copy.ml, { name: item.name, ml: String(item.ml) });
 }
 
 /**

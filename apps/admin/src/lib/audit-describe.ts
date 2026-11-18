@@ -656,6 +656,37 @@ const describers: Record<string, Describer> = {
       fill(d.bottledOil, { grams: valueText(c, c.p.oilGrams), ml: valueText(c, c.p.ethanolMl) }),
     ];
   },
+  'warehouse.set_bottled': (c) => {
+    c.take(
+      'vialMl',
+      'quantity',
+      'onHand',
+      'fragrances',
+      'oilGrams',
+      'ethanolMl',
+      'oilPercent',
+      'oilDensity',
+      'fillingLossPercent',
+    );
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.onHand) ?? [null, null];
+    const names = Array.isArray(c.p.fragrances)
+      ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(d.setBottled, {
+        ml: valueText(c, c.p.vialMl),
+        qty: valueText(c, c.p.quantity),
+        old: onHandText(c, pair[0]),
+        new: onHandText(c, pair[1]),
+      }),
+      fill(d.setBottledOil, {
+        grams: valueText(c, c.p.oilGrams),
+        names: clip(names.join(', ')),
+        ml: valueText(c, c.p.ethanolMl),
+      }),
+    ];
+  },
   'warehouse.oil_receipt_drafts_created': (c) => {
     c.take('count', 'grams', 'fragrances');
     const names = Array.isArray(c.p.fragrances)
