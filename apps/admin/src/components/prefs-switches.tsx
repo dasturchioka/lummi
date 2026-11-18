@@ -1,6 +1,7 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useSyncExternalStore, useTransition } from 'react';
 import { LANG_COOKIE } from '@/lib/lang-cookie';
@@ -60,9 +61,82 @@ export type PrefsLabels = {
   theme: { label: string; light: string; dark: string };
 };
 
+/** The theme as the page shows it, and the one way to change it: cookie, `<html>`, bar colour. */
+function useThemeChoice(initial: Theme): [Theme, (next: Theme) => void] {
+  const theme = useTheme(initial);
+  const setTheme = (next: Theme) => {
+    if (next === theme) return;
+    writeCookie(THEME_COOKIE, next);
+    document.documentElement.dataset.theme = next; // at once; the server renders the cookie next time
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[next]);
+    window.dispatchEvent(new Event(THEME_EVENT));
+  };
+  return [theme, setTheme];
+}
+
+/** RU / UZ as a segmented pill pair (DESIGN.md); writes the language cookie and re-renders. */
+export function LanguageSwitch({ language, label }: { language: 'ru' | 'uz'; label: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const setLanguage = (lang: 'ru' | 'uz') => {
+    if (lang === language) return;
+    writeCookie(LANG_COOKIE, lang);
+    start(() => router.refresh());
+  };
+  return (
+    <Track label={label} busy={pending}>
+      {(['ru', 'uz'] as const).map((lang) => (
+        <button
+          key={lang}
+          type="button"
+          lang={lang}
+          onClick={() => setLanguage(lang)}
+          aria-pressed={language === lang}
+          className={segment(language === lang, 'min-w-10 px-2.5 tracking-wide uppercase')}
+        >
+          {lang}
+        </button>
+      ))}
+    </Track>
+  );
+}
+
 /**
- * The panel's two preferences as twin segmented controls (DESIGN.md): RU / UZ, then Светлая /
- * Тёмная (Sun and Moon; `words` adds the names where there is room). Both write a plain cookie.
+ * The theme as one quiet icon button beside sign-out in the account block (#74): the Moon while
+ * light, the Sun while dark. The two glyphs share one slot and swap with a short blur-and-scale
+ * crossfade (opacity only under reduced motion), so the change reads as one object turning.
+ */
+export function ThemeToggle({
+  theme: initialTheme,
+  labels,
+}: {
+  theme: Theme;
+  labels: PrefsLabels['theme'];
+}) {
+  const [theme, setTheme] = useThemeChoice(initialTheme);
+  const dark = theme === 'dark';
+  const glyph =
+    'absolute inset-0 m-auto size-5 transition-[opacity,transform,filter] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-opacity';
+  const hidden = 'scale-50 opacity-0 blur-[2px] motion-reduce:scale-100 motion-reduce:blur-none';
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-pressed={dark}
+      aria-label={`${labels.label}: ${labels.dark}`}
+      title={dark ? labels.light : labels.dark}
+      onClick={() => setTheme(dark ? 'light' : 'dark')}
+      className="relative"
+    >
+      <Moon className={cn(glyph, dark && hidden)} strokeWidth={1.5} aria-hidden />
+      <Sun className={cn(glyph, !dark && hidden)} strokeWidth={1.5} aria-hidden />
+    </Button>
+  );
+}
+
+/**
+ * Both preferences as twin segmented controls, for the sign-in pages where there is room:
+ * RU / UZ, then Светлая / Тёмная (Sun and Moon; `words` adds the names).
  */
 export function PrefsSwitches({
   language,
@@ -77,39 +151,10 @@ export function PrefsSwitches({
   words?: boolean;
   className?: string;
 }) {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const theme = useTheme(initialTheme);
-
-  const setLanguage = (lang: 'ru' | 'uz') => {
-    if (lang === language) return;
-    writeCookie(LANG_COOKIE, lang);
-    start(() => router.refresh());
-  };
-  const setTheme = (next: Theme) => {
-    if (next === theme) return;
-    writeCookie(THEME_COOKIE, next);
-    document.documentElement.dataset.theme = next; // at once; the server renders the cookie next time
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[next]);
-    window.dispatchEvent(new Event(THEME_EVENT));
-  };
-
+  const [theme, setTheme] = useThemeChoice(initialTheme);
   return (
     <div className={cn('flex items-center gap-1.5', className)}>
-      <Track label={labels.language} busy={pending}>
-        {(['ru', 'uz'] as const).map((lang) => (
-          <button
-            key={lang}
-            type="button"
-            lang={lang}
-            onClick={() => setLanguage(lang)}
-            aria-pressed={language === lang}
-            className={segment(language === lang, 'min-w-10 px-2.5 tracking-wide uppercase')}
-          >
-            {lang}
-          </button>
-        ))}
-      </Track>
+      <LanguageSwitch language={language} label={labels.language} />
       <Track label={labels.theme.label}>
         {(['light', 'dark'] as const).map((value) => (
           <button

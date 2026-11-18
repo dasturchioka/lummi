@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Avatar } from '@/components/avatar';
 import { Logo } from '@/components/logo';
+import { ThemeToggle } from '@/components/prefs-switches';
 import { SignOutButton } from '@/components/sign-out-button';
 import type { AdminMessages } from '@/lib/i18n';
+import type { Theme } from '@/lib/theme';
 import { isActive, navFor } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 
@@ -141,8 +143,16 @@ export function NavScroller({
   );
 }
 
-/** Who is signed in, and sign-out: the foot of the sidebar and of the menu sheet. */
-export function PanelAccount({ member, t }: { member: StaffDto; t: AdminMessages }) {
+/** Who is signed in, the theme and sign-out: the foot of the sidebar and of the menu sheet. */
+export function PanelAccount({
+  member,
+  theme,
+  t,
+}: {
+  member: StaffDto;
+  theme: Theme;
+  t: AdminMessages;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-3 pl-3">
       <Avatar name={member.name} photo={member.photo} />
@@ -154,7 +164,10 @@ export function PanelAccount({ member, t }: { member: StaffDto; t: AdminMessages
           {t.roles[member.role]}
         </p>
       </div>
-      <SignOutButton label={t.nav.signOut} />
+      <div className="-mr-1 flex shrink-0 items-center">
+        <ThemeToggle theme={theme} labels={t.theme} />
+        <SignOutButton label={t.nav.signOut} />
+      </div>
     </div>
   );
 }
