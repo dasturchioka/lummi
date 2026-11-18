@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import ExcelJS from 'exceljs';
 import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
-import { LIMIT_BANNER, LONG_PAGE } from './content-data';
+import { LIMIT_BANNER, LONG_PAGE, bannersWorst } from './content-data';
 import { SHOT_QR_CODE, WORST_LINK_CODE } from './campaign-data';
 import { customerScreens, stockScreens } from './stock-data';
 import {
@@ -1212,7 +1212,10 @@ export const screens: Screen[] = [
     },
   },
   // Content (ticket #21): the banner editor with its live preview, the pages and the page editor.
+  // Since #62 the banners are the Home slider: the preview strip in slider order, the banners
+  // that are on with up / down, the ones that are off; then the worst case (six slides, the cap).
   { id: 'content', path: '/content', as: 'owner' },
+  { id: 'content-banners-worst', path: '/content', as: 'owner', ...bannersWorst },
   {
     id: 'content-banner-editor',
     path: '/content',

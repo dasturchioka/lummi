@@ -15,12 +15,20 @@ export interface PreviewBanner {
  * the same layout with the panel's own tokens, so the owner sees what customers will see: the
  * title and subtitle stop at three lines each there too.
  */
-export function BannerPreview({ banner, label }: { banner: PreviewBanner; label: string }) {
+export function BannerPreview({
+  banner,
+  label,
+  className = '',
+}: {
+  banner: PreviewBanner;
+  label: string;
+  className?: string;
+}) {
   return (
     <div
       role="img"
       aria-label={label}
-      className="flex min-h-[140px] w-full max-w-[358px] overflow-hidden rounded-card bg-graphite text-milk"
+      className={`flex min-h-[140px] w-full max-w-[358px] overflow-hidden rounded-card bg-graphite text-milk ${className}`}
     >
       <div className="relative w-[34%] shrink-0 bg-stone">
         {banner.imageHash ? (
