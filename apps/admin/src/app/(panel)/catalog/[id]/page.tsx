@@ -24,6 +24,7 @@ export default async function EditFragrancePage({ params }: { params: Promise<{ 
       key={one.body.id}
       initial={one.body}
       costs={costs.status === 200 ? costs.body : null}
+      costsFailed={costs.status !== 200}
       families={families.body}
       notes={notes.body}
       others={all.body.filter((f) => f.id !== id).map((f) => ({ id: f.id, name: f.name }))}

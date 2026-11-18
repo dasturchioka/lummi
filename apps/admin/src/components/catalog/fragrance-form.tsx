@@ -157,6 +157,7 @@ const priceEcho = (v: unknown, language: Language) =>
 export function FragranceForm({
   initial,
   costs = null,
+  costsFailed = false,
   families,
   notes,
   others,
@@ -166,6 +167,8 @@ export function FragranceForm({
   initial: FragranceAdmin | null;
   /** The saved volumes' unit costs (ADR 0040); refreshed with the page after a save. */
   costs?: FragranceCosts | null;
+  /** The costs request failed (the cost block offers «Повторить»). */
+  costsFailed?: boolean;
   families: DictionaryItem[];
   notes: DictionaryItem[];
   others: { id: number; name: string }[];
@@ -736,7 +739,13 @@ export function FragranceForm({
               <Input {...reg('oilInvoice')} />
             </Field>
           </div>
-          <CostBlock costs={costs} saved={!!initial} language={language} t={t} />
+          <CostBlock
+            costs={costs}
+            failed={costsFailed}
+            saved={!!initial}
+            language={language}
+            t={t}
+          />
         </Section>
 
         <Section title={c.sectionFlags}>

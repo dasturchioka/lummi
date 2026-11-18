@@ -1,6 +1,7 @@
-import type { FragranceTier } from '@lummi/contracts';
+import { FRAGRANCE_TIERS, MAX_OIL_PRICE } from '@lummi/contracts';
 import { eq, fragrances, type Db } from '@lummi/db';
 import { existsSync, readFileSync } from 'node:fs';
+import { z } from 'zod';
 
 /**
  * The oil prices the seed starts from (#75, ADR 0040): the list from the owner's supplier
@@ -8,14 +9,59 @@ import { existsSync, readFileSync } from 'node:fs';
  * file on the server and the seed reads it only from the path in `OIL_PRICES_FILE`; without the
  * variable or the file the step is skipped. The owner's own values in the admin always win.
  */
-export interface OilPriceEntry {
+/** One row of the list, held to the admin form's own limits (it lands in the same columns). */
+export const oilPriceEntrySchema = z.object({
   /** As the list writes it: brand and name in one. */
-  name: string;
-  tier: FragranceTier | null;
+  name: z.string().trim().min(1).max(241),
+  tier: z.enum(FRAGRANCE_TIERS).nullable(),
   /** So'm per gram before the supplier discount. */
-  oilPrice: number;
-  supplier: string | null;
-  invoice: string | null;
+  oilPrice: z.number().int().min(1).max(MAX_OIL_PRICE),
+  supplier: z.string().trim().max(120).nullable(),
+  invoice: z.string().trim().max(120).nullable(),
+});
+export type OilPriceEntry = z.infer<typeof oilPriceEntrySchema>;
+
+export type OilPriceList =
+  | { ok: true; entries: OilPriceEntry[]; rejected: number }
+  | { ok: false; skipped: 'unset' | 'missing' | 'unreadable' };
+
+/**
+ * The list at `file`, checked row by row. Nothing here throws: no path, no file, a file that is not
+ * a JSON list (or not a file) skips the whole fill with one log line; a bad row is dropped with one
+ * line naming it and why, and the good rows go on.
+ */
+export function loadOilPriceList(file: string | undefined, log: (line: string) => void): OilPriceList {
+  if (!file) {
+    log('oil prices: OIL_PRICES_FILE is not set, skipped');
+    return { ok: false, skipped: 'unset' };
+  }
+  if (!existsSync(file)) {
+    log(`oil prices: ${file} not found, skipped`);
+    return { ok: false, skipped: 'missing' };
+  }
+  let rows: unknown;
+  try {
+    rows = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (e) {
+    log(`oil prices: ${file} unreadable (${(e as Error).message}), skipped`);
+    return { ok: false, skipped: 'unreadable' };
+  }
+  if (!Array.isArray(rows)) {
+    log(`oil prices: ${file} is not a JSON list, skipped`);
+    return { ok: false, skipped: 'unreadable' };
+  }
+  const entries: OilPriceEntry[] = [];
+  let rejected = 0;
+  rows.forEach((row, i) => {
+    const parsed = oilPriceEntrySchema.safeParse(row);
+    if (parsed.success) return void entries.push(parsed.data);
+    rejected++;
+    const name = (row as { name?: unknown } | null)?.name;
+    const who = typeof name === 'string' && name.trim() ? `«${name.trim()}»` : `row ${i + 1}`;
+    const why = parsed.error.issues.map((x) => `${x.path.join('.') || 'row'}: ${x.message}`);
+    log(`oil prices: ${who} skipped (${why.join('; ')})`);
+  });
+  return { ok: true, entries, rejected };
 }
 
 /** How the list spells a brand we spell otherwise. */
@@ -75,28 +121,23 @@ export function matchOilPrices<K>(
 }
 
 export type SeedOilPricesResult =
-  | { skipped: 'unset' | 'missing' }
-  | { filled: number; unmatchedCatalog: string[]; unmatchedList: string[] };
+  | { skipped: 'unset' | 'missing' | 'unreadable' }
+  | { filled: number; rejected: number; unmatchedCatalog: string[]; unmatchedList: string[] };
 
 /**
  * The seed step for oil prices: the list at `file` (default `OIL_PRICES_FILE`) onto the catalog by
  * brand + name, each of oil price, tier, supplier and invoice only where it is empty, so nothing
- * the owner set is overwritten. Idempotent. Skips with one log line when there is no file.
+ * the owner set is overwritten. Idempotent. Never throws over the file (`loadOilPriceList`): a
+ * staging deploy goes on whatever is in it.
  */
 export async function seedOilPrices(
   db: Db,
   file: string | undefined = process.env.OIL_PRICES_FILE,
   log: (line: string) => void = console.log,
 ): Promise<SeedOilPricesResult> {
-  if (!file) {
-    log('oil prices: OIL_PRICES_FILE is not set, skipped');
-    return { skipped: 'unset' };
-  }
-  if (!existsSync(file)) {
-    log(`oil prices: ${file} not found, skipped`);
-    return { skipped: 'missing' };
-  }
-  const list = JSON.parse(readFileSync(file, 'utf8')) as OilPriceEntry[];
+  const loaded = loadOilPriceList(file, log);
+  if (!loaded.ok) return { skipped: loaded.skipped };
+  const list = loaded.entries;
   let filled = 0;
   const outcome = await db.transaction(async (tx) => {
     const rows = await tx
@@ -128,5 +169,5 @@ export async function seedOilPrices(
     `oil prices: ${filled} fragrances filled; no price for ${outcome.unmatchedCatalog.length}, ` +
       `${outcome.unmatchedList.length} in the list are not in the catalog`,
   );
-  return { filled, ...outcome };
+  return { filled, rejected: loaded.rejected, ...outcome };
 }

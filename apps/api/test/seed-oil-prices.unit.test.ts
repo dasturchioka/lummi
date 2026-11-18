@@ -1,5 +1,15 @@
+import { MAX_OIL_PRICE } from '@lummi/contracts';
+import type { Db } from '@lummi/db';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { matchOilPrices, type OilPriceEntry } from '../src/catalog/seed-oil-prices';
+import {
+  loadOilPriceList,
+  matchOilPrices,
+  seedOilPrices,
+  type OilPriceEntry,
+} from '../src/catalog/seed-oil-prices';
 
 /**
  * Matching the owner's oil price list to the catalog by brand + name (#75). The list's spellings
@@ -82,5 +92,89 @@ describe('matching the oil price list to the catalog by brand and name', () => {
     );
     expect([...twice.matched.keys()]).toEqual(['a']);
     expect(twice.unmatchedCatalog).toEqual(['b']);
+  });
+});
+
+describe('reading the oil price file: a bad file or row never stops the deploy', () => {
+  const dir = () => mkdtemp(join(tmpdir(), 'oil-list-'));
+  async function file(content: string): Promise<string> {
+    const f = join(await dir(), 'oil-prices.json');
+    await writeFile(f, content);
+    return f;
+  }
+  const collect = () => {
+    const lines: string[] = [];
+    return { lines, log: (l: string) => void lines.push(l) };
+  };
+
+  it('reads a valid list as it is', async () => {
+    const c = collect();
+    const res = loadOilPriceList(await file(JSON.stringify(LIST)), c.log);
+    expect(res).toEqual({ ok: true, entries: LIST, rejected: 0 });
+    expect(c.lines).toEqual([]);
+  });
+
+  it.each([
+    ['unset', undefined, 'unset'],
+    ['empty', '', 'unset'],
+    ['missing', '/nonexistent/oil-prices.json', 'missing'],
+  ] as const)('skips with one line when the path is %s', (_n, path, skipped) => {
+    const c = collect();
+    expect(loadOilPriceList(path, c.log)).toEqual({ ok: false, skipped });
+    expect(c.lines).toHaveLength(1);
+  });
+
+  it.each([
+    ['bad JSON', '{"name": "YSL Libre", oilPrice: '],
+    ['not a list', JSON.stringify({ name: 'YSL Libre', oilPrice: 1000 })],
+  ])('skips the whole fill with one line on %s', async (_n, content) => {
+    const c = collect();
+    expect(loadOilPriceList(await file(content), c.log)).toEqual({ ok: false, skipped: 'unreadable' });
+    expect(c.lines).toHaveLength(1);
+  });
+
+  it('skips the whole fill with one line when the path is a directory', async () => {
+    const c = collect();
+    expect(loadOilPriceList(await dir(), c.log)).toEqual({ ok: false, skipped: 'unreadable' });
+    expect(c.lines).toHaveLength(1);
+  });
+
+  it('drops each bad row with one line naming it and why, and keeps the good ones', async () => {
+    const good = entry('YSL Libre', 1005);
+    const rows = [
+      good,
+      { ...entry('Zero Price', 0) },
+      { ...entry('Fraction Price', 1000.5) },
+      { ...entry('Too Dear', MAX_OIL_PRICE + 1) },
+      { ...entry('Text Price', 1000), oilPrice: '1000' },
+      { ...entry('Gold Tier', 1000), tier: 'gold' },
+      { ...entry('Long Supplier', 1000), supplier: 'x'.repeat(121) },
+      { ...entry('', 1000) },
+      null,
+      { ...entry('Null Tier', 1001), tier: null, supplier: null, invoice: null },
+    ];
+    const c = collect();
+    const res = loadOilPriceList(await file(JSON.stringify(rows)), c.log);
+    expect(res).toEqual({
+      ok: true,
+      entries: [good, { ...entry('Null Tier', 1001), tier: null, supplier: null, invoice: null }],
+      rejected: 8,
+    });
+    expect(c.lines).toHaveLength(8);
+    for (const [i, name] of ['Zero Price', 'Fraction Price', 'Too Dear', 'Text Price', 'Gold Tier', 'Long Supplier'].entries()) {
+      expect(c.lines[i]).toContain(name);
+    }
+    expect(c.lines[1]).toContain('oilPrice');
+    expect(c.lines[4]).toContain('tier');
+    expect(c.lines[5]).toContain('supplier');
+    expect(c.lines[6]).toContain('row 8');
+    expect(c.lines[7]).toContain('row 9');
+  });
+
+  it('the seed step returns the skip without touching the database', async () => {
+    const c = collect();
+    const noDb = new Proxy({}, { get: () => { throw new Error('database touched'); } }) as Db;
+    await expect(seedOilPrices(noDb, await dir(), c.log)).resolves.toEqual({ skipped: 'unreadable' });
+    expect(c.lines).toHaveLength(1);
   });
 });
