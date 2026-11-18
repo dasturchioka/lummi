@@ -13,6 +13,8 @@ import {
   forgetUses,
   holdUses,
   seedPromoList,
+  addPromoStats,
+  removePromoStats,
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
@@ -997,6 +999,14 @@ export const screens: Screen[] = [
   // Promo codes (ticket #29): the list, the editor of the worst-case code, a new code with every
   // error, the delete dialog, and the audit entries.
   { id: 'promo-list', path: '/promo-codes', as: 'owner' },
+  {
+    // fulfilled orders and net sales per code (#65), one with a nine-digit sale
+    id: 'promo-list-stats',
+    path: '/promo-codes',
+    as: 'owner',
+    setup: ({ db }) => addPromoStats(db),
+    teardown: ({ db }) => removePromoStats(db),
+  },
   {
     id: 'promo-editor',
     path: '/promo-codes',

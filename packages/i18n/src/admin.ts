@@ -1660,7 +1660,11 @@ export const adminMessages = defineMessages(
           many: '{total} промокодов',
           other: '{total} промокода',
         },
-        columns: { code: 'Код', uses: 'Использовано', state: 'Состояние' },
+        columns: { code: 'Код', uses: 'Использовано', fulfilled: 'Выданные заказы', net: 'Чистые продажи', state: 'Состояние' },
+        report: 'Отчёт по коду',
+        reportLabel: 'Отчёт по коду {code}: маркетинг',
+        statsHint:
+          'Заказы и продажи кода за всё время его жизни — по правилам отчёта «Маркетинг»: доставленные заказы без возвратов, минус возвраты денег.',
         states: {
           active: 'Действует',
           inactive: 'Выключен',
@@ -4339,7 +4343,11 @@ export const adminMessages = defineMessages(
           many: '{total} ta promokod',
           other: '{total} ta promokod',
         },
-        columns: { code: 'Kod', uses: 'Foydalanilgan', state: 'Holat' },
+        columns: { code: 'Kod', uses: 'Foydalanilgan', fulfilled: 'Yetkazilgan buyurtmalar', net: 'Sof savdo', state: 'Holat' },
+        report: 'Kod hisoboti',
+        reportLabel: '{code} kodi hisoboti: marketing',
+        statsHint:
+          'Kodning butun umri davomidagi buyurtmalar va savdo — «Marketing» hisobotining qoidalari boʻyicha: qaytarilmagan yetkazilgan buyurtmalar, qaytarilgan pullar ayirilgan.',
         states: {
           active: 'Amal qiladi',
           inactive: 'Oʻchirilgan',

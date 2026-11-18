@@ -24,6 +24,15 @@ export class PromoAdminController {
     }));
   }
 
+  // before `get`: `/stats` must not be read as an id
+  @TsRestHandler(adminContract.promoCodes.stats)
+  stats() {
+    return tsRestHandler(adminContract.promoCodes.stats, async () => ({
+      status: 200 as const,
+      body: await this.promo.stats(),
+    }));
+  }
+
   @TsRestHandler(adminContract.promoCodes.get)
   get() {
     return tsRestHandler(adminContract.promoCodes.get, async ({ params }) => {

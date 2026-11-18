@@ -77,6 +77,18 @@ export async function marketingSummary(
   filters: MarketingFilters = {},
 ): Promise<MarketingReport> {
   if (!isReportRange(range)) throw new RangeError(`not a report range: ${JSON.stringify(range)}`);
+  return marketingSummaryOver(db, range, filters);
+}
+
+/**
+ * The same computation without the report page's range guard (at most a year): for a caller that
+ * counts a whole life, such as the promo list's stats (#65). The page's own limit stays.
+ */
+export function marketingSummaryOver(
+  db: Db,
+  range: TashkentRange,
+  filters: MarketingFilters = {},
+): Promise<MarketingReport> {
   return db.transaction((tx) => summarise(tx, range, filters), {
     isolationLevel: 'repeatable read',
     accessMode: 'read only',
