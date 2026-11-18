@@ -85,18 +85,22 @@ export const adminPromoCodeSchema = z.object({
 export type AdminPromoCode = z.infer<typeof adminPromoCodeSchema>;
 
 /**
- * A list row (#65): the code with what it brought over its whole life, by the marketing report's
- * own rules (Fulfilled orders on their delivery day, refunds off the net). `statsFrom`..`statsTo`
- * are the Tashkent days it was counted over (its creation day to today, at most the report's
- * longest range): the report link filtered to the code opens the same range.
+ * What a code brought over its whole life (#65), by the marketing report's own rules (Fulfilled
+ * orders on their delivery day, refunds off the net). `statsFrom`..`statsTo` are the Tashkent
+ * days it was counted over (its creation day to today); `reportFrom` is where the report link
+ * starts: `statsFrom`, or the latest start the report page allows for a longer life.
  */
-export const adminPromoCodeRowSchema = adminPromoCodeSchema.extend({
-  deliveredOrders: z.number().int().nonnegative(),
+export const promoCodeStatsSchema = z.object({
+  promoCodeId: z.number().int(),
+  fulfilledOrders: z.number().int().nonnegative(),
   netSales: z.number().int(),
-  statsFrom: z.string(),
-  statsTo: z.string(),
+  statsFrom: tashkentDaySchema,
+  statsTo: tashkentDaySchema,
+  reportFrom: tashkentDaySchema,
 });
-export type AdminPromoCodeRow = z.infer<typeof adminPromoCodeRowSchema>;
+export type PromoCodeStats = z.infer<typeof promoCodeStatsSchema>;
+/** A list row with its stats, as the promo page joins the two answers. */
+export type AdminPromoCodeRow = AdminPromoCode & PromoCodeStats;
 
 export const promoErrorSchema = z.object({
   code: z.enum(['unauthorized', 'forbidden', 'not_found', 'invalid', 'code_taken', 'in_use']),

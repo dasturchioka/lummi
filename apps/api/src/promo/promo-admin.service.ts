@@ -6,7 +6,7 @@ import {
   tashkentToUtc,
   utcToTashkent,
   type AdminPromoCode,
-  type AdminPromoCodeRow,
+  type PromoCodeStats,
   type PromoCodeInput,
 } from '@lummi/contracts';
 import {
@@ -27,7 +27,7 @@ import { AuditService } from '../audit/audit.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
-import { marketingSummary } from '../reports/marketing-summary';
+import { marketingSummaryOver } from '../reports/marketing-summary';
 import { promoState } from './promo-codes';
 
 export type PromoFailure = { ok: false; reason: 'not_found' | 'code_taken' | 'in_use' };
@@ -80,33 +80,40 @@ export class PromoAdminService {
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
   ) {}
 
-  /**
-   * Every code with its uses and, over its whole life, the marketing report's delivered orders and
-   * net sales (#65): one `marketingSummary` over the oldest code's life, not a report per code, so
-   * the list and the report share one definition. A code's life runs from its creation day to
-   * today, at most the report's longest range; no orders in it is 0.
-   */
-  async list(): Promise<AdminPromoCodeRow[]> {
+  async list(): Promise<AdminPromoCode[]> {
     const rows = await this.db.select().from(promoCodes).orderBy(desc(promoCodes.id));
-    const withUses = await this.withUses(this.db, rows);
+    return this.withUses(this.db, rows);
+  }
+
+  /**
+   * Over each code's whole life (its creation day to today) the marketing report's Fulfilled
+   * orders and net sales (#65): one `marketingSummaryOver` from the oldest code's creation day,
+   * not a report per code, so the list and the report share one definition. No clamp to the
+   * report page's longest range; only `reportFrom` (the link's start) respects it. A code with no
+   * such orders shows 0.
+   */
+  async stats(): Promise<PromoCodeStats[]> {
+    const rows = await this.db.select().from(promoCodes).orderBy(desc(promoCodes.id));
     if (rows.length === 0) return [];
     const today = tashkentDay(this.edges.clock.now());
-    const earliest = formatLocalDate(addDays(today, 1 - REPORT_MAX_DAYS));
     const to = formatLocalDate(today);
-    const startOf = (r: PromoCodeRow) => {
-      const created = formatLocalDate(tashkentDay(r.createdAt));
-      return created > earliest ? created : earliest;
-    };
+    const latestStart = formatLocalDate(addDays(today, 1 - REPORT_MAX_DAYS));
+    const startOf = (r: PromoCodeRow) => formatLocalDate(tashkentDay(r.createdAt));
     const from = rows.map(startOf).reduce((a, b) => (a < b ? a : b));
-    const report = await marketingSummary(this.db, { from, to });
-    const stats = new Map(report.promoCodes.map((p) => [p.promoCodeId, p]));
-    return withUses.map((p, i) => ({
-      ...p,
-      deliveredOrders: stats.get(p.id)?.orders ?? 0,
-      netSales: stats.get(p.id)?.net ?? 0,
-      statsFrom: startOf(rows[i]!),
-      statsTo: to,
-    }));
+    const report = await marketingSummaryOver(this.db, { from, to });
+    const byId = new Map(report.promoCodes.map((p) => [p.promoCodeId, p]));
+    return rows.map((r) => {
+      const statsFrom = startOf(r);
+      const found = byId.get(r.id);
+      return {
+        promoCodeId: r.id,
+        fulfilledOrders: found?.orders ?? 0,
+        netSales: found?.net ?? 0,
+        statsFrom,
+        statsTo: to,
+        reportFrom: statsFrom > latestStart ? statsFrom : latestStart,
+      };
+    });
   }
 
   async get(id: number, tx: DbOrTx = this.db): Promise<AdminPromoCode | null> {

@@ -13,7 +13,8 @@ import {
   forgetUses,
   holdUses,
   seedPromoList,
-  shotPromoStats,
+  addPromoStats,
+  removePromoStats,
   WORST_PROMO,
   WORST_FIXED_PROMO,
 } from './promo-data';
@@ -42,13 +43,7 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (
-      await page
-        .getByRole('listbox')
-        .isVisible()
-        .catch(() => false)
-    )
-      return;
+    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();
@@ -1002,12 +997,12 @@ export const screens: Screen[] = [
   // error, the delete dialog, and the audit entries.
   { id: 'promo-list', path: '/promo-codes', as: 'owner' },
   {
-    // delivered orders and net sales per code (#65), one with a nine-digit sale
+    // fulfilled orders and net sales per code (#65), one with a nine-digit sale
     id: 'promo-list-stats',
     path: '/promo-codes',
     as: 'owner',
-    setup: ({ db }) => shotPromoStats(db, 'add'),
-    teardown: ({ db }) => shotPromoStats(db, 'remove'),
+    setup: ({ db }) => addPromoStats(db),
+    teardown: ({ db }) => removePromoStats(db),
   },
   {
     id: 'promo-editor',

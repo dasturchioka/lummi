@@ -44,7 +44,7 @@ import {
   openCampaignResultSchema,
 } from './campaign';
 import {
-  adminPromoCodeRowSchema,
+  promoCodeStatsSchema,
   adminPromoCodeSchema,
   applyPromoCodeBodySchema,
   promoAttemptsErrorSchema,
@@ -1392,12 +1392,23 @@ const adminPromo = c.router({
       method: 'GET',
       path: '/admin/promo-codes',
       responses: {
-        200: z.array(adminPromoCodeRowSchema),
+        200: z.array(adminPromoCodeSchema),
         401: promoErrorSchema,
         403: promoErrorSchema,
       },
       summary:
-        'Owner only: every promo code with its uses (non-voided), state, and delivered orders and net sales over its life (marketing report rules), newest first',
+        'Owner only: every promo code with its uses (non-voided) and state, newest first (no stats: the dropdowns read this)',
+    },
+    stats: {
+      method: 'GET',
+      path: '/admin/promo-codes/stats',
+      responses: {
+        200: z.array(promoCodeStatsSchema),
+        401: promoErrorSchema,
+        403: promoErrorSchema,
+      },
+      summary:
+        'Owner only: per code, Fulfilled orders and net sales over its whole life (marketing report rules), one aggregate',
     },
     get: {
       method: 'GET',

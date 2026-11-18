@@ -65,14 +65,14 @@ export function PromoList({
     </span>
   );
 
-  const delivered = (p: AdminPromoCodeRow) => (
+  const fulfilled = (p: AdminPromoCodeRow) => (
     <span
       className={cn(
         'font-semibold',
-        p.deliveredOrders === 0 && 'font-normal text-muted-foreground',
+        p.fulfilledOrders === 0 && 'font-normal text-muted-foreground',
       )}
     >
-      {num(p.deliveredOrders)}
+      {num(p.fulfilledOrders)}
     </span>
   );
   const net = (p: AdminPromoCodeRow) => (
@@ -83,7 +83,7 @@ export function PromoList({
   // the marketing report for this code over the same days the figures count
   const report = (p: AdminPromoCodeRow) => (
     <Link
-      href={`/reports/marketing?from=${p.statsFrom}&to=${p.statsTo}&code=${encodeURIComponent(p.code)}`}
+      href={`/reports/marketing?from=${p.reportFrom}&to=${p.statsTo}&code=${encodeURIComponent(p.code)}`}
       onClick={(e) => e.stopPropagation()}
       aria-label={fill(m.reportLabel, { code: p.code })}
       className="inline-flex items-center gap-0.5 rounded-sm text-small text-muted-foreground underline-offset-[3px] transition-colors duration-150 hover:text-foreground hover:underline"
@@ -131,7 +131,7 @@ export function PromoList({
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-small text-muted-foreground tabular-nums">
                   <span>
-                    {m.columns.delivered} {delivered(p)}
+                    {m.columns.fulfilled} {fulfilled(p)}
                   </span>
                   <span className="[overflow-wrap:anywhere]">
                     {m.columns.net} {net(p)}
@@ -147,7 +147,7 @@ export function PromoList({
                 <TR>
                   <TH>{m.columns.code}</TH>
                   <TH className="w-px text-right">{m.columns.uses}</TH>
-                  <TH className="w-px text-right">{m.columns.delivered}</TH>
+                  <TH className="w-px text-right">{m.columns.fulfilled}</TH>
                   <TH className="text-right">{m.columns.net}</TH>
                   <TH className="w-px">{m.columns.state}</TH>
                 </TR>
@@ -165,7 +165,7 @@ export function PromoList({
                     </TD>
                     <TD className="w-px pt-4 text-right whitespace-nowrap">{uses(p)}</TD>
                     <TD className="w-px pt-4 text-right whitespace-nowrap tabular-nums">
-                      {delivered(p)}
+                      {fulfilled(p)}
                     </TD>
                     <TD className="pt-4 text-right tabular-nums">
                       <div className="whitespace-nowrap">{net(p)}</div>

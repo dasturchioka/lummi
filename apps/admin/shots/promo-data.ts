@@ -98,51 +98,84 @@ export async function holdUses(db: Sql, code: string, n: number) {
   );
 }
 
+/** What `addPromoStats` changed, for `removePromoStats` to put back. */
+let before: {
+  createdAt: unknown[][];
+  order: { id: unknown; items: unknown; total: unknown; due: unknown } | null;
+  uses: unknown[][];
+  usedIds: unknown[];
+} | null = null;
+
+const STATS_ORDERS = [9006, 9012, 9013];
+
 /**
- * What the list shows per code (#65): the delivered shot orders 9012 and 9013 held by LUMMI10,
- * and 9006 held by the worst code with a nine-digit sale (987 654 321 so'm). Codes are made "now" and the shot orders are dated early November, so the codes'
- * creation day moves back to 1 Nov while it runs. `remove` undoes all of it; idempotent.
+ * What the list shows per code (#65): the delivered shot orders 9012 and 9013 held by LUMMI10, and
+ * 9006 held by the worst code with a nine-digit sale (987 654 321 so'm). Codes are made "now" and
+ * the shot orders are dated early November, so the codes' creation day moves back to 1 Nov while
+ * it runs. `removePromoStats` puts back exactly what this changed.
  */
-export async function shotPromoStats(db: Sql, what: 'add' | 'remove') {
+export async function addPromoStats(db: Sql) {
   const SALE = 987_654_321;
   const ids = (
-    await db.query(`select id, number from orders where number = any($1)`, [[9006, 9012, 9013]])
+    await db.query(
+      `select id, number, items_subtotal, total, amount_due from orders where number = any($1)`,
+      [STATS_ORDERS],
+    )
   ).rows;
   const id = (n: number) => ids.find((r) => Number(r.number) === n)!.id;
-  await db.query(`delete from promo_code_uses where order_id = any($1)`, [
-    [id(9006), id(9012), id(9013)],
-  ]);
+  const worst = ids.find((r) => Number(r.number) === 9006)!;
+  const orderIds = [id(9006), id(9012), id(9013)];
+  before = {
+    createdAt: (await db.query(`select id, created_at from promo_codes`)).rows.map((r) => [
+      r.id,
+      r.created_at,
+    ]),
+    order: { id: worst.id, items: worst.items_subtotal, total: worst.total, due: worst.amount_due },
+    uses: (
+      await db.query(
+        `select promo_code_id, order_id, customer_id, voided_at from promo_code_uses where order_id = any($1)`,
+        [orderIds],
+      )
+    ).rows.map((r) => [r.promo_code_id, r.order_id, r.customer_id, r.voided_at]),
+    usedIds: orderIds,
+  };
+  await db.query(`delete from promo_code_uses where order_id = any($1)`, [orderIds]);
+  await db.query(`update promo_codes set created_at = '2026-11-01T00:00:00Z'`);
   await db.query(
     `update orders set items_subtotal = $2, total = $2 + delivery_fee - discount_amount,
        amount_due = $2 + delivery_fee - discount_amount where id = $1`,
-    [id(9006), what === 'add' ? SALE : 0],
+    [id(9006), SALE],
   );
-  await db.query(`update promo_codes set created_at = $1`, [
-    what === 'add' ? '2026-11-01T00:00:00Z' : new Date().toISOString(),
-  ]);
-  if (what === 'remove') {
-    // the order's own figures come back from its lines
-    await db.query(
-      `update orders o set items_subtotal = l.s, total = l.s + o.delivery_fee - o.discount_amount,
-         amount_due = l.s + o.delivery_fee - o.discount_amount
-       from (select order_id, sum(line_total) s from order_lines group by order_id) l
-       where l.order_id = o.id and o.id = $1`,
-      [id(9006)],
-    );
-    return;
-  }
-  await db.query(
-    `insert into promo_code_uses (promo_code_id, order_id, customer_id)
-     select (select id from promo_codes where code = $2), o.id, o.customer_id
-     from orders o where o.id = any($1)`,
+  for (const [orders, code] of [
     [[id(9012), id(9013)], 'LUMMI10'],
-  );
-  await db.query(
-    `insert into promo_code_uses (promo_code_id, order_id, customer_id)
-     select (select id from promo_codes where code = $2), o.id, o.customer_id
-     from orders o where o.id = $1`,
-    [id(9006), WORST_PROMO],
-  );
+    [[id(9006)], WORST_PROMO],
+  ] as const)
+    await db.query(
+      `insert into promo_code_uses (promo_code_id, order_id, customer_id)
+       select (select id from promo_codes where code = $2), o.id, o.customer_id
+       from orders o where o.id = any($1)`,
+      [orders, code],
+    );
+}
+
+/** Puts back the creation days, the order's figures and the uses `addPromoStats` took. */
+export async function removePromoStats(db: Sql) {
+  if (!before) return;
+  const b = before;
+  before = null;
+  await db.query(`delete from promo_code_uses where order_id = any($1)`, [b.usedIds]);
+  for (const [pid, at] of b.createdAt)
+    await db.query(`update promo_codes set created_at = $2 where id = $1`, [pid, at]);
+  if (b.order)
+    await db.query(
+      `update orders set items_subtotal = $2, total = $3, amount_due = $4 where id = $1`,
+      [b.order.id, b.order.items, b.order.total, b.order.due],
+    );
+  for (const [pid, oid, cid, voided] of b.uses)
+    await db.query(
+      `insert into promo_code_uses (promo_code_id, order_id, customer_id, voided_at) values ($1, $2, $3, $4)`,
+      [pid, oid, cid, voided],
+    );
 }
 
 /** Drops the shot customer's orders, and with them their uses. */
