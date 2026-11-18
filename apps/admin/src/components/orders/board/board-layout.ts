@@ -71,7 +71,7 @@ function useMedia(query: string, fallback: boolean) {
   return matches;
 }
 
-/** From 640 px the closed rails sit beside the scroller; on phones they end it. */
+/** From 640 px: the columns share the room (`columnLayout`) and auto-scroll is gentler. */
 export const useWide = () => useMedia(WIDE, true);
 
 /** The person asked for less motion: fades only, nothing travels (DESIGN.md). */
