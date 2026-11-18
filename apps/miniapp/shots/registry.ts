@@ -825,7 +825,7 @@ const WORST_HITS = [
   'miss-dior-blooming-bouquet',
 ];
 /** The two top sellers: the first row of the catalog grid on the 390 px viewport. */
-const FIRST_ROW = ['elysium-pour-homme-parfum', 'baccarat-rouge-540'];
+const FIRST_ROW = ['rain-tea', 'moon-tale'];
 const worstData: Pick<ScreenDef, 'setup' | 'teardown'> = {
   setup: async ({ db }) => {
     await db.query(`update fragrances set is_hit = true where slug = any($1)`, [WORST_HITS]);
