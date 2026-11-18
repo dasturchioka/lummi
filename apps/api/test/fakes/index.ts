@@ -75,6 +75,11 @@ export class FakeTelegramSender implements TelegramSender {
    * there answers what `editError` maps to `MessageGoneError`.
    */
   readonly migrated = new Map<number, number>();
+  /** Profile photos the bot can see, by Telegram user id: the file_id getUserProfilePhotos returns. */
+  readonly profilePhotos = new Map<number, string>();
+  async profilePhotoFileId(telegramId: number): Promise<string | null> {
+    return this.profilePhotos.get(telegramId) ?? null;
+  }
   async answerCallback(callbackQueryId: string, text?: string): Promise<void> {
     this.answered.push(callbackQueryId);
     this.answers.push({ id: callbackQueryId, ...(text === undefined ? {} : { text }) });
@@ -146,6 +151,7 @@ export class FakeTelegramSender implements TelegramSender {
     this.blockedChats.clear();
     this.releaseHeld();
     this.migrated.clear();
+    this.profilePhotos.clear();
   }
 }
 
@@ -194,6 +200,16 @@ export class FakeTelegramFiles implements TelegramFiles {
   async download(fileId: string, maxBytes: number): Promise<FileDownload> {
     this.downloads.push(fileId);
     const bytes = this.files.get(fileId);
+    if (!bytes) return { kind: 'unavailable' };
+    return bytes.length > maxBytes ? { kind: 'too_large' } : { kind: 'ok', bytes };
+  }
+  /** Files behind a signed `photo_url`, by URL. */
+  readonly urls = new Map<string, Uint8Array>();
+  /** Every photo_url asked for, in order. */
+  readonly urlDownloads: string[] = [];
+  async downloadUrl(url: string, maxBytes: number): Promise<FileDownload> {
+    this.urlDownloads.push(url);
+    const bytes = this.urls.get(url);
     if (!bytes) return { kind: 'unavailable' };
     return bytes.length > maxBytes ? { kind: 'too_large' } : { kind: 'ok', bytes };
   }

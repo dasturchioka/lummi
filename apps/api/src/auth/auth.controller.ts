@@ -40,7 +40,7 @@ export class AuthController {
           body: { code: expired ? ('expired_init_data' as const) : ('invalid_init_data' as const) },
         };
       }
-      const customer = await this.customers.signIn(verified.user);
+      const customer = await this.customers.signIn(verified.user, undefined, { signed: true });
       const session = await this.sessions.issue(customer.id, customer.telegramId);
       return {
         status: 200 as const,

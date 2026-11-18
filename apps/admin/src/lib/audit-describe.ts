@@ -288,6 +288,11 @@ const telegramOf: Describer = (c) => {
     fill(c.t.audit.detail.telegram, { name: staffName(c), id: String(c.p.telegramId ?? '—') }),
   ];
 };
+const photoOf: Describer = (c) => {
+  c.take('photo', 'source');
+  const how = c.t.audit.detail.profilePhoto as Record<string, string>;
+  return [how[String(c.p.source)] ?? c.t.audit.detail.photo];
+};
 const reviewOf: Describer = (c) => {
   c.take('orderId', 'rating');
   return [
@@ -379,6 +384,8 @@ const describers: Record<string, Describer> = {
   },
 
   'customer.created': () => [],
+  'customer.photo_changed': photoOf,
+  'staff.photo_changed': photoOf,
   'customer.phone_set': (c) => {
     c.take('previous');
     return [c.p.previous === true ? c.t.audit.detail.phoneChanged : c.t.audit.detail.phoneSet];

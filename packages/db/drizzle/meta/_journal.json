@@ -250,8 +250,15 @@
     {
       "idx": 35,
       "version": "7",
-      "when": 1794991866261,
-      "tag": "0035_promo_gift",
+      "when": 1794992396697,
+      "tag": "0035_profile_photos",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794994398217,
+      "tag": "0036_promo_gift",
       "breakpoints": true
     }
   ]

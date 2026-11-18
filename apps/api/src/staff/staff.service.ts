@@ -1,5 +1,6 @@
 import { and, asc, eq, ne, or, staff, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
+import { deleteProfilePhotoFiles } from '../profile-photo/profile-photo-pipeline';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';
 import { SettingsService } from '../settings/settings.service';
@@ -47,6 +48,11 @@ export class StaffService {
 
   async findByTelegramId(telegramId: number, db: DbOrTx = this.db): Promise<StaffRow | null> {
     const [row] = await db.select().from(staff).where(eq(staff.telegramId, telegramId));
+    return row ?? null;
+  }
+
+  async findById(id: number): Promise<StaffRow | null> {
+    const [row] = await this.db.select().from(staff).where(eq(staff.id, id));
     return row ?? null;
   }
 
@@ -297,6 +303,14 @@ export class StaffService {
 
   /** Sessions go with the row (FK cascade). The audit entry keeps the name for the history. */
   async remove(actor: StaffRow, id: number): Promise<StaffOutcome> {
+    const res = await this.removeRow(actor, id);
+    if (res.ok && res.staff.photoKey) {
+      await deleteProfilePhotoFiles(this.edges.files, res.staff.photoKey);
+    }
+    return res;
+  }
+
+  private async removeRow(actor: StaffRow, id: number): Promise<StaffOutcome> {
     return this.db.transaction(async (tx) => {
       const locked = await this.lockManager(tx, id);
       if (!locked.ok) return locked;

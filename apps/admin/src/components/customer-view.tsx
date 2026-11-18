@@ -1,4 +1,5 @@
 import type { AdminCustomerDetail } from '@lummi/contracts';
+import { Avatar } from '@/components/avatar';
 import { formatMoney, formatPhone, type Language } from '@lummi/i18n';
 import { ordersMessages } from '@lummi/i18n/orders';
 import { ChevronLeft } from 'lucide-react';
@@ -64,7 +65,12 @@ export function CustomerView({
         {c.back}
       </Link>
       <PageHeader
-        title={customer.name}
+        title={
+          <span className="flex items-center gap-3">
+            <Avatar name={customer.name} photo={customer.photo} className="size-12 text-[15px]" />
+            <span className="min-w-0">{customer.name}</span>
+          </span>
+        }
         actions={customer.botBlocked ? <BlockedBadge t={t} /> : undefined}
       />
       <Card className="mb-6 p-4 sm:p-6">

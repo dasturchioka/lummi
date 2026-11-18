@@ -1,5 +1,5 @@
 {
-  "id": "aa7c3750-64db-4480-a991-6b75cefe0abc",
+  "id": "0e6bc118-b40d-421a-bced-805599a67464",
   "prevId": "063e2282-034a-426a-a35e-79e8048dfdf7",
   "version": "7",
   "dialect": "postgresql",
@@ -1493,6 +1493,18 @@
         },
         "username": {
           "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegram_photo_url": {
+          "name": "telegram_photo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_key": {
+          "name": "photo_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -3386,13 +3398,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "promo_gift": {
-          "name": "promo_gift",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "set_volume_ids": {
           "name": "set_volume_ids",
           "type": "bigint[]",
@@ -3500,10 +3505,6 @@
         "order_lines_money_check": {
           "name": "order_lines_money_check",
           "value": "\"order_lines\".\"unit_price\" >= 0 and \"order_lines\".\"regular_unit_price\" >= 0 and \"order_lines\".\"line_total\" >= 0"
-        },
-        "order_lines_promo_gift_check": {
-          "name": "order_lines_promo_gift_check",
-          "value": "not \"order_lines\".\"promo_gift\" or (\"order_lines\".\"unit_price\" = 0 and \"order_lines\".\"line_total\" = 0 and \"order_lines\".\"qty\" = 1)"
         }
       },
       "isRLSEnabled": false
@@ -4502,19 +4503,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "gift_volume_id": {
-          "name": "gift_volume_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gift_discovery_set": {
-          "name": "gift_discovery_set",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp with time zone",
@@ -4583,21 +4571,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "promo_codes_gift_volume_id_volumes_id_fk": {
-          "name": "promo_codes_gift_volume_id_volumes_id_fk",
-          "tableFrom": "promo_codes",
-          "tableTo": "volumes",
-          "columnsFrom": [
-            "gift_volume_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "promo_codes_code_unique": {
@@ -4616,11 +4590,7 @@
         },
         "promo_codes_terms_check": {
           "name": "promo_codes_terms_check",
-          "value": "(\"promo_codes\".\"kind\" = 'percent' and \"promo_codes\".\"percent\" between 1 and 100 and \"promo_codes\".\"amount\" is null) or (\"promo_codes\".\"kind\" = 'fixed' and \"promo_codes\".\"amount\" > 0 and \"promo_codes\".\"percent\" is null and \"promo_codes\".\"max_discount\" is null) or (\"promo_codes\".\"kind\"::text = 'gift' and \"promo_codes\".\"percent\" is null and \"promo_codes\".\"amount\" is null and \"promo_codes\".\"max_discount\" is null)"
-        },
-        "promo_codes_gift_check": {
-          "name": "promo_codes_gift_check",
-          "value": "case when \"promo_codes\".\"kind\"::text = 'gift' then (\"promo_codes\".\"gift_volume_id\" is not null) <> \"promo_codes\".\"gift_discovery_set\" else \"promo_codes\".\"gift_volume_id\" is null and not \"promo_codes\".\"gift_discovery_set\" end"
+          "value": "(\"promo_codes\".\"kind\" = 'percent' and \"promo_codes\".\"percent\" between 1 and 100 and \"promo_codes\".\"amount\" is null) or (\"promo_codes\".\"kind\" = 'fixed' and \"promo_codes\".\"amount\" > 0 and \"promo_codes\".\"percent\" is null and \"promo_codes\".\"max_discount\" is null)"
         },
         "promo_codes_limits_check": {
           "name": "promo_codes_limits_check",
@@ -5831,6 +5801,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "photo_key": {
+          "name": "photo_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "role": {
           "name": "role",
           "type": "staff_role",
@@ -6662,8 +6638,7 @@
       "schema": "public",
       "values": [
         "percent",
-        "fixed",
-        "gift"
+        "fixed"
       ]
     },
     "public.receipt_check_outcome": {

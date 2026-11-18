@@ -74,6 +74,7 @@ describe('sign-in with login and password', () => {
     expect(created.body).toEqual({
       id: expect.any(Number),
       name: 'Dilnoza',
+      photo: null,
       login: 'dilnoza',
       telegramId: null,
       hasPassword: true,

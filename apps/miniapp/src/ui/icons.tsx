@@ -7,6 +7,13 @@ import { Icon, type P } from './icons-core';
 
 export * from './icons-core';
 
+export const CameraIcon = (p: P) => (
+  <Icon
+    d="M4 8.5A1.5 1.5 0 0 1 5.5 7H8l1.2-2h5.6L16 7h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5zM12 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"
+    {...p}
+  />
+);
+export const SendIcon = (p: P) => <Icon d="M20 4 4 11l6 2.5L12.5 20zM10 13.5 20 4" {...p} />;
 export const PhoneIcon = (p: P) => (
   <Icon d="M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2" {...p} />
 );
