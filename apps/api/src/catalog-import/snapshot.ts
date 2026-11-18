@@ -52,6 +52,8 @@ export function normDraft(d: FragranceDraft): FragranceDraft {
     internalRemark: d.internalRemark.trim(),
     aliases: [...new Set(d.aliases.map((x) => normalizeUzbek(x.trim())).filter(Boolean))],
     uzumUrl: d.uzumUrl.trim(),
+    oilSupplier: d.oilSupplier.trim(),
+    oilInvoice: d.oilInvoice.trim(),
   };
 }
 export const sameDraft = (a: FragranceDraft, b: FragranceDraft) =>
@@ -137,6 +139,10 @@ export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
         isHit: f.isHit,
         isNew: f.isNew,
         hidden: f.hidden,
+        oilPrice: f.oilPrice,
+        tier: f.tier,
+        oilSupplier: f.oilSupplier ?? '',
+        oilInvoice: f.oilInvoice ?? '',
       }),
     });
   }

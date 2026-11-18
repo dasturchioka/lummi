@@ -60,6 +60,7 @@ import {
   searchResultSchema,
   similarResultSchema,
 } from './catalog';
+import { fragranceCostsSchema } from './cost';
 import {
   catalogAdminErrorSchema,
   dictionaryInputSchema,
@@ -1051,6 +1052,19 @@ const adminCore = c.router({
           404: catalogAdminErrorSchema,
         },
         summary: 'Owner only: every field of one fragrance',
+      },
+      costs: {
+        method: 'GET',
+        path: '/admin/catalog/fragrances/:id/costs',
+        pathParams: z.object({ id: z.coerce.number().int().positive() }),
+        responses: {
+          200: fragranceCostsSchema,
+          401: catalogAdminErrorSchema,
+          403: catalogAdminErrorSchema,
+          404: catalogAdminErrorSchema,
+        },
+        summary:
+          'Owner only: the unit cost of each volume with its breakdown, price and margin, from the saved oil price and the cost settings (ADR 0040)',
       },
       create: {
         method: 'POST',

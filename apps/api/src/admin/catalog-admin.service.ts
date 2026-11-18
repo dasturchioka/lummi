@@ -2,6 +2,7 @@ import type {
   DictionaryInput,
   DictionaryItem,
   FragranceAdmin,
+  FragranceCosts,
   FragranceInput,
   AdminFragranceListItem,
   OnHandItem,
@@ -28,6 +29,8 @@ import { normalizeUzbek } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
+import { readCostSettings } from '../cost/cost-settings';
+import { fragranceCosts } from '../cost/fragrance-costs';
 import { reindexFragrances } from '../search/search-index';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
@@ -219,6 +222,10 @@ export class CatalogAdminService {
       internalRemark: f.internalRemark,
       aliases: f.aliases,
       uzumUrl: f.uzumUrl,
+      oilPrice: f.oilPrice,
+      tier: f.tier,
+      oilSupplier: f.oilSupplier,
+      oilInvoice: f.oilInvoice,
       isHit: f.isHit,
       isNew: f.isNew,
       hidden: f.hidden,
@@ -237,6 +244,21 @@ export class CatalogAdminService {
         isPlaceholder: v.isPlaceholder,
       })),
     };
+  }
+
+  /** Each volume's unit cost from the saved oil price and the cost settings (ADR 0040); null: no such fragrance. */
+  async costs(id: number): Promise<FragranceCosts | null> {
+    const [f] = await this.db
+      .select({ oilPrice: fragrances.oilPrice })
+      .from(fragrances)
+      .where(eq(fragrances.id, id));
+    if (!f) return null;
+    const vols = await this.db
+      .select()
+      .from(volumes)
+      .where(eq(volumes.fragranceId, id))
+      .orderBy(asc(volumes.ml));
+    return fragranceCosts(f.oilPrice, vols, await readCostSettings(this.db), this.edges.clock.now());
   }
 
   async create(actor: StaffRow, raw: FragranceInput): Promise<Outcome<FragranceAdmin>> {
@@ -434,6 +456,10 @@ export class CatalogAdminService {
       internalRemark: emptyToNull(i.internalRemark),
       aliases: i.aliases,
       uzumUrl: emptyToNull(i.uzumUrl),
+      oilPrice: i.oilPrice,
+      tier: i.tier,
+      oilSupplier: emptyToNull(i.oilSupplier),
+      oilInvoice: emptyToNull(i.oilInvoice),
       isHit: i.isHit,
       isNew: i.isNew,
       hidden: i.hidden,

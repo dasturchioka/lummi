@@ -1,4 +1,4 @@
-import { CATALOG_SHEETS, type ImportIssue } from '@lummi/contracts';
+import { CATALOG_SHEETS, type FragranceTier, type ImportIssue } from '@lummi/contracts';
 import { normalizeUzbek } from '@lummi/i18n';
 import ExcelJS from 'exceljs';
 
@@ -8,7 +8,16 @@ import ExcelJS from 'exceljs';
  * (read a file, write the catalog), so an export always re-imports as zero changes.
  */
 
-export type ColumnDef<K extends string> = { key: K; header: string; width: number };
+/**
+ * `optional`: a file without the column still imports and leaves the stored value as it is (the
+ * cost columns of #75, so a file made from an older template keeps working).
+ */
+export type ColumnDef<K extends string> = {
+  key: K;
+  header: string;
+  width: number;
+  optional?: true;
+};
 
 export const FRAGRANCE_COLUMNS = [
   { key: 'code', header: 'Внутренний код', width: 12 },
@@ -37,8 +46,17 @@ export const FRAGRANCE_COLUMNS = [
   { key: 'isHit', header: 'Хит', width: 8 },
   { key: 'isNew', header: 'Новинка', width: 10 },
   { key: 'hidden', header: 'Скрыт', width: 8 },
+  // the cost model (ADR 0040): admin only, never in the Mini App
+  { key: 'oilPrice', header: 'Масло, сум за 1 г (до скидки)', width: 18, optional: true },
+  { key: 'tier', header: 'Категория масла', width: 16, optional: true },
+  { key: 'oilSupplier', header: 'Поставщик масла', width: 22, optional: true },
+  { key: 'oilInvoice', header: 'Накладная на масло', width: 24, optional: true },
 ] as const satisfies readonly ColumnDef<string>[];
 export type FragranceKey = (typeof FRAGRANCE_COLUMNS)[number]['key'];
+/** The columns a file may leave out (`ColumnDef.optional`). */
+export const OPTIONAL_FRAGRANCE_KEYS = FRAGRANCE_COLUMNS.flatMap((c) =>
+  'optional' in c && c.optional ? [c.key] : [],
+);
 
 export const VOLUME_COLUMNS = [
   { key: 'code', header: 'Внутренний код', width: 14 },
@@ -78,7 +96,10 @@ export const LABELS = {
     day_evening: 'День и вечер',
     everyday: 'На каждый день',
   },
-} as const;
+  tier: { top: 'TOP', premium: 'PREMIUM', premium_new: 'PREMIUM NEW' },
+} as const satisfies Record<string, Record<string, string>> & {
+  tier: Record<FragranceTier, string>;
+};
 export const YES = 'да';
 export const NO = 'нет';
 
@@ -147,6 +168,12 @@ export interface FragranceDraft {
   isHit: boolean;
   isNew: boolean;
   hidden: boolean;
+  /** So'm per gram before the supplier discount; null: not known. */
+  oilPrice: number | null;
+  tier: FragranceTier | null;
+  /** '' for none, like `internalRemark`. */
+  oilSupplier: string;
+  oilInvoice: string;
 }
 export interface VolumeDraft {
   ml: 10 | 30 | 50;
@@ -231,6 +258,10 @@ export async function writeWorkbook(data: CatalogData): Promise<Buffer> {
     d.isHit ? YES : NO,
     d.isNew ? YES : NO,
     d.hidden ? YES : NO,
+    d.oilPrice,
+    d.tier ? LABELS.tier[d.tier] : null,
+    d.oilSupplier || null,
+    d.oilInvoice || null,
   ]);
   const fs = addSheet(wb, CATALOG_SHEETS.fragrances, FRAGRANCE_COLUMNS, fragranceRows);
   // The code is text: Excel must not turn «007» into 7 (the import also accepts 7).
@@ -241,6 +272,7 @@ export async function writeWorkbook(data: CatalogData): Promise<Buffer> {
   listValidation(fs, col('timeOfDay'), labelsOf('timeOfDay'));
   listValidation(fs, col('sillage'), labelsOf('sillage'));
   for (const k of ['isHit', 'isNew', 'hidden'] as const) listValidation(fs, col(k), [YES, NO]);
+  listValidation(fs, col('tier'), labelsOf('tier'));
 
   const volumeRows = data.fragrances.flatMap(({ draft, volumes }) =>
     volumes.map((v) => [draft.code, v.ml, v.price, v.salePrice, v.saleEndsOn, v.onHand]),
@@ -271,6 +303,8 @@ export interface RawRow<K extends string> {
 }
 export interface RawWorkbook {
   fragrances: RawRow<FragranceKey>[];
+  /** Optional «Ароматы» columns the file does not have: their stored values stay. */
+  absent: FragranceKey[];
   volumes: RawRow<VolumeKey>[];
   families: RawRow<'nameRu' | 'nameUz'>[];
   notes: RawRow<'nameRu' | 'nameUz'>[];
@@ -333,18 +367,24 @@ function readTable(
   sheet: 'fragrances' | 'volumes' | 'dictionary',
   maxRows: number,
   issues: ImportIssue[],
-): { found: Map<string, number>; rows: { row: number; get: (key: string) => string }[] } | null {
+): {
+  found: Map<string, number>;
+  absent: string[];
+  rows: { row: number; get: (key: string) => string }[];
+} | null {
   const headers = new Map<string, number>();
   ws.getRow(1).eachCell((cell, n) => {
     const t = fold1(cellText(cell).text);
     if (t && !headers.has(t)) headers.set(t, n);
   });
   const found = new Map<string, number>();
+  const absent: string[] = [];
   let missing = false;
   for (const c of cols) {
     if (!c.header) continue;
     const n = headers.get(fold1(c.header));
-    if (n === undefined) {
+    if (n === undefined && c.optional) absent.push(c.key);
+    else if (n === undefined) {
       issues.push({ sheet, row: 1, column: c.header, code: 'missing_column' });
       missing = true;
     } else found.set(c.key, n);
@@ -359,7 +399,9 @@ function readTable(
   for (let r = 2; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const get = (key: string) => {
-      const { text, bad } = cellText(row.getCell(found.get(key)!));
+      const at = found.get(key);
+      if (at === undefined) return ''; // an optional column the file does not have
+      const { text, bad } = cellText(row.getCell(at));
       if (bad) {
         const column = cols.find((c) => c.key === key)!.header;
         const id = `${r}|${column}`;
@@ -373,7 +415,7 @@ function readTable(
     if ([...found.keys()].every((k) => get(k) === '')) continue;
     rows.push({ row: r, get });
   }
-  return { found, rows };
+  return { found, absent, rows };
 }
 
 /** Reads the three sheets into raw cell text. Throws if the bytes are not a workbook. */
@@ -383,7 +425,14 @@ export async function readWorkbook(
 ): Promise<RawWorkbook> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(bytes as unknown as ExcelJS.Buffer);
-  const out: RawWorkbook = { fragrances: [], volumes: [], families: [], notes: [], issues: [] };
+  const out: RawWorkbook = {
+    fragrances: [],
+    absent: [],
+    volumes: [],
+    families: [],
+    notes: [],
+    issues: [],
+  };
 
   for (const sheet of ['fragrances', 'volumes', 'dictionary'] as const) {
     const ws = wb.getWorksheet(CATALOG_SHEETS[sheet]);
@@ -399,6 +448,7 @@ export async function readWorkbook(
     }
     if (sheet === 'fragrances') {
       const t = readTable(ws, FRAGRANCE_COLUMNS, sheet, limits.maxRows, out.issues);
+      out.absent = (t?.absent ?? []) as FragranceKey[];
       for (const r of t?.rows ?? []) {
         out.fragrances.push({
           row: r.row,
