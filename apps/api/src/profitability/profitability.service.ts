@@ -77,6 +77,7 @@ export class Profitability {
   async table(view: ProfitabilityView): Promise<ProfitabilityTable> {
     const shop = await this.shop();
     const ctx = this.context(shop, view);
+    const unknownGift = giftUnknown(shop, view);
     const rows: ProfitabilityRow[] = [];
     for (const f of shop.fragrances) {
       for (const v of f.volumes) {
@@ -92,11 +93,11 @@ export class Profitability {
               ? bottleCost(f.oilPrice, v.ml, shop.cost)
               : null,
         };
-        rows.push(this.row(line, f.hidden, ctx, shop));
+        rows.push(this.row(line, f.hidden, ctx, shop, unknownGift));
       }
     }
     const set = setLine(shop);
-    if (set) rows.push(this.row(set, false, ctx, shop));
+    if (set) rows.push(this.row(set, false, ctx, shop, unknownGift));
     return {
       channel: view.channel,
       afterSetDiscount: view.afterSetDiscount,
@@ -181,10 +182,17 @@ export class Profitability {
     };
   }
 
-  private row(line: SaleLine, hidden: boolean, ctx: SaleContext, shop: Shop): ProfitabilityRow {
+  /** One sale's row; `unknownGift`: a gift sample is asked for but has no cost, so neither has the sale. */
+  private row(
+    line: SaleLine,
+    hidden: boolean,
+    ctx: SaleContext,
+    shop: Shop,
+    unknownGift: boolean,
+  ): ProfitabilityRow {
     const sale = costSale([line], ctx);
     const priced = sale.lines[0]!;
-    const costs = giftUnknown(shop, { giftSample: ctx.giftSample !== null }) ? null : sale.costs;
+    const costs = unknownGift ? null : sale.costs;
     const profit = costs?.profit ?? null;
     const margin = costs?.margin ?? null;
     return {
