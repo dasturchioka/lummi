@@ -6,6 +6,7 @@ import { importBtsPoints, type Snapshot } from '../bts/import-points';
 import { seedCatalog } from '../catalog/seed';
 import { seedOilPrices } from '../catalog/seed-oil-prices';
 import { seedCatalogIfEmpty } from '../catalog/seed-if-empty';
+import { freezeMissingOrderCosts } from '../cost/freeze-order-costs';
 import { LocalFileStore } from '../edges';
 
 /**
@@ -13,7 +14,9 @@ import { LocalFileStore } from '../edges';
  *   - catalog (67 fragrances, placeholder prices, photos): only while the catalog is empty;
  *   - oil prices and tiers from the file at OIL_PRICES_FILE (#75, kept off the repository): only
  *     where a fragrance has none; skipped without the variable or the file;
- *   - BTS pickup points: adds missing codes, never touches existing rows.
+ *   - BTS pickup points: adds missing codes, never touches existing rows;
+ *   - order costs (#77): orders paid before costs were recorded get their cost snapshot, once
+ *     every line has an oil price; a frozen snapshot is never touched.
  * Content texts are seeded by the API at start. Needs DATABASE_URL and FILES_DIR.
  */
 const url = process.env.DATABASE_URL;
@@ -34,6 +37,8 @@ try {
   ) as Snapshot;
   const r = await importBtsPoints(db, snapshot);
   console.log(`BTS points: ${r.inserted} added, ${r.updated} updated, ${r.unchanged} unchanged`);
+  // after the oil prices, so an order waiting for one gets its costs as soon as it is there
+  console.log(`order costs: ${await freezeMissingOrderCosts(db, new Date())} orders frozen`);
 } finally {
   await pool.end();
 }

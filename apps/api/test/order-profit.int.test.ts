@@ -251,6 +251,17 @@ describe('orders paid before costs were recorded', () => {
     expect((await orderRow(t, unpaid.number)).costs).toBeNull();
     expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(0);
   });
+
+  it('wait for a missing oil price instead of freezing without costs for good', async () => {
+    const o = await paidOrder([{ slug: C.slug, ml: 10 }]);
+    await t.db.update(orders).set({ costs: null }).where(eq(orders.id, o.id));
+    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(0);
+    expect((await orderRow(t, o.number)).costs).toBeNull();
+    // the owner types C's oil price (B's, made up): the next deploy freezes it
+    await t.db.update(fragrances).set({ oilPrice: OIL_B }).where(eq(fragrances.id, C.id));
+    expect(await freezeMissingOrderCosts(t.db, t.edges.clock.now())).toBe(1);
+    expect(await unitCosts(o.id)).toEqual([17_145]);
+  });
 });
 
 describe('the sales report: revenue, cost, profit and margin', () => {

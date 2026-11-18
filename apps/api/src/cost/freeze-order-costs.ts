@@ -79,10 +79,17 @@ export function orderCostSnapshot(
 /**
  * Freezes the order's costs in the caller's transaction (the payment confirmation, the one door):
  * each line's unit cost into `order_lines.unit_cost`, the snapshot into `orders.costs`. Later oil
- * prices and settings never touch them. An order already frozen keeps its snapshot.
+ * prices and settings never touch them. An order already frozen keeps its snapshot. With
+ * `onlyWhenKnown` (the backfill) an order a fragrance has no oil price for is left without one, so
+ * a later run can still freeze it; returns whether it wrote one.
  */
-export async function freezeOrderCosts(tx: DbOrTx, order: OrderRow, at: Date): Promise<void> {
-  if (order.costs) return;
+export async function freezeOrderCosts(
+  tx: DbOrTx,
+  order: OrderRow,
+  at: Date,
+  opts: { onlyWhenKnown?: boolean } = {},
+): Promise<boolean> {
+  if (order.costs) return false;
   const lines = await tx
     .select()
     .from(orderLines)
@@ -110,17 +117,21 @@ export async function freezeOrderCosts(tx: DbOrTx, order: OrderRow, at: Date): P
     await readCostSettings(tx),
     at,
   );
+  if (opts.onlyWhenKnown && snapshot.costs === null) return false;
   for (const [i, l] of lines.entries()) {
     if (unitCosts[i] === null) continue;
     await tx.update(orderLines).set({ unitCost: unitCosts[i] }).where(eq(orderLines.id, l.id));
   }
   await tx.update(orders).set({ costs: snapshot }).where(eq(orders.id, order.id));
+  return true;
 }
 
 /**
  * Orders paid before costs were recorded (#77 shipped after them) get theirs frozen now, with the
  * oil prices and settings of now: every order with a payment confirmation in its history and no
- * snapshot. Idempotent; run on deploy (`seed-staging`, the run guide). Returns how many it froze.
+ * snapshot, once every line has a unit cost (an order waiting for an oil price is left for a later
+ * run, rather than frozen without costs for good). Idempotent; run by the deploy's seed step.
+ * Returns how many it froze.
  */
 export async function freezeMissingOrderCosts(db: Db, now: Date): Promise<number> {
   const due = await db
@@ -133,11 +144,12 @@ export async function freezeMissingOrderCosts(db: Db, now: Date): Promise<number
       ),
     )
     .orderBy(asc(orders.id));
+  let frozen = 0;
   for (const o of due) {
     await db.transaction(async (tx) => {
       const [locked] = await tx.select().from(orders).where(eq(orders.id, o.id)).for('update');
-      if (locked) await freezeOrderCosts(tx, locked, now);
+      if (locked && (await freezeOrderCosts(tx, locked, now, { onlyWhenKnown: true }))) frozen += 1;
     });
   }
-  return due.length;
+  return frozen;
 }
