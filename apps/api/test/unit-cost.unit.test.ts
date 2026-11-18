@@ -5,6 +5,7 @@ import {
   giftSampleCost,
   landedOilPrice,
   liquidNeeded,
+  orderCosts,
   setCost,
   type CostSettings,
 } from '../src/cost/unit-cost';
@@ -179,5 +180,45 @@ describe('the liquid a bottle takes (bottling draws on it, #76)', () => {
     const need = liquidNeeded(10, OTHER.liquid);
     expect(need.oilGrams).toBeCloseTo(2.47, 10);
     expect(need.ethanolMl).toBeCloseTo(7.8, 10);
+  });
+});
+
+/**
+ * `orderCosts` follows the calculator's `orderCosts(revenue, goods, chan, gift)` on its `P0`
+ * (mailer 2 000, BTS 25 000, customer fee 25 000 below 250 000, tax 1 %, Uzum 20.5 %, ad 3 000),
+ * for a 189 000 revenue and 52 086 goods, and a 300 000 revenue.
+ */
+describe('orderCosts', () => {
+  const delivery = { freeFrom: 250_000, customerFee: 25_000 };
+  const s = defaultCostSettings();
+  it('Mini App below the threshold: the customer pays the delivery fee', () => {
+    const c = orderCosts({ revenue: 189_000, goods: 52_086, channel: 'app', delivery, settings: s });
+    expect(c).toMatchObject({ mailer: 2_000, delivery: 0, commission: 0, ad: 3_000, gift: 0 });
+    expect(c.tax).toBeCloseTo(1_890, 6);
+    expect(c.total).toBeCloseTo(52_086 + 2_000 + 3_000 + 1_890, 6);
+    expect(c.profit).toBeCloseTo(189_000 - c.total, 6);
+    expect(c.margin).toBeCloseTo(c.profit / 189_000, 9);
+  });
+  it('Mini App from the threshold: BTS is ours, and a gift sample adds its cost', () => {
+    const c = orderCosts({
+      revenue: 300_000,
+      goods: 52_086,
+      channel: 'app',
+      giftSample: 11_953,
+      delivery,
+      settings: s,
+    });
+    expect(c.delivery).toBe(25_000);
+    expect(c.gift).toBe(11_953);
+    expect(c.total).toBeCloseTo(52_086 + 2_000 + 25_000 + 3_000 + 3_000 + 11_953, 6);
+  });
+  it('Uzum: its commission, no mailer or delivery', () => {
+    const c = orderCosts({ revenue: 189_000, goods: 52_086, channel: 'uzum', delivery, settings: s });
+    expect(c).toMatchObject({ mailer: 0, delivery: 0 });
+    expect(c.commission).toBeCloseTo(38_745, 6);
+    expect(c.profit).toBeCloseTo(189_000 - 52_086 - 38_745 - 3_000 - 1_890, 6);
+  });
+  it('no revenue: margin 0, not NaN', () => {
+    expect(orderCosts({ revenue: 0, goods: 0, channel: 'uzum', delivery, settings: s }).margin).toBe(0);
   });
 });

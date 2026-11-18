@@ -3,7 +3,9 @@ import {
   bottleCostExact,
   giftSampleCostExact,
   landedOilPrice,
+  orderCosts,
   som,
+  type SaleChannel,
   type BottleMl,
   type CostSettings,
 } from './unit-cost';
@@ -49,24 +51,6 @@ export interface PlanFragrance {
   prices: Partial<Record<PlanMl, number>>;
   oilKg: number;
   overridden: boolean;
-}
-
-/** What one bottle sold as an order of its own earns (calculator `orderCosts`): profit on the Mini App or on Uzum. */
-function singleSaleProfit(
-  revenue: number,
-  goods: number,
-  channel: 'app' | 'uzum',
-  c: CostSettings['order'],
-  p: PlanSettings,
-  onlinePayment: number,
-): number {
-  const channelCosts =
-    channel === 'app'
-      ? c.mailer +
-        (c.btsCharge - (revenue < p.freeDeliveryThreshold ? p.customerDeliveryFee : 0)) +
-        (revenue * onlinePayment) / 100
-      : (revenue * c.uzumCommissionPercent) / 100;
-  return revenue - (goods + channelCosts + c.adPerSale + (revenue * c.taxPercent) / 100);
 }
 
 export function planPurchase(
@@ -116,9 +100,16 @@ export function planPurchase(
       rowBottles += count;
       const unit = bottleCostExact(f.oilPrice, ml, s);
       const net = full * (1 - discount);
-      const one =
-        singleSaleProfit(net, unit.total, 'app', o, p, o.onlinePaymentPercent) * (1 - uzum) +
-        singleSaleProfit(net, unit.total, 'uzum', o, p, o.onlinePaymentPercent) * uzum;
+      // each bottle is an order of its own, on the Mini App or on Uzum
+      const profitOn = (channel: SaleChannel) =>
+        orderCosts({
+          revenue: net,
+          goods: unit.total,
+          channel,
+          delivery: { freeFrom: p.freeDeliveryThreshold, customerFee: p.customerDeliveryFee },
+          settings: s,
+        }).profit;
+      const one = profitOn('app') * (1 - uzum) + profitOn('uzum') * uzum;
       revenueFull += full * count;
       revenueNet += net * count;
       rowRevenue += net * count;
