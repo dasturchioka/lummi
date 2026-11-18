@@ -83,8 +83,12 @@ Turning a fragrance's oil into bottles («Розлив» / «Quyish»): counts p
 _Avoid_: Filling (that is the per-bottle work cost), production, decanting
 
 **Stock move**:
-One line of a fragrance's warehouse history («История» / «Tarix»): an Oil receipt, its correction or void, a Bottling, bottles leaving at BTS handover or coming back, or a manual count with its reason. Written with the change it records.
+One line of a fragrance's warehouse history («История» / «Tarix»): an Oil receipt, its correction or void, a Bottling, bottles leaving at BTS handover or coming back, a manual count with its reason, or an Uzum sale or its void. Written with the change it records.
 _Avoid_: Transaction, movement log, audit entry (that is the audit log's)
+
+**Uzum sale**:
+A sale on Uzum Market recorded by the owner or a manager («Продажа на Uzum» / «Uzumdagi sotuv»), by hand or from an Excel file: the day, Uzum's order number, its lines (a fragrance's volume or the Discovery set, quantity, what the buyer paid for one) and Uzum's commission. Its bottles leave On hand at once, within Available; its profit is frozen on the Uzum channel when it is recorded. Voided with a reason, never deleted; a void brings the bottles back. Not an Order.
+_Avoid_: Uzum order (that is Uzum's own record), marketplace order, external order
 
 ### Money
 
