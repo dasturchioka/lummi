@@ -134,3 +134,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 ## Home fabric photo (ticket #61)
 - **Larger original of the fabric photo.** The light-theme Home hero uses the 884 × 708 PNG from the chat (2026-11-17); the slot asks for 1170 px wide, so it is upscaled a little on 3x phones. Ask the customer for a larger original, and for a dark-theme photo if he wants one.
+
+## Promo gift (ticket #69, ADR 0039)
+- **Does a gift open an Upgrade right?** A delivered gift 10 ml (while the 10 ml source is on) or a gift Discovery set opens rights like a bought one: the right is about a fragrance the customer received. Ask the customer whether a free gift should count.
+- **The orders group card names the code** («Подарок по промокоду RAINTEA: Rain Tea 10 мл»), so staff see where the gift comes from; the ticket's wording had no code. Confirm.

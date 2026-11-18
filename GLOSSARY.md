@@ -88,6 +88,10 @@ _Avoid_: Reward, bonus, voucher
 A discount source the customer enters (or gets prefilled by a link); it carries the marketing source it is attributed to.
 _Avoid_: Coupon, voucher
 
+**Promo gift**:
+The one item a gift promo code adds to the order free: a Volume or the Discovery set the owner chose, quantity 1 («Подарок по промокоду» / «Promokod sovgʻasi»). It is the order's one Discount: nothing comes off the paid items, and the reports count its regular price as the discount. Not a Gift order.
+_Avoid_: Gift (that is the Gift order), free sample, bonus, present
+
 **Markdown**:
 A temporary lower price on a volume, shown with the regular price struck through. It is a price, not a discount.
 _Avoid_: Sale discount, уценка-скидка
