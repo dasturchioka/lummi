@@ -1320,6 +1320,9 @@ export const adminMessages = defineMessages(
         costMargin: 'Маржа',
         costMarkdown: 'По цене со скидкой {price}',
         costLoss: 'Цена ниже себестоимости.',
+        costFailed: 'Не удалось посчитать себестоимость.',
+        costRounding:
+          'Каждая строка округлена до сума, поэтому их сумма может отличаться от итога на 1–2 сума.',
         errors: {
           required: 'Заполните поле.',
           number: 'Нужно целое число.',
@@ -4115,6 +4118,9 @@ export const adminMessages = defineMessages(
         costMargin: 'Marja',
         costMarkdown: 'Chegirmali narx {price} boʻyicha',
         costLoss: 'Narx tannarxdan past.',
+        costFailed: 'Tannarxni hisoblab boʻlmadi.',
+        costRounding:
+          'Har bir qator soʻmgacha yaxlitlangan, shuning uchun ularning yigʻindisi jamidan 1–2 soʻmga farq qilishi mumkin.',
         errors: {
           required: 'Maydonni toʻldiring.',
           number: 'Butun son kerak.',

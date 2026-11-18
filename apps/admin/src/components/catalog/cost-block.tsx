@@ -1,6 +1,12 @@
+'use client';
+
 import type { FragranceCosts, UnitCost, VolumeCost } from '@lummi/contracts';
 import { formatMoney, type Language } from '@lummi/i18n';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useTransition } from 'react';
+import { Button } from '@/components/ui/button';
+import { Notice } from '@/components/ui/notice';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
 
@@ -30,23 +36,44 @@ const percent = (ratio: number) => `${Math.round(ratio * 100)}\u00a0%`;
  */
 export function CostBlock({
   costs,
+  failed = false,
   saved,
   language,
   t,
 }: {
   costs: FragranceCosts | null;
+  /** The costs request failed: an error with «Повторить», never «укажите цену масла». */
+  failed?: boolean;
   /** False on a fragrance not saved yet: nothing to compute. */
   saved: boolean;
   language: Language;
   t: AdminMessages;
 }) {
   const c = t.catalog;
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const money = (n: number) => formatMoney(n, language);
   const note = (text: string) => (
     <p className="max-w-[70ch] text-small text-pretty text-muted-foreground">{text}</p>
   );
   if (!saved) return note(c.costAfterSave);
-  if (!costs || costs.oilPrice === null || costs.landedOilPrice === null) return note(c.costNoOil);
+  if (failed || !costs) {
+    return (
+      <div className="grid justify-items-start gap-3">
+        <Notice title={c.costFailed} className="w-full" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          loading={pending}
+          onClick={() => start(() => router.refresh())}
+        >
+          {t.actions.retry}
+        </Button>
+      </div>
+    );
+  }
+  if (costs.oilPrice === null || costs.landedOilPrice === null) return note(c.costNoOil);
   return (
     <div className="grid gap-5" data-testid="cost-block">
       <div className="grid max-w-[70ch] gap-1 text-small text-pretty text-muted-foreground">
@@ -57,6 +84,7 @@ export function CostBlock({
           </Link>
         </p>
         <p className="tabular-nums">{fill(c.landedOil, { price: money(costs.landedOilPrice) })}</p>
+        <p>{c.costRounding}</p>
       </div>
       {/* one column per volume from 1024 px, split by hairlines, as the volume editor above */}
       <div className="grid divide-y divide-border lg:-mx-6 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
