@@ -4,12 +4,14 @@ import type { OrderStatus } from '@lummi/contracts';
 import {
   and,
   auditLog,
+  bottlings,
   cartLines,
   customers,
   discoverySet,
   discoverySetItems,
   eq,
   fragrances,
+  ne,
   orderEvents,
   orderLines,
   orders,
@@ -342,7 +344,8 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
       .select()
       .from(auditLog)
       .where(eq(auditLog.action, 'sets.discovery_changed'));
-    expect(entry).toMatchObject({ targetId: 'discovery-5' });
+    // the entry names its set: the audit page's Target reads «Discovery set 5 × 5 мл»
+    expect(entry).toMatchObject({ targetId: 'discovery-5', payload: { vialMl: 5 } });
   });
 });
 
@@ -370,6 +373,9 @@ describe('a set bottling fills boxes straight from the five oils (ADR 0042)', ()
           details: { set: { vialMl: 5, quantity: 4 } },
         },
       ]);
+      // the bottling row says it was the set's, so its vials never read as 5 ml on hand
+      const [b] = await t.db.select().from(bottlings).where(eq(bottlings.fragranceId, f.id));
+      expect(b).toMatchObject({ setVialMl: 5, lines: [{ ml: 5, quantity: 4 }], oilMg: 6_180 });
     }
     const history = await owner.client.admin.warehouse.get({ params: { id: five[0]!.id } });
     expect(history.status === 200 && history.body.history[0]).toMatchObject({
@@ -575,6 +581,68 @@ describe("a first order's gift sample (ADR 0042)", () => {
     expect(mine.status === 200 && mine.body.lines[1]).toMatchObject({ giftSample: true });
     const admin = await owner.client.admin.orders.get({ params: { number: o.number } });
     expect(admin.status === 200 && admin.body.order.lines[1]).toMatchObject({ giftSample: true });
+  });
+});
+
+describe("the gift sample's 5 ml stock warns before it runs out (#79)", () => {
+  const stockOf = async () => {
+    const res = await owner.client.admin.stock.list({ query: { page: 1, pageSize: 10 } });
+    if (res.status !== 200) throw new Error(`stock ${res.status}`);
+    return res.body.giftSample;
+  };
+  const homeSample = async () => {
+    const res = await owner.client.admin.home();
+    if (res.status !== 200) throw new Error(`home ${res.status}`);
+    const first = res.body.queues.stock.first;
+    return { first, count: res.body.queues.stock.count };
+  };
+
+  it('most stocked: all visible 5 ml together against `giftSample.lowStock`', async () => {
+    expect(await stockOf()).toEqual({
+      fragrance: null,
+      missing: false,
+      available: 0,
+      threshold: 10,
+      level: 'zero',
+    });
+    // nothing else is short, so the samples are what Home names first
+    await t.db.update(volumes).set({ onHand: 50 }).where(ne(volumes.ml, 5));
+    await t.db.update(discoverySet).set({ onHand: 50 });
+    expect((await homeSample()).first).toMatchObject({ kind: 'sample', name: null, level: 'zero' });
+
+    const [a, b] = await slugsOf(t, 2);
+    await setFiveMl(a!, 4);
+    await setFiveMl(b!, 5);
+    expect(await stockOf()).toMatchObject({ available: 9, level: 'low' });
+    await setFiveMl(b!, 7);
+    expect(await stockOf()).toMatchObject({ available: 11, level: 'ok' });
+    expect((await homeSample()).count).toBe(0);
+  });
+
+  it('a chosen fragrance: its own 5 ml; hidden or gone, it says so instead of going quiet', async () => {
+    await t.db.update(volumes).set({ onHand: 50 }).where(ne(volumes.ml, 5));
+    await t.db.update(discoverySet).set({ onHand: 50 });
+    const [a] = await slugsOf(t, 1);
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, a!));
+    await setFiveMl(a!, 3);
+    await setSetting('giftSample.fragranceId', f!.id);
+    expect(await stockOf()).toEqual({
+      fragrance: f!.name,
+      missing: false,
+      available: 3,
+      threshold: 10,
+      level: 'low',
+    });
+    expect((await homeSample()).first).toMatchObject({ kind: 'sample', name: f!.name });
+
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, f!.id));
+    expect(await stockOf()).toMatchObject({ missing: true, available: 0, level: 'zero' });
+
+    await setSetting('giftSample.fragranceId', 999_999);
+    expect(await stockOf()).toMatchObject({ fragrance: null, missing: true });
+
+    await setSetting('giftSample.enabled', false);
+    expect(await stockOf()).toBeNull();
   });
 });
 

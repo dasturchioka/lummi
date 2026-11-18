@@ -48,6 +48,22 @@ export const stockQuerySchema = z.object({
 });
 export type StockQuery = z.infer<typeof stockQuerySchema>;
 
+/**
+ * The gift sample's 5 ml stock (#79, ADR 0042) while samples are on: the chosen fragrance's, or
+ * every visible fragrance's together when the most-stocked one is picked; `level` against the
+ * setting `giftSample.lowStock`. `missing`: the chosen fragrance is gone or hidden, so no sample
+ * goes out until another is chosen.
+ */
+export const giftSampleStockSchema = z.object({
+  /** The chosen fragrance's name; null when the most-stocked one is picked (or the chosen one is gone). */
+  fragrance: z.string().nullable(),
+  missing: z.boolean(),
+  available: z.number().int(),
+  threshold: z.number().int(),
+  level: z.enum(STOCK_LEVELS),
+});
+export type GiftSampleStock = z.infer<typeof giftSampleStockSchema>;
+
 export const stockListSchema = z.object({
   /** The setting `stock.lowAvailableThreshold`. */
   lowThreshold: z.number().int(),
@@ -59,6 +75,8 @@ export const stockListSchema = z.object({
   rows: z.array(stockRowSchema),
   /** Fragrances matching the search and filters, over all pages. */
   total: z.number().int(),
+  /** The gift sample's 5 ml stock; null while samples are off. */
+  giftSample: giftSampleStockSchema.nullable(),
   page: z.number().int(),
   pageSize: z.number().int(),
 });

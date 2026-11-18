@@ -9,7 +9,7 @@ import type {
   VolumeInput,
 } from '@lummi/contracts';
 import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
-import { SAMPLE_ML } from '@lummi/contracts/constants';
+import { NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -312,7 +312,7 @@ export class CatalogAdminService {
     for (const v of input.volumes) await this.insertVolume(tx, id, v, opts.placeholder);
     // the 5 ml bottle (ADR 0042): stocked and bottled for the 5 × 5 ml set and the gift sample,
     // never sold, so it has no price and no place in the form
-    await tx.insert(volumes).values({ fragranceId: id, ml: SAMPLE_ML, price: 0, onHand: 0 });
+    await tx.insert(volumes).values({ fragranceId: id, ml: NOT_SOLD_ALONE_ML, price: 0, onHand: 0 });
     // the first counts are a correction from the form or the import (#76); the seed writes none
     if (actor)
       await this.recordFormCounts(

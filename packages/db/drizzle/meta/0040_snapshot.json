@@ -1,5 +1,5 @@
 {
-  "id": "ee448087-17eb-40e1-b5eb-e2b138a454eb",
+  "id": "4416b9df-6630-4a7a-9079-14e446f0f90a",
   "prevId": "f50a9617-a271-4f58-a33d-c0f9322ea21e",
   "version": "7",
   "dialect": "postgresql",
@@ -444,6 +444,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "set_vial_ml": {
+          "name": "set_vial_ml",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "oil_mg": {
           "name": "oil_mg",
           "type": "integer",
@@ -509,6 +515,10 @@
         "bottlings_amounts_check": {
           "name": "bottlings_amounts_check",
           "value": "\"bottlings\".\"oil_mg\" >= 0 and \"bottlings\".\"ethanol_ml\" >= 0"
+        },
+        "bottlings_set_vial_ml_check": {
+          "name": "bottlings_set_vial_ml_check",
+          "value": "\"bottlings\".\"set_vial_ml\" is null or \"bottlings\".\"set_vial_ml\" in (5, 10)"
         }
       },
       "isRLSEnabled": false

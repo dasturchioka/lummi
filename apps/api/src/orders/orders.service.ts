@@ -491,11 +491,7 @@ export class OrdersService {
             // (its own stock is its reserve), its `ml` is its vial size (ADR 0042) and its
             // snapshot is the composition alone.
             const name = (t: typeof dictionaries.ru.sets) =>
-              l.kind === 'discovery_set'
-                ? l.vialMl === 5
-                  ? t.lineDiscovery5
-                  : t.lineDiscovery
-                : t.lineBuilder;
+              l.kind === 'discovery_set' ? t.discovery[l.vialMl].line : t.lineBuilder;
             return {
               ...base,
               kind: l.kind,
@@ -760,8 +756,8 @@ function promoGiftLine(orderId: number, position: number, g: PromoGiftView) {
   return {
     ...base,
     kind: 'discovery_set' as const,
-    nameRu: dictionaries.ru.sets.lineDiscovery,
-    nameUz: dictionaries.uz.sets.lineDiscovery,
+    nameRu: dictionaries.ru.sets.discovery[SET_VIAL_ML].line,
+    nameUz: dictionaries.uz.sets.discovery[SET_VIAL_ML].line,
     ml: 10,
     setComposition: g.items.map((i) => ({
       fragranceId: i.fragranceId,

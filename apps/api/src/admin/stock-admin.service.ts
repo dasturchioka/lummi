@@ -3,7 +3,8 @@ import { asc, eq, fragrances, sql, volumes, type Db, type DbOrTx, type StaffRow 
 import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
-import { DISCOVERY_VIAL_MLS, SAMPLE_ML } from '@lummi/contracts/constants';
+import { DISCOVERY_SETS, DISCOVERY_VIAL_MLS, NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
+import { giftSampleStock } from '../orders/gift-sample';
 import { loadDiscovery } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
 import { isOwner } from '../staff/staff.guard';
@@ -83,8 +84,7 @@ export async function stockRows(
     const set = await loadDiscovery(db, vialMl);
     discovery.push({
       kind: 'discovery',
-      // the 5 × 10 ml set keeps the key it had before the 5 × 5 ml one (#79)
-      key: vialMl === 10 ? 'discovery' : `discovery-${vialMl}`,
+      key: DISCOVERY_SETS[vialMl].key,
       volumeId: null,
       fragranceId: null,
       name: null,
@@ -118,7 +118,7 @@ export function matchesStockQuery(
   if (
     (query.filter === 'zero' || query.filter === 'low') &&
     r.kind === 'volume' &&
-    r.ml === SAMPLE_ML
+    r.ml === NOT_SOLD_ALONE_ML
   )
     return false;
   if (query.filter === 'zero' && r.level !== 'zero') return false;
@@ -162,6 +162,7 @@ export class StockAdminService {
       total: fragranceIds.length,
       page: query.page,
       pageSize: query.pageSize,
+      giftSample: await giftSampleStock(this.db),
     };
   }
 }

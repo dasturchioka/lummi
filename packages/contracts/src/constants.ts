@@ -29,7 +29,7 @@ export const SILLAGES = ['medium', 'noticeable', 'strong'] as const;
 export const SEASONS = ['spring_summer', 'autumn_winter', 'all_year', 'spring_autumn'] as const;
 export const TIMES_OF_DAY = ['day', 'evening', 'day_evening', 'everyday'] as const;
 export const NOTE_LEVELS = ['top', 'heart', 'base'] as const;
-/** The volumes the shop sells (5 ml is stocked but never sold alone: `SAMPLE_ML`). */
+/** The volumes the shop sells (5 ml is stocked but never sold alone: `NOT_SOLD_ALONE_ML`). */
 export const VOLUMES_ML = [10, 30, 50] as const;
 /**
  * The oil grade a fragrance is bought at, as the supplier's invoice names it (ADR 0040): admin
@@ -85,13 +85,55 @@ export const SET_VIAL_ML = 10;
  */
 export const DISCOVERY_VIAL_MLS = [10, 5] as const;
 export type DiscoveryVialMl = (typeof DISCOVERY_VIAL_MLS)[number];
+
+/**
+ * What tells the two Discovery sets apart, in one place for every caller (ADR 0042); their texts
+ * are the i18n `sets.discovery[vialMl]`, keyed the same way.
+ */
+export interface DiscoverySetFacts {
+  vialMl: DiscoveryVialMl;
+  /**
+   * Its key: the stock page's row, the audit target, the photo slot. The 5 × 10 ml set keeps the
+   * one it had before the 5 × 5 ml set came (#79).
+   */
+  key: 'discovery' | 'discovery-5';
+  /** Its Mini App screen. */
+  route: '/sets/discovery' | '/sets/discovery-5';
+  /** Its «Купить сейчас» item text (`@lummi/contracts/buy-now`). */
+  buyNow: 'discovery_set' | 'discovery_set:5';
+  /** The heart, the share link and the reviews block: the 5 × 10 ml set's only, for now. */
+  extras: boolean;
+}
+export const DISCOVERY_SETS: Readonly<Record<DiscoveryVialMl, DiscoverySetFacts>> = {
+  10: {
+    vialMl: 10,
+    key: 'discovery',
+    route: '/sets/discovery',
+    buyNow: 'discovery_set',
+    extras: true,
+  },
+  5: {
+    vialMl: 5,
+    key: 'discovery-5',
+    route: '/sets/discovery-5',
+    buyNow: 'discovery_set:5',
+    extras: false,
+  },
+};
+
+/** A stored vial ml as the Discovery set it names; the DB allows no other, so anything else throws. */
+export function asDiscoveryVialMl(ml: number | null): DiscoveryVialMl {
+  const found = DISCOVERY_VIAL_MLS.find((v) => v === ml);
+  if (found === undefined) throw new Error(`no Discovery set of ${ml} ml vials`);
+  return found;
+}
 /**
  * The 5 ml bottle (ADR 0042): stocked and costed, bottled from oil, but never sold on its own; it
  * goes into the 5 × 5 ml set and is the gift sample of a first order.
  */
-export const SAMPLE_ML = 5;
+export const NOT_SOLD_ALONE_ML = 5;
 /** Every bottle size a fragrance is stocked in: the sold ones and the 5 ml. */
-export const STOCK_VOLUMES_ML = [SAMPLE_ML, ...VOLUMES_ML] as const;
+export const STOCK_VOLUMES_ML = [NOT_SOLD_ALONE_ML, ...VOLUMES_ML] as const;
 
 /**
  * What opens an Upgrade right (ADR 0003): a delivered set, or a delivered single bottle of

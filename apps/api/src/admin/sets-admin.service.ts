@@ -1,5 +1,5 @@
 import type { AdminDiscoverySet, DiscoverySetInput } from '@lummi/contracts';
-import type { DiscoveryVialMl } from '@lummi/contracts/constants';
+import { DISCOVERY_SETS, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   discoverySet,
   discoverySetItems,
@@ -15,7 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { belowReserve } from '../catalog/catalog.service';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import type { Edges } from '../edges';
-import { discoveryTarget, loadDiscovery, readComposition, readDiscoverySet } from '../sets/sets';
+import { loadDiscovery, readComposition, readDiscoverySet } from '../sets/sets';
 import { DB, EDGES } from '../tokens';
 import type { Outcome } from './catalog-admin.service';
 
@@ -85,8 +85,9 @@ export class SetsAdminService {
         actor: { type: 'staff', id: actor.id },
         action: 'sets.discovery_changed',
         targetType: 'discovery_set',
-        targetId: discoveryTarget(vialMl),
+        targetId: DISCOVERY_SETS[vialMl].key,
         payload: {
+          vialMl,
           price: [old.price, input.price],
           ...(input.uzumUrl === undefined ? {} : { uzumUrl: [old.uzumUrl, input.uzumUrl || null] }),
           composition: [before.map((f) => f.name), after.map((f) => f.name)],
@@ -117,8 +118,8 @@ export class SetsAdminService {
         actor: { type: 'staff', id: actor.id },
         action: 'sets.discovery_on_hand_changed',
         targetType: 'discovery_set',
-        targetId: discoveryTarget(vialMl),
-        payload: { onHand: [old.onHand, onHand], reason },
+        targetId: DISCOVERY_SETS[vialMl].key,
+        payload: { vialMl, onHand: [old.onHand, onHand], reason },
       });
       return { ok: true, value: await this.get(vialMl, tx) } as const;
     });
@@ -143,8 +144,8 @@ export class SetsAdminService {
         actor: { type: 'staff', id: actor.id },
         action: 'sets.discovery_photo_uploaded',
         targetType: 'discovery_set',
-        targetId: discoveryTarget(vialMl),
-        payload: { photo: [old.photoHash, hash] },
+        targetId: DISCOVERY_SETS[vialMl].key,
+        payload: { vialMl, photo: [old.photoHash, hash] },
       });
       return { ok: true, value: hash } as const;
     });

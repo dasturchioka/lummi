@@ -280,7 +280,7 @@ export async function createTestApp(
       await seedShopCard(db);
       // the migrations insert the two Discovery set rows (ADR 0009, 0042); the truncate took them too
       await pool.query(
-        `INSERT INTO discovery_set (vial_ml, price, on_hand, is_placeholder) VALUES (10, 299000, 0, true), (5, 99000, 0, false)`,
+        `INSERT INTO discovery_set (vial_ml, price, on_hand, is_placeholder) VALUES (10, 299000, 0, true), (5, 99000, 0, true)`,
       );
       await worker?.resume();
     },

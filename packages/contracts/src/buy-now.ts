@@ -1,4 +1,4 @@
-import { SET_SIZE, type DiscoveryVialMl } from './constants';
+import { DISCOVERY_SETS, DISCOVERY_VIAL_MLS, SET_SIZE, type DiscoveryVialMl } from './constants';
 
 /**
  * «Купить сейчас»: the one item a one-line checkout buys, without touching the cart (spec Changes
@@ -27,7 +27,7 @@ export function buyNowParam(item: BuyNowItem): string {
     case 'volume':
       return `volume:${item.slug}:${item.ml}`;
     case 'discovery_set':
-      return item.vialMl === 10 ? 'discovery_set' : `discovery_set:${item.vialMl}`;
+      return DISCOVERY_SETS[item.vialMl].buyNow;
     case 'builder_set':
       return `builder_set:${item.slugs.join(',')}`;
   }
@@ -36,8 +36,8 @@ export function buyNowParam(item: BuyNowItem): string {
 /** The item an `item` text names; null when it is not one (a builder needs five different slugs). */
 export function parseBuyNowParam(text: string): BuyNowItem | null {
   if (text.length > BUY_NOW_ITEM_MAX) return null;
-  if (text === 'discovery_set') return { kind: 'discovery_set', vialMl: 10 };
-  if (text === 'discovery_set:5') return { kind: 'discovery_set', vialMl: 5 };
+  const set = DISCOVERY_VIAL_MLS.find((ml) => DISCOVERY_SETS[ml].buyNow === text);
+  if (set !== undefined) return { kind: 'discovery_set', vialMl: set };
   const [kind, ...rest] = text.split(':');
   if (kind === 'volume' && rest.length === 2) {
     const [slug, ml] = rest as [string, string];

@@ -217,7 +217,3 @@ export function judgeBuilderPick(slugs: readonly string[], found: readonly TenMl
   if (gone.length > 0) return { ok: false, reason: 'unavailable', slugs: gone };
   return { ok: true, tenMl: all };
 }
-
-/** The audit target of a Discovery set: `discovery` for the 5 × 10 ml one (as before #79), `discovery-5` for the 5 × 5 ml. */
-export const discoveryTarget = (vialMl: DiscoveryVialMl) =>
-  vialMl === 10 ? 'discovery' : `discovery-${vialMl}`;

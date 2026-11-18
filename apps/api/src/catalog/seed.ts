@@ -59,7 +59,9 @@ export interface SeedOptions {
 /**
  * Each Discovery set (ADR 0009, 0042) starts as the first five fragrances with 10 boxes in stock,
  * both ours (the composition is the owner's to choose, the boxes his to count). Only while the
- * owner has not set that set's composition, so a re-run never undoes his choice.
+ * owner has not set that set's composition, so a re-run never undoes his choice; the boxes only
+ * onto a row still flagged `is_placeholder` (the migration flags both), so ours never reach launch
+ * unmarked.
  */
 async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
   if (fragranceIds.length < SET_SIZE) return;
@@ -79,8 +81,14 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
     );
     await tx
       .update(discoverySet)
-      .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND })
-      .where(and(eq(discoverySet.vialMl, vialMl), eq(discoverySet.onHand, 0)));
+      .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND, isPlaceholder: true })
+      .where(
+        and(
+          eq(discoverySet.vialMl, vialMl),
+          eq(discoverySet.onHand, 0),
+          eq(discoverySet.isPlaceholder, true),
+        ),
+      );
   }
 }
 

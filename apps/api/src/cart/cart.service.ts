@@ -8,7 +8,7 @@ import {
   type RepeatResultDto,
   type RepeatShortReason,
 } from '@lummi/contracts';
-import type { DiscoveryVialMl } from '@lummi/contracts/constants';
+import { asDiscoveryVialMl, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -44,7 +44,6 @@ import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
 import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
 import {
-  asDiscoveryVialMl,
   loadCartQuote,
   loadQuote,
   readCartLines,

@@ -1,4 +1,5 @@
-import { SAMPLE_ML } from '@lummi/contracts/constants';
+import type { GiftSampleStock } from '@lummi/contracts';
+import { NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -71,7 +72,7 @@ export async function pickGiftSample(tx: DbOrTx, customerId: number): Promise<Gi
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(
       and(
-        eq(volumes.ml, SAMPLE_ML),
+        eq(volumes.ml, NOT_SOLD_ALONE_ML),
         eq(fragrances.hidden, false),
         named > 0 ? eq(fragrances.id, named) : undefined,
       ),
@@ -133,7 +134,7 @@ export function giftSampleLine(
     nameRu: g.name,
     nameUz: g.name,
     brand: g.brand,
-    ml: SAMPLE_ML,
+    ml: NOT_SOLD_ALONE_ML,
     photo: g.photo,
     unitPrice: 0,
     regularUnitPrice: 0,
@@ -147,3 +148,53 @@ export function giftSampleLine(
 /** The order's gift sample line, if it has one. */
 export const giftSampleOf = (lines: readonly OrderLineRow[]): OrderLineRow | undefined =>
   lines.find((l) => l.giftSample);
+
+/**
+ * The gift sample's 5 ml stock (#79), for the stock page and Home's warning: the chosen
+ * fragrance's available 5 ml, or every visible fragrance's together while the most-stocked one is
+ * picked, against the setting `giftSample.lowStock`. A chosen fragrance that is gone or hidden is
+ * `missing` (no sample goes out), never a silent off. Null while samples are off.
+ */
+export async function giftSampleStock(tx: DbOrTx): Promise<GiftSampleStock | null> {
+  const s = await readSettings(tx, [
+    'giftSample.enabled',
+    'giftSample.fragranceId',
+    'giftSample.lowStock',
+  ]);
+  if (!s['giftSample.enabled']) return null;
+  const named = s['giftSample.fragranceId'];
+  const threshold = s['giftSample.lowStock'];
+  const rows = await tx
+    .select({
+      volumeId: volumes.id,
+      name: fragrances.name,
+      hidden: fragrances.hidden,
+      onHand: volumes.onHand,
+    })
+    .from(volumes)
+    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+    .where(
+      and(
+        eq(volumes.ml, NOT_SOLD_ALONE_ML),
+        named > 0 ? eq(fragrances.id, named) : eq(fragrances.hidden, false),
+      ),
+    );
+  const chosen = named > 0 ? (rows[0] ?? null) : null;
+  const missing = named > 0 && (chosen === null || chosen.hidden);
+  const counted = missing ? [] : rows;
+  const reserved = await reservedByVolume(
+    tx,
+    counted.map((r) => r.volumeId),
+  );
+  const left = counted.reduce(
+    (sum, r) => sum + available(r.onHand, reserved.get(r.volumeId) ?? 0),
+    0,
+  );
+  return {
+    fragrance: chosen?.name ?? null,
+    missing,
+    available: left,
+    threshold,
+    level: left === 0 ? 'zero' : left <= threshold ? 'low' : 'ok',
+  };
+}

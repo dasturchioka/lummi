@@ -10,11 +10,22 @@ export const setsMessages = defineMessages(
   {
     sets: {
       setsLabel: 'Наборы',
-      discoveryTitle: 'Discovery set',
-      discoveryLead: 'Пять ароматов по 10 мл в одной коробке',
-      /** The 5 × 5 ml set (ADR 0042), next to the 5 × 10 ml one. */
-      discovery5Title: 'Discovery set 5 × 5 мл',
-      discovery5Lead: 'Пять ароматов по 5 мл: познакомиться с LUMMI',
+      /**
+       * Each Discovery set by the ml of its vials (ADR 0042): its name on the card and screen
+       * (`title`), the line under it (`lead`) and its name on a cart or order line (`line`).
+       */
+      discovery: {
+        10: {
+          title: 'Discovery set',
+          lead: 'Пять ароматов по 10 мл в одной коробке',
+          line: 'Discovery set',
+        },
+        5: {
+          title: 'Discovery set 5 × 5 мл',
+          lead: 'Пять ароматов по 5 мл: познакомиться с LUMMI',
+          line: 'Discovery set 5 × 5 мл',
+        },
+      },
       inside: 'Что внутри',
       toCart: 'В корзину',
       soldOut: 'Нет в наличии',
@@ -35,8 +46,6 @@ export const setsMessages = defineMessages(
       noMore: 'Уже выбрано пять',
       empty: 'Сейчас нет ароматов для набора',
       emptyText: 'Все 10 мл разобрали. Загляните чуть позже.',
-      lineDiscovery: 'Discovery set',
-      lineDiscovery5: 'Discovery set 5 × 5 мл',
       lineBuilder: 'Свой набор',
       unavailable: 'Одного из ароматов уже нет в 10 мл. Выберите другой.',
       unavailableNamed: 'Закончились 10 мл: {names}. Выберите замену.',
@@ -49,10 +58,18 @@ export const setsMessages = defineMessages(
   {
     sets: {
       setsLabel: 'Toʻplamlar',
-      discoveryTitle: 'Discovery set',
-      discoveryLead: 'Bitta qutida 10 ml’dan beshta ifor',
-      discovery5Title: 'Discovery set 5 × 5 ml',
-      discovery5Lead: '5 ml’dan beshta ifor: LUMMI bilan tanishish uchun',
+      discovery: {
+        10: {
+          title: 'Discovery set',
+          lead: 'Bitta qutida 10 ml’dan beshta ifor',
+          line: 'Discovery set',
+        },
+        5: {
+          title: 'Discovery set 5 × 5 ml',
+          lead: '5 ml’dan beshta ifor: LUMMI bilan tanishish uchun',
+          line: 'Discovery set 5 × 5 ml',
+        },
+      },
       inside: 'Ichida nima bor',
       toCart: 'Savatga',
       soldOut: 'Sotuvda yoʻq',
@@ -73,8 +90,6 @@ export const setsMessages = defineMessages(
       noMore: 'Beshtasi tanlangan',
       empty: 'Hozir toʻplam uchun iforlar yoʻq',
       emptyText: '10 ml’lar tugadi. Birozdan keyin kiring.',
-      lineDiscovery: 'Discovery set',
-      lineDiscovery5: 'Discovery set 5 × 5 ml',
       lineBuilder: 'Oʻz toʻplamim',
       unavailable: 'Iforlardan birining 10 ml’i qolmadi. Boshqasini tanlang.',
       unavailableNamed: '10 ml tugadi: {names}. Oʻrniga boshqasini tanlang.',

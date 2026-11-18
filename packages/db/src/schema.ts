@@ -10,7 +10,7 @@ import {
   RECEIPT_FILE_KINDS,
   RECEIPT_REVIEW_REASONS,
   RECEIPT_VERDICTS,
-  SAMPLE_ML,
+  NOT_SOLD_ALONE_ML,
   STOCK_MOVE_KINDS,
   UPGRADE_RIGHT_SOURCES,
   type CancelReason,
@@ -447,7 +447,7 @@ export const timeOfDayEnum = pgEnum('time_of_day', ['day', 'evening', 'day_eveni
 export const noteLevelEnum = pgEnum('note_level', ['top', 'heart', 'base']);
 /** The oil grade on the supplier's invoice (ADR 0040). */
 export const fragranceTierEnum = pgEnum('fragrance_tier', FRAGRANCE_TIERS);
-/** The volumes the shop sells; 5 ml (`SAMPLE_ML`) is stocked too but never sold alone (ADR 0042). */
+/** The volumes the shop sells; 5 ml (`NOT_SOLD_ALONE_ML`) is stocked too but never sold alone (ADR 0042). */
 export const VOLUMES_ML = [10, 30, 50] as const;
 
 /** Fragrance families from the customer's guide (29 composite families), RU/UZ. */
@@ -567,7 +567,7 @@ export const fragranceSimilar = pgTable(
 /**
  * One bottle size of a fragrance: 10, 30 or 50 ml for sale, and the 5 ml (ADR 0042), stocked and
  * bottled for the 5 × 5 ml set and the gift sample but never sold alone (price 0, kept off every
- * shop read by `SELLABLE_VOLUME`).
+ * shop read by `sellableVolume()`).
  */
 export const volumes = pgTable(
   'volumes',
@@ -603,7 +603,7 @@ export const volumes = pgTable(
  * The shop's volumes only (ADR 0042): a 5 ml bottle is stocked but never sold alone, so every read
  * that offers, prices or sells a volume adds this condition.
  */
-export const sellableVolume = () => sql<boolean>`${volumes.ml} <> ${SAMPLE_ML}`;
+export const sellableVolume = () => sql<boolean>`${volumes.ml} <> ${NOT_SOLD_ALONE_ML}`;
 
 /**
  * The search document of one fragrance (ADR 0019), every field a Latin skeleton
@@ -1931,6 +1931,12 @@ export const bottlings = pgTable(
       .references(() => fragrances.id, { onDelete: 'restrict' }),
     /** Bottles per volume, as the form sent them: `[{ ml, quantity }]`. */
     lines: jsonb('lines').$type<{ ml: number; quantity: number }[]>().notNull(),
+    /**
+     * A set bottling (#79, ADR 0042): the Discovery set (its vial ml) whose boxes this fragrance's
+     * oil went into; `lines` are then the set's vials of it, not bottles on hand. Null for a
+     * bottling into the fragrance's own volumes.
+     */
+    setVialMl: smallint('set_vial_ml'),
     oilMg: integer('oil_mg').notNull(),
     ethanolMl: integer('ethanol_ml').notNull(),
     createdAt: createdAt(),
@@ -1938,6 +1944,7 @@ export const bottlings = pgTable(
   (t) => [
     index('bottlings_fragrance_idx').on(t.fragranceId, t.id),
     check('bottlings_amounts_check', sql`${t.oilMg} >= 0 and ${t.ethanolMl} >= 0`),
+    check('bottlings_set_vial_ml_check', sql`${t.setVialMl} is null or ${t.setVialMl} in (5, 10)`),
   ],
 );
 export type BottlingRow = typeof bottlings.$inferSelect;

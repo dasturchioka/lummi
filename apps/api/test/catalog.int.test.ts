@@ -1,4 +1,4 @@
-import { families, fragrances, volumes, eq, and } from '@lummi/db';
+import { discoverySet, families, fragrances, volumes, eq, and } from '@lummi/db';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { beforeEach, afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -33,6 +33,12 @@ describe('seed', () => {
     expect(fives.every((v) => v.price === 0 && v.onHand === 0 && !v.isPlaceholder)).toBe(true);
     const vols = all.filter((v) => v.ml !== 5);
     expect(vols).toHaveLength(67 * 3);
+    // both Discovery sets' seeded boxes are ours, so both rows stay flagged (ADR 0042)
+    const sets = await t.db.select().from(discoverySet).orderBy(discoverySet.vialMl);
+    expect(sets.map((s) => [s.vialMl, s.onHand, s.isPlaceholder])).toEqual([
+      [5, 10, true],
+      [10, 10, true],
+    ]);
     expect(vols.every((v) => v.isPlaceholder && v.onHand === 20)).toBe(true);
     expect(vols.filter((v) => v.ml === 30).every((v) => v.price === 149_000)).toBe(true);
   });

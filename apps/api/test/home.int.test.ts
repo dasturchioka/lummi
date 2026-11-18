@@ -10,6 +10,7 @@ import {
   paymentPauses,
   receipts,
   reviews,
+  settings,
   shopCard,
   userbotHeartbeat,
   volumes,
@@ -52,6 +53,8 @@ beforeEach(async () => {
   await t.reset();
   await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
+  // no gift samples here: their 5 ml stock is one more stock item (five-ml.int.test.ts covers it)
+  await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
 });
 
 const ali: TestUser = { id: 4801, first_name: 'Ali', last_name: 'Karimov', language_code: 'ru' };

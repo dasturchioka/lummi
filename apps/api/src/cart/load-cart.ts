@@ -7,8 +7,8 @@ import {
   type Quote,
 } from '@lummi/contracts';
 import {
+  asDiscoveryVialMl,
   CART_MAX_QTY,
-  DISCOVERY_VIAL_MLS,
   SET_SIZE,
   SET_VIAL_ML,
   type DiscoveryVialMl,
@@ -145,13 +145,6 @@ export interface StoredLine {
   /** Which Discovery set a `discovery_set` line holds; null on the other kinds. */
   vialMl: DiscoveryVialMl | null;
   qty: number;
-}
-
-/** A stored vial ml as the Discovery set it names (the DB check allows only these). */
-export function asDiscoveryVialMl(ml: number | null): DiscoveryVialMl {
-  const found = DISCOVERY_VIAL_MLS.find((v) => v === ml);
-  if (found === undefined) throw new Error(`no Discovery set of ${ml} ml vials`);
-  return found;
 }
 
 /**

@@ -343,6 +343,11 @@ export const adminMessages = defineMessages(
           stockMore: '{item} и ещё {n}',
         },
         ml: '{name} {ml}\u00a0мл',
+        /** A Discovery set's stock row (ADR 0042): «Discovery set 5 × 10 мл». */
+        discoverySet: 'Discovery set 5 × {ml}\u00a0мл',
+        /** The gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's. */
+        samples: 'Пробники 5\u00a0мл',
+        sample: 'Пробник {name} 5\u00a0мл',
         system: {
           humo: 'Humo: сигнал {age} назад',
           humoNever: 'Humo: сигнала ещё не было',
@@ -576,6 +581,15 @@ export const adminMessages = defineMessages(
       settings: {
         title: 'Настройки',
         sections: 'Разделы настроек',
+        /** A setting whose value is a fragrance, picked by name (`picker: 'fragrance'`, #79). */
+        fragrancePicker: {
+          zero: 'Аромат с самым большим остатком 5 мл',
+          loading: 'Загружаем ароматы…',
+          missing:
+            'Выбранного аромата больше нет в каталоге: пробник не выдаётся. Выберите другой.',
+          hidden: 'Аромат скрыт из каталога: пробник не выдаётся. Выберите другой.',
+          hiddenTag: 'скрыт',
+        },
         description:
           'Все числа и правила магазина в одном месте. Сохранённое значение действует сразу, а в журнал попадает, кто и что поменял.',
         areas: {
@@ -2412,8 +2426,11 @@ export const adminMessages = defineMessages(
         priceTitle: 'Цена и состав',
         priceOnly: 'Цену и состав меняет только владелец.',
         price: 'Цена набора, сум',
-        priceHint: 'Одна цена для Discovery set и для набора, который клиент собирает сам.',
-        priceHint5: 'Своя цена этой коробки. Свой набор клиента стоит как коробка 5 × 10 мл.',
+        /** By the set's vial ml (ADR 0042): the 5 × 10 ml price is the builder's too. */
+        priceHint: {
+          10: 'Одна цена для Discovery set и для набора, который клиент собирает сам.',
+          5: 'Своя цена этой коробки. Свой набор клиента стоит как коробка 5 × 10 мл.',
+        },
         uzumUrl: 'Ссылка на Discovery set в Uzum Market',
         uzumHint:
           'Адрес начинается с https://. Пусто — кнопка «Купить на Uzum» на экране набора скрыта.',
@@ -2445,6 +2462,14 @@ export const adminMessages = defineMessages(
       },
       stock: {
         title: 'Склад',
+        /** The gift sample's 5 ml stock (#79): running low, gone, or its fragrance gone. */
+        sampleLow: 'Пробники 5 мл заканчиваются: осталось {n}',
+        sampleLowNamed: 'Пробники {name} 5 мл заканчиваются: осталось {n}',
+        sampleOut: 'Пробников 5 мл не осталось: первые заказы идут без пробника',
+        sampleOutNamed: 'Пробников {name} 5 мл не осталось: первые заказы идут без пробника',
+        sampleMissing:
+          'Аромат пробника скрыт или удалён из каталога: первые заказы идут без пробника. Выберите другой в настройках.',
+        sampleHint: 'Разлейте флаконы 5 мл на странице аромата.',
         description:
           'Сколько флаконов лежит на складе, сколько держат открытые заказы и сколько ещё можно продать. Остаток меняется по физическому пересчёту.',
         search: 'Поиск',
@@ -3522,6 +3547,9 @@ export const adminMessages = defineMessages(
           stockMore: '{item} va yana {n}\u00a0ta',
         },
         ml: '{name} {ml}\u00a0ml',
+        discoverySet: 'Discovery set 5 × {ml}\u00a0ml',
+        samples: 'Namunalar 5\u00a0ml',
+        sample: '{name} namunasi 5\u00a0ml',
         system: {
           humo: 'Humo: {age} oldin signal',
           humoNever: 'Humo: hali signal boʻlmagan',
@@ -3759,6 +3787,13 @@ export const adminMessages = defineMessages(
       settings: {
         title: 'Sozlamalar',
         sections: 'Sozlamalar boʻlimlari',
+        fragrancePicker: {
+          zero: '5 ml qoldigʻi eng koʻp boʻlgan ifor',
+          loading: 'Iforlar yuklanmoqda…',
+          missing: 'Tanlangan ifor katalogda yoʻq: namuna berilmaydi. Boshqasini tanlang.',
+          hidden: 'Ifor katalogdan yashirilgan: namuna berilmaydi. Boshqasini tanlang.',
+          hiddenTag: 'yashirilgan',
+        },
         description:
           'Doʻkonning barcha raqamlari va qoidalari bir joyda. Saqlangan qiymat darhol amal qiladi, jurnalga esa kim nimani oʻzgartirgani yoziladi.',
         areas: {
@@ -5607,8 +5642,10 @@ export const adminMessages = defineMessages(
         priceTitle: 'Narx va tarkib',
         priceOnly: 'Narx va tarkibni faqat egasi oʻzgartiradi.',
         price: 'Toʻplam narxi, soʻm',
-        priceHint: 'Discovery set va mijoz oʻzi yigʻadigan toʻplam uchun bitta narx.',
-        priceHint5: 'Bu qutining oʻz narxi. Mijozning oʻz toʻplami 5 × 10 ml quti narxida.',
+        priceHint: {
+          10: 'Discovery set va mijoz oʻzi yigʻadigan toʻplam uchun bitta narx.',
+          5: 'Bu qutining oʻz narxi. Mijozning oʻz toʻplami 5 × 10 ml quti narxida.',
+        },
         uzumUrl: 'Discovery setning Uzum Market havolasi',
         uzumHint:
           'Manzil https:// bilan boshlanadi. Boʻsh qoldirilsa, toʻplam ekranidagi «Uzum’da sotib olish» tugmasi yashiriladi.',
@@ -5639,6 +5676,13 @@ export const adminMessages = defineMessages(
       },
       stock: {
         title: 'Ombor',
+        sampleLow: '5 ml namunalar tugayapti: {n} ta qoldi',
+        sampleLowNamed: '{name} 5 ml namunalari tugayapti: {n} ta qoldi',
+        sampleOut: '5 ml namunalar qolmadi: birinchi buyurtmalar namunasiz ketadi',
+        sampleOutNamed: '{name} 5 ml namunalari qolmadi: birinchi buyurtmalar namunasiz ketadi',
+        sampleMissing:
+          'Namuna atiri katalogdan yashirilgan yoki oʻchirilgan: birinchi buyurtmalar namunasiz ketadi. Sozlamalarda boshqasini tanlang.',
+        sampleHint: '5 ml flakonlarni atir sahifasida quying.',
         description:
           'Omborda nechta flakon bor, ochiq buyurtmalar nechtasini band qilgan va yana nechtasini sotish mumkin. Qoldiq jismoniy sanoq boʻyicha oʻzgartiriladi.',
         search: 'Qidiruv',
@@ -6263,7 +6307,7 @@ export const adminMessages = defineMessages(
         channels: { miniapp: 'Mini ilova', uzum: 'Uzum' },
         conditions: 'Shartlar',
         afterSetDiscount: 'Toʻplamdan keyingi chegirma {percent} %',
-        giftSample: 'Sovgʻa namunasi',
+        giftSample: 'Sovgʻa namuna',
         volume: 'Hajm',
         all: 'Hammasi',
         set: 'Toʻplam',
@@ -6342,7 +6386,7 @@ export const adminMessages = defineMessages(
           commissionUzum: 'Uzum komissiyasi {percent} %',
           ad: 'Reklama',
           tax: 'Soliq {percent} %',
-          giftSample: 'Sovgʻa namunasi',
+          giftSample: 'Sovgʻa namuna',
           cost: 'Jami xarajatlar',
           profit: 'Foyda',
           margin: 'marja',

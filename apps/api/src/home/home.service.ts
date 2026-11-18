@@ -16,6 +16,7 @@ import {
   type PaidFigures,
   type TashkentMoment,
 } from '@lummi/contracts';
+import { NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -50,6 +51,7 @@ import {
   paymentState,
 } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
+import { giftSampleStock } from '../orders/gift-sample';
 import type { Edges } from '../edges';
 import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
 import { lastFour, readShopCard } from '../payment/shop-card.service';
@@ -226,20 +228,31 @@ export class HomeService {
       'stock.lowAvailableThreshold',
     ]);
     const { volumes, discovery } = await stockRows(this.db, threshold);
-    // the filter leaves the 5 ml out: it is not sold alone (ADR 0042)
+    // the filter leaves each 5 ml out: it is not sold alone (ADR 0042); the gift sample's 5 ml
+    // stock is one item of its own, against its own threshold
     const rows = [...discovery, ...volumes].filter((r) =>
       matchesStockQuery(r, { filter: 'low', visibility: 'visible' }),
     );
-    return rows
-      .map((r, i) => ({ r, i }))
-      .sort((a, b) => a.r.available - b.r.available || a.i - b.i)
-      .map(({ r }) => ({
-        kind: r.kind,
-        name: r.name,
-        ml: r.ml,
-        available: r.available,
-        level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
-      }));
+    const items: HomeStockItem[] = rows.map((r) => ({
+      kind: r.kind,
+      name: r.name,
+      ml: r.ml,
+      available: r.available,
+      level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
+    }));
+    const sample = await giftSampleStock(this.db);
+    if (sample && (sample.missing || sample.level !== 'ok'))
+      items.push({
+        kind: 'sample',
+        name: sample.fragrance,
+        ml: NOT_SOLD_ALONE_ML,
+        available: sample.available,
+        level: sample.level === 'low' ? 'low' : 'zero',
+      });
+    return items
+      .map((item, i) => ({ item, i }))
+      .sort((a, b) => a.item.available - b.item.available || a.i - b.i)
+      .map(({ item }) => item);
   }
 
   private queues(waiting: WaitingQueues, stock: HomeStockItem[], now: Date): HomeQueues {

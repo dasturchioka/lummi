@@ -11,7 +11,7 @@ import {
   type WarehouseFragrance,
 } from '@lummi/contracts';
 import { formatLocalDate, tashkentDay } from '@lummi/contracts';
-import { SET_SIZE, type DiscoveryVialMl } from '@lummi/contracts/constants';
+import { DISCOVERY_SETS, SET_SIZE, type DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -44,7 +44,7 @@ import { retryOrTryAgain } from '../util/transient';
 import { fragranceOil, readOilContext, round3 } from './fragrance-oil';
 import { bottlingNeeds, gramsFromMg, mgFromGrams, oilReceiptCost } from './oil';
 import { recordStockMove } from './stock-moves';
-import { discoveryTarget, readComposition, readDiscoverySet } from '../sets/sets';
+import { readComposition, readDiscoverySet } from '../sets/sets';
 
 export type WarehouseFailure =
   | { ok: false; reason: 'not_found' | 'voided' | 'draft' | 'not_draft' | 'try_again' }
@@ -568,7 +568,8 @@ export class WarehouseService {
  * `liquidNeeded` with the filling loss (as a bottling of that volume would take). In one
  * transaction: the set's row is locked first (as checkout and the handover take it), then its
  * five fragrances in ascending id (`FOR NO KEY UPDATE`, the warehouse's lock); each one's oil
- * falls with a stock move and a bottling row, and the set's boxes on hand rise. Refused with the
+ * falls with a stock move and a bottling row marked with the set (`set_vial_ml`), and the set's
+ * boxes on hand rise. Refused with the
  * first short fragrance named when any balance holds less, and while the set is not five.
  */
 export async function bottleDiscoverySet(
@@ -610,7 +611,14 @@ export async function bottleDiscoverySet(
       .where(eq(fragrances.id, f.id));
     const [b] = await tx
       .insert(bottlings)
-      .values({ fragranceId: f.id, lines: [line], oilMg: need.oilMg, ethanolMl: need.ethanolMl })
+      .values({
+        fragranceId: f.id,
+        // marked as the set's, so `lines` never read as bottles on hand
+        setVialMl: vialMl,
+        lines: [line],
+        oilMg: need.oilMg,
+        ethanolMl: need.ethanolMl,
+      })
       .returning({ id: bottlings.id });
     await recordStockMove(tx, {
       fragranceId: f.id,
@@ -627,7 +635,7 @@ export async function bottleDiscoverySet(
     actor: actorRef,
     action: 'warehouse.set_bottled',
     targetType: 'discovery_set',
-    targetId: discoveryTarget(vialMl),
+    targetId: DISCOVERY_SETS[vialMl].key,
     payload: {
       vialMl,
       quantity,
