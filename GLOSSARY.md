@@ -110,7 +110,7 @@ _Avoid_: Completed, closed, successful order
 
 **Net sales**:
 «Чистые продажи»: the items before discount of Fulfilled orders, less their discounts and the Refunds sent for them. Delivery is never part of it. The average check leaves the Refunds out: items before discount less discounts, per Fulfilled order.
-_Avoid_: Revenue, turnover, profit (there is no cost data), выручка
+_Avoid_: Revenue, turnover, profit (net sales less the unit cost and order costs), выручка
 
 **Upgrade right**:
 A customer's one-time right to a discount on one full-size bottle of a fragrance they already received in 10 ml. Opened by a delivered set (covers its five fragrances) or a delivered single 10 ml bottle (covers that fragrance).
@@ -127,6 +127,20 @@ _Avoid_: Big bottle, flakon
 **Step-up**:
 The next larger Volume of the same fragrance that can be bought, offered under the volume tiles with what the customer saves by taking it («С 30 мл экономия 58 000 сум»). The saving is the bigger Volume priced at the chosen Volume's price per ml, less its own price, in whole thousands rounded down. It is offered when the saving is at least a setting's percent, and when the customer's Upgrade right prices neither volume. A nudge, not a Discount: it changes no price.
 _Avoid_: Upsell, upgrade (that is the Upgrade right), bigger-bottle discount
+
+### Cost
+
+**Unit cost**:
+What one bottle or one set costs the shop to make, computed by the server from the cost settings and the fragrance's Oil price: liquid with the filling loss, bottle, label, spray, filling work, box and QR card (neither for 5 ml; one set box and one card for a whole set), plus the defect percent of all of it («Себестоимость» / «Tannarx»). Whole so'm. No Oil price, no unit cost.
+_Avoid_: Price, cost price of the order (that is the order's goods plus order costs), purchase price
+
+**Oil price**:
+So'm per gram of a fragrance's perfume oil as the supplier's invoice reads, before the supplier discount. The discount and the delivery to Termez are settings applied on top.
+_Avoid_: Oil cost, landed price (that is after the discount and delivery), price per ml
+
+**Tier**:
+The oil grade a fragrance is bought at, as the invoice names it: TOP, PREMIUM or PREMIUM NEW. Admin only.
+_Avoid_: Category, class, level, quality
 
 ### Delivery
 
