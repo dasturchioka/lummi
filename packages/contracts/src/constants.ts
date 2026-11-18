@@ -42,7 +42,8 @@ export const MAX_OIL_PRICE = 1_000_000;
 /**
  * What changed a fragrance's stock, one row of its warehouse history (ADR 0041): an oil receipt
  * (`oil_receipt`), its correction or void, a bottling, bottles leaving at BTS handover (`sale`) or coming back
- * (`returned`: a parcel back, a return to stock), and a manual count (`correction`).
+ * (`returned`: a parcel back, a return to stock), a manual count (`correction`), and a sale on Uzum
+ * Market (`uzum_sale`, #80) or its void (`uzum_sale_voided`: the bottles back on the shelf).
  */
 export const STOCK_MOVE_KINDS = [
   'oil_receipt',
@@ -52,6 +53,8 @@ export const STOCK_MOVE_KINDS = [
   'sale',
   'returned',
   'correction',
+  'uzum_sale',
+  'uzum_sale_voided',
 ] as const;
 export type StockMoveKind = (typeof STOCK_MOVE_KINDS)[number];
 

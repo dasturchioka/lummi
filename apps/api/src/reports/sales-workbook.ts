@@ -14,7 +14,7 @@ const known = (n: number | null) => (n === null ? '' : n);
  * page, every row (the page shows the top ten). It only lays out what `salesSummary` computed.
  * Money cells are numbers in whole so'm, days are real dates, so the owner can sum and sort.
  * Profit (#77) adds a cost and a profit column to the fragrances, Volumes and sets, and a last
- * sheet with the range's revenue, cost, profit and margin.
+ * sheet with the range's revenue, cost, profit and margin; «Каналы» splits them by channel (#80).
  */
 export async function salesWorkbook(report: SalesReport, language: Language): Promise<Buffer> {
   const t = adminMessages[language].admin.reports;
@@ -100,6 +100,37 @@ export async function salesWorkbook(report: SalesReport, language: Language): Pr
     { header: t.excel.margin, key: 'margin', width: 10, numFmt: PERCENT },
   ]);
   profit.addRow({ ...p, margin: known(p.margin) });
+
+  // revenue and profit by channel (#80): the Mini App, Uzum, both
+  const c = t.channels;
+  const channels = sheet(wb, t.excel.channelsSheet, [
+    { header: c.channel, key: 'channel', width: 20 },
+    { header: c.sales, key: 'sales', width: 10 },
+    { header: c.revenue, key: 'revenue', width: 18, numFmt: MONEY },
+    { header: t.excel.costed, key: 'costed', width: 16 },
+    { header: t.excel.uncosted, key: 'uncosted', width: 16 },
+    { header: t.excel.costedRevenue, key: 'costedRevenue', width: 22, numFmt: MONEY },
+    { header: c.commission, key: 'commission', width: 16, numFmt: MONEY },
+    { header: t.profit.cost, key: 'cost', width: 18, numFmt: MONEY },
+    { header: t.profit.profit, key: 'profit', width: 18, numFmt: MONEY },
+    { header: t.excel.margin, key: 'margin', width: 10, numFmt: PERCENT },
+  ]);
+  for (const key of ['miniapp', 'uzum', 'total'] as const) {
+    const x = report.channels[key];
+    const row = channels.addRow({
+      channel: c[key],
+      sales: x.sales,
+      revenue: x.revenue,
+      costed: x.profit.orders,
+      uncosted: x.profit.uncosted,
+      costedRevenue: x.profit.revenue,
+      commission: x.commission,
+      cost: x.profit.cost,
+      profit: x.profit.profit,
+      margin: known(x.profit.margin),
+    });
+    if (key === 'total') row.font = { bold: true };
+  }
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

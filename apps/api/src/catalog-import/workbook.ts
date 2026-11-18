@@ -315,7 +315,7 @@ export interface RawWorkbook {
 const fold1 = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /** A cell's text, or why it cannot be trusted: a formula (its stored result may be stale) or an error value. */
-function cellText(cell: ExcelJS.Cell): { text: string; bad?: 'formula_cell' | 'error_cell' } {
+export function cellText(cell: ExcelJS.Cell): { text: string; bad?: 'formula_cell' | 'error_cell' } {
   const v = cell.value;
   if (v === null || v === undefined) return { text: '' };
   if (v instanceof Date) return { text: v.toISOString().slice(0, 10) };

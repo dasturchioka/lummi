@@ -21,6 +21,7 @@ export * from './buy-now';
 export * from './cart';
 export * from './sets';
 export * from './uzum';
+export * from './uzum-sales';
 export * from './content';
 export * from './broadcast';
 export * from './orders';

@@ -159,6 +159,8 @@ export const stockMoveSchema = z.object({
   supplier: z.string().nullable(),
   /** The order, for `sale` and `returned`. */
   orderNumber: z.number().int().nullable(),
+  /** Uzum's order number, for `uzum_sale` and `uzum_sale_voided` (#80). */
+  uzumOrder: z.string().nullable(),
   /** Where a `correction` came from: the stock page, the fragrance form or the Excel import. */
   source: z.enum(['stock', 'form', 'import']).nullable(),
 });

@@ -118,6 +118,21 @@ export const salesProfitSchema = z.object({
 });
 export type SalesProfit = z.infer<typeof salesProfitSchema>;
 
+/**
+ * One sales channel over the range (#80): the Mini App's Fulfilled orders (counted on their
+ * delivery day), or the Uzum sales recorded for its days (voided ones left out). Revenue is over
+ * every sale: items less the discount before refunds, or what Uzum's buyers paid. `profit` is over
+ * the sales with costs, as `salesProfitSchema` says; `commission` is the commission in those
+ * costs: Uzum's on Uzum (no mailer, no delivery), the online-payment fee on the Mini App.
+ */
+export const channelSalesSchema = z.object({
+  sales: count,
+  revenue: som,
+  commission: som,
+  profit: salesProfitSchema,
+});
+export type ChannelSales = z.infer<typeof channelSalesSchema>;
+
 export const salesReportSchema = z.object({
   from: tashkentDaySchema,
   to: tashkentDaySchema,
@@ -125,7 +140,14 @@ export const salesReportSchema = z.object({
   days: z.array(salesDaySchema),
   /** The whole range (its average check over the range's orders). */
   totals: salesFiguresSchema,
+  /** The Mini App's profit (#77); `channels.miniapp.profit` is the same. */
   profit: salesProfitSchema,
+  /** Revenue and profit by channel (#80), and both together. */
+  channels: z.object({
+    miniapp: channelSalesSchema,
+    uzum: channelSalesSchema,
+    total: channelSalesSchema,
+  }),
   /** Most units first, then most net. Every fragrance sold in the range. */
   fragrances: z.array(fragranceSalesSchema),
   /** Most units first, then most net. Every Volume sold in the range. */

@@ -18,6 +18,7 @@ export interface StockMoveInput {
   oilReceiptId?: number;
   bottlingId?: number;
   orderId?: number;
+  uzumSaleId?: number;
   reason?: string | null;
   details?: Record<string, unknown>;
 }
@@ -33,6 +34,7 @@ export async function recordStockMove(tx: DbOrTx, m: StockMoveInput): Promise<vo
     oilReceiptId: m.oilReceiptId ?? null,
     bottlingId: m.bottlingId ?? null,
     orderId: m.orderId ?? null,
+    uzumSaleId: m.uzumSaleId ?? null,
     reason: m.reason ?? null,
     details: m.details ?? {},
     actorType: m.actor.type,
