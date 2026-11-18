@@ -25,7 +25,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
 import { cn, fill } from '@/lib/utils';
-import { ReportRange, ReportTabs } from './report-chrome';
+import { HowCounted, ReportRange, ReportTabs } from './report-chrome';
 
 /** How the top lists rank: most units (the API's order) or most net. */
 export type TopOrder = 'units' | 'net';
@@ -124,9 +124,9 @@ export function SalesReportView({
               money={money}
             />
           </div>
-          <p className="-mt-1 max-w-[80ch] text-small text-muted-foreground lg:-mt-3">
-            {r.linesHint}
-          </p>
+          <HowCounted r={r} className="-mt-2 px-1 lg:-mt-4">
+            <p>{r.linesHint}</p>
+          </HowCounted>
           <Card className="p-4 sm:p-5">
             <h2 className={HEADING}>{r.sets}</h2>
             <ul className="mt-3 divide-y divide-border">
@@ -148,7 +148,9 @@ export function SalesReportView({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-small text-muted-foreground">{r.setsHint}</p>
+            <HowCounted r={r} className="mt-1">
+              <p>{r.setsHint}</p>
+            </HowCounted>
           </Card>
         </div>
       )}
@@ -207,7 +209,10 @@ function Totals({
           </div>
         ))}
       </dl>
-      <p className="mt-1.5 max-w-[80ch] px-1 text-small text-muted-foreground">{r.netHint}</p>
+      <HowCounted r={r} className="px-1">
+        <p>{r.periodHint}</p>
+        <p>{r.netHint}</p>
+      </HowCounted>
     </section>
   );
 }
@@ -302,7 +307,7 @@ function Days({
           ) : (
             <li
               key={row.to}
-              className="flex justify-between gap-3 px-4 py-3 text-small text-muted-foreground"
+              className="flex justify-between gap-3 px-4 py-2 text-xs text-muted-foreground"
             >
               <span>
                 <QuietLabel r={r} row={row} language={language} />
@@ -340,7 +345,7 @@ function Days({
                 <TR
                   key={row.to}
                   data-testid={`quiet-${row.from}`}
-                  className="text-muted-foreground"
+                  className="text-xs text-muted-foreground"
                 >
                   <TD className="px-3">
                     <QuietLabel r={r} row={row} language={language} />
