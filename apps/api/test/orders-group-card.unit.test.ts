@@ -198,6 +198,52 @@ describe('the card text', () => {
     expect(shown).toContain('Итого: 269 100 сум');
   });
 
+  it('lists a gift code’s gift as «Подарок по промокоду: Rain Tea 10 мл», with nothing taken off (ADR 0039)', () => {
+    const gift = (language: 'ru' | 'uz') =>
+      plainText(
+        renderCard(
+          data({
+            order: {
+              ...order,
+              itemsSubtotal: 219_000,
+              discount: {
+                type: 'promo_code',
+                code: 'RAINTEA',
+                amount: 0,
+                gift: { item: { kind: 'volume', volumeId: 9 }, value: 69_000 },
+              },
+              discountAmount: 0,
+              deliveryFee: 25_000,
+              total: 244_000,
+              amountDue: 244_000,
+            },
+            lines: [
+              { ...line(0), qty: 1, unitPrice: 219_000, regularUnitPrice: 219_000, lineTotal: 219_000 },
+              {
+                ...line(1),
+                nameRu: 'Rain Tea',
+                nameUz: 'Rain Tea',
+                ml: 10,
+                qty: 1,
+                unitPrice: 0,
+                regularUnitPrice: 69_000,
+                lineTotal: 0,
+                promoGift: true,
+              },
+            ],
+          }),
+          language,
+        ).text,
+        { parse_mode: 'HTML' },
+      ).replace(/[\u00a0\u202f]/g, ' ');
+    const ru = gift('ru');
+    expect(ru).toContain('• Подарок по промокоду RAINTEA: Rain Tea 10 мл');
+    expect(ru).not.toContain('Скидка');
+    expect(ru).not.toMatch(/Rain Tea.*— 0/);
+    expect(ru).toContain('Итого: 244 000 сум');
+    expect(gift('uz')).toContain('• RAINTEA promokodi sovgʻasi: Rain Tea 10 ml');
+  });
+
   it('escapes what people typed, everywhere it appears', () => {
     const { text } = renderCard(
       data({

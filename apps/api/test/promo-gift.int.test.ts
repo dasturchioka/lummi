@@ -12,6 +12,7 @@ import {
   fragrances,
   orderLines,
   orders,
+  outbox,
   regions,
   volumes,
 } from '@lummi/db';
@@ -321,6 +322,9 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
       promoGift: true,
     });
     expect(order.lines[0]).toMatchObject({ promoGift: false, lineTotal: 219_000 });
+    // the bot's «Заказ оформлен» names the gift, so the shopper knows it is in the parcel
+    const [created] = await t.db.select().from(outbox);
+    expect(created!.text).toContain(`Подарок по промокоду: ${order.lines[1]!.name.ru} 10 мл`);
     expect(await s.available(giftSlug, 10)).toBe(before - 1);
     expect(await usesOf()).toMatchObject({ uses: 1, state: 'exhausted' });
 

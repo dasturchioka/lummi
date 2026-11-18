@@ -186,8 +186,18 @@ function cardText(
 
   const sorted = [...d.lines].sort((a, b) => a.position - b.position);
   const shown = squeeze.lines === null ? sorted : sorted.slice(0, squeeze.lines);
+  // a gift code's gift (ADR 0039): named with its code; it costs nothing, so no discount row
+  const giftCode = o.discount?.type === 'promo_code' && o.discount.gift ? o.discount.code : null;
   for (const l of shown) {
     const name = escapeHtml(language === 'uz' ? l.nameUz : l.nameRu);
+    if (l.promoGift) {
+      const what = l.kind === 'volume' ? `${name} ${l.ml} ${unitMl(language)}` : name;
+      const label = fill(admin.detail.promoGiftSource, { code: escapeHtml(giftCode ?? '') });
+      out.push(`• ${label}: ${what}`);
+      if (l.setComposition)
+        out.push(`   ${escapeHtml(l.setComposition.map((f) => f.name).join(', '))}`);
+      continue;
+    }
     const what = l.kind === 'volume' ? `${name}, ${l.ml} ${unitMl(language)}` : name;
     out.push(`• ${what} × ${l.qty} — ${money(l.lineTotal)}`);
     if (l.setComposition)
@@ -195,7 +205,7 @@ function cardText(
   }
   if (shown.length < sorted.length)
     out.push(fill(g.moreLines, { n: String(sorted.length - shown.length) }));
-  if (o.discount) {
+  if (o.discount && giftCode === null) {
     const source = fill(admin.detail.discountSource[o.discount.type], {
       code: o.discount.type === 'promo_code' ? escapeHtml(o.discount.code) : '',
     });

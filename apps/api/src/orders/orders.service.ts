@@ -545,7 +545,7 @@ export class OrdersService {
         targetId: order.id,
         payload: { number: order.number, total: order.total, status: order.status },
       });
-      await this.outbox.enqueue(tx, this.createdMessage(c, order));
+      await this.outbox.enqueue(tx, this.createdMessage(c, order, lines));
       return { kind: 'created', order: toOrderDto(order, lines, null) } as const;
     }
   }
@@ -628,16 +628,27 @@ export class OrdersService {
   }
 
   /** "Order created" in the customer's language, with «Открыть заказ» opening the order (spec 2026-11-07). */
-  private createdMessage(c: CustomerRow, order: OrderRow) {
-    const t = dictionaries[c.language].bot;
+  private createdMessage(c: CustomerRow, order: OrderRow, lines: OrderLineRow[]) {
+    const dict = dictionaries[c.language];
+    const t = dict.bot;
     const url = this.env.MINIAPP_URL ? orderUrl(this.env.MINIAPP_URL, order.number) : null;
+    // a gift code's gift (ADR 0039) is named, so the shopper knows it is in the parcel
+    const gift = lines.find((l) => l.promoGift);
+    const giftName = !gift
+      ? null
+      : gift.kind === 'volume'
+        ? `${gift.nameRu} ${gift.ml} ${dict.admin.orders.export.ml}`
+        : c.language === 'uz'
+          ? gift.nameUz
+          : gift.nameRu;
+    const created = fill(t.orderCreated, {
+      number: String(order.number),
+      amount: formatMoney(order.amountDue, c.language),
+      until: formatDateTime(order.reserveUntil, c.language),
+    });
     return {
       chatId: c.telegramId,
-      text: fill(t.orderCreated, {
-        number: String(order.number),
-        amount: formatMoney(order.amountDue, c.language),
-        until: formatDateTime(order.reserveUntil, c.language),
-      }),
+      text: giftName ? `${created}\n\n${fill(t.orderCreatedGift, { gift: giftName })}` : created,
       options: url
         ? { reply_markup: { inline_keyboard: [[{ text: t.openOrder, web_app: { url } }]] } }
         : {},
