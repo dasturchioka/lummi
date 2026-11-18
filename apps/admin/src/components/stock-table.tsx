@@ -1,8 +1,14 @@
 'use client';
 
-import type { StockLevel, StockRow } from '@lummi/contracts';
-import { plural, type Language } from '@lummi/i18n';
+import {
+  STOCK_REASON_MAX,
+  type FragranceOil,
+  type StockLevel,
+  type StockRow,
+} from '@lummi/contracts';
+import { formatMoney, plural, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -13,14 +19,20 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
-import { QUIET_ACTION } from '@/lib/ui-classes';
+import { QUIET_ACTION, TEXT_LINK } from '@/lib/ui-classes';
 import { cn, fill } from '@/lib/utils';
 
 /** What the row's editor is doing. `conflict` carries the count somebody else saved meanwhile. */
 type Edit =
-  | { step: 'typing'; value: string; error?: 'invalid' | 'failed' | 'busy' }
-  | { step: 'below'; value: number }
-  | { step: 'conflict'; value: number; current: number };
+  | {
+      step: 'typing';
+      value: string;
+      /** Why the count changed (#76): required, kept in the fragrance's history. */
+      reason: string;
+      error?: 'invalid' | 'reason' | 'failed' | 'busy';
+    }
+  | { step: 'below'; value: number; reason: string }
+  | { step: 'conflict'; value: number; current: number; reason: string };
 
 /** Highlight without alarm colours (DESIGN.md): Stone for nothing left, Sage wash for running low. */
 function StateTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
@@ -52,6 +64,67 @@ function ShortTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
   );
 }
 
+/** A fragrance's oil (#76): none left or running low, in the stock tags' own tones. */
+function OilTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
+  if (level === 'ok') return null;
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-semibold',
+        level === 'zero' ? 'bg-stone text-graphite' : 'bg-sage-wash text-sage-ink',
+      )}
+    >
+      {level === 'zero' ? t.stock.oilZero : t.stock.oilLow}
+    </span>
+  );
+}
+
+/**
+ * The fragrance's oil line (#76, ADR 0041): the balance in grams and the litres of perfume it
+ * still makes, the low-oil tag, the stock at cost for the owner, and the way to its warehouse page.
+ */
+function OilLine({
+  oil,
+  name,
+  language,
+  t,
+}: {
+  oil: FragranceOil | undefined;
+  name: string;
+  language: Language;
+  t: AdminMessages;
+}) {
+  const s = t.stock;
+  if (!oil) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-small"
+      data-testid={`oil-${oil.fragranceId}`}
+      data-level={oil.level}
+    >
+      <span>
+        <span className="text-muted-foreground">{s.oil} </span>
+        <span className="font-semibold tabular-nums">
+          {fill(s.oilLine, { grams: num(oil.oilGrams), litres: num(oil.liquidLitres) })}
+        </span>
+      </span>
+      <OilTag level={oil.level} t={t} />
+      {oil.value?.total != null && (
+        <span className="text-muted-foreground tabular-nums">
+          {fill(s.value, { sum: formatMoney(oil.value.total, language) })}
+        </span>
+      )}
+      <Link
+        href={`/stock/${oil.fragranceId}`}
+        className={cn(TEXT_LINK, 'text-small')}
+        aria-label={fill(s.openLabel, { name })}
+      >
+        {s.open}
+      </Link>
+    </div>
+  );
+}
+
 /**
  * The stock table (#27). On hand edits inline for owner and manager: the row opens an input; below
  * the reserve it asks first and says why (ADR 0010: allowed, never silent); a 409 shows the count
@@ -61,17 +134,23 @@ function ShortTag({ level, t }: { level: StockLevel; t: AdminMessages }) {
  */
 export function StockTable({
   rows: served,
+  oil,
   lowThreshold,
+  lowOilLitres,
   total,
   language,
   t,
 }: {
   rows: StockRow[];
+  /** Each fragrance's oil on this page (#76). */
+  oil: FragranceOil[];
   lowThreshold: number;
+  lowOilLitres: number;
   total: number;
   language: Language;
   t: AdminMessages;
 }) {
+  const oilOf = new Map(oil.map((o) => [o.fragranceId, o]));
   const router = useRouter();
   /** Rows re-read from the server after a 409, until the page's own refresh brings the same numbers. */
   const [fresh, setFresh] = useState<Record<string, StockRow>>({});
@@ -87,7 +166,7 @@ export function StockTable({
 
   const open = (r: StockRow) => {
     setSavedKey(null);
-    setEditing({ key: r.key, edit: { step: 'typing', value: String(r.onHand) } });
+    setEditing({ key: r.key, edit: { step: 'typing', value: String(r.onHand), reason: '' } });
   };
   const close = () => setEditing(null);
 
@@ -101,9 +180,9 @@ export function StockTable({
   }
 
   /** One save, always compare-and-set against the count the row showed (or the one the 409 returned). */
-  async function save(r: StockRow, onHand: number, expected: number) {
+  async function save(r: StockRow, onHand: number, expected: number, reason: string) {
     setSaving(r.key);
-    const body = { onHand, expected };
+    const body = { onHand, expected, reason };
     try {
       const res =
         r.kind === 'discovery'
@@ -118,7 +197,7 @@ export function StockTable({
         await reread(r);
         setEditing({
           key: r.key,
-          edit: { step: 'conflict', value: onHand, current: res.body.current },
+          edit: { step: 'conflict', value: onHand, current: res.body.current, reason },
         });
         router.refresh();
       } else {
@@ -127,27 +206,36 @@ export function StockTable({
           edit: {
             step: 'typing',
             value: String(onHand),
+            reason,
             error: res.status === 409 ? 'busy' : 'failed',
           },
         });
       }
     } catch {
-      setEditing({ key: r.key, edit: { step: 'typing', value: String(onHand), error: 'failed' } });
+      setEditing({
+        key: r.key,
+        edit: { step: 'typing', value: String(onHand), reason, error: 'failed' },
+      });
     } finally {
       setSaving(null);
     }
   }
 
   /** Submit from the input: validate, then ask first when it drops below the reserve. */
-  function submit(r: StockRow, value: string) {
+  function submit(r: StockRow, value: string, typed: string) {
+    const reason = typed.trim();
     if (!/^\d{1,7}$/.test(value) || Number(value) > 1_000_000) {
-      setEditing({ key: r.key, edit: { step: 'typing', value, error: 'invalid' } });
+      setEditing({ key: r.key, edit: { step: 'typing', value, reason: typed, error: 'invalid' } });
       return;
     }
     const next = Number(value);
     if (next === r.onHand) return close();
-    if (next < r.reserved) setEditing({ key: r.key, edit: { step: 'below', value: next } });
-    else void save(r, next, r.onHand);
+    if (!reason) {
+      setEditing({ key: r.key, edit: { step: 'typing', value, reason: typed, error: 'reason' } });
+      return;
+    }
+    if (next < r.reserved) setEditing({ key: r.key, edit: { step: 'below', value: next, reason } });
+    else void save(r, next, r.onHand, reason);
   }
 
   const editor = (r: StockRow, active: Edit, layout: 'block' | 'table') => (
@@ -158,12 +246,16 @@ export function StockTable({
       saving={saving === r.key}
       t={t}
       name={label(r)}
-      onChange={(value) => setEditing({ key: r.key, edit: { step: 'typing', value } })}
-      onSubmit={(value) => submit(r, value)}
-      onConfirmBelow={(value) => void save(r, value, r.onHand)}
-      onOverwrite={(value, current) => void save(r, value, current)}
+      onChange={(value, reason) =>
+        setEditing({ key: r.key, edit: { step: 'typing', value, reason } })
+      }
+      onSubmit={(value, reason) => submit(r, value, reason)}
+      onConfirmBelow={(value, reason) => void save(r, value, r.onHand, reason)}
+      onOverwrite={(value, current, reason) => void save(r, value, current, reason)}
       onCancel={close}
-      onBack={(value) => setEditing({ key: r.key, edit: { step: 'typing', value: String(value) } })}
+      onBack={(value, reason) =>
+        setEditing({ key: r.key, edit: { step: 'typing', value: String(value), reason } })
+      }
     />
   );
   const changeButton = (r: StockRow) => (
@@ -190,41 +282,53 @@ export function StockTable({
           .filter(Boolean)
           .join(' · ');
   /** The Discovery set is its own card; a fragrance's volumes (the rows arrive together) share one. */
-  const groups = rows.reduce<{ key: string; title: string; hidden: boolean; rows: StockRow[] }[]>(
-    (out, r) => {
-      const key = r.kind === 'discovery' ? 'discovery' : `f${r.fragranceId}`;
-      const last = out[out.length - 1];
-      if (last && last.key === key) last.rows.push(r);
-      else
-        out.push({
-          key,
-          title: r.kind === 'discovery' ? s.discovery : r.name!,
-          hidden: r.hidden,
-          rows: [r],
-        });
-      return out;
-    },
-    [],
-  );
+  const groups = rows.reduce<
+    {
+      key: string;
+      fragranceId: number | null;
+      title: string;
+      hidden: boolean;
+      rows: StockRow[];
+    }[]
+  >((out, r) => {
+    const key = r.kind === 'discovery' ? 'discovery' : `f${r.fragranceId}`;
+    const last = out[out.length - 1];
+    if (last && last.key === key) last.rows.push(r);
+    else
+      out.push({
+        key,
+        fragranceId: r.fragranceId,
+        title: r.kind === 'discovery' ? s.discovery : r.name!,
+        hidden: r.hidden,
+        rows: [r],
+      });
+    return out;
+  }, []);
   const tone = (level: StockLevel) =>
     level === 'zero' ? 'bg-stone/30' : level === 'low' ? 'bg-sage-wash' : '';
 
   return (
     <Card className="@container">
       <p className="border-b border-border px-4 py-3 text-small text-muted-foreground tabular-nums @xl:px-5">
-        {plural(language, total, s.total)} · {fill(s.lowHint, { n: num(lowThreshold) })}
+        {plural(language, total, s.total)} · {fill(s.lowHint, { n: num(lowThreshold) })}{' '}
+        {fill(s.oilHint, { n: num(lowOilLitres) })}
       </p>
       {/* phones and narrow cards: a card per fragrance with a short line per volume, so reserve and
           available need no side scroll and 60 volumes are not 60 cards */}
       <ul className="divide-y divide-border @3xl:hidden">
         {groups.map((g) => (
           <li key={g.key} data-testid={`stock-card-${g.key}`} className="grid gap-1 px-4 py-3.5">
-            <div className="min-w-0">
-              <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
-                {g.title}
-              </span>
-              {g.hidden && (
-                <span className="block text-small text-muted-foreground">{s.hiddenTag}</span>
+            <div className="grid min-w-0 gap-1">
+              <div>
+                <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
+                  {g.title}
+                </span>
+                {g.hidden && (
+                  <span className="block text-small text-muted-foreground">{s.hiddenTag}</span>
+                )}
+              </div>
+              {g.fragranceId !== null && (
+                <OilLine oil={oilOf.get(g.fragranceId)} name={g.title} language={language} t={t} />
               )}
             </div>
             <ul className="grid gap-1.5">
@@ -295,20 +399,54 @@ export function StockTable({
             </TR>
           </THead>
           <TBody>
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const active = editing?.key === r.key ? editing.edit : null;
+              const firstOfFragrance =
+                r.kind === 'volume' && rows[i - 1]?.fragranceId !== r.fragranceId;
               return (
                 <Fragment key={r.key}>
+                  {firstOfFragrance && (
+                    <TR
+                      data-testid={`stock-fragrance-f${r.fragranceId}`}
+                      className="bg-milk/40 [tbody>&]:hover:bg-milk/40"
+                    >
+                      <TD colSpan={5} className="h-auto py-3">
+                        <div className="grid gap-1">
+                          <span className="font-semibold leading-snug [overflow-wrap:anywhere]">
+                            {r.name}
+                            {r.hidden && (
+                              <span className="ml-2 text-small font-normal text-muted-foreground">
+                                {s.hiddenTag}
+                              </span>
+                            )}
+                          </span>
+                          <OilLine
+                            oil={oilOf.get(r.fragranceId!)}
+                            name={r.name!}
+                            language={language}
+                            t={t}
+                          />
+                        </div>
+                      </TD>
+                    </TR>
+                  )}
                   <TR
                     data-testid={`stock-row-${r.key}`}
                     data-level={r.level}
                     className={tone(r.level)}
                   >
                     <TD className="min-w-[13rem] max-w-[22rem]">
-                      <span className="block font-semibold leading-snug [overflow-wrap:anywhere]">
-                        {r.kind === 'discovery' ? s.discovery : r.name}
-                      </span>
-                      <span className="block text-small text-muted-foreground">{sub(r)}</span>
+                      {r.kind === 'discovery' ? (
+                        <>
+                          <span className="block font-semibold leading-snug">{s.discovery}</span>
+                          <span className="block text-small text-muted-foreground">{sub(r)}</span>
+                        </>
+                      ) : (
+                        // the fragrance's name heads its rows; the volume reads under it
+                        <span className="block pl-3 font-medium">
+                          {fill(s.ml, { ml: String(r.ml) })}
+                        </span>
+                      )}
                     </TD>
                     <TD className="text-right whitespace-nowrap">
                       {active ? null : (
@@ -374,15 +512,16 @@ function Editor({
   saving: boolean;
   name: string;
   t: AdminMessages;
-  onChange: (value: string) => void;
-  onSubmit: (value: string) => void;
-  onConfirmBelow: (value: number) => void;
-  onOverwrite: (value: number, current: number) => void;
+  onChange: (value: string, reason: string) => void;
+  onSubmit: (value: string, reason: string) => void;
+  onConfirmBelow: (value: number, reason: string) => void;
+  onOverwrite: (value: number, current: number, reason: string) => void;
   onCancel: () => void;
-  onBack: (value: number) => void;
+  onBack: (value: number, reason: string) => void;
 }) {
   const s = t.stock;
   const inputId = `on-hand-${layout}-${row.key}`;
+  const reasonId = `count-reason-${layout}-${row.key}`;
   if (edit.step === 'below') {
     return (
       <div className="grid max-w-[60ch] gap-3">
@@ -392,10 +531,14 @@ function Editor({
           {fill(s.belowText, { onHand: num(edit.value), reserved: num(row.reserved) })}
         </Notice>
         <div className="flex flex-wrap gap-2">
-          <Button loading={saving} onClick={() => onConfirmBelow(edit.value)}>
+          <Button loading={saving} onClick={() => onConfirmBelow(edit.value, edit.reason)}>
             {s.belowConfirm}
           </Button>
-          <Button variant="outline" disabled={saving} onClick={() => onBack(edit.value)}>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => onBack(edit.value, edit.reason)}
+          >
             {s.back}
           </Button>
         </div>
@@ -409,7 +552,10 @@ function Editor({
           {s.changedText}
         </Notice>
         <div className="flex flex-wrap gap-2">
-          <Button loading={saving} onClick={() => onOverwrite(edit.value, edit.current)}>
+          <Button
+            loading={saving}
+            onClick={() => onOverwrite(edit.value, edit.current, edit.reason)}
+          >
             {fill(s.changedConfirm, { value: num(edit.value), current: num(edit.current) })}
           </Button>
           <Button variant="outline" disabled={saving} onClick={onCancel}>
@@ -424,25 +570,41 @@ function Editor({
       className="grid max-w-[34rem] gap-3"
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit(edit.value);
+        onSubmit(edit.value, edit.reason);
       }}
     >
       <div className="grid gap-1.5">
         <label htmlFor={inputId} className="text-[12.5px] font-medium text-muted-foreground">
           {s.newOnHand} · {name}
         </label>
+        <Input
+          id={inputId}
+          autoFocus
+          inputMode="numeric"
+          pattern="[0-9]+"
+          autoComplete="off"
+          enterKeyHint="next"
+          className="w-32 tabular-nums"
+          aria-invalid={edit.error === 'invalid' || undefined}
+          value={edit.value}
+          onChange={(e) => onChange(e.target.value, edit.reason)}
+        />
+      </div>
+      <div className="grid gap-1.5">
+        <label htmlFor={reasonId} className="text-[12.5px] font-medium text-muted-foreground">
+          {s.reason}
+        </label>
         <div className="flex flex-wrap gap-2">
           <Input
-            id={inputId}
-            autoFocus
-            inputMode="numeric"
-            pattern="[0-9]+"
+            id={reasonId}
             autoComplete="off"
             enterKeyHint="done"
-            className="w-32 tabular-nums"
-            aria-invalid={edit.error === 'invalid' || undefined}
-            value={edit.value}
-            onChange={(e) => onChange(e.target.value)}
+            maxLength={STOCK_REASON_MAX}
+            placeholder={s.reasonPlaceholder}
+            className="min-w-0 flex-1 basis-56"
+            aria-invalid={edit.error === 'reason' || undefined}
+            value={edit.reason}
+            onChange={(e) => onChange(edit.value, e.target.value)}
           />
           <Button type="submit" loading={saving}>
             {s.save}
@@ -454,7 +616,13 @@ function Editor({
       </div>
       {edit.error && (
         <p role="alert" className="text-xs font-medium">
-          {edit.error === 'invalid' ? s.invalid : edit.error === 'busy' ? s.tryAgain : s.failed}
+          {edit.error === 'invalid'
+            ? s.invalid
+            : edit.error === 'reason'
+              ? s.reasonRequired
+              : edit.error === 'busy'
+                ? s.tryAgain
+                : s.failed}
         </p>
       )}
     </form>

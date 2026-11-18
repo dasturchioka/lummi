@@ -174,7 +174,50 @@ const showEditor = (page: Page) =>
     .first()
     .evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
+/** Oil for the first fragrance (#76): one made-up receipt of 250 g and its stock move. */
+async function someOil(db: ShotSql) {
+  await db.query('update fragrances set oil_mg = 250000 where id = 1');
+  await db.query(
+    `insert into oil_receipts (fragrance_id, supplier, invoice, received_on, oil_mg, price_per_gram,
+       discount_percent, import_percent)
+     values (1, 'Test Oils', 'INV-0001', '2026-11-17', 250000, 4000, 9, 3)`,
+  );
+  await db.query(
+    `insert into stock_moves (fragrance_id, kind, oil_mg, receipt_id, details, actor_type)
+     select 1, 'receipt', 250000, max(id), '{"invoice":"INV-0001","supplier":"Test Oils"}', 'system'
+     from oil_receipts`,
+  );
+}
+async function noOil(db: ShotSql) {
+  await db.query('delete from stock_moves');
+  await db.query('delete from bottlings');
+  await db.query('delete from oil_receipts');
+  await db.query('update fragrances set oil_mg = 0');
+}
+
 export const stockScreens: Screen[] = [
+  // the raw-material warehouse (#76): a fragrance's oil, receipts, bottling and history
+  {
+    id: 'warehouse',
+    path: '/stock/1',
+    as: 'owner',
+    setup: ({ db }) => someOil(db),
+    teardown: ({ db }) => noOil(db),
+  },
+  {
+    id: 'warehouse-manager',
+    path: '/stock/1',
+    as: 'manager',
+    setup: ({ db }) => someOil(db),
+    teardown: ({ db }) => noOil(db),
+  },
+  {
+    id: 'stock-oil-low',
+    path: '/stock?filter=oilLow',
+    as: 'owner',
+    setup: ({ db }) => someOil(db),
+    teardown: ({ db }) => noOil(db),
+  },
   {
     id: 'stock',
     path: '/stock',
@@ -218,6 +261,7 @@ export const stockScreens: Screen[] = [
     act: async ({ page }) => {
       await editFirst(page);
       await page.locator('input[id^="on-hand-"]:visible').fill('1');
+      await page.locator('input[id^="count-reason-"]:visible').fill('Пересчёт');
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]:visible').first().waitFor();
       await showEditor(page);
@@ -239,9 +283,10 @@ export const stockScreens: Screen[] = [
       const volumeId = (await input.getAttribute('id'))!.split('-v').pop()!;
       const origin = new URL(page.url()).origin;
       const other = await page.request.patch(`${origin}/api/admin/volumes/${volumeId}/on-hand`, {
-        data: { onHand: 19 },
+        data: { onHand: 19, reason: 'Пересчёт' },
       });
       if (!other.ok()) throw new Error(`the other editor's save failed: ${other.status()}`);
+      await page.locator('input[id^="count-reason-"]:visible').fill('Пересчёт');
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]:visible').first().waitFor();
       await showEditor(page);
@@ -255,6 +300,7 @@ export const stockScreens: Screen[] = [
     act: async ({ page }) => {
       const input = page.locator('#set-on-hand');
       await input.fill('7');
+      await page.locator('#set-on-hand-reason').fill('Пересчёт');
       // somebody saved another count while this page was open
       await page.route('**/api/admin/sets/discovery/on-hand', (route) =>
         route.fulfill({ status: 409, json: { code: 'on_hand_changed', current: 12 } }),
@@ -308,32 +354,30 @@ export const customerScreens: Screen[] = [
       await page.locator('[data-testid^="order-row-"]').first().waitFor();
     },
   },
-  ...(['owner', 'manager'] as const).map(
-    (as): Screen => ({
-      // #30: the date of birth on the page; only the owner corrects it (dialog open), a manager
-      // sees the date alone
-      id: `customer-birth-date-${as}`,
-      path: '/customers?q=ali_valiyev',
-      as,
-      setup: async ({ db }) => {
-        await seedCustomers(db);
-        await db.query(
-          `update customers set birth_date = '1996-03-14', birth_date_set_at = now() where telegram_id = $1`,
-          [FIRST],
-        );
-      },
-      teardown: ({ db }) => clearCustomers(db),
-      act: async ({ page }) => {
-        await page.locator('main a[href^="/customers/"]:visible').first().click();
-        await page.locator('[data-testid="birth-date"]').waitFor();
-        if (as === 'owner') {
-          await page.locator('[data-testid="birth-date-edit"]').click();
-          await page.getByRole('dialog').waitFor();
-        }
-      },
-      fullPage: false,
-    }),
-  ),
+  ...(['owner', 'manager'] as const).map((as): Screen => ({
+    // #30: the date of birth on the page; only the owner corrects it (dialog open), a manager
+    // sees the date alone
+    id: `customer-birth-date-${as}`,
+    path: '/customers?q=ali_valiyev',
+    as,
+    setup: async ({ db }) => {
+      await seedCustomers(db);
+      await db.query(
+        `update customers set birth_date = '1996-03-14', birth_date_set_at = now() where telegram_id = $1`,
+        [FIRST],
+      );
+    },
+    teardown: ({ db }) => clearCustomers(db),
+    act: async ({ page }) => {
+      await page.locator('main a[href^="/customers/"]:visible').first().click();
+      await page.locator('[data-testid="birth-date"]').waitFor();
+      if (as === 'owner') {
+        await page.locator('[data-testid="birth-date-edit"]').click();
+        await page.getByRole('dialog').waitFor();
+      }
+    },
+    fullPage: false,
+  })),
   {
     id: 'w-customers-500',
     path: '/customers?sort=spent&page=3',

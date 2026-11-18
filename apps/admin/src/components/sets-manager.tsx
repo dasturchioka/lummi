@@ -1,6 +1,6 @@
 'use client';
 
-import { isUzumUrl, type AdminDiscoverySet } from '@lummi/contracts';
+import { isUzumUrl, STOCK_REASON_MAX, type AdminDiscoverySet } from '@lummi/contracts';
 import { SET_SIZE } from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
@@ -114,6 +114,8 @@ function StockCard({
   const s = t.sets;
   const st = t.stock;
   const [value, setValue] = useState(String(set.onHand));
+  /** Why the count changed (#76): kept in the audit. */
+  const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
   const [state, setState] = useState<'idle' | 'saved' | 'error'>('idle');
   /** A save waiting on the editor: below the reserve (ask first) or somebody else changed the count (409). */
@@ -126,10 +128,13 @@ function StockCard({
   async function save(onHand: number, expected: number) {
     setPending(true);
     setState('idle');
-    const res = await browserApi.sets.setOnHand({ body: { onHand, expected } }).catch(() => null);
+    const res = await browserApi.sets
+      .setOnHand({ body: { onHand, expected, reason: reason.trim() } })
+      .catch(() => null);
     setPending(false);
     if (res?.status === 200) {
       setAsk(null);
+      setReason('');
       setState('saved');
       onSaved();
     } else if (res?.status === 409 && res.body.current !== undefined) {
@@ -163,7 +168,7 @@ function StockCard({
         className="grid gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!valid) return;
+          if (!valid || !reason.trim()) return;
           const next = Number(value);
           if (next < set.reserved) setAsk({ kind: 'below', value: next });
           else void save(next, set.onHand);
@@ -182,6 +187,19 @@ function StockCard({
               setValue(e.target.value);
               setState('idle');
               setAsk(null);
+            }}
+          />
+        </Field>
+        <Field id="set-on-hand-reason" label={st.reason}>
+          <Input
+            autoComplete="off"
+            maxLength={STOCK_REASON_MAX}
+            placeholder={st.reasonPlaceholder}
+            required
+            value={reason}
+            onChange={(e) => {
+              setReason(e.target.value);
+              setState('idle');
             }}
           />
         </Field>
