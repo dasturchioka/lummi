@@ -169,13 +169,13 @@ export interface UzumPlan {
 
 /** A whole number from a cell: «69 000», «69000», «69000.00»; null when it is not one. */
 function wholeNumber(text: string): number | null {
-  const t = text.replace(/[\s  ]/g, '').replace(/,00$|\.00?$/, '');
+  const t = text.replace(/\s/g, '').replace(/,00$|\.00?$/, '');
   return /^\d+$/.test(t) ? Number(t) : null;
 }
 
 /** A percent from a cell: «20,5», «20.5», «20.5 %»; null when it is not one from 0 to 100 with two decimals at most. */
 function percent(text: string): number | null {
-  const t = text.replace(/[\s  %]/g, '').replace(',', '.');
+  const t = text.replace(/[\s%]/g, '').replace(',', '.');
   if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
   const n = Number(t);
   return n <= 100 ? n : null;

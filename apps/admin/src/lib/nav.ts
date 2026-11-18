@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   ShoppingBasket,
   SlidersHorizontal,
+  Store,
   TicketPercent,
   UserCog,
   Users,
@@ -57,6 +58,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: 'orders', icon: ShoppingBag, href: '/orders', roles: ALL },
       { key: 'credits', icon: BanknoteArrowDown, href: '/credits', roles: ALL },
+      { key: 'uzum', icon: Store, href: '/uzum', roles: ALL },
       { key: 'btsPoints', icon: MapPin, href: '/bts-points', roles: ALL },
       { key: 'customers', icon: Users, href: '/customers', roles: ALL },
       { key: 'reviews', icon: MessageSquareText, href: '/reviews', roles: ALL },

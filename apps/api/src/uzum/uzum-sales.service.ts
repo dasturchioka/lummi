@@ -192,6 +192,7 @@ export class UzumSalesService {
             soldOn: sale.soldOn,
             lines: lines.map(lineAudit),
             revenue: sale.revenue,
+            commissionPercent: sale.commissionPercent,
             reason,
           },
         });

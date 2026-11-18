@@ -688,6 +688,9 @@ const describers: Record<string, Describer> = {
       }),
     ];
   },
+  // Uzum sales (#80)
+  'uzum.sale_recorded': (c) => uzumSale(c),
+  'uzum.sale_voided': (c) => uzumSale(c),
 
   'orders.exported': (c) => {
     c.take('filters', 'count');
@@ -948,3 +951,32 @@ export function describeAudit(t: AdminMessages, language: Language, e: AuditEntr
 
 /** Every action this module describes: the table's keys, for the unit test that every action has a case. */
 export const DESCRIBED_ACTIONS = Object.keys(describers);
+
+/** An Uzum sale, recorded or voided: its order, day and lines, its money, the file it came from. */
+function uzumSale(c: Ctx): ReturnType<Describer> {
+  c.take('uzumOrder', 'soldOn', 'lines', 'revenue', 'commissionPercent', 'via', 'rows', 'reason');
+  const d = c.t.audit.detail;
+  const lines = Array.isArray(c.p.lines) ? c.p.lines.filter(isRecord) : [];
+  const rows = Array.isArray(c.p.rows) ? c.p.rows.filter((r) => typeof r === 'number') : [];
+  return [
+    fill(d.uzumSale, {
+      order: str(c.p.uzumOrder) ?? '—',
+      date: when(c.p.soldOn, c.language) ?? '—',
+      lines: lines
+        .map((l) => {
+          const item = str(l.name)
+            ? `${str(l.name)} ${fill(c.t.uzum.ml, { ml: String(l.ml ?? '—') })}`
+            : c.t.uzum.set;
+          return `${item} × ${valueText(c, l.qty)}`;
+        })
+        .join(', '),
+    }),
+    int(c.p.revenue) !== null &&
+      fill(d.uzumMoney, {
+        revenue: money(c, int(c.p.revenue)!),
+        percent: valueText(c, c.p.commissionPercent),
+      }),
+    c.p.via === 'import' && fill(d.uzumImported, { rows: rows.join(', ') || '—' }),
+    str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
+  ];
+}

@@ -815,9 +815,10 @@ function DiscardDialog({
 const bottlesText = (m: StockMove, w: W) =>
   m.bottles.map((b) => `${fill(w.ml, { ml: String(b.ml) })} ${signed(b.change)}`).join(', ');
 
-/** Where it came from: the order, the invoice, or where a count was typed. */
+/** Where it came from: the order, the Uzum order, the invoice, or where a count was typed. */
 function documentText(m: StockMove, w: W): string | null {
   if (m.orderNumber !== null) return fill(w.order, { number: String(m.orderNumber) });
+  if (m.uzumOrder !== null) return fill(w.uzumOrder, { number: m.uzumOrder });
   if (m.invoice !== null) return [m.supplier, m.invoice].filter(Boolean).join(', ');
   if (m.source !== null) return w.sources[m.source];
   return null;

@@ -8,6 +8,7 @@ import { HYPHEN_NAME, WORST_NAME } from './catalog-data';
 import { LIMIT_BANNER, LONG_PAGE, bannersWorst } from './content-data';
 import { SHOT_QR_CODE, WORST_LINK_CODE } from './campaign-data';
 import { customerScreens, stockScreens } from './stock-data';
+import { uzumScreens } from './uzum-data';
 import {
   forgetPromoList,
   forgetUses,
@@ -2407,6 +2408,7 @@ export const screens: Screen[] = [
     },
   },
   ...stockScreens,
+  ...uzumScreens,
   ...customerScreens,
   // ---- Reports (#42): the owner's sales report over the delivered shot orders (9006, 9012,
   // 9013; the returned 9011 drops out), with a partial refund of 9012 sent on 10 November

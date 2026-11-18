@@ -641,6 +641,50 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     ['Аудитория: клиенты на русском, с картинкой', 'Получателей: 40, отправил Aziza'],
     [],
   ],
+  [
+    'uzum.sale_recorded',
+    {
+      uzumOrder: 'UZ-1001',
+      soldOn: '2026-11-18',
+      lines: [
+        { kind: 'volume', name: 'Rain Tea', ml: 10, qty: 2, price: 69_000 },
+        { kind: 'discovery_set', name: null, ml: 10, qty: 1, price: 299_000 },
+      ],
+      revenue: 437_000,
+      commissionPercent: 20.5,
+      via: 'import',
+      rows: [2, 3],
+    },
+    {},
+    [
+      'Заказ Uzum UZ-1001 от 18 ноября: Rain Tea 10 мл × 2, Discovery set × 1',
+      'Выручка 437 000 сум, комиссия Uzum 20,5 %',
+      'Из файла Excel, строки 2, 3',
+    ],
+    [
+      'Uzum buyurtmasi UZ-1001, 18-noyabr: Rain Tea 10 ml × 2, Discovery set × 1',
+      'Tushum 437 000 soʻm, Uzum komissiyasi 20,5 %',
+      'Excel faylidan, qatorlar 2, 3',
+    ],
+  ],
+  [
+    'uzum.sale_voided',
+    {
+      uzumOrder: 'UZ-1001',
+      soldOn: '2026-11-18',
+      lines: [{ kind: 'volume', name: 'Rain Tea', ml: 30, qty: 1, price: 189_000 }],
+      revenue: 189_000,
+      commissionPercent: 20.5,
+      reason: 'Возврат на Uzum',
+    },
+    {},
+    [
+      'Заказ Uzum UZ-1001 от 18 ноября: Rain Tea 30 мл × 1',
+      'Выручка 189 000 сум, комиссия Uzum 20,5 %',
+      'Причина: Возврат на Uzum',
+    ],
+    [],
+  ],
 ];
 
 const move = (_action: string, payload: Record<string, unknown>) => ({
@@ -656,6 +700,15 @@ describe('audit details read as text (#63)', () => {
     expect(say(e, 'ru')).toEqual(ruLines.map(flat));
     if (uzLines.length || ruLines.length === 0) expect(say(e, 'uz')).toEqual(uzLines.map(flat));
     for (const line of say(e, 'uz')) expect(line).not.toMatch(/[{}[\]"]/);
+  });
+
+  it('names every Uzum sale action and its target in both languages (#80)', () => {
+    const actions = apiActions().filter((a) => a.startsWith('uzum.'));
+    expect(actions).toEqual(expect.arrayContaining(['uzum.sale_recorded', 'uzum.sale_voided']));
+    for (const lang of [ru, uz]) {
+      for (const a of actions) expect(lang.audit.actions, a).toHaveProperty([a]);
+      expect(lang.audit.targets).toHaveProperty(['uzum_sale']);
+    }
   });
 
   it('names every warehouse action and target in both languages (#76)', () => {
