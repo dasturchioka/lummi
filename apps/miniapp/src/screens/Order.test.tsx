@@ -83,6 +83,7 @@ const order = (over: Partial<OrderDto> = {}): OrderDto => ({
       qty: 1,
       lineTotal: 69_000,
       setComposition: null,
+      promoGift: false,
     },
   ],
   itemsSubtotal: 69_000,
@@ -169,6 +170,7 @@ describe('set lines', () => {
               markedDown: false,
               qty: 1,
               lineTotal: 299_000,
+              promoGift: false,
               setComposition: five,
             },
           ],
@@ -415,5 +417,67 @@ describe('cancelling an order', () => {
       'Повторить заказ можно, когда он доставлен или отменён.',
     );
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('a gift code’s gift (ADR 0039)', () => {
+  it('lists it at 0 as «Подарок по промокоду»; the totals take nothing off', () => {
+    renderView(
+      <OrderView
+        order={order({
+          lines: [
+            {
+              kind: 'volume',
+              slug: 'tygar',
+              name: { ru: 'Tygar', uz: 'Tygar' },
+              brand: 'Bvlgari',
+              ml: 50,
+              photo: null,
+              unitPrice: 219_000,
+              regularUnitPrice: 219_000,
+              markedDown: false,
+              qty: 1,
+              lineTotal: 219_000,
+              promoGift: false,
+              setComposition: null,
+            },
+            {
+              kind: 'volume',
+              slug: 'rain-tea',
+              name: { ru: 'Rain Tea', uz: 'Rain Tea' },
+              brand: 'Bvlgari',
+              ml: 10,
+              photo: null,
+              unitPrice: 0,
+              regularUnitPrice: 69_000,
+              markedDown: false,
+              qty: 1,
+              lineTotal: 0,
+              promoGift: true,
+              setComposition: null,
+            },
+          ],
+          itemsSubtotal: 219_000,
+          discount: {
+            type: 'promo_code',
+            code: 'RAINTEA',
+            amount: 0,
+            gift: { item: { kind: 'volume', volumeId: 7 }, value: 69_000 },
+          },
+          deliveryFee: 25_000,
+          total: 244_000,
+          amountDue: 244_000,
+        })}
+      />,
+    );
+    const gift = screen.getByTestId('promo-gift-line');
+    const text = (gift.textContent ?? '').replace(/\s/g, '');
+    expect(text).toContain('RainTea');
+    expect(text).toContain('Подарокпопромокоду');
+    expect(text).toContain('0сум');
+    expect(screen.getAllByTestId('order-line')).toHaveLength(1);
+    const summary = (screen.getByTestId('money-summary').textContent ?? '').replace(/\s/g, '');
+    expect(summary).toContain('Подарокпопромокоду0сумПромокодRAINTEA');
+    expect(summary).not.toContain('−');
   });
 });

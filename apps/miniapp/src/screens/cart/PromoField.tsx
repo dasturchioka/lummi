@@ -100,7 +100,10 @@ export function PromoField({
   else if (applied)
     status = {
       tone: 'ok',
-      text: fill(p.applied, { amount: formatMoney(discount.amount, language) }),
+      // a gift code takes nothing off: its gift joins the order (ADR 0039)
+      text: discount.gift
+        ? p.appliedGift
+        : fill(p.applied, { amount: formatMoney(discount.amount, language) }),
     };
   else if (showsStored && entered?.invalid)
     status = {

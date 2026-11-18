@@ -134,7 +134,9 @@ export function DiscountChoice({
     const bottle = bottleOf(o.discount, cart.lines, c.bottle);
     return [
       <span key="amount" className="whitespace-nowrap text-sage-ink tabular-nums">
-        −{formatMoney(o.discount.amount, language)}
+        {o.discount.type === 'promo_code' && o.discount.gift
+          ? t.cart.promoGift
+          : `−${formatMoney(o.discount.amount, language)}`}
       </span>,
       bottle,
       o.terms ? <span className="whitespace-nowrap">{until(o.terms.lastDay)}</span> : null,

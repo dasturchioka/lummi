@@ -30,6 +30,7 @@ import { CardIcon } from '../orders/icons';
 import { MoneySummary, SectionTitle } from '../orders/parts';
 import { checkoutKey, useCheckout, useCreateOrder, useOrdersText } from '../orders/queries';
 import { OrderLine } from '../orders/OrderLine';
+import { promoGiftLine } from '../cart/promo-gift';
 import { SavedPointPicker } from '../orders/saved-points';
 import { usePrefs } from '../lib/prefs';
 import { goBackOrCatalog } from '../lib/navigation';
@@ -780,6 +781,14 @@ export function Checkout() {
         <SectionTitle>{o.checkout.summary}</SectionTitle>
         {data.item && data.quote.lines[0] ? (
           <BuyNowItem line={data.item} priced={data.quote.lines[0]} />
+        ) : null}
+        {/* a gift code's free item comes with the order (ADR 0039): shown, so it is expected */}
+        {data.promoGift ? (
+          <Card as="ul" className="mb-3 overflow-hidden" data-testid="checkout-promo-gift">
+            <OrderLine
+              line={promoGiftLine(data.promoGift, setsMessages[language].sets.lineDiscovery)}
+            />
+          </Card>
         ) : null}
         <MoneySummary
           itemCount={data.itemCount}

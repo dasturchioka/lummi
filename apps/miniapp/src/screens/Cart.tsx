@@ -20,11 +20,13 @@ import {
   useSetQuantity,
 } from '../cart/queries';
 import { useChooseDiscount } from '../cart/choose';
+import { promoGiftLine } from '../cart/promo-gift';
 import { useStaleChoice, type Lapsed } from '../cart/stale-choice';
 import { useDiscountsText } from '../discounts/queries';
 import { deliveryPlace } from '../delivery/queries';
 import { useSetsText } from '../sets/actions';
 import { usePrefs } from '../lib/prefs';
+import { OrderLine } from '../orders/OrderLine';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Figure } from '../ui/Figure';
@@ -618,6 +620,7 @@ export function CartView({
   lapsed?: Lapsed | null;
 }) {
   const rows = useRows(data);
+  const s = useSetsText();
   return (
     <Screen footer={<Totals cart={data} onCheckout={onCheckout} />}>
       <ScreenHeaderTitle />
@@ -649,6 +652,8 @@ export function CartView({
             </li>
           ),
         )}
+        {/* a gift code's free item (ADR 0039): not a cart line, so no stepper and no removal */}
+        {data.promoGift ? <OrderLine line={promoGiftLine(data.promoGift, s.lineDiscovery)} /> : null}
       </Card>
       <PromoField
         stored={data.promoCode}

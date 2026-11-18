@@ -58,7 +58,12 @@ const priced = (
 
 const noQuoteExtras = { alternatives: [], promoCode: null, staleChoice: false };
 /** The cart's own extras when there is nothing to choose between (#39). */
-const noChoice = { discountOptions: [], entitlementWaiting: null, lapsedDiscount: null };
+const noChoice = {
+  discountOptions: [],
+  entitlementWaiting: null,
+  lapsedDiscount: null,
+  promoGift: null,
+};
 
 /** An applied discount (a set's upgrade right) and a line capped at what is left. */
 const discount: CartDto = {
@@ -264,6 +269,52 @@ const withCode = (invalid: PromoCodeInvalid | null, code = 'BLOGER10'): CartDto 
   },
 });
 
+/**
+ * A gift code (ADR 0039): its free Rain Tea 10 ml listed under the lines at 0, nothing off the
+ * items; or the Discovery set; or its gift gone («Подарок закончился»).
+ */
+const withGift = (gift: 'volume' | 'discovery_set' | 'sold_out'): CartDto => ({
+  ...plain,
+  lines: PHOTOGRAPHED,
+  promoCode: 'RAINTEA',
+  ...noChoice,
+  promoGift:
+    gift === 'volume'
+      ? { kind: 'volume', photo: PHOTO[10], slug: 'rain-tea', name: 'Rain Tea', brand: 'Bvlgari', ml: 10 }
+      : gift === 'discovery_set'
+        ? {
+            kind: 'discovery_set',
+            photo: null,
+            fragrances: ['Symphony', 'Tygar', 'Megamare', 'Erba Pura', 'Oud Wood'].map((name) => ({
+              slug: name.toLowerCase().replace(' ', '-'),
+              name,
+              brand: 'Louis Vuitton',
+            })),
+          }
+        : null,
+  quote: {
+    ...plain.quote,
+    ...(gift === 'sold_out'
+      ? {}
+      : {
+          discount: {
+            type: 'promo_code',
+            code: 'RAINTEA',
+            amount: 0,
+            gift: {
+              item: gift === 'volume' ? { kind: 'volume', volumeId: 7 } : { kind: 'discovery_set' },
+              value: gift === 'volume' ? 69_000 : 299_000,
+            },
+          },
+          thresholdBase: 'after',
+        }),
+    promoCode: {
+      code: 'RAINTEA',
+      invalid: gift === 'sold_out' ? { reason: 'gift_sold_out' } : null,
+    },
+  },
+});
+
 /** The longest code the admin allows (32 characters), for the break-ui cases (#29). */
 const LONG_CODE = 'BLOGER_MALIKA_NOVOGODNIY_2026_UZ';
 
@@ -386,6 +437,7 @@ const choosing = (
     deliveryCity: null,
     suggestions: [],
     promoCode: more.promoCode ?? null,
+    promoGift: null,
     discountOptions,
     lapsedDiscount: more.lapsed ?? null,
     entitlementWaiting: more.waiting ?? null,
@@ -423,6 +475,9 @@ export const CART_FIXTURES = {
   'worst-nudge': worstNudge,
   unavailable,
   'promo-applied': withCode(null),
+  'promo-gift': withGift('volume'),
+  'promo-gift-set': withGift('discovery_set'),
+  'promo-gift-sold-out': withGift('sold_out'),
   ...promoFixtures,
   'promo-worst': promoWorst,
   'promo-full': promoFull,

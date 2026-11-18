@@ -214,6 +214,8 @@ export const miniappMessages = defineMessages(
       sourceSingle: 'За полный объём',
       sourceBirthday: 'Купон ко дню рождения',
       sourcePromo: 'Промокод {code}',
+      /** A gift code's free item (ADR 0039): its line at 0, and the totals row. */
+      promoGift: 'Подарок по промокоду',
       delivery: 'Доставка BTS, {city}',
       deliveryNoCity: 'Доставка BTS',
       deliveryFree: 'Бесплатно',
@@ -227,6 +229,8 @@ export const miniappMessages = defineMessages(
         apply: 'Применить',
         remove: 'Убрать промокод',
         applied: 'Промокод применён: скидка {amount}',
+        /** A gift code (ADR 0039): nothing comes off, its gift joins the order. */
+        appliedGift: 'Промокод применён: подарок в заказе',
         inCart: 'Промокод {code} уже в корзине',
         notChosen: 'Сейчас выбрана другая скидка',
         reasons: {
@@ -238,6 +242,7 @@ export const miniappMessages = defineMessages(
           not_new_customer: 'Промокод действует только на первый заказ.',
           below_minimum: 'Промокод действует на заказ от {amount}.',
           no_eligible_items: 'Промокод не действует на товары со скидкой.',
+          gift_sold_out: 'Подарок закончился.',
         },
         /** What the shopper can do about each reason, under it in Muted Ink (the cart only). */
         next: {
@@ -249,6 +254,7 @@ export const miniappMessages = defineMessages(
           not_new_customer: 'Заказ можно оформить и без него.',
           below_minimum: 'Добавьте ароматов до этой суммы — и он применится.',
           no_eligible_items: 'Добавьте аромат по обычной цене — и он применится.',
+          gift_sold_out: 'Заказ можно оформить и без него.',
         },
         tooMany: 'Слишком много попыток.',
         tooManyNext: 'До следующей попытки — {time}.',
@@ -519,6 +525,7 @@ export const miniappMessages = defineMessages(
       sourceSingle: 'Toʻliq hajm uchun',
       sourceBirthday: 'Tugʻilgan kun kuponi',
       sourcePromo: 'Promokod {code}',
+      promoGift: 'Promokod sovgʻasi',
       delivery: 'BTS yetkazish, {city}',
       deliveryNoCity: 'BTS yetkazish',
       deliveryFree: 'Bepul',
@@ -532,6 +539,7 @@ export const miniappMessages = defineMessages(
         apply: 'Qoʻllash',
         remove: 'Promokodni olib tashlash',
         applied: 'Promokod qoʻllandi: {amount} chegirma',
+        appliedGift: 'Promokod qoʻllandi: sovgʻa buyurtmada',
         inCart: '{code} promokodi savatda',
         notChosen: 'Hozir boshqa chegirma tanlangan',
         reasons: {
@@ -543,6 +551,7 @@ export const miniappMessages = defineMessages(
           not_new_customer: 'Promokod faqat birinchi buyurtmaga amal qiladi.',
           below_minimum: 'Promokod {amount}dan boshlab buyurtmaga amal qiladi.',
           no_eligible_items: 'Promokod chegirmadagi mahsulotlarga amal qilmaydi.',
+          gift_sold_out: 'Sovgʻa tugadi.',
         },
         next: {
           unknown: 'Yozilishini tekshiring.',
@@ -553,6 +562,7 @@ export const miniappMessages = defineMessages(
           not_new_customer: 'Buyurtmani usiz ham rasmiylashtirish mumkin.',
           below_minimum: 'Shu summagacha ifor qoʻshing — promokod qoʻllanadi.',
           no_eligible_items: 'Oddiy narxdagi ifor qoʻshing — promokod qoʻllanadi.',
+          gift_sold_out: 'Buyurtmani usiz ham rasmiylashtirish mumkin.',
         },
         tooMany: 'Urinishlar juda koʻp.',
         tooManyNext: 'Keyingi urinishgacha — {time}.',
