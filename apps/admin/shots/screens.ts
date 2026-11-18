@@ -41,7 +41,13 @@ function nativeSelect(loc: Locator) {
 async function openList(page: Page, field: Locator) {
   for (let i = 0; i < 4; i++) {
     await field.click();
-    if (await page.getByRole('listbox').isVisible().catch(() => false)) return;
+    if (
+      await page
+        .getByRole('listbox')
+        .isVisible()
+        .catch(() => false)
+    )
+      return;
     await page.waitForTimeout(400);
   }
   await page.getByRole('listbox').waitFor();
@@ -976,16 +982,13 @@ export const screens: Screen[] = [
       await page.getByRole('link', { name: t.audit.filters.reset }).first().waitFor();
     },
   },
+  // several entries of different actions, read as text (#63); the newest are on page one
   {
     id: 'audit-details',
-    path: '/audit?action=setting.changed',
+    path: '/audit',
     as: 'owner',
-    fullPage: false,
     act: async ({ page }) => {
-      await page.locator('summary:visible').first().click();
-      const raw = page.locator('details[open] pre:visible').first();
-      await raw.waitFor();
-      await raw.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await page.getByText('9001').locator('visible=true').first().waitFor();
     },
   },
   // a staff member as the target is named like the actor

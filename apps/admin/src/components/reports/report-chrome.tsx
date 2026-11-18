@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { TabLinks } from '@/components/tab-links';
 import { Notice } from '@/components/ui/notice';
 import type { AdminMessages } from '@/lib/i18n';
+import { QUIET_ACTION } from '@/lib/ui-classes';
 import { cn } from '@/lib/utils';
 
 type Copy = AdminMessages['reports'];
@@ -123,5 +125,40 @@ export function ReportRange({
       {note && <p className="mt-3 text-small text-muted-foreground">{note}</p>}
       {invalid && <Notice title={r.invalidRange} className="mt-3" />}
     </Card>
+  );
+}
+
+/**
+ * «Как считается?»: the full definition of a section's figures, closed by default so a report
+ * reads as numbers first. One per section.
+ */
+export function HowCounted({
+  r,
+  children,
+  className,
+}: {
+  r: Copy;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details className={cn('group text-small', className)}>
+      <summary
+        className={cn(
+          'inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm select-none [&::-webkit-details-marker]:hidden',
+          QUIET_ACTION,
+        )}
+      >
+        <ChevronRight
+          className="size-3.5 transition-transform duration-150 ease-out group-open:rotate-90 motion-reduce:transition-none"
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        {r.how}
+      </summary>
+      <div className="mt-1 mb-2 grid max-w-[64ch] gap-1.5 text-pretty text-muted-foreground">
+        {children}
+      </div>
+    </details>
   );
 }

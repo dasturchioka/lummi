@@ -3,7 +3,21 @@ import {
   type AuditEntryDto,
   type AuditQuery,
 } from '@lummi/contracts';
-import { alias, and, auditLog, customers, desc, eq, sql, staff, type Db } from '@lummi/db';
+import {
+  alias,
+  and,
+  auditLog,
+  customers,
+  desc,
+  eq,
+  fragrances,
+  inArray,
+  promoBanners,
+  sql,
+  staff,
+  volumes,
+  type Db,
+} from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { DB } from '../tokens';
 
@@ -74,6 +88,7 @@ export class AuditQueryService {
       .limit(limit)
       .offset(offset);
 
+    const names = await this.targetNames(rows.map((r) => r.row));
     return rows.map(({ row, staffName, customerName, targetName }) => ({
       id: row.id,
       createdAt: row.createdAt.toISOString(),
@@ -83,9 +98,47 @@ export class AuditQueryService {
       action: row.action,
       targetType: row.targetType,
       targetId: row.targetId,
-      targetName: targetName ?? null,
+      targetName: targetName ?? names.get(`${row.targetType}:${row.targetId}`) ?? null,
       payload: row.payload as Record<string, unknown>,
     }));
+  }
+
+  /**
+   * Names for the targets that have one, in one query per kind for the whole page: a banner's
+   * title, a fragrance's name, and the fragrance a volume belongs to. A deleted row has none.
+   */
+  private async targetNames(rows: { targetType: string; targetId: string | null }[]) {
+    const ids = (type: string) => [
+      ...new Set(
+        rows
+          .filter((r) => r.targetType === type && r.targetId !== null && /^\d+$/.test(r.targetId))
+          .map((r) => Number(r.targetId)),
+      ),
+    ];
+    const out = new Map<string, string>();
+    const banners = ids('promo_banner');
+    if (banners.length)
+      for (const b of await this.db
+        .select({ id: promoBanners.id, title: promoBanners.titleRu })
+        .from(promoBanners)
+        .where(inArray(promoBanners.id, banners)))
+        out.set(`promo_banner:${b.id}`, b.title);
+    const frs = ids('fragrance');
+    if (frs.length)
+      for (const f of await this.db
+        .select({ id: fragrances.id, name: fragrances.name })
+        .from(fragrances)
+        .where(inArray(fragrances.id, frs)))
+        out.set(`fragrance:${f.id}`, f.name);
+    const vols = ids('volume');
+    if (vols.length)
+      for (const v of await this.db
+        .select({ id: volumes.id, name: fragrances.name })
+        .from(volumes)
+        .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+        .where(inArray(volumes.id, vols)))
+        out.set(`volume:${v.id}`, v.name);
+    return out;
   }
 
   /** Staff are listed one by one; customers, the AI and the system are one filter each. */

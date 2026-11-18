@@ -21,7 +21,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { num } from '@/lib/setting-copy';
 import { cn } from '@/lib/utils';
-import { ReportRange, ReportTabs } from './report-chrome';
+import { HowCounted, ReportRange, ReportTabs } from './report-chrome';
 
 const HEADING = 'font-display text-[13px] leading-[1.35] tracking-[0.2em] uppercase';
 
@@ -298,7 +298,7 @@ function FiguresTable<R extends MarketingFigures>({
           <ul className="divide-y divide-border @4xl:hidden">
             {lines.map((line) =>
               'folded' in line ? (
-                <li key={line.key} className="px-4 py-3 text-small text-muted-foreground">
+                <li key={line.key} className="px-4 py-2 text-xs text-muted-foreground/80">
                   {line.label}: {line.folded.join(' · ')}
                 </li>
               ) : (
@@ -344,10 +344,9 @@ function FiguresTable<R extends MarketingFigures>({
               <TBody>
                 {lines.map((line) =>
                   'folded' in line ? (
-                    <TR key={line.key} className="text-muted-foreground">
-                      <TD className="py-2.5 pr-2 pl-5">{line.label}</TD>
-                      <TD colSpan={columns.length} className="px-2">
-                        {line.folded.join(' · ')}
+                    <TR key={line.key} className="text-xs text-muted-foreground/80">
+                      <TD colSpan={columns.length + 1} className="py-2 pr-2 pl-5">
+                        {line.label}: {line.folded.join(' · ')}
                       </TD>
                     </TR>
                   ) : (
@@ -370,9 +369,9 @@ function FiguresTable<R extends MarketingFigures>({
           </div>
         </>
       )}
-      <p className="max-w-[90ch] px-4 pt-2 pb-4 text-small text-muted-foreground @4xl:px-5 @4xl:pb-5">
-        {hint}
-      </p>
+      <HowCounted r={r} className="px-4 pt-1 pb-2 @4xl:px-5 @4xl:pb-3">
+        <p>{hint}</p>
+      </HowCounted>
     </Card>
   );
 }

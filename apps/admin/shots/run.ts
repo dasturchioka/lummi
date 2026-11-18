@@ -17,6 +17,7 @@ import { parseArgs } from 'node:util';
 import { chromium, type BrowserContext } from '@playwright/test';
 import pg from 'pg';
 import { adminMessages } from '@lummi/i18n/admin';
+import { seedShotAudit } from './audit-data';
 import { seedShotBroadcasts } from './broadcast-data';
 import { seedShotCatalog } from './catalog-data';
 import { seedShotContent } from './content-data';
@@ -302,6 +303,7 @@ async function main() {
     resolve(repoRoot, 'apps/api', process.env.FILES_DIR ?? 'media'),
   );
   await seedShotRequests(db);
+  await seedShotAudit(db);
   let count = 0;
   for (const lang of LANGS) {
     // one browser per language: `--lang` is what makes date fields show the local format

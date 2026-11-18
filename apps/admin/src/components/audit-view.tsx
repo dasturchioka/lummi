@@ -1,6 +1,6 @@
 import { settingKeys, settingMeta, type AuditEntryDto, type SettingKey } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { AuditFiltersForm, type AuditFilters } from '@/components/audit-filters';
 import { EmptyState } from '@/components/empty-state';
@@ -14,8 +14,8 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { displayValue, formatTashkent, num, pick } from '@/lib/setting-copy';
 import { describeInput } from '@/lib/setting-input';
-import { QUIET_ACTION } from '@/lib/ui-classes';
-import { cn, fill } from '@/lib/utils';
+import { describeAudit } from '@/lib/audit-describe';
+import { fill } from '@/lib/utils';
 
 export type { AuditFilters };
 
@@ -67,6 +67,16 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
         </span>
       </>
     );
+  // a banner, fragrance or volume by its name (the API looks it up), an order by its number
+  const named =
+    e.targetName ?? (e.targetType === 'order' ? (e.payload.number as number | undefined) : null);
+  if (named !== null && named !== undefined && e.targetType !== 'staff')
+    return (
+      <>
+        {targetLabel(t, e.targetType)}{' '}
+        {e.targetType === 'order' && e.targetName === null ? `№\u00a0${named}` : `«${named}»`}
+      </>
+    );
   return (
     <>
       {targetLabel(t, e.targetType)}
@@ -85,8 +95,8 @@ function cardText(t: AdminMessages, v: unknown): string {
 
 /**
  * A setting change reads "old → new" in the setting's own units (so'm through `formatMoney`), the
- * old value in Muted Ink; the words «было» / «стало» stay for screen readers. The raw payload
- * sits behind «Подробнее».
+ * old value in Muted Ink; the words «было» / «стало» stay for screen readers. Every other action
+ * reads as short lines (`describeAudit`).
  */
 export function Details({
   t,
@@ -128,30 +138,15 @@ export function Details({
       <span className="font-medium">{pair[1]}</span>
     </p>
   ) : null;
-  const raw = Object.keys(payload).length === 0 ? null : JSON.stringify(payload, null, 2);
+  const lines = describeAudit(t, language, e);
   return (
     <div className="grid min-w-0 gap-1">
       {change}
-      {raw && (
-        <details className="group text-[13px]">
-          <summary
-            className={cn(
-              'inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm select-none [&::-webkit-details-marker]:hidden',
-              QUIET_ACTION,
-            )}
-          >
-            <ChevronRight
-              className="size-3.5 transition-transform duration-150 ease-out group-open:rotate-90 motion-reduce:transition-none"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-            {t.audit.more}
-          </summary>
-          <pre className="mt-1 max-h-72 max-w-full overflow-auto rounded-button bg-field p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {raw}
-          </pre>
-        </details>
-      )}
+      {lines.map((line, i) => (
+        <p key={i} className="break-words [overflow-wrap:anywhere]">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
