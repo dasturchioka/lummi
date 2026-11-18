@@ -1,6 +1,6 @@
 import { settingKeys, settingMeta, type AuditEntryDto, type SettingKey } from '@lummi/contracts';
 import { plural, type Language } from '@lummi/i18n';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { AuditFiltersForm, type AuditFilters } from '@/components/audit-filters';
 import { EmptyState } from '@/components/empty-state';
@@ -14,8 +14,8 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { displayValue, formatTashkent, num, pick } from '@/lib/setting-copy';
 import { describeInput } from '@/lib/setting-input';
-import { QUIET_ACTION } from '@/lib/ui-classes';
-import { cn, fill } from '@/lib/utils';
+import { describeAudit, humanise } from '@/lib/audit-describe';
+import { fill } from '@/lib/utils';
 
 export type { AuditFilters };
 
@@ -38,9 +38,9 @@ const knownKey = (id: string | null): id is SettingKey =>
 
 /** Readable action name; a code a later ticket adds shows as the code itself until it is labelled. */
 export const actionLabel = (t: AdminMessages, code: string) =>
-  (t.audit.actions as Record<string, string>)[code] ?? code;
+  (t.audit.actions as Record<string, string>)[code] ?? `${t.audit.what}: ${humanise(code)}`;
 const targetLabel = (t: AdminMessages, type: string) =>
-  (t.audit.targets as Record<string, string>)[type] ?? type;
+  (t.audit.targets as Record<string, string>)[type] ?? `${t.audit.target}: ${humanise(type)}`;
 
 export function who(t: AdminMessages, e: AuditEntryDto): string {
   if (e.actorType === 'staff') return e.actorName ?? t.audit.actors.unknownStaff;
@@ -67,6 +67,21 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
         </span>
       </>
     );
+  // a banner, fragrance or volume by its name (the API looks it up), an order by its number
+  const named = (language === 'uz' ? (e.targetNameUz ?? e.targetName) : e.targetName) || null;
+  if (named)
+    return (
+      <>
+        {targetLabel(t, e.targetType)} «{named}»
+      </>
+    );
+  if (e.targetType === 'order' && typeof e.payload.number === 'number')
+    return (
+      <>
+        {targetLabel(t, e.targetType)} №{'\u00a0'}
+        {e.payload.number}
+      </>
+    );
   return (
     <>
       {targetLabel(t, e.targetType)}
@@ -85,8 +100,8 @@ function cardText(t: AdminMessages, v: unknown): string {
 
 /**
  * A setting change reads "old → new" in the setting's own units (so'm through `formatMoney`), the
- * old value in Muted Ink; the words «было» / «стало» stay for screen readers. The raw payload
- * sits behind «Подробнее».
+ * old value in Muted Ink; the words «было» / «стало» stay for screen readers. Every other action
+ * reads as short lines (`describeAudit`).
  */
 export function Details({
   t,
@@ -128,30 +143,15 @@ export function Details({
       <span className="font-medium">{pair[1]}</span>
     </p>
   ) : null;
-  const raw = Object.keys(payload).length === 0 ? null : JSON.stringify(payload, null, 2);
+  const lines = describeAudit(t, language, e);
   return (
     <div className="grid min-w-0 gap-1">
       {change}
-      {raw && (
-        <details className="group text-[13px]">
-          <summary
-            className={cn(
-              'inline-flex min-h-9 cursor-pointer list-none items-center gap-1 rounded-sm select-none [&::-webkit-details-marker]:hidden',
-              QUIET_ACTION,
-            )}
-          >
-            <ChevronRight
-              className="size-3.5 transition-transform duration-150 ease-out group-open:rotate-90 motion-reduce:transition-none"
-              strokeWidth={1.75}
-              aria-hidden
-            />
-            {t.audit.more}
-          </summary>
-          <pre className="mt-1 max-h-72 max-w-full overflow-auto rounded-button bg-field p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
-            {raw}
-          </pre>
-        </details>
-      )}
+      {lines.map((line, i) => (
+        <p key={i} className="break-words [overflow-wrap:anywhere]">
+          {line}
+        </p>
+      ))}
     </div>
   );
 }
@@ -219,7 +219,15 @@ export function AuditView({ t, language, items, total, page, pageSize, filters, 
                 </div>
                 <MetaLine
                   className="text-small text-muted-foreground [overflow-wrap:anywhere]"
-                  parts={[who(t, e), <Target key="target" t={t} language={language} e={e} />]}
+                  parts={[
+                    who(t, e),
+                    // a sign-in names the actor twice: the object is the same person
+                    !(
+                      e.targetType === 'staff' &&
+                      e.actorType === 'staff' &&
+                      e.targetId === String(e.actorId)
+                    ) && <Target key="target" t={t} language={language} e={e} />,
+                  ]}
                 />
                 <div className="mt-1 text-[13px]">
                   <Details t={t} language={language} e={e} />
