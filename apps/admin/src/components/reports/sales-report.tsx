@@ -1,4 +1,5 @@
 import type {
+  ChannelSales,
   FragranceSales,
   SalesDay,
   SalesFigures,
@@ -69,7 +70,7 @@ export function SalesReportView({
     to: data.to,
     lang: language,
   })}`;
-  const sold = data.totals.orders > 0 || data.totals.refunds > 0;
+  const sold = data.totals.orders > 0 || data.totals.refunds > 0 || data.channels.uzum.sales > 0;
 
   return (
     <>
@@ -102,6 +103,7 @@ export function SalesReportView({
         <div className="grid gap-4 lg:gap-6">
           <Totals r={r} totals={data.totals} money={money} />
           <Profit r={r} profit={data.profit} language={language} money={money} />
+          <Channels r={r} data={data} language={language} money={money} />
           <Days r={r} language={language} data={data} money={money} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className={HEADING}>{r.topTitle}</h2>
@@ -227,6 +229,9 @@ function Totals({
   );
 }
 
+/** A margin as the report shows it: «42 %», or «—» without revenue. */
+const marginText = (m: number | null) => (m === null ? '—' : `${Math.round(m * 100)}\u00a0%`);
+
 /**
  * The range's profit (#77) as figure cards under the sales figures: revenue, cost, profit and
  * margin over the orders with a cost snapshot; how many were left out says so under them.
@@ -251,7 +256,7 @@ function Profit({
       key: 'margin',
       icon: Percent,
       label: f.margin,
-      value: profit.margin === null ? '—' : `${Math.round(profit.margin * 100)}\u00a0%`,
+      value: marginText(profit.margin),
     },
   ];
   return (
@@ -281,6 +286,129 @@ function Profit({
       <HowCounted r={r} className="px-1">
         <p>{f.hint}</p>
         <p>{f.rowsHint}</p>
+      </HowCounted>
+    </section>
+  );
+}
+
+const CHANNELS = ['miniapp', 'uzum', 'total'] as const;
+
+/**
+ * Revenue and profit by channel (#80): the Mini App's delivered orders, the Uzum sales recorded for
+ * the range's days, both. A table on wide screens, one block per channel on phones; a channel's
+ * sales without costs are counted under it.
+ */
+function Channels({
+  r,
+  data,
+  language,
+  money,
+}: {
+  r: Copy;
+  data: SalesReport;
+  language: Language;
+  money: (n: number) => string;
+}) {
+  const c = r.channels;
+  const margin = (x: ChannelSales) => marginText(x.profit.margin);
+  const profit = (x: ChannelSales) => (x.profit.sales === 0 ? '—' : money(x.profit.profit));
+  const th = 'h-auto py-2 align-bottom leading-tight whitespace-normal px-3';
+  const td = 'px-3 text-right whitespace-nowrap';
+  const uncosted = (['miniapp', 'uzum'] as const).filter((k) => data.channels[k].profit.uncosted);
+  return (
+    <section aria-labelledby="report-channels" data-channels>
+      <Card className="@container">
+        <div className="px-4 pt-4 pb-1 @2xl:px-5 @2xl:pt-5">
+          <h2 id="report-channels" className={HEADING}>
+            {c.title}
+          </h2>
+        </div>
+        {/* narrow: one block per channel, profit first */}
+        <ul className="divide-y divide-border @2xl:hidden">
+          {CHANNELS.map((key) => {
+            const x = data.channels[key];
+            return (
+              <li
+                key={key}
+                className={cn('grid gap-1 px-4 py-3.5', key === 'total' && 'bg-milk/60')}
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-semibold">{c[key]}</span>
+                  <span className="text-right">
+                    <span className="sr-only">{c.profit}: </span>
+                    <span className="font-semibold whitespace-nowrap tabular-nums">
+                      {profit(x)}
+                    </span>
+                  </span>
+                </div>
+                <MetaLine
+                  className="text-small text-muted-foreground"
+                  parts={[
+                    <span key="s" className="whitespace-nowrap">
+                      {c.sales} <span className="text-foreground tabular-nums">{num(x.sales)}</span>
+                    </span>,
+                    <span key="r" className="whitespace-nowrap">
+                      {c.revenue}{' '}
+                      <span className="text-foreground tabular-nums">{money(x.revenue)}</span>
+                    </span>,
+                    <span key="c" className="whitespace-nowrap">
+                      {c.commission}{' '}
+                      <span className="text-foreground tabular-nums">{money(x.commission)}</span>
+                    </span>,
+                    <span key="m" className="whitespace-nowrap">
+                      {c.margin} <span className="text-foreground tabular-nums">{margin(x)}</span>
+                    </span>,
+                  ]}
+                />
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden @2xl:block">
+          <Table className="text-[13px]">
+            <THead>
+              <TR>
+                <TH className={th}>{c.channel}</TH>
+                {[c.sales, c.revenue, c.commission, c.profit, c.margin].map((label) => (
+                  <TH key={label} className={cn(th, 'text-right')}>
+                    {label}
+                  </TH>
+                ))}
+              </TR>
+            </THead>
+            <TBody>
+              {CHANNELS.map((key) => {
+                const x = data.channels[key];
+                return (
+                  <TR
+                    key={key}
+                    data-testid={`channel-${key}`}
+                    className={cn(key === 'total' && 'border-t border-border-strong font-semibold')}
+                  >
+                    <TD className="px-3">{c[key]}</TD>
+                    <TD className={td}>{num(x.sales)}</TD>
+                    <TD className={td}>{num(x.revenue)}</TD>
+                    <TD className={td}>{num(x.commission)}</TD>
+                    <TD className={cn(td, 'font-semibold')}>
+                      {x.profit.sales === 0 ? '—' : num(x.profit.profit)}
+                    </TD>
+                    <TD className={td}>{margin(x)}</TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </div>
+      </Card>
+      {uncosted.map((k) => (
+        <p key={k} className="mt-3 px-1 text-small text-pretty text-muted-foreground">
+          {fill(plural(language, data.channels[k].profit.uncosted, c.uncosted), {
+            channel: c[k],
+          })}
+        </p>
+      ))}
+      <HowCounted r={r} className="px-1">
+        <p>{c.hint}</p>
       </HowCounted>
     </section>
   );

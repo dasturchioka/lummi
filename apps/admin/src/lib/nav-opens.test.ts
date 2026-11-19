@@ -7,7 +7,7 @@ const ru = adminMessages.ru.admin;
 describe('opensFor', () => {
   it("lists a manager's sections from NAV, without Home and Profile", () => {
     expect(opensFor('manager', ru)).toBe(
-      'Открыто: Заказы, Поступления, Пункты BTS, Клиенты, Отзывы, Склад, Наборы',
+      'Открыто: Заказы, Поступления, Продажи Uzum, Пункты BTS, Клиенты, Отзывы, Склад, Наборы',
     );
   });
   it('lists only what an owner adds to a manager', () => {
@@ -19,7 +19,7 @@ describe('opensFor', () => {
   it('reads the same in UZ, from the same table', () => {
     const uz = adminMessages.uz.admin;
     expect(opensFor('manager', uz)).toBe(
-      'Ochiq: Buyurtmalar, Tushumlar, BTS punktlari, Mijozlar, Sharhlar, Ombor, Toʻplamlar',
+      'Ochiq: Buyurtmalar, Tushumlar, Uzum savdolari, BTS punktlari, Mijozlar, Sharhlar, Ombor, Toʻplamlar',
     );
     expect(opensFor('owner', uz).startsWith('Menejerdagi hammasi va yana: Katalog')).toBe(true);
   });

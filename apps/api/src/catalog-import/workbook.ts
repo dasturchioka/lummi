@@ -195,7 +195,8 @@ export interface CatalogData {
 
 // ---- writing ----
 
-const HEADER_FILL: ExcelJS.Fill = {
+/** The header row's fill (Stone), every workbook template's. */
+export const HEADER_FILL: ExcelJS.Fill = {
   type: 'pattern',
   pattern: 'solid',
   fgColor: { argb: 'FFCFC6B8' },
@@ -315,7 +316,10 @@ export interface RawWorkbook {
 const fold1 = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /** A cell's text, or why it cannot be trusted: a formula (its stored result may be stale) or an error value. */
-function cellText(cell: ExcelJS.Cell): { text: string; bad?: 'formula_cell' | 'error_cell' } {
+export function cellText(cell: ExcelJS.Cell): {
+  text: string;
+  bad?: 'formula_cell' | 'error_cell';
+} {
   const v = cell.value;
   if (v === null || v === undefined) return { text: '' };
   if (v instanceof Date) return { text: v.toISOString().slice(0, 10) };
@@ -391,7 +395,13 @@ function readTable(
   }
   if (missing) return null;
   if (ws.rowCount - 1 > maxRows) {
-    issues.push({ sheet, row: null, column: null, code: 'too_many_rows', params: { max: maxRows } });
+    issues.push({
+      sheet,
+      row: null,
+      column: null,
+      code: 'too_many_rows',
+      params: { max: maxRows },
+    });
     return null;
   }
   const rows: { row: number; get: (key: string) => string }[] = [];

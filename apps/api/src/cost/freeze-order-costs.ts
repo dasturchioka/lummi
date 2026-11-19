@@ -17,8 +17,8 @@ import {
 } from '@lummi/db';
 import { readCostSettings } from './cost-settings';
 import { PAID_BY } from '../orders/order-read';
-import { lineUnitCost, saleProfit, type CostedItem } from './order-costs';
-import { giftSampleCost, type CostSettings } from './unit-cost';
+import { costSnapshot, type CostedItem } from './order-costs';
+import type { CostSettings } from './unit-cost';
 
 /** What a line is, for its unit cost: its bottle, or its set's five fragrances at the vial size. */
 export function costedItemOf(
@@ -33,12 +33,10 @@ export function costedItemOf(
 
 /**
  * An order's cost snapshot from its lines, the oil prices and the settings now (#77): each line
- * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel. A
- * first order's gift sample (#79, ADR 0042) is no goods: its line costs the calculator's `giftCost`
- * for its own fragrance and goes into the order costs' gift sample. Pure.
- * The goods are known only when every line's unit cost is: otherwise `profit` is null and
- * `missing` names the fragrances without an oil price (ADR 0040: no oil price, no cost); empty, a
- * line had nothing to cost (no fragrance, or a size the model has no cost for).
+ * at its unit cost (a Promo gift's line too), then the order costs on the Mini App channel, by the
+ * one builder `costSnapshot`. A first order's gift sample (#79, ADR 0042) is no goods: its line
+ * costs the calculator's `giftCost` for its own fragrance and goes into the order costs' gift
+ * sample. Pure.
  */
 export function orderCostSnapshot(
   order: Pick<OrderRow, 'itemsSubtotal' | 'discountAmount' | 'deliveryFee'>,
@@ -50,44 +48,17 @@ export function orderCostSnapshot(
   s: CostSettings,
   at: Date,
 ): { snapshot: OrderCostSnapshot; unitCosts: (number | null)[] } {
-  const missing = new Set<number>();
-  const oilPriceOf = (id: number) => oil.get(id)?.oilPrice ?? null;
-  const unitCosts = lines.map((l) => {
-    if (l.giftSample) {
-      const price = l.fragranceId === null ? null : oilPriceOf(l.fragranceId);
-      if (price === null && l.fragranceId !== null) missing.add(l.fragranceId);
-      return price === null ? null : giftSampleCost([price], s);
-    }
-    const item = costedItemOf(l);
-    if (!item) return null;
-    const cost = lineUnitCost(item, oilPriceOf, s);
-    cost.missing.forEach((id) => missing.add(id));
-    return cost.unitCost;
-  });
-  const known = unitCosts.every((c) => c !== null);
-  const sumOf = (sample: boolean) =>
-    lines.reduce((sum, l, i) => (l.giftSample === sample ? sum + unitCosts[i]! * l.qty : sum), 0);
-  const goods = known ? sumOf(false) : null;
-  return {
-    snapshot: {
-      at: at.toISOString(),
-      profit:
-        goods === null
-          ? null
-          : saleProfit(
-              {
-                channel: 'miniapp',
-                revenue: order.itemsSubtotal - order.discountAmount,
-                goods,
-                deliveryPaid: order.deliveryFee,
-                giftSample: sumOf(true),
-              },
-              s,
-            ),
-      missing: [...missing].map((id) => oil.get(id)?.name ?? `#${id}`).sort(),
+  return costSnapshot(
+    lines.map((l) => ({ item: costedItemOf(l), qty: l.qty, giftSample: l.giftSample })),
+    {
+      channel: 'miniapp',
+      revenue: order.itemsSubtotal - order.discountAmount,
+      deliveryPaid: order.deliveryFee,
     },
-    unitCosts,
-  };
+    oil,
+    s,
+    at,
+  );
 }
 
 /**

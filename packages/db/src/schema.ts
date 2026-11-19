@@ -1949,6 +1949,99 @@ export const bottlings = pgTable(
 );
 export type BottlingRow = typeof bottlings.$inferSelect;
 
+/** Where an Uzum sale was typed in: the panel's form, or an Excel file. */
+export const uzumSaleSourceEnum = pgEnum('uzum_sale_source', ['form', 'import']);
+export const uzumSaleLineKindEnum = pgEnum('uzum_sale_line_kind', ['volume', 'discovery_set']);
+
+/**
+ * A sale on Uzum Market (#80), recorded by the owner or a manager. Its bottles left on hand in the
+ * transaction that wrote it (a stock move per fragrance; the Discovery set's own row has no
+ * history). Its profit on the Uzum channel is frozen in `costs` then, like an order's at its
+ * payment (#77). A void, with a reason, brings the bottles back and keeps the row; one standing sale
+ * per Uzum order number.
+ */
+export const uzumSales = pgTable(
+  'uzum_sales',
+  {
+    id: id(),
+    /** The day it sold, a Tashkent date: the reports count it on this day. */
+    soldOn: date('sold_on', { mode: 'string' }).notNull(),
+    uzumOrder: text('uzum_order').notNull(),
+    commissionPercent: numeric('commission_percent', {
+      precision: 5,
+      scale: 2,
+      mode: 'number',
+    }).notNull(),
+    /** What the buyers paid, the lines' totals, integer so'm. */
+    revenue: integer('revenue').notNull(),
+    costs: jsonb('costs').$type<OrderCostSnapshot>().notNull(),
+    source: uzumSaleSourceEnum('source').notNull(),
+    createdBy: bigint('created_by', { mode: 'number' })
+      .notNull()
+      .references(() => staff.id),
+    createdAt: createdAt(),
+    voidedAt: timestamp('voided_at', { withTimezone: true }),
+    voidReason: text('void_reason'),
+    voidedBy: bigint('voided_by', { mode: 'number' }).references(() => staff.id),
+  },
+  (t) => [
+    uniqueIndex('uzum_sales_standing_order_idx')
+      .on(t.uzumOrder)
+      .where(sql`${t.voidedAt} is null`),
+    index('uzum_sales_sold_on_idx').on(t.soldOn),
+    check(
+      'uzum_sales_amounts_check',
+      sql`${t.revenue} >= 0 and ${t.commissionPercent} between 0 and 100`,
+    ),
+    check(
+      'uzum_sales_void_check',
+      sql`(${t.voidedAt} is null) = (${t.voidReason} is null) and (${t.voidedAt} is null) = (${t.voidedBy} is null)`,
+    ),
+  ],
+);
+export type UzumSaleRow = typeof uzumSales.$inferSelect;
+
+/**
+ * A line of an Uzum sale: a volume, or the Discovery set (`set_fragrance_ids`: its five as they
+ * were, for the cost). `fragrance_id` has no foreign key, as on `stock_moves`: a sale holds volume
+ * locks, and a key check on the fragrance would queue behind the fragrance form's `FOR UPDATE`.
+ */
+export const uzumSaleLines = pgTable(
+  'uzum_sale_lines',
+  {
+    id: id(),
+    saleId: bigint('sale_id', { mode: 'number' })
+      .notNull()
+      .references(() => uzumSales.id, { onDelete: 'restrict' }),
+    position: smallint('position').notNull(),
+    kind: uzumSaleLineKindEnum('kind').notNull(),
+    volumeId: bigint('volume_id', { mode: 'number' }).references(() => volumes.id),
+    fragranceId: bigint('fragrance_id', { mode: 'number' }),
+    /** The fragrance's name when it sold; null for the Discovery set. */
+    name: text('name'),
+    ml: smallint('ml').notNull(),
+    qty: integer('qty').notNull(),
+    /** What the buyer paid for one, integer so'm. */
+    price: integer('price').notNull(),
+    lineTotal: integer('line_total').notNull(),
+    /** Frozen when recorded (ADR 0040); null without an oil price. */
+    unitCost: integer('unit_cost'),
+    setFragranceIds: bigint('set_fragrance_ids', { mode: 'number' }).array(),
+  },
+  (t) => [
+    uniqueIndex('uzum_sale_lines_position_idx').on(t.saleId, t.position),
+    check(
+      'uzum_sale_lines_item_check',
+      sql`(${t.kind} = 'volume') = (${t.volumeId} is not null and ${t.fragranceId} is not null)`,
+    ),
+    check(
+      'uzum_sale_lines_amounts_check',
+      sql`${t.qty} > 0 and ${t.price} >= 0 and ${t.lineTotal} = ${t.qty} * ${t.price}`,
+    ),
+  ],
+);
+export type UzumSaleLineRow = typeof uzumSaleLines.$inferSelect;
+
 export const stockMoveKindEnum = pgEnum('stock_move_kind', STOCK_MOVE_KINDS);
 
 /**
@@ -1979,6 +2072,9 @@ export const stockMoves = pgTable(
       onDelete: 'restrict',
     }),
     orderId: bigint('order_id', { mode: 'number' }).references(() => orders.id),
+    uzumSaleId: bigint('uzum_sale_id', { mode: 'number' }).references(() => uzumSales.id, {
+      onDelete: 'restrict',
+    }),
     reason: text('reason'),
     details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
     actorType: actorTypeEnum('actor_type').notNull(),

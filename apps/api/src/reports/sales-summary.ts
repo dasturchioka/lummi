@@ -3,6 +3,7 @@ import {
   formatLocalDate,
   parseLocalDate,
   tashkentDay,
+  type ChannelSales,
   type FragranceSales,
   type SalesDay,
   type SalesFigures,
@@ -11,7 +12,18 @@ import {
   type SetSales,
   type VolumeSales,
 } from '@lummi/contracts';
-import { asc, inArray, orderLines, type Db, type DbOrTx } from '@lummi/db';
+import {
+  and,
+  asc,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  orderLines,
+  uzumSales,
+  type Db,
+  type DbOrTx,
+} from '@lummi/db';
 import { sharedBy } from './shares';
 import { discountShares } from './discount-shares';
 import { countedRefunds, deliveredIn } from './report-orders';
@@ -39,6 +51,12 @@ import { isReportRange, roundedAverage, type TashkentRange } from './report-rang
  *   cost is its lines at their frozen unit cost plus their share of their order's other costs,
  *   shared by the lines' net (`sharedBy`), so the rows' profits add up to the range's; a row with
  *   a line from an order without costs has none.
+ *
+ * - **Channels** (#80): the Mini App is the orders above; Uzum is the Uzum sales recorded for the
+ *   range's days (`sold_on`), voided ones left out, each with the profit frozen when it was
+ *   recorded (the commission, no mailer, no delivery). Revenue is over every sale; commission,
+ *   cost, profit and margin over the ones with costs, as above. The days, totals and rows stay the
+ *   Mini App's (the TZ's figures).
  *
  * Amounts are integer so'm. Refunds are summed in SQL as `bigint` (per order and day); the order
  * figures and the rest are exact integer sums in code, far below 2^53. Every read happens in one
@@ -177,12 +195,24 @@ async function summarise(db: DbOrTx, range: TashkentRange): Promise<SalesReport>
     });
   }
 
+  const profit = profitOf(sold);
+  const miniapp: ChannelSale[] = sold.map((o) => ({
+    revenue: o.items - o.discountAmount,
+    profit: o.profit,
+  }));
+  const uzum = await uzumSalesIn(db, range);
+
   return {
     from: range.from,
     to: range.to,
     days: daily,
     totals,
-    profit: profitOf(sold),
+    profit,
+    channels: {
+      miniapp: channelOf(miniapp),
+      uzum: channelOf(uzum),
+      total: channelOf([...miniapp, ...uzum]),
+    },
     fragrances: ranked([...fragrances.values()], (r) => r.fragranceId).map(
       ({ at: _at, ...r }) => r,
     ),
@@ -257,6 +287,41 @@ function addCost(
   }
   row.cost += cost;
   row.profit += net - cost;
+}
+
+/** One sale of a channel (#80): what it brought in, and its frozen profit when it has one. */
+type ChannelSale = {
+  revenue: number;
+  profit: { revenue: number; cost: number; commission: number } | null;
+};
+
+/** The Uzum sales of the range's days (#80), voided ones left out, at their frozen profit. */
+async function uzumSalesIn(db: DbOrTx, range: TashkentRange): Promise<ChannelSale[]> {
+  const rows = await db
+    .select({ revenue: uzumSales.revenue, costs: uzumSales.costs })
+    .from(uzumSales)
+    .where(
+      and(
+        gte(uzumSales.soldOn, range.from),
+        lte(uzumSales.soldOn, range.to),
+        isNull(uzumSales.voidedAt),
+      ),
+    );
+  return rows.map((r) => ({ revenue: r.revenue, profit: r.costs.profit }));
+}
+
+/**
+ * A channel's figures (#80), or both channels' together: every sale's revenue, and `profitOf`
+ * over the ones with costs, which it counts as `sales` (an Uzum sale is not an order).
+ */
+function channelOf(sales: readonly ChannelSale[]): ChannelSales {
+  const { orders, ...profit } = profitOf(sales);
+  return {
+    sales: sales.length,
+    revenue: sales.reduce((sum, x) => sum + x.revenue, 0),
+    commission: sales.reduce((sum, x) => sum + (x.profit?.commission ?? 0), 0),
+    profit: { sales: orders, ...profit },
+  };
 }
 
 /** The range's profit over the orders with a cost snapshot (#77); the rest are `uncosted`. */

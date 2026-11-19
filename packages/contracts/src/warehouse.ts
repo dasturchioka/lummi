@@ -178,6 +178,8 @@ export const stockMoveSchema = z.object({
   supplier: z.string().nullable(),
   /** The order, for `sale` and `returned`. */
   orderNumber: z.number().int().nullable(),
+  /** Uzum's order number, for `uzum_sale` and `uzum_sale_voided` (#80). */
+  uzumOrder: z.string().nullable(),
   /** A set bottling's set (its vial ml) and boxes (#79); null for every other move. */
   set: z.object({ vialMl: z.number().int(), quantity: z.number().int() }).nullable(),
   /** Where a `correction` came from: the stock page, the fragrance form or the Excel import. */

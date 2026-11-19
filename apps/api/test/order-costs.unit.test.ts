@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { orderCostSnapshot } from '../src/cost/freeze-order-costs';
-import { lineUnitCost, saleProfit } from '../src/cost/order-costs';
+import { costSnapshot, lineUnitCost, saleProfit } from '../src/cost/order-costs';
 import { defaultCostSettings, type CostSettings } from '../src/cost/unit-cost';
 
 /**
@@ -230,5 +230,59 @@ describe("a first order's gift sample in the cost snapshot (#79, ADR 0042)", () 
   it('an order without one costs no sample', () => {
     const { snapshot } = orderCostSnapshot(order, [bottle], oil, s, at);
     expect(snapshot.profit).toMatchObject({ giftSample: 0, cost: 58_976 });
+  });
+});
+
+describe("a sale's cost snapshot (the one builder of an order's and an Uzum sale's, #80)", () => {
+  const s = defaultCostSettings();
+  const oil = new Map([
+    [1, { name: 'A', oilPrice: 3950 }],
+    [2, { name: 'B', oilPrice: 2150 }],
+    [6, { name: 'F', oilPrice: null }],
+  ]);
+  const at = new Date('2026-11-19T05:00:00Z');
+  const uzum = { channel: 'uzum' as const, deliveryPaid: 0 };
+
+  it("costs each line, then the sale on its channel: the calculator's A 30 ml + B 10 ml on Uzum", () => {
+    const { snapshot, unitCosts } = costSnapshot(
+      [
+        { item: { kind: 'volume', fragranceId: 1, ml: 30 }, qty: 1 },
+        { item: { kind: 'volume', fragranceId: 2, ml: 10 }, qty: 1 },
+      ],
+      { ...uzum, revenue: 258_000 },
+      oil,
+      s,
+      at,
+    );
+    expect(unitCosts).toEqual([52_086, 17_145]);
+    // 258 000 − 69 231 − 52 890 − 3 000 − 2 580
+    expect(snapshot).toMatchObject({ at: at.toISOString(), missing: [] });
+    expect(snapshot.profit).toMatchObject({ goods: 69_231, commission: 52_890, profit: 130_299 });
+  });
+
+  it('a line with nothing to cost (a set short of its five) leaves the sale without profit and names nobody', () => {
+    const { snapshot, unitCosts } = costSnapshot(
+      [
+        { item: { kind: 'volume', fragranceId: 1, ml: 10 }, qty: 1 },
+        { item: null, qty: 1 },
+      ],
+      { ...uzum, revenue: 368_000 },
+      oil,
+      s,
+      at,
+    );
+    expect(unitCosts).toEqual([22_462, null]);
+    expect(snapshot).toEqual({ at: at.toISOString(), profit: null, missing: [] });
+  });
+
+  it('no oil price, no profit: the fragrance is named', () => {
+    const { snapshot } = costSnapshot(
+      [{ item: { kind: 'volume', fragranceId: 6, ml: 10 }, qty: 2 }],
+      { ...uzum, revenue: 138_000 },
+      oil,
+      s,
+      at,
+    );
+    expect(snapshot).toMatchObject({ profit: null, missing: ['F'] });
   });
 });

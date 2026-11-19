@@ -815,9 +815,10 @@ function DiscardDialog({
 const bottlesText = (m: StockMove, w: W) =>
   m.bottles.map((b) => `${fill(w.ml, { ml: String(b.ml) })} ${signed(b.change)}`).join(', ');
 
-/** Where it came from: the order, the invoice, or where a count was typed. */
+/** Where it came from: the order, the Uzum order, the invoice, or where a count was typed. */
 function documentText(m: StockMove, w: W): string | null {
   if (m.orderNumber !== null) return fill(w.order, { number: String(m.orderNumber) });
+  if (m.uzumOrder !== null) return fill(w.uzumOrder, { number: m.uzumOrder });
   // a set bottling (#79): the oil went into that set's boxes
   if (m.set !== null)
     return fill(w.setBottling, { ml: String(m.set.vialMl), qty: String(m.set.quantity) });

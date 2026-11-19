@@ -1,6 +1,7 @@
-import type { OrderProfit, SalesChannel } from '@lummi/contracts';
+import type { OrderCostSnapshot, OrderProfit, SalesChannel } from '@lummi/contracts';
 import {
   bottleCost,
+  giftSampleCost,
   isBottleMl,
   orderCosts,
   setCost,
@@ -99,3 +100,48 @@ export function lineUnitCost(
 }
 
 const isSetVialMl = (ml: number): ml is SetVialMl => ml === 5 || ml === 10;
+
+/**
+ * A sale's cost snapshot (#77, #80): each line at its unit cost (`lineUnitCost`), then
+ * `saleProfit` on the sale's channel. The one builder an order's freeze and an Uzum sale share.
+ * Pure. A gift sample's line (#79, ADR 0042) is no goods: it costs the calculator's `giftCost` for
+ * its own fragrance and goes into the sale's gift sample. The goods are known only when every
+ * line's unit cost is: otherwise `profit` is null and `missing` names the fragrances without an oil
+ * price (ADR 0040: no oil price, no cost); empty, a line had nothing to cost (`item` null: no
+ * fragrance, a size the model has no cost for, a set without its five).
+ */
+export function costSnapshot(
+  lines: readonly { item: CostedItem | null; qty: number; giftSample?: boolean }[],
+  sale: Omit<SaleCostInput, 'goods' | 'giftSample'>,
+  oil: ReadonlyMap<number, { name: string; oilPrice: number | null }>,
+  s: CostSettings,
+  at: Date,
+): { snapshot: OrderCostSnapshot; unitCosts: (number | null)[] } {
+  const missing = new Set<number>();
+  const oilPriceOf = (id: number) => oil.get(id)?.oilPrice ?? null;
+  const unitCosts = lines.map((l) => {
+    if (!l.item) return null;
+    if (l.giftSample) {
+      if (l.item.kind !== 'volume') return null;
+      const price = oilPriceOf(l.item.fragranceId);
+      if (price === null) missing.add(l.item.fragranceId);
+      return price === null ? null : giftSampleCost([price], s);
+    }
+    const cost = lineUnitCost(l.item, oilPriceOf, s);
+    cost.missing.forEach((id) => missing.add(id));
+    return cost.unitCost;
+  });
+  const known = unitCosts.every((c) => c !== null);
+  const sumOf = (sample: boolean) =>
+    lines.reduce((sum, l, i) => (!!l.giftSample === sample ? sum + unitCosts[i]! * l.qty : sum), 0);
+  return {
+    snapshot: {
+      at: at.toISOString(),
+      profit: known
+        ? saleProfit({ ...sale, goods: sumOf(false), giftSample: sumOf(true) }, s)
+        : null,
+      missing: [...missing].map((id) => oil.get(id)?.name ?? `#${id}`).sort(),
+    },
+    unitCosts,
+  };
+}

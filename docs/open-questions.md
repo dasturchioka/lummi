@@ -150,7 +150,7 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 ## Order profit and «Рентабельность» (ticket #77)
 - **Refunds and profit.** A refund is not taken off an order's profit (it stays in «Возвраты денег»): a partly refunded order shows the profit frozen at its payment. Should the report's profit subtract refunds too?
 - **The online-payment %** is taken of the items' revenue, as in the calculator; if the card or payment service charges on the whole transfer (delivery included), the base should be the amount due. 0 % today, so nothing changes yet.
-- **Uzum** is costed at our regular price with the Uzum commission (20.5 %), no mailer and no delivery, until real Uzum sales come (#80). Confirm Uzum prices are ours, or give them.
+- **Uzum** is costed at our regular price with the Uzum commission (20.5 %), no mailer and no delivery, until real Uzum sales come (#80). Confirm Uzum prices are ours, or give them. Since #80 the real Uzum sales are recorded at the price they sold for; the «Рентабельность» page still simulates at our price.
 - **One after-set discount per order.** In the simulator the «Скидка после набора» takes one Full size bottle (the dearest), as the shop does; the customer's calculator took 20 % off every 30 / 50 ml line. Confirm the shop's rule is what he wants to see.
 - **The margin floor** «Ниже 15 %» is the calculator's 15 %, now the setting `cost.order.lowMarginPercent`.
 - **The gift sample in an order** (#79): the snapshot has a gift-sample line, 0 until #79 says when a sample went in and which one.
@@ -169,3 +169,11 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Which fragrance is the sample:** our default is the one with the most 5 ml bottles available; the owner can pick one by name in «Настройки → Магазин». A chosen fragrance out of 5 ml gives no sample (not another one), with a warning on the stock page and the Home. Confirm. The warning threshold `giftSample.lowStock` (10 bottles) is ours.
 - **«First order»:** a customer with no order that is not cancelled. An unpaid order that expires counts as cancelled, so the next order gets the sample; a returned one does not. Confirm.
 - **The after-set discount on any fragrance** (`entitlements.setDiscountScope`) stays on «Аромат из набора» (TZ) until the owner switches it.
+
+## Uzum sales (ticket #80)
+- **Uzum's seller export.** We have not seen Uzum's own Excel export of orders, so the import reads our template (`LUMMI_Uzum_shablon.xlsx`: date, Uzum order number, fragrance or «Discovery set», ml, quantity, price for one, commission %; one row per line, the rows of one order make one sale). Ask the customer for one real export file from the seller cabinet (seller.uzum.uz → Заказы → Выгрузить) to map its columns; the template stays as the fallback.
+- **What «цена» means.** The price typed is what the Uzum buyer paid for one unit, before Uzum's commission; the commission % comes off it in the profit. Confirm, or say whether he would rather type what Uzum pays out.
+- **Logistics and storage fees.** Only the commission is costed (the calculator's note). If Uzum charges for delivery or storage (FBO/FBS), say so: it becomes a setting, or part of the commission.
+- **A sale beyond what is available** is refused: the owner or manager first recounts the volume on the stock page with a reason, then records the sale. Confirm, or say if he wants to record it anyway and sort the count out later.
+- **Uzum's warehouse (FBO).** We assume each Uzum parcel leaves our own shelf when it sells (FBS). If stock is sent to Uzum's warehouse in advance, that shipment should leave on hand instead, and the sale should not.
+- **Two date bases in «По каналам».** The Mini App counts an order on the day it was delivered (as the rest of the report); Uzum counts a sale on the day it sold (`sold_on`), since we do not see Uzum's delivery. Confirm, or say if Uzum should count on its payout day.

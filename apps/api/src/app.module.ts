@@ -59,6 +59,9 @@ import { StockAdminService } from './admin/stock-admin.service';
 import { WarehouseController } from './warehouse/warehouse.controller';
 import { WarehouseExport } from './warehouse/warehouse-export';
 import { WarehouseService } from './warehouse/warehouse.service';
+import { UzumController } from './uzum/uzum.controller';
+import { UzumImportService } from './uzum/uzum-import.service';
+import { UzumSalesService } from './uzum/uzum-sales.service';
 import { SetsAdminService } from './admin/sets-admin.service';
 import { ReviewsAdminController, ReviewsController } from './reviews/reviews.controller';
 import { ReviewsBot } from './reviews/reviews-bot';
@@ -168,6 +171,7 @@ export class AppModule {
         SetsAdminController,
         StockAdminController,
         WarehouseController,
+        UzumController,
         CustomersAdminController,
         ContentController,
         ContentAdminController,
@@ -228,6 +232,8 @@ export class AppModule {
         StockAdminService,
         WarehouseService,
         WarehouseExport,
+        UzumSalesService,
+        UzumImportService,
         CustomersAdminService,
         ContentService,
         SearchService,

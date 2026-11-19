@@ -119,11 +119,13 @@ export class WarehouseExport {
             document:
               m.orderNumber !== null
                 ? fill(x.order, { number: String(m.orderNumber) })
-                : m.invoice !== null
-                  ? [m.supplier, m.invoice].filter(Boolean).join(', ')
-                  : m.source
-                    ? x.sources[m.source]
-                    : '',
+                : m.uzumOrder !== null
+                  ? fill(x.uzumOrder, { number: m.uzumOrder })
+                  : m.invoice !== null
+                    ? [m.supplier, m.invoice].filter(Boolean).join(', ')
+                    : m.source
+                      ? x.sources[m.source]
+                      : '',
             reason: m.reason ?? '',
             who: m.actorName ?? '',
           });

@@ -113,6 +113,14 @@ import {
   warehouseFragranceSchema,
 } from './warehouse';
 import {
+  uzumErrorSchema,
+  uzumSaleInputSchema,
+  uzumSaleSchema,
+  uzumSaleVoidSchema,
+  uzumSalesPageSchema,
+  uzumSalesQuerySchema,
+} from './uzum-sales';
+import {
   audienceCountSchema,
   audienceQuerySchema,
   broadcastBodySchema,
@@ -2099,6 +2107,61 @@ const adminProfitability = c.router({
   },
 });
 
+/**
+ * Uzum sales (#80): owner and manager record what sold on Uzum Market; the bottles leave on hand at
+ * once, a void brings them back. Costs and profit are the owner's. The Excel template, dry run and
+ * apply are raw xlsx bodies under `/admin/uzum/import/*` (not in the contract).
+ */
+const uzumSaleId = z.object({ id: z.coerce.number().int().positive() });
+const adminUzum = c.router({
+  uzum: {
+    list: {
+      method: 'GET',
+      path: '/admin/uzum/sales',
+      query: uzumSalesQuerySchema,
+      responses: {
+        200: uzumSalesPageSchema,
+        400: z.unknown(),
+        401: uzumErrorSchema,
+        403: uzumErrorSchema,
+      },
+      summary:
+        'Owner and manager: Uzum sales newest first, what the form can sell and the default commission; costs for the owner only',
+    },
+    record: {
+      method: 'POST',
+      path: '/admin/uzum/sales',
+      body: uzumSaleInputSchema,
+      responses: {
+        201: uzumSaleSchema,
+        400: z.unknown(),
+        401: uzumErrorSchema,
+        403: uzumErrorSchema,
+        409: uzumErrorSchema,
+        422: uzumErrorSchema,
+      },
+      summary:
+        'Owner and manager: record an Uzum sale; on hand drops at once (audited), 409 stock_short beyond what is available, 409 duplicate_order',
+    },
+    void: {
+      method: 'POST',
+      path: '/admin/uzum/sales/:id/void',
+      pathParams: uzumSaleId,
+      body: uzumSaleVoidSchema,
+      responses: {
+        200: uzumSaleSchema,
+        400: z.unknown(),
+        401: uzumErrorSchema,
+        403: uzumErrorSchema,
+        404: uzumErrorSchema,
+        409: uzumErrorSchema,
+      },
+      summary:
+        'Owner and manager: void an Uzum sale with a reason; its bottles come back (audited)',
+    },
+  },
+});
+
 export const adminContract = c.router({
   ...adminCore,
   ...adminOrders,
@@ -2114,6 +2177,7 @@ export const adminContract = c.router({
   ...adminHome,
   ...adminProfitability,
   ...adminWarehouse,
+  ...adminUzum,
 });
 
 /** Userbot only (ADR 0031): internal network, `x-internal-secret` header; never the Mini App or admin. */

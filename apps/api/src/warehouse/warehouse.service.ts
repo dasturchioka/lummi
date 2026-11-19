@@ -683,7 +683,8 @@ async function lockOilReceipt(tx: DbOrTx, oilReceiptId: number) {
 
 /**
  * A fragrance's stock moves as history lines, newest first: who did it (a staff name, or none for
- * the shop itself), the order of a sale or return, the invoice and supplier of an oil receipt.
+ * the shop itself), the order of a sale or return, Uzum's order number of an Uzum sale or its void
+ * (#80), the invoice and supplier of an oil receipt.
  * Those two are purchase records, the owner's (ADR 0041): without `withOilReceipts` they are left
  * out.
  */
@@ -706,6 +707,7 @@ export async function stockHistory(
       invoice?: string;
       supplier?: string;
       source?: StockMove['source'];
+      uzumOrder?: string;
       set?: { vialMl: number; quantity: number };
     };
     return {
@@ -722,6 +724,7 @@ export async function stockHistory(
       invoice: withOilReceipts ? (d.invoice ?? null) : null,
       supplier: withOilReceipts ? (d.supplier ?? null) : null,
       orderNumber: orderNumber ?? null,
+      uzumOrder: d.uzumOrder ?? null,
       set: d.set ?? null,
       source: d.source ?? null,
     };
