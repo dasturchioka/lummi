@@ -1,14 +1,27 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { auditLog, discoverySet, eq, fragrances, settings, sql, volumes } from '@lummi/db';
+import type { StockFragranceRow } from '@lummi/contracts';
+import { auditLog, discoverySet, eq, fragrances, settings, sql, stockMoves } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { reservedByVolume } from '../src/catalog/catalog.service';
+import { readLiquidStock } from '../src/catalog/catalog.service';
 import { reservedDiscovery } from '../src/sets/sets';
-import { orderBody, samarkandPoint, shopper, slugs as slugsOf, tenMl } from './harness/orders';
+import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
+import {
+  concentrateUl,
+  FILL_UL,
+  fragranceIdOf,
+  setConcentrateUl,
+  stockBottles,
+} from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
+/**
+ * Seam 1 (ADR 0028): the stock page (#27) in liquid (ADR 0043): a row per fragrance with its ready
+ * concentrate, what orders hold of it, what is free, the bottles that fills, and its oil; the
+ * Discovery sets' own boxes. A 10 ml fill is 10.3 ml at the default filling loss.
+ */
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
 ) as Snapshot;
@@ -27,6 +40,9 @@ beforeEach(async () => {
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
   manager = await t.managerSession();
+  // a first order would carry a 5 ml gift sample from whichever fragrance has the most; the
+  // reserves here are each order's own bottles
+  await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
 });
 
 const ali: TestUser = { id: 71, first_name: 'Ali', language_code: 'ru' };
@@ -41,21 +57,25 @@ async function page(as: StaffSession = manager, query: Record<string, string> = 
 /** Every page of it, merged: most tests care about the rows, not the paging. */
 async function list(as: StaffSession = manager, query: Record<string, string> = {}) {
   const first = await page(as, { ...query, pageSize: '50', page: '1' });
-  const rows = [...first.rows];
+  const rows = [...first.fragrances];
   for (let p = 2; (p - 1) * 50 < first.total; p++) {
-    rows.push(...(await page(as, { ...query, pageSize: '50', page: String(p) })).rows);
+    rows.push(...(await page(as, { ...query, pageSize: '50', page: String(p) })).fragrances);
   }
-  return { ...first, rows };
+  return { ...first, fragrances: rows };
 }
-async function volumeRow(slug: string, ml: number, as: StaffSession = manager) {
-  const { id } = await tenMl(t, slug);
-  const rows = (await list(as)).rows;
-  return { id, row: rows.find((r) => r.volumeId === id && r.ml === ml)! };
+async function fragranceRow(slug: string, as: StaffSession = manager): Promise<StockFragranceRow> {
+  const id = await fragranceIdOf(t, slug);
+  return (await list(as)).fragrances.find((r) => r.fragranceId === id)!;
 }
 /** The 5 × 10 ml set's row (its key is the one it had before the 5 × 5 ml set). */
 async function discoveryRow() {
-  return (await list()).rows.find((r) => r.key === 'discovery')!;
+  return (await list()).sets.find((r) => r.key === 'discovery')!;
 }
+const count = (id: number, ml: number, expectedMl?: number, as = manager) =>
+  as.client.admin.warehouse.countConcentrate({
+    params: { id },
+    body: { ml, reason: 'Пересчёт', ...(expectedMl === undefined ? {} : { expectedMl }) },
+  });
 
 /** Reserves `qty` of a fragrance's 10 ml for a shopper. */
 async function reserve(slug: string, qty: number, user: TestUser = ali) {
@@ -81,49 +101,68 @@ describe('who may open the stock page', () => {
     expect((await manager.client.admin.stock.list({ query: {} })).status).toBe(200);
   });
 
-  it('refuses an on-hand edit from a shopper session', async () => {
+  it('refuses a concentrate count from a shopper session', async () => {
     const [slug] = await slugsOf(t, 1);
-    const { id } = await tenMl(t, slug!);
+    const id = await fragranceIdOf(t, slug!);
     const { token } = await t.signIn(ali);
-    const res = await fetch(`${t.baseUrl}/admin/volumes/${id}/on-hand`, {
-      method: 'PATCH',
+    const res = await fetch(`${t.baseUrl}/admin/warehouse/fragrances/${id}/concentrate`, {
+      method: 'PUT',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ onHand: 99 }),
+      body: JSON.stringify({ ml: 99, reason: 'x' }),
     });
     expect(res.status).toBe(401);
-    expect((await volumeRow(slug!, 10)).row.onHand).toBe(20);
+    expect((await fragranceRow(slug!)).concentrateMl).toBe(1000);
   });
 });
 
 describe('the rows', () => {
-  it('has one row per volume plus the Discovery set, with the same reserve checkout uses', async () => {
+  it('has one row per fragrance plus the Discovery sets, with the same reserve checkout uses', async () => {
     const [slug] = await slugsOf(t, 1);
     await reserve(slug!, 2);
-    const { rows, lowThreshold } = await list();
-    expect(lowThreshold).toBe(3);
-    const count = await t.db.select().from(volumes);
-    expect(rows.filter((r) => r.kind === 'volume')).toHaveLength(count.length);
+    const { fragrances: rows, sets, lowThreshold, lowConcentrateMl, lowOilMl } = await list();
+    expect([lowThreshold, lowConcentrateMl, lowOilMl]).toEqual([3, 300, 300]);
+    const all = await t.db.select().from(fragrances);
+    expect(rows).toHaveLength(all.length);
     // both Discovery sets (ADR 0042), each with its own row
-    expect(rows.filter((r) => r.kind === 'discovery').map((r) => r.ml)).toEqual([10, 5]);
+    expect(sets.map((r) => r.vialMl)).toEqual([10, 5]);
 
-    const reserved = await reservedByVolume(
+    const stock = await readLiquidStock(
       t.db,
-      count.map((v) => v.id),
+      all.map((f) => f.id),
     );
-    for (const r of rows.filter((x) => x.kind === 'volume')) {
-      expect(r.reserved).toBe(reserved.get(r.volumeId!));
-      expect(r.available).toBe(Math.max(0, r.onHand - r.reserved));
+    for (const r of rows) {
+      expect(r.reservedMl * 1000).toBe(stock.of(r.fragranceId).reservedUl);
+      expect(r.availableMl).toBe(Math.max(0, r.concentrateMl - r.reservedMl));
     }
-    const { id } = await tenMl(t, slug!);
-    expect(rows.find((r) => r.volumeId === id)).toMatchObject({
-      reserved: 2,
-      onHand: 20,
-      available: 18,
+    const id = await fragranceIdOf(t, slug!);
+    // two 10 ml fills held: 20.6 of 1 000 ml
+    expect(rows.find((r) => r.fragranceId === id)).toMatchObject({
+      concentrateMl: 1000,
+      reservedMl: 20.6,
+      availableMl: 979.4,
+      belowReserve: false,
+      level: 'ok',
+      bottles: [
+        { ml: 10, available: 95 },
+        { ml: 30, available: 31 },
+        { ml: 50, available: 19 },
+      ],
     });
     expect((await discoveryRow()).reserved).toBe(await reservedDiscovery(t.db, 10));
   });
 
-  it("reports the Discovery set's own reserve, not a 10 ml one", async () => {
+  it('shows the oil in grams and in ml by the density, with its own level', async () => {
+    const [slug] = await slugsOf(t, 1);
+    const id = await fragranceIdOf(t, slug!);
+    await t.db.update(fragrances).set({ oilMg: 190_000 }).where(eq(fragrances.id, id));
+    await t.db.insert(settings).values({ key: 'cost.liquid.oilDensity', value: 0.95 });
+    // 190 g ÷ 0.95 g/ml = 200 ml: at or under 300 ml, «Мало масла»
+    expect(await fragranceRow(slug!)).toMatchObject({ oilGrams: 190, oilMl: 200, oilLevel: 'low' });
+    await t.db.insert(settings).values({ key: 'stock.lowOilMl', value: 100 });
+    expect((await fragranceRow(slug!)).oilLevel).toBe('ok');
+  });
+
+  it("reports the Discovery set's own reserve, not a fragrance's", async () => {
     await t.db.update(discoverySet).set({ onHand: 5 });
     const client = await shopper(t, ali, '998901234567');
     await client.cart.addDiscovery({ body: { qty: 2 } });
@@ -132,97 +171,104 @@ describe('the rows', () => {
     if (checkout.status !== 200) throw new Error('checkout');
     await client.orders.create({ body: orderBody(point.id, checkout.body.quote.total) });
     expect(await discoveryRow()).toMatchObject({ onHand: 5, reserved: 2, available: 3 });
+    expect((await list()).fragrances.every((r) => r.reservedMl === 0)).toBe(true);
+  });
+
+  it('values the stock at cost for the owner only: the oil at its receipts, the concentrate at its oil price', async () => {
+    const [slug] = await slugsOf(t, 1);
+    const id = await fragranceIdOf(t, slug!);
+    await setConcentrateUl(t, id, 100_000);
+    await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
+    // 100 ml at (3 950 × 0.91 × 1.03 × 30 % + 150 × 70 %) = 1 215.7005 so'm per ml
+    expect((await fragranceRow(slug!, owner)).value).toEqual({
+      oil: 0,
+      concentrate: 121_570,
+      total: 121_570,
+    });
+    expect((await fragranceRow(slug!, manager)).value).toBeNull();
+    // without an oil price the concentrate has no value, and neither has the total
+    await t.db.update(fragrances).set({ oilPrice: null }).where(eq(fragrances.id, id));
+    expect((await fragranceRow(slug!, owner)).value).toEqual({
+      oil: 0,
+      concentrate: null,
+      total: null,
+    });
   });
 });
 
-describe('an on-hand edit', () => {
-  it('changes available and is audited with the actor', async () => {
+describe('a concentrate count', () => {
+  it('changes what is free, is a history line from the stock page and is audited with the actor', async () => {
     const [slug] = await slugsOf(t, 1);
     await reserve(slug!, 2);
-    const { id } = await volumeRow(slug!, 10);
-    const res = await manager.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 12, expected: 20, reason: 'Пересчёт' },
-    });
-    expect(res.status === 200 && res.body).toMatchObject({
-      onHand: 12,
-      reserved: 2,
-      available: 10,
+    const id = await fragranceIdOf(t, slug!);
+    const res = await count(id, 123.6, 1000);
+    expect(res.status === 200 && res.body.stock).toMatchObject({
+      concentrateMl: 123.6,
+      reservedMl: 20.6,
+      availableMl: 103,
       belowReserve: false,
     });
-    expect((await volumeRow(slug!, 10)).row).toMatchObject({ onHand: 12, available: 10 });
-    const [row] = await audits('catalog.on_hand_changed');
+    expect(await fragranceRow(slug!)).toMatchObject({ concentrateMl: 123.6, availableMl: 103 });
+    const [row] = await audits('warehouse.concentrate_corrected');
     expect(row).toMatchObject({ actorType: 'staff', actorId: manager.staff.id });
-    expect(row?.payload).toMatchObject({ ml: 10, onHand: [20, 12] });
+    expect(row?.payload).toMatchObject({ concentrateMl: [1000, 123.6], reason: 'Пересчёт' });
+    expect(res.status === 200 && res.body.history[0]).toMatchObject({
+      kind: 'correction',
+      concentrateMl: -876.4,
+      source: 'stock',
+      reason: 'Пересчёт',
+      actorName: manager.staff.name,
+    });
   });
 
   it('is allowed below the reserve and says so', async () => {
     const [slug] = await slugsOf(t, 1);
     await reserve(slug!, 3);
-    const { id } = await volumeRow(slug!, 10);
-    const res = await owner.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 1, expected: 20, reason: 'Пересчёт' },
-    });
-    expect(res.status === 200 && res.body).toMatchObject({
-      onHand: 1,
-      reserved: 3,
-      available: 0,
+    const id = await fragranceIdOf(t, slug!);
+    const res = await count(id, 10, 1000, owner);
+    expect(res.status === 200 && res.body.stock).toMatchObject({
+      concentrateMl: 10,
+      reservedMl: 30.9,
+      availableMl: 0,
       belowReserve: true,
+      level: 'zero',
     });
-    expect((await volumeRow(slug!, 10)).row).toMatchObject({ onHand: 1, belowReserve: true });
+    expect(await fragranceRow(slug!)).toMatchObject({ concentrateMl: 10, belowReserve: true });
   });
 
-  it('answers 409 with the current count when it moved meanwhile, and writes nothing', async () => {
+  it('answers 409 with the current ml when it moved meanwhile, and writes nothing', async () => {
     const [slug] = await slugsOf(t, 1);
-    const { id } = await volumeRow(slug!, 10);
-    await owner.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 8, reason: 'Пересчёт' },
-    });
-    const res = await manager.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 15, expected: 20, reason: 'Пересчёт' },
-    });
+    const id = await fragranceIdOf(t, slug!);
+    expect((await count(id, 800, undefined, owner)).status).toBe(200);
+    const res = await count(id, 500, 1000);
     expect(res.status).toBe(409);
-    expect(res.status === 409 && res.body).toEqual({ code: 'on_hand_changed', current: 8 });
-    expect((await volumeRow(slug!, 10)).row.onHand).toBe(8);
-    expect(await audits('catalog.on_hand_changed')).toHaveLength(1);
+    expect(res.status === 409 && res.body).toEqual({ code: 'changed', currentMl: 800 });
+    expect((await fragranceRow(slug!)).concentrateMl).toBe(800);
+    expect(await audits('warehouse.concentrate_corrected')).toHaveLength(1);
     // the editor retries from the value it was shown
-    const retry = await manager.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 15, expected: 8, reason: 'Пересчёт' },
-    });
-    expect(retry.status).toBe(200);
+    expect((await count(id, 500, 800)).status).toBe(200);
   });
 
-  it('lets exactly one of two edits from the same count win', async () => {
+  it('lets exactly one of two counts from the same value win', async () => {
     const [slug] = await slugsOf(t, 1);
-    const { id } = await volumeRow(slug!, 10);
-    const [a, b] = await Promise.all([
-      owner.client.admin.onHand.set({
-        params: { id },
-        body: { onHand: 7, expected: 20, reason: 'Пересчёт' },
-      }),
-      manager.client.admin.onHand.set({
-        params: { id },
-        body: { onHand: 9, expected: 20, reason: 'Пересчёт' },
-      }),
-    ]);
+    const id = await fragranceIdOf(t, slug!);
+    const [a, b] = await Promise.all([count(id, 700, 1000, owner), count(id, 900, 1000)]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
-    const winner = a.status === 200 ? 7 : 9;
-    expect((await volumeRow(slug!, 10)).row.onHand).toBe(winner);
-    expect(await audits('catalog.on_hand_changed')).toHaveLength(1);
+    const winner = a.status === 200 ? 700 : 900;
+    expect((await fragranceRow(slug!)).concentrateMl).toBe(winner);
+    expect(await audits('warehouse.concentrate_corrected')).toHaveLength(1);
+    expect(await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, id))).toHaveLength(
+      1,
+    );
   });
 
-  it('still takes an edit without `expected` (the older callers)', async () => {
+  it('still takes a count without `expectedMl`; one that changes nothing writes nothing', async () => {
     const [slug] = await slugsOf(t, 1);
-    const { id } = await volumeRow(slug!, 10);
-    const res = await manager.client.admin.onHand.set({
-      params: { id },
-      body: { onHand: 4, reason: 'Пересчёт' },
-    });
-    expect(res.status).toBe(200);
+    const id = await fragranceIdOf(t, slug!);
+    expect((await count(id, 1000)).status).toBe(200);
+    expect(await audits('warehouse.concentrate_corrected')).toHaveLength(0);
+    expect((await count(id, 4)).status).toBe(200);
+    expect(await concentrateUl(t, id)).toBe(4000);
   });
 });
 
@@ -261,28 +307,24 @@ describe('the Discovery set follows the same rules', () => {
 
 describe('paging (by fragrance)', () => {
   const fragranceCount = async () => (await t.db.select().from(fragrances)).length;
-  const ids = (rows: { fragranceId: number | null }[]) => [
-    ...new Set(rows.map((r) => r.fragranceId).filter((id) => id !== null)),
-  ];
+  const ids = (rows: { fragranceId: number }[]) => rows.map((r) => r.fragranceId);
 
-  it('holds whole fragrances, the Discovery set first on page 1 only, and nothing twice', async () => {
+  it('holds fragrances, the Discovery sets on page 1 only, and nothing twice', async () => {
     const total = await fragranceCount();
     const one = await page(manager, { pageSize: '5' });
     expect(one).toMatchObject({ total, page: 1, pageSize: 5 });
-    expect(one.rows[0]?.kind).toBe('discovery');
-    const volumesOnPage = one.rows.filter((r) => r.kind === 'volume');
-    expect(ids(volumesOnPage)).toHaveLength(5);
-    expect(volumesOnPage).toHaveLength(20); // every volume of those five (5 ml too), none split off
+    expect(one.sets.map((r) => r.key)).toEqual(['discovery', 'discovery-5']);
+    expect(ids(one.fragrances)).toHaveLength(5);
     const two = await page(manager, { pageSize: '5', page: '2' });
-    expect(two.rows.some((r) => r.kind === 'discovery')).toBe(false);
-    expect(ids(two.rows).filter((id) => ids(volumesOnPage).includes(id))).toEqual([]);
+    expect(two.sets).toEqual([]);
+    expect(ids(two.fragrances).filter((id) => ids(one.fragrances).includes(id))).toEqual([]);
     // the last page holds the remainder; past the end is empty but still says how many there are
     const lastPage = Math.ceil(total / 5);
-    expect(ids((await page(manager, { pageSize: '5', page: String(lastPage) })).rows)).toHaveLength(
-      total - (lastPage - 1) * 5,
-    );
+    expect(
+      (await page(manager, { pageSize: '5', page: String(lastPage) })).fragrances,
+    ).toHaveLength(total - (lastPage - 1) * 5);
     const past = await page(manager, { pageSize: '5', page: String(lastPage + 1) });
-    expect(past).toMatchObject({ rows: [], total });
+    expect(past).toMatchObject({ fragrances: [], sets: [], total });
   });
 
   it('filters and searches cover every page: only matching fragrances count, wherever they sort', async () => {
@@ -291,20 +333,18 @@ describe('paging (by fragrance)', () => {
       .from(fragrances)
       .orderBy(sql`lower(${fragrances.name})`);
     const spread = [all[0]!.id, all[30]!.id, all[60]!.id];
-    for (const id of spread) {
-      await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.fragranceId, id));
-    }
+    for (const id of spread) await setConcentrateUl(t, id, 100_000);
     const one = await page(manager, { filter: 'low', pageSize: '2' });
     expect(one.total).toBe(3);
-    expect(ids(one.rows)).toEqual([spread[0], spread[1]]);
-    expect(one.rows.every((r) => r.level !== 'ok')).toBe(true);
+    expect(ids(one.fragrances)).toEqual([spread[0], spread[1]]);
+    expect(one.fragrances.every((r) => r.level !== 'ok')).toBe(true);
     const two = await page(manager, { filter: 'low', pageSize: '2', page: '2' });
-    expect(ids(two.rows)).toEqual([spread[2]]);
+    expect(ids(two.fragrances)).toEqual([spread[2]]);
     // a hidden fragrance deep in the list is on page 1 of the hidden filter
     await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, all[60]!.id));
     const hidden = await page(manager, { visibility: 'hidden', pageSize: '2' });
     expect(hidden.total).toBe(1);
-    expect(ids(hidden.rows)).toEqual([all[60]!.id]);
+    expect(ids(hidden.fragrances)).toEqual([all[60]!.id]);
   });
 
   it('refuses a page size above the maximum', async () => {
@@ -318,29 +358,39 @@ describe('paging (by fragrance)', () => {
 describe('filters and search', () => {
   async function arrange() {
     const [a, b, c] = await slugsOf(t, 3);
-    const va = await tenMl(t, a!);
-    const vb = await tenMl(t, b!);
-    const vc = await tenMl(t, c!);
-    await t.db.update(volumes).set({ onHand: 2 }).where(eq(volumes.id, va.id)); // low
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, vb.id)); // zero
-    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, vc.fragranceId));
-    return { va, vb, vc, names: [a!, b!, c!] };
+    const fa = await fragranceIdOf(t, a!);
+    const fb = await fragranceIdOf(t, b!);
+    const fc = await fragranceIdOf(t, c!);
+    await setConcentrateUl(t, fa, 250_000); // low: at or under 300 ml
+    await stockBottles(t, fb, 5, 1); // zero: a 5 ml fill can't fill a 10 ml bottle
+    await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.id, fc));
+    await t.db.update(fragrances).set({ oilMg: 0 });
+    await t.db.update(fragrances).set({ oilMg: 500_000 }).where(eq(fragrances.id, fa));
+    return { fa, fb, fc };
   }
 
   it('low includes zero, zero is only zero', async () => {
-    const { va, vb } = await arrange();
-    const low = (await list(manager, { filter: 'low' })).rows.filter((r) => r.kind === 'volume');
-    expect(low.map((r) => r.volumeId).sort()).toEqual([va.id, vb.id].sort());
-    const zero = (await list(manager, { filter: 'zero' })).rows;
-    expect(zero.map((r) => r.volumeId)).toEqual([vb.id]);
+    const { fa, fb } = await arrange();
+    const low = (await list(manager, { filter: 'low' })).fragrances;
+    expect(low.map((r) => r.fragranceId).sort()).toEqual([fa, fb].sort());
+    const zero = (await list(manager, { filter: 'zero' })).fragrances;
+    expect(zero.map((r) => r.fragranceId)).toEqual([fb]);
   });
 
-  it('carries the level the server decided, for volumes and the Discovery set', async () => {
-    const { va, vb } = await arrange();
-    const rows = (await list()).rows;
-    const level = (id: number) => rows.find((r) => r.volumeId === id)?.level;
-    expect([level(va.id), level(vb.id)]).toEqual(['low', 'zero']);
-    expect(rows.find((r) => r.kind === 'discovery')?.level).toBe('ok');
+  it('«Мало масла» reads the oil: none and low, a fragrance with plenty left out', async () => {
+    const { fa } = await arrange();
+    const oilLow = await list(manager, { filter: 'oilLow' });
+    expect(oilLow.fragrances.map((r) => r.fragranceId)).not.toContain(fa);
+    expect(oilLow.fragrances.every((r) => r.oilLevel !== 'ok')).toBe(true);
+    expect(oilLow.sets).toEqual([]);
+  });
+
+  it('carries the level the server decided, for fragrances and the Discovery set', async () => {
+    const { fa, fb } = await arrange();
+    const rows = (await list()).fragrances;
+    const level = (id: number) => rows.find((r) => r.fragranceId === id)?.level;
+    expect([level(fa), level(fb)]).toEqual(['low', 'zero']);
+    expect((await list()).sets.find((r) => r.key === 'discovery')?.level).toBe('ok');
     await t.db.update(discoverySet).set({ onHand: 0 });
     expect((await discoveryRow()).level).toBe('zero');
     // the Discovery page reports the same warning flag as the stock page
@@ -348,23 +398,27 @@ describe('filters and search', () => {
     expect(set.status === 200 && set.body.belowReserve).toBe(false);
   });
 
-  it('follows the threshold setting', async () => {
-    const { va } = await arrange();
-    await t.db.insert(settings).values({ key: 'stock.lowAvailableThreshold', value: 1 });
+  it('follows the threshold settings', async () => {
+    const { fa } = await arrange();
+    await t.db.insert(settings).values({ key: 'stock.lowConcentrateMl', value: 200 });
     const body = await list(manager, { filter: 'low' });
-    expect(body.lowThreshold).toBe(1);
-    expect(body.rows.map((r) => r.volumeId)).not.toContain(va.id);
+    expect(body.lowConcentrateMl).toBe(200);
+    expect(body.fragrances.map((r) => r.fragranceId)).not.toContain(fa);
+    await t.db.update(discoverySet).set({ onHand: 2 });
+    expect((await discoveryRow()).level).toBe('low');
+    await t.db.insert(settings).values({ key: 'stock.lowAvailableThreshold', value: 1 });
+    expect((await discoveryRow()).level).toBe('ok');
   });
 
   it('hidden fragrances only, or visible only', async () => {
-    const { vc } = await arrange();
-    const hidden = (await list(manager, { visibility: 'hidden' })).rows;
-    expect(hidden.length).toBeGreaterThan(0);
-    expect(hidden.every((r) => r.hidden && r.kind === 'volume')).toBe(true);
-    expect(hidden.some((r) => r.volumeId === vc.id)).toBe(true);
-    const visible = (await list(manager, { visibility: 'visible' })).rows;
-    expect(visible.some((r) => r.hidden)).toBe(false);
-    expect(visible.some((r) => r.kind === 'discovery')).toBe(true);
+    const { fc } = await arrange();
+    const hidden = await list(manager, { visibility: 'hidden' });
+    expect(hidden.fragrances.map((r) => r.fragranceId)).toEqual([fc]);
+    expect(hidden.fragrances.every((r) => r.hidden)).toBe(true);
+    expect(hidden.sets).toEqual([]);
+    const visible = await list(manager, { visibility: 'visible' });
+    expect(visible.fragrances.some((r) => r.hidden)).toBe(false);
+    expect(visible.sets.length).toBe(2);
   });
 
   it('searches by fragrance name, ignoring case, and finds the Discovery set', async () => {
@@ -373,16 +427,16 @@ describe('filters and search', () => {
       .select({ name: fragrances.name })
       .from(fragrances)
       .where(eq(fragrances.slug, slug!));
-    const rows = (await list(manager, { q: f!.name.toUpperCase() })).rows;
+    const rows = (await list(manager, { q: f!.name.toUpperCase() })).fragrances;
     expect(rows.length).toBeGreaterThan(0);
-    expect(
-      rows.every((r) => r.name === null || r.name.toLowerCase().includes(f!.name.toLowerCase())),
-    ).toBe(true);
-    expect((await list(manager, { q: 'discovery' })).rows.map((r) => r.kind)).toEqual([
-      'discovery',
-      'discovery',
+    expect(rows.every((r) => r.name.toLowerCase().includes(f!.name.toLowerCase()))).toBe(true);
+    const sets = await list(manager, { q: 'discovery' });
+    expect([sets.sets.map((r) => r.key), sets.fragrances]).toEqual([
+      ['discovery', 'discovery-5'],
+      [],
     ]);
-    expect((await list(manager, { q: 'zzzzqqq' })).rows).toEqual([]);
+    const none = await list(manager, { q: 'zzzzqqq' });
+    expect([none.fragrances, none.sets]).toEqual([[], []]);
   });
 
   it('ignores apostrophe variants on both sides', async () => {
@@ -392,7 +446,7 @@ describe('filters and search', () => {
       .set({ name: 'Devil’s Intrigue' })
       .where(eq(fragrances.slug, slug!));
     for (const q of ['Devil’s', "Devil's", 'Devils', 'devilʻs int']) {
-      const rows = (await list(manager, { q })).rows.filter((r) => r.kind === 'volume');
+      const rows = (await list(manager, { q })).fragrances;
       expect(
         rows.map((r) => r.name),
         q,
@@ -400,7 +454,23 @@ describe('filters and search', () => {
     }
     await t.db.update(fragrances).set({ name: "Bal d'Afrique" }).where(eq(fragrances.slug, slug!));
     expect(
-      (await list(manager, { q: 'Bal d’Afrique' })).rows.some((r) => r.name === "Bal d'Afrique"),
+      (await list(manager, { q: 'Bal d’Afrique' })).fragrances.some(
+        (r) => r.name === "Bal d'Afrique",
+      ),
     ).toBe(true);
+  });
+});
+
+describe('the bottles a fragrance still fills', () => {
+  it('are whole fills of the free concentrate per sold volume, the 5 ml left out', async () => {
+    const [slug] = await slugsOf(t, 1);
+    await stockBottles(t, slug!, 50, 1);
+    expect((await fragranceRow(slug!)).bottles).toEqual([
+      { ml: 10, available: 5 },
+      { ml: 30, available: 1 },
+      { ml: 50, available: 1 },
+    ]);
+    await setConcentrateUl(t, slug!, FILL_UL[50] - 1);
+    expect((await fragranceRow(slug!)).bottles.map((b) => b.available)).toEqual([4, 1, 0]);
   });
 });

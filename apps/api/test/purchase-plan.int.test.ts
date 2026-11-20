@@ -50,9 +50,9 @@ const input = (name: string, oilPrice: number | null): FragranceInput => ({
   notes: { top: [], heart: [], base: [] },
   similarIds: [],
   volumes: [
-    { ml: 10, price: 69_000, salePrice: null, saleEndsOn: null, onHand: 0 },
-    { ml: 30, price: 189_000, salePrice: null, saleEndsOn: null, onHand: 0 },
-    { ml: 50, price: 249_000, salePrice: null, saleEndsOn: null, onHand: 0 },
+    { ml: 10, price: 69_000, salePrice: null, saleEndsOn: null },
+    { ml: 30, price: 189_000, salePrice: null, saleEndsOn: null },
+    { ml: 50, price: 249_000, salePrice: null, saleEndsOn: null },
   ],
 });
 

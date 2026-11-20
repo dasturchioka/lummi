@@ -1,5 +1,5 @@
 import type { FragranceInput } from '@lummi/contracts';
-import { auditLog, eq, families, fragrances, notes, staff, volumes } from '@lummi/db';
+import { auditLog, eq, families, fragrances, notes, staff, stockMoves, volumes } from '@lummi/db';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -52,9 +52,11 @@ const baseInput = (over: Partial<FragranceInput> = {}): FragranceInput => ({
   notes: { top: [], heart: [], base: [] },
   similarIds: [],
   volumes: [
-    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 5 },
-    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null, onHand: 5 },
+    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null },
+    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null },
   ],
+  // five 10 ml fills of ready concentrate (ADR 0043): 5 × 10.3 ml
+  concentrateMl: 51.5,
   ...over,
 });
 
@@ -90,9 +92,10 @@ describe('create and edit a fragrance', () => {
     expect(c.status).toBe(200);
     if (c.status === 200) {
       expect(c.body.isNew).toBe(true);
+      // one liquid: five 10 ml fills, or one 30 ml (30.9 ml)
       expect(c.body.volumes.map((v) => [v.ml, v.price, v.available])).toEqual([
         [10, 70_000, 5],
-        [30, 150_000, 5],
+        [30, 150_000, 1],
       ]);
     }
     expect(JSON.stringify(c)).not.toContain('"007"');
@@ -151,16 +154,9 @@ describe('create and edit a fragrance', () => {
         isHit: true,
         sillage: 'medium',
         uzumUrl: 'https://uzum.uz/ru/product/x',
-        volumes: [
-          {
-            ml: 10,
-            price: 80_000,
-            salePrice: null,
-            saleEndsOn: null,
-            onHand: 3,
-            loadedOnHand: 5,
-          },
-        ],
+        volumes: [{ ml: 10, price: 80_000, salePrice: null, saleEndsOn: null }],
+        concentrateMl: 30.9,
+        loadedConcentrateMl: 51.5,
       }),
     });
     expect(res.status).toBe(200);
@@ -178,11 +174,15 @@ describe('create and edit a fragrance', () => {
     const payload = row?.payload as {
       changed: string[];
       volumes: { ml: number; price?: number[] }[];
+      concentrateMl?: number[];
     };
     expect(payload.changed).toEqual(
       expect.arrayContaining(['name', 'isHit', 'sillage', 'uzumUrl']),
     );
-    expect(payload.volumes).toEqual([{ ml: 10, price: [70_000, 80_000], onHand: [5, 3] }]);
+    expect(payload.changed).not.toContain('stock');
+    expect(payload.volumes).toEqual([{ ml: 10, price: [70_000, 80_000] }]);
+    expect(payload.concentrateMl).toEqual([51.5, 30.9]);
+    expect(res.body.stock).toEqual({ concentrateMl: 30.9, reservedMl: 0, belowReserve: false });
   });
 
   it('adds a volume that did not exist yet', async () => {
@@ -190,13 +190,13 @@ describe('create and edit a fragrance', () => {
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
       body: baseInput({
-        volumes: [{ ml: 50, price: 220_000, salePrice: null, saleEndsOn: null, onHand: 2 }],
+        volumes: [{ ml: 50, price: 220_000, salePrice: null, saleEndsOn: null }],
       }),
     });
     expect(res.status === 200 && res.body.volumes.map((v) => v.ml)).toEqual([10, 30, 50]);
   });
 
-  it('clears the placeholder flag only on a volume whose price or on hand was set', async () => {
+  it('clears the placeholder flag only on a volume whose price was set', async () => {
     const [seeded] = await t.db.select().from(fragrances).limit(1);
     const before = await owner.client.admin.catalog.fragrances.get({ params: { id: seeded!.id } });
     if (before.status !== 200) throw new Error('get');
@@ -240,38 +240,36 @@ describe('validation', () => {
     ['a bad Uzum link', { uzumUrl: 'javascript:alert(1)' }],
     [
       'a sale price equal to the price',
-      { volumes: [{ ml: 10, price: 70_000, salePrice: 70_000, saleEndsOn: null, onHand: 1 }] },
+      { volumes: [{ ml: 10, price: 70_000, salePrice: 70_000, saleEndsOn: null }] },
     ],
     [
       'a sale price above the price',
-      { volumes: [{ ml: 10, price: 70_000, salePrice: 90_000, saleEndsOn: null, onHand: 1 }] },
+      { volumes: [{ ml: 10, price: 70_000, salePrice: 90_000, saleEndsOn: null }] },
     ],
     [
       'a fractional price',
-      { volumes: [{ ml: 10, price: 70_000.5, salePrice: null, saleEndsOn: null, onHand: 1 }] },
+      { volumes: [{ ml: 10, price: 70_000.5, salePrice: null, saleEndsOn: null }] },
     ],
-    [
-      'a negative on hand',
-      { volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: -1 }] },
-    ],
+    ['a negative concentrate', { concentrateMl: -1 }],
+    ['a concentrate past the microlitre', { concentrateMl: 1.0005 }],
     [
       'a sale end date with no sale price',
       {
-        volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: '2026-12-01', onHand: 1 }],
+        volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: '2026-12-01' }],
       },
     ],
     [
       'the same volume twice',
       {
         volumes: [
-          { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 1 },
-          { ml: 10, price: 80_000, salePrice: null, saleEndsOn: null, onHand: 1 },
+          { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null },
+          { ml: 10, price: 80_000, salePrice: null, saleEndsOn: null },
         ],
       },
     ],
     [
       'a volume that is not sold',
-      { volumes: [{ ml: 20 as never, price: 1, salePrice: null, saleEndsOn: null, onHand: 1 }] },
+      { volumes: [{ ml: 20 as never, price: 1, salePrice: null, saleEndsOn: null }] },
     ],
   ] as [string, Partial<FragranceInput>][])(
     'rejects %s with 400 and writes nothing',
@@ -292,7 +290,7 @@ describe('validation', () => {
     ['a fractional price', { price: 70_000.5, salePrice: null, saleEndsOn: null }],
   ])('rejects %s on an edit with 400 and changes nothing', async (_n, v) => {
     const f = await created();
-    const body = baseInput({ volumes: [{ ml: 10, onHand: 5, ...v }] });
+    const body = baseInput({ volumes: [{ ml: 10, ...v }] });
     expect(await send('PUT', `/admin/catalog/fragrances/${f.id}`, body)).toBe(400);
     const [vol] = await t.db.select().from(volumes).where(eq(volumes.fragranceId, f.id));
     expect(vol?.price).toBe(70_000);
@@ -304,7 +302,7 @@ describe('validation', () => {
       familyId: 9999,
       notes: { top: [9999], heart: [], base: [] },
       similarIds: [9999],
-      volumes: [{ ml: 10, price: 70_000, salePrice: 60_000, saleEndsOn: '2026-02-31', onHand: 1 }],
+      volumes: [{ ml: 10, price: 70_000, salePrice: 60_000, saleEndsOn: '2026-02-31' }],
     });
     expect(res.status).toBe(422);
     expect(res.body).toMatchObject({ code: 'invalid' });
@@ -354,7 +352,7 @@ describe('uzbek apostrophes', () => {
 describe('markdown', () => {
   it('ends at 23:59:59 Asia/Tashkent of the given day and reverts by itself', async () => {
     const f = await created({
-      volumes: [{ ml: 10, price: 70_000, salePrice: 50_000, saleEndsOn: '2026-11-15', onHand: 5 }],
+      volumes: [{ ml: 10, price: 70_000, salePrice: 50_000, saleEndsOn: '2026-11-15' }],
     });
     expect(f.volumes[0]).toMatchObject({ salePrice: 50_000, saleEndsOn: '2026-11-15' });
     const [v] = await t.db.select().from(volumes).where(eq(volumes.id, f.volumes[0]!.id));
@@ -376,12 +374,12 @@ describe('markdown', () => {
 
   it('can be removed again', async () => {
     const f = await created({
-      volumes: [{ ml: 10, price: 70_000, salePrice: 50_000, saleEndsOn: '2026-11-15', onHand: 5 }],
+      volumes: [{ ml: 10, price: 70_000, salePrice: 50_000, saleEndsOn: '2026-11-15' }],
     });
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
       body: baseInput({
-        volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 5 }],
+        volumes: [{ ml: 10, price: 70_000, salePrice: null, saleEndsOn: null }],
       }),
     });
     expect(res.status === 200 && res.body.volumes[0]).toMatchObject({
@@ -475,66 +473,75 @@ describe('permissions (ADR 0017)', () => {
     expect(row).toMatchObject({ name: 'Nuit Blanche', hidden: false });
   });
 
-  it('lets a manager (and the owner) set on hand, audited with the actor', async () => {
+  it('lets a manager (and the owner) count the concentrate, audited with the actor (ADR 0043)', async () => {
     const f = await created();
-    const vol = f.volumes[0]!;
-    const res = await manager.client.admin.onHand.set({
-      params: { id: vol.id },
-      body: { onHand: 12, reason: 'Пересчёт' },
+    const res = await manager.client.admin.warehouse.countConcentrate({
+      params: { id: f.id },
+      body: { ml: 123.6, reason: 'Пересчёт' },
     });
-    expect(res.status === 200 && res.body).toMatchObject({
-      onHand: 12,
-      reserved: 0,
-      available: 12,
+    expect(res.status === 200 && res.body.stock).toMatchObject({
+      concentrateMl: 123.6,
+      reservedMl: 0,
+      availableMl: 123.6,
     });
+    // 123.6 ml = twelve 10 ml fills
     const c = await card('nuit-blanche');
     expect(c.status === 200 && c.body.volumes[0]?.available).toBe(12);
-    const [row] = await audits('catalog.on_hand_changed');
+    const [row] = await audits('warehouse.concentrate_corrected');
     expect(row).toMatchObject({
       actorType: 'staff',
       actorId: manager.staff.id,
-      targetId: String(vol.id),
+      targetType: 'fragrance',
+      targetId: String(f.id),
     });
-    expect(row?.payload).toMatchObject({ ml: 10, onHand: [5, 12] });
+    expect(row?.payload).toMatchObject({ concentrateMl: [51.5, 123.6], reason: 'Пересчёт' });
 
-    const ownerRes = await owner.client.admin.onHand.set({
-      params: { id: vol.id },
-      body: { onHand: 0, reason: 'Пересчёт' },
+    const ownerRes = await owner.client.admin.warehouse.countConcentrate({
+      params: { id: f.id },
+      body: { ml: 0, reason: 'Пересчёт' },
     });
-    expect(ownerRes.status === 200 && ownerRes.body.available).toBe(0);
-    expect((await audits('catalog.on_hand_changed')).map((r) => r.actorId)).toEqual([
+    expect(ownerRes.status === 200 && ownerRes.body.stock.availableMl).toBe(0);
+    expect((await audits('warehouse.concentrate_corrected')).map((r) => r.actorId)).toEqual([
       manager.staff.id,
       owner.staff.id,
     ]);
   });
 
-  it('refuses a negative or fractional on hand and an unknown volume', async () => {
+  it('refuses a negative concentrate, more than three decimals and an unknown fragrance', async () => {
     const f = await created();
-    const id = f.volumes[0]!.id;
-    const path = `/admin/volumes/${id}/on-hand`;
-    expect(await send('PATCH', path, { onHand: -1 }, manager)).toBe(400);
-    expect(await send('PATCH', path, { onHand: 1.5 }, manager)).toBe(400);
+    const path = `/admin/warehouse/fragrances/${f.id}/concentrate`;
+    expect(await send('PUT', path, { ml: -1, reason: 'Пересчёт' }, manager)).toBe(400);
+    expect(await send('PUT', path, { ml: 1.2345, reason: 'Пересчёт' }, manager)).toBe(400);
+    expect(await send('PUT', path, { ml: 10, reason: ' ' }, manager)).toBe(400);
     expect(
       (
-        await manager.client.admin.onHand.set({
+        await manager.client.admin.warehouse.countConcentrate({
           params: { id: 9999 },
-          body: { onHand: 1, reason: 'Пересчёт' },
+          body: { ml: 1, reason: 'Пересчёт' },
         })
       ).status,
     ).toBe(404);
+    // the bottle count per volume is gone
+    expect(
+      await send('PATCH', `/admin/volumes/${f.volumes[0]!.id}/on-hand`, { onHand: 1 }, manager),
+    ).toBe(404);
   });
 
-  it('lists on hand for a manager', async () => {
+  it('lists the concentrate and the bottles it fills for a manager', async () => {
     await created();
     const res = await manager.client.admin.stock.list({ query: { q: 'nuit' } });
-    expect(
-      res.status === 200 &&
-        res.body.rows.filter((s) => s.kind === 'volume').map((s) => [s.ml, s.onHand, s.available]),
-    ).toEqual([
-      // the 5 ml the form adds (ADR 0042): counted here for samples and bottling, never sold
-      [5, 0, 0],
-      [10, 5, 5],
-      [30, 5, 5],
+    expect(res.status === 200 && res.body.fragrances).toEqual([
+      expect.objectContaining({
+        name: 'Nuit Blanche',
+        concentrateMl: 51.5,
+        availableMl: 51.5,
+        // the form's volumes only; the 5 ml (ADR 0042) is filled for samples and sets, never sold
+        bottles: [
+          { ml: 10, available: 5 },
+          { ml: 30, available: 1 },
+        ],
+        value: null,
+      }),
     ]);
   });
 
@@ -726,54 +733,45 @@ describe('dictionaries', () => {
   });
 });
 
-describe('on hand and a stale form (ADR 0010)', () => {
-  const editBody = (f: Awaited<ReturnType<typeof created>>, onHand: number, loaded: number) =>
-    baseInput({
-      name: 'Nuit Blanche Edit',
-      volumes: [
-        { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand, loadedOnHand: loaded },
-        { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null, onHand: 5, loadedOnHand: 5 },
-      ],
-    });
+describe('the concentrate and a stale form (ADR 0010, 0043)', () => {
+  const editBody = (concentrateMl: number, loaded: number) =>
+    baseInput({ name: 'Nuit Blanche Edit', concentrateMl, loadedConcentrateMl: loaded });
   const stored = async (id: number) =>
-    (await t.db.select().from(volumes).where(eq(volumes.id, id))).map((v) => v.onHand);
+    (await t.db.select().from(fragrances).where(eq(fragrances.id, id)))[0]!.concentrateUl;
+  const count = (id: number, ml: number) =>
+    manager.client.admin.warehouse.countConcentrate({
+      params: { id },
+      body: { ml, reason: 'Пересчёт' },
+    });
 
   it("keeps a manager's count when the owner saves a form loaded before it", async () => {
     const f = await created();
-    const vol = f.volumes[0]!;
-    await manager.client.admin.onHand.set({
-      params: { id: vol.id },
-      body: { onHand: 12, reason: 'Пересчёт' },
-    });
-    // the owner's form still carries the old count, 5, and did not touch it
+    await count(f.id, 123.6);
+    // the owner's form still carries the old count, 51.5, and did not touch it
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
-      body: editBody(f, 5, 5),
+      body: editBody(51.5, 51.5),
     });
     expect(res.status).toBe(200);
-    expect(await stored(vol.id)).toEqual([12]);
-    expect(res.status === 200 && res.body.volumes[0]?.onHand).toBe(12);
+    expect(await stored(f.id)).toBe(123_600);
+    expect(res.status === 200 && res.body.stock.concentrateMl).toBe(123.6);
     const [row] = await audits('catalog.fragrance_updated');
-    expect((row?.payload as { volumes: unknown[] }).volumes).toEqual([]);
+    expect(row?.payload).not.toHaveProperty('concentrateMl');
   });
 
   it('refuses with 409 when the owner changes a count that moved meanwhile', async () => {
     const f = await created();
-    const vol = f.volumes[0]!;
-    await manager.client.admin.onHand.set({
-      params: { id: vol.id },
-      body: { onHand: 12, reason: 'Пересчёт' },
-    });
+    await count(f.id, 123.6);
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
-      body: editBody(f, 8, 5),
+      body: editBody(80, 51.5),
     });
     expect(res.status).toBe(409);
     expect(res.status === 409 && res.body).toEqual({
-      code: 'on_hand_changed',
-      fields: ['volumes.0.onHand'],
+      code: 'concentrate_changed',
+      fields: ['concentrateMl'],
     });
-    expect(await stored(vol.id)).toEqual([12]);
+    expect(await stored(f.id)).toBe(123_600);
     // nothing else of that save went through either
     const [name] = await t.db
       .select({ n: fragrances.name })
@@ -782,40 +780,55 @@ describe('on hand and a stale form (ADR 0010)', () => {
     expect(name?.n).toBe('Nuit Blanche');
   });
 
-  it('writes a count the owner changed from the loaded value', async () => {
+  it('writes a count the owner changed from the loaded value, as a correction from the form', async () => {
     const f = await created();
     const res = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
-      body: editBody(f, 9, 5),
+      body: editBody(92.7, 51.5),
     });
     expect(res.status).toBe(200);
-    expect(await stored(f.volumes[0]!.id)).toEqual([9]);
+    expect(await stored(f.id)).toBe(92_700);
+    const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, f.id));
+    // the create's first count, then the edit's
+    expect(moves.map((m) => [m.kind, m.concentrateUl, m.details])).toEqual([
+      ['correction', 51_500, { source: 'form' }],
+      ['correction', 41_200, { source: 'form' }],
+    ]);
   });
 
-  it('takes the first count of a new volume, and never writes one omitted loadedOnHand', async () => {
+  it('a new fragrance takes the first count; an edit without loadedConcentrateMl writes none', async () => {
     const f = await created();
     const body = baseInput({
       volumes: [
-        { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 99 },
-        { ml: 50, price: 250_000, salePrice: null, saleEndsOn: null, onHand: 7 },
+        { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null },
+        { ml: 50, price: 250_000, salePrice: null, saleEndsOn: null },
       ],
+      concentrateMl: 999,
     });
     const res = await owner.client.admin.catalog.fragrances.update({ params: { id: f.id }, body });
-    expect(res.status === 200 && res.body.volumes.map((v) => [v.ml, v.onHand])).toEqual([
+    expect(res.status === 200 && res.body.volumes.map((v) => [v.ml, v.available])).toEqual([
       [10, 5],
-      [30, 5],
-      [50, 7],
+      [30, 1],
+      [50, 1],
     ]);
+    expect(await stored(f.id)).toBe(51_500);
+    // none counted: none in the history
+    const bare = await created({ name: 'Bare', concentrateMl: undefined });
+    expect(await stored(bare.id)).toBe(0);
+    expect(await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, bare.id))).toEqual(
+      [],
+    );
   });
 
   it('allows a count below the reserve but flags it', async () => {
     // the reserve is 0 until order lines exist (#23), so only the flag's shape is checked here
     const f = await created();
-    const res = await manager.client.admin.onHand.set({
-      params: { id: f.volumes[0]!.id },
-      body: { onHand: 0, reason: 'Пересчёт' },
+    const res = await count(f.id, 0);
+    expect(res.status === 200 && res.body.stock).toMatchObject({
+      belowReserve: false,
+      availableMl: 0,
+      level: 'zero',
     });
-    expect(res.status === 200 && res.body).toMatchObject({ belowReserve: false, available: 0 });
   });
 });
 

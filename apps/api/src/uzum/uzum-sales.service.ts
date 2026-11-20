@@ -34,7 +34,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { bottlesOf, readLiquidStock } from '../catalog/catalog.service';
+import { bottlesOf, readLiquidStock, type LiquidStock } from '../catalog/catalog.service';
 import { readCostSettings } from '../cost/cost-settings';
 import { costSnapshot, type CostedItem } from '../cost/order-costs';
 import type { Edges } from '../edges';
@@ -386,26 +386,36 @@ async function lockShelves(
   return { stock, sets, volumes: new Map(rows.map(({ id, ...v }) => [id, v])) };
 }
 
-/**
- * Refuses (`stock_short`) when the free concentrate (less the reserve, read under the locks) can't
- * fill the lines: each volume in the order the lines name it, from its fragrance's one liquid.
- */
-async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLineInput[]) {
-  // a volume by its id, a Discovery set by `set:<vial ml>`
-  const wanted = new Map<number | `set:${DiscoveryVialMl}`, number>();
+/** What lines want: a volume by its id, a Discovery set by `set:<vial ml>`, summed. */
+export type WantedStock = Map<number | `set:${DiscoveryVialMl}`, number>;
+
+export function wantedOf(lines: readonly UzumSaleLineInput[]): WantedStock {
+  const wanted: WantedStock = new Map();
   for (const l of lines) {
     const key = l.kind === 'volume' ? l.volumeId : (`set:${l.vialMl}` as const);
     wanted.set(key, (wanted.get(key) ?? 0) + l.qty);
   }
-  const ids = [...new Set([...locked.volumes.values()].map((v) => v.fragranceId))];
-  const stock = await readLiquidStock(tx, ids);
-  const free = new Map(ids.map((id) => [id, stock.free(id)]));
-  const names = new Map([...locked.stock.fragrances].map(([id, f]) => [id, f.name]));
+  return wanted;
+}
+
+/**
+ * The lines that the stock can't cover (ADR 0043): each volume in the order the lines name it,
+ * from its fragrance's one free liquid, so two volumes of one fragrance never both take the same
+ * ml; a Discovery set from its own boxes. The record (under the locks) and the import's dry run
+ * (without them) judge alike.
+ */
+export function shortLines(
+  wanted: WantedStock,
+  volumes: ReadonlyMap<number, { fragranceId: number; ml: number; name: string | null }>,
+  setsAvailable: ReadonlyMap<DiscoveryVialMl, number>,
+  stock: Pick<LiquidStock, 'free' | 'fill'>,
+): UzumShortLine[] {
+  const free = new Map<number, number>();
   const short: UzumShortLine[] = [];
   for (const [key, want] of wanted) {
     if (typeof key === 'string') {
       const ml = asDiscoveryVialMl(Number(key.slice(4)));
-      const left = locked.sets.get(ml)?.available ?? 0;
+      const left = setsAvailable.get(ml) ?? 0;
       if (want > left)
         short.push({
           kind: 'discovery_set',
@@ -417,20 +427,40 @@ async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLi
         });
       continue;
     }
-    const v = locked.volumes.get(key)!;
+    const v = volumes.get(key);
+    if (!v) continue;
     const fill = stock.fill(v.ml);
-    const left = bottlesOf(free.get(v.fragranceId) ?? 0, fill);
+    const has = free.get(v.fragranceId) ?? stock.free(v.fragranceId);
+    const left = bottlesOf(has, fill);
     if (want > left)
       short.push({
         kind: 'volume',
         volumeId: key,
-        name: names.get(v.fragranceId) ?? null,
+        name: v.name,
         ml: v.ml,
         wanted: want,
         available: left,
       });
-    free.set(v.fragranceId, (free.get(v.fragranceId) ?? 0) - Math.min(want, left) * fill);
+    free.set(v.fragranceId, has - Math.min(want, left) * fill);
   }
+  return short;
+}
+
+/** Refuses (`stock_short`) when the free concentrate (less the reserve, read under the locks) can't fill the lines. */
+async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLineInput[]) {
+  const ids = [...new Set([...locked.volumes.values()].map((v) => v.fragranceId))];
+  const stock = await readLiquidStock(tx, ids);
+  const short = shortLines(
+    wantedOf(lines),
+    new Map(
+      [...locked.volumes].map(([id, v]) => [
+        id,
+        { ...v, name: locked.stock.fragrances.get(v.fragranceId)?.name ?? null },
+      ]),
+    ),
+    new Map([...locked.sets].map(([ml, set]) => [ml, set.available])),
+    stock,
+  );
   if (short.length) throw new Refused({ ok: false, reason: 'stock_short', short });
 }
 

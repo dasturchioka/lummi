@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   bottleCost,
+  concentrateCost,
   defaultCostSettings,
+  fillUl,
   giftSampleCost,
   landedOilPrice,
   liquidNeeded,
+  mixNeeds,
   orderCosts,
   setCost,
   type CostSettings,
@@ -490,7 +493,7 @@ describe("the registry defaults are the calculator's P0", () => {
   });
 });
 
-describe('the liquid a bottle takes (bottling draws on it, #76)', () => {
+describe('the liquid a bottle takes (its fill, #76, #82)', () => {
   it('50 ml at the defaults: 30 % oil at 1 g/ml and 70 % ethanol, plus 3 % filling loss', () => {
     // worked by hand: 50 × 1.03 × 0.30 × 1 = 15.45 g; 50 × 1.03 × 0.70 = 36.05 ml
     const need = liquidNeeded(50, defaultCostSettings().liquid);
@@ -510,6 +513,44 @@ describe('the liquid a bottle takes (bottling draws on it, #76)', () => {
     const need = liquidNeeded(10, OTHER.liquid);
     expect(need.oilGrams).toBeCloseTo(2.47, 10);
     expect(need.ethanolMl).toBeCloseTo(7.8, 10);
+  });
+});
+
+describe('the ready concentrate (ADR 0043): a fill, a mixing, its value', () => {
+  it('a fill is the bottle with the filling loss, whole microlitres', () => {
+    const d = defaultCostSettings().liquid;
+    // 3 % loss: 5.15, 10.3, 30.9, 51.5 ml
+    expect([5, 10, 30, 50].map((ml) => fillUl(ml, d))).toEqual([5150, 10_300, 30_900, 51_500]);
+    // 4 % loss: 10 × 1.04 = 10.4 ml
+    expect(fillUl(10, OTHER.liquid)).toBe(10_400);
+    expect(fillUl(10, { ...d, fillingLossPercent: 2.55 })).toBe(10_255);
+  });
+  it('a mixing takes the oil and ethanol shares of the ml made, no loss', () => {
+    // 100 ml: 30 g of oil (30 % at 1 g/ml), 70 ml of ethanol
+    const need = mixNeeds(100, defaultCostSettings().liquid);
+    expect(need.oilGrams).toBeCloseTo(30, 10);
+    expect(need.ethanolMl).toBeCloseTo(70, 10);
+    // 100 ml at 25 % oil, 0.95 g/ml: 23.75 g; ethanol 75 ml
+    const other = mixNeeds(100, OTHER.liquid);
+    expect(other.oilGrams).toBeCloseTo(23.75, 10);
+    expect(other.ethanolMl).toBeCloseTo(75, 10);
+  });
+  it('a bottle takes the mixing of its fill: one formula', () => {
+    // 10 ml at 4 % loss is a mixing of 10.4 ml
+    expect(liquidNeeded(10, OTHER.liquid)).toEqual(mixNeeds(10.4, OTHER.liquid));
+  });
+  it('a ml of concentrate costs its oil at the landed price and its ethanol with the fixative', () => {
+    // A at the defaults: 3 702.335 × 1 g/ml × 30 % = 1 110.7005; ethanol 150 × 70 % + 0 = 105;
+    // 1 215.7005 so'm per ml, 100 ml = 121 570.05
+    expect(concentrateCost(A, 100, defaultCostSettings())).toBeCloseTo(121_570.05, 6);
+    // the same per ml as a 50 ml bottle's liquid: (57 201.1 + 5 407.5) / 51.5
+    const s = defaultCostSettings();
+    expect(concentrateCost(A, 51.5, s)).toBeCloseTo(
+      bottleCost(A, 50, s).oil + bottleCost(A, 50, s).ethanol,
+      -1,
+    );
+    // OTHER: 3 950 × 0.9 × 1.05 = 3 732.75 × 0.95 × 25 % = 886.528125; ethanol 160 × 75 % + 300 = 420
+    expect(concentrateCost(A, 10, OTHER)).toBeCloseTo(13_065.28125, 6);
   });
 });
 

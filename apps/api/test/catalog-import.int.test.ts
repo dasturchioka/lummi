@@ -2,7 +2,7 @@ import { IMPORT_ISSUE_CODES, type ImportApplied, type ImportReport } from '@lumm
 import { adminMessages } from '@lummi/i18n/admin';
 import { normalizeUzbek } from '@lummi/i18n';
 import JSZip from 'jszip';
-import { auditLog, eq, fragrances, notes, sql, volumes } from '@lummi/db';
+import { auditLog, eq, fragrances, notes, sql, stockMoves, volumes } from '@lummi/db';
 import ExcelJS from 'exceljs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -72,8 +72,12 @@ function lastData(ws: ExcelJS.Worksheet): number {
   });
   return last;
 }
-const volState = async () =>
-  (await t.db.select().from(volumes)).map((v) => [v.id, v.price, v.onHand]).sort();
+/** Every volume's price and every fragrance's ready concentrate (ADR 0043): what an import may write. */
+const volState = async () => [
+  ...(await t.db.select().from(volumes)).map((v) => [v.id, v.price]).sort(),
+  ...(await t.db.select().from(fragrances)).map((f) => ['f', f.id, f.concentrateUl]).sort(),
+];
+const CONCENTRATE = 'Концентрат, мл';
 
 describe('dry run', () => {
   it('counts new, changed and unchanged rows and writes nothing', async () => {
@@ -91,7 +95,6 @@ describe('dry run', () => {
       vr.getCell(colOf(v, 'Внутренний код')).value = '900';
       vr.getCell(colOf(v, 'Объём, мл')).value = 30;
       vr.getCell(colOf(v, 'Цена, сум')).value = 150_000;
-      vr.getCell(colOf(v, 'В наличии, шт.')).value = 4;
     });
     const { status, report } = await dryRun(file);
     expect(status).toBe(201);
@@ -104,9 +107,9 @@ describe('dry run', () => {
   });
 
   it('reports each problem by sheet, row and column and gives no token', async () => {
-    const file = await edit(await exportBytes(), ({ volumes: v }) => {
+    const file = await edit(await exportBytes(), ({ fragrances: f, volumes: v }) => {
       v.getRow(3).getCell(colOf(v, 'Цена, сум')).value = 'дорого';
-      v.getRow(4).getCell(colOf(v, 'В наличии, шт.')).value = -2;
+      f.getRow(4).getCell(colOf(f, CONCENTRATE)).value = -2;
     });
     const { report } = await dryRun(file);
     expect(report.token).toBeNull();
@@ -114,20 +117,59 @@ describe('dry run', () => {
     expect(report.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sheet: 'volumes', row: 3, column: 'Цена, сум' }),
-        expect.objectContaining({ sheet: 'volumes', row: 4, column: 'В наличии, шт.' }),
+        expect.objectContaining({ sheet: 'fragrances', row: 4, column: CONCENTRATE, code: 'bad_number' }),
       ]),
     );
   });
 
-  it('shows on hand, reserve and the resulting available per volume, a negative one as a warning', async () => {
-    const [v] = await t.db.select().from(volumes).orderBy(volumes.id).limit(1);
-    const file = await edit(await exportBytes(), ({ volumes: vs }) => {
-      vs.getRow(2).getCell(colOf(vs, 'В наличии, шт.')).value = 7;
+  it('shows the concentrate, its reserve and the resulting free ml per fragrance (ADR 0043)', async () => {
+    const [first] = await t.db.select().from(fragrances).orderBy(fragrances.code).limit(1);
+    const file = await edit(await exportBytes(), ({ fragrances: f }) => {
+      f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = '7,5';
     });
     const { report } = await dryRun(file);
-    const row = report.stock.find((s) => s.row === 2)!;
-    expect(row).toMatchObject({ onHand: v!.onHand, newOnHand: 7, reserved: 0, available: 7, negative: false });
+    expect(report.errors).toEqual([]);
+    expect(report.stock).toEqual([
+      {
+        row: 2,
+        code: first!.code,
+        name: first!.name,
+        concentrateMl: first!.concentrateUl / 1000,
+        newConcentrateMl: 7.5,
+        reservedMl: 0,
+        availableMl: 7.5,
+        negative: false,
+      },
+    ]);
     expect(report.warnings.filter((w) => w.code === 'below_reserve')).toHaveLength(0);
+  });
+
+  it('an empty concentrate cell keeps the stored count, more than three decimals is refused', async () => {
+    const kept = await edit(await exportBytes(), ({ fragrances: f }) => {
+      f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = null;
+    });
+    const a = await dryRun(kept);
+    expect(a.report.errors).toEqual([]);
+    expect(a.report.stock).toEqual([]);
+    expect(a.report.changeTotal).toBe(0);
+    const fine = await edit(await exportBytes(), ({ fragrances: f }) => {
+      f.getRow(3).getCell(colOf(f, CONCENTRATE)).value = '12.3456';
+    });
+    expect((await dryRun(fine)).report.errors).toEqual([
+      expect.objectContaining({ sheet: 'fragrances', row: 3, column: CONCENTRATE, code: 'bad_number' }),
+    ]);
+  });
+
+  it('an older file with «В наличии, шт.» on «Объёмы» still imports; the bottle count is not read', async () => {
+    const file = await edit(await exportBytes(), ({ volumes: v }) => {
+      const col = v.getRow(1).cellCount + 1;
+      v.getRow(1).getCell(col).value = 'В наличии, шт.';
+      v.getRow(2).getCell(col).value = 99;
+    });
+    const { report } = await dryRun(file);
+    expect(report.errors).toEqual([]);
+    expect(report.stock).toEqual([]);
+    expect(report.changeTotal).toBe(0);
   });
 
   it('rejects a file that is not an xlsx', async () => {
@@ -144,9 +186,10 @@ describe('dry run', () => {
 
 describe('what the dry run says it will change', () => {
   it('lists every change by name as before → after: prices and markdowns first, then stock, then content', async () => {
-    const [v1, v2] = await t.db.select().from(volumes).orderBy(volumes.id).limit(2);
+    const [, v2] = await t.db.select().from(volumes).orderBy(volumes.id).limit(2);
+    const [first] = await t.db.select().from(fragrances).orderBy(fragrances.code).limit(1);
     const file = await edit(await exportBytes(), ({ fragrances: f, volumes: v }) => {
-      v.getRow(2).getCell(colOf(v, 'В наличии, шт.')).value = 9; // stock only
+      f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = 9; // stock only
       v.getRow(3).getCell(colOf(v, 'Цена, сум')).value = 88_000; // a price
       v.getRow(4).getCell(colOf(v, 'Цена со скидкой, сум')).value = 50_000; // a markdown …
       v.getRow(4).getCell(colOf(v, 'Скидка до (ГГГГ-ММ-ДД)')).value = '2026-12-31'; // … with an end
@@ -169,7 +212,10 @@ describe('what the dry run says it will change', () => {
       ]),
     );
     const stock = report.changes.find((c) => c.group === 'stock')!;
-    expect(stock.fields).toEqual([{ field: 'onHand', before: v1!.onHand, after: 9 }]);
+    expect(stock).toMatchObject({ kind: 'changed', row: 2, ml: null, name: first!.name });
+    expect(stock.fields).toEqual([
+      { field: 'concentrateMl', before: first!.concentrateUl / 1000, after: 9 },
+    ]);
     const content = report.changes.find((c) => c.group === 'content')!;
     expect(content.fields).toEqual([
       expect.objectContaining({ field: 'descriptionRu', after: 'Новый текст описания.' }),
@@ -188,10 +234,14 @@ describe('what the dry run says it will change', () => {
       vr.getCell(colOf(v, 'Внутренний код')).value = '901';
       vr.getCell(colOf(v, 'Объём, мл')).value = 30;
       vr.getCell(colOf(v, 'Цена, сум')).value = 150_000;
-      vr.getCell(colOf(v, 'В наличии, шт.')).value = 4;
+      row.getCell(colOf(f, CONCENTRATE)).value = 250;
     });
     const { report } = await dryRun(file);
     expect(report.errors).toEqual([]);
+    // a new fragrance starts with the concentrate the file counts
+    expect(report.stock).toEqual([
+      expect.objectContaining({ code: '901', concentrateMl: null, newConcentrateMl: 250 }),
+    ]);
     const news = report.changes.filter((c) => c.kind === 'new');
     expect(news.map((c) => [c.group, c.name, c.ml])).toEqual(
       expect.arrayContaining([['price', 'Nuit Neuf', 30], ['content', 'Nuit Neuf', null]]),
@@ -210,6 +260,8 @@ describe('round trip', () => {
     expect(report.counts.volumes).toMatchObject({ new: 0, changed: 0, unchanged: 18 });
     expect(report.counts.families).toMatchObject({ new: 0, changed: 0 });
     expect(report.counts.notes).toMatchObject({ new: 0, changed: 0 });
+    expect(report.stock).toEqual([]);
+    expect(report.changeTotal).toBe(0);
   });
 });
 
@@ -253,15 +305,15 @@ describe('notes', () => {
 
 describe('cells that cannot be trusted', () => {
   it('rejects a formula and an error value instead of importing their text', async () => {
-    const file = await edit(await exportBytes(), ({ volumes: v }) => {
+    const file = await edit(await exportBytes(), ({ fragrances: f, volumes: v }) => {
       v.getRow(2).getCell(colOf(v, 'Цена, сум')).value = { formula: '1000*70', result: 70_000 };
-      v.getRow(3).getCell(colOf(v, 'В наличии, шт.')).value = { error: '#N/A' } as never;
+      f.getRow(3).getCell(colOf(f, CONCENTRATE)).value = { error: '#N/A' } as never;
     });
     const { report } = await dryRun(file);
     expect(report.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sheet: 'volumes', row: 2, column: 'Цена, сум', code: 'formula_cell' }),
-        expect.objectContaining({ sheet: 'volumes', row: 3, column: 'В наличии, шт.', code: 'error_cell' }),
+        expect.objectContaining({ sheet: 'fragrances', row: 3, column: CONCENTRATE, code: 'error_cell' }),
       ]),
     );
     expect(report.token).toBeNull();
@@ -378,6 +430,30 @@ describe('apply', () => {
     expect(log[0]!.actorType).toBe('staff');
   });
 
+  it('writes a concentrate count as a correction from the import in the fragrance history', async () => {
+    const [first] = await t.db.select().from(fragrances).orderBy(fragrances.code).limit(1);
+    const file = await edit(await exportBytes(), ({ fragrances: f }) => {
+      f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = 123.4;
+    });
+    const { report } = await dryRun(file);
+    expect((await apply(file, report.token!)).status).toBe(201);
+    const [after] = await t.db.select().from(fragrances).where(eq(fragrances.id, first!.id));
+    expect(after!.concentrateUl).toBe(123_400);
+    const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, first!.id));
+    expect(moves).toEqual([
+      expect.objectContaining({
+        kind: 'correction',
+        concentrateUl: 123_400 - first!.concentrateUl,
+        details: { source: 'import' },
+        actorType: 'staff',
+      }),
+    ]);
+    // the seed over a loaded catalog keeps the owner's count
+    await seedCatalog(t.db, { materialsDir, limit: 6 });
+    const [again] = await t.db.select().from(fragrances).where(eq(fragrances.id, first!.id));
+    expect(again!.concentrateUl).toBe(123_400);
+  });
+
   it('is all or nothing: a file with one good and one bad row changes nothing', async () => {
     const before = await volState();
     const file = await edit(await exportBytes(), ({ volumes: v }) => {
@@ -434,6 +510,9 @@ describe('access', () => {
     await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as unknown as ArrayBuffer);
     expect(wb.worksheets.map((w) => w.name)).toEqual(['Ароматы', 'Объёмы', 'Справочник']);
     expect(lastData(wb.getWorksheet('Ароматы')!)).toBe(1);
+    // the count is the fragrance's concentrate; a volume has none (ADR 0043)
+    expect(colOf(wb.getWorksheet('Ароматы')!, CONCENTRATE)).toBeGreaterThan(0);
+    expect(() => colOf(wb.getWorksheet('Объёмы')!, 'В наличии, шт.')).toThrow();
   });
 });
 
@@ -469,7 +548,7 @@ describe('apply, under pressure', () => {
     const snapshot = JSON.parse(
       readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
     ) as Snapshot;
-    /** Places an order for `qty` of the first fragrance's 10 ml (the volume on row 2 of «Объёмы»). */
+    /** Places an order for `qty` of the first fragrance's 10 ml (the fragrance on row 2 of «Ароматы»), 10.3 ml each. */
     async function hold(qty: number) {
       await importBtsPoints(t.db, snapshot);
       const [slug] = await slugs(t, 1);
@@ -488,19 +567,27 @@ describe('apply, under pressure', () => {
 
     it('the dry run warns when the new count is below the reserve', async () => {
       await hold(5);
-      const file = await edit(await exportBytes(), ({ volumes: v }) => {
-        v.getRow(2).getCell(colOf(v, 'В наличии, шт.')).value = 3;
+      const file = await edit(await exportBytes(), ({ fragrances: f }) => {
+        f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = 30;
       });
       const { report } = await dryRun(file);
       const row = report.stock.find((s) => s.row === 2)!;
-      expect(row).toMatchObject({ newOnHand: 3, reserved: 5, available: -2, negative: true });
-      expect(report.warnings).toEqual([expect.objectContaining({ code: 'below_reserve', row: 2 })]);
+      // five 10 ml fills hold 51.5 ml
+      expect(row).toMatchObject({
+        newConcentrateMl: 30,
+        reservedMl: 51.5,
+        availableMl: -21.5,
+        negative: true,
+      });
+      expect(report.warnings).toEqual([
+        expect.objectContaining({ code: 'below_reserve', sheet: 'fragrances', row: 2 }),
+      ]);
       expect(report.token).not.toBeNull(); // a warning never blocks
     });
 
     it('a reserve that grows after the dry run comes back as a warning and is audited', async () => {
-      const file = await edit(await exportBytes(), ({ volumes: v }) => {
-        v.getRow(2).getCell(colOf(v, 'В наличии, шт.')).value = 6;
+      const file = await edit(await exportBytes(), ({ fragrances: f }) => {
+        f.getRow(2).getCell(colOf(f, CONCENTRATE)).value = 60;
       });
       const { report } = await dryRun(file);
       expect(report.warnings).toEqual([]); // nothing reserved yet
@@ -508,9 +595,15 @@ describe('apply, under pressure', () => {
       const res = await apply(file, report.token!);
       expect(res.status).toBe(201);
       const body = (await res.json()) as ImportApplied;
+      // eight 10 ml fills hold 82.4 ml
       expect(body.warnings).toEqual([
-        expect.objectContaining({ code: 'below_reserve', params: expect.objectContaining({ onHand: 6, reserved: 8 }) }),
+        expect.objectContaining({
+          code: 'below_reserve',
+          params: expect.objectContaining({ onHand: 60, reserved: 82.4 }),
+        }),
       ]);
+      const [first] = await t.db.select().from(fragrances).orderBy(fragrances.code).limit(1);
+      expect(first!.concentrateUl).toBe(60_000);
       const [log] = await t.db.select().from(auditLog).where(eq(auditLog.action, 'catalog.import_applied'));
       expect(JSON.stringify(log!.payload)).toContain('belowReserve');
     });
