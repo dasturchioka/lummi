@@ -53,10 +53,10 @@ function Tags({ r, t }: { r: StockFragranceRow; t: AdminMessages }) {
 }
 
 /**
- * The stock page's fragrances (ADR 0043): each one's ready concentrate (counted, held by orders,
- * free), the bottles that fills per sold volume, its oil in ml and grams, its tags, the owner's
- * value, the number shown to customers (#83) and the way to its warehouse page. The concentrate
- * is counted inline by owner and manager with a reason, compare-and-set as every count.
+ * The stock page's fragrances (ADR 0043): per fragrance only its ready concentrate (with what
+ * orders hold of it) and its oil, both in ml («Boshqa narsa kerak emas»), its tags, the owner's
+ * value, the number shown to customers (#83) and the way to its warehouse page, which has the
+ * detail. The concentrate is counted inline by owner and manager with a reason, compare-and-set.
  */
 export function StockTable({
   rows,
@@ -130,10 +130,9 @@ export function StockTable({
         {s.saved}
       </span>
     );
-  const reservedLine = (r: StockFragranceRow) =>
-    fill(s.reservedLine, { reserved: ml(r.reservedMl), available: ml(r.availableMl) });
-  const bottles = (r: StockFragranceRow) =>
-    r.bottles.map((b) => fill(s.bottle, { ml: String(b.ml), n: num(b.available) }));
+  /** What open orders hold, only while they hold any. */
+  const reservedNote = (r: StockFragranceRow) =>
+    r.reservedMl > 0 ? fill(s.reservedNote, { reserved: ml(r.reservedMl) }) : null;
   const shownEdit = (r: StockFragranceRow, layout: 'block' | 'table') => (
     <ShownCountEdit
       fragranceId={r.fragranceId}
@@ -174,7 +173,7 @@ export function StockTable({
         {plural(language, total, s.total)} ·{' '}
         {fill(s.lowHint, { n: num(lowConcentrateMl), oil: num(lowOilMl) })}
       </p>
-      {/* phones and narrow cards: a block per fragrance, the three figures side by side */}
+      {/* phones and narrow cards: a block per fragrance, its two figures side by side */}
       <ul className="divide-y divide-border @4xl:hidden">
         {rows.map((r) => {
           const active = count.editOf(keyOf(r));
@@ -196,14 +195,13 @@ export function StockTable({
               )}
               <dl
                 className={cn(
-                  'grid grid-cols-3 gap-2 rounded-button px-3 py-2.5',
+                  'grid grid-cols-2 gap-2 rounded-button px-3 py-2.5',
                   levelTone(r.level) || 'bg-milk/50',
                 )}
               >
                 {(
                   [
                     [s.concentrate, ml(r.concentrateMl), 'concentrate'],
-                    [s.available, ml(r.availableMl), 'available'],
                     [s.oil, ml(r.oilMl), 'oil'],
                   ] as const
                 ).map(([name, value, id]) => (
@@ -218,9 +216,11 @@ export function StockTable({
                   </div>
                 ))}
               </dl>
-              <p className="text-small text-muted-foreground tabular-nums">
-                {s.bottles}: {bottles(r).join(' · ')}
-              </p>
+              {reservedNote(r) && (
+                <p className="-mt-1 text-small text-muted-foreground tabular-nums">
+                  {reservedNote(r)}
+                </p>
+              )}
               {r.belowReserve && <p className="text-small text-muted-foreground">{s.belowNow}</p>}
               {active ? (
                 editor(r, 'block')
@@ -242,7 +242,6 @@ export function StockTable({
             <TR>
               <TH>{s.fragrance}</TH>
               <TH className="text-right">{s.concentrate}</TH>
-              <TH>{s.bottles}</TH>
               <TH className="text-right">{s.oil}</TH>
               <TH>{s.state}</TH>
             </TR>
@@ -282,24 +281,17 @@ export function StockTable({
                             {countButton(r)}
                           </span>
                         )}
-                        <span className="text-small text-muted-foreground tabular-nums">
-                          {reservedLine(r)}
-                        </span>
+                        {reservedNote(r) && (
+                          <span className="text-small text-muted-foreground tabular-nums">
+                            {reservedNote(r)}
+                          </span>
+                        )}
                         {r.belowReserve && (
                           <span className="max-w-[18rem] text-small text-muted-foreground">
                             {s.belowNow}
                           </span>
                         )}
                       </div>
-                    </TD>
-                    <TD className="h-auto py-3">
-                      <ul className="grid gap-0.5 text-small tabular-nums" data-testid="bottles">
-                        {bottles(r).map((line) => (
-                          <li key={line} className="whitespace-nowrap">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
                     </TD>
                     <TD className="h-auto py-3 text-right">
                       <span className="block font-semibold tabular-nums" data-testid="oil">
@@ -321,7 +313,7 @@ export function StockTable({
                   </TR>
                   {active && (
                     <TR className="bg-milk/60">
-                      <TD colSpan={5} className="h-auto py-4">
+                      <TD colSpan={4} className="h-auto py-4">
                         {editor(r, 'table')}
                       </TD>
                     </TR>
