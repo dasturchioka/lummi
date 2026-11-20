@@ -42,7 +42,6 @@ import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
 import { retryOrTryAgain } from '../util/transient';
 import { mlFromUl, ulFromMl } from '../warehouse/oil';
 import { recordStockMove } from '../warehouse/stock-moves';
-import { lockFragrances } from '../warehouse/stock-changes';
 
 export type Failure = {
   ok: false;

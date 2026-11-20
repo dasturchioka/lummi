@@ -47,7 +47,7 @@ import { isOwner } from '../staff/staff.guard';
 import { retryOrTryAgain } from '../util/transient';
 import { fragranceStock, readStockContext, round3 } from './fragrance-stock';
 import { gramsFromMg, mgFromGrams, mixingNeeds, mlFromUl, oilReceiptCost, ulFromMl } from './oil';
-import { applyStock, linkOf, lockFragrances, lockStock } from './stock-changes';
+import { applyStock, linkOf, lockStock } from './stock-changes';
 import { recordStockMove } from './stock-moves';
 import { readComposition } from '../sets/sets';
 

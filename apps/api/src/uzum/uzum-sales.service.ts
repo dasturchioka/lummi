@@ -15,7 +15,6 @@ import {
 import {
   asc,
   desc,
-  discoverySet,
   eq,
   fragrances,
   inArray,
