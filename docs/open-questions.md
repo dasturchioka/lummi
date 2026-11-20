@@ -178,6 +178,11 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **Uzum's warehouse (FBO).** We assume each Uzum parcel leaves our own shelf when it sells (FBS). If stock is sent to Uzum's warehouse in advance, that shipment should leave on hand instead, and the sale should not.
 - **Two date bases in «По каналам».** The Mini App counts an order on the day it was delivered (as the rest of the report); Uzum counts a sale on the day it sold (`sold_on`), since we do not see Uzum's delivery. Confirm, or say if Uzum should count on its payout day.
 
+## Shown stock count (ticket #83)
+
+- **«Changes daily».** The customer said the shown number should change every day. We built the owner-set number only: he edits it on the stock page, nothing moves it automatically. Confirm that is enough, or whether he wants a daily drift or schedule.
+- **List card.** Only the product page shows «В наличии: N шт.» today (the list card never showed a count). Confirm he does not want it on the list card too.
+
 ## Stock in liquid and consumables (ticket #82, ADR 0043)
 - **Thresholds are ours:** «Мало концентрата» at 300 ml of free concentrate (`stock.lowConcentrateMl`), «Мало масла» at 300 ml of oil (`stock.lowOilMl`), each consumable's own low count (seeded 20 flacons or boxes, 1 000 ml of spirit). The owner sets them.
 - **Boxes for sets:** a builder set's five 10 ml vials and the 5 ml gift sample take a flacon each but no 10 ml box (the cost model gives a set one set box). No «коробка набора» item is seeded; if the owner adds one, should a handed-over builder set or an assembled Discovery set take it?

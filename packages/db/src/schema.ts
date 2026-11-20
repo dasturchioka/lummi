@@ -530,10 +530,17 @@ export const fragrances = pgTable(
     isHit: boolean('is_hit').notNull().default(false),
     isNew: boolean('is_new').notNull().default(false),
     hidden: boolean('hidden').notNull().default(false),
+    /**
+     * #83: the most bottles the shop shows the customer for this fragrance («В наличии: N шт.»);
+     * null = the setting `stock.shownDefault`. The upper bound is the setting `stock.shownMax`, so
+     * it is enforced by the server; the database only keeps it positive.
+     */
+    shownCount: integer('shown_count'),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check('fragrances_shown_count_positive', sql`${t.shownCount} is null or ${t.shownCount} >= 1`),
     check(
       'fragrances_three_key_notes',
       sql`cardinality(${t.keyNotesRu}) = 3 and cardinality(${t.keyNotesUz}) = 3`,

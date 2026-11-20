@@ -54,6 +54,7 @@ const volumesOf = (prices: [number, number, number], stock: [number, number, num
     saleEndsAt: null,
     effectivePrice: prices[i]!,
     available: stock[i]!,
+    shown: Math.min(7, stock[i]!),
     photo: null,
   }));
 

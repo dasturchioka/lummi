@@ -142,3 +142,21 @@ export class CatalogAdminController {
     throw photoFailure(res.reason);
   }
 }
+
+/** #83: the number shown to customers is the owner's and the manager's, like on hand. */
+@Controller()
+@UseGuards(StaffGuard)
+export class ShownCountController {
+  constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
+
+  @TsRestHandler(adminContract.shownCount.set)
+  set(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.shownCount.set, async ({ params, body }) => {
+      const res = await this.catalog.setShownCount(actor, params.id, body.shownCount);
+      if (res.ok) return { status: 200 as const, body: res.value };
+      return res.reason === 'invalid'
+        ? { status: 422 as const, body: { code: 'invalid' as const, fields: res.fields } }
+        : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
+  }
+}

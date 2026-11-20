@@ -41,6 +41,7 @@ const volume = (ml: VolumeCard['ml'], price: number, available: number): VolumeC
   saleEndsAt: null,
   effectivePrice: price,
   available,
+  shown: available,
   photo: null,
 });
 

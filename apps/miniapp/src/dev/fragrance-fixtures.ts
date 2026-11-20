@@ -50,6 +50,7 @@ const demo: FragranceCard = {
       saleEndsAt: null,
       effectivePrice: 69_000,
       available: 20,
+      shown: 7,
       photo: PHOTO[10],
     },
     {
@@ -60,6 +61,7 @@ const demo: FragranceCard = {
       saleEndsAt: null,
       effectivePrice: 149_000,
       available: 20,
+      shown: 7,
       photo: PHOTO[30],
     },
     {
@@ -70,6 +72,7 @@ const demo: FragranceCard = {
       saleEndsAt: null,
       effectivePrice: 219_000,
       available: 20,
+      shown: 7,
       photo: PHOTO[50],
     },
   ],
@@ -138,6 +141,7 @@ const worst: FragranceCard = {
       saleEndsAt: SALE_ENDS,
       effectivePrice: 71_200,
       available: 0,
+      shown: 0,
       photo: PHOTO[10],
     },
     {
@@ -148,6 +152,7 @@ const worst: FragranceCard = {
       saleEndsAt: SALE_ENDS,
       effectivePrice: 391_200,
       available: 3,
+      shown: 3,
       photo: null,
     },
     {
@@ -158,6 +163,7 @@ const worst: FragranceCard = {
       saleEndsAt: null,
       effectivePrice: 1_032_000,
       available: 1,
+      shown: 1,
       photo: PHOTO[50],
     },
   ],

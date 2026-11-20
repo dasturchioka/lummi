@@ -267,11 +267,37 @@ export const bottlesOf = (freeUl: number, fill: number) =>
 /** On hand under the reserve (ADR 0010): allowed, and reported; the one place that says so. */
 export const belowReserve = (onHand: number, reserved: number) => onHand < reserved;
 
+/** What decides the number shown to customers (#83): the fragrance's own and the two settings. */
+export interface ShownRule {
+  /** `fragrances.shownCount`: null = the default. */
+  own: number | null;
+  /** Setting `stock.shownDefault`. */
+  fallback: number;
+  /** Setting `stock.shownMax`. */
+  max: number;
+}
+
 /**
- * One volume as the card shows it, with the bottles its fragrance's free concentrate fills. The
- * markdown reverts by itself: it is judged against `now`, no job.
+ * THE count a customer is shown («В наличии: N шт.», #83): the fragrance's own number (or the
+ * default), never above the maximum and never above what the server can actually sell; 0 when
+ * nothing is available, so a sold-out volume shows no count. The one place that says so.
  */
-export function toVolumeCard(v: VolumeRow, bottles: number, now: Date): VolumeCard {
+export function shownCount(availableNow: number, rule: ShownRule): number {
+  if (availableNow <= 0) return 0;
+  return Math.min(rule.own ?? rule.fallback, rule.max, availableNow);
+}
+
+/**
+ * One volume as the card shows it, with the bottles its fragrance's free concentrate fills (ADR
+ * 0043) and the count shown from them (#83). The markdown reverts by itself: it is judged against
+ * `now`, no job.
+ */
+export function toVolumeCard(
+  v: VolumeRow,
+  bottles: number,
+  now: Date,
+  rule: ShownRule,
+): VolumeCard {
   const sale = activeMarkdown(volumePrice(v), now);
   return {
     ml: v.ml as VolumeCard['ml'],
@@ -281,6 +307,7 @@ export function toVolumeCard(v: VolumeRow, bottles: number, now: Date): VolumeCa
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
     available: bottles,
+    shown: shownCount(bottles, rule),
     photo: v.photoHash,
   };
 }
@@ -349,6 +376,7 @@ export class CatalogService {
           keyNotesUz: fragrances.keyNotesUz,
           isHit: fragrances.isHit,
           isNew: fragrances.isNew,
+          shownCount: fragrances.shownCount,
           createdAt: fragrances.createdAt,
           familyRu: families.nameRu,
           familyUz: families.nameUz,
@@ -368,11 +396,17 @@ export class CatalogService {
       rows.map((r) => r.id),
     );
     const now = this.edges.clock.now();
+    const shownCfg = await readSettings(this.db, ['stock.shownDefault', 'stock.shownMax']);
+    const ownOf = new Map(rows.map((r) => [r.id, r.shownCount]));
     const cardsOf = new Map<number, VolumeCard[]>();
     for (const v of vols)
       cardsOf.set(v.fragranceId, [
         ...(cardsOf.get(v.fragranceId) ?? []),
-        toVolumeCard(v, stock.bottles(v.fragranceId, v.ml), now),
+        toVolumeCard(v, stock.bottles(v.fragranceId, v.ml), now, {
+          own: ownOf.get(v.fragranceId) ?? null,
+          fallback: shownCfg['stock.shownDefault'],
+          max: shownCfg['stock.shownMax'],
+        }),
       ]);
     return rows.map((r) => ({
       id: r.id,
@@ -520,6 +554,7 @@ export class CatalogService {
         isHit: fragrances.isHit,
         isNew: fragrances.isNew,
         hidden: fragrances.hidden,
+        shownCount: fragrances.shownCount,
         familyRu: families.nameRu,
         familyUz: families.nameUz,
       })
@@ -549,7 +584,6 @@ export class CatalogService {
     const now = this.edges.clock.now();
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => ({ ru: n.ru, uz: n.uz }));
-    const cards = volumeRows.map((v) => toVolumeCard(v, stock.bottles(f.id, v.ml), now));
     const [rights, pricing, step] = await Promise.all([
       upgradeRightPrices(this.db, customerId, f.id, volumeRows, now),
       readPricingSettings(this.db),
@@ -557,8 +591,16 @@ export class CatalogService {
         'catalog.stepUp.enabled',
         'catalog.stepUp.minPercent',
         'catalog.showAvailableCount',
+        'stock.shownDefault',
+        'stock.shownMax',
       ]),
     ]);
+    const rule: ShownRule = {
+      own: f.shownCount,
+      fallback: step['stock.shownDefault'],
+      max: step['stock.shownMax'],
+    };
+    const cards = volumeRows.map((v) => toVolumeCard(v, stock.bottles(f.id, v.ml), now, rule));
     // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
     // the right's price there, so «+N сум» would contradict them (the right's strip nudges then)
     const righted = new Set<number>(rights.map((r) => r.ml));

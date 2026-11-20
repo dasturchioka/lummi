@@ -174,7 +174,7 @@ export const miniappMessages = defineMessages(
       ml: 'мл',
       soldOut: 'нет в наличии',
       inStock: 'В наличии',
-      /** With the real count (setting `catalog.showAvailableCount`, #70). */
+      /** With the shown count (setting `catalog.showAvailableCount`, #70; the number is #83's). */
       inStockCount: 'В наличии: {count}\u00a0шт.',
       unavailable: 'Нет в наличии',
       saleUntil: 'до {date}',
@@ -503,7 +503,7 @@ export const miniappMessages = defineMessages(
       ml: 'ml',
       soldOut: 'sotuvda yoʻq',
       inStock: 'Sotuvda bor',
-      inStockCount: 'Sotuvda: {count}\u00a0dona',
+      inStockCount: 'Sotuvda bor: {count}\u00a0dona',
       unavailable: 'Sotuvda yoʻq',
       saleUntil: '{date}',
       // {amount} is drawn in Sage Ink; no-break spaces keep «30 ml» and the amount whole

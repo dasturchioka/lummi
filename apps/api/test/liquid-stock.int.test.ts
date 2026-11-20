@@ -454,7 +454,7 @@ describe('a consumable shortfall never blocks', () => {
 
 describe('the migration folds the bottles on hand into concentrate and consumables', () => {
   const drizzleDir = fileURLToPath(new URL('../../../packages/db/drizzle', import.meta.url));
-  const LAST_BEFORE = '0041_uzum_sales';
+  const LAST_BEFORE = '0042_shown_count';
 
   it('pours each fragrance’s bottles into its concentrate at the stored filling loss, flacons and boxes counted, one history line', async () => {
     const adminUrl = inject('pgAdminUrl');
@@ -468,7 +468,7 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
     const pool = new pg.Pool({ connectionString: url.toString(), max: 1 });
     const before = mkdtempSync(join(tmpdir(), 'lummi-drizzle-'));
     try {
-      // the migrations up to #80's, as stage-1 had them
+      // the migrations up to #83's, as stage-1 had them
       cpSync(drizzleDir, before, { recursive: true });
       const journalPath = join(before, 'meta/_journal.json');
       const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {

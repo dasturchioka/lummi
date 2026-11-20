@@ -1,5 +1,5 @@
 import type { StockLevel, StockList, StockQuery, StockRow } from '@lummi/contracts';
-import { asc, eq, fragrances, sql, volumes, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
+import { asc, eq, fragrances, inArray, sql, volumes, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
 import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
@@ -134,8 +134,14 @@ export class StockAdminService {
 
   /** The page's rows and each fragrance's oil (#76); stock values for the owner only (ADR 0041). */
   async list(query: StockQuery, viewer: StaffRow): Promise<StockList> {
-    const { 'stock.lowAvailableThreshold': lowThreshold } = await readSettings(this.db, [
+    const {
+      'stock.lowAvailableThreshold': lowThreshold,
+      'stock.shownDefault': shownDefault,
+      'stock.shownMax': shownMax,
+    } = await readSettings(this.db, [
       'stock.lowAvailableThreshold',
+      'stock.shownDefault',
+      'stock.shownMax',
     ]);
     const q = query.q?.trim();
     const { volumes: rows, discovery } = await stockRows(this.db, lowThreshold, q);
@@ -154,7 +160,15 @@ export class StockAdminService {
     if (query.page === 1 && (!q || matchesDiscoveryLabel(q)))
       pageRows.unshift(...discovery.filter(matching));
 
+    const pageFragranceIds = [...onPage] as number[];
+    const own = pageFragranceIds.length
+      ? await this.db
+          .select({ fragranceId: fragrances.id, shownCount: fragrances.shownCount })
+          .from(fragrances)
+          .where(inArray(fragrances.id, pageFragranceIds))
+      : [];
     return {
+      shown: { default: shownDefault, max: shownMax, own },
       lowThreshold,
       lowOilLitres: ctx.lowOilLitres,
       oil: [...onPage].map((id) => oil.get(id!)!),

@@ -1,0 +1,2 @@
+ALTER TABLE "fragrances" ADD COLUMN "shown_count" integer;--> statement-breakpoint
+ALTER TABLE "fragrances" ADD CONSTRAINT "fragrances_shown_count_positive" CHECK ("fragrances"."shown_count" is null or "fragrances"."shown_count" >= 1);

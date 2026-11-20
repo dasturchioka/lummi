@@ -1,7 +1,7 @@
 import type { ConsumableUnit, ConsumableUse } from '@lummi/contracts/constants';
 
 /**
- * The consumables the migration `0042_liquid_stock` seeds (ADR 0043), in its order: a flacon of
+ * The consumables the migration `0043_liquid_stock` seeds (ADR 0043), in its order: a flacon of
  * every ml, a box of every ml sold alone, the spirit. The test harness puts them back after its
  * truncate; the migration test checks the two agree.
  */

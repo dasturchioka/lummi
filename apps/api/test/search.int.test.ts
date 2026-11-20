@@ -104,6 +104,8 @@ describe('search', () => {
         saleEndsAt: null,
         effectivePrice: expect.any(Number),
         available: 20,
+        // #83: the default shown count (7) under the real 20
+        shown: 7,
         photo: null,
       })),
     });

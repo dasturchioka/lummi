@@ -37,6 +37,7 @@ import { Notice } from '@/components/ui/notice';
 import { Section } from '@/components/ui/section';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ShownCountEdit } from '@/components/stock/shown-count-edit';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
 import { fill } from '@/lib/utils';
@@ -753,6 +754,17 @@ export function FragranceForm({
           <Toggle label={c.isNew} hint={c.isNewHint} {...reg('isNew')} />
           <Toggle label={c.hiddenLabel} hint={c.hiddenHint} {...reg('hidden')} />
         </Section>
+          {initial && (
+            <ShownCountEdit
+              fragranceId={initial.id}
+              name={initial.name}
+              own={initial.shownCount}
+              fallback={initial.shownDefault}
+              max={initial.shownMax}
+              idPrefix="shown-form"
+              t={t}
+            />
+          )}
       </div>
 
       {/* the save bar: a Milk dock with a top hairline, edge to edge of the content column */}

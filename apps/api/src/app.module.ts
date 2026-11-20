@@ -7,7 +7,7 @@ import { AdminOrdersController } from './admin-orders/admin-orders.controller';
 import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
-import { CatalogAdminController } from './admin/catalog-admin.controller';
+import { CatalogAdminController, ShownCountController } from './admin/catalog-admin.controller';
 import { CatalogImportController } from './admin/catalog-import.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
 import { CatalogImportService } from './catalog-import/catalog-import.service';
@@ -167,6 +167,7 @@ export class AppModule {
         AuditController,
         CatalogAdminController,
         CatalogImportController,
+        ShownCountController,
         SetsAdminController,
         StockAdminController,
         WarehouseController,

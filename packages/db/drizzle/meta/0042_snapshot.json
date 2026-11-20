@@ -1,5 +1,5 @@
 {
-  "id": "4aefb9cd-2a00-4933-9606-c4410959a67a",
+  "id": "3306b83b-8609-491d-865c-bd3d77f168f4",
   "prevId": "9cb5d098-47a6-45f4-949e-8b33ca3e3fc8",
   "version": "7",
   "dialect": "postgresql",
@@ -1380,143 +1380,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.consumables": {
-      "name": "consumables",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "bigint",
-          "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "consumables_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "name_ru": {
-          "name": "name_ru",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_uz": {
-          "name": "name_uz",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unit": {
-          "name": "unit",
-          "type": "consumable_unit",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "use": {
-          "name": "use",
-          "type": "consumable_use",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'other'"
-        },
-        "ml": {
-          "name": "ml",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "on_hand": {
-          "name": "on_hand",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "low_threshold": {
-          "name": "low_threshold",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "needs_recount": {
-          "name": "needs_recount",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "archived": {
-          "name": "archived",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "consumables_use_ml_idx": {
-          "name": "consumables_use_ml_idx",
-          "columns": [
-            {
-              "expression": "use",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"ml\", 0)",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "not \"consumables\".\"archived\" and \"consumables\".\"use\" <> 'other'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "consumables_counts_check": {
-          "name": "consumables_counts_check",
-          "value": "\"consumables\".\"on_hand\" >= 0 and \"consumables\".\"low_threshold\" >= 0"
-        },
-        "consumables_link_check": {
-          "name": "consumables_link_check",
-          "value": "(\"consumables\".\"use\" = 'flacon' and \"consumables\".\"ml\" in (5, 10, 30, 50) and \"consumables\".\"unit\" = 'pcs')\n        or (\"consumables\".\"use\" = 'box' and \"consumables\".\"ml\" in (10, 30, 50) and \"consumables\".\"unit\" = 'pcs')\n        or (\"consumables\".\"use\" = 'ethanol' and \"consumables\".\"ml\" is null and \"consumables\".\"unit\" = 'ml')\n        or (\"consumables\".\"use\" = 'other' and \"consumables\".\"ml\" is null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.content_texts": {
       "name": "content_texts",
       "schema": "",
@@ -2785,13 +2648,6 @@
           "notNull": true,
           "default": 0
         },
-        "concentrate_ul": {
-          "name": "concentrate_ul",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "is_hit": {
           "name": "is_hit",
           "type": "boolean",
@@ -2812,6 +2668,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "shown_count": {
+          "name": "shown_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -2863,6 +2725,10 @@
       },
       "policies": {},
       "checkConstraints": {
+        "fragrances_shown_count_positive": {
+          "name": "fragrances_shown_count_positive",
+          "value": "\"fragrances\".\"shown_count\" is null or \"fragrances\".\"shown_count\" >= 1"
+        },
         "fragrances_three_key_notes": {
           "name": "fragrances_three_key_notes",
           "value": "cardinality(\"fragrances\".\"key_notes_ru\") = 3 and cardinality(\"fragrances\".\"key_notes_uz\") = 3"
@@ -2874,10 +2740,6 @@
         "fragrances_oil_mg_check": {
           "name": "fragrances_oil_mg_check",
           "value": "\"fragrances\".\"oil_mg\" >= 0"
-        },
-        "fragrances_concentrate_ul_check": {
-          "name": "fragrances_concentrate_ul_check",
-          "value": "\"fragrances\".\"concentrate_ul\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -6668,7 +6530,7 @@
           "name": "fragrance_id",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "kind": {
           "name": "kind",
@@ -6684,22 +6546,8 @@
           "notNull": true,
           "default": 0
         },
-        "concentrate_ul": {
-          "name": "concentrate_ul",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "bottles": {
           "name": "bottles",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "consumables": {
-          "name": "consumables",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
@@ -6843,12 +6691,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "stock_moves_subject_check": {
-          "name": "stock_moves_subject_check",
-          "value": "\"stock_moves\".\"fragrance_id\" is not null or \"stock_moves\".\"consumables\" <> '{}'::jsonb"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.upgrade_rights": {
@@ -7486,6 +7329,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "on_hand": {
+          "name": "on_hand",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "photo_hash": {
           "name": "photo_hash",
           "type": "text",
@@ -7548,7 +7398,7 @@
         },
         "volumes_money_check": {
           "name": "volumes_money_check",
-          "value": "\"volumes\".\"price\" >= 0 and (\"volumes\".\"sale_price\" is null or \"volumes\".\"sale_price\" >= 0)"
+          "value": "\"volumes\".\"price\" >= 0 and (\"volumes\".\"sale_price\" is null or \"volumes\".\"sale_price\" >= 0) and \"volumes\".\"on_hand\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -7640,24 +7490,6 @@
         "volume",
         "builder_set",
         "discovery_set"
-      ]
-    },
-    "public.consumable_unit": {
-      "name": "consumable_unit",
-      "schema": "public",
-      "values": [
-        "pcs",
-        "ml"
-      ]
-    },
-    "public.consumable_use": {
-      "name": "consumable_use",
-      "schema": "public",
-      "values": [
-        "flacon",
-        "box",
-        "ethanol",
-        "other"
       ]
     },
     "public.fragrance_tier": {
@@ -7859,11 +7691,7 @@
         "returned",
         "correction",
         "uzum_sale",
-        "uzum_sale_voided",
-        "mixing",
-        "set_assembly",
-        "consumable_received",
-        "consumable_corrected"
+        "uzum_sale_voided"
       ]
     },
     "public.theme": {

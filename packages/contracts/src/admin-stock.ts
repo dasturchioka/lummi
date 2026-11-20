@@ -65,7 +65,22 @@ export const giftSampleStockSchema = z.object({
 });
 export type GiftSampleStock = z.infer<typeof giftSampleStockSchema>;
 
+/** #83: what the shop shows customers («В наличии: N шт.»), for the stock page's per-fragrance editor. */
+export const shownCountsSchema = z.object({
+  /** The setting `stock.shownDefault`. */
+  default: z.number().int(),
+  /** The setting `stock.shownMax`. */
+  max: z.number().int(),
+  /** The fragrances on this page: their own number, null = the default. */
+  own: z.array(
+    z.object({ fragranceId: z.number().int(), shownCount: z.number().int().nullable() }),
+  ),
+});
+export type ShownCounts = z.infer<typeof shownCountsSchema>;
+
 export const stockListSchema = z.object({
+  /** The shown-to-customers numbers of this page's fragrances (#83). */
+  shown: shownCountsSchema,
   /** The setting `stock.lowAvailableThreshold` (the Discovery sets' boxes). */
   lowThreshold: z.number().int(),
   /** The settings `stock.lowConcentrateMl` and `stock.lowOilMl` (ADR 0043). */
