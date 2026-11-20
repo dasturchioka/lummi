@@ -27,11 +27,11 @@ import {
   AlertDialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
 import { Section } from '@/components/ui/section';
-import { Select } from '@/components/ui/select';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
@@ -222,6 +222,14 @@ function SaleForm({
 
   const err = (key: string, text: string = f.required) => (bad.has(key) ? text : undefined);
   const items = data.items;
+  const itemOptions: ComboboxOption[] = items.map((it) => ({
+    value: optionValue(it),
+    label:
+      it.kind === 'volume'
+        ? fill(f.itemOption, { name: it.name, ml: String(it.ml), n: num(it.available) })
+        : fill(f.setOption, { ml: String(it.vialMl), n: num(it.available) }),
+    muted: it.available <= 0,
+  }));
 
   return (
     <Section title={f.title}>
@@ -290,20 +298,13 @@ function SaleForm({
               aria-label={fill(f.lineTitle, { n: String(i + 1) })}
             >
               <Field id={`uzum-line-${l.key}-item`} label={f.item} error={err(`${l.key}.item`)}>
-                <Select value={l.item} onChange={(e) => setLine(l.key, { item: e.target.value })}>
-                  <option value="">{f.pick}</option>
-                  {items.map((it) => (
-                    <option key={optionValue(it)} value={optionValue(it)}>
-                      {it.kind === 'volume'
-                        ? fill(f.itemOption, {
-                            name: it.name,
-                            ml: String(it.ml),
-                            n: num(it.available),
-                          })
-                        : fill(f.setOption, { ml: String(it.vialMl), n: num(it.available) })}
-                    </option>
-                  ))}
-                </Select>
+                <Combobox
+                  value={l.item}
+                  onChange={(v) => setLine(l.key, { item: v })}
+                  options={itemOptions}
+                  placeholder={f.search}
+                  emptyText={f.noMatch}
+                />
               </Field>
               <Field
                 id={`uzum-line-${l.key}-qty`}
