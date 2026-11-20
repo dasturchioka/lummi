@@ -49,6 +49,7 @@ export function CountEditor({
   unitLabel,
   saving,
   t,
+  invalidText,
   onChange,
   onSubmit,
   onConfirmBelow,
@@ -67,6 +68,8 @@ export function CountEditor({
   unitLabel: string;
   saving: boolean;
   t: AdminMessages;
+  /** What a count that does not parse is told, when the unit's own line does not fit (a consumable's top). */
+  invalidText?: string;
   onChange: (value: string, reason: string) => void;
   onSubmit: (value: string, reason: string) => void;
   onConfirmBelow: (value: number, reason: string) => void;
@@ -172,9 +175,7 @@ export function CountEditor({
       {edit.error && (
         <p role="alert" className="text-xs font-medium">
           {edit.error === 'invalid'
-            ? unit === 'ml'
-              ? s.invalidMl
-              : s.invalid
+            ? (invalidText ?? (unit === 'ml' ? s.invalidMl : s.invalid))
             : edit.error === 'reason'
               ? s.reasonRequired
               : edit.error === 'busy'

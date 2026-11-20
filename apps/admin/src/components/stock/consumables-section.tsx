@@ -6,7 +6,6 @@ import {
   CONSUMABLE_USES,
   FLACON_MLS,
   MAX_CONSUMABLE_COUNT,
-  STOCK_REASON_MAX,
   type Consumable,
   type ConsumableHistory,
   type ConsumableUse,
@@ -17,6 +16,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LevelTag, levelTone } from '@/components/stock-table';
 import { HistoryList } from '@/components/warehouse/warehouse-view';
+import { CountEditor, parseCount } from './count-editor';
+import { useCount, type CountRow } from './use-count';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -39,13 +40,12 @@ import { cn, fill } from '@/lib/utils';
 type C = AdminMessages['stock']['consumables'];
 
 /** What the dialog is open for. */
-type Open = { kind: 'receive' | 'count' | 'edit' | 'history'; item: Consumable } | { kind: 'add' };
+type Open = { kind: 'receive' | 'edit' | 'history'; item: Consumable } | { kind: 'add' };
 
+/** A typed whole count (the stock page's one parser), at least `min`. */
 const whole = (text: string, min: number): number | null => {
-  const t = text.replace(/[\s\u00a0\u202f]/g, '');
-  if (!/^\d{1,9}$/.test(t)) return null;
-  const n = Number(t);
-  return n >= min && n <= MAX_CONSUMABLE_COUNT ? n : null;
+  const n = parseCount(text, 'pcs', MAX_CONSUMABLE_COUNT);
+  return n !== null && n >= min ? n : null;
 };
 
 /**
@@ -80,6 +80,25 @@ export function ConsumablesSection({
     setOpen(null);
     setSavedId(i?.id ?? null);
   };
+  // a count is the stock page's own inline count (with a reason, compare-and-set); a consumable is
+  // never held by orders, so it never asks about a reserve
+  const countRow = (i: Consumable): CountRow => ({
+    key: `c${i.id}`,
+    onHand: i.onHand,
+    reserved: 0,
+    unit: 'pcs',
+    max: MAX_CONSUMABLE_COUNT,
+  });
+  const count = useCount(async (key, value, expected, reason) => {
+    const res = await browserApi.consumables.count({
+      params: { id: Number(key.slice(1)) },
+      body: { onHand: value, expected, reason },
+    });
+    if (res.status === 200) return { kind: 'saved' };
+    if (res.status === 409 && res.body.code === 'changed' && res.body.current !== undefined)
+      return { kind: 'changed', current: res.body.current };
+    return { kind: res.status === 409 ? 'busy' : 'failed' };
+  });
   const action = (label: string, i: Consumable, kind: Exclude<Open['kind'], 'add'>) => (
     <button
       type="button"
@@ -172,16 +191,42 @@ export function ConsumablesSection({
               </dl>
               <div className="-mx-1 flex flex-wrap items-center gap-x-2 @3xl:justify-end">
                 {action(c.receive, i, 'receive')}
-                {action(c.count, i, 'count')}
+                <button
+                  type="button"
+                  className={cn('min-h-9 rounded-sm px-1 text-[13px]', QUIET_ACTION)}
+                  aria-label={`${c.count}: ${nameOf(i)}`}
+                  onClick={() => {
+                    setSavedId(null);
+                    count.open(countRow(i));
+                  }}
+                >
+                  {c.count}
+                </button>
                 {action(c.history, i, 'history')}
                 {action(c.edit, i, 'edit')}
-                {savedId === i.id && (
+                {(savedId === i.id || count.savedKey === `c${i.id}`) && (
                   <span role="status" className="inline-flex items-center gap-1 text-small">
                     <Check className="size-3.5 text-sage-ink" strokeWidth={1.5} aria-hidden />
                     {c.saved}
                   </span>
                 )}
               </div>
+              {count.editOf(`c${i.id}`) && (
+                <div className="@3xl:col-span-3">
+                  <CountEditor
+                    id={`consumable-${i.id}`}
+                    label={`${fill(c.newOnHand, { unit: c.units[i.unit] })} · ${nameOf(i)}`}
+                    unit="pcs"
+                    unitLabel={c.units[i.unit]}
+                    invalidText={fill(c.wholeNumber, { min: '0' })}
+                    edit={count.editOf(`c${i.id}`)!}
+                    reserved={0}
+                    saving={count.saving === `c${i.id}`}
+                    t={t}
+                    {...count.handlers(countRow(i))}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -207,15 +252,6 @@ export function ConsumablesSection({
               item={open.item}
               c={c}
               failed={t.stock.failed}
-              name={nameOf(open.item)}
-              onDone={done}
-              onCancel={() => setOpen(null)}
-            />
-          )}
-          {open?.kind === 'count' && (
-            <CountForm
-              item={open.item}
-              t={t}
               name={nameOf(open.item)}
               onDone={done}
               onCancel={() => setOpen(null)}
@@ -354,115 +390,6 @@ function ReceiveForm({
         </Field>
         {submit.error && <Notice title={failed} />}
         <Footer pending={submit.pending} submit={c.receive} cancel={c.cancel} onCancel={onCancel} />
-      </div>
-    </form>
-  );
-}
-
-function CountForm({
-  item,
-  name,
-  t,
-  onDone,
-  onCancel,
-}: {
-  item: Consumable;
-  name: string;
-  t: AdminMessages;
-  onDone: (i: Consumable) => void;
-  onCancel: () => void;
-}) {
-  const s = t.stock;
-  const c = s.consumables;
-  const [value, setValue] = useState(String(item.onHand));
-  const [reason, setReason] = useState('');
-  const [expected, setExpected] = useState(item.onHand);
-  const [bad, setBad] = useState<'value' | 'reason' | null>(null);
-  const [current, setCurrent] = useState<number | null>(null);
-  const submit = useSubmit();
-  const unit = c.units[item.unit];
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        const n = whole(value, 0);
-        if (n === null) return setBad('value');
-        if (!reason.trim()) return setBad('reason');
-        setBad(null);
-        void submit.run(
-          () =>
-            browserApi.consumables.count({
-              params: { id: item.id },
-              body: { onHand: n, expected, reason: reason.trim() },
-            }),
-          (res) => {
-            if (res.status === 200) {
-              onDone(res.body);
-              return null;
-            }
-            if (
-              res.status === 409 &&
-              res.body.code === 'changed' &&
-              res.body.current !== undefined
-            ) {
-              // the next save writes over the count somebody else saved, once it was shown
-              setCurrent(res.body.current);
-              setExpected(res.body.current);
-              return null;
-            }
-            return res.status === 409 ? s.tryAgain : s.failed;
-          },
-        );
-      }}
-    >
-      <DialogTitle>{fill(c.countTitle, { name })}</DialogTitle>
-      <DialogDescription>{fill(c.amount, { n: num(item.onHand), unit })}</DialogDescription>
-      <div className="mt-5 grid gap-4">
-        {current !== null && (
-          <Notice
-            title={fill(s.changedTitle, { current: fill(c.amount, { n: num(current), unit }) })}
-          >
-            {s.changedText}
-          </Notice>
-        )}
-        <Field
-          id="count-value"
-          label={fill(c.newOnHand, { unit })}
-          error={bad === 'value' ? fill(c.wholeNumber, { min: '0' }) : undefined}
-        >
-          <Input
-            autoFocus
-            inputMode="numeric"
-            autoComplete="off"
-            className="w-40 tabular-nums"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-        </Field>
-        <Field
-          id="count-reason"
-          label={s.reason}
-          error={bad === 'reason' ? s.reasonRequired : undefined}
-        >
-          <Input
-            autoComplete="off"
-            maxLength={STOCK_REASON_MAX}
-            placeholder={s.reasonPlaceholder}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </Field>
-        {submit.error && <Notice title={submit.error === 'failed' ? s.failed : submit.error} />}
-        <Footer
-          pending={submit.pending}
-          submit={
-            current !== null
-              ? fill(s.changedConfirm, { value: value, current: num(current) })
-              : c.save
-          }
-          cancel={c.cancel}
-          onCancel={onCancel}
-        />
       </div>
     </form>
   );
