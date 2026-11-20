@@ -6,6 +6,7 @@ import {
   type HomeQueues,
   type HomeSystem,
   type OwnerHome,
+  type HomeStockItem,
 } from '@lummi/contracts';
 import { formatMoney, formatTiyin, plural, type Language } from '@lummi/i18n';
 import {
@@ -208,19 +209,17 @@ export function SalesStrip({
 
 // ---- the queue
 
-/** A stock row's name: «Blue Sapphire 30 мл», a Discovery set, or the gift samples' 5 ml. */
-export function stockLabel(
-  item: { kind: 'fragrance' | 'discovery' | 'sample'; name: string | null; ml: number | null },
-  copy: HomeCopy,
-) {
-  // the gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's
-  if (item.kind === 'sample')
-    return item.name === null ? copy.samples : fill(copy.sample, { name: item.name });
-  // a Discovery set's `ml` is its vial size (ADR 0042)
-  if (item.kind === 'discovery' || item.name === null)
-    return fill(copy.discoverySet, { ml: String(item.ml ?? 10) });
-  // a fragrance's ready concentrate (ADR 0043): its name
-  return item.name;
+/** A stock row's name: a fragrance (its ready concentrate, ADR 0043), a Discovery set, or the gift samples' 5 ml. */
+export function stockLabel(item: HomeStockItem, copy: HomeCopy) {
+  switch (item.kind) {
+    // the gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's
+    case 'sample':
+      return item.name === null ? copy.samples : fill(copy.sample, { name: item.name });
+    case 'discovery':
+      return fill(copy.discoverySet, { ml: String(item.vialMl) });
+    case 'fragrance':
+      return item.name;
+  }
 }
 
 /**

@@ -11,12 +11,12 @@ import {
   type HomeQueues,
   type HomeSales,
   type HomeStockItem,
+  type StockLevel,
   type HomeSystem,
   type OrderStatus,
   type PaidFigures,
   type TashkentMoment,
 } from '@lummi/contracts';
-import { NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -142,7 +142,7 @@ export class HomeService {
       readShopCard(this.db),
       this.db.select().from(paymentPauses).where(isNull(paymentPauses.endedAt)),
       this.waiting(now),
-      this.stock(),
+      this.stockItems(),
     ]);
     const queues = this.queues(waiting, stock, now);
     const counts = Object.fromEntries(HOME_QUEUES.map((q) => [q, queues[q].count])) as Record<
@@ -220,58 +220,56 @@ export class HomeService {
   }
 
   /**
-   * The stock page's `filter=low&visibility=visible`: nothing available, or at most the threshold,
-   * among what the shop sells (a hidden fragrance is not for sale): a fragrance's free concentrate
-   * (whole ml, ADR 0043), a Discovery set's boxes. Nothing left first, then the fewest available,
-   * then the page's order (boxes, samples and ml
-   * are not compared across kinds beyond that).
+   * The stock queue's items: the stock page's `filter=low&visibility=visible` (a hidden fragrance
+   * is not for sale) and the gift sample's own warning, each kind in its own unit (ADR 0043): a
+   * fragrance's free concentrate in ml, a Discovery set's boxes, the samples. Nothing left first;
+   * then sets, samples and fragrances, each by name: ml and boxes are never put on one scale.
    */
-  private async stock(): Promise<HomeStockItem[]> {
+  async stockItems(): Promise<HomeStockItem[]> {
     const { 'stock.lowAvailableThreshold': threshold } = await readSettings(this.db, [
       'stock.lowAvailableThreshold',
     ]);
     const ctx = await readStockContext(this.db, false);
     const rows = await stockRows(this.db, ctx, threshold);
     const low = { filter: 'low', visibility: 'visible' } as const;
-    // the gift sample's 5 ml stock is one item of its own, against its own threshold
+    const levelOf = (l: StockLevel) => (l === 'zero' ? ('zero' as const) : ('low' as const));
     const items: HomeStockItem[] = [
       ...rows.sets
         .filter((r) => matchesStockQuery(r, low))
         .map((r) => ({
           kind: 'discovery' as const,
-          name: null,
-          ml: r.vialMl,
+          vialMl: r.vialMl,
           available: r.available,
-          level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
+          level: levelOf(r.level),
         })),
       ...rows.fragrances
         .filter((r) => matchesStockQuery(r, low))
         .map((r) => ({
           kind: 'fragrance' as const,
           name: r.name,
-          ml: null,
-          available: Math.floor(r.availableMl),
-          level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
+          availableMl: r.availableMl,
+          level: levelOf(r.level),
         })),
     ];
+    // the gift sample's 5 ml stock is one item of its own, against its own threshold
     const sample = await giftSampleStock(this.db);
     if (sample && (sample.missing || sample.level !== 'ok'))
       items.push({
         kind: 'sample',
         name: sample.fragrance,
-        ml: NOT_SOLD_ALONE_ML,
         available: sample.available,
         level: sample.level === 'low' ? 'low' : 'zero',
       });
-    return items
-      .map((item, i) => ({ item, i }))
-      .sort(
-        (a, b) =>
-          Number(a.item.level === 'low') - Number(b.item.level === 'low') ||
-          a.item.available - b.item.available ||
-          a.i - b.i,
-      )
-      .map(({ item }) => item);
+    const group = { discovery: 0, sample: 1, fragrance: 2 } as const;
+    // a set's name is its vial ml (5 before 10, as the stock page lists them)
+    const nameOf = (i: HomeStockItem) =>
+      i.kind === 'discovery' ? String(i.vialMl).padStart(3, '0') : (i.name ?? '');
+    return items.sort(
+      (a, b) =>
+        Number(a.level === 'low') - Number(b.level === 'low') ||
+        group[a.kind] - group[b.kind] ||
+        nameOf(a).localeCompare(nameOf(b), 'ru'),
+    );
   }
 
   private queues(waiting: WaitingQueues, stock: HomeStockItem[], now: Date): HomeQueues {

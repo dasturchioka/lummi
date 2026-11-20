@@ -281,12 +281,16 @@ export const adminMessages = defineMessages(
             all: 'Все возвраты ·\u00a0{n}',
           },
           stock: {
+            /** Each kind in its own unit (ADR 0043): ready concentrate in ml, boxes and samples in pieces. */
             zero: '{item} — нет в наличии',
-            low: '{item} — осталось {n}',
+            low: '{item} — осталось {n}\u00a0шт.',
+            zeroConcentrate: '{item} — нет концентрата',
+            lowConcentrate: '{item} — осталось {n}\u00a0мл',
             /** Each half only when it is above zero. */
             factsOut: 'нет в наличии: {n}',
             factsLow: 'заканчивается: {n}',
-            why: 'Когда придёт поставка, обновите остаток на складе.',
+            whyConcentrate: 'Приготовьте концентрат или пересчитайте его на складе.',
+            whyBoxes: 'Соберите наборы или пересчитайте коробки на складе.',
             open: 'Открыть склад',
           },
           review: {
@@ -3791,10 +3795,13 @@ export const adminMessages = defineMessages(
           },
           stock: {
             zero: '{item} — tugagan',
-            low: '{item} — {n}\u00a0ta qoldi',
+            low: '{item} — {n}\u00a0dona qoldi',
+            zeroConcentrate: '{item} — konsentrat yoʻq',
+            lowConcentrate: '{item} — {n}\u00a0ml qoldi',
             factsOut: 'tugagan: {n}',
             factsLow: 'kam qolgan: {n}',
-            why: 'Yetkazib berish kelganda ombordagi qoldiqni yangilang.',
+            whyConcentrate: 'Konsentrat tayyorlang yoki uni omborda qayta sanang.',
+            whyBoxes: 'Toʻplam yigʻing yoki qutilarni omborda qayta sanang.',
             open: 'Omborni ochish',
           },
           review: {
