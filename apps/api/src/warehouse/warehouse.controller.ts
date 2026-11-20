@@ -4,7 +4,7 @@ import { Controller, Get, HttpException, Inject, Query, Res, UseGuards } from '@
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import type { Response } from 'express';
 import { CurrentStaff, OwnerGuard, StaffGuard } from '../staff/staff.guard';
-import { gramsFromMg } from './oil';
+import { gramsFromMg, mlFromUl } from './oil';
 import { WarehouseExport } from './warehouse-export';
 import { WarehouseService, type WarehouseFailure } from './warehouse.service';
 
@@ -29,15 +29,41 @@ function failure(f: WarehouseFailure) {
           neededGrams: gramsFromMg(f.neededMg),
           balanceGrams: gramsFromMg(f.balanceMg),
           shortGrams: gramsFromMg(f.neededMg - f.balanceMg),
-          ...(f.fragrance === undefined ? {} : { fragrance: f.fragrance }),
         },
+      };
+    case 'ethanol_short':
+      return {
+        status: 409 as const,
+        body: {
+          code: 'ethanol_short' as const,
+          neededMl: f.neededMl,
+          balanceMl: f.balanceMl,
+          shortMl: f.neededMl - f.balanceMl,
+        },
+      };
+    case 'concentrate_short':
+      return {
+        status: 409 as const,
+        body: {
+          code: 'concentrate_short' as const,
+          fragrance: f.fragrance,
+          neededMl: mlFromUl(f.neededUl),
+          balanceMl: mlFromUl(f.balanceUl),
+          shortMl: mlFromUl(f.neededUl - f.balanceUl),
+        },
+      };
+    case 'changed':
+      return {
+        status: 409 as const,
+        body: { code: 'changed' as const, currentMl: mlFromUl(f.currentUl) },
       };
   }
 }
 
 /**
- * The raw-material warehouse (#76, ADR 0041). Stock is the manager's work too (ADR 0017): the page,
- * bottling and the export. Oil receipts carry the shop's purchase prices and are the owner's.
+ * The warehouse (#76, ADR 0041, 0043). Stock is the manager's work too (ADR 0017): the page, mixing,
+ * concentrate counts, set assembly and the export. Oil receipts carry the shop's purchase prices
+ * and are the owner's.
  */
 @Controller()
 @UseGuards(StaffGuard)
@@ -114,18 +140,30 @@ export class WarehouseController {
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.bottle)
-  bottle(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.bottle, async ({ params, body }) => {
-      const res = await this.warehouse.bottle(actor, params.id, body);
-      return res.ok ? { status: 201 as const, body: res.value } : failure(res);
+  @TsRestHandler(adminContract.warehouse.mix)
+  mix(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.mix, async ({ params, body }) => {
+      const res = await this.warehouse.mix(actor, params.id, body.ml);
+      if (res.ok) return { status: 201 as const, body: res.value };
+      const f = failure(res);
+      return f.status === 422 ? { status: 404 as const, body: { code: 'not_found' as const } } : f;
     });
   }
 
-  @TsRestHandler(adminContract.warehouse.bottleSet)
-  bottleSet(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.warehouse.bottleSet, async ({ params, body }) => {
-      const res = await this.warehouse.bottleSet(actor, params.vialMl, body.quantity);
+  @TsRestHandler(adminContract.warehouse.countConcentrate)
+  countConcentrate(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.countConcentrate, async ({ params, body }) => {
+      const res = await this.warehouse.countConcentrate(actor, params.id, body);
+      if (res.ok) return { status: 200 as const, body: res.value };
+      const f = failure(res);
+      return f.status === 422 ? { status: 404 as const, body: { code: 'not_found' as const } } : f;
+    });
+  }
+
+  @TsRestHandler(adminContract.warehouse.assembleSet)
+  assembleSet(@CurrentStaff() actor: StaffRow) {
+    return tsRestHandler(adminContract.warehouse.assembleSet, async ({ params, body }) => {
+      const res = await this.warehouse.assembleSet(actor, params.vialMl, body.quantity);
       if (res.ok) return { status: 201 as const, body: res.value };
       const f = failure(res);
       // a set has no 404: both rows always exist
@@ -133,7 +171,7 @@ export class WarehouseController {
     });
   }
 
-  /** The workbook: every fragrance's oil and bottles (values for the owner), and the whole history. */
+  /** The workbook: every fragrance's stock (values for the owner), the consumables, the whole history. */
   @Get('admin/warehouse/export')
   async export(
     @CurrentStaff() actor: StaffRow,

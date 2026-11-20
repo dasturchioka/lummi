@@ -12,7 +12,7 @@ import {
   type orderLines,
   type OrderLineRow,
 } from '@lummi/db';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { readLiquidStock } from '../catalog/catalog.service';
 import { readSettings } from '../settings/settings.service';
 
 /**
@@ -47,11 +47,12 @@ export async function isFirstOrder(tx: DbOrTx, customerId: number): Promise<bool
 }
 
 /**
- * The sample the customer's next order would get, read now (checkout locks its volume with the
- * others and checks it again, `giftSampleStillAvailable`): null while the setting is off, when it is
- * not the customer's first order, or when no 5 ml bottle is available. The setting
- * `giftSample.fragranceId` names it; 0 picks the visible fragrance with the most 5 ml bottles
- * available, ties by name. A named fragrance that is hidden or out of 5 ml gives none.
+ * The sample the customer's next order would get, read now (checkout locks its fragrance with the
+ * others and checks it again once the order's own lines hold their fills,
+ * `giftSampleStillAvailable`): null while the setting is off, when it is not the customer's first
+ * order, or when no 5 ml fill is free (ADR 0043). The setting `giftSample.fragranceId` names it; 0
+ * picks the visible fragrance with the most 5 ml fills free, ties by name. A named fragrance that
+ * is hidden or out of concentrate gives none.
  */
 export async function pickGiftSample(tx: DbOrTx, customerId: number): Promise<GiftSample | null> {
   const s = await readSettings(tx, ['giftSample.enabled', 'giftSample.fragranceId']);
@@ -66,7 +67,6 @@ export async function pickGiftSample(tx: DbOrTx, customerId: number): Promise<Gi
       name: fragrances.name,
       brand: fragrances.originalBrand,
       photo: volumes.photoHash,
-      onHand: volumes.onHand,
     })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
@@ -78,35 +78,31 @@ export async function pickGiftSample(tx: DbOrTx, customerId: number): Promise<Gi
       ),
     )
     .orderBy(asc(fragrances.name), asc(fragrances.id));
-  const stocked = rows.filter((r) => r.onHand > 0);
-  if (stocked.length === 0) return null;
-  const reserved = await reservedByVolume(
+  if (rows.length === 0) return null;
+  const stock = await readLiquidStock(
     tx,
-    stocked.map((r) => r.volumeId),
+    rows.map((r) => r.fragranceId),
   );
-  let best: (typeof stocked)[number] | null = null;
+  let best: (typeof rows)[number] | null = null;
   let bestLeft = 0;
-  for (const r of stocked) {
-    const left = available(r.onHand, reserved.get(r.volumeId) ?? 0);
+  for (const r of rows) {
+    const left = stock.bottles(r.fragranceId, NOT_SOLD_ALONE_ML);
     if (left > bestLeft) {
       best = r;
       bestLeft = left;
     }
   }
   if (!best) return null;
-  const { onHand: _onHand, photo, ...sample } = best;
+  const { photo, ...sample } = best;
   return { ...sample, photo: photo ?? (await tenMlPhoto(tx, best.fragranceId)) };
 }
 
-/** Under checkout's lock on its volume: whether a bottle is still there for the sample. */
-export async function giftSampleStillAvailable(tx: DbOrTx, volumeId: number): Promise<boolean> {
-  const [v] = await tx
-    .select({ onHand: volumes.onHand })
-    .from(volumes)
-    .where(eq(volumes.id, volumeId));
-  if (!v) return false;
-  const reserved = await reservedByVolume(tx, [volumeId]);
-  return available(v.onHand, reserved.get(volumeId) ?? 0) > 0;
+/**
+ * Under checkout's lock on its fragrance, once the order's own lines are written (so they hold
+ * their fills): whether a 5 ml fill is still free for the sample (ADR 0043).
+ */
+export async function giftSampleStillAvailable(tx: DbOrTx, fragranceId: number): Promise<boolean> {
+  return (await readLiquidStock(tx, [fragranceId])).bottles(fragranceId, NOT_SOLD_ALONE_ML) > 0;
 }
 
 async function tenMlPhoto(tx: DbOrTx, fragranceId: number): Promise<string | null> {
@@ -150,9 +146,9 @@ export const giftSampleOf = (lines: readonly OrderLineRow[]): OrderLineRow | und
   lines.find((l) => l.giftSample);
 
 /**
- * The gift sample's 5 ml stock (#79), for the stock page and Home's warning: the chosen
- * fragrance's available 5 ml, or every visible fragrance's together while the most-stocked one is
- * picked, against the setting `giftSample.lowStock`. A chosen fragrance that is gone or hidden is
+ * The gift sample's 5 ml stock (#79, ADR 0043), for the stock page and Home's warning: the 5 ml
+ * fills the chosen fragrance's free concentrate makes, or every visible fragrance's together while
+ * the most-stocked one is picked, against the setting `giftSample.lowStock`. A chosen fragrance that is gone or hidden is
  * `missing` (no sample goes out), never a silent off. Null while samples are off.
  */
 export async function giftSampleStock(tx: DbOrTx): Promise<GiftSampleStock | null> {
@@ -166,10 +162,9 @@ export async function giftSampleStock(tx: DbOrTx): Promise<GiftSampleStock | nul
   const threshold = s['giftSample.lowStock'];
   const rows = await tx
     .select({
-      volumeId: volumes.id,
+      fragranceId: fragrances.id,
       name: fragrances.name,
       hidden: fragrances.hidden,
-      onHand: volumes.onHand,
     })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
@@ -182,14 +177,11 @@ export async function giftSampleStock(tx: DbOrTx): Promise<GiftSampleStock | nul
   const chosen = named > 0 ? (rows[0] ?? null) : null;
   const missing = named > 0 && (chosen === null || chosen.hidden);
   const counted = missing ? [] : rows;
-  const reserved = await reservedByVolume(
+  const stock = await readLiquidStock(
     tx,
-    counted.map((r) => r.volumeId),
+    counted.map((r) => r.fragranceId),
   );
-  const left = counted.reduce(
-    (sum, r) => sum + available(r.onHand, reserved.get(r.volumeId) ?? 0),
-    0,
-  );
+  const left = counted.reduce((sum, r) => sum + stock.bottles(r.fragranceId, NOT_SOLD_ALONE_ML), 0);
   return {
     fragrance: chosen?.name ?? null,
     missing,
