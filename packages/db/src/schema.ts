@@ -1,6 +1,8 @@
 import type { Discount, OrderCostSnapshot } from '@lummi/contracts';
 import {
   CAMPAIGN_SOURCES,
+  CONSUMABLE_UNITS,
+  CONSUMABLE_USES,
   FRAGRANCE_TIERS,
   LINE_KINDS,
   ORDER_ACTIONS,
@@ -518,6 +520,13 @@ export const fragrances = pgTable(
      * an oil receipt, down with a bottling; written only under this row's lock, with a stock move.
      */
     oilMg: integer('oil_mg').notNull().default(0),
+    /**
+     * The ready concentrate (ADR 0043): this fragrance's perfume liquid, mixed and ready to pour,
+     * whole microlitres. Up with a mixing or a count, down when a bottle is filled at BTS handover
+     * or on Uzum; every volume's bottles come out of it. Written only under this row's lock, with a
+     * stock move.
+     */
+    concentrateUl: bigint('concentrate_ul', { mode: 'number' }).notNull().default(0),
     isHit: boolean('is_hit').notNull().default(false),
     isNew: boolean('is_new').notNull().default(false),
     hidden: boolean('hidden').notNull().default(false),
@@ -531,6 +540,7 @@ export const fragrances = pgTable(
     ),
     check('fragrances_oil_price_check', sql`${t.oilPrice} is null or ${t.oilPrice} > 0`),
     check('fragrances_oil_mg_check', sql`${t.oilMg} >= 0`),
+    check('fragrances_concentrate_ul_check', sql`${t.concentrateUl} >= 0`),
   ],
 );
 
@@ -565,9 +575,10 @@ export const fragranceSimilar = pgTable(
 );
 
 /**
- * One bottle size of a fragrance: 10, 30 or 50 ml for sale, and the 5 ml (ADR 0042), stocked and
- * bottled for the 5 × 5 ml set and the gift sample but never sold alone (price 0, kept off every
- * shop read by `sellableVolume()`).
+ * One bottle size of a fragrance: 10, 30 or 50 ml for sale, and the 5 ml (ADR 0042), filled for the
+ * 5 × 5 ml set and the gift sample but never sold alone (price 0, kept off every shop read by
+ * `sellableVolume()`). Its bottles are not counted: they are filled from the fragrance's ready
+ * concentrate when they ship (ADR 0043).
  */
 export const volumes = pgTable(
   'volumes',
@@ -582,8 +593,6 @@ export const volumes = pgTable(
     /** A markdown is a price, not a discount (ADR 0008). Active while below `price` and not past its end. */
     salePrice: integer('sale_price'),
     saleEndsAt: timestamp('sale_ends_at', { withTimezone: true }),
-    /** Physically in the warehouse; available = on hand - reserve (ADR 0010). */
-    onHand: integer('on_hand').notNull().default(0),
     /** Content hash of the rendered photo set (`public/<hash>-<w>.webp`); null until uploaded. */
     photoHash: text('photo_hash'),
     /** Seed values that are ours, not the customer's; none may reach launch. */
@@ -594,7 +603,7 @@ export const volumes = pgTable(
     check('volumes_ml_check', sql`${t.ml} in (5, 10, 30, 50)`),
     check(
       'volumes_money_check',
-      sql`${t.price} >= 0 and (${t.salePrice} is null or ${t.salePrice} >= 0) and ${t.onHand} >= 0`,
+      sql`${t.price} >= 0 and (${t.salePrice} is null or ${t.salePrice} >= 0)`,
     ),
   ],
 );
@@ -2042,29 +2051,76 @@ export const uzumSaleLines = pgTable(
 );
 export type UzumSaleLineRow = typeof uzumSaleLines.$inferSelect;
 
+export const consumableUnitEnum = pgEnum('consumable_unit', CONSUMABLE_UNITS);
+export const consumableUseEnum = pgEnum('consumable_use', CONSUMABLE_USES);
+
+/**
+ * A consumable (ADR 0043): a flacon or a box of one ml, the ethanol, or anything staff count. A
+ * bottle filled at handover takes its flacon and box, a set assembly its flacons, a mixing the
+ * ethanol; a use that finds fewer stops the count at zero and flags `needs_recount` until a count.
+ * One active item per use and ml (`other` excepted).
+ */
+export const consumables = pgTable(
+  'consumables',
+  {
+    id: id(),
+    nameRu: text('name_ru').notNull(),
+    nameUz: text('name_uz').notNull(),
+    unit: consumableUnitEnum('unit').notNull(),
+    use: consumableUseEnum('use').notNull().default('other'),
+    /** The ml of a flacon or box; null for the ethanol and `other`. */
+    ml: smallint('ml'),
+    /** Whole units: pieces, or ml. */
+    onHand: integer('on_hand').notNull().default(0),
+    lowThreshold: integer('low_threshold').notNull().default(0),
+    needsRecount: boolean('needs_recount').notNull().default(false),
+    archived: boolean('archived').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('consumables_use_ml_idx')
+      .on(t.use, sql`coalesce(${t.ml}, 0)`)
+      .where(sql`not ${t.archived} and ${t.use} <> 'other'`),
+    check(
+      'consumables_counts_check',
+      sql`${t.onHand} >= 0 and ${t.lowThreshold} >= 0`,
+    ),
+    check(
+      'consumables_link_check',
+      sql`(${t.use} = 'flacon' and ${t.ml} in (5, 10, 30, 50) and ${t.unit} = 'pcs')
+        or (${t.use} = 'box' and ${t.ml} in (10, 30, 50) and ${t.unit} = 'pcs')
+        or (${t.use} = 'ethanol' and ${t.ml} is null and ${t.unit} = 'ml')
+        or (${t.use} = 'other' and ${t.ml} is null)`,
+    ),
+  ],
+);
+export type ConsumableRow = typeof consumables.$inferSelect;
+
 export const stockMoveKindEnum = pgEnum('stock_move_kind', STOCK_MOVE_KINDS);
 
 /**
- * A fragrance's warehouse history (ADR 0041), append only: one row per change of its oil balance
- * or of its bottles on hand, written in the transaction that made it. `oil_mg` and `bottles` are
- * signed changes (`bottles` keyed by ml); `details` keeps what the history line needs to read
- * (an invoice, an order number, where a count came from).
+ * The warehouse history (ADR 0041, 0043), append only: one row per change of a fragrance's oil
+ * balance or ready concentrate, or of consumables' counts, written in the transaction that made
+ * it. `oil_mg`, `concentrate_ul`, `bottles` and `consumables` are signed changes (`bottles` keyed
+ * by ml: what was filled, handed over or returned; `consumables` by id); `details` keeps what the
+ * history line needs to read (an invoice, an order number, where a count came from, a shortfall).
  */
 export const stockMoves = pgTable(
   'stock_moves',
   {
     id: id(),
     /**
-     * No foreign key on purpose. The fragrance form and the catalog import take `FOR UPDATE` on
-     * the fragrance, then lock its volumes; the BTS handover locks volumes and then writes a move.
-     * A key check here would take a share lock on the fragrance row that the form's `FOR UPDATE`
-     * blocks, while the form waits for the handover's volume locks: a deadlock. Fragrances are
-     * never deleted, so nothing is lost.
+     * No foreign key, as ADR 0041 set it (then the handover held volume locks while the form held
+     * the fragrance); fragrances are never deleted, so nothing is lost. Null for a consumable's own
+     * receipt or count (ADR 0043).
      */
-    fragranceId: bigint('fragrance_id', { mode: 'number' }).notNull(),
+    fragranceId: bigint('fragrance_id', { mode: 'number' }),
     kind: stockMoveKindEnum('kind').notNull(),
     oilMg: integer('oil_mg').notNull().default(0),
+    concentrateUl: bigint('concentrate_ul', { mode: 'number' }).notNull().default(0),
     bottles: jsonb('bottles').$type<Record<string, number>>().notNull().default({}),
+    consumables: jsonb('consumables').$type<Record<string, number>>().notNull().default({}),
     oilReceiptId: bigint('oil_receipt_id', { mode: 'number' }).references(() => oilReceipts.id, {
       onDelete: 'restrict',
     }),
@@ -2081,6 +2137,13 @@ export const stockMoves = pgTable(
     actorId: bigint('actor_id', { mode: 'number' }),
     createdAt: createdAt(),
   },
-  (t) => [index('stock_moves_fragrance_idx').on(t.fragranceId, t.id)],
+  (t) => [
+    index('stock_moves_fragrance_idx').on(t.fragranceId, t.id),
+    // a consumable-only move (a receipt or a count) names no fragrance
+    check(
+      'stock_moves_subject_check',
+      sql`${t.fragranceId} is not null or ${t.consumables} <> '{}'::jsonb`,
+    ),
+  ],
 );
 export type StockMoveRow = typeof stockMoves.$inferSelect;

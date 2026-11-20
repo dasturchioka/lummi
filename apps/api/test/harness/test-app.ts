@@ -1,4 +1,13 @@
-import { createDb, shopCard, staff, type Db, type StaffRole, type StaffRow } from '@lummi/db';
+import {
+  consumables,
+  createDb,
+  SEEDED_CONSUMABLES,
+  shopCard,
+  staff,
+  type Db,
+  type StaffRole,
+  type StaffRow,
+} from '@lummi/db';
 import type { INestApplication } from '@nestjs/common';
 import { initClient } from '@ts-rest/core';
 import { Queue } from 'bullmq';
@@ -76,7 +85,7 @@ export interface TestApp {
   managerSession(): Promise<StaffSession>;
   /** A typed client that sends this staff session cookie (`lummi_admin=...`). */
   withCookie(cookie: string): ReturnType<typeof makeClient>;
-  /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions and the shop card. Call in beforeEach. */
+  /** Per-test isolation: empties every table (identity restarted), then re-adds the 14 regions, the shop card, the Discovery set rows and the seeded consumables. Call in beforeEach. */
   reset(): Promise<void>;
   /**
    * `seedCatalog(t.db, { materialsDir })`, fast; call it after `reset()`. The file's first call
@@ -282,6 +291,8 @@ export async function createTestApp(
       await pool.query(
         `INSERT INTO discovery_set (vial_ml, price, on_hand, is_placeholder) VALUES (10, 299000, 0, true), (5, 99000, 0, true)`,
       );
+      // and the consumables (ADR 0043), at 0
+      await db.insert(consumables).values([...SEEDED_CONSUMABLES]);
       await worker?.resume();
     },
     async seedCatalog() {

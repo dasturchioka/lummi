@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OilReceiptInput } from '@lummi/contracts';
-import { consumables, eq, migrateDb, settings, stockMoves, type StockMoveRow } from '@lummi/db';
+import {
+  consumables,
+  eq,
+  migrateDb,
+  SEEDED_CONSUMABLES,
+  settings,
+  stockMoves,
+  type StockMoveRow,
+} from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -505,6 +513,20 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
       const c = await pool.query<{ use: string; ml: number | null; unit: string; on_hand: number }>(
         'SELECT use, ml, unit, on_hand FROM consumables ORDER BY id',
       );
+      const seeded = await pool.query<{ name_ru: string; name_uz: string; low_threshold: number }>(
+        'SELECT name_ru, name_uz, low_threshold FROM consumables ORDER BY id',
+      );
+      // the harness puts the same rows back after its truncate
+      expect(
+        seeded.rows.map((r, i) => ({
+          nameRu: r.name_ru,
+          nameUz: r.name_uz,
+          lowThreshold: r.low_threshold,
+          unit: c.rows[i]!.unit,
+          use: c.rows[i]!.use,
+          ml: c.rows[i]!.ml,
+        })),
+      ).toEqual(SEEDED_CONSUMABLES);
       expect(c.rows).toEqual([
         { use: 'flacon', ml: 5, unit: 'pcs', on_hand: 4 },
         { use: 'flacon', ml: 10, unit: 'pcs', on_hand: 3 },
