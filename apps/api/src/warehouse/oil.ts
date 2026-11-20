@@ -39,7 +39,11 @@ export function oilLevel(oilMl: number, lowMl: number): StockLevel {
  * The low-concentrate warning (ADR 0043): none while the free concentrate can't fill the smallest
  * bottle sold (`smallestFillUl`), at or under the `stock.lowConcentrateMl` setting, or fine.
  */
-export function concentrateLevel(freeUl: number, smallestFillUl: number, lowMl: number): StockLevel {
+export function concentrateLevel(
+  freeUl: number,
+  smallestFillUl: number,
+  lowMl: number,
+): StockLevel {
   if (freeUl < smallestFillUl) return 'zero';
   return freeUl <= ulFromMl(lowMl) ? 'low' : 'ok';
 }

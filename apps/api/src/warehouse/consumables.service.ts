@@ -8,7 +8,16 @@ import {
   type ConsumableUpdate,
   type StockLevel,
 } from '@lummi/contracts';
-import { asc, consumables, eq, sql, type ConsumableRow, type Db, type DbOrTx, type StaffRow } from '@lummi/db';
+import {
+  asc,
+  consumables,
+  eq,
+  sql,
+  type ConsumableRow,
+  type Db,
+  type DbOrTx,
+  type StaffRow,
+} from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import type { Edges } from '../edges';

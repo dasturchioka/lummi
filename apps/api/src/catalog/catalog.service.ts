@@ -131,7 +131,10 @@ export async function readLiquidStock(
     reservedLiquid(db, ids, liquid),
   ]);
   const byId = new Map(
-    rows.map((r) => [r.id, { concentrateUl: r.concentrateUl, reservedUl: reserved.get(r.id) ?? 0 }]),
+    rows.map((r) => [
+      r.id,
+      { concentrateUl: r.concentrateUl, reservedUl: reserved.get(r.id) ?? 0 },
+    ]),
   );
   const of = (id: number) => byId.get(id) ?? { concentrateUl: 0, reservedUl: 0 };
   const fill = (ml: number) => fillUl(ml, liquid);

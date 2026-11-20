@@ -49,4 +49,3 @@ export async function recordStockMove(tx: DbOrTx, m: StockMoveInput): Promise<vo
     actorId: m.actor.id ?? null,
   });
 }
-

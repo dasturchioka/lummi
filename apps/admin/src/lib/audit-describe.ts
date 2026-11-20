@@ -214,7 +214,16 @@ const orderMove: Describer = (c) => {
 };
 
 /** The ids a payload stays quiet about: they point at rows, not at anything a person reads. */
-const QUIET = ['receiptId', 'creditId', 'pausedSeconds', 'onHand', 'orderId', 'slug', 'code'];
+const QUIET = [
+  'receiptId',
+  'creditId',
+  'pausedSeconds',
+  'onHand',
+  'stock',
+  'orderId',
+  'slug',
+  'code',
+];
 
 /** The target's name in the panel's language, when the audit read found one. */
 const targetName = (c: Ctx) =>
@@ -223,6 +232,17 @@ const staffName = (c: Ctx) => str(c.p.name) ?? targetName(c) ?? c.t.audit.actors
 const roleName = (c: Ctx, role: unknown) =>
   (c.t.roles as Record<string, string>)[String(role)] ?? String(role ?? '—');
 const onHandText = (c: Ctx, v: unknown) => (typeof v === 'number' ? String(v) : valueText(c, v));
+/** A consumable's count with its unit («12 шт.», «930 мл»), from the payload's `unit`. */
+const unitText = (c: Ctx, v: unknown) => {
+  const unit = c.p.unit === 'ml' || c.p.unit === 'pcs' ? c.p.unit : null;
+  const n = valueText(c, v);
+  return unit ? `${n} ${c.t.stock.consumables.units[unit]}` : n;
+};
+/** A new consumable's name in the panel's language. */
+const consumableName = (c: Ctx) =>
+  (c.language === 'uz' ? str(c.p.nameUz) : str(c.p.nameRu)) ??
+  targetName(c) ??
+  c.t.audit.detail.unknownName;
 
 /** A banner's name for a sentence: «Title» when known, else its number. */
 const bannerName = (title: string | null, id: unknown) =>
@@ -525,16 +545,25 @@ const describers: Record<string, Describer> = {
     return [str(c.p.name) ?? targetName(c), c.p.hidden === true && c.t.audit.detail.hiddenNew];
   },
   'catalog.fragrance_updated': (c) => {
-    c.take('name', 'changed', 'volumes', 'source');
+    c.take('name', 'changed', 'volumes', 'source', 'concentrateMl');
     const d = c.t.audit.detail;
     const volumes = Array.isArray(c.p.volumes) ? c.p.volumes.filter(isRecord) : [];
+    const concentrate = asPair(c.p.concentrateMl);
+    const name = str(c.p.name) ?? targetName(c);
     return [
-      str(c.p.name) ?? targetName(c),
+      name,
       ...changedLines(c, c.p.changed),
       ...volumes.map((v) => {
         const { ml, ...diff } = v;
         return fill(d.volumes, { ml: String(ml ?? '—'), changes: diffPairs(c, diff).join('; ') });
       }),
+      // the form's concentrate count (ADR 0043)
+      concentrate &&
+        fill(d.concentrate, {
+          name: name ?? d.unknownName,
+          old: valueText(c, concentrate[0]),
+          new: valueText(c, concentrate[1]),
+        }),
     ];
   },
   'catalog.fragrance_hidden': fragranceOf,
@@ -726,8 +755,113 @@ const describers: Record<string, Describer> = {
       }),
     ];
   },
+  // stock in liquid (#82, ADR 0043)
+  'warehouse.mixed': (c) => {
+    c.take(
+      'fragrance',
+      'ml',
+      'oilGrams',
+      'ethanolMl',
+      'oilPercent',
+      'ethanolPercent',
+      'oilDensity',
+    );
+    const d = c.t.audit.detail;
+    return [
+      fill(d.mixed, {
+        name: str(c.p.fragrance) ?? targetName(c) ?? d.unknownName,
+        ml: valueText(c, c.p.ml),
+      }),
+      fill(d.mixedTook, {
+        grams: valueText(c, c.p.oilGrams),
+        ethanol: valueText(c, c.p.ethanolMl),
+      }),
+    ];
+  },
+  'warehouse.set_assembled': (c) => {
+    c.take('vialMl', 'quantity', 'onHand', 'fragrances', 'concentrateMl', 'flacons');
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.onHand) ?? [null, null];
+    const names = Array.isArray(c.p.fragrances)
+      ? c.p.fragrances.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(d.setAssembled, {
+        ml: valueText(c, c.p.vialMl),
+        qty: valueText(c, c.p.quantity),
+        old: onHandText(c, pair[0]),
+        new: onHandText(c, pair[1]),
+      }),
+      fill(d.setAssembledTook, {
+        conc: valueText(c, c.p.concentrateMl),
+        names: clip(names.join(', ')),
+        flacons: valueText(c, c.p.flacons),
+      }),
+    ];
+  },
+  'warehouse.concentrate_corrected': (c) => {
+    c.take('fragrance', 'concentrateMl', 'reason');
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.concentrateMl) ?? [null, null];
+    return [
+      fill(d.concentrate, {
+        name: str(c.p.fragrance) ?? targetName(c) ?? d.unknownName,
+        old: valueText(c, pair[0]),
+        new: valueText(c, pair[1]),
+      }),
+      str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
+    ];
+  },
+  'consumable.created': (c) => {
+    c.take('nameRu', 'nameUz', 'unit', 'use', 'ml', 'lowThreshold');
+    return [fill(c.t.audit.detail.consumableCreated, { name: consumableName(c) })];
+  },
+  'consumable.updated': (c) => {
+    const { name, archived, ...diff } = c.p;
+    c.take(...Object.keys(c.p));
+    const d = c.t.audit.detail;
+    const flag = asPair(archived);
+    return [
+      fill(d.consumableUpdated, {
+        name: str(name) ?? targetName(c) ?? d.unknownName,
+        changes: [
+          ...diffPairs(c, diff),
+          flag && (flag[1] === true ? d.consumableArchived : d.consumableRestored),
+        ]
+          .filter(Boolean)
+          .join('; '),
+      }),
+    ];
+  },
+  'consumable.received': (c) => {
+    c.take('name', 'unit', 'quantity', 'onHand', 'note');
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.onHand) ?? [null, null];
+    return [
+      fill(d.consumableReceived, {
+        name: str(c.p.name) ?? targetName(c) ?? d.unknownName,
+        qty: unitText(c, c.p.quantity),
+        old: unitText(c, pair[0]),
+        new: unitText(c, pair[1]),
+      }),
+      str(c.p.note) && fill(d.consumableNote, { note: str(c.p.note)! }),
+    ];
+  },
+  'consumable.corrected': (c) => {
+    c.take('name', 'unit', 'onHand', 'reason');
+    const d = c.t.audit.detail;
+    const pair = asPair(c.p.onHand) ?? [null, null];
+    return [
+      fill(d.consumableCounted, {
+        name: str(c.p.name) ?? targetName(c) ?? d.unknownName,
+        old: unitText(c, pair[0]),
+        new: unitText(c, pair[1]),
+      }),
+      str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
+    ];
+  },
   'warehouse.exported': (c) => {
-    c.take('fragrances', 'moves');
+    c.take('fragrances', 'moves', 'consumables');
     return [
       fill(c.t.audit.detail.warehouseExported, {
         fragrances: String(int(c.p.fragrances) ?? 0),

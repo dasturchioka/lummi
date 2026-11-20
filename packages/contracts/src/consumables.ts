@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import {
-  BOX_MLS,
-  CONSUMABLE_UNITS,
-  CONSUMABLE_USES,
-  FLACON_MLS,
-} from './constants';
+import { BOX_MLS, CONSUMABLE_UNITS, CONSUMABLE_USES, FLACON_MLS } from './constants';
 import { STOCK_LEVELS } from './admin-stock';
 import { stockMoveSchema, stockReasonSchema } from './warehouse';
 
@@ -25,7 +20,11 @@ const count = z.number().int().min(0).max(MAX_CONSUMABLE_COUNT);
 
 /** The link must fit the use: a flacon or box names its ml and is counted in pieces, the ethanol in ml. */
 function checkLink(
-  v: { unit: (typeof CONSUMABLE_UNITS)[number]; use: (typeof CONSUMABLE_USES)[number]; ml: number | null },
+  v: {
+    unit: (typeof CONSUMABLE_UNITS)[number];
+    use: (typeof CONSUMABLE_USES)[number];
+    ml: number | null;
+  },
   ctx: z.RefinementCtx,
 ) {
   const mls: readonly number[] = v.use === 'flacon' ? FLACON_MLS : v.use === 'box' ? BOX_MLS : [];

@@ -377,7 +377,9 @@ async function lockShelves(
   const stock = await lockStock(tx, {
     fragranceIds: rows.map((r) => r.fragranceId),
     setMls,
-    links: linksOf(rows.map((r) => ({ fragranceId: r.fragranceId, ml: r.ml, qty: 1, boxed: true }))),
+    links: linksOf(
+      rows.map((r) => ({ fragranceId: r.fragranceId, ml: r.ml, qty: 1, boxed: true })),
+    ),
   });
   const sets = new Map<DiscoveryVialMl, DiscoveryState>();
   for (const ml of [...new Set(setMls)].sort((a, b) => a - b))

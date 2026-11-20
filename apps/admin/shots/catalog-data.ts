@@ -76,10 +76,11 @@ export async function seedShotCatalog(call: Call) {
       notes: { top: ids.slice(0, 7), heart: ids.slice(7, 14), base: ids.slice(14, 21) },
       similarIds,
       volumes: [
-        { ml: 10, price: 1_250_000, salePrice: null, saleEndsOn: null, onHand: 1250 },
-        { ml: 30, price: 2_450_000, salePrice: 1_990_000, saleEndsOn: '2026-12-31', onHand: 0 },
-        { ml: 50, price: 3_990_000, salePrice: null, saleEndsOn: null, onHand: 12 },
+        { ml: 10, price: 1_250_000, salePrice: null, saleEndsOn: null },
+        { ml: 30, price: 2_450_000, salePrice: 1_990_000, saleEndsOn: '2026-12-31' },
+        { ml: 50, price: 3_990_000, salePrice: null, saleEndsOn: null },
       ],
+      concentrateMl: 12_875.5,
     },
     {
       ...common,
@@ -101,7 +102,8 @@ export async function seedShotCatalog(call: Call) {
       hidden: false,
       notes: { top: ids.slice(21, 22), heart: [], base: [] },
       similarIds: [],
-      volumes: [{ ml: 10, price: 99_000, salePrice: null, saleEndsOn: null, onHand: 0 }],
+      volumes: [{ ml: 10, price: 99_000, salePrice: null, saleEndsOn: null }],
+      concentrateMl: 0,
     },
   ];
   for (const row of rows) {

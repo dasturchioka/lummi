@@ -213,7 +213,10 @@ export function mixNeeds(ml: number, l: LiquidSettings): { oilGrams: number; eth
  * What filling `ml` of perfume uses up, the filling loss included: grams of oil and ml of ethanol
  * (unrounded). The oil part of a bottle's cost is these grams at the landed price.
  */
-export function liquidNeeded(ml: number, l: LiquidSettings): { oilGrams: number; ethanolMl: number } {
+export function liquidNeeded(
+  ml: number,
+  l: LiquidSettings,
+): { oilGrams: number; ethanolMl: number } {
   return mixNeeds(filled(ml, l), l);
 }
 

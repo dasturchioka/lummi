@@ -190,9 +190,7 @@ export const fragranceStockSchema = z.object({
    * landed price of its receipts, the concentrate at the cost model's liquid per ml (null without
    * an oil price).
    */
-  value: z
-    .object({ oil: som, concentrate: som.nullable(), total: som.nullable() })
-    .nullable(),
+  value: z.object({ oil: som, concentrate: som.nullable(), total: som.nullable() }).nullable(),
   /** Draft receipts waiting for the owner's confirmation (#78); 0 for a manager. */
   drafts: z.number().int(),
 });

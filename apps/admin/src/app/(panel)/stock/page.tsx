@@ -21,7 +21,10 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     ? parsed.data
     : stockQuerySchema.parse({ pageSize: STOCK_PAGE_DEFAULT });
   const api = await serverApi();
-  const res = await api.stock.list({ query });
+  const [res, items] = await Promise.all([
+    api.stock.list({ query }),
+    query.page === 1 ? api.consumables.list() : null,
+  ]);
   if (res.status === 401) redirect('/login');
   if (res.status !== 200) throw new Error(`stock failed to load: ${res.status}`);
   // a page past the end (an old link, fewer rows after a filter) opens the last one
@@ -34,5 +37,13 @@ export default async function StockPage({ searchParams }: { searchParams: Promis
     redirect(q.size ? `/stock?${q}` : '/stock');
   }
   const { language, t } = await getAdminMessages();
-  return <StockView t={t} language={language} data={res.body} query={query} />;
+  return (
+    <StockView
+      t={t}
+      language={language}
+      data={res.body}
+      consumables={items?.status === 200 ? items.body.items : null}
+      query={query}
+    />
+  );
 }

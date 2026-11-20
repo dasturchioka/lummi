@@ -134,43 +134,50 @@ async function restoreName(db: ShotSql) {
   saved = undefined;
 }
 
-let savedOnHand: unknown[] | undefined;
+let savedStock: unknown[] | undefined;
+/** Concentrate (ADR 0043) low on a few fragrances and gone on others, the sets' boxes out, flacons short. */
 async function lowStock(db: ShotSql) {
-  savedOnHand ??= (await db.query('select id, on_hand from volumes order by id')).rows.map((r) => [
-    r.id,
-    r.on_hand,
-  ]);
-  // a few low, a few zero, among the rest at their seed count
+  savedStock ??= (await db.query('select id, concentrate_ul from fragrances order by id')).rows.map(
+    (r) => [r.id, r.concentrate_ul],
+  );
+  // a few low (150 ml, under the 300 ml threshold), a few gone (less than a 10 ml fill)
   await db.query(
-    `update volumes set on_hand = 2 where id in (select id from volumes order by id limit 4 offset 1)`,
+    `update fragrances set concentrate_ul = 150000 where id in (select id from fragrances order by id limit 4 offset 1)`,
   );
   await db.query(
-    `update volumes set on_hand = 0 where id in (select id from volumes order by id limit 3 offset 7)`,
+    `update fragrances set concentrate_ul = 5000 where id in (select id from fragrances order by id limit 3 offset 7)`,
   );
   await db.query(`update discovery_set set on_hand = 0`);
+  await db.query(
+    `update consumables set on_hand = 0, needs_recount = true where use = 'flacon' and ml = 10`,
+  );
+  await db.query(`update consumables set on_hand = 8 where use = 'box' and ml = 10`);
 }
 async function restoreStock(db: ShotSql) {
-  if (!savedOnHand) return;
-  for (const [id, onHand] of savedOnHand as [unknown, unknown][]) {
-    await db.query('update volumes set on_hand = $2 where id = $1', [id, onHand]);
+  if (!savedStock) return;
+  for (const [id, ul] of savedStock as [unknown, unknown][]) {
+    await db.query('update fragrances set concentrate_ul = $2 where id = $1', [id, ul]);
   }
   await db.query('update discovery_set set on_hand = 20');
-  savedOnHand = undefined;
+  await db.query(`update consumables set on_hand = 0, needs_recount = false`);
+  savedStock = undefined;
 }
 
+/** The first fragrance row's «Пересчитать», on whichever layout the viewport shows. */
 const editFirst = async (page: Page) => {
   await page
     .locator(
-      '[data-testid^="stock-block-v"] button:visible, tr[data-testid^="stock-row-v"] button:visible',
+      '[data-testid^="stock-card-f"] button:visible, tr[data-testid^="stock-row-f"] button:visible',
     )
     .first()
     .click();
-  await page.locator('input[id^="on-hand-"]:visible').waitFor();
+  await page.locator(COUNT_INPUT).waitFor();
 };
-/** The state screens are viewport shots of the open row: the full stock table is hundreds of rows tall. */
+const COUNT_INPUT = 'input[id^="count-block-"]:visible, input[id^="count-table-"]:visible';
+/** The state screens are viewport shots of the open row: the full stock table is many rows tall. */
 const showEditor = (page: Page) =>
   page
-    .locator('input[id^="on-hand-"]:visible, [role=alert]:visible')
+    .locator(`${COUNT_INPUT}, [role=alert]:visible`)
     .first()
     .evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
@@ -193,10 +200,11 @@ async function noOil(db: ShotSql) {
   await db.query('delete from bottlings');
   await db.query('delete from oil_receipts');
   await db.query('update fragrances set oil_mg = 0');
+  await db.query(`update consumables set on_hand = 0 where use = 'ethanol'`);
 }
 
 export const stockScreens: Screen[] = [
-  // the raw-material warehouse (#76): a fragrance's oil, receipts, bottling and history
+  // the warehouse (#76, #82): a fragrance's concentrate, oil, mixing, receipts and history
   {
     id: 'warehouse',
     path: '/stock/1',
@@ -210,6 +218,36 @@ export const stockScreens: Screen[] = [
     as: 'manager',
     setup: ({ db }) => someOil(db),
     teardown: ({ db }) => noOil(db),
+  },
+  {
+    // mixing 100 ml with 40 ml of spirit on hand: the preview, then the refusal
+    id: 'warehouse-mixing-short',
+    path: '/stock/1',
+    as: 'manager',
+    fullPage: false,
+    setup: async ({ db }) => {
+      await someOil(db);
+      await db.query(`update consumables set on_hand = 40 where use = 'ethanol'`);
+    },
+    teardown: ({ db }) => noOil(db),
+    act: async ({ page }) => {
+      await page.locator('#mix-ml').fill('100');
+      await page.locator('#mix-ml').press('Enter');
+      await page.locator('[role=alert]:visible').first().waitFor();
+      await page.locator('#mix-ml').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    },
+  },
+  {
+    // consumables (ADR 0043): a flacon short after a handover («Пересчитайте»), a box running low
+    id: 'stock-consumables',
+    path: '/stock',
+    as: 'manager',
+    fullPage: false,
+    setup: ({ db }) => lowStock(db),
+    teardown: ({ db }) => restoreStock(db),
+    act: async ({ page }) => {
+      await page.locator('[data-testid="consumables"]').evaluate((el) => el.scrollIntoView());
+    },
   },
   {
     id: 'stock-oil-low',
@@ -260,7 +298,7 @@ export const stockScreens: Screen[] = [
     teardown: ({ db }) => clearCustomers(db),
     act: async ({ page }) => {
       await editFirst(page);
-      await page.locator('input[id^="on-hand-"]:visible').fill('1');
+      await page.locator(COUNT_INPUT).fill('1');
       await page.locator('input[id^="count-reason-"]:visible').fill('Пересчёт');
       await page.keyboard.press('Enter');
       await page.locator('[role=alert]:visible').first().waitFor();
@@ -271,20 +309,21 @@ export const stockScreens: Screen[] = [
     id: 'stock-conflict',
     fullPage: false,
     teardown: async ({ db }) => {
-      await db.query('update volumes set on_hand = 20 where on_hand = 19');
+      await db.query('update fragrances set concentrate_ul = 1000000 where concentrate_ul = 19000');
     },
     path: '/stock',
     as: 'manager',
     act: async ({ page }) => {
       await editFirst(page);
-      const input = page.locator('input[id^="on-hand-"]:visible');
+      const input = page.locator(COUNT_INPUT);
       await input.fill('15');
-      // somebody else saves 19 meanwhile (a real write), so the editor's save gets a real 409
-      const volumeId = (await input.getAttribute('id'))!.split('-v').pop()!;
+      // somebody else saves 19 ml meanwhile (a real write), so the editor's save gets a real 409
+      const fragranceId = (await input.getAttribute('id'))!.split('-f').pop()!;
       const origin = new URL(page.url()).origin;
-      const other = await page.request.patch(`${origin}/api/admin/volumes/${volumeId}/on-hand`, {
-        data: { onHand: 19, reason: 'Пересчёт' },
-      });
+      const other = await page.request.put(
+        `${origin}/api/admin/warehouse/fragrances/${fragranceId}/concentrate`,
+        { data: { ml: 19, reason: 'Пересчёт' } },
+      );
       if (!other.ok()) throw new Error(`the other editor's save failed: ${other.status()}`);
       await page.locator('input[id^="count-reason-"]:visible').fill('Пересчёт');
       await page.keyboard.press('Enter');

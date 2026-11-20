@@ -210,7 +210,7 @@ export function SalesStrip({
 
 /** A stock row's name: «Blue Sapphire 30 мл», a Discovery set, or the gift samples' 5 ml. */
 export function stockLabel(
-  item: { kind: 'volume' | 'discovery' | 'sample'; name: string | null; ml: number | null },
+  item: { kind: 'fragrance' | 'discovery' | 'sample'; name: string | null; ml: number | null },
   copy: HomeCopy,
 ) {
   // the gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's
@@ -219,7 +219,8 @@ export function stockLabel(
   // a Discovery set's `ml` is its vial size (ADR 0042)
   if (item.kind === 'discovery' || item.name === null)
     return fill(copy.discoverySet, { ml: String(item.ml ?? 10) });
-  return fill(copy.ml, { name: item.name, ml: String(item.ml) });
+  // a fragrance's ready concentrate (ADR 0043): its name
+  return item.name;
 }
 
 /**

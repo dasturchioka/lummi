@@ -8,8 +8,12 @@ export interface ShotDb {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
   /** Put a markdown on a volume: `price` so'm, ending at 23:59:59 Tashkent `days` days from now. */
   markdown(slug: string, ml: number, price: number, days: number): Promise<void>;
-  /** Clear every markdown and restore stock of a fragrance, so a rerun starts from the seed. */
+  /** Clear every markdown and restore a fragrance's concentrate, so a rerun starts from the seed. */
   restore(slug: string): Promise<void>;
+  /**
+   * Leaves the fragrance concentrate for `onHand` 10 ml bottles (ADR 0043: its volumes share one
+   * liquid, a 10 ml fill is 10.3 ml at the default loss); 0 sells it out.
+   */
   setOnHand(slug: string, onHand: number): Promise<void>;
   /** Sets the shop card shoppers transfer to (#28); null takes it off, which closes checkout. */
   shopCard(card: { number: string; holder: string } | null): Promise<void>;
@@ -37,13 +41,17 @@ export function connectShotDb(url: string): ShotDb {
       );
     },
     async restore(slug) {
-      await query(
-        `update volumes set sale_price = null, sale_ends_at = null, on_hand = 20 where ${volumeOf}`,
-        [slug],
-      );
+      await query(`update volumes set sale_price = null, sale_ends_at = null where ${volumeOf}`, [
+        slug,
+      ]);
+      // the seed's concentrate (PLACEHOLDER_CONCENTRATE_ML)
+      await query(`update fragrances set concentrate_ul = 1000000 where slug = $1`, [slug]);
     },
     async setOnHand(slug, onHand) {
-      await query(`update volumes set on_hand = $2 where ${volumeOf}`, [slug, onHand]);
+      await query(`update fragrances set concentrate_ul = $2 * 10300 where slug = $1`, [
+        slug,
+        onHand,
+      ]);
     },
     async shopCard(card) {
       if (!card) {

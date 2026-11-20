@@ -82,7 +82,11 @@ export class WarehouseExport {
             reserved: s.reservedMl,
             available: s.availableMl,
             ...(s.value
-              ? { oilValue: s.value.oil, concentrateValue: s.value.concentrate, total: s.value.total }
+              ? {
+                  oilValue: s.value.oil,
+                  concentrateValue: s.value.concentrate,
+                  total: s.value.total,
+                }
               : {}),
           });
         }

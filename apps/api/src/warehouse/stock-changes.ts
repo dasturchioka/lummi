@@ -51,10 +51,7 @@ export interface LockedStock {
 export function linksOf(fills: readonly FillLine[]): ConsumableLink[] {
   return [
     ...new Set(
-      fills.flatMap((f) => [
-        linkOf('flacon', f.ml),
-        ...(f.boxed ? [linkOf('box', f.ml)] : []),
-      ]),
+      fills.flatMap((f) => [linkOf('flacon', f.ml), ...(f.boxed ? [linkOf('box', f.ml)] : [])]),
     ),
   ];
 }
@@ -147,7 +144,10 @@ export async function applyStock(
     fills: readonly FillLine[];
     sign: 1 | -1;
     sets?: readonly { vialMl: DiscoveryVialMl; change: number }[];
-    move: Omit<StockMoveInput, 'fragranceId' | 'concentrateUl' | 'bottles' | 'consumables' | 'oilMg'>;
+    move: Omit<
+      StockMoveInput,
+      'fragranceId' | 'concentrateUl' | 'bottles' | 'consumables' | 'oilMg'
+    >;
   },
 ): Promise<AppliedStock> {
   const { sign } = change;

@@ -46,14 +46,7 @@ import { DB, EDGES } from '../tokens';
 import { isOwner } from '../staff/staff.guard';
 import { retryOrTryAgain } from '../util/transient';
 import { fragranceStock, readStockContext, round3 } from './fragrance-stock';
-import {
-  gramsFromMg,
-  mgFromGrams,
-  mixingNeeds,
-  mlFromUl,
-  oilReceiptCost,
-  ulFromMl,
-} from './oil';
+import { gramsFromMg, mgFromGrams, mixingNeeds, mlFromUl, oilReceiptCost, ulFromMl } from './oil';
 import { applyStock, linkOf, lockFragrances, lockStock } from './stock-changes';
 import { recordStockMove } from './stock-moves';
 import { readComposition } from '../sets/sets';
@@ -66,7 +59,13 @@ export type WarehouseFailure =
   /** A mixing needs more ethanol than there is (ml). */
   | { ok: false; reason: 'ethanol_short'; neededMl: number; balanceMl: number }
   /** A set assembly needs more of a fragrance's free concentrate than there is (µl). */
-  | { ok: false; reason: 'concentrate_short'; neededUl: number; balanceUl: number; fragrance: string }
+  | {
+      ok: false;
+      reason: 'concentrate_short';
+      neededUl: number;
+      balanceUl: number;
+      fragrance: string;
+    }
   /** A count compared against one that moved meanwhile (µl). */
   | { ok: false; reason: 'changed'; currentUl: number };
 export type WarehouseOutcome<T> = { ok: true; value: T } | WarehouseFailure;
@@ -128,7 +127,11 @@ export class WarehouseService {
    * The fragrance's warehouse page. Oil receipts, their defaults, values, and the invoices and
    * suppliers in the history are the owner's only.
    */
-  async get(id: number, viewer: StaffRow, db: DbOrTx = this.db): Promise<WarehouseFragrance | null> {
+  async get(
+    id: number,
+    viewer: StaffRow,
+    db: DbOrTx = this.db,
+  ): Promise<WarehouseFragrance | null> {
     const owner = isOwner(viewer);
     const read = async (tx: DbOrTx) => {
       const [f] = await tx.select().from(fragrances).where(eq(fragrances.id, id));
@@ -512,7 +515,12 @@ export class WarehouseService {
         if (need.oilMg > f.oilMg) return short(need.oilMg, f.oilMg);
         const balanceMl = ethanol?.onHand ?? 0;
         if (need.ethanolMl > balanceMl)
-          return { ok: false, reason: 'ethanol_short', neededMl: need.ethanolMl, balanceMl } as const;
+          return {
+            ok: false,
+            reason: 'ethanol_short',
+            neededMl: need.ethanolMl,
+            balanceMl,
+          } as const;
 
         const oilLeft = f.oilMg - need.oilMg;
         const madeUl = ulFromMl(ml);

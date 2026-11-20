@@ -2089,10 +2089,7 @@ export const consumables = pgTable(
     uniqueIndex('consumables_use_ml_idx')
       .on(t.use, sql`coalesce(${t.ml}, 0)`)
       .where(sql`not ${t.archived} and ${t.use} <> 'other'`),
-    check(
-      'consumables_counts_check',
-      sql`${t.onHand} >= 0 and ${t.lowThreshold} >= 0`,
-    ),
+    check('consumables_counts_check', sql`${t.onHand} >= 0 and ${t.lowThreshold} >= 0`),
     check(
       'consumables_link_check',
       sql`(${t.use} = 'flacon' and ${t.ml} in (5, 10, 30, 50) and ${t.unit} = 'pcs')

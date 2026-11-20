@@ -16,6 +16,7 @@ import { Section } from '@/components/ui/section';
 import { Select } from '@/components/ui/select';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
+import { num } from '@/lib/setting-copy';
 import { fill } from '@/lib/utils';
 
 type Option = { id: number; name: string; hidden: boolean };
@@ -32,13 +33,13 @@ function Saved({ text }: { text: string }) {
 
 /**
  * The Discovery sets (ADR 0009, 0042), the 5 × 10 ml and the 5 × 5 ml box, one block each: its own
- * boxes on hand and a bottling from oil (owner and manager), and the owner's price (the builder set
+ * boxes on hand and a set assembly from concentrate (owner and manager), and the owner's price (the builder set
  * costs the 5 × 10 ml one's), five fragrances in order and photo. Every change is audited by the
  * API with the old and the new value.
  *
- * From 1024 px: the stock and the bottling over the photo on the left, the price and the
+ * From 1024 px: the stock and the assembly over the photo on the left, the price and the
  * composition on the right (the longest card spans the rows, so no left card is stretched).
- * Phones: stock, bottling, price, photo.
+ * Phones: stock, assembly, price, photo.
  */
 export function SetsManager({
   sets,
@@ -122,7 +123,7 @@ function SetBlock({
             <ReadOnly set={set} language={language} t={t} />
           )}
         </Section>
-        <BottleCard set={set} t={t} onBottled={() => router.refresh()} />
+        <AssembleCard set={set} t={t} onAssembled={() => router.refresh()} />
         {owner && (
           <Section title={s.photoTitle}>
             <p className="-mt-2 text-small text-pretty text-muted-foreground">{s.photoHint}</p>
@@ -142,18 +143,18 @@ function SetBlock({
 }
 
 /**
- * A set bottling (#79): boxes filled straight from the oil of the set's five, one vial of the set's
- * size from each per box. The server takes the oil and adds the boxes, or names the fragrance
- * whose oil is short.
+ * A set assembly (ADR 0043): boxes packed from the free concentrate of the set's five, one fill of
+ * the set's vial size from each per box, with a flacon per vial. The server takes the concentrate
+ * and the flacons and adds the boxes, or names the fragrance whose free concentrate is short.
  */
-function BottleCard({
+function AssembleCard({
   set,
   t,
-  onBottled,
+  onAssembled,
 }: {
   set: AdminDiscoverySet;
   t: AdminMessages;
-  onBottled: () => void;
+  onAssembled: () => void;
 }) {
   const s = t.sets;
   const [value, setValue] = useState('');
@@ -162,11 +163,11 @@ function BottleCard({
   const quantity = Number(value);
   const valid = /^\d{1,5}$/.test(value) && quantity > 0;
   const complete = set.composition.length === SET_SIZE;
-  const id = `set-${set.vialMl}-bottle`;
+  const id = `set-${set.vialMl}-assemble`;
   return (
-    <Section title={s.bottleTitle}>
+    <Section title={s.assembleTitle}>
       <p className="-mt-2 text-small text-pretty text-muted-foreground">
-        {fill(s.bottleHint, { ml: String(set.vialMl) })}
+        {fill(s.assembleHint, { ml: String(set.vialMl) })}
       </p>
       {!complete && <Notice title={s.notForSale} />}
       <form
@@ -177,32 +178,33 @@ function BottleCard({
           setPending(true);
           setResult(null);
           const res = await browserApi.warehouse
-            .bottleSet({ params: { vialMl: set.vialMl }, body: { quantity } })
+            .assembleSet({ params: { vialMl: set.vialMl }, body: { quantity } })
             .catch(() => null);
           setPending(false);
           if (res?.status === 201) {
             setValue('');
             setResult({
               ok: true,
-              text: fill(s.bottled, {
+              text: fill(s.assembled, {
                 qty: String(quantity),
-                grams: String(res.body.oilGrams),
+                ml: num(res.body.concentrateMl),
+                flacons: num(res.body.flacons),
               }),
             });
-            onBottled();
-          } else if (res?.status === 409 && res.body.code === 'oil_short')
+            onAssembled();
+          } else if (res?.status === 409 && res.body.code === 'concentrate_short')
             setResult({
               ok: false,
-              text: fill(s.bottleShort, {
+              text: fill(s.assembleShort, {
                 name: res.body.fragrance ?? '',
-                needed: String(res.body.neededGrams ?? ''),
-                balance: String(res.body.balanceGrams ?? ''),
+                needed: num(res.body.neededMl ?? 0),
+                balance: num(res.body.balanceMl ?? 0),
               }),
             });
           else setResult({ ok: false, text: t.errors.generic });
         }}
       >
-        <Field id={id} label={s.bottleQuantity}>
+        <Field id={id} label={s.assembleQuantity}>
           <Input
             inputMode="numeric"
             pattern="[0-9]+"
@@ -221,7 +223,7 @@ function BottleCard({
         {result && !result.ok && <Notice title={result.text} />}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Button type="submit" loading={pending} disabled={!valid || !complete}>
-            {s.bottleSubmit}
+            {s.assembleSubmit}
           </Button>
           {result?.ok && <Saved text={result.text} />}
         </div>
