@@ -23,7 +23,8 @@ export const WAREHOUSE_HISTORY_LIMIT = 200;
 const som = z.number().int();
 /** Why a count or a receipt changed: required, said in a few words. */
 export const stockReasonSchema = z.string().trim().min(1).max(STOCK_REASON_MAX);
-const hasAtMostDecimals = (places: number) => (v: number) => {
+/** True when `v` has at most `places` decimals (to a float's noise): the one rule every amount uses. */
+export const hasAtMostDecimals = (places: number) => (v: number) => {
   const scaled = v * 10 ** places;
   return Math.abs(scaled - Math.round(scaled)) < 1e-6;
 };
@@ -96,10 +97,24 @@ export type OilReceiptDraftsBody = z.infer<typeof oilReceiptDraftsBodySchema>;
 export const oilReceiptDraftsResultSchema = z.object({ created: z.number().int() });
 export const oilReceiptDiscardedSchema = z.object({ discarded: z.literal(true) });
 
+/** Microlitres in a millilitre: the ready concentrate is kept in whole µl (ADR 0043). */
+export const UL_PER_ML = 1000;
+/** Ml as the API and the panel speak it, from whole µl, and back (rounded to the µl). */
+export const mlFromUl = (ul: number) => ul / UL_PER_ML;
+export const ulFromMl = (ml: number) => Math.round(ml * UL_PER_ML);
+/** Grams and ml go out to three decimals: a milligram, a microlitre. */
+export const round3 = (x: number) => Math.round(x * 1000) / 1000;
+
 /** The most concentrate one mixing may make: a thousand litres. */
 export const MAX_MIX_ML = 1_000_000;
-/** The most a concentrate count may hold, ml. */
+/** The most a concentrate count may hold, ml: the stock page's, the form's and the import's. */
 export const MAX_CONCENTRATE_ML = 100_000_000;
+/** A concentrate count, ml to the microlitre (ADR 0043): the stock page, the form and the import. */
+export const concentrateMlSchema = z
+  .number()
+  .min(0)
+  .max(MAX_CONCENTRATE_ML)
+  .refine(hasAtMostDecimals(3), 'at most 3 decimals');
 /** The most boxes of a Discovery set one assembly may pack. */
 export const MAX_ASSEMBLY_QUANTITY = 10_000;
 
@@ -147,7 +162,7 @@ export type SetAssemblyResult = z.infer<typeof setAssemblyResultSchema>;
 
 /** A count of a fragrance's ready concentrate (stock page): compare-and-set, with a reason. */
 export const concentrateCountBodySchema = z.object({
-  ml: z.number().min(0).max(MAX_CONCENTRATE_ML).refine(hasAtMostDecimals(3), 'at most 3 decimals'),
+  ml: concentrateMlSchema,
   /** The ml the editor was looking at: when the stored count moved, 409 `changed` with it. */
   expectedMl: z.number().min(0).optional(),
   reason: stockReasonSchema,

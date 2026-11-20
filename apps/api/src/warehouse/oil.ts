@@ -1,5 +1,6 @@
 import type { StockLevel } from '@lummi/contracts';
-import { landedOilPrice, mixNeeds, UL_PER_ML, type LiquidSettings } from '../cost/unit-cost';
+import { ulFromMl } from '@lummi/contracts';
+import { landedOilPrice, mixNeeds, type LiquidSettings } from '../cost/unit-cost';
 
 /**
  * The warehouse's arithmetic (ADR 0041, 0043), pure. Oil is kept in whole milligrams and the ready
@@ -10,8 +11,8 @@ import { landedOilPrice, mixNeeds, UL_PER_ML, type LiquidSettings } from '../cos
 export const MG_PER_GRAM = 1000;
 export const mgFromGrams = (grams: number) => Math.round(grams * MG_PER_GRAM);
 export const gramsFromMg = (mg: number) => mg / MG_PER_GRAM;
-export const ulFromMl = (ml: number) => Math.round(ml * UL_PER_ML);
-export const mlFromUl = (ul: number) => ul / UL_PER_ML;
+// ml and µl: the contracts' one pair, here beside grams and mg
+export { mlFromUl, ulFromMl } from '@lummi/contracts';
 
 /**
  * The oil (mg) and ethanol (whole ml) mixing `ml` of ready concentrate takes: the cost model's
@@ -27,12 +28,15 @@ export const oilMlOf = (grams: number, l: Pick<LiquidSettings, 'oilDensity'>) =>
   l.oilDensity > 0 ? grams / l.oilDensity : 0;
 
 /**
- * The low-oil warning: none left, at or under the `stock.lowOilMl` setting (ml of oil), or fine. A
- * threshold of 0 warns only when nothing is left.
+ * THE low-stock rule (ADR 0041, 0043): none left at or under 0, running low at or under the
+ * threshold, else fine; a threshold of 0 warns only when nothing is left. The oil in ml
+ * (`stock.lowOilMl`), a consumable against its own threshold, a Discovery set's boxes
+ * (`stock.lowAvailableThreshold`) and the gift samples (`giftSample.lowStock`) all read it; the
+ * concentrate's «none» is «can't fill the smallest bottle» (`concentrateLevel`).
  */
-export function oilLevel(oilMl: number, lowMl: number): StockLevel {
-  if (oilMl <= 0) return 'zero';
-  return oilMl <= lowMl ? 'low' : 'ok';
+export function stockLevelOf(amount: number, low: number): StockLevel {
+  if (amount <= 0) return 'zero';
+  return amount <= low ? 'low' : 'ok';
 }
 
 /**

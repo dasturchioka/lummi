@@ -186,6 +186,7 @@ export class OrderStatusService {
           fx.onHand(move),
           { type: actor.type, id: actorId },
           action === 'hand_to_bts' ? 'sale' : 'returned',
+          now,
         )
       : null;
     const moved =

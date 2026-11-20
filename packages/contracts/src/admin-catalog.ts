@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uzumUrlSchema } from './uzum';
-import { stockReasonSchema } from './warehouse';
+import { concentrateMlSchema, stockReasonSchema } from './warehouse';
 import {
   FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
@@ -25,13 +25,6 @@ export const VOLUME_MLS = [10, 30, 50] as const;
 export const MAX_SIMILAR = 12;
 /** The most boxes a Discovery set's count may hold. */
 export const MAX_ON_HAND = 1_000_000;
-/** The most ready concentrate a form or an import may count, ml. */
-export const MAX_FORM_CONCENTRATE_ML = 100_000_000;
-const concentrateMl = z
-  .number()
-  .min(0)
-  .max(MAX_FORM_CONCENTRATE_ML)
-  .refine((v) => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6, 'at most 3 decimals');
 /** Key notes shown under the name: exactly this many, per language. */
 export const KEY_NOTE_COUNT = 3;
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
@@ -99,8 +92,8 @@ export const fragranceInputSchema = z
      * and only if the stored count still equals that (a count made by a manager in between must
      * survive the owner saving the form). Omitted: not written.
      */
-    concentrateMl: concentrateMl.optional(),
-    loadedConcentrateMl: concentrateMl.nullable().optional(),
+    concentrateMl: concentrateMlSchema.optional(),
+    loadedConcentrateMl: concentrateMlSchema.nullable().optional(),
   })
   .superRefine((v, ctx) => {
     const mls = v.volumes.map((x) => x.ml);

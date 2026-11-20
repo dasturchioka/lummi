@@ -5,6 +5,7 @@ import {
   MAX_MIX_ML,
   MAX_OIL_RECEIPT_GRAMS,
   OIL_TEXT_MAX,
+  round3,
   STOCK_REASON_MAX,
   WAREHOUSE_HISTORY_LIMIT,
   type OilReceipt,
@@ -56,7 +57,6 @@ function parseNumber(v: string): number | null {
 }
 /** A signed change: «+3», «−9,27» (a true minus), nothing for zero. */
 const signed = (n: number) => (n > 0 ? `+${num(n)}` : n < 0 ? `−${num(-n)}` : '');
-const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
  * A fragrance's warehouse page (#76, ADR 0041, 0043): its ready concentrate (counted here with a

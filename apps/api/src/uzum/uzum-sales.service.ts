@@ -177,7 +177,7 @@ export class UzumSalesService {
           .where(eq(uzumSales.id, id))
           .returning();
         const actorRef = { type: 'staff' as const, id: actor.id };
-        await moveShelves(tx, locked, lines, +1, {
+        await moveShelves(tx, locked, lines, +1, now, {
           kind: 'uzum_sale_voided',
           actor: actorRef,
           uzumSaleId: id,
@@ -317,7 +317,7 @@ export class UzumSalesService {
           })),
         )
         .returning();
-      await moveShelves(tx, locked, saleLines, -1, {
+      await moveShelves(tx, locked, saleLines, -1, now, {
         kind: 'uzum_sale',
         actor: actorRef,
         uzumSaleId: row!.id,
@@ -474,6 +474,7 @@ async function moveShelves(
   locked: Locked,
   lines: readonly Pick<UzumSaleLineRow, 'kind' | 'fragranceId' | 'ml' | 'qty'>[],
   sign: 1 | -1,
+  now: Date,
   move: Parameters<typeof applyStock>[2]['move'],
 ) {
   const bySet = new Map<DiscoveryVialMl, number>();
@@ -492,6 +493,7 @@ async function moveShelves(
     sign,
     sets: [...bySet].map(([vialMl, qty]) => ({ vialMl, change: sign * qty })),
     move,
+    now,
   });
 }
 

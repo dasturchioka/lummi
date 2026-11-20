@@ -17,6 +17,7 @@ import { isOwner } from '../staff/staff.guard';
 import { DB } from '../tokens';
 import { containsIgnoringApostrophes } from '../util/apostrophe-match';
 import { fragranceStocks, readStockContext, type StockContext } from '../warehouse/fragrance-stock';
+import { stockLevelOf } from '../warehouse/oil';
 
 /**
  * The stock page's read side (#27, ADR 0043): each fragrance's ready concentrate, reserve, free ml,
@@ -36,10 +37,6 @@ const DISCOVERY_LABELS = [
 const fold = (s: string) => stripApostrophes(normalizeUzbek(s)).toLowerCase();
 const matchesDiscoveryLabel = (q: string) =>
   fold(q) !== '' && DISCOVERY_LABELS.some((label) => fold(label).includes(fold(q)));
-
-/** The server decides what is "nothing left" and "running low" (the setting), the client only draws it. */
-export const stockLevel = (availableNow: number, lowThreshold: number): StockLevel =>
-  availableNow === 0 ? 'zero' : availableNow <= lowThreshold ? 'low' : 'ok';
 
 /**
  * Every stock row as the stock page shows it: each fragrance (name order; `q` narrows by name)
@@ -72,7 +69,7 @@ export async function stockRows(
       reserved: set.reserved,
       available: set.available,
       belowReserve: belowReserve(set.row.onHand, set.reserved),
-      level: stockLevel(set.available, lowThreshold),
+      level: stockLevelOf(set.available, lowThreshold),
     });
   }
   return {

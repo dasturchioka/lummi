@@ -1,4 +1,5 @@
 import {
+  UL_PER_ML,
   settingDefinitions,
   type SalesChannel,
   type SettingKey,
@@ -186,9 +187,6 @@ const oilShare = (liquidMl: number, l: LiquidSettings) => (liquidMl * l.oilPerce
 /** Ethanol and fixative, so'm per ml of perfume, before the filling loss. */
 const ethanolPerMl = (l: LiquidSettings) =>
   ((l.ethanolPerLitre / 1000) * l.ethanolPercent) / 100 + l.fixativePerMl;
-
-/** Microlitres in a millilitre: the ready concentrate is kept in whole µl (ADR 0043). */
-export const UL_PER_ML = 1000;
 
 /**
  * One bottle's fill of ready concentrate (ADR 0043), whole µl: its ml with the filling loss, the

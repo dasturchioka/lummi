@@ -6,7 +6,6 @@ import {
   type ConsumableInput,
   type ConsumableReceiptBody,
   type ConsumableUpdate,
-  type StockLevel,
 } from '@lummi/contracts';
 import {
   asc,
@@ -24,6 +23,7 @@ import type { Edges } from '../edges';
 import { isOwner } from '../staff/staff.guard';
 import { DB, EDGES } from '../tokens';
 import { retryOrTryAgain, uniqueViolation } from '../util/transient';
+import { stockLevelOf } from './oil';
 import { recordStockMove } from './stock-moves';
 import { stockHistory } from './warehouse.service';
 
@@ -35,10 +35,6 @@ export type ConsumableOutcome<T> = { ok: true; value: T } | ConsumableFailure;
 const notFound = { ok: false, reason: 'not_found' } as const;
 const transient = <T>(run: () => Promise<ConsumableOutcome<T>>) =>
   retryOrTryAgain<ConsumableOutcome<T>>(run, { ok: false, reason: 'try_again' });
-
-/** The item's level against its own threshold: none left, at or under it, or fine. */
-export const consumableLevel = (onHand: number, low: number): StockLevel =>
-  onHand <= 0 ? 'zero' : onHand <= low ? 'low' : 'ok';
 
 /** The list's order: what is used by itself first (flacons, boxes by ml, the ethanol), then the rest. */
 const USE_ORDER = sql`case ${consumables.use} when 'flacon' then 0 when 'box' then 1 when 'ethanol' then 2 else 3 end`;
@@ -53,7 +49,8 @@ export function consumableOut(c: ConsumableRow): Consumable {
     ml: c.ml,
     onHand: c.onHand,
     lowThreshold: c.lowThreshold,
-    level: consumableLevel(c.onHand, c.lowThreshold),
+    // against its own threshold, by the one low-stock rule
+    level: stockLevelOf(c.onHand, c.lowThreshold),
     needsRecount: c.needsRecount,
     isPlaceholder: c.isPlaceholder,
     archived: c.archived,

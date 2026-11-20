@@ -1,6 +1,6 @@
 import {
   KEY_NOTE_COUNT,
-  MAX_FORM_CONCENTRATE_ML,
+  MAX_CONCENTRATE_ML,
   MAX_OIL_PRICE,
   MAX_PRICE,
   dictionaryInputSchema,
@@ -563,8 +563,8 @@ function parseFragrance(
   if (c.concentrateMl.trim() !== '') {
     concentrateMl = millilitres(c.concentrateMl);
     if (concentrateMl === null) bad('concentrateMl', 'bad_number', { value: c.concentrateMl });
-    else if (concentrateMl > MAX_FORM_CONCENTRATE_ML)
-      bad('concentrateMl', 'too_big', { max: MAX_FORM_CONCENTRATE_ML });
+    else if (concentrateMl > MAX_CONCENTRATE_ML)
+      bad('concentrateMl', 'too_big', { max: MAX_CONCENTRATE_ML });
   }
   let tier: keyof typeof LABELS.tier | null = null;
   if (c.tier.trim() !== '') {

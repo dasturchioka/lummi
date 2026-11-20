@@ -26,7 +26,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService, isUniqueViolation, normalise } from '../admin/catalog-admin.service';
 import { readLiquidStock } from '../catalog/catalog.service';
-import { mlFromUl } from '../warehouse/oil';
+import { mlFromUl, ulFromMl } from '../warehouse/oil';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { planImport, sortChanges, type FragranceOp, type Plan } from './plan';
@@ -261,9 +261,15 @@ export class CatalogImportService {
     const stock = await readLiquidStock(db, ids);
     return plan.stock.map((s) => {
       const id = snap.byCode.get(s.code)?.id;
-      const held = id ? mlFromUl(stock.of(id).reservedUl) : 0;
-      const availableMl = Math.round((s.newConcentrateMl - held) * 1000) / 1000;
-      return { ...s, reservedMl: held, availableMl, negative: availableMl < 0 };
+      // in whole µl, as the stock keeps it, then ml again
+      const heldUl = id ? stock.of(id).reservedUl : 0;
+      const freeUl = ulFromMl(s.newConcentrateMl) - heldUl;
+      return {
+        ...s,
+        reservedMl: mlFromUl(heldUl),
+        availableMl: mlFromUl(freeUl),
+        negative: freeUl < 0,
+      };
     });
   }
 

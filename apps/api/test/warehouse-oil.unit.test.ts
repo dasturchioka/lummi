@@ -6,7 +6,7 @@ import {
   mgFromGrams,
   mixingNeeds,
   mlFromUl,
-  oilLevel,
+  stockLevelOf,
   oilMlOf,
   oilReceiptCost,
   oilValue,
@@ -65,11 +65,11 @@ describe('the oil read in ml (by the density)', () => {
 
 describe('the low-oil warning', () => {
   it('says none for no oil, low at or under the ml the setting names, else ok', () => {
-    expect(oilLevel(0, 300)).toBe('zero');
-    expect(oilLevel(120, 300)).toBe('low');
-    expect(oilLevel(300, 300)).toBe('low');
-    expect(oilLevel(300.5, 300)).toBe('ok');
-    expect(oilLevel(0.2, 0)).toBe('ok');
+    expect(stockLevelOf(0, 300)).toBe('zero');
+    expect(stockLevelOf(120, 300)).toBe('low');
+    expect(stockLevelOf(300, 300)).toBe('low');
+    expect(stockLevelOf(300.5, 300)).toBe('ok');
+    expect(stockLevelOf(0.2, 0)).toBe('ok');
   });
 });
 

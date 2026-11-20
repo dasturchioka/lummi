@@ -1,4 +1,4 @@
-import type { FragranceStock } from '@lummi/contracts';
+import { round3, type FragranceStock } from '@lummi/contracts';
 import { VOLUMES_ML } from '@lummi/contracts/constants';
 import {
   and,
@@ -18,14 +18,11 @@ import {
   concentrateLevel,
   gramsFromMg,
   mlFromUl,
-  oilLevel,
+  stockLevelOf,
   oilMlOf,
   oilValue,
   type OilReceiptPrice,
 } from './oil';
-
-/** Grams and ml go out to three decimals: a milligram, a microlitre. */
-export const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** What every stock summary needs, read once per request. */
 export interface StockContext {
@@ -92,7 +89,7 @@ export function fragranceStock(
       .map((ml) => ({ ml, available: bottlesOf(freeUl, fillUl(ml, l)) })),
     oilGrams: gramsFromMg(f.oilMg),
     oilMl: round3(oilMl),
-    oilLevel: oilLevel(oilMl, ctx.lowOilMl),
+    oilLevel: stockLevelOf(oilMl, ctx.lowOilMl),
     value,
     drafts,
   };

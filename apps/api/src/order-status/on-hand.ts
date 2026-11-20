@@ -66,6 +66,7 @@ export async function changeOnHand(
   move: OnHandMove,
   actor: Actor,
   kind: 'sale' | 'returned',
+  now: Date,
 ): Promise<AppliedStock> {
   const all = await fillsOf(tx, orderId, lines);
   const moved = await fillsOf(tx, orderId, move.lines);
@@ -82,5 +83,6 @@ export async function changeOnHand(
     sign: move.sign,
     sets: [...sets].map(([vialMl, qty]) => ({ vialMl, change: move.sign * qty })),
     move: { kind, actor, orderId },
+    now,
   });
 }

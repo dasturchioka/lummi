@@ -1,4 +1,5 @@
 import {
+  round3,
   WAREHOUSE_HISTORY_LIMIT,
   type ConcentrateCountBody,
   type MixingResult,
@@ -45,9 +46,9 @@ import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { isOwner } from '../staff/staff.guard';
 import { retryOrTryAgain } from '../util/transient';
-import { fragranceStock, readStockContext, round3 } from './fragrance-stock';
+import { fragranceStock, readStockContext } from './fragrance-stock';
 import { gramsFromMg, mgFromGrams, mixingNeeds, mlFromUl, oilReceiptCost, ulFromMl } from './oil';
-import { applyStock, linkOf, lockStock } from './stock-changes';
+import { applyStock, linkOf, lockFragrances, lockStock } from './stock-changes';
 import { recordStockMove } from './stock-moves';
 import { readComposition } from '../sets/sets';
 
@@ -490,7 +491,9 @@ export class WarehouseService {
     quantity: number,
   ): Promise<WarehouseOutcome<SetAssemblyResult>> {
     return transient(() =>
-      this.db.transaction((tx) => assembleDiscoverySet(tx, this.audit, actor, vialMl, quantity)),
+      this.db.transaction((tx) =>
+        assembleDiscoverySet(tx, this.audit, actor, vialMl, quantity, this.edges.clock.now()),
+      ),
     );
   }
 
@@ -635,6 +638,7 @@ export async function assembleDiscoverySet(
   actor: StaffRow,
   vialMl: DiscoveryVialMl,
   quantity: number,
+  now: Date,
 ): Promise<WarehouseOutcome<SetAssemblyResult>> {
   const composition = await readComposition(tx, vialMl);
   if (composition.length !== SET_SIZE)
@@ -665,6 +669,7 @@ export async function assembleDiscoverySet(
     sign: -1,
     sets: [{ vialMl, change: quantity }],
     move: { kind: 'set_assembly', actor: actorRef, details: { set: { vialMl, quantity } } },
+    now,
   });
   const onHand = locked.sets.get(vialMl)!.onHand;
   const flacons = applied.consumables.reduce((a, c) => a + (c.from - c.to), 0);
@@ -685,19 +690,10 @@ export async function assembleDiscoverySet(
   return { ok: true, value: { concentrateMl: mlFromUl(need), flacons, onHand } } as const;
 }
 
-/** The fragrance row under the warehouse's lock; null when there is none. */
+/** The fragrance row under the stock lock (`lockFragrances`, the one place that takes it); null when none. */
 async function lockFragrance(tx: DbOrTx, id: number) {
-  const [f] = await tx
-    .select({
-      id: fragrances.id,
-      name: fragrances.name,
-      oilMg: fragrances.oilMg,
-      concentrateUl: fragrances.concentrateUl,
-    })
-    .from(fragrances)
-    .where(eq(fragrances.id, id))
-    .for('no key update');
-  return f ?? null;
+  const f = (await lockFragrances(tx, [id])).get(id);
+  return f ? { id, ...f } : null;
 }
 
 /** An oil receipt and its fragrance, locked fragrance first (the warehouse's one order). */

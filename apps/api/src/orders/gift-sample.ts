@@ -14,6 +14,7 @@ import {
 } from '@lummi/db';
 import { readLiquidStock } from '../catalog/catalog.service';
 import { readSettings } from '../settings/settings.service';
+import { stockLevelOf } from '../warehouse/oil';
 
 /**
  * The gift sample (#79, ADR 0042): a customer's first order gets one 5 ml bottle free. It is a line
@@ -187,6 +188,6 @@ export async function giftSampleStock(tx: DbOrTx): Promise<GiftSampleStock | nul
     missing,
     available: left,
     threshold,
-    level: left === 0 ? 'zero' : left <= threshold ? 'low' : 'ok',
+    level: stockLevelOf(left, threshold),
   };
 }

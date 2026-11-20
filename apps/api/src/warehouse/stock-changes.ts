@@ -1,4 +1,4 @@
-import type { DiscoveryVialMl } from '@lummi/contracts/constants';
+import type { ConsumableUse, DiscoveryVialMl } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -14,7 +14,7 @@ import {
 } from '@lummi/db';
 import { readCostSettings } from '../cost/cost-settings';
 import { fillUl, type LiquidSettings } from '../cost/unit-cost';
-import { readDiscoverySet } from '../sets/sets';
+import { lockDiscoverySets } from '../sets/sets';
 import { recordStockMove, type StockMoveInput } from './stock-moves';
 
 /*
@@ -25,10 +25,23 @@ import { recordStockMove, type StockMoveInput } from './stock-moves';
  * stock move per fragrance with the flacons and boxes its bottles took.
  */
 
-/** What a bottle takes from the consumables: a flacon of its ml, and a box when it is sold alone. */
-export type ConsumableLink = `${'flacon' | 'box' | 'ethanol'}:${number}`;
-export const linkOf = (use: 'flacon' | 'box' | 'ethanol', ml: number | null): ConsumableLink =>
-  `${use}:${ml ?? 0}`;
+/** The uses the shop takes by itself; `other` is counted by hand only. */
+type LinkedUse = Exclude<ConsumableUse, 'other'>;
+/** What a bottle takes from the consumables: a flacon of its ml, a box when sold alone; mixing the ethanol. */
+export type ConsumableLink = `${LinkedUse}:${number}`;
+export const linkOf = (use: LinkedUse, ml: number | null): ConsumableLink => `${use}:${ml ?? 0}`;
+/** The order a move lists and counts its consumables in: by use, then ml, numerically. */
+const USE_ORDER: Record<LinkedUse, number> = { flacon: 0, box: 1, ethanol: 2 };
+function compareLinks(a: ConsumableLink, b: ConsumableLink): number {
+  const [ua, ma] = a.split(':') as [LinkedUse, string];
+  const [ub, mb] = b.split(':') as [LinkedUse, string];
+  return USE_ORDER[ua] - USE_ORDER[ub] || Number(ma) - Number(mb);
+}
+/** The link of an item read under the lock (asked for by link, so never `other`). */
+function linkOfRow(c: ConsumableRow): ConsumableLink {
+  if (c.use === 'other') throw new Error(`consumable ${c.id} has no link`);
+  return linkOf(c.use, c.ml);
+}
 
 /** Bottles of one fragrance and ml. `boxed`: sold alone (10 / 30 / 50 ml), so it takes a box too. */
 export interface FillLine {
@@ -41,7 +54,7 @@ export interface FillLine {
 /** Every row a change touches, locked, as it was under the lock. */
 export interface LockedStock {
   liquid: LiquidSettings;
-  fragrances: Map<number, { name: string; concentrateUl: number }>;
+  fragrances: Map<number, LockedFragrance>;
   sets: Map<DiscoveryVialMl, DiscoverySetRow>;
   /** The active consumable of each link asked for; a link with none is simply not counted. */
   consumables: Map<ConsumableLink, ConsumableRow>;
@@ -56,18 +69,31 @@ export function linksOf(fills: readonly FillLine[]): ConsumableLink[] {
   ];
 }
 
+/** A fragrance row as its stock lock read it. */
+export interface LockedFragrance {
+  name: string;
+  oilMg: number;
+  concentrateUl: number;
+}
+
 /**
  * Locks fragrance rows `FOR NO KEY UPDATE` in ascending id: the first lock of every stock path
- * (checkout, the handover, Uzum, mixing, assembly, counts; ADR 0043). Their concentrate under it.
+ * (checkout, the handover, Uzum, mixing, assembly, counts; ADR 0043). Their oil and concentrate
+ * under it. The one place that takes this lock.
  */
 export async function lockFragrances(
   tx: DbOrTx,
   fragranceIds: readonly number[],
-): Promise<Map<number, { name: string; concentrateUl: number }>> {
+): Promise<Map<number, LockedFragrance>> {
   const ids = [...new Set(fragranceIds)].sort((a, b) => a - b);
   if (ids.length === 0) return new Map();
   const rows = await tx
-    .select({ id: fragrances.id, name: fragrances.name, concentrateUl: fragrances.concentrateUl })
+    .select({
+      id: fragrances.id,
+      name: fragrances.name,
+      oilMg: fragrances.oilMg,
+      concentrateUl: fragrances.concentrateUl,
+    })
     .from(fragrances)
     .where(inArray(fragrances.id, ids))
     .orderBy(asc(fragrances.id))
@@ -88,9 +114,7 @@ export async function lockStock(
   },
 ): Promise<LockedStock> {
   const locked = await lockFragrances(tx, want.fragranceIds);
-  const sets = new Map<DiscoveryVialMl, DiscoverySetRow>();
-  for (const ml of [...new Set(want.setMls ?? [])].sort((a, b) => a - b))
-    sets.set(ml, await readDiscoverySet(tx, ml, true));
+  const sets = await lockDiscoverySets(tx, want.setMls ?? []);
   const links = [...new Set(want.links ?? [])];
   const found = links.length
     ? await tx
@@ -112,7 +136,7 @@ export async function lockStock(
     liquid: (await readCostSettings(tx)).liquid,
     fragrances: locked,
     sets,
-    consumables: new Map(found.map((c) => [linkOf(c.use as 'flacon', c.ml), c])),
+    consumables: new Map(found.map((c) => [linkOfRow(c), c])),
   };
 }
 
@@ -148,6 +172,8 @@ export async function applyStock(
       StockMoveInput,
       'fragranceId' | 'concentrateUl' | 'bottles' | 'consumables' | 'oilMg'
     >;
+    /** The Clock edge's now (ADR 0028): when the consumables' counts moved. */
+    now: Date;
   },
 ): Promise<AppliedStock> {
   const { sign } = change;
@@ -190,7 +216,7 @@ export async function applyStock(
 
     const moved: Record<number, number> = {};
     const short: Record<number, number> = {};
-    for (const [link, qty] of [...uses].sort()) {
+    for (const [link, qty] of [...uses].sort(([a], [b]) => compareLinks(a, b))) {
       const c = locked.consumables.get(link);
       if (!c) continue;
       const seen = counted.get(c.id) ?? { from: c.onHand, row: c, short: false };
@@ -225,7 +251,7 @@ export async function applyStock(
   for (const [id, { from, row, short }] of [...counted].sort(([a], [b]) => a - b)) {
     await tx
       .update(consumables)
-      .set({ onHand: row.onHand, ...(short ? { needsRecount: true } : {}), updatedAt: sql`now()` })
+      .set({ onHand: row.onHand, ...(short ? { needsRecount: true } : {}), updatedAt: change.now })
       .where(eq(consumables.id, id));
     if (short) row.needsRecount = true;
     if (row.onHand !== from) out.consumables.push({ id, from, to: row.onHand });
