@@ -14,6 +14,7 @@ CREATE TABLE "consumables" (
 	"on_hand" integer DEFAULT 0 NOT NULL,
 	"low_threshold" integer DEFAULT 0 NOT NULL,
 	"needs_recount" boolean DEFAULT false NOT NULL,
+	"is_placeholder" boolean DEFAULT false NOT NULL,
 	"archived" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -31,15 +32,16 @@ ALTER TABLE "stock_moves" ADD COLUMN "concentrate_ul" bigint DEFAULT 0 NOT NULL;
 ALTER TABLE "stock_moves" ADD COLUMN "consumables" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "consumables_use_ml_idx" ON "consumables" USING btree ("use",coalesce("ml", 0)) WHERE not "consumables"."archived" and "consumables"."use" <> 'other';--> statement-breakpoint
 -- the seeded consumables (ADR 0043): a flacon of every ml, a box of every ml sold alone, the spirit
-INSERT INTO "consumables" ("name_ru", "name_uz", "unit", "use", "ml", "low_threshold") VALUES
-  ('Флакон 5 мл', 'Flakon 5 ml', 'pcs', 'flacon', 5, 20),
-  ('Флакон 10 мл', 'Flakon 10 ml', 'pcs', 'flacon', 10, 20),
-  ('Флакон 30 мл', 'Flakon 30 ml', 'pcs', 'flacon', 30, 20),
-  ('Флакон 50 мл', 'Flakon 50 ml', 'pcs', 'flacon', 50, 20),
-  ('Коробка 10 мл', 'Quti 10 ml', 'pcs', 'box', 10, 20),
-  ('Коробка 30 мл', 'Quti 30 ml', 'pcs', 'box', 30, 20),
-  ('Коробка 50 мл', 'Quti 50 ml', 'pcs', 'box', 50, 20),
-  ('Спирт', 'Spirt', 'ml', 'ethanol', NULL, 1000);--> statement-breakpoint
+-- (counted by nobody yet: ours until a receipt or a count, like the 5 × 5 ml set's boxes)
+INSERT INTO "consumables" ("name_ru", "name_uz", "unit", "use", "ml", "low_threshold", "is_placeholder") VALUES
+  ('Флакон 5 мл', 'Flakon 5 ml', 'pcs', 'flacon', 5, 20, true),
+  ('Флакон 10 мл', 'Flakon 10 ml', 'pcs', 'flacon', 10, 20, true),
+  ('Флакон 30 мл', 'Flakon 30 ml', 'pcs', 'flacon', 30, 20, true),
+  ('Флакон 50 мл', 'Flakon 50 ml', 'pcs', 'flacon', 50, 20, true),
+  ('Коробка 10 мл', 'Quti 10 ml', 'pcs', 'box', 10, 20, true),
+  ('Коробка 30 мл', 'Quti 30 ml', 'pcs', 'box', 30, 20, true),
+  ('Коробка 50 мл', 'Quti 50 ml', 'pcs', 'box', 50, 20, true),
+  ('Спирт', 'Spirt', 'ml', 'ethanol', NULL, 1000, true);--> statement-breakpoint
 -- each fragrance's bottles on hand pour into its ready concentrate: a bottle is its fill, ml × (1 + the filling loss) in µl, at the stored loss (else its default, 3 %)
 UPDATE "fragrances" f SET "concentrate_ul" = s."ul"
 FROM (
@@ -50,9 +52,14 @@ FROM (
   GROUP BY v."fragrance_id"
 ) s
 WHERE s."fragrance_id" = f."id";--> statement-breakpoint
--- a bottle on hand held a flacon and, at 10 / 30 / 50 ml, a box: they are in stock again
-UPDATE "consumables" c SET "on_hand" = s."n"
-FROM (SELECT "ml", sum("on_hand")::int AS "n" FROM "volumes" GROUP BY "ml") s
+-- a bottle on hand held a flacon and, at 10 / 30 / 50 ml, a box: they are in stock again; the count
+-- stays ours where every bottle it came from was the seed's placeholder (`volumes.is_placeholder`)
+UPDATE "consumables" c SET "on_hand" = s."n", "is_placeholder" = s."ours"
+FROM (
+  SELECT "ml", sum("on_hand")::int AS "n",
+    coalesce(bool_and("is_placeholder") FILTER (WHERE "on_hand" > 0), true) AS "ours"
+  FROM "volumes" GROUP BY "ml"
+) s
 WHERE c."ml" = s."ml" AND c."use" IN ('flacon', 'box');--> statement-breakpoint
 -- one history line per fragrance: its bottles out, its concentrate, flacons and boxes in
 INSERT INTO "stock_moves" ("fragrance_id", "kind", "concentrate_ul", "bottles", "consumables", "details", "actor_type")

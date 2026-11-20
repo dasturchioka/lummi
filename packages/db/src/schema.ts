@@ -2081,6 +2081,12 @@ export const consumables = pgTable(
     onHand: integer('on_hand').notNull().default(0),
     lowThreshold: integer('low_threshold').notNull().default(0),
     needsRecount: boolean('needs_recount').notNull().default(false),
+    /**
+     * A count that is ours, not the owner's (the seed's, or folded from the seed's placeholder
+     * bottles), like the 5 × 5 ml set's boxes (#79): none may reach launch. A receipt or a count
+     * by staff makes it his.
+     */
+    isPlaceholder: boolean('is_placeholder').notNull().default(false),
     archived: boolean('archived').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

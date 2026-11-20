@@ -142,6 +142,14 @@ export function ConsumablesSection({
                       {c.recount}
                     </span>
                   )}
+                  {i.isPlaceholder && !i.archived && (
+                    <span
+                      className="inline-flex h-6 items-center whitespace-nowrap rounded-full bg-field px-2.5 text-xs font-semibold"
+                      title={c.placeholderHint}
+                    >
+                      {c.placeholder}
+                    </span>
+                  )}
                 </span>
                 {useOf(i) && <span className="text-small text-muted-foreground">{useOf(i)}</span>}
                 {i.needsRecount && (

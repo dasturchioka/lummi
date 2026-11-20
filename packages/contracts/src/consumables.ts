@@ -89,6 +89,8 @@ export const consumableSchema = z.object({
   level: z.enum(STOCK_LEVELS),
   /** A use found fewer than it took («Пересчитайте»), until the next count. */
   needsRecount: z.boolean(),
+  /** The count is ours (the seed's), not the owner's: none may reach launch. */
+  isPlaceholder: z.boolean(),
   archived: z.boolean(),
 });
 export type Consumable = z.infer<typeof consumableSchema>;

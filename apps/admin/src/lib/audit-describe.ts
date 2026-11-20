@@ -238,7 +238,7 @@ const unitText = (c: Ctx, v: unknown) => {
   const n = valueText(c, v);
   return unit ? `${n} ${c.t.stock.consumables.units[unit]}` : n;
 };
-/** A new consumable's name in the panel's language. */
+/** A consumable's name in the panel's language: its payload carries both (ADR 0043). */
 const consumableName = (c: Ctx) =>
   (c.language === 'uz' ? str(c.p.nameUz) : str(c.p.nameRu)) ??
   targetName(c) ??
@@ -817,13 +817,13 @@ const describers: Record<string, Describer> = {
     return [fill(c.t.audit.detail.consumableCreated, { name: consumableName(c) })];
   },
   'consumable.updated': (c) => {
-    const { name, archived, ...diff } = c.p;
-    c.take(...Object.keys(c.p));
+    c.take('nameRu', 'nameUz', 'changes');
     const d = c.t.audit.detail;
+    const { archived, ...diff } = isRecord(c.p.changes) ? c.p.changes : {};
     const flag = asPair(archived);
     return [
       fill(d.consumableUpdated, {
-        name: str(name) ?? targetName(c) ?? d.unknownName,
+        name: consumableName(c),
         changes: [
           ...diffPairs(c, diff),
           flag && (flag[1] === true ? d.consumableArchived : d.consumableRestored),
@@ -834,12 +834,12 @@ const describers: Record<string, Describer> = {
     ];
   },
   'consumable.received': (c) => {
-    c.take('name', 'unit', 'quantity', 'onHand', 'note');
+    c.take('nameRu', 'nameUz', 'unit', 'quantity', 'onHand', 'note');
     const d = c.t.audit.detail;
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(d.consumableReceived, {
-        name: str(c.p.name) ?? targetName(c) ?? d.unknownName,
+        name: consumableName(c),
         qty: unitText(c, c.p.quantity),
         old: unitText(c, pair[0]),
         new: unitText(c, pair[1]),
@@ -848,12 +848,12 @@ const describers: Record<string, Describer> = {
     ];
   },
   'consumable.corrected': (c) => {
-    c.take('name', 'unit', 'onHand', 'reason');
+    c.take('nameRu', 'nameUz', 'unit', 'onHand', 'reason');
     const d = c.t.audit.detail;
     const pair = asPair(c.p.onHand) ?? [null, null];
     return [
       fill(d.consumableCounted, {
-        name: str(c.p.name) ?? targetName(c) ?? d.unknownName,
+        name: consumableName(c),
         old: unitText(c, pair[0]),
         new: unitText(c, pair[1]),
       }),

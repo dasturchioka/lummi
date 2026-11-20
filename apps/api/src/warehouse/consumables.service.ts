@@ -55,6 +55,7 @@ export function consumableOut(c: ConsumableRow): Consumable {
     lowThreshold: c.lowThreshold,
     level: consumableLevel(c.onHand, c.lowThreshold),
     needsRecount: c.needsRecount,
+    isPlaceholder: c.isPlaceholder,
     archived: c.archived,
   };
 }
@@ -145,7 +146,8 @@ export class ConsumablesService {
               action: 'consumable.updated',
               targetType: 'consumable',
               targetId: id,
-              payload: { name: old.nameRu, ...diff },
+              // the item's names as they were, both languages; what changed, each a [from, to] pair
+              payload: { nameRu: old.nameRu, nameUz: old.nameUz, changes: diff },
             });
           return { ok: true, value: consumableOut(row!) } as const;
         }),
@@ -170,6 +172,7 @@ export class ConsumablesService {
         if (!old) return notFound;
         const [row] = await tx
           .update(consumables)
+          // added to a placeholder count, the total is still partly ours: only a count clears it
           .set({ onHand: old.onHand + body.quantity, updatedAt: this.edges.clock.now() })
           .where(eq(consumables.id, id))
           .returning();
@@ -187,7 +190,8 @@ export class ConsumablesService {
           targetType: 'consumable',
           targetId: id,
           payload: {
-            name: old.nameRu,
+            nameRu: old.nameRu,
+            nameUz: old.nameUz,
             unit: old.unit,
             quantity: body.quantity,
             onHand: [old.onHand, row!.onHand],
@@ -216,7 +220,12 @@ export class ConsumablesService {
           return { ok: false, reason: 'changed', current: old.onHand } as const;
         const [row] = await tx
           .update(consumables)
-          .set({ onHand: body.onHand, needsRecount: false, updatedAt: this.edges.clock.now() })
+          .set({
+            onHand: body.onHand,
+            needsRecount: false,
+            isPlaceholder: false,
+            updatedAt: this.edges.clock.now(),
+          })
           .where(eq(consumables.id, id))
           .returning();
         const actorRef = { type: 'staff' as const, id: actor.id };
@@ -234,7 +243,8 @@ export class ConsumablesService {
           targetType: 'consumable',
           targetId: id,
           payload: {
-            name: old.nameRu,
+            nameRu: old.nameRu,
+            nameUz: old.nameUz,
             unit: old.unit,
             onHand: [old.onHand, body.onHand],
             reason: body.reason,

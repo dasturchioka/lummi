@@ -469,6 +469,50 @@ describe('a consumable shortfall never blocks', () => {
   });
 });
 
+describe('the seed counts the consumables as ours, beside its concentrate', () => {
+  it('gives flacons, boxes and spirit placeholder counts a first handover can use; a count makes one real', async () => {
+    const all = await t.db.select().from(consumables);
+    const fragrances = await slugsOf(t, 1_000);
+    for (const c of all) {
+      expect(c.isPlaceholder, c.nameRu).toBe(true);
+      // twenty bottles of each volume per fragrance (the old seed's count), spirit to mix the
+      // seed's 1 000 ml of concentrate once more (70 %)
+      expect(c.onHand, c.nameRu).toBe(
+        c.use === 'ethanol' ? fragrances.length * 700 : fragrances.length * 20,
+      );
+    }
+
+    // a fresh seed's first handover asks for no recount
+    const [a] = await slugsOf(t, 1);
+    const { order } = await orderOf(ali, '998901234567', [{ slug: a!, ml: 10, qty: 1 }]);
+    await pay(t, order.number);
+    await fulfilTo(t, order.number, 'handed_to_bts');
+    const flacon = await consumable(t, 'flacon', 10);
+    expect(flacon).toMatchObject({ onHand: fragrances.length * 20 - 1, needsRecount: false });
+
+    // a receipt adds to a count that is still partly ours; only a count makes it the owner's
+    const box = await consumable(t, 'box', 30);
+    expect(
+      (
+        await manager.client.admin.consumables.receive({
+          params: { id: box.id },
+          body: { quantity: 5 },
+        })
+      ).status,
+    ).toBe(201);
+    expect(await consumable(t, 'box', 30)).toMatchObject({ isPlaceholder: true });
+    const list = await manager.client.admin.consumables.list();
+    expect(list.status === 200 && list.body.items.find((i) => i.id === flacon.id)).toMatchObject({
+      isPlaceholder: true,
+    });
+    const counted = await manager.client.admin.consumables.count({
+      params: { id: flacon.id },
+      body: { onHand: 12, reason: 'Пересчёт' },
+    });
+    expect(counted.status === 200 && counted.body).toMatchObject({ isPlaceholder: false });
+  });
+});
+
 describe('the migration folds the bottles on hand into concentrate and consumables', () => {
   const drizzleDir = fileURLToPath(new URL('../../../packages/db/drizzle', import.meta.url));
   const LAST_BEFORE = '0042_shown_count';
@@ -515,9 +559,10 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
       );
       const [nuit, empty] = rows.map((r) => Number(r.id));
       await pool.query(
-        `INSERT INTO volumes (fragrance_id, ml, price, on_hand) VALUES
-           ($1, 5, 0, 4), ($1, 10, 69000, 3), ($1, 30, 149000, 2), ($1, 50, 219000, 1),
-           ($2, 5, 0, 0), ($2, 10, 69000, 0)`,
+        // the seed's placeholder bottles, but the owner counted the 10 ml himself
+        `INSERT INTO volumes (fragrance_id, ml, price, on_hand, is_placeholder) VALUES
+           ($1, 5, 0, 4, true), ($1, 10, 69000, 3, false), ($1, 30, 149000, 2, true),
+           ($1, 50, 219000, 1, true), ($2, 5, 0, 0, true), ($2, 10, 69000, 0, true)`,
         [nuit, empty],
       );
 
@@ -532,6 +577,14 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
       const c = await pool.query<{ use: string; ml: number | null; unit: string; on_hand: number }>(
         'SELECT use, ml, unit, on_hand FROM consumables ORDER BY id',
       );
+      // a count folded from the seed's placeholder bottles stays ours; one the owner made is his
+      const flagged = await pool.query<{ use: string; ml: number | null; is_placeholder: boolean }>(
+        'SELECT use, ml, is_placeholder FROM consumables ORDER BY id',
+      );
+      expect(flagged.rows.filter((r) => !r.is_placeholder)).toEqual([
+        { use: 'flacon', ml: 10, is_placeholder: false },
+        { use: 'box', ml: 10, is_placeholder: false },
+      ]);
       const seeded = await pool.query<{ name_ru: string; name_uz: string; low_threshold: number }>(
         'SELECT name_ru, name_uz, low_threshold FROM consumables ORDER BY id',
       );
@@ -545,7 +598,7 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
           use: c.rows[i]!.use,
           ml: c.rows[i]!.ml,
         })),
-      ).toEqual(SEEDED_CONSUMABLES);
+      ).toEqual(SEEDED_CONSUMABLES.map(({ isPlaceholder: _ours, ...rest }) => rest));
       expect(c.rows).toEqual([
         { use: 'flacon', ml: 5, unit: 'pcs', on_hand: 4 },
         { use: 'flacon', ml: 10, unit: 'pcs', on_hand: 3 },

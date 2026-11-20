@@ -3,7 +3,21 @@ import { DISCOVERY_VIAL_MLS, SET_SIZE } from '@lummi/contracts/constants';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { and, asc, discoverySet, discoverySetItems, eq, fragrances, volumes, type Db, type DbOrTx } from '@lummi/db';
+import {
+  and,
+  asc,
+  consumables,
+  discoverySet,
+  discoverySetItems,
+  eq,
+  fragrances,
+  inArray,
+  sql,
+  volumes,
+  type Db,
+  type DbOrTx,
+} from '@lummi/db';
+import { defaultCostSettings, mixNeeds } from '../cost/unit-cost';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService } from '../admin/catalog-admin.service';
 import { CatalogImportService } from '../catalog-import/catalog-import.service';
@@ -94,6 +108,35 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
   }
 }
 
+/** Bottles of each volume per fragrance the placeholder flacons and boxes stand for (the old seed's count). */
+export const PLACEHOLDER_BOTTLES_PER_VOLUME = 20;
+
+/**
+ * The consumables' placeholder counts (ADR 0043), consistent with the seeded concentrate: a flacon
+ * and a box of each ml for `PLACEHOLDER_BOTTLES_PER_VOLUME` bottles per fragrance, and the spirit
+ * to mix each fragrance's `PLACEHOLDER_CONCENTRATE_ML` once more at the default shares. Only onto
+ * an item still flagged ours and never counted (0), as the Discovery set's boxes (#79): a re-run
+ * never overwrites the owner's number, and ours never reach launch unmarked.
+ */
+async function seedConsumables(tx: DbOrTx): Promise<void> {
+  const [{ n } = { n: 0 }] = await tx.select({ n: sql<number>`count(*)::int` }).from(fragrances);
+  const spirit = Math.round(mixNeeds(PLACEHOLDER_CONCENTRATE_ML, defaultCostSettings().liquid).ethanolMl);
+  await tx
+    .update(consumables)
+    .set({
+      onHand: sql`case when ${consumables.use} = 'ethanol' then ${n * spirit}::int else ${
+        n * PLACEHOLDER_BOTTLES_PER_VOLUME
+      }::int end`,
+    })
+    .where(
+      and(
+        eq(consumables.isPlaceholder, true),
+        eq(consumables.onHand, 0),
+        inArray(consumables.use, ['flacon', 'box', 'ethanol']),
+      ),
+    );
+}
+
 export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragrances: number }> {
   const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);
   const raw = await readWorkbook(bytes, { maxRows: 100_000 });
@@ -151,5 +194,6 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
   // Discovery set (#22): outside the workbook, by the first five fragrances in workbook order.
   const first = await db.select({ id: fragrances.id }).from(fragrances).orderBy(asc(fragrances.id)).limit(SET_SIZE);
   await db.transaction((tx) => seedDiscoverySet(tx, first.map((f) => f.id)));
+  await db.transaction((tx) => seedConsumables(tx));
   return { fragrances: raw.fragrances.length };
 }

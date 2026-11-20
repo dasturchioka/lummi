@@ -836,7 +836,8 @@ describe('consumables (ADR 0043)', () => {
       ['box', 50, 'pcs', 'Коробка 50 мл', 'Quti 50 ml'],
       ['ethanol', null, 'ml', 'Спирт', 'Spirt'],
     ]);
-    expect(list.every((i) => i.onHand === 0 && i.level === 'zero' && !i.needsRecount)).toBe(true);
+    // the seed's placeholder counts, flagged as ours (ADR 0043)
+    expect(list.every((i) => i.onHand > 0 && i.isPlaceholder && !i.needsRecount)).toBe(true);
   });
 
   it('adds, renames and archives an item, all audited; a use and ml is one active item', async () => {
@@ -890,7 +891,12 @@ describe('consumables (ADR 0043)', () => {
       manager.staff.id,
     ]);
     const [updated] = await audits('consumable.updated');
-    expect(updated?.payload).toMatchObject({ archived: [false, true], lowThreshold: [20, 0] });
+    // both names, so the audit reads in the panel's language (CLAUDE.md: bilingual everything)
+    expect(updated?.payload).toMatchObject({
+      nameRu: expect.any(String),
+      nameUz: expect.any(String),
+      changes: { archived: [false, true], lowThreshold: [20, 0] },
+    });
 
     // the link must fit the use (the schema)
     for (const body of [
@@ -918,6 +924,8 @@ describe('consumables (ADR 0043)', () => {
 
   it('receives and counts with a reason; a stale count is 409; the history keeps notes and reasons', async () => {
     const box = await consumable(t, 'box', 30);
+    // from a count of 0, not the seed's placeholder
+    await setConsumable(t, box.id, 0);
     const got = await manager.client.admin.consumables.receive({
       params: { id: box.id },
       body: { quantity: 100, note: 'Поставщик А' },
@@ -928,7 +936,11 @@ describe('consumables (ADR 0043)', () => {
       body: { onHand: 20, expected: 100, reason: 'Пересчёт' },
     });
     // at the threshold (20): low
-    expect(counted.status === 200 && counted.body).toMatchObject({ onHand: 20, level: 'low' });
+    expect(counted.status === 200 && counted.body).toMatchObject({
+      onHand: 20,
+      level: 'low',
+      isPlaceholder: false,
+    });
     const stale = await owner.client.admin.consumables.count({
       params: { id: box.id },
       body: { onHand: 50, expected: 100, reason: 'Пересчёт' },
@@ -953,17 +965,27 @@ describe('consumables (ADR 0043)', () => {
     const [received] = await audits('consumable.received');
     expect(received).toMatchObject({ actorId: manager.staff.id, targetType: 'consumable' });
     expect(received?.payload).toMatchObject({
+      nameRu: 'Коробка 30 мл',
+      nameUz: 'Quti 30 ml',
       quantity: 100,
       onHand: [0, 100],
       note: 'Поставщик А',
     });
     const [fixed] = await audits('consumable.corrected');
-    expect(fixed?.payload).toMatchObject({ onHand: [100, 20], reason: 'Пересчёт' });
+    expect(fixed?.payload).toMatchObject({
+      nameRu: 'Коробка 30 мл',
+      nameUz: 'Quti 30 ml',
+      onHand: [100, 20],
+      reason: 'Пересчёт',
+    });
   });
 
   it('a count that changes nothing clears «Пересчитайте» and moves nothing', async () => {
     const flacon = await consumable(t, 'flacon', 50);
-    await t.db.update(consumables).set({ needsRecount: true }).where(eq(consumables.id, flacon.id));
+    await t.db
+      .update(consumables)
+      .set({ needsRecount: true, onHand: 0 })
+      .where(eq(consumables.id, flacon.id));
     const res = await manager.client.admin.consumables.count({
       params: { id: flacon.id },
       body: { onHand: 0, reason: 'Пересчитали, ноль' },

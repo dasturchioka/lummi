@@ -31,7 +31,7 @@ import { WorkerRuntime } from '../src/worker/runtime';
 import { payWithCredit, recordCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
 import { giftSampleOff } from './harness/gift-sample';
-import { concentrateUl, FILL_UL, stockBottles, type FillMl } from './harness/stock';
+import { concentrateUl, consumable, FILL_UL, stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
 const snapshot = JSON.parse(
@@ -643,13 +643,19 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
       ['handed_to_bts', 'delivered', 'staff'],
       ['delivered', 'returned', 'staff'],
     ]);
-    // two 10 ml fills left the concentrate (ADR 0043); no flacon or box was counted to take
+    // two 10 ml fills left the concentrate, with a 10 ml flacon and box each (ADR 0043); the return
+    // put them back, so their counts now are what they were before the handover
+    const flacon = await consumable(t, 'flacon', 10);
+    const box = await consumable(t, 'box', 10);
     expect(events[4]!.payload).toEqual({
       trackingNumber: 'BTS 4471 0098',
       stock: {
         fragrances: [{ id: fragranceId, from: 5 * FILL_UL[10], to: 3 * FILL_UL[10] }],
         sets: [],
-        consumables: [],
+        consumables: [
+          { id: flacon.id, from: flacon.onHand, to: flacon.onHand - 2 },
+          { id: box.id, from: box.onHand, to: box.onHand - 2 },
+        ],
       },
     });
     expect(events[6]).toMatchObject({
