@@ -16,7 +16,13 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { fulfilTo, orderRow, pay, placeOrder, signedIn } from './harness/fulfilment';
-import { shopper, slugs as slugsOf, whileTableLocked, orderBody, samarkandPoint } from './harness/orders';
+import {
+  shopper,
+  slugs as slugsOf,
+  whileTableLocked,
+  orderBody,
+  samarkandPoint,
+} from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
 import {
   concentrateUl,
@@ -186,7 +192,9 @@ describe('the last ml is sold once', () => {
       ]),
     );
     expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
-    expect(await card(a!)).toEqual({ 10: 0, 30: 0, 50: 0 });
+    // whichever won holds its ml: the 30 ml all of it, the 10 ml one fill, leaving two
+    const thirtyWon = results[0]!.status === 201;
+    expect(await card(a!)).toEqual(thirtyWon ? { 10: 0, 30: 0, 50: 0 } : { 10: 2, 30: 0, 50: 0 });
   });
 });
 
@@ -222,7 +230,10 @@ describe('handover, return, Uzum and void move the liquid and the consumables', 
       body: {
         expectedStatus: 'delivered',
         reason: 'Не подошёл',
-        lines: page.body.returnPreview.lines.map((l) => ({ position: l.position, backToStock: true })),
+        lines: page.body.returnPreview.lines.map((l) => ({
+          position: l.position,
+          backToStock: true,
+        })),
       },
     });
     expect(back.status).toBe(200);
@@ -316,10 +327,7 @@ describe('handover, return, Uzum and void move the liquid and the consumables', 
   });
 
   it('a first order’s gift sample is a 5 ml fill only when the order’s own bottles leave one', async () => {
-    await t.db
-      .update(settings)
-      .set({ value: true })
-      .where(eq(settings.key, 'giftSample.enabled'));
+    await t.db.update(settings).set({ value: true }).where(eq(settings.key, 'giftSample.enabled'));
     const [a] = await slugsOf(t, 1);
     const id = await fragranceIdOf(t, a!);
     await t.db
@@ -331,19 +339,18 @@ describe('handover, return, Uzum and void move the liquid and the consumables', 
     const { order } = await orderOf(ali, '998901234567', [{ slug: a!, ml: 10, qty: 1 }]);
     const first = await t.signIn(ali);
     const mine = await first.client.orders.get({ params: { number: order.number } });
-    expect(mine.status === 200 && mine.body.lines.some((l) => l.kind === 'volume' && l.ml === 5)).toBe(
-      false,
-    );
+    expect(
+      mine.status === 200 && mine.body.lines.some((l) => l.kind === 'volume' && l.ml === 5),
+    ).toBe(false);
 
     // a whole 5 ml left over: the next first order gets it
     await setConcentrateUl(t, id, 2 * FILL_UL[10] + FILL_UL[5]);
-    const { order: second } = await orderOf(vali, '998907654321', [
-      { slug: a!, ml: 10, qty: 1 },
-    ]);
+    const { order: second } = await orderOf(vali, '998907654321', [{ slug: a!, ml: 10, qty: 1 }]);
     const other = await signedIn(t, vali);
     const theirs = await other.orders.get({ params: { number: second.number } });
     expect(
-      theirs.status === 200 && theirs.body.lines.filter((l) => l.kind === 'volume').map((l) => l.ml),
+      theirs.status === 200 &&
+        theirs.body.lines.filter((l) => l.kind === 'volume').map((l) => l.ml),
     ).toEqual([10, 5]);
     expect((await orderRow(t, second.number)).status).toBe('awaiting_payment');
   });
@@ -363,7 +370,12 @@ describe('mixing makes ready concentrate from oil and ethanol', () => {
     // no ethanol yet: 100 ml takes 70 ml
     const dry = await manager.client.admin.warehouse.mix({ params: { id }, body: { ml: 100 } });
     expect(dry.status).toBe(409);
-    expect(dry.body).toMatchObject({ code: 'ethanol_short', neededMl: 70, balanceMl: 0, shortMl: 70 });
+    expect(dry.body).toMatchObject({
+      code: 'ethanol_short',
+      neededMl: 70,
+      balanceMl: 0,
+      shortMl: 70,
+    });
 
     const got = await manager.client.admin.consumables.receive({
       params: { id: ethanol.id },
@@ -430,15 +442,20 @@ describe('a consumable shortfall never blocks', () => {
     expect(sale.details).toMatchObject({ short: { consumables: { [flacon.id]: 1, [box.id]: 2 } } });
 
     const list = await manager.client.admin.consumables.list();
-    expect(
-      list.status === 200 && list.body.items.find((i) => i.id === flacon.id),
-    ).toMatchObject({ onHand: 0, needsRecount: true, level: 'zero' });
+    expect(list.status === 200 && list.body.items.find((i) => i.id === flacon.id)).toMatchObject({
+      onHand: 0,
+      needsRecount: true,
+      level: 'zero',
+    });
 
     const counted = await manager.client.admin.consumables.count({
       params: { id: flacon.id },
       body: { onHand: 40, expected: 0, reason: 'Пересчитали' },
     });
-    expect(counted.status === 200 && counted.body).toMatchObject({ onHand: 40, needsRecount: false });
+    expect(counted.status === 200 && counted.body).toMatchObject({
+      onHand: 40,
+      needsRecount: false,
+    });
     const stale = await manager.client.admin.consumables.count({
       params: { id: flacon.id },
       body: { onHand: 41, expected: 0, reason: 'Пересчитали' },
@@ -481,7 +498,9 @@ describe('the migration folds the bottles on hand into concentrate and consumabl
       await migrateDb(url.toString(), before);
 
       // a fragrance with bottles on hand, and a 5 % filling loss the owner set
-      await pool.query(`INSERT INTO settings (key, value) VALUES ('cost.liquid.fillingLossPercent', '5'), ('stock.lowOilLitres', '2')`);
+      await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('cost.liquid.fillingLossPercent', '5'), ('stock.lowOilLitres', '2')`,
+      );
       const { rows } = await pool.query<{ id: string }>(
         `INSERT INTO fragrances (slug, code, name, original_brand, type, season, time_of_day,
            longevity_ru, longevity_uz, sillage, description_ru, description_uz, when_to_wear_ru,
