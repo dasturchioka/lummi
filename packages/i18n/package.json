@@ -1,0 +1,27 @@
+{
+  "name": "@lummi/i18n",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./miniapp": "./src/miniapp.ts",
+    "./orders": "./src/orders.ts",
+    "./sets": "./src/sets.ts",
+    "./discounts": "./src/discounts.ts",
+    "./favourites": "./src/favourites.ts",
+    "./reviews": "./src/reviews.ts",
+    "./bot": "./src/bot.ts",
+    "./admin": "./src/admin.ts",
+    "./all": "./src/all.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@lummi/config": "*",
+    "vitest": "^5.1.0"
+  }
+}

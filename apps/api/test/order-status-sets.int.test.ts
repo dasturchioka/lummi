@@ -1,0 +1,174 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { OrderStatus } from '@lummi/contracts';
+import { discoverySet, eq, orderEvents, orders } from '@lummi/db';
+import sharp from 'sharp';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
+import { ReceiptsService } from '../src/receipts/receipts.service';
+import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
+import { payWithCredit } from './harness/payments';
+import { giftSampleOff } from './harness/gift-sample';
+import { concentrateUl, FILL_UL, stockBottles } from './harness/stock';
+import { createTestApp, type TestApp } from './harness/test-app';
+import type { TestUser } from './harness/sign-init-data';
+
+const snapshot = JSON.parse(
+  readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
+) as Snapshot;
+
+let t: TestApp;
+beforeAll(async () => {
+  t = await createTestApp();
+});
+afterAll(() => t.close());
+beforeEach(async () => {
+  t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
+  await t.reset();
+  await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
+  await importBtsPoints(t.db, snapshot);
+});
+
+const ali: TestUser = { id: 71, first_name: 'Ali', language_code: 'ru' };
+const machine = () => t.app.get(OrderStatusService);
+const staff = async (): Promise<TransitionActor> => ({
+  type: 'staff',
+  id: (await t.managerSession()).staff.id,
+});
+
+/** The 5 × 10 ml set's boxes on hand. */
+const discoveryOnHand = async () =>
+  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, 10)))[0]!.onHand;
+/** 10 ml bottles each fragrance's concentrate fills, reserve aside: the shelf's count (ADR 0043). */
+const tenMlOnHand = async (slugs: string[]) =>
+  Promise.all(slugs.map(async (s) => Math.floor((await concentrateUl(t, s)) / FILL_UL[10])));
+
+/** A small receipt screenshot for the intake. */
+const RECEIPT_IMAGE = sharp({
+  create: { width: 300, height: 600, channels: 3, background: '#ffffff' },
+})
+  .png()
+  .toBuffer();
+
+/** The same walk the status-machine tests use: every step a real `transition()`. */
+async function walkTo(number: number, status: Exclude<OrderStatus, 'awaiting_payment'>) {
+  const [order] = await t.db.select().from(orders).where(eq(orders.number, number));
+  const { id, customerId } = order!;
+  // the receipt goes in as the shopper sends it (#28): the intake records it and makes the move
+  const sent = await t.app
+    .get(ReceiptsService)
+    .submit(customerId, number, await RECEIPT_IMAGE, { fileName: null, source: 'miniapp' });
+  if (sent.kind !== 'submitted') throw new Error(`submit_receipt: ${sent.kind}`);
+  if (status === 'receipt_review') return id;
+  // the money arrives and the receipt AI confirms it (#32): the only way to «Оплата подтверждена»
+  await payWithCredit(t, order!, sent.receipt.id);
+  if (status === 'payment_confirmed') return id;
+  const manager = await staff();
+  const path = [
+    ['accepted', 'accept', manager, undefined],
+    ['assembling', 'start_assembly', manager, undefined],
+    ['handed_to_bts', 'hand_to_bts', manager, { trackingNumber: 'BTS 4471 0098' }],
+    ['delivered', 'deliver', manager, undefined],
+  ] as const;
+  let from: OrderStatus = 'payment_confirmed';
+  for (const [to, action, actor, payload] of path) {
+    const out = await machine().transition(id, action, actor, from, payload as never);
+    if (out.kind !== 'done') throw new Error(`${action}: ${out.kind}`);
+    if (to === status) return id;
+    from = to;
+  }
+  throw new Error(`no path to ${status}`);
+}
+
+/** A Discovery set order (`discovery` boxes) and/or a builder order (`builder` sets) as a shopper. */
+async function place(opts: { discovery?: number; builder?: { slugs: string[]; qty: number } }) {
+  const client = await shopper(t, ali, '998901234567');
+  const point = await samarkandPoint(t);
+  if (opts.discovery) await client.cart.addDiscovery({ body: { qty: opts.discovery } });
+  if (opts.builder) await client.cart.addBuilder({ body: opts.builder });
+  const checkout = await client.checkout.get({ query: { regionId: point.regionId } });
+  if (checkout.status !== 200) throw new Error(`checkout ${checkout.status}`);
+  const res = await client.orders.create({
+    body: orderBody(point.id, checkout.body.quote.total),
+  });
+  if (res.status !== 201) throw new Error(`order ${res.status}`);
+  return { client, number: res.body.number };
+}
+
+const availableDiscovery = async (client: Awaited<ReturnType<typeof place>>['client']) => {
+  const res = await client.sets.discovery();
+  if (res.status !== 200) throw new Error('discovery');
+  return res.body.available;
+};
+
+describe('on hand through the status machine: sets (ADR 0009, 0010)', () => {
+  it('a Discovery handover lowers its own on hand, not the 10 ml; available stays put', async () => {
+    await t.db.update(discoverySet).set({ onHand: 5 });
+    const five = await slugsOf(t, 5);
+    const before = await tenMlOnHand(five);
+    const { client, number } = await place({ discovery: 2 });
+    expect(await availableDiscovery(client)).toBe(3);
+
+    const id = await walkTo(number, 'handed_to_bts');
+    expect(await discoveryOnHand()).toBe(3);
+    expect(await availableDiscovery(client)).toBe(3);
+    expect(await tenMlOnHand(five)).toEqual(before);
+    const [event] = (
+      await t.db.select().from(orderEvents).where(eq(orderEvents.orderId, id))
+    ).filter((e) => e.action === 'hand_to_bts');
+    expect(event!.payload).toMatchObject({ stock: { sets: [{ id: 10, from: 5, to: 3 }] } });
+  });
+
+  it('a builder handover lowers each of the five 10 ml by the set count', async () => {
+    const five = await slugsOf(t, 5);
+    for (const s of five) await stockBottles(t, s, 10, 6);
+    await t.db.update(discoverySet).set({ onHand: 4 });
+    const { number } = await place({ builder: { slugs: five, qty: 2 } });
+    expect(await tenMlOnHand(five)).toEqual([6, 6, 6, 6, 6]);
+
+    await walkTo(number, 'handed_to_bts');
+    expect(await tenMlOnHand(five)).toEqual([4, 4, 4, 4, 4]);
+    expect(await discoveryOnHand()).toBe(4);
+  });
+
+  it('cancelling after handover puts both kinds back', async () => {
+    const five = await slugsOf(t, 5);
+    for (const s of five) await stockBottles(t, s, 10, 6);
+    await t.db.update(discoverySet).set({ onHand: 5 });
+    const { number } = await place({ discovery: 2, builder: { slugs: five, qty: 1 } });
+    const id = await walkTo(number, 'handed_to_bts');
+    expect(await discoveryOnHand()).toBe(3);
+    expect(await tenMlOnHand(five)).toEqual([5, 5, 5, 5, 5]);
+
+    const out = await machine().transition(id, 'cancel', await staff(), 'handed_to_bts', {
+      reason: 'not_collected_at_bts',
+    });
+    expect(out.kind).toBe('done');
+    expect(await discoveryOnHand()).toBe(5);
+    expect(await tenMlOnHand(five)).toEqual([6, 6, 6, 6, 6]);
+  });
+
+  it('a return with back-to-stock restores both lines', async () => {
+    const five = await slugsOf(t, 5);
+    for (const s of five) await stockBottles(t, s, 10, 6);
+    await t.db.update(discoverySet).set({ onHand: 5 });
+    const { number } = await place({ discovery: 1, builder: { slugs: five, qty: 1 } });
+    const id = await walkTo(number, 'delivered');
+    expect(await discoveryOnHand()).toBe(4);
+    expect(await tenMlOnHand(five)).toEqual([5, 5, 5, 5, 5]);
+
+    const out = await machine().transition(id, 'return', await staff(), 'delivered', {
+      reason: 'Не подошёл',
+      lines: [
+        { position: 0, backToStock: true },
+        { position: 1, backToStock: true },
+      ],
+    });
+    expect(out.kind).toBe('done');
+    expect(await discoveryOnHand()).toBe(5);
+    expect(await tenMlOnHand(five)).toEqual([6, 6, 6, 6, 6]);
+  });
+});

@@ -8,10 +8,15 @@ dist/
 .next/
 .turbo/
 coverage/
+test-results/
+playwright-report/
 
 # runtime files
 media/
 *.log
+# the userbot's sealed session (a local login): never in the repo, even sealed
+.userbot/
+*.enc
 
 # customer originals: zips duplicate the extracted files
 materials/_archives/
@@ -26,3 +31,9 @@ materials/_archives/
 
 # Impeccable design tool cache and review screenshots
 .impeccable/
+.worktrees/
+*.tsbuildinfo
+next-env.d.ts
+
+# test reporter output
+.vitest/

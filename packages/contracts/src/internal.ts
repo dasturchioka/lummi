@@ -1,0 +1,53 @@
+import { z } from 'zod';
+
+/**
+ * Internal endpoints (ADR 0031): only the userbot calls them, from the internal network, with the
+ * shared secret in this header. The Mini App and admin never do.
+ */
+export const INTERNAL_SECRET_HEADER = 'x-internal-secret';
+
+/** One message from the Humo bot chat, posted as received (ADR 0014). */
+export const humoMessageBodySchema = z.object({
+  /** Telegram message id. Idempotency key; in a user account it grows across all private chats. */
+  messageId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  /** The text exactly as received (Telegram caps a message at 4096 characters). */
+  text: z
+    .string()
+    .max(4096)
+    .refine((t) => !t.includes('\u0000'), 'text must not contain NUL (U+0000)'),
+});
+
+export const humoMessageResultSchema = z.object({
+  /**
+   * credit: recorded (or had been); debit: ignored, nothing stored; service: the Humo bot's own
+   * talk (a menu, a settings answer, a promo), stored raw with no alert, or a notice about the card
+   * itself (blocked, a limit), stored raw and the owner alerted; unparseable: looks like an
+   * operation but does not fit the template, stored raw and flagged, the owner alerted.
+   */
+  outcome: z.enum(['credit', 'debit', 'service', 'unparseable']),
+  /** This message_id was stored before; nothing was recorded or alerted again. */
+  duplicate: z.boolean(),
+  creditId: z.number().int().nullable(),
+});
+export type HumoMessageResult = z.infer<typeof humoMessageResultSchema>;
+
+/** The highest stored message_id: the userbot reads the Humo chat after it on restart. Null before the first. */
+export const humoLastMessageIdSchema = z.object({ messageId: z.number().int().nullable() });
+
+/** The backup script reports a finished run; `skipped` names steps it could not do (the second copy, the userbot session). */
+export const backupReportBodySchema = z.object({
+  skipped: z.array(z.string().min(1).max(40)).max(10),
+});
+
+/**
+ * Where the userbot forwards each ➕ notification (#19): the orders group (`bot.groupChatId`) and
+ * its «Поступления» topic (`bot.topics.payments`). Null chat: the group is not set up, nothing is
+ * forwarded. Null topic: the group has no such topic yet, the forward goes to its general chat.
+ */
+export const userbotForwardTargetSchema = z.object({
+  chatId: z.number().int().nullable(),
+  topicId: z.number().int().positive().nullable(),
+});
+export type UserbotForwardTarget = z.infer<typeof userbotForwardTargetSchema>;
+
+export const internalErrorSchema = z.object({ code: z.enum(['unauthorized', 'forbidden']) });

@@ -1,0 +1,338 @@
+import {
+  addDays,
+  formatLocalDate,
+  REPORT_MAX_DAYS,
+  tashkentDay,
+  tashkentToUtc,
+  utcToTashkent,
+  type AdminPromoCode,
+  type PromoCodeStats,
+  type PromoCodeInput,
+} from '@lummi/contracts';
+import {
+  and,
+  desc,
+  eq,
+  fragrances,
+  inArray,
+  promoCodes,
+  promoCodeUses,
+  sql,
+  type Db,
+  type DbOrTx,
+  type PromoCodeRow,
+  type StaffRow,
+  volumes,
+} from '@lummi/db';
+import { Inject, Injectable } from '@nestjs/common';
+import { isUniqueViolation } from '../admin/catalog-admin.service';
+import { AuditService } from '../audit/audit.service';
+import { CampaignsService } from '../campaigns/campaigns.service';
+import type { Edges } from '../edges';
+import { DB, EDGES } from '../tokens';
+import { marketingSummaryOver } from '../reports/marketing-summary';
+import { promoState } from './promo-codes';
+
+export type PromoFailure = {
+  ok: false;
+  reason: 'not_found' | 'code_taken' | 'in_use' | 'invalid';
+  fields?: string[];
+};
+export type PromoOutcome<T> = { ok: true; value: T } | PromoFailure;
+const fail = (reason: PromoFailure['reason'], fields?: string[]): PromoFailure =>
+  fields ? { ok: false, reason, fields } : { ok: false, reason };
+
+/** A gift code's Promo gift as the list and the audit name it (ADR 0039). */
+type AdminPromoGift = AdminPromoCode['promoGift'];
+
+/**
+ * The editable fields, both ways. They are the input's own fields except the last day, which is
+ * stored as an instant (23:59:59 Tashkent that day), and a gift code's gift, stored as the volume
+ * it names (`resolvePromoGift`) or the Discovery set flag: a new plain field is one edit in the schema
+ * and the contract, nothing here.
+ */
+function toColumns({ expiresOn, promoGift, ...rest }: PromoCodeInput, giftVolumeId: number | null) {
+  return {
+    ...rest,
+    giftVolumeId,
+    giftDiscoverySet: promoGift?.kind === 'discovery_set',
+    // a gift cuts no item's price, so the marked-down flag means nothing for it (ADR 0039)
+    appliesToMarkedDown: rest.kind === 'gift' ? false : rest.appliesToMarkedDown,
+    expiresAt: expiresOn === null ? null : lastInstantOf(expiresOn),
+  };
+}
+
+/** The editable fields as the form shows them (the gift named): what the audit diffs and the list returns. */
+function fieldsOf(
+  r: PromoCodeRow,
+  promoGift: AdminPromoGift,
+): Omit<PromoCodeInput, 'promoGift'> & { promoGift: AdminPromoGift } {
+  const {
+    id: _id,
+    createdAt: _c,
+    updatedAt: _u,
+    campaignLinkMade: _l,
+    giftVolumeId: _v,
+    giftDiscoverySet: _d,
+    expiresAt,
+    ...rest
+  } = r;
+  return { ...rest, promoGift, expiresOn: tashkentDateOf(expiresAt) };
+}
+
+/** Each gift code's item, named: its volume's fragrance and ml, or the Discovery set. */
+async function promoGiftsOf(
+  tx: DbOrTx,
+  rows: PromoCodeRow[],
+): Promise<Map<number, AdminPromoGift>> {
+  const ids = [...new Set(rows.flatMap((r) => (r.giftVolumeId === null ? [] : [r.giftVolumeId])))];
+  const named =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({
+            id: volumes.id,
+            fragranceId: volumes.fragranceId,
+            ml: volumes.ml,
+            name: fragrances.name,
+            brand: fragrances.originalBrand,
+          })
+          .from(volumes)
+          .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+          .where(inArray(volumes.id, ids));
+  const byVolume = new Map(named.map((v) => [v.id, v]));
+  return new Map(
+    rows.map((r): [number, AdminPromoGift] => {
+      if (r.giftDiscoverySet) return [r.id, { kind: 'discovery_set' }];
+      const v = r.giftVolumeId === null ? undefined : byVolume.get(r.giftVolumeId);
+      if (!v) return [r.id, null];
+      const ml = v.ml as 10 | 30 | 50;
+      return [
+        r.id,
+        { kind: 'volume', fragranceId: v.fragranceId, ml, name: v.name, brand: v.brand },
+      ];
+    }),
+  );
+}
+
+/** The volume a gift names (null for the Discovery set or no gift); `undefined` when there is none such. */
+async function resolvePromoGift(
+  tx: DbOrTx,
+  promoGift: PromoCodeInput['promoGift'],
+): Promise<number | null | undefined> {
+  if (promoGift?.kind !== 'volume') return null;
+  const [v] = await tx
+    .select({ id: volumes.id })
+    .from(volumes)
+    .where(and(eq(volumes.fragranceId, promoGift.fragranceId), eq(volumes.ml, promoGift.ml)));
+  return v?.id;
+}
+
+/** The last second a code works: 23:59:59 Asia/Tashkent of its last day (spec Changes 2026-11-07). */
+function lastInstantOf(day: string): Date {
+  const [year, month, d] = day.split('-').map(Number) as [number, number, number];
+  const at = tashkentToUtc({ year, month, day: d, hour: 23, minute: 59, second: 59 });
+  if (!at) throw new Error(`not a calendar day: ${day}`);
+  return at;
+}
+
+/** The Tashkent calendar day (`YYYY-MM-DD`) of an instant. */
+function tashkentDateOf(at: Date | null): string | null {
+  if (!at) return null;
+  const t = utcToTashkent(at);
+  return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`;
+}
+
+/** The same Promo gift as the form names it: the Discovery set, or the same fragrance and ml. */
+function samePromoGift(a: AdminPromoGift, b: AdminPromoGift): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.kind === 'discovery_set' || b.kind === 'discovery_set') return a.kind === b.kind;
+  return a.fragranceId === b.fragranceId && a.ml === b.ml;
+}
+
+/** The fields that changed: plain values by `===`, the Promo gift by what it names. */
+function diff(before: ReturnType<typeof fieldsOf>, after: ReturnType<typeof fieldsOf>) {
+  const out: Record<string, [unknown, unknown]> = {};
+  for (const k of Object.keys(after) as (keyof typeof after)[]) {
+    const same =
+      k === 'promoGift' ? samePromoGift(before.promoGift, after.promoGift) : before[k] === after[k];
+    if (!same) out[k] = [before[k], after[k]];
+  }
+  return out;
+}
+
+/** Owner-only promo code admin (ADR 0017): every change is audited with the actor. */
+@Injectable()
+export class PromoAdminService {
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(EDGES) private readonly edges: Edges,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
+  ) {}
+
+  async list(): Promise<AdminPromoCode[]> {
+    const rows = await this.db.select().from(promoCodes).orderBy(desc(promoCodes.id));
+    return this.withUses(this.db, rows);
+  }
+
+  /**
+   * Over each code's whole life (its creation day to today) the marketing report's Fulfilled
+   * orders and net sales (#65): one `marketingSummaryOver` from the oldest code's creation day,
+   * not a report per code, so the list and the report share one definition. No clamp to the
+   * report page's longest range; only `reportFrom` (the link's start) respects it. A code with no
+   * such orders shows 0.
+   */
+  async stats(): Promise<PromoCodeStats[]> {
+    const rows = await this.db.select().from(promoCodes).orderBy(desc(promoCodes.id));
+    if (rows.length === 0) return [];
+    const today = tashkentDay(this.edges.clock.now());
+    const to = formatLocalDate(today);
+    const latestStart = formatLocalDate(addDays(today, 1 - REPORT_MAX_DAYS));
+    const startOf = (r: PromoCodeRow) => formatLocalDate(tashkentDay(r.createdAt));
+    const from = rows.map(startOf).reduce((a, b) => (a < b ? a : b));
+    const report = await marketingSummaryOver(this.db, { from, to });
+    const byId = new Map(report.promoCodes.map((p) => [p.promoCodeId, p]));
+    return rows.map((r) => {
+      const statsFrom = startOf(r);
+      const found = byId.get(r.id);
+      return {
+        promoCodeId: r.id,
+        fulfilledOrders: found?.orders ?? 0,
+        netSales: found?.net ?? 0,
+        statsFrom,
+        statsTo: to,
+        reportFrom: statsFrom > latestStart ? statsFrom : latestStart,
+      };
+    });
+  }
+
+  async get(id: number, tx: DbOrTx = this.db): Promise<AdminPromoCode | null> {
+    const [row] = await tx.select().from(promoCodes).where(eq(promoCodes.id, id));
+    return row ? ((await this.withUses(tx, [row]))[0] ?? null) : null;
+  }
+
+  async create(actor: StaffRow, input: PromoCodeInput): Promise<PromoOutcome<AdminPromoCode>> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const now = this.edges.clock.now();
+        const giftVolumeId = await resolvePromoGift(tx, input.promoGift);
+        if (giftVolumeId === undefined) return fail('invalid', ['promoGift']);
+        const [row] = await tx
+          .insert(promoCodes)
+          .values({ ...toColumns(input, giftVolumeId), createdAt: now, updatedAt: now })
+          .returning();
+        await this.audit.record(tx, {
+          actor: { type: 'staff', id: actor.id },
+          action: 'promo.created',
+          targetType: 'promo_code',
+          targetId: row!.id,
+          payload: fieldsOf(row!, (await promoGiftsOf(tx, [row!])).get(row!.id) ?? null),
+        });
+        // every promo code has a campaign link (ticket #35)
+        await this.campaigns.ensurePromoLink(tx, row!, { type: 'staff', id: actor.id });
+        return { ok: true, value: (await this.get(row!.id, tx))! } as const;
+      });
+    } catch (e) {
+      if (isUniqueViolation(e)) return fail('code_taken');
+      throw e;
+    }
+  }
+
+  /** Orders already placed keep their snapshot; the limits keep counting the uses they hold. */
+  async update(
+    actor: StaffRow,
+    id: number,
+    input: PromoCodeInput,
+  ): Promise<PromoOutcome<AdminPromoCode>> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        // the same row lock `createOrder` takes, so an order never prices with half an edit
+        const [old] = await tx.select().from(promoCodes).where(eq(promoCodes.id, id)).for('update');
+        if (!old) return fail('not_found');
+        const giftVolumeId = await resolvePromoGift(tx, input.promoGift);
+        if (giftVolumeId === undefined) return fail('invalid', ['promoGift']);
+        const columns = toColumns(input, giftVolumeId);
+        const edited = { ...old, ...columns };
+        const before = fieldsOf(old, (await promoGiftsOf(tx, [old])).get(old.id) ?? null);
+        const after = fieldsOf(edited, (await promoGiftsOf(tx, [edited])).get(old.id) ?? null);
+        const changed = diff(before, { ...before, ...after });
+        if (Object.keys(changed).length === 0)
+          return { ok: true, value: (await this.get(id, tx))! } as const;
+        await tx
+          .update(promoCodes)
+          .set({ ...columns, updatedAt: this.edges.clock.now() })
+          .where(eq(promoCodes.id, id));
+        await this.audit.record(tx, {
+          actor: { type: 'staff', id: actor.id },
+          action: 'promo.updated',
+          targetType: 'promo_code',
+          targetId: id,
+          payload: { code: input.code, changed },
+        });
+        return { ok: true, value: (await this.get(id, tx))! } as const;
+      });
+    } catch (e) {
+      if (isUniqueViolation(e)) return fail('code_taken');
+      throw e;
+    }
+  }
+
+  /** Only a code no order ever took: the uses keep the promo report's history (switch it off instead). */
+  async remove(actor: StaffRow, id: number): Promise<PromoOutcome<true>> {
+    return this.db.transaction(async (tx) => {
+      const [old] = await tx.select().from(promoCodes).where(eq(promoCodes.id, id)).for('update');
+      if (!old) return fail('not_found');
+      const [used] = await tx
+        .select({ id: promoCodeUses.id })
+        .from(promoCodeUses)
+        .where(eq(promoCodeUses.promoCodeId, id))
+        .limit(1);
+      if (used) return fail('in_use');
+      await this.campaigns.releasePromoCode(tx, id);
+      await tx.delete(promoCodes).where(eq(promoCodes.id, id));
+      await this.audit.record(tx, {
+        actor: { type: 'staff', id: actor.id },
+        action: 'promo.deleted',
+        targetType: 'promo_code',
+        targetId: id,
+        payload: { code: old.code },
+      });
+      return { ok: true, value: true } as const;
+    });
+  }
+
+  private async withUses(tx: DbOrTx, rows: PromoCodeRow[]): Promise<AdminPromoCode[]> {
+    if (rows.length === 0) return [];
+    const counts = await tx
+      .select({
+        id: promoCodeUses.promoCodeId,
+        uses: sql<number>`(count(*) filter (where ${promoCodeUses.voidedAt} is null))::int`,
+        ever: sql<number>`count(*)::int`,
+      })
+      .from(promoCodeUses)
+      .where(
+        inArray(
+          promoCodeUses.promoCodeId,
+          rows.map((r) => r.id),
+        ),
+      )
+      .groupBy(promoCodeUses.promoCodeId);
+    const byId = new Map(counts.map((c) => [c.id, c]));
+    const promoGifts = await promoGiftsOf(tx, rows);
+    const now = this.edges.clock.now();
+    return rows.map((r) => {
+      const c = byId.get(r.id);
+      const uses = Number(c?.uses ?? 0);
+      return {
+        id: r.id,
+        ...fieldsOf(r, promoGifts.get(r.id) ?? null),
+        uses,
+        everUsed: Number(c?.ever ?? 0) > 0,
+        state: promoState(r, uses, now),
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+      };
+    });
+  }
+}

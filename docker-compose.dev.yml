@@ -1,0 +1,32 @@
+# Dev services. Host ports come from env so parallel stacks do not collide:
+#   POSTGRES_HOST_PORT=2502 docker compose -f docker-compose.dev.yml up -d --wait
+# Redis (BullMQ for the worker) is on REDIS_HOST_PORT.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: lummi
+      POSTGRES_PASSWORD: lummi
+      POSTGRES_DB: lummi
+    ports:
+      - '127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lummi -d lummi']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:${REDIS_HOST_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

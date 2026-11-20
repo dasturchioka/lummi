@@ -1,0 +1,382 @@
+@import 'tailwindcss';
+@import './fonts.css';
+@import './tokens.css';
+
+@theme inline {
+  --color-*: initial;
+  --color-ground: var(--c-ground);
+  --color-card: var(--c-card);
+  --color-block: var(--c-block);
+  --color-field: var(--c-field);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-ink-muted);
+  --color-faint: var(--c-ink-faint);
+  --color-sage: var(--c-sage);
+  --color-sage-ink: var(--c-sage-ink);
+  --color-on-sage: var(--c-on-sage);
+  --color-sage-wash: var(--c-sage-wash);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-btn: var(--c-btn);
+  --color-btn-ink: var(--c-btn-ink);
+  --color-bar: var(--c-bar);
+  --color-bar-ink: var(--c-bar-ink);
+  --color-bar-active: var(--c-bar-active);
+  --color-bar-active-ink: var(--c-bar-active-ink);
+  --color-totals: var(--c-totals);
+  --color-totals-ink: var(--c-totals-ink);
+  --color-totals-accent: var(--c-totals-accent);
+  --color-photo: var(--c-photo);
+  --color-overlay: var(--c-overlay);
+  --color-on-sage: var(--c-on-sage);
+  --color-photo-disc: var(--c-photo-disc);
+  --color-photo-disc-ink: var(--c-photo-disc-ink);
+  --color-transparent: transparent;
+
+  --radius-*: initial;
+  --radius-thumb: var(--radius-thumb);
+  --radius-photo: var(--radius-photo);
+  --radius-btn: var(--radius-btn);
+  --radius-card: var(--radius-card);
+  --radius-pill: 999px;
+
+  --font-display: 'Tenor Sans', 'Manrope', sans-serif;
+  --font-ui: 'Manrope', system-ui, sans-serif;
+  --font-name: 'Cormorant Garamond', Georgia, serif;
+}
+
+/* Type roles from DESIGN.md. Italic is for fragrance and set names (`type-name`) and the Home slogan. */
+@utility type-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-section {
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-label {
+  font-family: var(--font-display);
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+/* The attribution on list cards and name-lockup rows: a step under `type-label`, same +0.2em tracking, never below 10 px. */
+@utility type-label-sm {
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 1.45;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+@utility type-name {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+}
+/* The name on the fragrance card itself. */
+@utility type-name-lg {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+}
+/* ХИТ / НОВИНКА: Tenor caps on a pill (`Badge`). */
+@utility type-badge {
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+/*
+ * The Home slogan, and the one use of the Cormorant italic beyond fragrance names
+ * (customer-approved comp, 2026-11-07): sentence case, one line under the logo.
+ */
+@utility type-slogan {
+  font-family: var(--font-name);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+}
+/* State titles and the profile name: a plain, readable heading in sentence case (no tracked caps). */
+@utility type-heading {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+@utility type-body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+@utility type-small {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+/* The label of a tappable list row (Profile, region / city / point pickers); 600 for a point's name and the Home city. */
+@utility type-row {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+/* The Muted Ink hint under a field, and the count under the chosen point. */
+@utility type-hint {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+/* The smallest readable line: characteristic labels, «Доставка» over the Home city, a sold-out volume's «нет в наличии». */
+@utility type-caption {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 400;
+}
+/* A short value under a caption: the characteristics row («до 24 часов», «Сильный»). */
+@utility type-value {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+@utility type-price {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* A price inside a control (volume tiles): `<Money size="small">`. */
+@utility type-price-sm {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.3;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* «Итого» and its amount in the cart's totals block. */
+@utility type-total {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* No negative tracking: it closed the digit groups up (`Money` widens their gaps). */
+@utility type-amount {
+  font-family: var(--font-ui);
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@utility type-tab {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 13px;
+  font-weight: 500;
+}
+@utility type-count {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@utility type-button {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@utility inset-line {
+  box-shadow: inset 0 0 0 1px var(--c-line-strong);
+}
+
+@layer base {
+  html {
+    background: var(--c-ground);
+    color: var(--c-ink);
+    font-family: var(--font-ui);
+    caret-color: var(--c-ink);
+    scrollbar-color: var(--c-line-strong) transparent; /* Telegram Desktop; phones overlay theirs */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; /* the root scroller: no rubber band or pull-to-refresh */
+  }
+  body {
+    margin: 0;
+    min-height: var(--tg-viewport-stable-height, 100dvh);
+    background: var(--c-ground);
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--c-sage-wash);
+    color: var(--c-ink);
+  }
+  /* iOS zooms into a focused field under 16 px and never zooms back: fields are 16 px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+  button,
+  a {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* No iOS link preview or image menu on a long press: the shop is an app, not a page. */
+  a,
+  button,
+  img,
+  svg {
+    -webkit-touch-callout: none;
+  }
+  img {
+    -webkit-user-drag: none;
+  }
+  :focus-visible {
+    outline: 2px solid var(--c-sage);
+    outline-offset: 2px;
+  }
+  /* Reduced motion: no movement, except a busy spinner, which is the only sign of progress. */
+  @media (prefers-reduced-motion: reduce) {
+    *:not([data-spin]),
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Telegram safe areas (device cut-outs and Telegram's own chrome) with the CSS env() fallback. */
+#root {
+  --safe-t: max(env(safe-area-inset-top, 0px), var(--tg-viewport-content-safe-area-inset-top, 0px));
+  --safe-b: max(env(safe-area-inset-bottom, 0px), var(--tg-viewport-safe-area-inset-bottom, 0px));
+  --safe-l: max(env(safe-area-inset-left, 0px), var(--tg-viewport-safe-area-inset-left, 0px));
+  --safe-r: max(env(safe-area-inset-right, 0px), var(--tg-viewport-safe-area-inset-right, 0px));
+  /* What the floating tab bar covers at the bottom; `Screen` pads by it. */
+  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) + var(--safe-b) + 28px);
+  min-height: var(--tg-viewport-stable-height, 100dvh);
+}
+
+/*
+ * Switching theme or language cross-fades the whole page once (View Transitions, where the
+ * WebView has them) instead of snapping every surface at the same instant.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+/* A picker step arrives from the side it was reached from: forward from the right, back from the left. */
+@keyframes step-forward {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+/* An outcome replacing content in place: it settles up 6 px as it appears. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+/* A count stepping up rolls in from below, stepping down from above (the cart stepper). */
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(55%);
+  }
+}
+@keyframes count-down {
+  from {
+    opacity: 0;
+    transform: translateY(-55%);
+  }
+}
+/* A server number that just changed settles in place (the cart totals). */
+@keyframes tick {
+  from {
+    opacity: 0.35;
+  }
+}
+/* A removed cart line folds away: it was already dimmed while the removal was in flight. */
+@keyframes fold {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 0.4;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+@keyframes skeleton {
+  50% {
+    opacity: 0.5;
+  }
+}

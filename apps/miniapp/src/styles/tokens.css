@@ -1,0 +1,82 @@
+/*
+ * The one place brand tokens live (DESIGN.md, Brandbook v2.0). Roles, not raw colours:
+ * components use `bg-ground`, `text-ink`, ... and never a hex value. Dark is OUR derived
+ * theme, switched in Profile; it never follows Telegram's palette or colorScheme.
+ */
+:root {
+  color-scheme: light;
+
+  --c-ground: #f5f2ec; /* Milk: app background */
+  --c-card: #ffffff; /* Card White */
+  --c-block: #cfc6b8; /* Stone: banners, empty-state disc, avatar */
+  --c-field: #ece7df; /* Milk Field: inputs, segmented track, disabled */
+  --c-ink: #2a2a2a; /* Graphite */
+  --c-ink-muted: #67625b;
+  --c-ink-faint: #a39d94; /* non-text only */
+  --c-sage: #9aa592;
+  --c-sage-ink: #5c6855; /* Sage deepened for text and icons */
+  --c-on-sage: #2a2a2a; /* Graphite on a Sage fill (badge, confirmed disc), in both themes */
+  --c-sage-wash: rgba(154, 165, 146, 0.18);
+  --c-line: rgba(42, 42, 42, 0.11);
+  --c-line-strong: rgba(42, 42, 42, 0.22);
+  --c-btn: #2a2a2a;
+  --c-btn-ink: #f5f2ec;
+  --c-bar: #2a2a2a; /* floating tab bar */
+  --c-bar-ink: #cfc6b8;
+  --c-bar-active: #f5f2ec;
+  --c-bar-active-ink: #2a2a2a;
+  --c-totals: #2a2a2a;
+  --c-totals-ink: #f5f2ec;
+  --c-totals-accent: #aeb8a6; /* Dark Sage Ink: the discount and «Бесплатно» on the Graphite block */
+  --c-photo: #f1ddd0; /* placeholder behind bottle photography */
+  --c-overlay: rgba(42, 42, 42, 0.45);
+  /*
+   * Fixed in both themes: what sits on brand colour that does not flip. Badge text on the Sage
+   * fill stays Graphite, and the overlay discs on the (always light) bottle photo stay Milk.
+   */
+  --c-on-sage: #2a2a2a;
+  --c-photo-disc: rgba(245, 242, 236, 0.92);
+  --c-photo-disc-ink: #2a2a2a;
+
+  --radius-card: 12px;
+  --radius-btn: 10px;
+  --radius-photo: 8px;
+  --radius-thumb: 6px;
+
+  --gutter: 16px;
+  --section: 28px;
+  --tabbar-h: 64px;
+  --tabbar-inset: 12px; /* above the bottom safe area */
+  --tabbar-side: 20px; /* from the screen edges */
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-ground: #1d1c1a; /* Dark Room */
+  --c-card: #2a2a2a; /* brand Graphite */
+  --c-block: #31302c; /* Dark Block: a neutral step above the room */
+  --c-field: #353330; /* Dark Field */
+  --c-ink: #f5f2ec;
+  --c-ink-muted: #cfc6b8; /* Stone as secondary ink */
+  --c-ink-faint: #6e6a63;
+  --c-sage: #9aa592; /* unchanged */
+  --c-sage-ink: #aeb8a6;
+  --c-sage-wash: rgba(154, 165, 146, 0.16);
+  --c-line: rgba(245, 242, 236, 0.1);
+  --c-line-strong: rgba(245, 242, 236, 0.22);
+  --c-btn: #f5f2ec; /* primary inverts */
+  --c-btn-ink: #2a2a2a;
+  --c-bar: #2a2a2a; /* Graphite, as the approved dark comp */
+  --c-bar-ink: #cfc6b8;
+  --c-bar-active: #f5f2ec;
+  --c-bar-active-ink: #2a2a2a;
+  --c-totals: #31302c;
+  --c-totals-ink: #f5f2ec;
+  --c-totals-accent: #aeb8a6; /* unchanged */
+  --c-photo: #3a322c;
+  --c-overlay: rgba(0, 0, 0, 0.55);
+  --c-on-sage: #2a2a2a; /* unchanged */
+  --c-photo-disc: rgba(245, 242, 236, 0.92); /* unchanged: the photo is light in both themes */
+  --c-photo-disc-ink: #2a2a2a;
+}
