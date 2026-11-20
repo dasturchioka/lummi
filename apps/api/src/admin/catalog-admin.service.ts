@@ -33,6 +33,7 @@ import { AuditService } from '../audit/audit.service';
 import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
 import { readCostSettings } from '../cost/cost-settings';
 import { fragranceCosts } from '../cost/fragrance-costs';
+import { readSettings } from '../settings/settings.service';
 import { reindexFragrances } from '../search/search-index';
 import { storeUploadedPhoto } from '../catalog/photo-pipeline';
 import { slugify } from '../catalog/slug';
@@ -203,6 +204,7 @@ export class CatalogAdminService {
       db,
       volumeRows.map((v) => v.id),
     );
+    const shownCfg = await readSettings(db, ['stock.shownDefault', 'stock.shownMax']);
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => n.noteId);
     return {
@@ -235,6 +237,9 @@ export class CatalogAdminService {
       isNew: f.isNew,
       hidden: f.hidden,
       notes: { top: level('top'), heart: level('heart'), base: level('base') },
+      shownCount: f.shownCount,
+      shownDefault: shownCfg['stock.shownDefault'],
+      shownMax: shownCfg['stock.shownMax'],
       similarIds: similarRows.map((s) => s.similarId),
       volumes: volumeRows.map((v) => ({
         id: v.id,
@@ -454,6 +459,42 @@ export class CatalogAdminService {
         targetId: id,
         payload: { name: updated.name },
       });
+      return { ok: true, value: (await this.get(id, tx))! } as const;
+    });
+  }
+
+  /**
+   * #83: the number the shop shows customers for this fragrance (null = the default). The top is the
+   * setting `stock.shownMax`, so it is checked here, not in the database. Audited with the actor.
+   */
+  async setShownCount(
+    actor: StaffRow,
+    id: number,
+    shownCount: number | null,
+  ): Promise<Outcome<FragranceAdmin>> {
+    const { 'stock.shownMax': max } = await readSettings(this.db, ['stock.shownMax']);
+    if (shownCount !== null && (shownCount < 1 || shownCount > max))
+      return fail('invalid', ['shownCount']);
+    return this.db.transaction(async (tx) => {
+      const [old] = await tx
+        .select({ name: fragrances.name, shownCount: fragrances.shownCount })
+        .from(fragrances)
+        .where(eq(fragrances.id, id))
+        .for('update');
+      if (!old) return fail('not_found');
+      if (old.shownCount !== shownCount) {
+        await tx
+          .update(fragrances)
+          .set({ shownCount, updatedAt: this.edges.clock.now() })
+          .where(eq(fragrances.id, id));
+        await this.audit.record(tx, {
+          actor: { type: 'staff', id: actor.id },
+          action: 'catalog.shown_count_changed',
+          targetType: 'fragrance',
+          targetId: id,
+          payload: { name: old.name, shownCount: [old.shownCount, shownCount] },
+        });
+      }
       return { ok: true, value: (await this.get(id, tx))! } as const;
     });
   }

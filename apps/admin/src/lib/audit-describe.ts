@@ -552,6 +552,17 @@ const describers: Record<string, Describer> = {
       str(c.p.reason) && fill(c.t.audit.detail.reason, { reason: str(c.p.reason)! }),
     ];
   },
+  'catalog.shown_count_changed': (c) => {
+    c.take('name', 'shownCount');
+    const pair = asPair(c.p.shownCount) ?? [null, null];
+    return [
+      fill(c.t.audit.detail.shownCount, {
+        name: str(c.p.name) ?? targetName(c) ?? '—',
+        old: onHandText(c, pair[0]),
+        new: onHandText(c, pair[1]),
+      }),
+    ];
+  },
   'catalog.photo_uploaded': (c) => {
     c.take('ml', 'fragranceId', 'photo');
     const ml = int(c.p.ml);

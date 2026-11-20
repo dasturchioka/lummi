@@ -30,6 +30,12 @@ export const volumeCardSchema = z.object({
   effectivePrice: z.number().int(),
   /** On hand minus reserve. 0 means the volume is sold out. */
   available: z.number().int(),
+  /**
+   * #83: the count a customer is shown («В наличии: N шт.»): the owner's number for the fragrance
+   * (or `stock.shownDefault`), capped by `stock.shownMax` and by `available`; 0 when sold out.
+   * Server-computed; `available` stays the real figure for the cart.
+   */
+  shown: z.number().int(),
   /** Content hash of the photo set; URLs are `<media>/<hash>-<400|800|1200>.webp`. */
   photo: z.string().nullable(),
 });
@@ -99,7 +105,7 @@ export const fragranceCardSchema = z.object({
    * upgrade right prices (`upgradeRightPrices`). Empty while switched off.
    */
   stepUps: z.array(stepUpSchema),
-  /** Setting `catalog.showAvailableCount`: the status line under the tiles shows the real available count («В наличии: 12 шт.»). */
+  /** Setting `catalog.showAvailableCount`: the status line under the tiles shows the shown count («В наличии: 7 шт.», #83). */
   showAvailableCount: z.boolean(),
 });
 export type FragranceCard = z.infer<typeof fragranceCardSchema>;

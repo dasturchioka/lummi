@@ -177,3 +177,8 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **A sale beyond what is available** is refused: the owner or manager first recounts the volume on the stock page with a reason, then records the sale. Confirm, or say if he wants to record it anyway and sort the count out later.
 - **Uzum's warehouse (FBO).** We assume each Uzum parcel leaves our own shelf when it sells (FBS). If stock is sent to Uzum's warehouse in advance, that shipment should leave on hand instead, and the sale should not.
 - **Two date bases in «По каналам».** The Mini App counts an order on the day it was delivered (as the rest of the report); Uzum counts a sale on the day it sold (`sold_on`), since we do not see Uzum's delivery. Confirm, or say if Uzum should count on its payout day.
+
+## Shown stock count (ticket #83)
+
+- **«Changes daily».** The customer said the shown number should change every day. We built the owner-set number only: he edits it on the stock page, nothing moves it automatically. Confirm that is enough, or whether he wants a daily drift or schedule.
+- **List card.** Only the product page shows «В наличии: N шт.» today (the list card never showed a count). Confirm he does not want it on the list card too.
