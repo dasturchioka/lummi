@@ -303,6 +303,13 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     [],
   ],
   [
+    'catalog.shown_count_changed',
+    { name: 'Tygar', shownCount: [null, 5] },
+    {},
+    ['Tygar: клиенту показывается — → 5 шт.'],
+    ['Tygar: mijozga koʻrsatiladi — → 5 dona'],
+  ],
+  [
     'warehouse.oil_received',
     {
       fragrance: 'Tygar',

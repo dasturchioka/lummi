@@ -51,6 +51,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
       saleEndsAt: null,
       effectivePrice: 69_000,
       available: 20,
+      shown: 7,
       photo: 'a'.repeat(16),
     },
     {
@@ -61,6 +62,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
       saleEndsAt: '2026-11-12T18:59:59.000Z',
       effectivePrice: 119_200,
       available: 5,
+      shown: 5,
       photo: 'b'.repeat(16),
     },
     {
@@ -71,6 +73,7 @@ const card = (over: Partial<FragranceCard> = {}): FragranceCard => ({
       saleEndsAt: null,
       effectivePrice: 219_000,
       available: 0,
+      shown: 0,
       photo: 'c'.repeat(16),
     },
   ],
@@ -128,17 +131,17 @@ describe('FragranceView', () => {
     expect(screen.getByRole('radio', { name: /50/ }).getAttribute('data-sold-out')).toBe('true');
   });
 
-  it('shows the real available count for the chosen volume, RU and UZ (#70)', () => {
+  it('shows the server-capped count for the chosen volume, RU and UZ (#70, #83)', () => {
     const status = () => document.querySelector('[data-availability="in-stock"]')?.textContent;
     language = 'ru';
     const { unmount } = show(card());
-    expect(status()).toMatch(/^В наличии: 20\sшт\.$/);
+    expect(status()).toMatch(/^В наличии: 7\sшт\.$/);
     fireEvent.click(screen.getByRole('radio', { name: /30/ }));
     expect(status()).toMatch(/^В наличии: 5\sшт\.$/);
     unmount();
     language = 'uz';
     show(card());
-    expect(status()).toMatch(/^Sotuvda: 20\sdona$/);
+    expect(status()).toMatch(/^Sotuvda bor: 7\sdona$/);
   });
 
   it('shows plain «В наличии» when the owner hides the count', () => {
@@ -192,6 +195,7 @@ describe('FragranceView', () => {
           saleEndsAt: null,
           effectivePrice: v.price,
           available: 5,
+          shown: 5,
         })),
         upgradeRightPrices: [
           { ml: 30, price: 119_200, source, percent: 20, lastDay: '2026-12-09' },

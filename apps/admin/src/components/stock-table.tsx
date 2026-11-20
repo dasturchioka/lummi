@@ -3,6 +3,7 @@
 import {
   STOCK_REASON_MAX,
   type FragranceOil,
+  type ShownCounts,
   type StockLevel,
   type StockRow,
 } from '@lummi/contracts';
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Notice } from '@/components/ui/notice';
+import { ShownCountEdit } from '@/components/stock/shown-count-edit';
 import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import { browserApi } from '@/lib/api';
 import type { AdminMessages } from '@/lib/i18n';
@@ -141,6 +143,7 @@ function OilLine({
 export function StockTable({
   rows: served,
   oil,
+  shown,
   lowThreshold,
   lowOilLitres,
   total,
@@ -150,6 +153,8 @@ export function StockTable({
   rows: StockRow[];
   /** Each fragrance's oil on this page (#76). */
   oil: FragranceOil[];
+  /** The numbers shown to customers (#83). */
+  shown: ShownCounts;
   lowThreshold: number;
   lowOilLitres: number;
   total: number;
@@ -315,6 +320,17 @@ export function StockTable({
       });
     return out;
   }, []);
+  const shownEdit = (fragranceId: number, name: string, layout: 'block' | 'table') => (
+    <ShownCountEdit
+      fragranceId={fragranceId}
+      name={name}
+      own={shown.own.find((o) => o.fragranceId === fragranceId)?.shownCount ?? null}
+      fallback={shown.default}
+      max={shown.max}
+      idPrefix={`shown-${layout}`}
+      t={t}
+    />
+  );
   const tone = (level: StockLevel) =>
     level === 'zero' ? 'bg-stone/30' : level === 'low' ? 'bg-sage-wash' : '';
 
@@ -341,6 +357,7 @@ export function StockTable({
               {g.fragranceId !== null && (
                 <OilLine oil={oilOf.get(g.fragranceId)} name={g.title} language={language} t={t} />
               )}
+              {g.fragranceId !== null && shownEdit(g.fragranceId, g.title, 'block')}
             </div>
             <ul className="grid gap-1.5">
               {g.rows.map((r) => {
@@ -437,6 +454,7 @@ export function StockTable({
                             language={language}
                             t={t}
                           />
+                          {shownEdit(r.fragranceId!, r.name!, 'table')}
                         </div>
                       </TD>
                     </TR>

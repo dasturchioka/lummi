@@ -84,6 +84,7 @@ import {
   adminFragranceListItemSchema,
   fragranceListQuerySchema,
   hiddenBodySchema,
+  shownCountBodySchema,
   onHandBodySchema,
   onHandItemSchema,
 } from './admin-catalog';
@@ -1279,6 +1280,23 @@ const adminCore = c.router({
       },
       summary:
         'Owner only: correct the date of birth (the customer enters it once); needs the account phone; audited as the fact',
+    },
+  },
+  shownCount: {
+    set: {
+      method: 'PATCH',
+      path: '/admin/fragrances/:id/shown-count',
+      pathParams: z.object({ id: z.coerce.number().int().positive() }),
+      body: shownCountBodySchema,
+      responses: {
+        200: fragranceAdminSchema,
+        401: catalogAdminErrorSchema,
+        403: catalogAdminErrorSchema,
+        404: catalogAdminErrorSchema,
+        422: catalogAdminErrorSchema,
+      },
+      summary:
+        'Owner and manager (#83): the number of bottles the shop shows customers («В наличии: N шт.»), 1 up to `stock.shownMax`; null = the default (audited)',
     },
   },
   onHand: {

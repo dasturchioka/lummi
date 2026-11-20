@@ -156,8 +156,8 @@ export const settingDefinitions = {
       uz: 'Nechta buyurtma qilish mumkinligini koʻrsatish',
     },
     hint: {
-      ru: 'Число на карточке товара под объёмами: «В наличии: 12 шт.» — остаток минус бронь. Выключено — просто «В наличии».',
-      uz: 'Mahsulot kartasida hajmlar ostida: «Sotuvda: 12 dona» — qoldiq minus bron. Oʻchiq boʻlsa — oddiy «Sotuvda bor».',
+      ru: 'Число на карточке товара под объёмами: «В наличии: 7 шт.» — число владельца (склад), не больше реального остатка. Выключено — просто «В наличии».',
+      uz: 'Mahsulot kartasida hajmlar ostida: «Sotuvda bor: 7 dona» — egasi belgilagan son, haqiqiy qoldiqdan koʻp emas. Oʻchiq boʻlsa — oddiy «Sotuvda bor».',
     },
   },
   /** The step-up line under the product page's volume tiles (#57): on or off. */
@@ -400,6 +400,30 @@ export const settingDefinitions = {
     hint: {
       ru: 'Аромат помечается «Мало масла», когда его масла хватит не больше чем на столько литров духов (потери при розливе учтены). 0 — только когда масла нет совсем.',
       uz: 'Moyidan shu litrdan koʻp boʻlmagan atir chiqsa, ifor «Moy kam» deb belgilanadi (quyishdagi yoʻqotish hisobga olingan). 0 — faqat moy umuman qolmaganda.',
+    },
+  },
+  /** #83: the number the shop shows a customer («В наличии: N шт.») when a fragrance has none of its own. */
+  'stock.shownDefault': {
+    schema: z.number().int().min(1).max(1000),
+    default: 7,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Сколько штук показывать клиенту', uz: 'Mijozga nechta dona koʻrsatish' },
+    hint: {
+      ru: 'Для ароматов, у которых число не задано: «В наличии: 7 шт.». Никогда не больше реального остатка. Своё число — на странице склада.',
+      uz: 'Soni belgilanmagan iforlar uchun: «Sotuvda bor: 7 dona». Hech qachon haqiqiy qoldiqdan koʻp emas. Oʻz sonini ombor sahifasida belgilang.',
+    },
+  },
+  /** #83: the ceiling of that number, for the default and for every fragrance's own. */
+  'stock.shownMax': {
+    schema: z.number().int().min(1).max(1000),
+    default: 10,
+    area: 'shop',
+    unit: 'count',
+    label: { ru: 'Максимум, который видит клиент', uz: 'Mijoz koʻradigan eng katta son' },
+    hint: {
+      ru: 'Верхняя граница числа «В наличии: N шт.» и поля «Показывать клиенту».',
+      uz: '«Sotuvda bor: N dona» sonining va «Mijozga koʻrsatish» maydonining yuqori chegarasi.',
     },
   },
   /**

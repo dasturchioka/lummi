@@ -117,6 +117,7 @@ export function StockView({
         <StockTable
           rows={data.rows}
           oil={data.oil}
+          shown={data.shown}
           lowThreshold={data.lowThreshold}
           lowOilLitres={data.lowOilLitres}
           total={data.total}

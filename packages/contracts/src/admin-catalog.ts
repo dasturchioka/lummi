@@ -159,6 +159,11 @@ export const fragranceAdminSchema = z.object({
   isHit: z.boolean(),
   isNew: z.boolean(),
   hidden: z.boolean(),
+  /** #83: the owner's number shown to customers; null = the setting `stock.shownDefault`. */
+  shownCount: z.number().int().nullable(),
+  /** The settings `stock.shownDefault` and `stock.shownMax`, for the editor beside `shownCount` (#83). */
+  shownDefault: z.number().int(),
+  shownMax: z.number().int(),
   notes: z.object({
     top: z.array(z.number().int()),
     heart: z.array(z.number().int()),
@@ -204,6 +209,8 @@ export const fragranceListQuerySchema = z.object({
 });
 
 export const hiddenBodySchema = z.object({ hidden: z.boolean() });
+/** #83: 1 up to `stock.shownMax` (a setting, so the server checks the top); null clears it. */
+export const shownCountBodySchema = z.object({ shownCount: z.number().int().min(1).nullable() });
 export const onHandBodySchema = z.object({
   onHand: z.number().int().min(0).max(MAX_ON_HAND),
   /**
