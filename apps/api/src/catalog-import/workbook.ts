@@ -51,6 +51,8 @@ export const FRAGRANCE_COLUMNS = [
   { key: 'tier', header: 'Категория масла', width: 16, optional: true },
   { key: 'oilSupplier', header: 'Поставщик масла', width: 22, optional: true },
   { key: 'oilInvoice', header: 'Накладная на масло', width: 24, optional: true },
+  // the ready concentrate counted (ADR 0043): empty keeps the stored count
+  { key: 'concentrateMl', header: 'Концентрат, мл', width: 16, optional: true },
 ] as const satisfies readonly ColumnDef<string>[];
 export type FragranceKey = (typeof FRAGRANCE_COLUMNS)[number]['key'];
 /** The columns a file may leave out (`ColumnDef.optional`). */
@@ -64,7 +66,6 @@ export const VOLUME_COLUMNS = [
   { key: 'price', header: 'Цена, сум', width: 14 },
   { key: 'salePrice', header: 'Цена со скидкой, сум', width: 22 },
   { key: 'saleEndsOn', header: 'Скидка до (ГГГГ-ММ-ДД)', width: 24 },
-  { key: 'onHand', header: 'В наличии, шт.', width: 16 },
 ] as const satisfies readonly ColumnDef<string>[];
 export type VolumeKey = (typeof VOLUME_COLUMNS)[number]['key'];
 
@@ -174,6 +175,11 @@ export interface FragranceDraft {
   /** '' for none, like `internalRemark`. */
   oilSupplier: string;
   oilInvoice: string;
+  /**
+   * The ready concentrate, ml (ADR 0043). From a file: null when the cell is empty or the column
+   * absent (the stored count stays); from the catalog: the count.
+   */
+  concentrateMl: number | null;
 }
 export interface VolumeDraft {
   ml: 10 | 30 | 50;
@@ -181,7 +187,6 @@ export interface VolumeDraft {
   salePrice: number | null;
   /** Tashkent calendar day `YYYY-MM-DD`. */
   saleEndsOn: string | null;
-  onHand: number;
 }
 export interface DictionaryDraft {
   nameRu: string;
@@ -263,6 +268,7 @@ export async function writeWorkbook(data: CatalogData): Promise<Buffer> {
     d.tier ? LABELS.tier[d.tier] : null,
     d.oilSupplier || null,
     d.oilInvoice || null,
+    d.concentrateMl,
   ]);
   const fs = addSheet(wb, CATALOG_SHEETS.fragrances, FRAGRANCE_COLUMNS, fragranceRows);
   // The code is text: Excel must not turn «007» into 7 (the import also accepts 7).
@@ -276,7 +282,7 @@ export async function writeWorkbook(data: CatalogData): Promise<Buffer> {
   listValidation(fs, col('tier'), labelsOf('tier'));
 
   const volumeRows = data.fragrances.flatMap(({ draft, volumes }) =>
-    volumes.map((v) => [draft.code, v.ml, v.price, v.salePrice, v.saleEndsOn, v.onHand]),
+    volumes.map((v) => [draft.code, v.ml, v.price, v.salePrice, v.saleEndsOn]),
   );
   const vs = addSheet(wb, CATALOG_SHEETS.volumes, VOLUME_COLUMNS, volumeRows);
   vs.getColumn(1).numFmt = '@';

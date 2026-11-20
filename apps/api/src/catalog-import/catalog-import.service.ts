@@ -25,7 +25,8 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { CatalogAdminService, isUniqueViolation, normalise } from '../admin/catalog-admin.service';
-import { reservedByVolume } from '../catalog/catalog.service';
+import { readLiquidStock } from '../catalog/catalog.service';
+import { mlFromUl } from '../warehouse/oil';
 import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { planImport, sortChanges, type FragranceOp, type Plan } from './plan';
@@ -242,27 +243,27 @@ export class CatalogImportService {
     s.negative
       ? [
           {
-            sheet: 'volumes',
+            sheet: 'fragrances',
             row: s.row,
             column: null,
             code: 'below_reserve',
-            params: { name: s.name, ml: s.ml, onHand: s.newOnHand, reserved: s.reserved },
+            params: { name: s.name, onHand: s.newConcentrateMl, reserved: s.reservedMl },
           },
         ]
       : [];
 
-  /** on hand → reserve → resulting available for every volume whose count the file sets. */
+  /** concentrate → reserve → resulting free ml for every fragrance whose count the file sets (ADR 0043). */
   private async stockRows(db: DbOrTx, plan: Plan, snap: Snapshot): Promise<ImportReport['stock']> {
     const ids = plan.stock.flatMap((s) => {
-      const id = snap.byCode.get(s.code)?.volumes.get(s.ml)?.id;
+      const id = snap.byCode.get(s.code)?.id;
       return id ? [id] : [];
     });
-    const reserved = await reservedByVolume(db, ids);
+    const stock = await readLiquidStock(db, ids);
     return plan.stock.map((s) => {
-      const id = snap.byCode.get(s.code)?.volumes.get(s.ml)?.id;
-      const held = id ? (reserved.get(id) ?? 0) : 0;
-      const available = s.newOnHand - held;
-      return { ...s, reserved: held, available, negative: available < 0 };
+      const id = snap.byCode.get(s.code)?.id;
+      const held = id ? mlFromUl(stock.of(id).reservedUl) : 0;
+      const availableMl = Math.round((s.newConcentrateMl - held) * 1000) / 1000;
+      return { ...s, reservedMl: held, availableMl, negative: availableMl < 0 };
     });
   }
 
@@ -310,9 +311,9 @@ export class CatalogImportService {
         price: v.price,
         salePrice: v.salePrice,
         saleEndsOn: v.saleEndsOn,
-        onHand: v.onHand,
-        loadedOnHand: v.loadedOnHand,
       })),
+      concentrateMl: d.concentrateMl,
+      loadedConcentrateMl: op.loadedConcentrateMl,
     };
   }
 
@@ -411,28 +412,33 @@ export class CatalogImportService {
     return below;
   }
 
-  /** Volumes the file set a count for that now hold less than the open orders reserve. */
+  /** Fragrances the file set a concentrate for that now hold less than the open orders reserve. */
   private async belowReserveNow(tx: DbOrTx, plan: Plan): Promise<ImportIssue[]> {
     if (!plan.stock.length) return [];
     const rows = await tx
-      .select({ id: volumes.id, code: fragrances.code, ml: volumes.ml, onHand: volumes.onHand })
-      .from(volumes)
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
+      .select({ id: fragrances.id, code: fragrances.code })
+      .from(fragrances)
       .where(inArray(fragrances.code, [...new Set(plan.stock.map((s) => s.code))]));
-    const touched = new Map(plan.stock.map((s) => [`${s.code}|${s.ml}`, s]));
-    const now = rows.filter((r) => touched.has(`${r.code}|${r.ml}`));
-    const reserved = await reservedByVolume(tx, now.map((r) => r.id));
-    return now.flatMap((r) => {
-      const held = reserved.get(r.id) ?? 0;
-      if (r.onHand >= held) return [];
-      const s = touched.get(`${r.code}|${r.ml}`)!;
+    const touched = new Map(plan.stock.map((s) => [s.code, s]));
+    const stock = await readLiquidStock(
+      tx,
+      rows.map((r) => r.id),
+    );
+    return rows.flatMap((r) => {
+      const l = stock.of(r.id);
+      if (l.concentrateUl >= l.reservedUl) return [];
+      const s = touched.get(r.code)!;
       return [
         {
-          sheet: 'volumes' as const,
+          sheet: 'fragrances' as const,
           row: s.row,
           column: null,
           code: 'below_reserve',
-          params: { name: s.name, ml: r.ml, onHand: r.onHand, reserved: held },
+          params: {
+            name: s.name,
+            onHand: mlFromUl(l.concentrateUl),
+            reserved: mlFromUl(l.reservedUl),
+          },
         },
       ];
     });

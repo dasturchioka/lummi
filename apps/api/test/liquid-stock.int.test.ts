@@ -253,7 +253,7 @@ describe('handover, return, Uzum and void move the liquid and the consumables', 
 
     const cancel = await manager.client.admin.orders.cancel({
       params: { number: order.number },
-      body: { expectedStatus: 'handed_to_bts', reason: 'not_picked_up' },
+      body: { expectedStatus: 'handed_to_bts', reason: 'not_collected_at_bts' },
     });
     expect(cancel.status).toBe(200);
     expect((await onHandOf(flacon.id)).onHand).toBe(20);

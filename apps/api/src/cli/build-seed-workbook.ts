@@ -4,7 +4,7 @@ import { normalizeUzbek } from '@lummi/i18n';
 import { slugify } from '../catalog/slug';
 import {
   LONGEVITY,
-  PLACEHOLDER_ON_HAND,
+  PLACEHOLDER_CONCENTRATE_ML,
   PLACEHOLDER_PRICES,
   SEED_ALIASES,
   SEED_WORKBOOK,
@@ -110,6 +110,8 @@ const data: CatalogData = {
       tier: null,
       oilSupplier: '',
       oilInvoice: '',
+      // ours, like the prices: the owner counts his concentrate (ADR 0043)
+      concentrateMl: PLACEHOLDER_CONCENTRATE_ML,
     };
     return {
       draft,
@@ -118,7 +120,6 @@ const data: CatalogData = {
         price: PLACEHOLDER_PRICES[ml],
         salePrice: null,
         saleEndsOn: null,
-        onHand: PLACEHOLDER_ON_HAND,
       })),
     };
   }),

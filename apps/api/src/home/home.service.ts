@@ -51,6 +51,7 @@ import {
   paymentState,
 } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
+import { readStockContext } from '../warehouse/fragrance-stock';
 import { giftSampleStock } from '../orders/gift-sample';
 import type { Edges } from '../edges';
 import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
@@ -220,26 +221,39 @@ export class HomeService {
 
   /**
    * The stock page's `filter=low&visibility=visible`: nothing available, or at most the threshold,
-   * among what the shop sells (a hidden fragrance is not for sale). Nothing left first, then the
-   * fewest available, then the page's order.
+   * among what the shop sells (a hidden fragrance is not for sale): a fragrance's free concentrate
+   * (whole ml, ADR 0043), a Discovery set's boxes. Nothing left first, then the fewest available,
+   * then the page's order (boxes, samples and ml
+   * are not compared across kinds beyond that).
    */
   private async stock(): Promise<HomeStockItem[]> {
     const { 'stock.lowAvailableThreshold': threshold } = await readSettings(this.db, [
       'stock.lowAvailableThreshold',
     ]);
-    const { volumes, discovery } = await stockRows(this.db, threshold);
-    // the filter leaves each 5 ml out: it is not sold alone (ADR 0042); the gift sample's 5 ml
-    // stock is one item of its own, against its own threshold
-    const rows = [...discovery, ...volumes].filter((r) =>
-      matchesStockQuery(r, { filter: 'low', visibility: 'visible' }),
-    );
-    const items: HomeStockItem[] = rows.map((r) => ({
-      kind: r.kind,
-      name: r.name,
-      ml: r.ml,
-      available: r.available,
-      level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
-    }));
+    const ctx = await readStockContext(this.db, false);
+    const rows = await stockRows(this.db, ctx, threshold);
+    const low = { filter: 'low', visibility: 'visible' } as const;
+    // the gift sample's 5 ml stock is one item of its own, against its own threshold
+    const items: HomeStockItem[] = [
+      ...rows.sets
+        .filter((r) => matchesStockQuery(r, low))
+        .map((r) => ({
+          kind: 'discovery' as const,
+          name: null,
+          ml: r.vialMl,
+          available: r.available,
+          level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
+        })),
+      ...rows.fragrances
+        .filter((r) => matchesStockQuery(r, low))
+        .map((r) => ({
+          kind: 'fragrance' as const,
+          name: r.name,
+          ml: null,
+          available: Math.floor(r.availableMl),
+          level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
+        })),
+    ];
     const sample = await giftSampleStock(this.db);
     if (sample && (sample.missing || sample.level !== 'ok'))
       items.push({
@@ -251,7 +265,12 @@ export class HomeService {
       });
     return items
       .map((item, i) => ({ item, i }))
-      .sort((a, b) => a.item.available - b.item.available || a.i - b.i)
+      .sort(
+        (a, b) =>
+          Number(a.item.level === 'low') - Number(b.item.level === 'low') ||
+          a.item.available - b.item.available ||
+          a.i - b.i,
+      )
       .map(({ item }) => item);
   }
 

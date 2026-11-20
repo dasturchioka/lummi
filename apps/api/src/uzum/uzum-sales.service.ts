@@ -35,7 +35,7 @@ import {
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { bottlesOf, readLiquidStock } from '../catalog/catalog.service';
 import { readCostSettings } from '../cost/cost-settings';
 import { costSnapshot, type CostedItem } from '../cost/order-costs';
 import type { Edges } from '../edges';
@@ -43,7 +43,7 @@ import { loadDiscovery, type DiscoveryState } from '../sets/sets';
 import { isOwner } from '../staff/staff.guard';
 import { DB, EDGES } from '../tokens';
 import { retryOrTryAgain, uniqueViolation } from '../util/transient';
-import { recordStockMove } from '../warehouse/stock-moves';
+import { applyStock, linksOf, lockStock, type LockedStock } from '../warehouse/stock-changes';
 
 export type UzumFailure =
   | { ok: false; reason: 'not_found' | 'voided' | 'duplicate_order' | 'try_again' }
@@ -75,10 +75,11 @@ const transient = <T>(run: () => Promise<UzumOutcome<T>>): Promise<UzumOutcome<T
   retryOrTryAgain<UzumOutcome<T>>(run, { ok: false, reason: 'try_again' });
 
 /**
- * Uzum sales (#80). A sale lowers on hand at once (the parcel left our shelf) and freezes its profit
- * on the Uzum channel; a void brings the bottles back. Both lock as checkout and the BTS handover
- * do: the Discovery set's row first, then volumes in ascending id; then read the reserve under the
- * locks, so a sale and an order can't take the same bottle. Every change leaves a stock move per
+ * Uzum sales (#80). A sale fills its bottles from the ready concentrate at once (the parcel left
+ * our shelf, ADR 0043), with their flacons and boxes, and freezes its profit on the Uzum channel; a
+ * void brings it all back. Both lock as checkout and the BTS handover do (the fragrances in
+ * ascending id, then the Discovery sets, then the consumables), then read the reserve under the
+ * locks, so a sale and an order can't take the same ml. Every change leaves a stock move per
  * fragrance (the Discovery set has no history of its own) and an audit entry, in the same
  * transaction.
  */
@@ -171,24 +172,19 @@ export class UzumSalesService {
         if (!sale || sale.voidedAt) return { ok: false, reason: 'voided' } as const;
 
         const now = this.edges.clock.now();
-        await moveShelves(tx, locked, lines, +1);
         const [row] = await tx
           .update(uzumSales)
           .set({ voidedAt: now, voidReason: reason, voidedBy: actor.id })
           .where(eq(uzumSales.id, id))
           .returning();
         const actorRef = { type: 'staff' as const, id: actor.id };
-        for (const [fragranceId, bottles] of bottlesByFragrance(lines, +1)) {
-          await recordStockMove(tx, {
-            fragranceId,
-            kind: 'uzum_sale_voided',
-            actor: actorRef,
-            bottles,
-            uzumSaleId: id,
-            reason,
-            details: { uzumOrder: sale.uzumOrder },
-          });
-        }
+        await moveShelves(tx, locked, lines, +1, {
+          kind: 'uzum_sale_voided',
+          actor: actorRef,
+          uzumSaleId: id,
+          reason,
+          details: { uzumOrder: sale.uzumOrder },
+        });
         await this.audit.record(tx, {
           actor: actorRef,
           action: 'uzum.sale_voided',
@@ -322,17 +318,12 @@ export class UzumSalesService {
           })),
         )
         .returning();
-      await moveShelves(tx, locked, saleLines, -1);
-      for (const [fragranceId, bottles] of bottlesByFragrance(saleLines, -1)) {
-        await recordStockMove(tx, {
-          fragranceId,
-          kind: 'uzum_sale',
-          actor: actorRef,
-          bottles,
-          uzumSaleId: row!.id,
-          details: { uzumOrder: s.uzumOrder },
-        });
-      }
+      await moveShelves(tx, locked, saleLines, -1, {
+        kind: 'uzum_sale',
+        actor: actorRef,
+        uzumSaleId: row!.id,
+        details: { uzumOrder: s.uzumOrder },
+      });
       await this.audit.record(tx, {
         actor: actorRef,
         action: 'uzum.sale_recorded',
@@ -357,44 +348,47 @@ export class UzumSalesService {
 // ---- stock ----
 
 interface Locked {
+  /** The fragrances, the Discovery sets and the consumables the lines fill from, locked. */
+  stock: LockedStock;
   /**
    * The Discovery sets the lines sell, by vial ml, each through its one read (`loadDiscovery`,
-   * locked): its on hand, its five and what is available (0 unless it has all five).
+   * under the lock): its on hand, its five and what is available (0 unless it has all five).
    */
   sets: Map<DiscoveryVialMl, DiscoveryState>;
-  volumes: Map<number, { fragranceId: number; ml: number; onHand: number }>;
+  volumes: Map<number, { fragranceId: number; ml: number }>;
 }
 
 /**
- * The shelves a sale touches, locked as checkout and the BTS handover lock them: the Discovery
- * sets' rows first, in ascending vial ml, then the volumes in ascending id. Values are as of the
- * lock.
+ * The stock a sale touches, locked as checkout and the BTS handover lock it (ADR 0043): the
+ * fragrances of its volumes in ascending id, then the Discovery sets' rows, then the flacons and
+ * boxes its bottles take. Values are as of the lock.
  */
 async function lockShelves(
   tx: DbOrTx,
   setMls: readonly DiscoveryVialMl[],
   volumeIds: number[],
 ): Promise<Locked> {
-  const sets = new Map<DiscoveryVialMl, DiscoveryState>();
-  for (const ml of [...new Set(setMls)].sort((a, b) => a - b))
-    sets.set(ml, await loadDiscovery(tx, ml, { lock: true }));
   const rows = volumeIds.length
     ? await tx
-        .select({
-          id: volumes.id,
-          fragranceId: volumes.fragranceId,
-          ml: volumes.ml,
-          onHand: volumes.onHand,
-        })
+        .select({ id: volumes.id, fragranceId: volumes.fragranceId, ml: volumes.ml })
         .from(volumes)
         .where(inArray(volumes.id, [...new Set(volumeIds)]))
-        .orderBy(asc(volumes.id))
-        .for('update')
     : [];
-  return { sets, volumes: new Map(rows.map(({ id, ...v }) => [id, v])) };
+  const stock = await lockStock(tx, {
+    fragranceIds: rows.map((r) => r.fragranceId),
+    setMls,
+    links: linksOf(rows.map((r) => ({ fragranceId: r.fragranceId, ml: r.ml, qty: 1, boxed: true }))),
+  });
+  const sets = new Map<DiscoveryVialMl, DiscoveryState>();
+  for (const ml of [...new Set(setMls)].sort((a, b) => a - b))
+    sets.set(ml, await loadDiscovery(tx, ml));
+  return { stock, sets, volumes: new Map(rows.map(({ id, ...v }) => [id, v])) };
 }
 
-/** Refuses (`stock_short`) when on hand less the reserve, read under the locks, can't cover the lines. */
+/**
+ * Refuses (`stock_short`) when the free concentrate (less the reserve, read under the locks) can't
+ * fill the lines: each volume in the order the lines name it, from its fragrance's one liquid.
+ */
 async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLineInput[]) {
   // a volume by its id, a Discovery set by `set:<vial ml>`
   const wanted = new Map<number | `set:${DiscoveryVialMl}`, number>();
@@ -402,86 +396,72 @@ async function checkStock(tx: DbOrTx, locked: Locked, lines: readonly UzumSaleLi
     const key = l.kind === 'volume' ? l.volumeId : (`set:${l.vialMl}` as const);
     wanted.set(key, (wanted.get(key) ?? 0) + l.qty);
   }
-  const reserved = await reservedByVolume(tx, [...locked.volumes.keys()]);
-  const short: UzumShortLine[] = [];
-  const names = new Map<number, string>();
   const ids = [...new Set([...locked.volumes.values()].map((v) => v.fragranceId))];
-  if (ids.length)
-    for (const f of await tx
-      .select({ id: fragrances.id, name: fragrances.name })
-      .from(fragrances)
-      .where(inArray(fragrances.id, ids)))
-      names.set(f.id, f.name);
+  const stock = await readLiquidStock(tx, ids);
+  const free = new Map(ids.map((id) => [id, stock.free(id)]));
+  const names = new Map([...locked.stock.fragrances].map(([id, f]) => [id, f.name]));
+  const short: UzumShortLine[] = [];
   for (const [key, want] of wanted) {
     if (typeof key === 'string') {
       const ml = asDiscoveryVialMl(Number(key.slice(4)));
-      const free = locked.sets.get(ml)?.available ?? 0;
-      if (want > free)
+      const left = locked.sets.get(ml)?.available ?? 0;
+      if (want > left)
         short.push({
           kind: 'discovery_set',
           volumeId: null,
           name: null,
           ml,
           wanted: want,
-          available: free,
+          available: left,
         });
       continue;
     }
     const v = locked.volumes.get(key)!;
-    const free = available(v.onHand, reserved.get(key) ?? 0);
-    if (want > free)
+    const fill = stock.fill(v.ml);
+    const left = bottlesOf(free.get(v.fragranceId) ?? 0, fill);
+    if (want > left)
       short.push({
         kind: 'volume',
         volumeId: key,
         name: names.get(v.fragranceId) ?? null,
         ml: v.ml,
         wanted: want,
-        available: free,
+        available: left,
       });
+    free.set(v.fragranceId, (free.get(v.fragranceId) ?? 0) - Math.min(want, left) * fill);
   }
   if (short.length) throw new Refused({ ok: false, reason: 'stock_short', short });
 }
 
-/** Moves on hand by the lines' quantities (`sign` −1 for a sale, +1 for a void), on the locked rows. */
+/**
+ * Fills the lines' bottles (`sign` −1 for a sale) or puts them back (+1 for a void) on the locked
+ * stock: the liquid, a flacon and a box per bottle, a Discovery set's boxes; a stock move per
+ * fragrance (`applyStock`).
+ */
 async function moveShelves(
   tx: DbOrTx,
   locked: Locked,
-  lines: readonly Pick<UzumSaleLineRow, 'kind' | 'volumeId' | 'ml' | 'qty'>[],
+  lines: readonly Pick<UzumSaleLineRow, 'kind' | 'fragranceId' | 'ml' | 'qty'>[],
   sign: 1 | -1,
+  move: Parameters<typeof applyStock>[2]['move'],
 ) {
   const bySet = new Map<DiscoveryVialMl, number>();
-  const byVolume = new Map<number, number>();
-  for (const l of lines) {
+  for (const l of lines)
     if (l.kind === 'discovery_set') {
       const ml = asDiscoveryVialMl(l.ml);
       bySet.set(ml, (bySet.get(ml) ?? 0) + l.qty);
-    } else byVolume.set(l.volumeId!, (byVolume.get(l.volumeId!) ?? 0) + l.qty);
-  }
-  for (const [ml, qty] of [...bySet].sort(([a], [b]) => a - b)) {
-    const row = locked.sets.get(ml)!.row;
-    row.onHand += sign * qty;
-    await tx.update(discoverySet).set({ onHand: row.onHand }).where(eq(discoverySet.vialMl, ml));
-  }
-  for (const [id, qty] of [...byVolume].sort(([a], [b]) => a - b)) {
-    const v = locked.volumes.get(id)!;
-    v.onHand += sign * qty;
-    await tx.update(volumes).set({ onHand: v.onHand }).where(eq(volumes.id, id));
-  }
-}
-
-/** The lines' bottles per fragrance, signed, keyed by ml: one stock move each. */
-function bottlesByFragrance(
-  lines: readonly Pick<UzumSaleLineRow, 'fragranceId' | 'ml' | 'qty'>[],
-  sign: 1 | -1,
-): [number, Record<number, number>][] {
-  const out = new Map<number, Record<number, number>>();
-  for (const l of lines) {
-    if (l.fragranceId === null) continue;
-    const b = out.get(l.fragranceId) ?? {};
-    b[l.ml] = (b[l.ml] ?? 0) + sign * l.qty;
-    out.set(l.fragranceId, b);
-  }
-  return [...out].sort(([a], [b]) => a - b);
+    }
+  await applyStock(tx, locked.stock, {
+    // a bottle sold alone on Uzum has its box (ADR 0043)
+    fills: lines.flatMap((l) =>
+      l.kind === 'volume' && l.fragranceId !== null
+        ? [{ fragranceId: l.fragranceId, ml: l.ml, qty: l.qty, boxed: true }]
+        : [],
+    ),
+    sign,
+    sets: [...bySet].map(([vialMl, qty]) => ({ vialMl, change: sign * qty })),
+    move,
+  });
 }
 
 const lineAudit = (l: UzumSaleLineRow) => ({
@@ -549,7 +529,7 @@ async function salesOut(
 
 /**
  * Every volume sold alone by fragrance name and ml (no 5 ml, ADR 0042), then both Discovery sets,
- * with what is available now.
+ * with what is available now (a volume: the bottles its fragrance's free concentrate fills).
  */
 export async function saleItems(tx: DbOrTx): Promise<UzumSaleItem[]> {
   const rows = await tx
@@ -558,24 +538,23 @@ export async function saleItems(tx: DbOrTx): Promise<UzumSaleItem[]> {
       fragranceId: volumes.fragranceId,
       name: fragrances.name,
       ml: volumes.ml,
-      onHand: volumes.onHand,
       hidden: fragrances.hidden,
     })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(ne(volumes.ml, NOT_SOLD_ALONE_ML))
     .orderBy(asc(fragrances.name), asc(volumes.ml));
-  const reserved = await reservedByVolume(
+  const stock = await readLiquidStock(
     tx,
-    rows.map((r) => r.volumeId),
+    rows.map((r) => r.fragranceId),
   );
   const sets = [];
   for (const vialMl of DISCOVERY_VIAL_MLS) sets.push(await loadDiscovery(tx, vialMl));
   return [
-    ...rows.map(({ onHand, ...r }) => ({
+    ...rows.map((r) => ({
       kind: 'volume' as const,
       ...r,
-      available: available(onHand, reserved.get(r.volumeId) ?? 0),
+      available: stock.bottles(r.fragranceId, r.ml),
     })),
     // through each set's one read: 0 unless it has all five
     ...sets.map((set) => ({

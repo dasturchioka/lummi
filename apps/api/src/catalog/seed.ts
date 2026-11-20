@@ -18,12 +18,14 @@ import { storePhoto } from './photo-pipeline';
  * ADR 0018) was converted once into the import template `apps/api/seed/LUMMI_Katalog.xlsx`
  * (`npm run seed:workbook -w @lummi/api`): 67 fragrances with RU/UZ text, families, notes by level,
  * curated similar fragrances. Everything the guide does not give is OURS and flagged `is_placeholder`:
- * prices and stock (docs/catalog-sample.md -> Seed data). The bottle photos go through the photo
- * pipeline afterwards. Idempotent: run it again and rows are updated in place; an existing fragrance
- * keeps its aliases, flags, prices, markdowns and stock (the importer's `seed` mode).
+ * prices and the ready concentrate (docs/catalog-sample.md -> Seed data). The bottle photos go
+ * through the photo pipeline afterwards. Idempotent: run it again and rows are updated in place; an
+ * existing fragrance keeps its aliases, flags, prices, markdowns and concentrate (the importer's
+ * `seed` mode).
  */
 export const PLACEHOLDER_PRICES = { 10: 69_000, 30: 149_000, 50: 219_000 } as const;
-export const PLACEHOLDER_ON_HAND = 20;
+/** Each fragrance's ready concentrate in the seed (ADR 0043): ours, like the prices. */
+export const PLACEHOLDER_CONCENTRATE_ML = 1000;
 export const PLACEHOLDER_DISCOVERY_ON_HAND = 10;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;

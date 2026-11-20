@@ -1,7 +1,7 @@
 import {
   KEY_NOTE_COUNT,
+  MAX_FORM_CONCENTRATE_ML,
   MAX_OIL_PRICE,
-  MAX_ON_HAND,
   MAX_PRICE,
   dictionaryInputSchema,
   fragranceInputSchema,
@@ -35,7 +35,7 @@ import {
   type VolumeDraft,
   type VolumeKey,
 } from './workbook';
-import { normDraft, sameDraft, sameVolume, type Snapshot } from './snapshot';
+import { contentOf, normDraft, sameDraft, sameVolume, type Snapshot } from './snapshot';
 
 /** One fragrance the file writes (new or changed), with every volume it ends up with. */
 export interface FragranceOp {
@@ -43,8 +43,11 @@ export interface FragranceOp {
   /** The Excel row of the fragrance (or of its first volume when only volumes are in the file). */
   row: number;
   existingId: number | null;
-  draft: FragranceDraft;
-  volumes: (VolumeDraft & { loadedOnHand: number | null })[];
+  /** Its `concentrateMl` is what the fragrance ends up with (ADR 0043). */
+  draft: FragranceDraft & { concentrateMl: number };
+  /** The concentrate the dry run saw (compare-and-set, as the form's); null for a new fragrance. */
+  loadedConcentrateMl: number | null;
+  volumes: VolumeDraft[];
 }
 export interface DictionaryOp {
   nameRu: string;
@@ -54,7 +57,7 @@ export interface DictionaryOp {
 export interface Plan {
   errors: ImportIssue[];
   warnings: ImportIssue[];
-  stock: Omit<ImportStockRow, 'reserved' | 'available' | 'negative'>[];
+  stock: Omit<ImportStockRow, 'reservedMl' | 'availableMl' | 'negative'>[];
   changes: ImportChange[];
   counts: {
     fragrances: { new: number; changed: number; unchanged: number; notInFile: number };
@@ -72,7 +75,7 @@ export interface PlanOptions {
   today: string;
   /**
    * The seed loads the guide onto a catalog that may already have been edited: an existing
-   * fragrance keeps its aliases, flags, Uzum link, prices, markdowns and stock.
+   * fragrance keeps its aliases, flags, Uzum link, prices, markdowns and concentrate.
    */
   seed?: boolean;
 }
@@ -89,6 +92,11 @@ export function normaliseCode(text: string): string | null {
 const integer = (text: string): number | null => {
   const t = text.replace(/[\s\u00a0\u202f]/g, '');
   return /^\d{1,12}$/.test(t) ? Number(t) : null;
+};
+/** Ml to the microlitre: «1 234,5» or «1234.5». */
+const millilitres = (text: string): number | null => {
+  const t = text.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
+  return /^\d{1,12}(\.\d{1,3})?$/.test(t) ? Number(t) : null;
 };
 
 function dateText(text: string): string | null {
@@ -113,7 +121,7 @@ export const sortChanges = (changes: ImportChange[]) =>
 
 function volumeFields(old: VolumeDraft | null, now: VolumeDraft): ImportChangeField[] {
   const out: ImportChangeField[] = [];
-  for (const field of ['price', 'salePrice', 'saleEndsOn', 'onHand'] as const) {
+  for (const field of ['price', 'salePrice', 'saleEndsOn'] as const) {
     const before = old ? old[field] : null;
     if (!old || before !== now[field]) out.push({ field, before, after: now[field] });
   }
@@ -121,10 +129,12 @@ function volumeFields(old: VolumeDraft | null, now: VolumeDraft): ImportChangeFi
 }
 
 function draftFields(old: FragranceDraft, now: FragranceDraft): ImportChangeField[] {
-  const a = normDraft(old) as unknown as Record<string, ImportChangeField['before']>;
-  const b = normDraft(now) as unknown as Record<string, ImportChangeField['before']>;
+  const a = contentOf(old) as unknown as Record<string, ImportChangeField['before']>;
+  const b = contentOf(now) as unknown as Record<string, ImportChangeField['before']>;
   return Object.keys(b)
-    .filter((k) => k !== 'code' && JSON.stringify(a[k]) !== JSON.stringify(b[k]))
+    .filter(
+      (k) => k !== 'code' && k !== 'concentrateMl' && JSON.stringify(a[k]) !== JSON.stringify(b[k]),
+    )
     .map((field) => ({ field, before: a[field] ?? null, after: b[field] ?? null }));
 }
 
@@ -362,10 +372,35 @@ export function planImport(
     const mine = fileVolumes.get(code) ?? new Map();
     const row = inFile?.row ?? [...mine.values()][0]?.row ?? 0;
 
+    // The ready concentrate (ADR 0043): the file's count, else (an empty cell, no column, the
+    // seed over a loaded catalog) what is stored; a new fragrance starts at 0.
+    const stored = existing ? (existing.draft.concentrateMl ?? 0) : null;
+    const fileMl = inFile?.draft.concentrateMl ?? null;
+    const concentrateMl = stored === null ? (fileMl ?? 0) : opts.seed ? stored : (fileMl ?? stored);
+    const stockChange = stored === null ? concentrateMl > 0 : concentrateMl !== stored;
+    if (inFile && (stored === null || stockChange))
+      plan.stock.push({
+        row: inFile.row,
+        code,
+        name: draft.name,
+        concentrateMl: stored,
+        newConcentrateMl: concentrateMl,
+      });
+    if (existing && stockChange)
+      plan.changes.push({
+        kind: 'changed',
+        group: 'stock',
+        row,
+        code,
+        name: draft.name,
+        ml: null,
+        fields: [{ field: 'concentrateMl', before: stored, after: concentrateMl }],
+      });
+
     // every volume the fragrance ends up with: what it has, overridden by the file
-    const finals = new Map<number, VolumeDraft & { loadedOnHand: number | null }>();
+    const finals = new Map<number, VolumeDraft>();
     for (const [ml, v] of existing?.volumes ?? []) {
-      finals.set(ml, { ...v, loadedOnHand: v.onHand });
+      finals.set(ml, { ml: v.ml, price: v.price, salePrice: v.salePrice, saleEndsOn: v.saleEndsOn });
     }
     let volumeChange = false;
     for (const [ml, { row: vrow, vol }] of mine) {
@@ -383,28 +418,16 @@ export function planImport(
         plan.counts.volumes.changed++;
         volumeChange = true;
       }
-      finals.set(ml, { ...vol, loadedOnHand: old ? old.onHand : null });
+      finals.set(ml, vol);
       if (!old || !sameVolume(old, vol)) {
-        const fields = volumeFields(old ?? null, vol);
-        const priceSide = fields.some((f) => f.field !== 'onHand');
         plan.changes.push({
           kind: old ? 'changed' : 'new',
-          group: priceSide ? 'price' : 'stock',
+          group: 'price',
           row: vrow,
           code,
           name: draft.name,
           ml,
-          fields,
-        });
-      }
-      if (!old || old.onHand !== vol.onHand) {
-        plan.stock.push({
-          row: vrow,
-          code,
-          name: draft.name,
-          ml,
-          onHand: old ? old.onHand : null,
-          newOnHand: vol.onHand,
+          fields: volumeFields(old ?? null, vol),
         });
       }
     }
@@ -438,12 +461,13 @@ export function planImport(
         fields,
       });
     }
-    if (changed || volumeChange) {
+    if (changed || volumeChange || stockChange) {
       plan.fragrances.push({
         code,
         row,
         existingId: existing?.id ?? null,
-        draft: normDraft(draft),
+        draft: { ...normDraft(draft), concentrateMl },
+        loadedConcentrateMl: stored,
         volumes: [...finals.values()].sort((a, b) => a.ml - b.ml),
       });
     }
@@ -535,6 +559,13 @@ function parseFragrance(
     if (oilPrice === null || oilPrice < 1) bad('oilPrice', 'bad_number', { value: c.oilPrice });
     else if (oilPrice > MAX_OIL_PRICE) bad('oilPrice', 'too_big', { max: MAX_OIL_PRICE });
   }
+  let concentrateMl: number | null = null;
+  if (c.concentrateMl.trim() !== '') {
+    concentrateMl = millilitres(c.concentrateMl);
+    if (concentrateMl === null) bad('concentrateMl', 'bad_number', { value: c.concentrateMl });
+    else if (concentrateMl > MAX_FORM_CONCENTRATE_ML)
+      bad('concentrateMl', 'too_big', { max: MAX_FORM_CONCENTRATE_ML });
+  }
   let tier: keyof typeof LABELS.tier | null = null;
   if (c.tier.trim() !== '') {
     tier = parseLabel('tier', c.tier);
@@ -579,6 +610,7 @@ function parseFragrance(
     tier,
     oilSupplier: c.oilSupplier.trim(),
     oilInvoice: c.oilInvoice.trim(),
+    concentrateMl,
   };
   if (!ok) return null;
   const d = normDraft(draft as FragranceDraft);
@@ -586,7 +618,7 @@ function parseFragrance(
   // The admin form's own rules (lengths, URL, duplicates), on synthetic ids.
   const idOf = (list: string[]) => new Map(list.map((n, i) => [n, i + 1]));
   const allNotes = idOf([...refs.noteNames.values()]);
-  const dummyVolume = { ml: 10, price: 1, salePrice: null, saleEndsOn: null, onHand: 0 };
+  const dummyVolume = { ml: 10, price: 1, salePrice: null, saleEndsOn: null };
   const parsed = fragranceInputSchema.safeParse({
     name: d.name,
     originalBrand: d.originalBrand,
@@ -687,16 +719,9 @@ function parseVolume(
     saleEndsOn = dateText(c.saleEndsOn);
     if (!saleEndsOn) bad('saleEndsOn', 'bad_date', { value: c.saleEndsOn });
   }
-  let onHand: number | null = null;
-  if (c.onHand.trim() === '') bad('onHand', 'required');
-  else {
-    onHand = integer(c.onHand);
-    if (onHand === null) bad('onHand', 'bad_number', { value: c.onHand });
-    else if (onHand > MAX_ON_HAND) bad('onHand', 'too_big', { max: MAX_ON_HAND });
-  }
-  if (!ok || price === null || onHand === null) return null;
+  if (!ok || price === null) return null;
   // the sale rules of the admin form: below the price, an end only with a sale
-  const parsed = volumeInputSchema.safeParse({ ml, price, salePrice, saleEndsOn, onHand });
+  const parsed = volumeInputSchema.safeParse({ ml, price, salePrice, saleEndsOn });
   if (!parsed.success) {
     for (const i of parsed.error.issues) {
       const k = i.path[0] as VolumeKey | undefined;
@@ -704,7 +729,7 @@ function parseVolume(
     }
     return null;
   }
-  return { ml: ml as 10 | 30 | 50, price, salePrice, saleEndsOn, onHand };
+  return { ml: ml as 10 | 30 | 50, price, salePrice, saleEndsOn };
 }
 
 export { KEY_NOTE_SEP };
