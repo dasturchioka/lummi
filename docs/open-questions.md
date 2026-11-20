@@ -177,3 +177,10 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - **A sale beyond what is available** is refused: the owner or manager first recounts the volume on the stock page with a reason, then records the sale. Confirm, or say if he wants to record it anyway and sort the count out later.
 - **Uzum's warehouse (FBO).** We assume each Uzum parcel leaves our own shelf when it sells (FBS). If stock is sent to Uzum's warehouse in advance, that shipment should leave on hand instead, and the sale should not.
 - **Two date bases in «По каналам».** The Mini App counts an order on the day it was delivered (as the rest of the report); Uzum counts a sale on the day it sold (`sold_on`), since we do not see Uzum's delivery. Confirm, or say if Uzum should count on its payout day.
+
+## Stock in liquid and consumables (ticket #82, ADR 0043)
+- **Thresholds are ours:** «Мало концентрата» at 300 ml of free concentrate (`stock.lowConcentrateMl`), «Мало масла» at 300 ml of oil (`stock.lowOilMl`), each consumable's own low count (seeded 20 flacons or boxes, 1 000 ml of spirit). The owner sets them.
+- **Boxes for sets:** a builder set's five 10 ml vials and the 5 ml gift sample take a flacon each but no 10 ml box (the cost model gives a set one set box). No «коробка набора» item is seeded; if the owner adds one, should a handed-over builder set or an assembled Discovery set take it?
+- **Returns give back a flacon and a box** with the liquid (the bottle is back on the shelf). Confirm, or say if a returned bottle is thrown away.
+- **Spirit for mixing is required:** mixing is refused while the «Спирт» count is short, so the owner first receives his spirit on the stock page. Confirm, or say if mixing should go on and ask for a recount, as flacons do.
+- **The fold of bottles into concentrate** counts each bottle on hand as its fill (10 ml at 3 % loss = 10.3 ml) and its flacon and box as in stock. If his shelf holds bottles that stay bottles (not poured back), he may keep them as concentrate (the next sale «fills» one) or recount.
