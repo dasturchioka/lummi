@@ -541,8 +541,16 @@ const describers: Record<string, Describer> = {
   },
 
   'catalog.fragrance_created': (c) => {
-    c.take('name', 'slug', 'code', 'hidden', 'source');
-    return [str(c.p.name) ?? targetName(c), c.p.hidden === true && c.t.audit.detail.hiddenNew];
+    c.take('name', 'slug', 'code', 'hidden', 'source', 'concentrateMl');
+    const d = c.t.audit.detail;
+    return [
+      str(c.p.name) ?? targetName(c),
+      c.p.hidden === true && d.hiddenNew,
+      // its starting ready concentrate (ADR 0043)
+      typeof c.p.concentrateMl === 'number' &&
+        c.p.concentrateMl > 0 &&
+        fill(d.concentrateStart, { ml: valueText(c, c.p.concentrateMl) }),
+    ];
   },
   'catalog.fragrance_updated': (c) => {
     c.take('name', 'changed', 'volumes', 'source', 'concentrateMl');

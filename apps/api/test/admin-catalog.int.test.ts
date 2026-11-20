@@ -101,7 +101,7 @@ describe('create and edit a fragrance', () => {
     expect(JSON.stringify(c)).not.toContain('"007"');
   });
 
-  it('audits the create with the actor', async () => {
+  it('audits the create with the actor and its starting concentrate (ADR 0043)', async () => {
     const f = await created();
     const [row] = await audits('catalog.fragrance_created');
     expect(row).toMatchObject({
@@ -109,6 +109,7 @@ describe('create and edit a fragrance', () => {
       actorId: owner.staff.id,
       targetType: 'fragrance',
       targetId: String(f.id),
+      payload: { concentrateMl: 51.5 },
     });
   });
 

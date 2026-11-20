@@ -338,6 +338,8 @@ export class CatalogAdminService {
           slug,
           code,
           hidden: input.hidden,
+          // the starting count of its ready concentrate (ADR 0043), as the form or the file set it
+          concentrateMl: mlFromUl(concentrateUl),
           ...(opts.source ? { source: opts.source } : {}),
         },
       });

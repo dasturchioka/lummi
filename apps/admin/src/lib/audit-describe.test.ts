@@ -280,6 +280,13 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     [],
   ],
   [
+    'catalog.fragrance_created',
+    { name: 'Tygar', slug: 't', code: 'x', hidden: false, concentrateMl: 250.5 },
+    {},
+    ['Tygar', 'Готовая концентрация: 250,5 мл'],
+    ['Tygar', 'Tayyor konsentrat: 250,5 ml'],
+  ],
+  [
     'catalog.fragrance_updated',
     { name: 'Tygar', changed: ['descriptionRu'], volumes: [{ ml: 30, price: [1, 2] }] },
     {},
