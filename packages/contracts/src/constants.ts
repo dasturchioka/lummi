@@ -41,10 +41,11 @@ export type FragranceTier = (typeof FRAGRANCE_TIERS)[number];
 export const MAX_OIL_PRICE = 1_000_000;
 
 /**
- * What changed a fragrance's stock, one row of its warehouse history (ADR 0041): an oil receipt
- * (`oil_receipt`), its correction or void, a bottling, bottles leaving at BTS handover (`sale`) or coming back
- * (`returned`: a parcel back, a return to stock), a manual count (`correction`), and a sale on Uzum
- * Market (`uzum_sale`, #80) or its void (`uzum_sale_voided`: the bottles back on the shelf).
+ * What changed the warehouse, one row of its history (ADR 0041, 0043): an oil receipt
+ * (`oil_receipt`), its correction or void, a bottling (before ADR 0043; old rows only), a mixing of
+ * ready concentrate, a Discovery set assembly, bottles filled at BTS handover (`sale`) or coming
+ * back (`returned`: a parcel back, a return to stock), a manual count (`correction`), a sale on Uzum
+ * Market (`uzum_sale`, #80) or its void (`uzum_sale_voided`), and a consumable received or counted.
  */
 export const STOCK_MOVE_KINDS = [
   'oil_receipt',
@@ -56,6 +57,10 @@ export const STOCK_MOVE_KINDS = [
   'correction',
   'uzum_sale',
   'uzum_sale_voided',
+  'mixing',
+  'set_assembly',
+  'consumable_received',
+  'consumable_corrected',
 ] as const;
 export type StockMoveKind = (typeof STOCK_MOVE_KINDS)[number];
 
@@ -131,12 +136,25 @@ export function asDiscoveryVialMl(ml: number | null): DiscoveryVialMl {
   return found;
 }
 /**
- * The 5 ml bottle (ADR 0042): stocked and costed, bottled from oil, but never sold on its own; it
- * goes into the 5 × 5 ml set and is the gift sample of a first order.
+ * The 5 ml bottle (ADR 0042): costed and filled from the ready concentrate, but never sold on its
+ * own; it goes into the 5 × 5 ml set and is the gift sample of a first order.
  */
 export const NOT_SOLD_ALONE_ML = 5;
-/** Every bottle size a fragrance is stocked in: the sold ones and the 5 ml. */
+/** Every bottle size a fragrance is filled in: the sold ones and the 5 ml. */
 export const STOCK_VOLUMES_ML = [NOT_SOLD_ALONE_ML, ...VOLUMES_ML] as const;
+
+/** A consumable's unit (ADR 0043): pieces, or ml for a liquid such as the ethanol. */
+export const CONSUMABLE_UNITS = ['pcs', 'ml'] as const;
+export type ConsumableUnit = (typeof CONSUMABLE_UNITS)[number];
+/**
+ * What a consumable is used for (ADR 0043): a flacon or a box of one ml, taken by each bottle filled;
+ * the ethanol, taken by a mixing; or `other`, used by nothing (counted by hand).
+ */
+export const CONSUMABLE_USES = ['flacon', 'box', 'ethanol', 'other'] as const;
+export type ConsumableUse = (typeof CONSUMABLE_USES)[number];
+/** The ml a flacon may hold, and a box (a 5 ml bottle has none, ADR 0040). */
+export const FLACON_MLS = [5, 10, 30, 50] as const;
+export const BOX_MLS = [10, 30, 50] as const;
 
 /**
  * What opens an Upgrade right (ADR 0003): a delivered set, or a delivered single bottle of

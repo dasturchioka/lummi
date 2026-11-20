@@ -390,16 +390,28 @@ export const settingDefinitions = {
       uz: 'Mavjud miqdor shu sondan oshmasa, ombor qatori ajratib koʻrsatiladi. Nol har doim ajratiladi.',
     },
   },
-  /** The low-oil warning on the stock page (#76, ADR 0041): litres of perfume the oil still makes. */
-  'stock.lowOilLitres': {
-    schema: z.number().min(0).max(1000),
-    default: 1,
+  /** «Мало концентрата» on the stock page and the Home (ADR 0043): ml of free ready concentrate. */
+  'stock.lowConcentrateMl': {
+    schema: z.number().int().min(0).max(1_000_000),
+    default: 300,
     area: 'shop',
-    unit: 'none',
-    label: { ru: 'Мало масла: запас жидкости, л', uz: 'Moy kam: suyuqlik zaxirasi, l' },
+    unit: 'ml',
+    label: { ru: 'Мало концентрата: остаток, мл', uz: 'Konsentrat kam: qoldiq, ml' },
     hint: {
-      ru: 'Аромат помечается «Мало масла», когда его масла хватит не больше чем на столько литров духов (потери при розливе учтены). 0 — только когда масла нет совсем.',
-      uz: 'Moyidan shu litrdan koʻp boʻlmagan atir chiqsa, ifor «Moy kam» deb belgilanadi (quyishdagi yoʻqotish hisobga olingan). 0 — faqat moy umuman qolmaganda.',
+      ru: 'Аромат помечается «Мало концентрата», когда свободной готовой концентрации (за вычетом брони) не больше этого. «Нет концентрата» — когда не хватает на флакон 10 мл.',
+      uz: 'Boʻsh tayyor konsentrat (bronsiz) shundan oshmasa, ifor «Konsentrat kam» deb belgilanadi. «Konsentrat yoʻq» — 10 ml flakonga yetmasa.',
+    },
+  },
+  /** The low-oil warning on the stock page (#76, ADR 0041, 0043): ml of oil. */
+  'stock.lowOilMl': {
+    schema: z.number().int().min(0).max(1_000_000),
+    default: 300,
+    area: 'shop',
+    unit: 'ml',
+    label: { ru: 'Мало масла: остаток, мл', uz: 'Moy kam: qoldiq, ml' },
+    hint: {
+      ru: 'Аромат помечается «Мало масла», когда масла осталось не больше этого (в мл по плотности масла). 0 — только когда масла нет совсем.',
+      uz: 'Moy shundan oshmasa (moy zichligi boʻyicha ml’da), ifor «Moy kam» deb belgilanadi. 0 — faqat moy umuman qolmaganda.',
     },
   },
   /**
@@ -1370,7 +1382,7 @@ export const settingDefinitions = {
     label: { ru: 'Смен фото профиля в час', uz: 'Soatiga profil rasmini almashtirish' },
     hint: {
       ru: 'Сколько раз в час клиент или сотрудник может загрузить, взять из Telegram или убрать фото профиля. Дальше сервер отвечает «слишком часто».',
-      uz: 'Mijoz yoki xodim soatiga necha marta profil rasmini yuklashi, Telegramdan olishi yoki olib tashlashi mumkin. Undan ortig‘iga server «juda tez-tez» deb javob beradi.',
+      uz: 'Mijoz yoki xodim soatiga necha marta profil rasmini yuklashi, Telegramdan olishi yoki olib tashlashi mumkin. Undan ortigʻiga server «juda tez-tez» deb javob beradi.',
     },
   },
   'auth.telegramLinkTtlSeconds': {

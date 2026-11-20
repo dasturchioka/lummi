@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { birthDateSchema } from './birthday';
 import { ORDER_STATUSES } from './order-status';
-import { fragranceOilSchema } from './warehouse';
+import { fragranceStockSchema } from './warehouse';
 
 /* ---- stock (#27) ---- */
 
@@ -10,49 +10,50 @@ export const STOCK_PAGE_MAX = 50;
 export const STOCK_LEVELS = ['zero', 'low', 'ok'] as const;
 export type StockLevel = (typeof STOCK_LEVELS)[number];
 
-/** One row of the stock page: a volume of a fragrance, or the Discovery set (its own stock, ADR 0009). */
-export const stockRowSchema = z.object({
-  kind: z.enum(['volume', 'discovery']),
-  /** `v<volume id>` or `discovery`: stable across reloads, for React keys and test ids. */
-  key: z.string(),
-  /** The volume to edit; null for the Discovery set. */
-  volumeId: z.number().int().nullable(),
-  /** The fragrance the volume belongs to; null for the Discovery set. A page holds whole fragrances. */
-  fragranceId: z.number().int().nullable(),
-  /** The fragrance's name; null for the Discovery set. */
-  name: z.string().nullable(),
+/**
+ * A fragrance on the stock page (ADR 0043): its ready concentrate and oil in ml, the bottles each
+ * sold volume still makes, its tags (hidden, below the reserve) and the owner's value.
+ */
+export const stockFragranceRowSchema = fragranceStockSchema.extend({
+  name: z.string(),
   hidden: z.boolean(),
-  ml: z.number().int().nullable(),
+});
+export type StockFragranceRow = z.infer<typeof stockFragranceRowSchema>;
+
+/** A Discovery set on the stock page: its own boxes (ADR 0009, 0042). */
+export const stockSetRowSchema = z.object({
+  vialMl: z.number().int(),
+  /** `discovery` or `discovery-5` (`DISCOVERY_SETS`): stable, for React keys and test ids. */
+  key: z.string(),
   onHand: z.number().int(),
   reserved: z.number().int(),
   available: z.number().int(),
   /** On hand is below the reserve (ADR 0010): allowed, and shown as a warning. */
   belowReserve: z.boolean(),
-  /** Decided by the server from the `stock.lowAvailableThreshold` setting: nothing left, running low, or fine. */
+  /** From the `stock.lowAvailableThreshold` setting: nothing left, running low, or fine. */
   level: z.enum(STOCK_LEVELS),
 });
-export type StockRow = z.infer<typeof stockRowSchema>;
+export type StockSetRow = z.infer<typeof stockSetRowSchema>;
 
 export const stockQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   /**
-   * `low`: available at or under the threshold (zero included); `zero`: nothing available;
-   * `oilLow`: fragrances whose oil is running low or gone (#76; the Discovery set never matches).
+   * `low`: concentrate (or a set's boxes) at or under its threshold, none included; `zero`: none;
+   * `oilLow`: fragrances whose oil is running low or gone (the Discovery sets never match).
    */
   filter: z.enum(['low', 'zero', 'oilLow']).optional(),
-  /** Fragrances hidden from the catalog; the Discovery set counts as visible. */
+  /** Fragrances hidden from the catalog; the Discovery sets count as visible. */
   visibility: z.enum(['visible', 'hidden']).optional(),
-  /** Pages hold whole fragrances (all their matching volumes), so a card is never split. */
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(STOCK_PAGE_MAX).default(STOCK_PAGE_DEFAULT),
 });
 export type StockQuery = z.infer<typeof stockQuerySchema>;
 
 /**
- * The gift sample's 5 ml stock (#79, ADR 0042) while samples are on: the chosen fragrance's, or
- * every visible fragrance's together when the most-stocked one is picked; `level` against the
- * setting `giftSample.lowStock`. `missing`: the chosen fragrance is gone or hidden, so no sample
- * goes out until another is chosen.
+ * The gift sample's 5 ml stock (#79, ADR 0042, 0043) while samples are on: the 5 ml fills the chosen
+ * fragrance's free concentrate makes, or every visible fragrance's together when the most-stocked
+ * one is picked; `level` against the setting `giftSample.lowStock`. `missing`: the chosen fragrance
+ * is gone or hidden, so no sample goes out until another is chosen.
  */
 export const giftSampleStockSchema = z.object({
   /** The chosen fragrance's name; null when the most-stocked one is picked (or the chosen one is gone). */
@@ -65,14 +66,15 @@ export const giftSampleStockSchema = z.object({
 export type GiftSampleStock = z.infer<typeof giftSampleStockSchema>;
 
 export const stockListSchema = z.object({
-  /** The setting `stock.lowAvailableThreshold`. */
+  /** The setting `stock.lowAvailableThreshold` (the Discovery sets' boxes). */
   lowThreshold: z.number().int(),
-  /** The setting `stock.lowOilLitres` (#76). */
-  lowOilLitres: z.number(),
-  /** The oil of each fragrance on this page (#76, ADR 0041), in the rows' order. */
-  oil: z.array(fragranceOilSchema),
-  /** This page's rows: the Discovery set first (page 1 only, when it matches), then whole fragrances in name order. */
-  rows: z.array(stockRowSchema),
+  /** The settings `stock.lowConcentrateMl` and `stock.lowOilMl` (ADR 0043). */
+  lowConcentrateMl: z.number(),
+  lowOilMl: z.number(),
+  /** This page's fragrances in name order. */
+  fragrances: z.array(stockFragranceRowSchema),
+  /** The Discovery sets: page 1 only, when they match. */
+  sets: z.array(stockSetRowSchema),
   /** Fragrances matching the search and filters, over all pages. */
   total: z.number().int(),
   /** The gift sample's 5 ml stock; null while samples are off. */

@@ -85,7 +85,6 @@ import {
   fragranceListQuerySchema,
   hiddenBodySchema,
   onHandBodySchema,
-  onHandItemSchema,
 } from './admin-catalog';
 import {
   adminCustomerDetailSchema,
@@ -98,10 +97,11 @@ import {
   stockQuerySchema,
 } from './admin-stock';
 import {
-  bottlingBodySchema,
-  bottlingResultSchema,
-  setBottlingBodySchema,
-  setBottlingResultSchema,
+  concentrateCountBodySchema,
+  mixingBodySchema,
+  mixingResultSchema,
+  setAssemblyBodySchema,
+  setAssemblyResultSchema,
   oilReceiptCorrectionSchema,
   oilReceiptInputSchema,
   oilReceiptSchema,
@@ -112,6 +112,16 @@ import {
   warehouseErrorSchema,
   warehouseFragranceSchema,
 } from './warehouse';
+import {
+  consumableCountBodySchema,
+  consumableHistorySchema,
+  consumableInputSchema,
+  consumableReceiptBodySchema,
+  consumableSchema,
+  consumablesErrorSchema,
+  consumablesListSchema,
+  consumableUpdateSchema,
+} from './consumables';
 import {
   uzumErrorSchema,
   uzumSaleInputSchema,
@@ -1237,7 +1247,7 @@ const adminCore = c.router({
         403: adminStockErrorSchema,
       },
       summary:
-        'Owner and manager: on hand, reserve and available per volume and for the Discovery set, with the low threshold',
+        "Owner and manager: each fragrance's ready concentrate, reserve, free ml, bottles per volume and oil; the Discovery sets' boxes; values for the owner",
     },
   },
   customers: {
@@ -1279,23 +1289,6 @@ const adminCore = c.router({
       },
       summary:
         'Owner only: correct the date of birth (the customer enters it once); needs the account phone; audited as the fact',
-    },
-  },
-  onHand: {
-    set: {
-      method: 'PATCH',
-      path: '/admin/volumes/:id/on-hand',
-      pathParams: z.object({ id: z.coerce.number().int().positive() }),
-      body: onHandBodySchema,
-      responses: {
-        200: onHandItemSchema,
-        401: catalogAdminErrorSchema,
-        403: catalogAdminErrorSchema,
-        404: catalogAdminErrorSchema,
-        409: catalogAdminErrorSchema,
-      },
-      summary:
-        'Owner and manager: set on hand for one volume (audited); with `expected`, refused with 409 when the count moved',
     },
   },
 });
@@ -1934,7 +1927,8 @@ const adminCampaigns = c.router({
 
 /**
  * The raw-material warehouse (#76, ADR 0041): a fragrance's oil, its receipts and its bottlings.
- * Receipts carry purchase prices and are the owner's; bottling is stock work, the manager's too.
+ * Receipts carry purchase prices and are the owner's; mixing, counts and set assembly are stock
+ * work, the manager's too (ADR 0043).
  */
 const warehouseId = z.object({ id: z.coerce.number().int().positive() });
 const adminWarehouse = c.router({
@@ -1949,7 +1943,7 @@ const adminWarehouse = c.router({
         404: warehouseErrorSchema,
       },
       summary:
-        "Owner and manager: a fragrance's oil balance, bottles, history; oil receipts, invoices and values for the owner only",
+        "Owner and manager: a fragrance's ready concentrate, oil, history; oil receipts, invoices and values for the owner only",
     },
     receiveOil: {
       method: 'POST',
@@ -2038,34 +2032,123 @@ const adminWarehouse = c.router({
       summary:
         'Owner only: discard a draft oil receipt (audited); a confirmed one is voided instead',
     },
-    bottle: {
+    mix: {
       method: 'POST',
-      path: '/admin/warehouse/fragrances/:id/bottlings',
+      path: '/admin/warehouse/fragrances/:id/mixings',
       pathParams: warehouseId,
-      body: bottlingBodySchema,
+      body: mixingBodySchema,
       responses: {
-        201: bottlingResultSchema,
+        201: mixingResultSchema,
         401: warehouseErrorSchema,
         404: warehouseErrorSchema,
         409: warehouseErrorSchema,
-        422: warehouseErrorSchema,
       },
       summary:
-        'Owner and manager: bottle oil into volumes; oil by the cost formula with the loss, 409 oil_short with the shortfall',
+        'Owner and manager: make ready concentrate (ADR 0043); its oil and ethanol by the cost shares, no loss; 409 oil_short or ethanol_short',
     },
-    bottleSet: {
-      method: 'POST',
-      path: '/admin/warehouse/sets/:vialMl/bottlings',
-      pathParams: z.object({ vialMl: z.coerce.number().pipe(discoveryVialMlSchema) }),
-      body: setBottlingBodySchema,
+    countConcentrate: {
+      method: 'PUT',
+      path: '/admin/warehouse/fragrances/:id/concentrate',
+      pathParams: warehouseId,
+      body: concentrateCountBodySchema,
       responses: {
-        201: setBottlingResultSchema,
+        200: warehouseFragranceSchema,
+        401: warehouseErrorSchema,
+        404: warehouseErrorSchema,
+        409: warehouseErrorSchema,
+      },
+      summary:
+        "Owner and manager: count a fragrance's ready concentrate with a reason (audited); with `expectedMl`, 409 changed when it moved",
+    },
+    assembleSet: {
+      method: 'POST',
+      path: '/admin/warehouse/sets/:vialMl/assemblies',
+      pathParams: z.object({ vialMl: z.coerce.number().pipe(discoveryVialMlSchema) }),
+      body: setAssemblyBodySchema,
+      responses: {
+        201: setAssemblyResultSchema,
         401: warehouseErrorSchema,
         409: warehouseErrorSchema,
         422: warehouseErrorSchema,
       },
       summary:
-        "Owner and manager: fill boxes of a Discovery set straight from its five fragrances' oil (#79); 409 oil_short names the fragrance, 422 while the set is not five",
+        "Owner and manager: pack boxes of a Discovery set from its five fragrances' free concentrate and flacons; 409 concentrate_short names the fragrance, 422 while the set is not five",
+    },
+  },
+});
+
+/**
+ * Consumables (ADR 0043): flacons, boxes, the ethanol and what staff add. Owner and manager.
+ */
+const consumableId = z.object({ id: z.coerce.number().int().positive() });
+const adminConsumables = c.router({
+  consumables: {
+    list: {
+      method: 'GET',
+      path: '/admin/consumables',
+      responses: { 200: consumablesListSchema, 401: consumablesErrorSchema },
+      summary: 'Owner and manager: every consumable, archived ones last',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/consumables',
+      body: consumableInputSchema,
+      responses: {
+        201: consumableSchema,
+        401: consumablesErrorSchema,
+        409: consumablesErrorSchema,
+      },
+      summary: 'Owner and manager: add an item, starting at 0 (audited); 409 link_taken',
+    },
+    update: {
+      method: 'PUT',
+      path: '/admin/consumables/:id',
+      pathParams: consumableId,
+      body: consumableUpdateSchema,
+      responses: {
+        200: consumableSchema,
+        401: consumablesErrorSchema,
+        404: consumablesErrorSchema,
+        409: consumablesErrorSchema,
+      },
+      summary: "Owner and manager: an item's names, threshold, archived (audited)",
+    },
+    receive: {
+      method: 'POST',
+      path: '/admin/consumables/:id/receipts',
+      pathParams: consumableId,
+      body: consumableReceiptBodySchema,
+      responses: {
+        201: consumableSchema,
+        401: consumablesErrorSchema,
+        404: consumablesErrorSchema,
+      },
+      summary: 'Owner and manager: units received (audited, a history line)',
+    },
+    count: {
+      method: 'POST',
+      path: '/admin/consumables/:id/counts',
+      pathParams: consumableId,
+      body: consumableCountBodySchema,
+      responses: {
+        200: consumableSchema,
+        401: consumablesErrorSchema,
+        404: consumablesErrorSchema,
+        409: consumablesErrorSchema,
+      },
+      summary:
+        'Owner and manager: a count with a reason (audited); clears «Пересчитайте»; with `expected`, 409 changed when it moved',
+    },
+    history: {
+      method: 'GET',
+      path: '/admin/consumables/:id/history',
+      pathParams: consumableId,
+      responses: {
+        200: consumableHistorySchema,
+        401: consumablesErrorSchema,
+        404: consumablesErrorSchema,
+      },
+      summary: "Owner and manager: an item's history, newest first",
     },
   },
 });
@@ -2177,6 +2260,7 @@ export const adminContract = c.router({
   ...adminHome,
   ...adminProfitability,
   ...adminWarehouse,
+  ...adminConsumables,
   ...adminUzum,
 });
 
