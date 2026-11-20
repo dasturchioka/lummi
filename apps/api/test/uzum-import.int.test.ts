@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { tashkent } from './harness/fulfilment';
 import { slugs } from './harness/orders';
+import { concentrateUl, FILL_UL, stockBottles } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
@@ -44,12 +45,13 @@ beforeEach(async () => {
     const vol: Record<number, number> = {};
     for (const ml of [10, 30, 50]) {
       const [v] = await t.db
-        .update(volumes)
-        .set({ onHand: 20 })
-        .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)))
-        .returning({ id: volumes.id });
+        .select({ id: volumes.id })
+        .from(volumes)
+        .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)));
       vol[ml] = v!.id;
     }
+    // twenty 10 ml fills of ready concentrate (ADR 0043)
+    await stockBottles(t, f!.id, 10, 20);
     picked.push({ id: f!.id, name: f!.name, vol });
   }
   [A, B] = picked as [Picked, Picked];
@@ -77,8 +79,8 @@ async function file(rows: (string | number | null)[][], headers = HEADERS): Prom
   for (const r of rows) ws.addRow(r);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
-const onHand = async (volumeId: number) =>
-  (await t.db.select().from(volumes).where(eq(volumes.id, volumeId)))[0]!.onHand;
+/** A fragrance's ready concentrate in 10 ml fills. */
+const tens = async (fragranceId: number) => (await concentrateUl(t, fragranceId)) / FILL_UL[10];
 
 describe('the template', () => {
   it('holds the sales sheet and every fragrance with its volumes', async () => {
@@ -153,7 +155,7 @@ describe('the dry run', () => {
         revenue: 327_000,
       },
     ]);
-    expect(await onHand(A.vol[10]!)).toBe(20);
+    expect(await tens(A.id)).toBe(20);
   });
 
   it('refuses a file whose sales the stock cannot cover', async () => {
@@ -169,6 +171,26 @@ describe('the dry run', () => {
         column: null,
         code: 'stock_short',
         params: { name: A.name, ml: 10, wanted: 21, available: 20 },
+      },
+    ]);
+    expect(report.token).toBeNull();
+  });
+
+  it('judges two volumes of one fragrance against its one liquid, as the record does (ADR 0043)', async () => {
+    // 20 × 10.3 ml = 206 ml: six 30 ml fills take 185.4 ml and leave two 10 ml fills, not three
+    // (alone, the 10 ml would have twenty)
+    const report = await dryRun(
+      await file([
+        ['2026-11-18', 'UZ-1', A.name, 30, 6, 189_000, null],
+        ['2026-11-18', 'UZ-2', A.name, 10, 3, 69_000, null],
+      ]),
+    );
+    expect(report.errors).toEqual([
+      {
+        row: null,
+        column: null,
+        code: 'stock_short',
+        params: { name: A.name, ml: 10, wanted: 3, available: 2 },
       },
     ]);
     expect(report.token).toBeNull();
@@ -210,8 +232,9 @@ describe('applying a file', () => {
       revenue: 725_000,
       skipped: 0,
     });
-    expect(await onHand(A.vol[10]!)).toBe(18);
-    expect(await onHand(B.vol[30]!)).toBe(19);
+    expect(await tens(A.id)).toBe(18);
+    // 206 − 30.9 ml
+    expect(await concentrateUl(t, B.id)).toBe(175_100);
     const sets = await t.db.select().from(discoverySet).orderBy(discoverySet.vialMl);
     expect(sets.map((x) => [x.vialMl, x.onHand])).toEqual([
       [5, 4],
@@ -245,7 +268,7 @@ describe('applying a file', () => {
     const { token } = await dryRun(other);
     const res = await apply(bytes, token!);
     expect(res.status).toBe(409);
-    expect(await onHand(A.vol[10]!)).toBe(20);
+    expect(await tens(A.id)).toBe(20);
     const anon = await fetch(`${t.baseUrl}/admin/uzum/import/dry-run`, {
       method: 'POST',
       headers: { 'content-type': XLSX },
@@ -260,7 +283,7 @@ describe('applying a file', () => {
       ['2026-11-18', 'UZ-2', A.name, 10, 5, 69_000, null],
     ]);
     const { token } = await dryRun(bytes, owner);
-    await t.db.update(volumes).set({ onHand: 4 }).where(eq(volumes.id, A.vol[10]!));
+    await stockBottles(t, A.id, 10, 4);
     const res = await apply(bytes, token!, owner);
     expect(res.status).toBe(422);
     const body = (await res.json()) as { code: string; report: UzumImportReport };
@@ -272,7 +295,7 @@ describe('applying a file', () => {
         params: { name: A.name, ml: 10, wanted: 5, available: 4 },
       },
     ]);
-    expect(await onHand(B.vol[10]!)).toBe(20);
+    expect(await tens(B.id)).toBe(20);
     expect(await t.db.select().from(uzumSales)).toHaveLength(0);
   });
 });

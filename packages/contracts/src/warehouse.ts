@@ -1,22 +1,20 @@
 import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
 import { languageSchema } from './auth';
-import { MAX_OIL_PRICE, STOCK_MOVE_KINDS } from './constants';
+import { CONSUMABLE_UNITS, MAX_OIL_PRICE, STOCK_MOVE_KINDS } from './constants';
 
 /*
- * The raw-material warehouse (#76, ADR 0041): each fragrance's oil balance in grams beside its
- * bottles on hand. Oil receipts add to the balance, a bottling turns oil into bottles, and every
- * change is a stock move in the fragrance's history. The API computes every figure; the panel
- * shows them.
+ * The warehouse (#76, ADR 0041, ADR 0043): each fragrance's oil balance in grams and its ready
+ * concentrate in ml. Oil receipts add to the oil, a mixing turns oil and ethanol into concentrate,
+ * bottles are filled from the concentrate when they ship, and every change is a stock move in the
+ * history. The API computes every figure; the panel shows them.
  */
 
-/** The low-oil warning's levels: the stock page's own (`STOCK_LEVELS`), none left, running low, fine. */
+/** The low-stock warning's levels: the stock page's own (`STOCK_LEVELS`), none left, running low, fine. */
 export const OIL_LEVELS = ['zero', 'low', 'ok'] as const;
 
 /** The most oil one receipt may hold: a tonne. */
 export const MAX_OIL_RECEIPT_GRAMS = 1_000_000;
-/** The most bottles of one volume one bottling may make. */
-export const MAX_BOTTLING_QUANTITY = 10_000;
 export const STOCK_REASON_MAX = 200;
 export const OIL_TEXT_MAX = 120;
 /** The newest history lines the fragrance's page shows; the Excel export holds them all. */
@@ -25,7 +23,8 @@ export const WAREHOUSE_HISTORY_LIMIT = 200;
 const som = z.number().int();
 /** Why a count or a receipt changed: required, said in a few words. */
 export const stockReasonSchema = z.string().trim().min(1).max(STOCK_REASON_MAX);
-const hasAtMostDecimals = (places: number) => (v: number) => {
+/** True when `v` has at most `places` decimals (to a float's noise): the one rule every amount uses. */
+export const hasAtMostDecimals = (places: number) => (v: number) => {
   const scaled = v * 10 ** places;
   return Math.abs(scaled - Math.round(scaled)) < 1e-6;
 };
@@ -98,78 +97,153 @@ export type OilReceiptDraftsBody = z.infer<typeof oilReceiptDraftsBodySchema>;
 export const oilReceiptDraftsResultSchema = z.object({ created: z.number().int() });
 export const oilReceiptDiscardedSchema = z.object({ discarded: z.literal(true) });
 
-/** A bottling: how many bottles of each volume the oil goes into. */
-export const bottlingBodySchema = z.object({
-  lines: z
-    .array(
-      z.object({
-        ml: z.number().int().positive(),
-        quantity: z.number().int().min(0).max(MAX_BOTTLING_QUANTITY),
-      }),
-    )
-    .min(1)
-    .max(8)
-    .refine((ls) => new Set(ls.map((l) => l.ml)).size === ls.length, 'one line per volume')
-    .refine((ls) => ls.some((l) => l.quantity > 0), 'at least one bottle'),
-});
-export type BottlingBody = z.infer<typeof bottlingBodySchema>;
+/** Microlitres in a millilitre: the ready concentrate is kept in whole µl (ADR 0043). */
+export const UL_PER_ML = 1000;
+/** Ml as the API and the panel speak it, from whole µl, and back (rounded to the µl). */
+export const mlFromUl = (ul: number) => ul / UL_PER_ML;
+export const ulFromMl = (ml: number) => Math.round(ml * UL_PER_ML);
+/** Grams and ml go out to three decimals: a milligram, a microlitre. */
+export const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
-export const bottlingResultSchema = z.object({
-  id: z.number().int(),
-  /** The oil it took, filling loss included. */
+/** The most concentrate one mixing may make: a thousand litres. */
+export const MAX_MIX_ML = 1_000_000;
+/** The most a concentrate count may hold, ml: the stock page's, the form's and the import's. */
+export const MAX_CONCENTRATE_ML = 100_000_000;
+/** A concentrate count, ml to the microlitre (ADR 0043): the stock page, the form and the import. */
+export const concentrateMlSchema = z
+  .number()
+  .min(0)
+  .max(MAX_CONCENTRATE_ML)
+  .refine(hasAtMostDecimals(3), 'at most 3 decimals');
+/** The most boxes of a Discovery set one assembly may pack. */
+export const MAX_ASSEMBLY_QUANTITY = 10_000;
+
+/** Ml to the microlitre, positive. */
+const mlAmount = (max: number) =>
+  z.number().positive().max(max).refine(hasAtMostDecimals(3), 'at most 3 decimals');
+
+/**
+ * A mixing (ADR 0043): the ml of ready concentrate made. The oil and the ethanol in it come off
+ * their stocks by the cost model's shares, without the filling loss.
+ */
+export const mixingBodySchema = z.object({ ml: mlAmount(MAX_MIX_ML) });
+export type MixingBody = z.infer<typeof mixingBodySchema>;
+
+export const mixingResultSchema = z.object({
+  /** The oil it took. */
   oilGrams: z.number(),
-  /** The ethanol it took (costed, not stocked). */
+  /** The ethanol it took, whole ml. */
   ethanolMl: z.number().int(),
   /** The oil balance after it. */
   oilLeftGrams: z.number(),
+  /** The ready concentrate after it. */
+  concentrateMl: z.number(),
 });
-export type BottlingResult = z.infer<typeof bottlingResultSchema>;
+export type MixingResult = z.infer<typeof mixingResultSchema>;
 
 /**
- * A set bottling (#79, ADR 0042): boxes of a Discovery set filled straight from its five
- * fragrances' oil, one vial of the set's size from each per box.
+ * A set assembly (ADR 0043): boxes of a Discovery set packed from its five fragrances' ready
+ * concentrate, one fill of the set's vial ml from each per box, and a flacon per vial.
  */
-export const setBottlingBodySchema = z.object({
-  quantity: z.number().int().min(1).max(MAX_BOTTLING_QUANTITY),
+export const setAssemblyBodySchema = z.object({
+  quantity: z.number().int().min(1).max(MAX_ASSEMBLY_QUANTITY),
 });
-export type SetBottlingBody = z.infer<typeof setBottlingBodySchema>;
+export type SetAssemblyBody = z.infer<typeof setAssemblyBodySchema>;
 
-export const setBottlingResultSchema = z.object({
-  /** The oil it took from each of the five, filling loss included. */
-  oilGrams: z.number(),
-  /** The ethanol it took in all (costed, not stocked). */
-  ethanolMl: z.number().int(),
+export const setAssemblyResultSchema = z.object({
+  /** The concentrate it took from each of the five, the filling loss included. */
+  concentrateMl: z.number(),
+  /** The flacons it took in all. */
+  flacons: z.number().int(),
   /** The set's boxes on hand after it. */
   onHand: z.number().int(),
 });
-export type SetBottlingResult = z.infer<typeof setBottlingResultSchema>;
+export type SetAssemblyResult = z.infer<typeof setAssemblyResultSchema>;
 
-/** A fragrance's oil, as the stock page and the fragrance's warehouse page show it. */
-export const fragranceOilSchema = z.object({
+/** A count of a fragrance's ready concentrate (stock page): compare-and-set, with a reason. */
+export const concentrateCountBodySchema = z.object({
+  ml: concentrateMlSchema,
+  /** The ml the editor was looking at: when the stored count moved, 409 `changed` with it. */
+  expectedMl: z.number().min(0).optional(),
+  reason: stockReasonSchema,
+});
+export type ConcentrateCountBody = z.infer<typeof concentrateCountBodySchema>;
+
+/** What the bottles of one sold volume can still take of the free concentrate. */
+export const volumeBottlesSchema = z.object({
+  ml: z.number().int(),
+  /** Whole bottles the free concentrate fills. */
+  available: z.number().int(),
+});
+
+/**
+ * A fragrance's stock as the stock page and its warehouse page show it (ADR 0043): the ready
+ * concentrate, what orders hold of it and what is free, the bottles that makes per sold volume,
+ * and the oil, all in ml (the oil in grams too).
+ */
+export const fragranceStockSchema = z.object({
   fragranceId: z.number().int(),
+  concentrateMl: z.number(),
+  /** Held by orders not yet handed to BTS: their bottles' fills. */
+  reservedMl: z.number(),
+  /** Concentrate less the reserve, never below zero. */
+  availableMl: z.number(),
+  /** The count is below the reserve (allowed, flagged). */
+  belowReserve: z.boolean(),
+  /** From `stock.lowConcentrateMl`: none (can't fill a 10 ml bottle), running low, or fine. */
+  level: z.enum(OIL_LEVELS),
+  /** Per sold volume of the fragrance (10 / 30 / 50 ml). */
+  bottles: z.array(volumeBottlesSchema),
   /** The oil balance. */
   oilGrams: z.number(),
-  /** Litres of perfume the oil still makes, the filling loss taken off. */
-  liquidLitres: z.number(),
-  /** From the `stock.lowOilLitres` setting: none left, running low, or fine. */
-  level: z.enum(OIL_LEVELS),
+  /** The same oil in ml, by the oil density setting. */
+  oilMl: z.number(),
+  /** From `stock.lowOilMl`. */
+  oilLevel: z.enum(OIL_LEVELS),
   /**
    * Stock at cost, whole so'm, for the owner only (null for a manager): the oil at the average
-   * landed price of its receipts, the bottles at their unit cost (null without an oil price).
+   * landed price of its receipts, the concentrate at the cost model's liquid per ml (null without
+   * an oil price).
    */
-  value: z.object({ oil: som, bottles: som.nullable(), total: som.nullable() }).nullable(),
+  value: z.object({ oil: som, concentrate: som.nullable(), total: som.nullable() }).nullable(),
   /** Draft receipts waiting for the owner's confirmation (#78); 0 for a manager. */
   drafts: z.number().int(),
 });
-export type FragranceOil = z.infer<typeof fragranceOilSchema>;
+export type FragranceStock = z.infer<typeof fragranceStockSchema>;
 
-/** One line of a fragrance's warehouse history. Changes are signed. */
+/** A consumable as a history line names it, with its signed change. */
+const consumableChangeSchema = z.object({
+  consumableId: z.number().int(),
+  nameRu: z.string(),
+  nameUz: z.string(),
+  unit: z.enum(CONSUMABLE_UNITS),
+  change: z.number().int(),
+});
+
+/** One line of the warehouse history. Changes are signed. */
 export const stockMoveSchema = z.object({
   id: z.number().int(),
   at: z.string(),
   kind: z.enum(STOCK_MOVE_KINDS),
+  /** The fragrance it moved; null for a consumable's own receipt or count. */
+  fragranceId: z.number().int().nullable(),
+  fragranceName: z.string().nullable(),
   oilGrams: z.number(),
+  /** The ready concentrate's change. */
+  concentrateMl: z.number(),
+  /** Bottles filled, handed over or returned (before ADR 0043: bottles on hand), by ml. */
   bottles: z.array(z.object({ ml: z.number().int(), change: z.number().int() })),
+  consumables: z.array(consumableChangeSchema),
+  /**
+   * What the move could not take because the count held less (a handover, an Uzum sale, an
+   * assembly never stop for it): the count stopped at zero and wants a recount.
+   */
+  short: z
+    .object({
+      concentrateMl: z.number().optional(),
+      consumables: z.array(consumableChangeSchema).optional(),
+    })
+    .nullable(),
   reason: z.string().nullable(),
   /** Who did it: a staff member's name, or null for the shop itself. */
   actorName: z.string().nullable(),
@@ -180,10 +254,15 @@ export const stockMoveSchema = z.object({
   orderNumber: z.number().int().nullable(),
   /** Uzum's order number, for `uzum_sale` and `uzum_sale_voided` (#80). */
   uzumOrder: z.string().nullable(),
-  /** A set bottling's set (its vial ml) and boxes (#79); null for every other move. */
+  /** A set bottling's or assembly's set (its vial ml) and boxes; null for every other move. */
   set: z.object({ vialMl: z.number().int(), quantity: z.number().int() }).nullable(),
-  /** Where a `correction` came from: the stock page, the fragrance form or the Excel import. */
-  source: z.enum(['stock', 'form', 'import']).nullable(),
+  /**
+   * Where a `correction` came from: the stock page, the fragrance form, the Excel import, or the
+   * migration that folded the bottles into concentrate (ADR 0043).
+   */
+  source: z.enum(['stock', 'form', 'import', 'migration']).nullable(),
+  /** A consumable receipt's note. */
+  note: z.string().nullable(),
 });
 export type StockMove = z.infer<typeof stockMoveSchema>;
 
@@ -192,22 +271,16 @@ export const warehouseFragranceSchema = z.object({
   fragranceId: z.number().int(),
   name: z.string(),
   hidden: z.boolean(),
-  oil: fragranceOilSchema,
-  /** The `stock.lowOilLitres` setting. */
-  lowOilLitres: z.number(),
-  volumes: z.array(
-    z.object({
-      volumeId: z.number().int(),
-      ml: z.number().int(),
-      onHand: z.number().int(),
-      reserved: z.number().int(),
-      available: z.number().int(),
-    }),
-  ),
-  /** What one bottle of each volume takes now (filling loss included), for the bottling form's preview. */
-  perBottle: z.array(
-    z.object({ ml: z.number().int(), oilGrams: z.number(), ethanolMl: z.number() }),
-  ),
+  stock: fragranceStockSchema,
+  /** The settings `stock.lowConcentrateMl` and `stock.lowOilMl`. */
+  lowConcentrateMl: z.number(),
+  lowOilMl: z.number(),
+  /** What one ml of concentrate takes now (no filling loss), for the mixing form's preview. */
+  perMl: z.object({ oilGrams: z.number(), ethanolMl: z.number() }),
+  /** One bottle's fill now (the filling loss included), per volume the fragrance has. */
+  fills: z.array(z.object({ ml: z.number().int(), fillMl: z.number() })),
+  /** The active ethanol consumable mixing takes from; null when there is none. */
+  ethanol: z.object({ id: z.number().int(), onHandMl: z.number().int() }).nullable(),
   /** The receipts, newest first: the owner's only (null for a manager), voided ones included. */
   oilReceipts: z.array(oilReceiptSchema).nullable(),
   /** The receipt form's starting values (owner only): the discount and import settings, the fragrance's supplier and oil price. */
@@ -231,6 +304,12 @@ export const warehouseErrorSchema = z.object({
     'not_found',
     'invalid',
     'oil_short',
+    /** A mixing needs more ethanol than the ethanol consumable holds (none active: 0). */
+    'ethanol_short',
+    /** A set assembly needs more of a fragrance's free concentrate than there is. */
+    'concentrate_short',
+    /** A count compared against one that moved meanwhile: nothing written. */
+    'changed',
     'voided',
     /** A draft is confirmed or discarded, never corrected or voided. */
     'draft',
@@ -242,10 +321,16 @@ export const warehouseErrorSchema = z.object({
   fields: z.array(z.string()).optional(),
   /** With `oil_short`: what the operation needs, what the balance holds, and the shortfall, in grams. */
   neededGrams: z.number().optional(),
-  /** With `oil_short` from a set bottling: the fragrance whose oil is short. */
+  /** With `concentrate_short`: the fragrance whose concentrate is short. */
   fragrance: z.string().optional(),
   balanceGrams: z.number().optional(),
   shortGrams: z.number().optional(),
+  /** With `ethanol_short` and `concentrate_short`: what it needs, what there is, the shortfall, in ml. */
+  neededMl: z.number().optional(),
+  balanceMl: z.number().optional(),
+  shortMl: z.number().optional(),
+  /** With `changed`: the count as it is now, ml. */
+  currentMl: z.number().optional(),
 });
 export type WarehouseError = z.infer<typeof warehouseErrorSchema>;
 

@@ -1,19 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { FragranceInput, OilReceiptInput, WarehouseFragrance } from '@lummi/contracts';
-import { auditLog, eq, fragrances, settings, stockMoves, volumes } from '@lummi/db';
+import {
+  auditLog,
+  consumables,
+  discoverySet,
+  discoverySetItems,
+  and,
+  eq,
+  fragrances,
+  settings,
+  stockMoves,
+} from '@lummi/db';
 import ExcelJS from 'exceljs';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { readComposition } from '../src/sets/sets';
 import { cancelByStaff, fulfilTo, pay, placeOrder } from './harness/fulfilment';
 import { shopper, slugs as slugsOf } from './harness/orders';
+import { concentrateUl, consumable, setConcentrateUl, setConsumable } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
- * Seam 1 (ADR 0028): the raw-material warehouse (#76, ADR 0041) over HTTP. Oil amounts are worked
- * out by hand from the cost settings' defaults (oil 30 %, density 1 g/ml, filling loss 3 %): a
- * 10 ml bottle takes 3.09 g of oil, 30 ml 9.27 g, 50 ml 15.45 g. Suppliers, invoices and prices
- * are made up.
+ * Seam 1 (ADR 0028): the warehouse (#76, ADR 0041, 0043) over HTTP. Amounts are worked out by hand
+ * from the cost settings' defaults (oil 30 %, ethanol 70 %, density 1 g/ml, filling loss 3 %): a
+ * ml of concentrate takes 0.3 g of oil and 0.7 ml of ethanol; a 10 ml bottle is a 10.3 ml fill.
+ * Suppliers, invoices and prices are made up.
  */
 const snapshot = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../src/bts/bts-points.snapshot.json'), 'utf8'),
@@ -65,10 +77,16 @@ async function receive(id: number, over: Partial<OilReceiptInput> = {}) {
   if (res.status !== 201) throw new Error(`receipt ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
-const bottle = (id: number, lines: { ml: number; quantity: number }[], as = manager) =>
-  as.client.admin.warehouse.bottle({ params: { id }, body: { lines } });
-/** A new fragrance as the owner's form sends it: 10 ml counted `onHand`, 30 ml none. */
-const formInput = (onHand: number, loadedOnHand?: number): FragranceInput => ({
+const mix = (id: number, ml: number, as = manager) =>
+  as.client.admin.warehouse.mix({ params: { id }, body: { ml } });
+const assemble = (vialMl: 5 | 10, quantity: number, as = manager) =>
+  as.client.admin.warehouse.assembleSet({ params: { vialMl }, body: { quantity } });
+/** The spirit on hand, ml. */
+async function setEthanol(ml: number) {
+  await setConsumable(t, (await consumable(t, 'ethanol')).id, ml);
+}
+/** A new fragrance as the owner's form sends it, with its concentrate counted. */
+const formInput = (concentrateMl: number, loadedConcentrateMl?: number): FragranceInput => ({
   name: 'Nuit Blanche',
   originalBrand: 'Maison Test',
   type: 'unisex',
@@ -97,111 +115,149 @@ const formInput = (onHand: number, loadedOnHand?: number): FragranceInput => ({
   notes: { top: [], heart: [], base: [] },
   similarIds: [],
   volumes: [
-    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand, loadedOnHand },
-    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null, onHand: 0, loadedOnHand: 0 },
+    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null },
+    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null },
   ],
+  concentrateMl,
+  loadedConcentrateMl,
 });
-const onHand = (p: WarehouseFragrance, ml: number) => p.volumes.find((v) => v.ml === ml)!.onHand;
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
+const setOnHand = async (vialMl: number) =>
+  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
 
-describe('an oil receipt, then a bottling', () => {
-  it('adds the grams to the oil balance, then takes the oil by the formula and raises on hand', async () => {
+describe('an oil receipt, then a mixing', () => {
+  it('adds the grams to the oil, then takes the oil and spirit of the ml made into concentrate', async () => {
     const id = await fragranceId();
+    await setConcentrateUl(t, id, 0);
     const before = await page(id);
-    expect(before.oil).toMatchObject({ oilGrams: 0, liquidLitres: 0, level: 'zero' });
+    expect(before.stock).toMatchObject({
+      oilGrams: 0,
+      oilMl: 0,
+      oilLevel: 'zero',
+      concentrateMl: 0,
+      level: 'zero',
+    });
 
     const r = await receive(id);
     // 4 000 × 0.91 × 1.03 = 3 749.2 so'm per gram; 100 g = 374 920
     expect(r).toMatchObject({ grams: 100, landedPerGram: 3749, total: 374_920, voided: false });
-    // 100 g ÷ 0.3 ÷ 1.03 = 323.6 ml of perfume
-    expect((await page(id)).oil).toMatchObject({ oilGrams: 100, liquidLitres: 0.324 });
+    // 100 g at 1 g/ml = 100 ml of oil: at or under 300 ml, «Мало масла»
+    expect((await page(id)).stock).toMatchObject({ oilGrams: 100, oilMl: 100, oilLevel: 'low' });
 
-    const res = await bottle(id, [
-      { ml: 10, quantity: 4 },
-      { ml: 30, quantity: 2 },
-      { ml: 50, quantity: 1 },
-    ]);
-    // 4 × 3.09 + 2 × 9.27 + 15.45 = 46.35 g of oil; ethanol 108.15 ml
-    expect(res.status === 201 && res.body).toMatchObject({
-      oilGrams: 46.35,
-      ethanolMl: 108,
-      oilLeftGrams: 53.65,
+    await setEthanol(1000);
+    const res = await mix(id, 200);
+    // 200 ml: 30 % oil = 60 g, 70 % spirit = 140 ml, no filling loss
+    expect(res.status === 201 && res.body).toEqual({
+      oilGrams: 60,
+      ethanolMl: 140,
+      oilLeftGrams: 40,
+      concentrateMl: 200,
     });
     const after = await page(id);
-    expect(after.oil.oilGrams).toBe(53.65);
-    expect([10, 30, 50].map((ml) => onHand(after, ml) - onHand(before, ml))).toEqual([4, 2, 1]);
-    // the 5 ml too (ADR 0042): bottled like any volume, never sold alone
-    expect(after.perBottle).toEqual([
-      { ml: 5, oilGrams: 1.545, ethanolMl: 3.605 },
-      { ml: 10, oilGrams: 3.09, ethanolMl: 7.21 },
-      { ml: 30, oilGrams: 9.27, ethanolMl: 21.63 },
-      { ml: 50, oilGrams: 15.45, ethanolMl: 36.05 },
+    expect(after.stock).toMatchObject({ oilGrams: 40, concentrateMl: 200, availableMl: 200 });
+    expect(after.ethanol).toEqual({ id: (await consumable(t, 'ethanol')).id, onHandMl: 860 });
+    // the form's preview: what a ml takes, and each bottle's fill (5 ml too, ADR 0042)
+    expect(after.perMl).toEqual({ oilGrams: 0.3, ethanolMl: 0.7 });
+    expect(after.fills).toEqual([
+      { ml: 5, fillMl: 5.15 },
+      { ml: 10, fillMl: 10.3 },
+      { ml: 30, fillMl: 30.9 },
+      { ml: 50, fillMl: 51.5 },
+    ]);
+    expect(after.stock.bottles).toEqual([
+      { ml: 10, available: 19 },
+      { ml: 30, available: 6 },
+      { ml: 50, available: 3 },
     ]);
   });
 
-  it('follows the liquid settings at the time of the bottling', async () => {
+  it('follows the liquid settings at the time of the mixing, never the filling loss', async () => {
     const id = await fragranceId();
     await receive(id);
+    await setEthanol(1000);
     await t.db.insert(settings).values([
       { key: 'cost.liquid.oilPercent', value: 25 },
+      { key: 'cost.liquid.ethanolPercent', value: 75 },
       { key: 'cost.liquid.oilDensity', value: 0.95 },
       { key: 'cost.liquid.fillingLossPercent', value: 5 },
     ]);
-    // 10 ml × 1.05 × 25 % × 0.95 g/ml = 2.49375 g → 2.494 g
-    const res = await bottle(id, [{ ml: 10, quantity: 1 }]);
-    expect(res.status === 201 && res.body).toMatchObject({ oilGrams: 2.494, oilLeftGrams: 97.506 });
-  });
-
-  it('refuses a short balance with the shortfall and changes nothing', async () => {
-    const id = await fragranceId();
-    await receive(id, { grams: 10 });
-    const before = await page(id);
-    const res = await bottle(id, [{ ml: 50, quantity: 2 }]);
-    expect(res.status).toBe(409);
-    expect(res.status === 409 && res.body).toEqual({
-      code: 'oil_short',
-      neededGrams: 30.9,
-      balanceGrams: 10,
-      shortGrams: 20.9,
+    // 10 ml × 25 % × 0.95 g/ml = 2.375 g; 10 ml × 75 % = 7.5 ml → 8 ml
+    const res = await mix(id, 10);
+    expect(res.status === 201 && res.body).toMatchObject({
+      oilGrams: 2.375,
+      ethanolMl: 8,
+      oilLeftGrams: 97.625,
     });
-    const after = await page(id);
-    expect(after.oil.oilGrams).toBe(10);
-    expect(after.volumes).toEqual(before.volumes);
-    expect(await audits('warehouse.bottled')).toHaveLength(0);
+    expect((await page(id)).fills.find((f) => f.ml === 10)?.fillMl).toBe(10.5);
   });
 
-  it('lets only one of two concurrent bottlings take oil the balance holds once', async () => {
+  it('refuses short oil or short spirit with the shortfall, and changes nothing', async () => {
     const id = await fragranceId();
+    const start = await concentrateUl(t, id);
+    await receive(id, { grams: 10 });
+    await setEthanol(1000);
+    const oil = await mix(id, 100);
+    expect(oil.status).toBe(409);
+    expect(oil.status === 409 && oil.body).toEqual({
+      code: 'oil_short',
+      neededGrams: 30,
+      balanceGrams: 10,
+      shortGrams: 20,
+    });
+
+    await receive(id, { grams: 100, invoice: 'INV-0002' });
+    await setEthanol(50);
+    const spirit = await mix(id, 100);
+    expect(spirit.status === 409 && spirit.body).toEqual({
+      code: 'ethanol_short',
+      neededMl: 70,
+      balanceMl: 50,
+      shortMl: 20,
+    });
+    // an archived spirit is none at all
+    await t.db.update(consumables).set({ archived: true }).where(eq(consumables.use, 'ethanol'));
+    const none = await mix(id, 1);
+    expect(none.status === 409 && none.body).toMatchObject({ code: 'ethanol_short', balanceMl: 0 });
+    expect((await page(id)).ethanol).toBeNull();
+
+    expect(await concentrateUl(t, id)).toBe(start);
+    expect((await page(id)).stock.oilGrams).toBe(110);
+    expect(await audits('warehouse.mixed')).toHaveLength(0);
+  });
+
+  it('lets only one of two concurrent mixings take oil the balance holds once', async () => {
+    const id = await fragranceId();
+    await setConcentrateUl(t, id, 0);
     await receive(id, { grams: 40 });
-    const before = await page(id);
-    const [a, b] = await Promise.all([
-      bottle(id, [{ ml: 50, quantity: 2 }], owner),
-      bottle(id, [{ ml: 50, quantity: 2 }], manager),
-    ]);
+    await setEthanol(1000);
+    const [a, b] = await Promise.all([mix(id, 100, owner), mix(id, 100, manager)]);
     expect([a.status, b.status].sort()).toEqual([201, 409]);
     const after = await page(id);
-    expect(after.oil.oilGrams).toBe(9.1);
-    expect(onHand(after, 50) - onHand(before, 50)).toBe(2);
+    expect(after.stock).toMatchObject({ oilGrams: 10, concentrateMl: 100 });
+    expect(after.ethanol?.onHandMl).toBe(930);
   });
 
-  it('refuses a volume the fragrance does not have, and an empty bottling', async () => {
+  it('refuses no ml or a fraction past the microlitre, and answers 404 for no such fragrance', async () => {
     const id = await fragranceId();
     await receive(id);
-    const res = await bottle(id, [{ ml: 15, quantity: 1 }]);
-    expect(res.status).toBe(422);
-    expect(res.status === 422 && res.body).toEqual({ code: 'invalid', fields: ['lines.0.ml'] });
-    const raw = await fetch(`${t.baseUrl}/admin/warehouse/fragrances/${id}/bottlings`, {
+    for (const ml of [0, -5, 1.0005]) {
+      const raw = await fetch(`${t.baseUrl}/admin/warehouse/fragrances/${id}/mixings`, {
+        method: 'POST',
+        headers: { cookie: manager.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ ml }),
+      });
+      expect(raw.status, String(ml)).toBe(400);
+    }
+    expect((await page(id)).stock.oilGrams).toBe(100);
+    expect((await mix(9999, 10)).status).toBe(404);
+    expect((await owner.client.admin.warehouse.get({ params: { id: 9999 } })).status).toBe(404);
+    // bottling into volumes is gone: bottles are filled when they ship
+    const old = await fetch(`${t.baseUrl}/admin/warehouse/fragrances/${id}/bottlings`, {
       method: 'POST',
       headers: { cookie: manager.cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ lines: [{ ml: 10, quantity: 0 }] }),
+      body: JSON.stringify({ lines: [{ ml: 10, quantity: 1 }] }),
     });
-    expect(raw.status).toBe(400);
-    expect((await page(id)).oil.oilGrams).toBe(100);
-  });
-
-  it('answers 404 for a fragrance that does not exist', async () => {
-    expect((await bottle(9999, [{ ml: 10, quantity: 1 }])).status).toBe(404);
-    expect((await owner.client.admin.warehouse.get({ params: { id: 9999 } })).status).toBe(404);
+    expect(old.status).toBe(404);
   });
 });
 
@@ -214,7 +270,7 @@ describe('correcting and voiding a receipt', () => {
       body: { ...RECEIPT, grams: 150, pricePerGram: 4100, reason: 'Опечатка в граммах' },
     });
     expect(fixed.status === 200 && fixed.body).toMatchObject({ grams: 150, pricePerGram: 4100 });
-    expect((await page(id)).oil.oilGrams).toBe(150);
+    expect((await page(id)).stock.oilGrams).toBe(150);
 
     const voided = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: r.id },
@@ -224,7 +280,7 @@ describe('correcting and voiding a receipt', () => {
       voided: true,
       voidReason: 'Накладная ошибочная',
     });
-    expect((await page(id)).oil.oilGrams).toBe(0);
+    expect((await page(id)).stock.oilGrams).toBe(0);
 
     // a voided receipt stays voided
     const again = await owner.client.admin.warehouse.voidOilReceipt({
@@ -239,10 +295,11 @@ describe('correcting and voiding a receipt', () => {
     expect(late.status === 409 && late.body).toEqual({ code: 'voided' });
   });
 
-  it('refuses to take back oil that was already bottled', async () => {
+  it('refuses to take back oil that already went into concentrate', async () => {
     const id = await fragranceId();
     const r = await receive(id);
-    await bottle(id, [{ ml: 50, quantity: 2 }]); // 30.9 g: 69.1 g left
+    await setEthanol(1000);
+    expect((await mix(id, 103)).status).toBe(201); // 30.9 g: 69.1 g left
     const voided = await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: r.id },
       body: { reason: 'Накладная ошибочная' },
@@ -263,7 +320,7 @@ describe('correcting and voiding a receipt', () => {
       balanceGrams: 69.1,
       shortGrams: 10.9,
     });
-    expect((await page(id)).oil.oilGrams).toBe(69.1);
+    expect((await page(id)).stock.oilGrams).toBe(69.1);
   });
 
   it('needs a reason', async () => {
@@ -302,7 +359,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
     expect(res.status === 201 && res.body).toEqual({ created: 2 });
 
     const pa = await page(ida);
-    expect(pa.oil).toMatchObject({ oilGrams: 0 });
+    expect(pa.stock).toMatchObject({ oilGrams: 0 });
     expect(pa.oilReceipts).toEqual([
       expect.objectContaining({
         draft: true,
@@ -325,7 +382,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
     // the stock page says a draft waits
     const list = await owner.client.admin.stock.list({ query: { pageSize: 50 } });
     if (list.status !== 200) throw new Error('stock');
-    expect(list.body.oil.find((o) => o.fragranceId === ida)?.drafts).toBe(1);
+    expect(list.body.fragrances.find((o) => o.fragranceId === ida)?.drafts).toBe(1);
     const [audit] = await audits('warehouse.oil_receipt_drafts_created');
     expect(audit).toMatchObject({ actorId: owner.staff.id });
     expect(audit?.payload).toMatchObject({ count: 2, grams: 3500 });
@@ -346,7 +403,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
       invoice: 'INV-0001',
     });
     const p = await page(id);
-    expect(p.oil.oilGrams).toBe(980);
+    expect(p.stock.oilGrams).toBe(980);
     expect(p.history.map((m) => [m.kind, m.oilGrams, m.invoice])).toEqual([
       ['oil_receipt', 980, 'INV-0001'],
     ]);
@@ -365,7 +422,7 @@ describe('draft receipts from the purchase plan (#78)', () => {
     await t.db.update(fragrances).set({ oilPrice: 3950 }).where(eq(fragrances.id, id));
     await drafts([{ fragranceId: id, grams: 1000 }]);
     const draft = (await page(id)).oilReceipts![0]!;
-    expect((await page(id)).oil.value?.oil).toBe(0);
+    expect((await page(id)).stock.value?.oil).toBe(0);
     const fixed = await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: draft.id },
       body: { ...RECEIPT, reason: 'x' },
@@ -404,14 +461,15 @@ describe('draft receipts from the purchase plan (#78)', () => {
 });
 
 describe('the audit', () => {
-  it('names the actor of every receipt, correction, void and bottling', async () => {
+  it('names the actor of every receipt, correction, void and mixing', async () => {
     const id = await fragranceId();
     const r = await receive(id);
     await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 120, reason: 'Довесили' },
     });
-    await bottle(id, [{ ml: 10, quantity: 2 }]);
+    await setEthanol(1000);
+    expect((await mix(id, 20.6)).status).toBe(201);
     await owner.client.admin.warehouse.voidOilReceipt({
       params: { id: (await receive(id, { invoice: 'INV-0002' })).id },
       body: { reason: 'Дубль' },
@@ -427,12 +485,20 @@ describe('the audit', () => {
     const [corrected] = await audits('warehouse.oil_receipt_corrected');
     expect(corrected).toMatchObject({ actorId: owner.staff.id, targetType: 'oil_receipt' });
     expect(corrected?.payload).toMatchObject({ reason: 'Довесили', grams: [100, 120] });
-    const [bottled] = await audits('warehouse.bottled');
-    expect(bottled).toMatchObject({ actorId: manager.staff.id, targetType: 'fragrance' });
-    expect(bottled?.payload).toMatchObject({
-      lines: [{ ml: 10, quantity: 2 }],
+    const [mixed] = await audits('warehouse.mixed');
+    expect(mixed).toMatchObject({
+      actorId: manager.staff.id,
+      targetType: 'fragrance',
+      targetId: String(id),
+    });
+    // 20.6 ml: 6.18 g of oil, 14.42 ml of spirit → 14
+    expect(mixed?.payload).toMatchObject({
+      ml: 20.6,
       oilGrams: 6.18,
       ethanolMl: 14,
+      oilPercent: 30,
+      ethanolPercent: 70,
+      oilDensity: 1,
     });
     const [voided] = await audits('warehouse.oil_receipt_voided');
     expect(voided?.payload).toMatchObject({ reason: 'Дубль', grams: 100, invoice: 'INV-0002' });
@@ -440,7 +506,7 @@ describe('the audit', () => {
 });
 
 describe('who may do what', () => {
-  it('keeps oil receipts and values to the owner; a manager bottles and reads the oil', async () => {
+  it('keeps oil receipts and values to the owner; a manager mixes, counts and reads the stock', async () => {
     const id = await fragranceId();
     const refused = await manager.client.admin.warehouse.receiveOil({
       params: { id },
@@ -450,7 +516,7 @@ describe('who may do what', () => {
     await receive(id);
     const seen = await page(id, manager);
     expect(seen).toMatchObject({ oilReceipts: null, oilReceiptDefaults: null });
-    expect(seen.oil).toMatchObject({ oilGrams: 100, value: null });
+    expect(seen.stock).toMatchObject({ oilGrams: 100, value: null, drafts: 0 });
     // the history says oil came in, but not from whom or on which invoice
     expect(seen.history[0]).toMatchObject({
       kind: 'oil_receipt',
@@ -462,7 +528,16 @@ describe('who may do what', () => {
       invoice: 'INV-0001',
       supplier: 'Test Oils',
     });
-    expect((await bottle(id, [{ ml: 10, quantity: 1 }], manager)).status).toBe(201);
+    await setEthanol(100);
+    expect((await mix(id, 10, manager)).status).toBe(201);
+    expect(
+      (
+        await manager.client.admin.warehouse.countConcentrate({
+          params: { id },
+          body: { ml: 5, reason: 'Пересчёт' },
+        })
+      ).status,
+    ).toBe(200);
     expect((await t.client.admin.warehouse.get({ params: { id } })).status).toBe(401);
   });
 
@@ -472,7 +547,7 @@ describe('who may do what', () => {
       .update(fragrances)
       .set({ oilPrice: 3950, oilSupplier: 'Test Oils' })
       .where(eq(fragrances.id, id));
-    await t.db.update(volumes).set({ onHand: 2 }).where(eq(volumes.fragranceId, id));
+    await setConcentrateUl(t, id, 100_000);
     await receive(id, { grams: 1000 });
     await receive(id, { grams: 500, pricePerGram: 2150, discountPercent: 10, importPercent: 2.5 });
     const p = await page(id);
@@ -484,34 +559,45 @@ describe('who may do what', () => {
       importPercent: 3,
     });
     // oil: 1 000 g at 3 749.2 + 500 g at 1 983.375 = 4 740 887.5 for 1 500 g, all of it left;
-    // bottles at oil 3 950 so'm/g, the 5 ml's (9 956, no box or card) too:
-    // 2 × (9 956 + 22 462 + 52 086 + 78 651) = 326 310
-    expect(p.oil.value).toEqual({ oil: 4_740_888, bottles: 326_310, total: 5_067_198 });
+    // concentrate at oil 3 950 so'm/g: 100 ml × (3 702.335 × 30 % + 105) = 121 570
+    expect(p.stock.value).toEqual({ oil: 4_740_888, concentrate: 121_570, total: 4_862_458 });
   });
 
-  it('values the bottles at nothing known without an oil price', async () => {
+  it('values the concentrate at nothing known without an oil price, and none at 0', async () => {
     const id = await fragranceId();
     await t.db.update(fragrances).set({ oilPrice: null }).where(eq(fragrances.id, id));
     await receive(id);
-    expect((await page(id)).oil.value).toEqual({ oil: 374_920, bottles: null, total: null });
+    expect((await page(id)).stock.value).toEqual({ oil: 374_920, concentrate: null, total: null });
+    await setConcentrateUl(t, id, 0);
+    expect((await page(id)).stock.value).toEqual({
+      oil: 374_920,
+      concentrate: 0,
+      total: 374_920,
+    });
   });
 });
 
 describe('the history', () => {
-  it('lists receipts, corrections, bottlings, counts, sales at handover and returns, newest first', async () => {
+  it('lists receipts, corrections, mixings, counts, bottles filled at handover and returns, newest first', async () => {
     await importBtsPoints(t.db, snapshot);
+    await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
     const [slug] = await slugsOf(t, 1);
     const id = await fragranceId(slug);
+    await setConcentrateUl(t, id, 0);
+    const flacon = await consumable(t, 'flacon', 10);
+    const box = await consumable(t, 'box', 10);
+    await setConsumable(t, flacon.id, 10);
+    await setConsumable(t, box.id, 10);
+    await setEthanol(1000);
     const r = await receive(id);
     await owner.client.admin.warehouse.correctOilReceipt({
       params: { id: r.id },
       body: { ...RECEIPT, grams: 110, reason: 'Довесили' },
     });
-    await bottle(id, [{ ml: 10, quantity: 3 }]);
-    const ten = (await page(id)).volumes.find((v) => v.ml === 10)!;
-    const counted = await manager.client.admin.onHand.set({
-      params: { id: ten.volumeId },
-      body: { onHand: ten.onHand - 1, expected: ten.onHand, reason: 'Разбился флакон' },
+    expect((await mix(id, 30.9)).status).toBe(201);
+    const counted = await manager.client.admin.warehouse.countConcentrate({
+      params: { id },
+      body: { ml: 20.6, expectedMl: 30.9, reason: 'Пролили' },
     });
     expect(counted.status).toBe(200);
 
@@ -524,105 +610,438 @@ describe('the history', () => {
     const order = await placeOrder(t, client);
     await pay(t, order.number);
     await fulfilTo(t, order.number, 'handed_to_bts');
-    await cancelByStaff(t, order.number);
+    await cancelByStaff(t, order.number, 'not_collected_at_bts');
 
     const { history } = await page(id);
-    expect(history.map((m) => [m.kind, m.oilGrams, m.bottles])).toEqual([
-      ['returned', 0, [{ ml: 10, change: 2 }]],
-      ['sale', 0, [{ ml: 10, change: -2 }]],
-      ['correction', 0, [{ ml: 10, change: -1 }]],
-      ['bottling', -9.27, [{ ml: 10, change: 3 }]],
-      ['oil_receipt_corrected', 10, []],
-      ['oil_receipt', 100, []],
+    expect(history.map((m) => [m.kind, m.oilGrams, m.concentrateMl, m.bottles])).toEqual([
+      ['returned', 0, 20.6, [{ ml: 10, change: 2 }]],
+      ['sale', 0, -20.6, [{ ml: 10, change: -2 }]],
+      ['correction', 0, -10.3, []],
+      ['mixing', -9.27, 30.9, []],
+      ['oil_receipt_corrected', 10, 0, []],
+      ['oil_receipt', 100, 0, []],
     ]);
-    expect(history[0]).toMatchObject({ orderNumber: order.number, actorName: manager.staff.name });
+    expect(history[0]).toMatchObject({
+      orderNumber: order.number,
+      actorName: manager.staff.name,
+      consumables: [
+        expect.objectContaining({ consumableId: flacon.id, change: 2 }),
+        expect.objectContaining({ consumableId: box.id, change: 2 }),
+      ],
+    });
+    expect(history[1]!.consumables.map((c) => c.change)).toEqual([-2, -2]);
     expect(history[2]).toMatchObject({
-      reason: 'Разбился флакон',
+      reason: 'Пролили',
       source: 'stock',
       actorName: manager.staff.name,
     });
+    expect(history[3]!.consumables).toEqual([
+      expect.objectContaining({ nameRu: 'Спирт', unit: 'ml', change: -22 }),
+    ]);
     expect(history[4]).toMatchObject({
       reason: 'Довесили',
       invoice: 'INV-0001',
       supplier: 'Test Oils',
       actorName: owner.staff.name,
     });
-    // the moves add up to the balance
+    // the moves add up to the balances
     const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, id));
     expect(moves.reduce((a, m) => a + m.oilMg, 0)).toBe(100_730);
-    expect((await page(id)).oil.oilGrams).toBe(100.73);
+    expect((await page(id)).stock.oilGrams).toBe(100.73);
+    expect(moves.reduce((a, m) => a + m.concentrateUl, 0)).toBe(await concentrateUl(t, id));
   });
 
   it("records the fragrance form's counts as counts from the form", async () => {
-    const created = await owner.client.admin.catalog.fragrances.create({ body: formInput(5) });
+    const created = await owner.client.admin.catalog.fragrances.create({ body: formInput(51.5) });
     if (created.status !== 201) throw new Error(`create ${created.status}`);
     const f = created.body;
     const updated = await owner.client.admin.catalog.fragrances.update({
       params: { id: f.id },
-      body: formInput(8, 5),
+      body: formInput(82.4, 51.5),
     });
     expect(updated.status).toBe(200);
     const { history } = await page(f.id);
-    expect(history.map((m) => [m.kind, m.source, m.bottles, m.actorName])).toEqual([
-      ['correction', 'form', [{ ml: 10, change: 3 }], owner.staff.name],
-      ['correction', 'form', [{ ml: 10, change: 5 }], owner.staff.name],
+    expect(history.map((m) => [m.kind, m.source, m.concentrateMl, m.actorName])).toEqual([
+      ['correction', 'form', 30.9, owner.staff.name],
+      ['correction', 'form', 51.5, owner.staff.name],
     ]);
   });
 });
 
 describe('the stock page', () => {
-  it("shows each fragrance's oil, warns from the low-oil setting, and filters by it", async () => {
+  it("shows each fragrance's oil in ml, warns from the low-oil setting, and filters by it", async () => {
     const [a, b] = await slugsOf(t, 2);
     const low = await fragranceId(a);
     const ok = await fragranceId(b);
-    await receive(low, { grams: 200 }); // 0.647 l
-    await receive(ok, { grams: 400 }); // 1.294 l
-    const res = await manager.client.admin.stock.list({ query: { q: '' } });
+    await receive(low, { grams: 200 });
+    await receive(ok, { grams: 400 });
+    const res = await manager.client.admin.stock.list({ query: { pageSize: 50 } });
     if (res.status !== 200) throw new Error('stock');
-    expect(res.body.lowOilLitres).toBe(1);
-    const oilOf = (fid: number) => res.body.oil.find((o) => o.fragranceId === fid);
-    expect(oilOf(low)).toMatchObject({
-      oilGrams: 200,
-      liquidLitres: 0.647,
-      level: 'low',
-      value: null,
-    });
-    expect(oilOf(ok)).toMatchObject({ oilGrams: 400, liquidLitres: 1.294, level: 'ok' });
+    expect(res.body.lowOilMl).toBe(300);
+    const oilOf = (fid: number) => res.body.fragrances.find((o) => o.fragranceId === fid);
+    expect(oilOf(low)).toMatchObject({ oilGrams: 200, oilMl: 200, oilLevel: 'low', value: null });
+    expect(oilOf(ok)).toMatchObject({ oilGrams: 400, oilMl: 400, oilLevel: 'ok' });
 
     const filtered = await manager.client.admin.stock.list({
       query: { filter: 'oilLow', pageSize: 50 },
     });
     if (filtered.status !== 200) throw new Error('stock');
-    const ids = new Set(filtered.body.rows.map((r) => r.fragranceId));
+    const ids = new Set(filtered.body.fragrances.map((r) => r.fragranceId));
     expect(ids.has(low)).toBe(true);
     expect(ids.has(ok)).toBe(false);
-    expect(ids.has(null)).toBe(false); // the Discovery set has no oil
+    expect(filtered.body.sets).toEqual([]); // the Discovery sets have no oil
   });
 
-  it('asks a reason for an on-hand edit', async () => {
+  it('asks a reason for a concentrate count', async () => {
     const id = await fragranceId();
-    const ten = (await page(id)).volumes.find((v) => v.ml === 10)!;
-    const res = await fetch(`${t.baseUrl}/admin/volumes/${ten.volumeId}/on-hand`, {
-      method: 'PATCH',
+    const res = await fetch(`${t.baseUrl}/admin/warehouse/fragrances/${id}/concentrate`, {
+      method: 'PUT',
       headers: { cookie: manager.cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ onHand: 3 }),
+      body: JSON.stringify({ ml: 3 }),
     });
     expect(res.status).toBe(400);
-    const done = await manager.client.admin.onHand.set({
-      params: { id: ten.volumeId },
-      body: { onHand: 3, reason: 'Пересчёт' },
+    const done = await manager.client.admin.warehouse.countConcentrate({
+      params: { id },
+      body: { ml: 3, reason: 'Пересчёт' },
     });
     expect(done.status).toBe(200);
-    const [row] = await audits('catalog.on_hand_changed');
-    expect(row?.payload).toMatchObject({ reason: 'Пересчёт' });
+    const [row] = await audits('warehouse.concentrate_corrected');
+    expect(row?.payload).toMatchObject({ reason: 'Пересчёт', concentrateMl: [1000, 3] });
+  });
+});
+
+describe('set assembly (ADR 0043)', () => {
+  it("packs boxes from the five fragrances' concentrate, a flacon per vial, a move per fragrance", async () => {
+    const five = await readComposition(t.db, 10);
+    expect(five).toHaveLength(5);
+    const flacon = await consumable(t, 'flacon', 10);
+    await setConsumable(t, flacon.id, 20);
+    const before = await setOnHand(10);
+    const res = await assemble(10, 2);
+    // two vials of 10 ml from each: 2 × 10.3 = 20.6 ml; ten flacons in all
+    expect(res.status === 201 && res.body).toEqual({
+      concentrateMl: 20.6,
+      flacons: 10,
+      onHand: before + 2,
+    });
+    for (const f of five) expect(await concentrateUl(t, f.id)).toBe(1_000_000 - 20_600);
+    expect((await consumable(t, 'flacon', 10)).onHand).toBe(10);
+    const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.kind, 'set_assembly'));
+    expect(moves.map((m) => m.fragranceId).sort()).toEqual(five.map((f) => f.id).sort());
+    expect(moves[0]).toMatchObject({
+      concentrateUl: -20_600,
+      bottles: { 10: -2 },
+      consumables: { [flacon.id]: -2 },
+      details: { set: { vialMl: 10, quantity: 2 } },
+      actorId: manager.staff.id,
+    });
+    expect((await page(five[0]!.id)).history[0]).toMatchObject({
+      kind: 'set_assembly',
+      set: { vialMl: 10, quantity: 2 },
+    });
+    const [audit] = await audits('warehouse.set_assembled');
+    expect(audit).toMatchObject({ actorId: manager.staff.id, targetId: 'discovery' });
+    expect(audit?.payload).toMatchObject({
+      vialMl: 10,
+      quantity: 2,
+      onHand: [before, before + 2],
+      concentrateMl: 20.6,
+      flacons: 10,
+    });
+  });
+
+  it('refuses when a fragrance is short of free concentrate, naming the first in the set; the reserve stays', async () => {
+    await importBtsPoints(t.db, snapshot);
+    await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
+    const five = await readComposition(t.db, 10);
+    // the third holds 15 ml
+    await setConcentrateUl(t, five[2]!.id, 15_000);
+    const before = await setOnHand(10);
+    const res = await assemble(10, 2);
+    expect(res.status).toBe(409);
+    expect(res.status === 409 && res.body).toEqual({
+      code: 'concentrate_short',
+      fragrance: five[2]!.name,
+      neededMl: 20.6,
+      balanceMl: 15,
+      shortMl: 5.6,
+    });
+    expect(await setOnHand(10)).toBe(before);
+    expect(await concentrateUl(t, five[0]!.id)).toBe(1_000_000);
+    expect(await audits('warehouse.set_assembled')).toHaveLength(0);
+
+    // an order holding a 10 ml of the first leaves 20.6 of its 30.9 ml free: two boxes, not three
+    await setConcentrateUl(t, five[2]!.id, 1_000_000);
+    await setConcentrateUl(t, five[0]!.id, 30_900);
+    const client = await shopper(
+      t,
+      { id: 71, first_name: 'Ali', language_code: 'ru' },
+      '998901234567',
+    );
+    await client.cart.addLine({ body: { slug: five[0]!.slug, ml: 10, qty: 1 } });
+    await placeOrder(t, client);
+    const three = await assemble(10, 3, owner);
+    expect(three.status === 409 && three.body).toMatchObject({
+      code: 'concentrate_short',
+      fragrance: five[0]!.name,
+      balanceMl: 20.6,
+    });
+    expect((await assemble(10, 2, owner)).status).toBe(201);
+  });
+
+  it('never stops for short flacons: the count stops at zero and asks for a recount', async () => {
+    const flacon = await consumable(t, 'flacon', 5);
+    await setConsumable(t, flacon.id, 3);
+    const res = await assemble(5, 1);
+    expect(res.status === 201 && res.body).toMatchObject({ concentrateMl: 5.15, flacons: 3 });
+    const after = await consumable(t, 'flacon', 5);
+    expect([after.onHand, after.needsRecount]).toEqual([0, true]);
+    const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.kind, 'set_assembly'));
+    const short = moves.filter((m) => (m.details as { short?: unknown }).short);
+    expect(short).toHaveLength(2);
+    expect(short[0]!.details).toMatchObject({ short: { consumables: { [flacon.id]: 1 } } });
+  });
+
+  it('is refused while the set is not five (422)', async () => {
+    await t.db
+      .delete(discoverySetItems)
+      .where(and(eq(discoverySetItems.vialMl, 5), eq(discoverySetItems.position, 1)));
+    const res = await assemble(5, 1);
+    expect(res.status === 422 && res.body).toMatchObject({ code: 'invalid' });
+    const raw = await fetch(`${t.baseUrl}/admin/warehouse/sets/10/assemblies`, {
+      method: 'POST',
+      headers: { cookie: manager.cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 0 }),
+    });
+    expect(raw.status).toBe(400);
+  });
+});
+
+describe('consumables (ADR 0043)', () => {
+  const items = async (as = manager) => {
+    const res = await as.client.admin.consumables.list();
+    if (res.status !== 200) throw new Error(`consumables ${res.status}`);
+    return res.body.items;
+  };
+
+  it('lists the seeded flacons and boxes by ml, then the spirit', async () => {
+    const list = await items();
+    expect(list.map((i) => [i.use, i.ml, i.unit, i.nameRu, i.nameUz])).toEqual([
+      ['flacon', 5, 'pcs', 'Флакон 5 мл', 'Flakon 5 ml'],
+      ['flacon', 10, 'pcs', 'Флакон 10 мл', 'Flakon 10 ml'],
+      ['flacon', 30, 'pcs', 'Флакон 30 мл', 'Flakon 30 ml'],
+      ['flacon', 50, 'pcs', 'Флакон 50 мл', 'Flakon 50 ml'],
+      ['box', 10, 'pcs', 'Коробка 10 мл', 'Quti 10 ml'],
+      ['box', 30, 'pcs', 'Коробка 30 мл', 'Quti 30 ml'],
+      ['box', 50, 'pcs', 'Коробка 50 мл', 'Quti 50 ml'],
+      ['ethanol', null, 'ml', 'Спирт', 'Spirt'],
+    ]);
+    // the seed's placeholder counts, flagged as ours (ADR 0043)
+    expect(list.every((i) => i.onHand > 0 && i.isPlaceholder && !i.needsRecount)).toBe(true);
+  });
+
+  it('adds, renames and archives an item, all audited; a use and ml is one active item', async () => {
+    const tape = await owner.client.admin.consumables.create({
+      body: {
+        nameRu: 'Лента',
+        nameUz: 'Lenta',
+        unit: 'pcs',
+        use: 'other',
+        ml: null,
+        lowThreshold: 5,
+      },
+    });
+    expect(tape.status === 201 && tape.body).toMatchObject({
+      nameRu: 'Лента',
+      onHand: 0,
+      lowThreshold: 5,
+      level: 'zero',
+      archived: false,
+    });
+    const flacon = {
+      nameRu: 'Флакон 10 мл (новый)',
+      nameUz: 'Flakon 10 ml',
+      unit: 'pcs',
+      use: 'flacon',
+      ml: 10,
+      lowThreshold: 10,
+    } as const;
+    const twice = await manager.client.admin.consumables.create({ body: flacon });
+    expect(twice.status === 409 && twice.body).toEqual({ code: 'link_taken', fields: ['ml'] });
+
+    const old = await consumable(t, 'flacon', 10);
+    const archived = await manager.client.admin.consumables.update({
+      params: { id: old.id },
+      body: { nameRu: old.nameRu, nameUz: old.nameUz, lowThreshold: 0, archived: true },
+    });
+    expect(archived.status === 200 && archived.body.archived).toBe(true);
+    const fresh = await manager.client.admin.consumables.create({ body: flacon });
+    expect(fresh.status).toBe(201);
+    // the archived one can't come back while the new one is active
+    const back = await manager.client.admin.consumables.update({
+      params: { id: old.id },
+      body: { nameRu: old.nameRu, nameUz: old.nameUz, lowThreshold: 0, archived: false },
+    });
+    expect(back.status === 409 && back.body.code).toBe('link_taken');
+    // archived items list last
+    expect((await items()).at(-1)).toMatchObject({ id: old.id, archived: true });
+
+    expect((await audits('consumable.created')).map((a) => a.actorId)).toEqual([
+      owner.staff.id,
+      manager.staff.id,
+    ]);
+    const [updated] = await audits('consumable.updated');
+    // both names, so the audit reads in the panel's language (CLAUDE.md: bilingual everything)
+    expect(updated?.payload).toMatchObject({
+      nameRu: expect.any(String),
+      nameUz: expect.any(String),
+      changes: { archived: [false, true], lowThreshold: [20, 0] },
+    });
+
+    // the link must fit the use (the schema)
+    for (const body of [
+      { ...flacon, ml: null },
+      { ...flacon, ml: 15 },
+      { ...flacon, use: 'box', ml: 5 },
+      {
+        nameRu: 'Спирт 2',
+        nameUz: 'Spirt 2',
+        unit: 'pcs',
+        use: 'ethanol',
+        ml: null,
+        lowThreshold: 0,
+      },
+      { nameRu: 'X', nameUz: 'X', unit: 'pcs', use: 'other', ml: 10, lowThreshold: 0 },
+    ]) {
+      const res = await fetch(`${t.baseUrl}/admin/consumables`, {
+        method: 'POST',
+        headers: { cookie: owner.cookie, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
+  it('receives and counts with a reason; a stale count is 409; the history keeps notes and reasons', async () => {
+    const box = await consumable(t, 'box', 30);
+    // from a count of 0, not the seed's placeholder
+    await setConsumable(t, box.id, 0);
+    const got = await manager.client.admin.consumables.receive({
+      params: { id: box.id },
+      body: { quantity: 100, note: 'Поставщик А' },
+    });
+    expect(got.status === 201 && got.body).toMatchObject({ onHand: 100, level: 'ok' });
+    const counted = await manager.client.admin.consumables.count({
+      params: { id: box.id },
+      body: { onHand: 20, expected: 100, reason: 'Пересчёт' },
+    });
+    // at the threshold (20): low
+    expect(counted.status === 200 && counted.body).toMatchObject({
+      onHand: 20,
+      level: 'low',
+      isPlaceholder: false,
+    });
+    const stale = await owner.client.admin.consumables.count({
+      params: { id: box.id },
+      body: { onHand: 50, expected: 100, reason: 'Пересчёт' },
+    });
+    expect(stale.status === 409 && stale.body).toEqual({ code: 'changed', current: 20 });
+
+    const history = await owner.client.admin.consumables.history({ params: { id: box.id } });
+    if (history.status !== 200) throw new Error('history');
+    expect(history.body.item).toMatchObject({ id: box.id, onHand: 20 });
+    expect(
+      history.body.moves.map((m) => [
+        m.kind,
+        m.fragranceId,
+        m.consumables[0]?.change,
+        m.reason,
+        m.note,
+      ]),
+    ).toEqual([
+      ['consumable_corrected', null, -80, 'Пересчёт', null],
+      ['consumable_received', null, 100, null, 'Поставщик А'],
+    ]);
+    const [received] = await audits('consumable.received');
+    expect(received).toMatchObject({ actorId: manager.staff.id, targetType: 'consumable' });
+    expect(received?.payload).toMatchObject({
+      nameRu: 'Коробка 30 мл',
+      nameUz: 'Quti 30 ml',
+      quantity: 100,
+      onHand: [0, 100],
+      note: 'Поставщик А',
+    });
+    const [fixed] = await audits('consumable.corrected');
+    expect(fixed?.payload).toMatchObject({
+      nameRu: 'Коробка 30 мл',
+      nameUz: 'Quti 30 ml',
+      onHand: [100, 20],
+      reason: 'Пересчёт',
+    });
+  });
+
+  it('a count that changes nothing clears «Пересчитайте» and moves nothing', async () => {
+    const flacon = await consumable(t, 'flacon', 50);
+    await t.db
+      .update(consumables)
+      .set({ needsRecount: true, onHand: 0 })
+      .where(eq(consumables.id, flacon.id));
+    const res = await manager.client.admin.consumables.count({
+      params: { id: flacon.id },
+      body: { onHand: 0, reason: 'Пересчитали, ноль' },
+    });
+    expect(res.status === 200 && res.body).toMatchObject({ onHand: 0, needsRecount: false });
+    expect(await t.db.select().from(stockMoves)).toEqual([]);
+    expect(await audits('consumable.corrected')).toHaveLength(1);
+  });
+
+  it('needs a session, a reason and a known item', async () => {
+    expect((await t.client.admin.consumables.list()).status).toBe(401);
+    const box = await consumable(t, 'box', 10);
+    const noReason = await fetch(`${t.baseUrl}/admin/consumables/${box.id}/counts`, {
+      method: 'POST',
+      headers: { cookie: manager.cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ onHand: 3, reason: ' ' }),
+    });
+    expect(noReason.status).toBe(400);
+    const zero = await fetch(`${t.baseUrl}/admin/consumables/${box.id}/receipts`, {
+      method: 'POST',
+      headers: { cookie: manager.cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ quantity: 0 }),
+    });
+    expect(zero.status).toBe(400);
+    const missing = { params: { id: 9999 } };
+    expect(
+      (await manager.client.admin.consumables.receive({ ...missing, body: { quantity: 1 } }))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await manager.client.admin.consumables.count({
+          ...missing,
+          body: { onHand: 1, reason: 'x' },
+        })
+      ).status,
+    ).toBe(404);
+    expect((await manager.client.admin.consumables.history(missing)).status).toBe(404);
+    expect(
+      (
+        await manager.client.admin.consumables.update({
+          ...missing,
+          body: { nameRu: 'x', nameUz: 'x', lowThreshold: 0, archived: false },
+        })
+      ).status,
+    ).toBe(404);
   });
 });
 
 describe('the Excel export', () => {
-  it('has a row per fragrance with its oil and bottles, values for the owner, and the history', async () => {
+  it('has the stock, the consumables and the whole history; values for the owner only', async () => {
     const id = await fragranceId();
+    await setConcentrateUl(t, id, 0);
     await receive(id);
-    await bottle(id, [{ ml: 30, quantity: 1 }]);
+    await setEthanol(1000);
+    expect((await mix(id, 30.9)).status).toBe(201);
     const name = (await page(id)).name;
 
     const res = await fetch(`${t.baseUrl}/admin/warehouse/export?lang=ru`, {
@@ -631,26 +1050,45 @@ describe('the Excel export', () => {
     expect(res.status).toBe(200);
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(await res.arrayBuffer());
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Склад', 'Расходники', 'История']);
     const stock = wb.worksheets[0]!;
-    const header = (stock.getRow(1).values as unknown[]).slice(1);
-    expect(header).toEqual([
+    expect((stock.getRow(1).values as unknown[]).slice(1)).toEqual([
       'Аромат',
       'Масло, г',
-      'Жидкость, л',
-      '5 мл, шт.',
-      '10 мл, шт.',
-      '30 мл, шт.',
-      '50 мл, шт.',
+      'Масло, мл',
+      'Концентрат, мл',
+      'В резерве, мл',
+      'Свободно, мл',
       'Масло по себестоимости',
-      'Флаконы по себестоимости',
+      'Концентрат по себестоимости',
       'Всего',
     ]);
     const row = stock.getSheetValues().find((v) => Array.isArray(v) && v[1] === name) as
       unknown[] | undefined;
-    expect(row?.slice(2, 4)).toEqual([90.73, 0.294]);
+    // 100 − 9.27 g of oil; 30.9 ml of concentrate, none held
+    expect(row?.slice(2, 7)).toEqual([90.73, 90.73, 30.9, 0, 30.9]);
 
-    const history = wb.worksheets[1]!;
-    expect(history.rowCount).toBe(3); // header, receipt, bottling
+    const items = wb.worksheets[1]!;
+    expect((items.getRow(1).values as unknown[]).slice(1)).toEqual([
+      'Расходник',
+      'Ед.',
+      'На складе',
+      'Мало при',
+      'Состояние',
+    ]);
+    expect(items.rowCount).toBe(9);
+    const spirit = items.getSheetValues().find((v) => Array.isArray(v) && v[1] === 'Спирт') as
+      unknown[] | undefined;
+    // 30.9 ml takes 21.63 ml of spirit → 22
+    expect(spirit?.slice(1, 5)).toEqual(['Спирт', 'мл', 978, 1000]);
+
+    const history = wb.worksheets[2]!;
+    expect(history.rowCount).toBe(3); // header, the mixing, the receipt
+    const headers = (history.getRow(1).values as unknown[]).slice(1);
+    const mixing = (history.getRow(2).values as unknown[]).slice(1);
+    expect(mixing[headers.indexOf('Операция')]).toBe('Приготовлен концентрат');
+    expect(mixing[headers.indexOf('Концентрат, мл')]).toBe(30.9);
+    expect(mixing[headers.indexOf('Расходники')]).toBe('Спирт -22');
 
     // a manager's file has no values
     const theirs = await fetch(`${t.baseUrl}/admin/warehouse/export?lang=uz`, {
@@ -659,9 +1097,9 @@ describe('the Excel export', () => {
     expect(theirs.status).toBe(200);
     const mb = new ExcelJS.Workbook();
     await mb.xlsx.load(await theirs.arrayBuffer());
-    expect((mb.worksheets[0]!.getRow(1).values as unknown[]).slice(1)).toHaveLength(7);
+    expect((mb.worksheets[0]!.getRow(1).values as unknown[]).slice(1)).toHaveLength(6);
     // nor the invoice and supplier in the history sheet: the document cell of the oil receipt is empty
-    const theirHistory = mb.worksheets[1]!;
+    const theirHistory = mb.worksheets[2]!;
     const documentColumn = (theirHistory.getRow(1).values as unknown[]).indexOf('Hujjat');
     expect(documentColumn).toBeGreaterThan(0);
     const cells = [2, 3].map((n) => theirHistory.getRow(n).getCell(documentColumn).value ?? '');

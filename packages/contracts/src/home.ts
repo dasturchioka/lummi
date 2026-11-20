@@ -26,7 +26,10 @@ export const HOME_QUEUES = [
   'credits',
   /** Paid orders that ended (cancelled, returned) with money still owed back. */
   'refunds',
-  /** Volumes and the Discovery set with nothing available, or at most `stock.lowAvailableThreshold`. */
+  /**
+   * Fragrances whose free concentrate is gone or at most `stock.lowConcentrateMl`, and the Discovery
+   * sets with no boxes or at most `stock.lowAvailableThreshold` (ADR 0043).
+   */
   'stock',
   /**
    * Reviews waiting for a decision: finished by the customer, never published or hidden, within
@@ -56,15 +59,32 @@ const queueSchema = z.object({
 });
 export type HomeQueueHead = z.infer<typeof queueSchema>;
 
-/** A stock row that needs a delivery: the Discovery set (no name, no ml) or a fragrance's Volume. */
-/** A volume, a Discovery set (its `ml` is its vial size), or the gift sample's 5 ml stock (#79). */
-export const homeStockItemSchema = z.object({
-  kind: z.enum(['volume', 'discovery', 'sample']),
-  name: z.string().nullable(),
-  ml: z.number().int().nullable(),
-  available: count,
-  level: z.enum(['zero', 'low']),
-});
+const stockLevel = z.enum(['zero', 'low']);
+/**
+ * A stock row that needs a delivery, each kind in its own unit (ADR 0043): a fragrance's free ready
+ * concentrate in ml, a Discovery set's boxes, or the gift sample's 5 ml samples (#79; `name` null:
+ * every visible fragrance's).
+ */
+export const homeStockItemSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('fragrance'),
+    name: z.string(),
+    availableMl: z.number().nonnegative(),
+    level: stockLevel,
+  }),
+  z.object({
+    kind: z.literal('discovery'),
+    vialMl: z.number().int(),
+    available: count,
+    level: stockLevel,
+  }),
+  z.object({
+    kind: z.literal('sample'),
+    name: z.string().nullable(),
+    available: count,
+    level: stockLevel,
+  }),
+]);
 export type HomeStockItem = z.infer<typeof homeStockItemSchema>;
 
 export const homeQueuesSchema = z.object({

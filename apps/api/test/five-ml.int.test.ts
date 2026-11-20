@@ -4,14 +4,13 @@ import type { OrderStatus } from '@lummi/contracts';
 import {
   and,
   auditLog,
-  bottlings,
   cartLines,
   customers,
   discoverySet,
   discoverySetItems,
   eq,
   fragrances,
-  ne,
+  inArray,
   orderEvents,
   orderLines,
   orders,
@@ -27,6 +26,13 @@ import { OrderStatusService, type TransitionActor } from '../src/order-status/or
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
 import { payWithCredit } from './harness/payments';
+import {
+  concentrateUl,
+  consumable,
+  FILL_UL,
+  setConcentrateUl,
+  setConsumable,
+} from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -51,10 +57,14 @@ beforeEach(async () => {
   await t.seedCatalog();
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
-  // no samples unless a test puts 5 ml bottles on the shelf
-  await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.ml, 5));
+  // no samples unless a test pours concentrate (ADR 0043): every 5 ml is a fill of it
+  await t.db.update(fragrances).set({ concentrateUl: 0 });
   await t.db.update(discoverySet).set({ onHand: 0 });
 });
+
+/** A 5 ml sample's fill and a 30 ml bottle's, µl (ADR 0043). */
+const SAMPLE = FILL_UL[5];
+const THIRTY = FILL_UL[30];
 
 const ali: TestUser = { id: 71, first_name: 'Ali', language_code: 'ru' };
 const vali: TestUser = { id: 72, first_name: 'Vali', language_code: 'uz' };
@@ -87,17 +97,19 @@ const setSetOnHand = (vialMl: 5 | 10, onHand: number) =>
 
 async function fiveMl(slug: string) {
   const [v] = await t.db
-    .select({ id: volumes.id, onHand: volumes.onHand, fragranceId: volumes.fragranceId })
+    .select({ id: volumes.id, fragranceId: volumes.fragranceId })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(and(eq(fragrances.slug, slug), eq(volumes.ml, 5)));
   return v!;
 }
-const setFiveMl = async (slug: string, onHand: number) =>
-  t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(eq(volumes.id, (await fiveMl(slug)).id));
+/**
+ * A fragrance's concentrate: `samples` 5 ml fills, plus `thirties` 30 ml fills for the orders the
+ * test places (ADR 0043). The sample is the most-stocked visible fragrance's (ties by name), judged
+ * before the order's own lines and given only if a fill is still free once they hold theirs.
+ */
+const pour = (slug: string, samples: number, thirties = 0) =>
+  setConcentrateUl(t, slug, samples * SAMPLE + thirties * THIRTY);
 
 /** Checks out whatever the cart holds (or a buy-now item) and returns the order. */
 async function order(client: Client, item?: string) {
@@ -178,7 +190,7 @@ describe('the 5 ml bottle is stocked, never sold alone', () => {
   it('every fragrance has one: price 0, off the card, the cart and «Купить сейчас»', async () => {
     const [slug] = await slugsOf(t, 1);
     expect(await fiveMl(slug!)).toBeDefined();
-    await setFiveMl(slug!, 10);
+    await pour(slug!, 10);
     const client = await shopper(t, ali, '998901234567');
 
     const card = await client.catalog.fragrance({ params: { slug: slug! } });
@@ -211,18 +223,14 @@ describe('the 5 ml bottle is stocked, never sold alone', () => {
     expect(got.body.volumes.map((v) => v.ml)).toEqual([10, 30, 50]);
   });
 
-  it('a bottling fills 5 ml bottles from the oil like any volume', async () => {
+  it('a 5 ml is filled from the concentrate like any volume: 5 ml × 1.03 (ADR 0043)', async () => {
     const [slug] = await slugsOf(t, 1);
     const v = await fiveMl(slug!);
-    await t.db.update(fragrances).set({ oilMg: 100_000 }).where(eq(fragrances.id, v.fragranceId));
-    const res = await owner.client.admin.warehouse.bottle({
-      params: { id: v.fragranceId },
-      body: { lines: [{ ml: 5, quantity: 10 }] },
+    const page = await owner.client.admin.warehouse.get({ params: { id: v.fragranceId } });
+    expect(page.status === 200 && page.body.fills.find((f) => f.ml === 5)).toEqual({
+      ml: 5,
+      fillMl: 5.15,
     });
-    expect(res.status).toBe(201);
-    // 5 ml × 1.03 × 30 % × density 1 = 1.545 g a bottle
-    expect(res.status === 201 && res.body.oilGrams).toBe(15.45);
-    expect((await fiveMl(slug!)).onHand).toBe(10);
   });
 });
 
@@ -295,7 +303,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
       await t.db.select().from(orderEvents).where(eq(orderEvents.orderId, id))
     ).filter((e) => e.action === 'hand_to_bts');
     expect(handed!.payload).toMatchObject({
-      onHand: [{ shelf: 'discovery_set', id: 5, from: 4, to: 3 }],
+      stock: { sets: [{ id: 5, from: 4, to: 3 }] },
     });
 
     await walkToDelivered(id);
@@ -309,6 +317,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
     expect(rights[0]!.fragrances.map((f) => f.fragranceId)).toEqual(five.map((f) => f.id));
 
     // the right discounts a full-size bottle of one of its five
+    await pour(five[0]!.slug, 0, 1);
     const cart = await add(client, five[0]!.slug, 30);
     expect(cart.quote.discount).toMatchObject({ type: 'upgrade_right', source: 'set' });
   });
@@ -383,13 +392,15 @@ describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => 
 
   it('a gift sample is a line of the return like any: back on hand when flagged, off when not', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 2);
+    // a: one 30 ml (six 5 ml fills); b: seven samples, the most stocked
+    await pour(a!, 0, 2);
+    await pour(b!, 13);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     const o = await order(client);
     const id = await walkTo(o.number, 'handed_to_bts');
     await walkToDelivered(id);
-    expect((await fiveMl(b!)).onHand).toBe(1);
+    expect(await concentrateUl(t, b!)).toBe(12 * SAMPLE);
     const { manager, lines } = await returnLines(o.number);
     expect(lines).toEqual([0, 1]); // the bottle, then the sample
     const res = await manager.client.admin.orders.return({
@@ -404,7 +415,7 @@ describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => 
       },
     });
     expect(res.status).toBe(200);
-    expect((await fiveMl(b!)).onHand).toBe(2);
+    expect(await concentrateUl(t, b!)).toBe(13 * SAMPLE);
     // a returned first order had its sample: the next order is no first order
     await add(client, a!, 30);
     expect((await order(client)).lines.some((l) => l.giftSample)).toBe(false);
@@ -412,7 +423,8 @@ describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => 
 
   it('a gift sample left unflagged stays off the shelf', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 2);
+    await pour(a!, 0, 1);
+    await pour(b!, 7);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     const o = await order(client);
@@ -431,71 +443,68 @@ describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => 
       },
     });
     expect(res.status).toBe(200);
-    expect((await fiveMl(b!)).onHand).toBe(1);
+    expect(await concentrateUl(t, b!)).toBe(6 * SAMPLE);
   });
 });
 
-describe('a set bottling fills boxes straight from the five oils (ADR 0042)', () => {
-  it('takes one vial of oil from each of the five per box and adds the boxes', async () => {
+describe('a set assembly packs boxes from the five concentrates (ADR 0042, 0043)', () => {
+  it('takes one 5 ml fill from each of the five per box, a flacon per vial, and adds the boxes', async () => {
     const five = await compositionOf(5);
-    for (const f of five)
-      await t.db.update(fragrances).set({ oilMg: 10_000 }).where(eq(fragrances.id, f.id));
-    const res = await owner.client.admin.warehouse.bottleSet({
+    for (const f of five) await setConcentrateUl(t, f.id, 100_000);
+    const flacon = await consumable(t, 'flacon', 5);
+    await setConsumable(t, flacon.id, 20);
+    const res = await owner.client.admin.warehouse.assembleSet({
       params: { vialMl: 5 },
       body: { quantity: 4 },
     });
-    // 4 × 1.545 g = 6.18 g of each
-    expect(res.status === 201 && res.body).toMatchObject({ oilGrams: 6.18, onHand: 4 });
+    // 4 × 5.15 ml of each, 20 flacons
+    expect(res.status === 201 && res.body).toEqual({ concentrateMl: 20.6, flacons: 20, onHand: 4 });
     expect(await setOnHand(5)).toBe(4);
     for (const f of five) {
-      const [row] = await t.db.select().from(fragrances).where(eq(fragrances.id, f.id));
-      expect(row!.oilMg).toBe(10_000 - 6_180);
+      expect(await concentrateUl(t, f.id)).toBe(100_000 - 4 * SAMPLE);
       const moves = await t.db.select().from(stockMoves).where(eq(stockMoves.fragranceId, f.id));
       expect(moves).toMatchObject([
         {
-          kind: 'bottling',
-          oilMg: -6_180,
-          bottles: {},
+          kind: 'set_assembly',
+          concentrateUl: -4 * SAMPLE,
+          bottles: { 5: -4 },
+          consumables: { [flacon.id]: -4 },
           details: { set: { vialMl: 5, quantity: 4 } },
         },
       ]);
-      // the bottling row says it was the set's, so its vials never read as 5 ml on hand
-      const [b] = await t.db.select().from(bottlings).where(eq(bottlings.fragranceId, f.id));
-      expect(b).toMatchObject({ setVialMl: 5, lines: [{ ml: 5, quantity: 4 }], oilMg: 6_180 });
     }
     const history = await owner.client.admin.warehouse.get({ params: { id: five[0]!.id } });
     expect(history.status === 200 && history.body.history[0]).toMatchObject({
-      kind: 'bottling',
+      kind: 'set_assembly',
       set: { vialMl: 5, quantity: 4 },
     });
   });
 
   it('refuses when one of the five is short, naming it, and changes nothing', async () => {
     const five = await compositionOf(5);
-    for (const f of five)
-      await t.db.update(fragrances).set({ oilMg: 10_000 }).where(eq(fragrances.id, f.id));
-    await t.db.update(fragrances).set({ oilMg: 1_000 }).where(eq(fragrances.id, five[2]!.id));
-    const res = await owner.client.admin.warehouse.bottleSet({
+    for (const f of five) await setConcentrateUl(t, f.id, 100_000);
+    await setConcentrateUl(t, five[2]!.id, 5_000);
+    const res = await owner.client.admin.warehouse.assembleSet({
       params: { vialMl: 5 },
       body: { quantity: 1 },
     });
     expect(res.status === 409 && res.body).toMatchObject({
-      code: 'oil_short',
+      code: 'concentrate_short',
       fragrance: five[2]!.name,
-      neededGrams: 1.545,
-      balanceGrams: 1,
+      neededMl: 5.15,
+      balanceMl: 5,
     });
     expect(await setOnHand(5)).toBe(0);
-    const [row] = await t.db.select().from(fragrances).where(eq(fragrances.id, five[0]!.id));
-    expect(row!.oilMg).toBe(10_000);
+    expect(await concentrateUl(t, five[0]!.id)).toBe(100_000);
   });
 });
 
 describe("a first order's gift sample (ADR 0042)", () => {
   it('a first order gets one 5 ml at 0, reserved, the total unchanged; the next order none', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(a!, 2);
-    await setFiveMl(b!, 5);
+    // a: two 30 ml (twelve 5 ml fills); b: twenty samples, the most stocked
+    await pour(a!, 0, 2);
+    await pour(b!, 20);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     const first = await order(client);
@@ -515,8 +524,10 @@ describe("a first order's gift sample (ADR 0042)", () => {
     });
     expect(first.itemsSubtotal).toBe(first.lines[0]!.lineTotal);
     expect(first.total).toBe(first.itemsSubtotal + first.deliveryFee);
-    // the bottle is reserved: on hand stays, another first order sees one fewer
-    expect((await fiveMl(b!)).onHand).toBe(5);
+    // the fill is reserved: the concentrate stays, its reserve holds 5.15 ml
+    expect(await concentrateUl(t, b!)).toBe(20 * SAMPLE);
+    const page = await owner.client.admin.warehouse.get({ params: { id: bName!.id } });
+    expect(page.status === 200 && page.body.stock.reservedMl).toBe(5.15);
     // the bot's «Заказ оформлен» names it
     const [created] = await t.db.select().from(outbox).orderBy(outbox.id);
     expect(created!.text).toContain(`В подарок к первому заказу: пробник ${bName!.name} 5 мл.`);
@@ -528,7 +539,8 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it('rides with any discount: it is not one', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 1);
+    await setConcentrateUl(t, a!, FILL_UL[50]);
+    await pour(b!, 20);
     const created = await owner.client.admin.promoCodes.create({
       body: {
         code: 'WELCOME10',
@@ -559,7 +571,8 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it('a cancelled first order does not spend it; a delivered one does', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 3);
+    await pour(a!, 0, 3);
+    await pour(b!, 20);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     const first = await order(client);
@@ -577,12 +590,17 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it('out of 5 ml, switched off, or a named fragrance out of stock: no sample, the order goes on', async () => {
     const [a, b, c] = await slugsOf(t, 3);
+    // a holds exactly one 30 ml: it is the most stocked when the sample is picked, but the order's
+    // own bottle takes all of it, so no 5 ml is left (ADR 0043)
+    await pour(a!, 0, 1);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     expect((await order(client)).lines.some((l) => l.giftSample)).toBe(false);
 
     const other = await shopper(t, vali, '998901234568');
-    await setFiveMl(b!, 3);
+    // a second 30 ml for the next orders (Ali's still holds the first); b: plenty of samples
+    await pour(a!, 0, 2);
+    await pour(b!, 20);
     await setSetting('giftSample.enabled', false);
     await add(other, a!, 30);
     const off = await order(other);
@@ -597,7 +615,7 @@ describe("a first order's gift sample (ADR 0042)", () => {
     expect(none.lines.some((l) => l.giftSample)).toBe(false);
     await cancelByCustomer(none.number);
 
-    await setFiveMl(c!, 1);
+    await pour(c!, 1);
     await add(other, a!, 30);
     const given = await order(other);
     expect(given.lines.find((l) => l.giftSample)).toMatchObject({ name: { ru: named!.name } });
@@ -605,7 +623,11 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it('the last bottle goes to one first order only', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 1);
+    await pour(a!, 0, 2);
+    // b, named, holds one sample: the most-stocked rule would pick a (ADR 0043)
+    await pour(b!, 1);
+    const [named] = await t.db.select().from(fragrances).where(eq(fragrances.slug, b!));
+    await setSetting('giftSample.fragranceId', named!.id);
     const one = await shopper(t, ali, '998901234567');
     const two = await shopper(t, vali, '998901234568');
     await add(one, a!, 30);
@@ -617,7 +639,8 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it('is handed over and returned like a line; its cost is in the profit, not in the goods', async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 2);
+    await pour(a!, 0, 1);
+    await pour(b!, 20);
     const ids = await t.db.select({ id: fragrances.id, slug: fragrances.slug }).from(fragrances);
     const idOf = (s: string) => ids.find((f) => f.slug === s)!.id;
     await t.db
@@ -642,12 +665,12 @@ describe("a first order's gift sample (ADR 0042)", () => {
     });
 
     await walkToFrom(id, 'payment_confirmed', 'handed_to_bts');
-    expect((await fiveMl(b!)).onHand).toBe(1);
+    expect(await concentrateUl(t, b!)).toBe(19 * SAMPLE);
     const moves = await t.db
       .select()
       .from(stockMoves)
       .where(and(eq(stockMoves.fragranceId, idOf(b!)), eq(stockMoves.kind, 'sale')));
-    expect(moves).toMatchObject([{ bottles: { 5: -1 } }]);
+    expect(moves).toMatchObject([{ bottles: { 5: -1 }, concentrateUl: -SAMPLE }]);
     // no right from a sample
     await walkToFrom(id, 'handed_to_bts', 'delivered');
     const rights = await t.db
@@ -659,7 +682,8 @@ describe("a first order's gift sample (ADR 0042)", () => {
 
   it("the admin order, the Excel and the customer's order page name it", async () => {
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(b!, 1);
+    await pour(a!, 0, 1);
+    await pour(b!, 20);
     const client = await shopper(t, ali, '998901234567');
     await add(client, a!, 30);
     const o = await order(client);
@@ -691,26 +715,38 @@ describe("the gift sample's 5 ml stock warns before it runs out (#79)", () => {
       threshold: 10,
       level: 'zero',
     });
-    // nothing else is short, so the samples are what Home names first
-    await t.db.update(volumes).set({ onHand: 50 }).where(ne(volumes.ml, 5));
+    // nothing else is short, so the samples are what Home names first: the fragrances' own
+    // concentrate would be (ADR 0043), so only two stay visible and «Мало концентрата» is off
+    await t.db.update(fragrances).set({ hidden: true });
     await t.db.update(discoverySet).set({ onHand: 50 });
+    await setSetting('stock.lowConcentrateMl', 0);
     expect((await homeSample()).first).toMatchObject({ kind: 'sample', name: null, level: 'zero' });
 
     const [a, b] = await slugsOf(t, 2);
-    await setFiveMl(a!, 4);
-    await setFiveMl(b!, 5);
+    await t.db
+      .update(fragrances)
+      .set({ hidden: false })
+      .where(inArray(fragrances.slug, [a!, b!]));
+    await pour(a!, 4);
+    await pour(b!, 5);
     expect(await stockOf()).toMatchObject({ available: 9, level: 'low' });
-    await setFiveMl(b!, 7);
+    await pour(b!, 7);
     expect(await stockOf()).toMatchObject({ available: 11, level: 'ok' });
     expect((await homeSample()).count).toBe(0);
   });
 
   it('a chosen fragrance: its own 5 ml; hidden or gone, it says so instead of going quiet', async () => {
-    await t.db.update(volumes).set({ onHand: 50 }).where(ne(volumes.ml, 5));
+    // only the chosen one visible, «Мало концентрата» off: the sample is what Home names first
+    await t.db.update(fragrances).set({ hidden: true });
     await t.db.update(discoverySet).set({ onHand: 50 });
+    await setSetting('stock.lowConcentrateMl', 0);
     const [a] = await slugsOf(t, 1);
-    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, a!));
-    await setFiveMl(a!, 3);
+    const [f] = await t.db
+      .update(fragrances)
+      .set({ hidden: false })
+      .where(eq(fragrances.slug, a!))
+      .returning();
+    await pour(a!, 3);
     await setSetting('giftSample.fragranceId', f!.id);
     expect(await stockOf()).toEqual({
       fragrance: f!.name,
@@ -743,6 +779,7 @@ describe('the set-discount scope (entitlements.setDiscountScope)', () => {
     const outside = (await t.db.select().from(fragrances)).find(
       (f) => !five.some((x) => x.id === f.id),
     )!;
+    await setConcentrateUl(t, outside.id, 100_000);
     return { client, five, outside };
   }
 

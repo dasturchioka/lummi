@@ -31,6 +31,7 @@ import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper, whileLockedUntil } from './harness/orders';
 import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
 import {
   createTestApp,
   MANAGER_WIDGET_USER,
@@ -55,6 +56,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 

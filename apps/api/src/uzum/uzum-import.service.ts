@@ -39,7 +39,14 @@ import {
   type UzumPlan,
   type UzumRawRow,
 } from './uzum-import';
-import { saleItems, UzumSalesService, type NewUzumSale } from './uzum-sales.service';
+import { readLiquidStock } from '../catalog/catalog.service';
+import {
+  saleItems,
+  shortLines,
+  UzumSalesService,
+  wantedOf,
+  type NewUzumSale,
+} from './uzum-sales.service';
 
 export type UzumApplyResult =
   | { ok: true; applied: UzumImportApplied }
@@ -225,37 +232,31 @@ const shortIssue = (s: UzumShortLine): UzumImportIssue => ({
       : { name: s.name ?? '', ml: s.ml, wanted: s.wanted, available: s.available },
 });
 
-/** The file's sales against what is available now (on hand less the reserve), without locks. */
+/**
+ * The file's sales against what is available now (the free concentrate, a set's own boxes),
+ * without locks, judged as the record judges them under its locks (`shortLines`).
+ */
 async function stockIssues(
   tx: DbOrTx,
   sales: readonly PlannedUzumSale[],
 ): Promise<UzumImportIssue[]> {
-  // a volume by its id, a Discovery set by its vial ml (as a string)
-  const wanted = new Map<number | string, number>();
-  for (const l of sales.flatMap((s) => s.lines)) {
-    const key = l.kind === 'volume' ? l.volumeId : String(l.vialMl);
-    wanted.set(key, (wanted.get(key) ?? 0) + l.qty);
-  }
+  const wanted = wantedOf(sales.flatMap((s) => s.lines));
   if (wanted.size === 0) return [];
   const items = await saleItems(tx);
-  const out: UzumShortLine[] = [];
-  for (const [key, want] of wanted) {
-    const item = items.find((i) =>
-      typeof key === 'string'
-        ? i.kind === 'discovery_set' && String(i.vialMl) === key
-        : i.kind === 'volume' && i.volumeId === key,
-    );
-    if (!item || want <= item.available) continue;
-    out.push({
-      kind: item.kind,
-      volumeId: item.kind === 'volume' ? item.volumeId : null,
-      name: item.kind === 'volume' ? item.name : null,
-      ml: item.kind === 'volume' ? item.ml : item.vialMl,
-      wanted: want,
-      available: item.available,
-    });
-  }
-  return out.map(shortIssue);
+  const volumes = new Map(
+    items.flatMap((i) =>
+      i.kind === 'volume'
+        ? [[i.volumeId, { fragranceId: i.fragranceId, ml: i.ml, name: i.name }] as const]
+        : [],
+    ),
+  );
+  const sets = new Map(
+    items.flatMap((i) => (i.kind === 'discovery_set' ? [[i.vialMl, i.available] as const] : [])),
+  );
+  const stock = await readLiquidStock(tx, [
+    ...new Set([...volumes.values()].map((v) => v.fragranceId)),
+  ]);
+  return shortLines(wanted, volumes, sets, stock).map(shortIssue);
 }
 
 /** Every fragrance with its volumes, for the template and the plan. */

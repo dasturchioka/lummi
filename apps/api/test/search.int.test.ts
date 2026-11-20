@@ -1,8 +1,9 @@
-import { eq, families, fragranceSearch, fragrances, notes, sql, volumes } from '@lummi/db';
+import { eq, families, fragranceSearch, fragrances, notes, sql } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '../src/audit/audit.service';
 import { reindexFragrances, syncSearchIndex } from '../src/search/search-index';
 import { SettingsService } from '../src/settings/settings.service';
+import { setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -96,15 +97,22 @@ describe('search', () => {
       soldOut: false,
       photo: null,
       // the volumes as the card's tiles show them (the list «+» reads them, #25)
-      volumes: [10, 30, 50].map((ml) => ({
+      // the seed's 1 000 ml of concentrate fills 97, 32 and 19 bottles (ADR 0043)
+      volumes: (
+        [
+          [10, 97],
+          [30, 32],
+          [50, 19],
+        ] as const
+      ).map(([ml, available]) => ({
         ml,
         price: expect.any(Number),
         salePrice: null,
         salePercent: null,
         saleEndsAt: null,
         effectivePrice: expect.any(Number),
-        available: 20,
-        // #83: the default shown count (7) under the real 20
+        available,
+        // #83: the default shown count (7) under the real available
         shown: 7,
         photo: null,
       })),
@@ -117,8 +125,8 @@ describe('search', () => {
       soldOut: false,
       from: { price: 69_000, ml: 10, regularPrice: null },
     });
-    const [row] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'aventus'));
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.fragranceId, row!.id));
+    // no concentrate left: no volume fills (ADR 0043)
+    await setConcentrateUl(t, 'aventus', 0);
     const [hit] = await search('aventus');
     expect(hit).toMatchObject({ soldOut: true, from: null });
   });

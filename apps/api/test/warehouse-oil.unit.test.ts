@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { defaultCostSettings, liquidFromOil, type LiquidSettings } from '../src/cost/unit-cost';
-import { bottlingNeeds, oilLevel, oilValue, oilReceiptCost } from '../src/warehouse/oil';
+import { defaultCostSettings, type LiquidSettings } from '../src/cost/unit-cost';
+import {
+  concentrateLevel,
+  gramsFromMg,
+  mgFromGrams,
+  mixingNeeds,
+  mlFromUl,
+  stockLevelOf,
+  oilMlOf,
+  oilReceiptCost,
+  oilValue,
+  ulFromMl,
+} from '../src/warehouse/oil';
 
 /**
- * Seam 2 (ADR 0028): the warehouse's arithmetic (ADR 0041) on top of the cost model's one liquid
- * formula (ADR 0040). Every expected figure is worked out by hand from the settings named in the
+ * Seam 2 (ADR 0028): the warehouse's arithmetic (ADR 0041, 0043) on top of the cost model's one
+ * liquid formula (ADR 0040). Every expected figure is worked out by hand from the settings named in the
  * test, never by calling the code under test.
  */
 const DEFAULTS = defaultCostSettings().liquid; // oil 30 %, density 1 g/ml, filling loss 3 %
@@ -18,68 +29,70 @@ const OTHER: LiquidSettings = {
   fillingLossPercent: 5,
 };
 
-describe('what a bottling uses up (the cost model liquidNeeded, summed and rounded once)', () => {
-  it('takes 3.09 g of oil and 7 ml of ethanol for one 10 ml bottle at the defaults', () => {
-    // 10 ml × 1.03 = 10.3 ml of liquid: 30 % oil = 3.09 ml × 1 g/ml, 70 % ethanol = 7.21 ml
-    expect(bottlingNeeds([{ ml: 10, quantity: 1 }], DEFAULTS)).toEqual({
-      oilMg: 3090,
-      ethanolMl: 7,
+describe('what a mixing uses up (the cost model mixNeeds, no filling loss, rounded once)', () => {
+  it('takes 30 g of oil and 70 ml of ethanol for 100 ml of concentrate at the defaults', () => {
+    // 100 ml: 30 % oil = 30 ml × 1 g/ml, 70 % ethanol = 70 ml; the filling loss is in each fill
+    expect(mixingNeeds(100, DEFAULTS)).toEqual({ oilMg: 30_000, ethanolMl: 70 });
+  });
+
+  it('follows the oil percent and the density, and never the filling loss', () => {
+    // 10 ml: 25 % oil = 2.5 ml × 0.95 g/ml = 2.375 g; ethanol 75 % = 7.5 ml → 8 ml (half up)
+    expect(mixingNeeds(10, OTHER)).toEqual({ oilMg: 2375, ethanolMl: 8 });
+    expect(mixingNeeds(10, { ...OTHER, fillingLossPercent: 40 })).toEqual({
+      oilMg: 2375,
+      ethanolMl: 8,
     });
   });
 
-  it('adds the volumes up before rounding', () => {
-    // oil: 4 × 3.09 + 2 × 9.27 + 1 × 15.45 = 46.35 g; ethanol: 28.84 + 43.26 + 36.05 = 108.15 ml
-    expect(
-      bottlingNeeds(
-        [
-          { ml: 10, quantity: 4 },
-          { ml: 30, quantity: 2 },
-          { ml: 50, quantity: 1 },
-        ],
-        DEFAULTS,
-      ),
-    ).toEqual({ oilMg: 46_350, ethanolMl: 108 });
-  });
-
-  it('follows the oil percent, the density and the filling loss', () => {
-    // 10 ml × 1.05 = 10.5 ml: 25 % oil = 2.625 ml × 0.95 g/ml = 2.49375 g → 2 494 mg (half up);
-    // ethanol 75 % = 7.875 ml → 8 ml
-    expect(bottlingNeeds([{ ml: 10, quantity: 1 }], OTHER)).toEqual({ oilMg: 2494, ethanolMl: 8 });
-    // no loss: exactly 30 % of the bottle
-    expect(
-      bottlingNeeds([{ ml: 50, quantity: 2 }], { ...DEFAULTS, fillingLossPercent: 0 }),
-    ).toEqual({ oilMg: 30_000, ethanolMl: 70 });
-  });
-
-  it('is nothing for no bottles', () => {
-    expect(bottlingNeeds([{ ml: 30, quantity: 0 }], DEFAULTS)).toEqual({ oilMg: 0, ethanolMl: 0 });
+  it('keeps a fraction of a ml to the milligram of oil', () => {
+    // 10.3 ml (one 10 ml fill): 3.09 g of oil, 7.21 ml of ethanol → 7 ml
+    expect(mixingNeeds(10.3, DEFAULTS)).toEqual({ oilMg: 3090, ethanolMl: 7 });
+    expect(mixingNeeds(0.001, DEFAULTS)).toEqual({ oilMg: 0, ethanolMl: 0 });
   });
 });
 
-describe('the oil balance as litres of liquid (the inverse of the same formula)', () => {
-  it('turns 1 kg of oil into 3.236 l of perfume at the defaults, the filling loss taken off', () => {
-    // 1000 g ÷ 1 g/ml = 1000 ml of oil; ÷ 30 % = 3333.3 ml of liquid; ÷ 1.03 = 3236.2 ml bottled
-    expect(liquidFromOil(1000, DEFAULTS)).toBeCloseTo(3236.246, 3);
+describe('the oil read in ml (by the density)', () => {
+  it('is the grams over the density', () => {
+    expect(oilMlOf(300, DEFAULTS)).toBe(300);
+    // 95 g ÷ 0.95 g/ml = 100 ml
+    expect(oilMlOf(95, OTHER)).toBeCloseTo(100, 9);
   });
 
-  it('gives back the 10 ml a bottle took', () => {
-    expect(liquidFromOil(3.09, DEFAULTS)).toBeCloseTo(10, 9);
-    expect(liquidFromOil(2.49375, OTHER)).toBeCloseTo(10, 9);
-  });
-
-  it('follows the density and the oil percent', () => {
-    // 95 g ÷ 0.95 g/ml = 100 ml of oil; ÷ 25 % = 400 ml; ÷ 1.05 = 380.95 ml
-    expect(liquidFromOil(95, OTHER)).toBeCloseTo(380.952, 3);
+  it('is nothing at a zero density', () => {
+    expect(oilMlOf(10, { oilDensity: 0 })).toBe(0);
   });
 });
 
 describe('the low-oil warning', () => {
-  it('says none for no oil, low at or under the litres the setting names, else ok', () => {
-    expect(oilLevel(0, 1)).toBe('zero');
-    expect(oilLevel(0.4, 1)).toBe('low');
-    expect(oilLevel(1, 1)).toBe('low');
-    expect(oilLevel(1.01, 1)).toBe('ok');
-    expect(oilLevel(0.2, 0)).toBe('ok');
+  it('says none for no oil, low at or under the ml the setting names, else ok', () => {
+    expect(stockLevelOf(0, 300)).toBe('zero');
+    expect(stockLevelOf(120, 300)).toBe('low');
+    expect(stockLevelOf(300, 300)).toBe('low');
+    expect(stockLevelOf(300.5, 300)).toBe('ok');
+    expect(stockLevelOf(0.2, 0)).toBe('ok');
+  });
+});
+
+describe('the low-concentrate warning', () => {
+  it('says none while it can not fill the smallest bottle, low at or under the setting, else ok', () => {
+    // the smallest bottle sold is 10 ml: 10 300 µl at the default loss
+    expect(concentrateLevel(0, 10_300, 300)).toBe('zero');
+    expect(concentrateLevel(10_299, 10_300, 300)).toBe('zero');
+    expect(concentrateLevel(10_300, 10_300, 300)).toBe('low');
+    expect(concentrateLevel(300_000, 10_300, 300)).toBe('low');
+    expect(concentrateLevel(300_001, 10_300, 300)).toBe('ok');
+    // a threshold of 0 warns only when a bottle can't be filled
+    expect(concentrateLevel(10_300, 10_300, 0)).toBe('ok');
+  });
+});
+
+describe('ml and µl, g and mg', () => {
+  it('round to the microlitre and the milligram', () => {
+    expect(ulFromMl(10.3)).toBe(10_300);
+    expect(ulFromMl(0.0004)).toBe(0);
+    expect(mlFromUl(51_500)).toBe(51.5);
+    expect(mgFromGrams(3.0905)).toBe(3091);
+    expect(gramsFromMg(46_350)).toBe(46.35);
   });
 });
 

@@ -61,8 +61,8 @@ const input = (over: Partial<FragranceInput> = {}): FragranceInput => ({
   notes: { top: [], heart: [], base: [] },
   similarIds: [],
   volumes: [
-    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null, onHand: 5 },
-    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null, onHand: 5 },
+    { ml: 10, price: 70_000, salePrice: null, saleEndsOn: null },
+    { ml: 30, price: 150_000, salePrice: null, saleEndsOn: null },
   ],
   ...over,
 });
@@ -174,8 +174,8 @@ describe('the cost of each volume on the catalog page', () => {
   it('shows the profit at an active markdown too, and not at an ended one', async () => {
     const f = await created({
       volumes: [
-        { ml: 10, price: 70_000, salePrice: 60_000, saleEndsOn: null, onHand: 5 },
-        { ml: 30, price: 150_000, salePrice: 120_000, saleEndsOn: '2026-11-17', onHand: 5 },
+        { ml: 10, price: 70_000, salePrice: 60_000, saleEndsOn: null },
+        { ml: 30, price: 150_000, salePrice: 120_000, saleEndsOn: '2026-11-17' },
       ],
     });
     const res = await costs(f.id);

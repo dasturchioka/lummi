@@ -11,6 +11,8 @@ import {
   tenMl as tenMlOf,
   whileTableLocked as lockedWhile,
 } from './harness/orders';
+import { giftSampleOff } from './harness/gift-sample';
+import { FILL_UL, stockBottles } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -27,6 +29,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 
@@ -39,18 +43,22 @@ const tenMl = (slug: string) => tenMlOf(t, slug);
 const samarkandPoint = () => pointOf(t);
 const whileTableLocked = <T>(table: string, run: () => Promise<T>) => lockedWhile(t, table, run);
 
-/** Units of this 10 ml held by orders, as the admin stock list shows it. */
+/**
+ * 10 ml fills of this fragrance held by orders, as the admin stock list shows its reserve in ml
+ * (ADR 0043): these tests hold nothing else of it.
+ */
 async function reservedOf(slug: string) {
   const manager = await t.managerSession();
-  const { id } = await tenMl(slug);
+  const { fragranceId } = await tenMl(slug);
   // the list pages by fragrance: find the fragrance's own page by its name
   const [f] = await t.db
     .select({ name: fragrances.name })
     .from(fragrances)
-    .where(eq(fragrances.id, (await tenMl(slug)).fragranceId));
+    .where(eq(fragrances.id, fragranceId));
   const res = await manager.client.admin.stock.list({ query: { q: f!.name } });
   if (res.status !== 200) throw new Error(`stock list: ${res.status}`);
-  return res.body.rows.find((r) => r.volumeId === id)?.reserved;
+  const row = res.body.fragrances.find((r) => r.fragranceId === fragranceId);
+  return row && Math.round(row.reservedMl * 1000) / FILL_UL[10];
 }
 
 describe('a Discovery set order (ADR 0009)', () => {
@@ -88,7 +96,8 @@ describe('a Discovery set order (ADR 0009)', () => {
     expect(after.status === 200 && after.body.available).toBe(1);
     expect(await Promise.all(inBox.map((s) => reservedOf(s)))).toEqual(before);
     const card = await client.catalog.fragrance({ params: { slug: inBox[0]! } });
-    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(20);
+    // the seed's 1 000 ml of concentrate, untouched: 97 fills of 10 ml (ADR 0043)
+    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(97);
   });
 
   it('a composition fragrance with no 10 ml still checks out (the box holds its own bottles)', async () => {
@@ -151,9 +160,10 @@ describe('a builder set order (ADR 0009)', () => {
     expect(res.status).toBe(201);
     if (res.status !== 201) return;
     expect(res.body.lines[0]).toMatchObject({ kind: 'builder_set', qty: 2 });
+    // two 10 ml fills of each (20.6 ml) held: 979.4 ml fill 95 (ADR 0043)
     for (const slug of five) {
       const card = await client.catalog.fragrance({ params: { slug } });
-      expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(18);
+      expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(95);
     }
     // the Discovery set's own stock is untouched
     const shop = await client.sets.discovery();
@@ -191,8 +201,8 @@ describe('a builder set order (ADR 0009)', () => {
   it('two concurrent orders for the last 10 ml of one of the five: exactly one wins and it is reserved once', async () => {
     const five = await slugs(5);
     const point = await samarkandPoint();
-    const v = await tenMl(five[2]!);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 10 ml fill of it left (ADR 0043)
+    await stockBottles(t, five[2]!, 10, 1);
     const a = await signedUp(ali, '998901234567');
     const b = await signedUp(vali, '998907654321');
     await a.cart.addBuilder({ body: { slugs: five, qty: 1 } });
@@ -211,8 +221,8 @@ describe('a builder set order (ADR 0009)', () => {
   it('a builder order shows in the builder offer, another cart and the admin stock', async () => {
     const five = await slugs(5);
     const point = await samarkandPoint();
-    const v = await tenMl(five[1]!);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 10 ml fill of it left (ADR 0043)
+    await stockBottles(t, five[1]!, 10, 1);
     const a = await signedUp(ali, '998901234567');
     const b = await signedUp(vali, '998907654321');
     await b.cart.addBuilder({ body: { slugs: five, qty: 1 } });
@@ -251,8 +261,8 @@ describe('one 10 ml shared by several lines of one order (ADR 0010)', () => {
   it('the last 10 ml in a volume line and a builder set is reserved once, and the cart shows the second line unavailable', async () => {
     const five = await slugs(5);
     const point = await samarkandPoint();
-    const v = await tenMl(five[0]!);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 10 ml fill of it left (ADR 0043)
+    await stockBottles(t, five[0]!, 10, 1);
     const client = await signedUp(ali, '998901234567');
     await client.cart.addLine({ body: { slug: five[0]!, ml: 10, qty: 1 } });
     await client.cart.addBuilder({ body: { slugs: five, qty: 1 } });
@@ -276,8 +286,8 @@ describe('one 10 ml shared by several lines of one order (ADR 0010)', () => {
   it('two builder sets sharing a fragrance with one unit left reserve it once', async () => {
     const six = await slugs(6);
     const point = await samarkandPoint();
-    const v = await tenMl(six[1]!);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 10 ml fill of it left (ADR 0043)
+    await stockBottles(t, six[1]!, 10, 1);
     const client = await signedUp(ali, '998901234567');
     await client.cart.addBuilder({ body: { slugs: six.slice(0, 5), qty: 1 } });
     await client.cart.addBuilder({ body: { slugs: six.slice(1), qty: 1 } });
@@ -294,8 +304,8 @@ describe('one 10 ml shared by several lines of one order (ADR 0010)', () => {
   it('a stale checkout that counted both lines is refused with the new total', async () => {
     const five = await slugs(5);
     const point = await samarkandPoint();
-    const v = await tenMl(five[0]!);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 10 ml fill of it left (ADR 0043)
+    await stockBottles(t, five[0]!, 10, 1);
     const client = await signedUp(ali, '998901234567');
     await client.cart.addLine({ body: { slug: five[0]!, ml: 10, qty: 1 } });
     await client.cart.addBuilder({ body: { slugs: five, qty: 1 } });

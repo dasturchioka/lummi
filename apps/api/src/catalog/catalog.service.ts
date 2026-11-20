@@ -35,14 +35,16 @@ import { stepUps } from '../pricing/step-up';
 import { readPricingSettings } from '../pricing/pricing-settings';
 import { upgradeRightPrices } from '../upgrade-rights/upgrade-rights';
 import { readSettings } from '../settings/settings.service';
+import { readCostSettings } from '../cost/cost-settings';
+import { fillUl, type LiquidSettings } from '../cost/unit-cost';
 import { DB, EDGES } from '../tokens';
 
 /**
- * The 10/30/50 ml bottles each order line holds, one row per line and volume
- * (`order_id, position, volume_id, qty`): a volume line its quantity of its volume, a builder set
- * line one 10 ml of each of its five fragrances per set (ADR 0009). The one definition of a
- * line's bottles: the Reserve sums it over orders not yet handed to BTS, and a status change
- * moves on hand by it (ADR 0010). The Discovery set has its own stock and never touches 10 ml.
+ * The bottles each order line holds, one row per line and volume (`order_id, position, volume_id,
+ * qty`): a volume line (the gift sample and a promo gift too) its quantity of its volume, a builder
+ * set line one 10 ml of each of its five fragrances per set (ADR 0009). The one definition of a
+ * line's bottles: the Reserve sums their fills over orders not yet handed to BTS, and a status
+ * change moves the concentrate by them (ADR 0010, 0043). The Discovery set has its own stock.
  */
 export const lineVolumeUnits = sql`
   select ol.order_id, ol.position, ol.volume_id, ol.qty
@@ -53,32 +55,94 @@ export const lineVolumeUnits = sql`
   from order_lines ol cross join lateral unnest(ol.set_volume_ids) as v(id)
   where ol.kind = 'builder_set'`;
 
+/** `lineVolumeUnits` with each bottle's fragrance and ml: what a line fills from which concentrate. */
+export const lineFills = sql`
+  select u.order_id, u.position, v.fragrance_id, v.ml, u.qty
+  from (${lineVolumeUnits}) u join volumes v on v.id = u.volume_id`;
+
 /**
- * The Reserve per volume (ADR 0010): the bottles (`lineVolumeUnits`) of orders neither handed to
- * BTS nor cancelled (`RESERVING_STATUSES`). This is the one place that knows, so "available" is
- * on hand minus reserve everywhere: card, list, cart, order creation.
+ * The Reserve per fragrance, µl (ADR 0010, 0043): the fills of the bottles (`lineFills`) of orders
+ * neither handed to BTS nor cancelled (`RESERVING_STATUSES`), at the liquid settings given. This is
+ * the one place that knows, so "available" is concentrate minus reserve everywhere: card, list,
+ * cart, order creation, the panel.
  */
-export async function reservedByVolume(
+export async function reservedLiquid(
   db: DbOrTx,
-  volumeIds: number[],
+  fragranceIds: readonly number[],
+  liquid: LiquidSettings,
 ): Promise<Map<number, number>> {
-  const out = new Map(volumeIds.map((id) => [id, 0]));
-  if (volumeIds.length === 0) return out;
+  const out = new Map(fragranceIds.map((id) => [id, 0]));
+  if (fragranceIds.length === 0) return out;
   const ids = sql.join(
-    volumeIds.map((id) => sql`${id}`),
+    [...new Set(fragranceIds)].map((id) => sql`${id}`),
     sql`, `,
   );
   const statuses = sql.join(
     RESERVING_STATUSES.map((s) => sql`${s}`),
     sql`, `,
   );
-  const { rows } = await db.execute<{ volume_id: string; reserved: string }>(sql`
-    select u.volume_id, sum(u.qty) as reserved
-    from (${lineVolumeUnits}) u join orders o on o.id = u.order_id
-    where o.status in (${statuses}) and u.volume_id in (${ids})
-    group by u.volume_id`);
-  for (const r of rows) out.set(Number(r.volume_id), Number(r.reserved));
+  const { rows } = await db.execute<{ fragrance_id: string; ml: number; qty: string }>(sql`
+    select u.fragrance_id, u.ml, sum(u.qty) as qty
+    from (${lineFills}) u join orders o on o.id = u.order_id
+    where o.status in (${statuses}) and u.fragrance_id in (${ids})
+    group by u.fragrance_id, u.ml`);
+  for (const r of rows) {
+    const id = Number(r.fragrance_id);
+    out.set(id, (out.get(id) ?? 0) + Number(r.qty) * fillUl(Number(r.ml), liquid));
+  }
   return out;
+}
+
+/** A fragrance's liquid as the shop judges it (ADR 0043), µl. */
+export interface FragranceLiquid {
+  concentrateUl: number;
+  reservedUl: number;
+}
+
+/**
+ * The fragrances' ready concentrate and its reserve, with the fill of each bottle size at the
+ * liquid settings of now: the one read every availability goes through.
+ */
+export interface LiquidStock {
+  liquid: LiquidSettings;
+  /** One bottle's fill of `ml`, µl. */
+  fill(ml: number): number;
+  /** A fragrance's concentrate and reserve; none read: 0 and 0. */
+  of(fragranceId: number): FragranceLiquid;
+  /** Concentrate less reserve, never below zero, µl. */
+  free(fragranceId: number): number;
+  /** Whole bottles of `ml` the fragrance's free concentrate fills. */
+  bottles(fragranceId: number, ml: number): number;
+}
+
+export async function readLiquidStock(
+  db: DbOrTx,
+  fragranceIds: readonly number[],
+): Promise<LiquidStock> {
+  const { liquid } = await readCostSettings(db);
+  const ids = [...new Set(fragranceIds)];
+  const [rows, reserved] = await Promise.all([
+    ids.length === 0
+      ? []
+      : db
+          .select({ id: fragrances.id, concentrateUl: fragrances.concentrateUl })
+          .from(fragrances)
+          .where(inArray(fragrances.id, ids)),
+    reservedLiquid(db, ids, liquid),
+  ]);
+  const byId = new Map(
+    rows.map((r) => [
+      r.id,
+      { concentrateUl: r.concentrateUl, reservedUl: reserved.get(r.id) ?? 0 },
+    ]),
+  );
+  const of = (id: number) => byId.get(id) ?? { concentrateUl: 0, reservedUl: 0 };
+  const fill = (ml: number) => fillUl(ml, liquid);
+  const free = (id: number) => {
+    const l = of(id);
+    return available(l.concentrateUl, l.reservedUl);
+  };
+  return { liquid, fill, of, free, bottles: (id, ml) => bottlesOf(free(id), fill(ml)) };
 }
 
 /** Orders that still count as sold: paid, and neither cancelled nor returned. */
@@ -193,8 +257,15 @@ function toListItem(e: CatalogEntry): FragranceListItem {
   };
 }
 
-/** Available is on hand minus reserve, never below zero (ADR 0010): the one place that says so. */
+/**
+ * Available is on hand minus reserve, never below zero (ADR 0010): a Discovery set's boxes, a
+ * fragrance's free concentrate in µl. The one place that says so.
+ */
 export const available = (onHand: number, reserved: number) => Math.max(0, onHand - reserved);
+
+/** Whole bottles a free liquid fills (ADR 0043): the one place that says so. */
+export const bottlesOf = (freeUl: number, fill: number) =>
+  fill > 0 ? Math.floor(freeUl / fill) : 0;
 
 /** On hand under the reserve (ADR 0010): allowed, and reported; the one place that says so. */
 export const belowReserve = (onHand: number, reserved: number) => onHand < reserved;
@@ -219,10 +290,14 @@ export function shownCount(availableNow: number, rule: ShownRule): number {
   return Math.min(rule.own ?? rule.fallback, rule.max, availableNow);
 }
 
-/** One volume as the card shows it. The markdown reverts by itself: it is judged against `now`, no job. */
+/**
+ * One volume as the card shows it, with the bottles its fragrance's free concentrate fills (ADR
+ * 0043) and the count shown from them (#83). The markdown reverts by itself: it is judged against
+ * `now`, no job.
+ */
 export function toVolumeCard(
   v: VolumeRow,
-  reserved: number,
+  bottles: number,
   now: Date,
   rule: ShownRule,
 ): VolumeCard {
@@ -234,8 +309,8 @@ export function toVolumeCard(
     salePercent: sale === null ? null : Math.round(((v.price - sale) / v.price) * 100),
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
-    available: available(v.onHand, reserved),
-    shown: shownCount(available(v.onHand, reserved), rule),
+    available: bottles,
+    shown: shownCount(bottles, rule),
     photo: v.photoHash,
   };
 }
@@ -319,9 +394,9 @@ export class CatalogService {
         .where(and(sellableVolume(), only ? inArray(volumes.fragranceId, only) : undefined))
         .orderBy(asc(volumes.ml)),
     ]);
-    const reserved = await reservedByVolume(
+    const stock = await readLiquidStock(
       this.db,
-      vols.map((v) => v.id),
+      rows.map((r) => r.id),
     );
     const now = this.edges.clock.now();
     const shownCfg = await readSettings(this.db, ['stock.shownDefault', 'stock.shownMax']);
@@ -330,7 +405,7 @@ export class CatalogService {
     for (const v of vols)
       cardsOf.set(v.fragranceId, [
         ...(cardsOf.get(v.fragranceId) ?? []),
-        toVolumeCard(v, reserved.get(v.id) ?? 0, now, {
+        toVolumeCard(v, stock.bottles(v.fragranceId, v.ml), now, {
           own: ownOf.get(v.fragranceId) ?? null,
           fallback: shownCfg['stock.shownDefault'],
           max: shownCfg['stock.shownMax'],
@@ -508,10 +583,7 @@ export class CatalogService {
         .where(and(eq(volumes.fragranceId, f.id), sellableVolume()))
         .orderBy(asc(volumes.ml)),
     ]);
-    const reserved = await reservedByVolume(
-      this.db,
-      volumeRows.map((v) => v.id),
-    );
+    const stock = await readLiquidStock(this.db, [f.id]);
     const now = this.edges.clock.now();
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => ({ ru: n.ru, uz: n.uz }));
@@ -531,7 +603,7 @@ export class CatalogService {
       fallback: step['stock.shownDefault'],
       max: step['stock.shownMax'],
     };
-    const cards = volumeRows.map((v) => toVolumeCard(v, reserved.get(v.id) ?? 0, now, rule));
+    const cards = volumeRows.map((v) => toVolumeCard(v, stock.bottles(f.id, v.ml), now, rule));
     // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
     // the right's price there, so «+N сум» would contradict them (the right's strip nudges then)
     const righted = new Set<number>(rights.map((r) => r.ml));

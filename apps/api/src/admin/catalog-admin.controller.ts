@@ -15,11 +15,8 @@ function failure(f: Failure) {
       return { status: 404 as const, body: { code: 'not_found' as const } };
     case 'conflict':
       return { status: 409 as const, body: { code: 'conflict' as const, fields } };
-    case 'on_hand_changed':
-      return {
-        status: 409 as const,
-        body: { code: 'on_hand_changed' as const, fields, current: f.current },
-      };
+    case 'concentrate_changed':
+      return { status: 409 as const, body: { code: 'concentrate_changed' as const, fields } };
     case 'invalid':
       return { status: 422 as const, body: { code: 'invalid' as const, fields } };
     case 'try_again':
@@ -27,7 +24,7 @@ function failure(f: Failure) {
   }
 }
 
-/** The catalog is the owner's (ADR 0017). On hand is the one thing a manager may also change. */
+/** The catalog is the owner's (ADR 0017); stock counts are the warehouse's (ADR 0041, 0043). */
 @Controller()
 @UseGuards(StaffGuard, OwnerGuard)
 export class CatalogAdminController {
@@ -143,31 +140,6 @@ export class CatalogAdminController {
     const res = await this.catalog.setPhoto(actor, id, readPhotoBody(req.body));
     if (res.ok) return { photo: res.value };
     throw photoFailure(res.reason);
-  }
-}
-
-/** On hand: any active staff member (owner and manager), audited with the actor. */
-@Controller()
-@UseGuards(StaffGuard)
-export class OnHandController {
-  constructor(@Inject(CatalogAdminService) private readonly catalog: CatalogAdminService) {}
-
-  @TsRestHandler(adminContract.onHand.set)
-  set(@CurrentStaff() actor: StaffRow) {
-    return tsRestHandler(adminContract.onHand.set, async ({ params, body }) => {
-      const res = await this.catalog.setOnHand(
-        actor,
-        params.id,
-        body.onHand,
-        body.expected,
-        body.reason,
-      );
-      if (res.ok) return { status: 200 as const, body: res.value };
-      if (res.reason === 'on_hand_changed') return failure(res);
-      return res.reason === 'try_again'
-        ? { status: 409 as const, body: { code: 'try_again' as const } }
-        : { status: 404 as const, body: { code: 'not_found' as const } };
-    });
   }
 }
 

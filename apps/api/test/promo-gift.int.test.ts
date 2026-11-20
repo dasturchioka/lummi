@@ -14,7 +14,6 @@ import {
   orders,
   outbox,
   regions,
-  volumes,
 } from '@lummi/db';
 import ExcelJS from 'exceljs';
 import pg from 'pg';
@@ -25,6 +24,8 @@ import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { payWithCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
+import { concentrateUl, FILL_UL, stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
@@ -54,6 +55,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
   const rows = await t.db
@@ -96,20 +99,11 @@ async function createGift(over: Partial<PromoCodeInput> = {}) {
   return res.body;
 }
 
-async function volumeOf(slug: string, ml: number) {
-  const [v] = await t.db
-    .select({ id: volumes.id, onHand: volumes.onHand })
-    .from(volumes)
-    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-    .where(and(eq(fragrances.slug, slug), eq(volumes.ml, ml)));
-  return v!;
-}
-async function setOnHand(slug: string, ml: number, onHand: number) {
-  await t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(eq(volumes.id, (await volumeOf(slug, ml)).id));
-}
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043). */
+const setOnHand = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
+/** Bottles of `ml` the fragrance's concentrate fills, reserve aside: the shelf's count of them. */
+const onHandOf = async (slug: string, ml: FillMl) =>
+  Math.floor((await concentrateUl(t, slug)) / FILL_UL[ml]);
 
 async function shopper(user: TestUser = ali, phone = '998901234567') {
   const { client } = await t.signIn(user);
@@ -356,7 +350,7 @@ describe('the order holds the gift as a line: reserve, cancel, handover (ADR 001
     await s.apply('RAINTEA');
     const order = await placeOrder(s);
     await payAndMove(order.number, 'handed_to_bts');
-    expect((await volumeOf(giftSlug, 10)).onHand).toBe(4);
+    expect(await onHandOf(giftSlug, 10)).toBe(4);
     expect(await s.available(giftSlug, 10)).toBe(4);
 
     // delivered, then repeated: only the bought 50 ml goes back into the cart

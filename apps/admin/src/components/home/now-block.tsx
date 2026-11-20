@@ -7,6 +7,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { age, moment, QUEUE_HREF, stockHalves, threadShare } from '@/lib/home-format';
+import { num } from '@/lib/setting-copy';
 import { cn, fill } from '@/lib/utils';
 import { joined, rich, Settle, stockLabel, type HomeCopy } from './home-parts';
 
@@ -194,11 +195,18 @@ export function nowContent(data: AdminHome, copy: HomeCopy, language: Language):
       };
     case 'stock': {
       const item = stockLabel(now.item, copy);
-      return {
-        title:
-          now.item.level === 'zero'
+      // each kind in its own unit (ADR 0043): concentrate in ml, boxes and samples in pieces
+      const concentrate = now.item.kind === 'fragrance';
+      const title =
+        now.item.kind === 'fragrance'
+          ? now.item.level === 'zero'
+            ? fill(c.stock.zeroConcentrate, { item })
+            : fill(c.stock.lowConcentrate, { item, n: num(Math.floor(now.item.availableMl)) })
+          : now.item.level === 'zero'
             ? fill(c.stock.zero, { item })
-            : fill(c.stock.low, { item, n: String(now.item.available) }),
+            : fill(c.stock.low, { item, n: String(now.item.available) });
+      return {
+        title,
         facts: joined(
           stockHalves(q.stock).map((half) =>
             fill(half === 'out' ? c.stock.factsOut : c.stock.factsLow, {
@@ -206,7 +214,7 @@ export function nowContent(data: AdminHome, copy: HomeCopy, language: Language):
             }),
           ),
         ),
-        why: c.stock.why,
+        why: concentrate || now.item.kind === 'sample' ? c.stock.whyConcentrate : c.stock.whyBoxes,
         primary: { href: QUEUE_HREF.stock, label: c.stock.open, icon: 'arrow' },
       };
     }

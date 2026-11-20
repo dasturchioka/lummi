@@ -280,6 +280,13 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     [],
   ],
   [
+    'catalog.fragrance_created',
+    { name: 'Tygar', slug: 't', code: 'x', hidden: false, concentrateMl: 250.5 },
+    {},
+    ['Tygar', 'Готовая концентрация: 250,5 мл'],
+    ['Tygar', 'Tayyor konsentrat: 250,5 ml'],
+  ],
+  [
     'catalog.fragrance_updated',
     { name: 'Tygar', changed: ['descriptionRu'], volumes: [{ ml: 30, price: [1, 2] }] },
     {},
@@ -360,6 +367,84 @@ const table: [string, Record<string, unknown>, Partial<AuditEntryDto>, string[],
     {},
     ['Tygar: розлив 10 мл × 4, 50 мл × 1', 'Масла 27,81 г, спирта 65 мл'],
     ['Tygar: quyish 10 ml × 4, 50 ml × 1', '27,81 g moy, 65 ml spirt'],
+  ],
+  [
+    'warehouse.mixed',
+    {
+      fragrance: 'Tygar',
+      ml: 100,
+      oilGrams: 30,
+      ethanolMl: 70,
+      oilPercent: 30,
+      ethanolPercent: 70,
+      oilDensity: 1,
+    },
+    {},
+    ['Tygar: приготовлено 100 мл концентрата', 'Масла 30 г, спирта 70 мл'],
+    ['Tygar: 100 ml konsentrat tayyorlandi', '30 g moy, 70 ml spirt'],
+  ],
+  [
+    'warehouse.set_assembled',
+    {
+      vialMl: 10,
+      quantity: 2,
+      onHand: [3, 5],
+      fragrances: ['Tygar', 'Symphony'],
+      concentrateMl: 20.6,
+      flacons: 10,
+    },
+    {},
+    [
+      'Discovery set 5 × 10 мл: собрано 2 шт., было 3, стало 5',
+      'Концентрата по 20,6 мл у каждого: Tygar, Symphony; флаконов 10',
+    ],
+    [],
+  ],
+  [
+    'warehouse.concentrate_corrected',
+    { fragrance: 'Tygar', concentrateMl: [100, 95.5], reason: 'Пролили' },
+    {},
+    ['Tygar: концентрат 100 → 95,5 мл', 'Причина: Пролили'],
+    ['Tygar: konsentrat 100 → 95,5 ml', 'Sabab: Пролили'],
+  ],
+  [
+    'consumable.received',
+    {
+      nameRu: 'Флакон 10 мл',
+      nameUz: 'Flakon 10 ml',
+      unit: 'pcs',
+      quantity: 200,
+      onHand: [5, 205],
+      note: 'Накладная 7',
+    },
+    {},
+    ['Флакон 10 мл: приход 200 шт., было 5 шт., стало 205 шт.', 'Комментарий: Накладная 7'],
+    ['Flakon 10 ml: kirim 200 dona, 5 dona edi, 205 dona boʻldi', 'Izoh: Накладная 7'],
+  ],
+  [
+    'consumable.corrected',
+    { nameRu: 'Спирт', nameUz: 'Spirt', unit: 'ml', onHand: [930, 900], reason: 'Пересчёт' },
+    {},
+    ['Спирт: пересчёт 930 мл → 900 мл', 'Причина: Пересчёт'],
+    ['Spirt: qayta sanoq 930 ml → 900 ml', 'Sabab: Пересчёт'],
+  ],
+  [
+    'consumable.updated',
+    {
+      nameRu: 'Коробка 10 мл',
+      nameUz: 'Quti 10 ml',
+      changes: { lowThreshold: [20, 50], archived: [false, true] },
+    },
+    {},
+    ['Коробка 10 мл: мало при: 20 → 50; убран в архив'],
+    ['Quti 10 ml: kam deb: 20 → 50; arxivga olindi'],
+  ],
+  [
+    'consumable.created',
+    { nameRu: 'Пакет', nameUz: 'Paket', unit: 'pcs', use: 'other', ml: null, lowThreshold: 10 },
+    {},
+    ['Новый расходник: Пакет'],
+    ['Yangi sarf materiali: Paket'],
   ],
   [
     'warehouse.oil_received',
@@ -707,6 +792,27 @@ describe('audit details read as text (#63)', () => {
     expect(say(e, 'ru')).toEqual(ruLines.map(flat));
     if (uzLines.length || ruLines.length === 0) expect(say(e, 'uz')).toEqual(uzLines.map(flat));
     for (const line of say(e, 'uz')) expect(line).not.toMatch(/[{}[\]"]/);
+  });
+
+  it('names every warehouse and consumable action and their targets in both languages (#82)', () => {
+    const actions = apiActions().filter(
+      (a) => a.startsWith('consumable.') || a.startsWith('warehouse.'),
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'warehouse.mixed',
+        'warehouse.set_assembled',
+        'warehouse.concentrate_corrected',
+        'consumable.created',
+        'consumable.updated',
+        'consumable.received',
+        'consumable.corrected',
+      ]),
+    );
+    for (const lang of [ru, uz]) {
+      for (const a of actions) expect(lang.audit.actions, a).toHaveProperty([a]);
+      expect(lang.audit.targets).toHaveProperty(['consumable']);
+    }
   });
 
   it('names every Uzum sale action and its target in both languages (#80)', () => {

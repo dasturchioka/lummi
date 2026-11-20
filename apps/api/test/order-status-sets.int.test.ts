@@ -1,14 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { OrderStatus } from '@lummi/contracts';
-import { discoverySet, eq, inArray, orderEvents, orders, volumes } from '@lummi/db';
+import { discoverySet, eq, orderEvents, orders } from '@lummi/db';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { OrderStatusService, type TransitionActor } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
-import { orderBody, samarkandPoint, shopper, slugs as slugsOf, tenMl } from './harness/orders';
+import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
 import { payWithCredit } from './harness/payments';
+import { giftSampleOff } from './harness/gift-sample';
+import { concentrateUl, FILL_UL, stockBottles } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -25,6 +27,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 
@@ -38,13 +42,9 @@ const staff = async (): Promise<TransitionActor> => ({
 /** The 5 × 10 ml set's boxes on hand. */
 const discoveryOnHand = async () =>
   (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, 10)))[0]!.onHand;
+/** 10 ml bottles each fragrance's concentrate fills, reserve aside: the shelf's count (ADR 0043). */
 const tenMlOnHand = async (slugs: string[]) =>
-  Promise.all(
-    slugs.map(async (s) => {
-      const { id } = await tenMl(t, s);
-      return (await t.db.select().from(volumes).where(eq(volumes.id, id)))[0]!.onHand;
-    }),
-  );
+  Promise.all(slugs.map(async (s) => Math.floor((await concentrateUl(t, s)) / FILL_UL[10])));
 
 /** A small receipt screenshot for the intake. */
 const RECEIPT_IMAGE = sharp({
@@ -119,15 +119,12 @@ describe('on hand through the status machine: sets (ADR 0009, 0010)', () => {
     const [event] = (
       await t.db.select().from(orderEvents).where(eq(orderEvents.orderId, id))
     ).filter((e) => e.action === 'hand_to_bts');
-    expect(event!.payload).toMatchObject({ onHand: [{ shelf: 'discovery_set', from: 5, to: 3 }] });
+    expect(event!.payload).toMatchObject({ stock: { sets: [{ id: 10, from: 5, to: 3 }] } });
   });
 
   it('a builder handover lowers each of the five 10 ml by the set count', async () => {
     const five = await slugsOf(t, 5);
-    await t.db
-      .update(volumes)
-      .set({ onHand: 6 })
-      .where(inArray(volumes.id, await Promise.all(five.map(async (s) => (await tenMl(t, s)).id))));
+    for (const s of five) await stockBottles(t, s, 10, 6);
     await t.db.update(discoverySet).set({ onHand: 4 });
     const { number } = await place({ builder: { slugs: five, qty: 2 } });
     expect(await tenMlOnHand(five)).toEqual([6, 6, 6, 6, 6]);
@@ -139,10 +136,7 @@ describe('on hand through the status machine: sets (ADR 0009, 0010)', () => {
 
   it('cancelling after handover puts both kinds back', async () => {
     const five = await slugsOf(t, 5);
-    await t.db
-      .update(volumes)
-      .set({ onHand: 6 })
-      .where(inArray(volumes.id, await Promise.all(five.map(async (s) => (await tenMl(t, s)).id))));
+    for (const s of five) await stockBottles(t, s, 10, 6);
     await t.db.update(discoverySet).set({ onHand: 5 });
     const { number } = await place({ discovery: 2, builder: { slugs: five, qty: 1 } });
     const id = await walkTo(number, 'handed_to_bts');
@@ -159,10 +153,7 @@ describe('on hand through the status machine: sets (ADR 0009, 0010)', () => {
 
   it('a return with back-to-stock restores both lines', async () => {
     const five = await slugsOf(t, 5);
-    await t.db
-      .update(volumes)
-      .set({ onHand: 6 })
-      .where(inArray(volumes.id, await Promise.all(five.map(async (s) => (await tenMl(t, s)).id))));
+    for (const s of five) await stockBottles(t, s, 10, 6);
     await t.db.update(discoverySet).set({ onHand: 5 });
     const { number } = await place({ discovery: 1, builder: { slugs: five, qty: 1 } });
     const id = await walkTo(number, 'delivered');

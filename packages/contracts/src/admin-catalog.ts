@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { uzumUrlSchema } from './uzum';
-import { stockReasonSchema } from './warehouse';
+import { concentrateMlSchema, stockReasonSchema } from './warehouse';
 import {
   FRAGRANCE_TIERS,
   FRAGRANCE_TYPES,
@@ -23,7 +23,7 @@ const mlSchema = z.union([z.literal(10), z.literal(30), z.literal(50)]);
 
 export const VOLUME_MLS = [10, 30, 50] as const;
 export const MAX_SIMILAR = 12;
-/** The most one volume can hold in stock (admin form and Excel import). */
+/** The most boxes a Discovery set's count may hold. */
 export const MAX_ON_HAND = 1_000_000;
 /** Key notes shown under the name: exactly this many, per language. */
 export const KEY_NOTE_COUNT = 3;
@@ -40,13 +40,6 @@ export const volumeInputSchema = z
     price: som,
     salePrice: som.nullable(),
     saleEndsOn: dateOnly.nullable(),
-    onHand: z.number().int().min(0).max(MAX_ON_HAND),
-    /**
-     * The on hand the form was loaded with. On an existing volume the server writes `onHand` only
-     * when it differs from this, and only if the stored count still equals it (ADR 0010: a count
-     * made by a manager in between must survive the owner saving the form). Omitted: not written.
-     */
-    loadedOnHand: z.number().int().min(0).nullable().optional(),
   })
   .superRefine((v, ctx) => {
     if (v.salePrice !== null && v.salePrice >= v.price) {
@@ -93,6 +86,14 @@ export const fragranceInputSchema = z
     /** Other fragrances, in the order they appear first in «Похожие ароматы». */
     similarIds: z.array(z.number().int().positive()).max(MAX_SIMILAR),
     volumes: z.array(volumeInputSchema).min(1).max(3),
+    /**
+     * The ready concentrate counted in the form, ml (ADR 0043). A new fragrance starts with it (none:
+     * 0). On an existing one the server writes it only when it differs from `loadedConcentrateMl`,
+     * and only if the stored count still equals that (a count made by a manager in between must
+     * survive the owner saving the form). Omitted: not written.
+     */
+    concentrateMl: concentrateMlSchema.optional(),
+    loadedConcentrateMl: concentrateMlSchema.nullable().optional(),
   })
   .superRefine((v, ctx) => {
     const mls = v.volumes.map((x) => x.ml);
@@ -118,11 +119,8 @@ export const volumeAdminSchema = z.object({
   price: z.number().int(),
   salePrice: z.number().int().nullable(),
   saleEndsOn: dateOnly.nullable(),
-  onHand: z.number().int(),
-  /** Held by orders (ADR 0010). */
-  reserved: z.number().int(),
-  /** A count below the reserve is allowed (a count is ground truth) but flagged: available shows 0. */
-  belowReserve: z.boolean(),
+  /** Whole bottles the fragrance's free concentrate fills (ADR 0043). */
+  available: z.number().int(),
   /** Content hash of the photo set, or null before the first upload. */
   photo: z.string().nullable(),
   isPlaceholder: z.boolean(),
@@ -171,6 +169,12 @@ export const fragranceAdminSchema = z.object({
   }),
   similarIds: z.array(z.number().int()),
   volumes: z.array(volumeAdminSchema),
+  /** The ready concentrate (ADR 0043): counted, held by orders, below the reserve (allowed, flagged). */
+  stock: z.object({
+    concentrateMl: z.number(),
+    reservedMl: z.number(),
+    belowReserve: z.boolean(),
+  }),
 });
 export type FragranceAdmin = z.infer<typeof fragranceAdminSchema>;
 
@@ -193,10 +197,13 @@ export const adminFragranceListItemSchema = z.object({
       ml: z.number().int(),
       price: z.number().int(),
       salePrice: z.number().int().nullable(),
-      onHand: z.number().int(),
+      /** Whole bottles the fragrance's free concentrate fills (ADR 0043). */
+      available: z.number().int(),
       photo: z.string().nullable(),
     }),
   ),
+  /** The ready concentrate, ml. */
+  concentrateMl: z.number(),
 });
 export type AdminFragranceListItem = z.infer<typeof adminFragranceListItemSchema>;
 
@@ -211,6 +218,7 @@ export const fragranceListQuerySchema = z.object({
 export const hiddenBodySchema = z.object({ hidden: z.boolean() });
 /** #83: 1 up to `stock.shownMax` (a setting, so the server checks the top); null clears it. */
 export const shownCountBodySchema = z.object({ shownCount: z.number().int().min(1).nullable() });
+/** A Discovery set's boxes counted (ADR 0009). */
 export const onHandBodySchema = z.object({
   onHand: z.number().int().min(0).max(MAX_ON_HAND),
   /**
@@ -245,20 +253,6 @@ export const dictionaryItemSchema = dictionaryInputSchema.extend({
 });
 export type DictionaryItem = z.infer<typeof dictionaryItemSchema>;
 
-export const onHandItemSchema = z.object({
-  volumeId: z.number().int(),
-  fragranceId: z.number().int(),
-  name: z.string(),
-  /** The fragrance is hidden from the catalog (its stock is still counted). */
-  hidden: z.boolean(),
-  ml: z.number().int(),
-  onHand: z.number().int(),
-  reserved: z.number().int(),
-  available: z.number().int(),
-  belowReserve: z.boolean(),
-});
-export type OnHandItem = z.infer<typeof onHandItemSchema>;
-
 export const photoResultSchema = z.object({ photo: z.string() });
 
 /** Field-level validation failures come back as 422 with the offending paths. */
@@ -270,6 +264,8 @@ export const catalogAdminErrorSchema = z.object({
     'conflict',
     'invalid',
     'on_hand_changed',
+    /** The form's concentrate count moved meanwhile (ADR 0043): nothing written. */
+    'concentrate_changed',
     /** A deadlock or serialization failure survived one retry: send the same request again. */
     'try_again',
   ]),

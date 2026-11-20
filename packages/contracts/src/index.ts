@@ -39,3 +39,4 @@ export * from './reports';
 export * from './home';
 export * from './not-delivered';
 export * from './warehouse';
+export * from './consumables';

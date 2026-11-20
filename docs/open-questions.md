@@ -182,3 +182,10 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 - **«Changes daily».** The customer said the shown number should change every day. We built the owner-set number only: he edits it on the stock page, nothing moves it automatically. Confirm that is enough, or whether he wants a daily drift or schedule.
 - **List card.** Only the product page shows «В наличии: N шт.» today (the list card never showed a count). Confirm he does not want it on the list card too.
+
+## Stock in liquid and consumables (ticket #82, ADR 0043)
+- **Thresholds are ours:** «Мало концентрата» at 300 ml of free concentrate (`stock.lowConcentrateMl`), «Мало масла» at 300 ml of oil (`stock.lowOilMl`), each consumable's own low count (seeded 20 flacons or boxes, 1 000 ml of spirit). The owner sets them.
+- **Boxes for sets:** a builder set's five 10 ml vials and the 5 ml gift sample take a flacon each but no 10 ml box (the cost model gives a set one set box). No «коробка набора» item is seeded; if the owner adds one, should a handed-over builder set or an assembled Discovery set take it?
+- **Returns give back a flacon and a box** with the liquid (the bottle is back on the shelf). Confirm, or say if a returned bottle is thrown away.
+- **Spirit for mixing is required:** mixing is refused while the «Спирт» count is short, so the owner first receives his spirit on the stock page. Confirm, or say if mixing should go on and ask for a recount, as flacons do.
+- **The fold of bottles into concentrate** counts each bottle on hand as its fill (10 ml at 3 % loss = 10.3 ml) and its flacon and box as in stock. If his shelf holds bottles that stay bottles (not poured back), he may keep them as concentrate (the next sale «fills» one) or recount.

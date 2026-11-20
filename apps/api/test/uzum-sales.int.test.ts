@@ -16,15 +16,17 @@ import ExcelJS from 'exceljs';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
-import { reservedByVolume } from '../src/catalog/catalog.service';
+import { readLiquidStock } from '../src/catalog/catalog.service';
 import { fulfilTo, orderRow, pay, placeOrder, tashkent } from './harness/fulfilment';
 import { orderBody, samarkandPoint, shopper, slugs, untilWaitingOnLocks } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
+import { concentrateUl, consumable, FILL_UL, setConsumable, stockBottles } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
- * Seam 1 (ADR 0028): Uzum sales (#80) over HTTP. A sale takes its bottles off on hand at once and
- * freezes its profit on the Uzum channel: the commission, no mailer, no delivery. The expected
+ * Seam 1 (ADR 0028): Uzum sales (#80) over HTTP. A sale fills its bottles from the ready
+ * concentrate at once (ADR 0043: 10 ml takes 10.3 ml, a flacon and a box) and freezes its profit on
+ * the Uzum channel: the commission, no mailer, no delivery. The expected
  * profits are the customer's calculator's own (`single(scent, volume, 'uzum')` at its defaults:
  * commission 20.5 %, ad 3 000, tax 1 %) for the made-up oil prices below, or worked out by hand
  * from its unit costs (A 10 ml 22 462, A 30 ml 52 086, B 10 ml 17 145).
@@ -42,7 +44,10 @@ let t: TestApp;
 let owner: StaffSession;
 let manager: StaffSession;
 type Picked = { slug: string; id: number; name: string; vol: Record<number, number> };
-/** A and B carry oil prices; C has none. Every volume: 20 on hand at the calculator's prices. */
+/**
+ * A and B carry oil prices; C has none. Each fragrance: twenty 10 ml fills of concentrate (206 ml),
+ * its volumes at the calculator's prices; a hundred flacons and boxes of each ml.
+ */
 let A: Picked;
 let B: Picked;
 let C: Picked;
@@ -65,17 +70,23 @@ beforeEach(async () => {
     for (const ml of [10, 30, 50]) {
       const [v] = await t.db
         .update(volumes)
-        .set({ price: PRICES[ml]!, salePrice: null, saleEndsAt: null, onHand: 20 })
+        .set({ price: PRICES[ml]!, salePrice: null, saleEndsAt: null })
         .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)))
         .returning({ id: volumes.id });
       vol[ml] = v!.id;
     }
+    await stockBottles(t, f!.id, 10, 20);
     picked.push({ slug, id: f!.id, name: f!.name, vol });
   }
+  for (const use of ['flacon', 'box'] as const)
+    for (const ml of [10, 30, 50]) await setConsumable(t, (await consumable(t, use, ml)).id, 100);
   [A, B, C] = picked as [Picked, Picked, Picked];
   await t.db.update(fragrances).set({ oilPrice: OIL_A }).where(eq(fragrances.id, A.id));
   await t.db.update(fragrances).set({ oilPrice: OIL_B }).where(eq(fragrances.id, B.id));
   await t.db.update(fragrances).set({ oilPrice: null }).where(eq(fragrances.id, C.id));
+  // every seeded fragrance has concentrate (ADR 0043), so a first order would carry a 5 ml gift
+  // sample of whichever has the most; these orders are about A alone
+  await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
 });
 
 const sale = (over: Partial<UzumSaleInput> = {}): UzumSaleInput => ({
@@ -98,14 +109,15 @@ async function page(id: number): Promise<WarehouseFragrance> {
   if (res.status !== 200) throw new Error(`warehouse ${res.status}`);
   return res.body;
 }
-const onHand = async (volumeId: number) =>
-  (await t.db.select().from(volumes).where(eq(volumes.id, volumeId)))[0]!.onHand;
+/** A fragrance's ready concentrate, in 10 ml fills (206 ml = 20). */
+const tens = async (fragranceId: number) => (await concentrateUl(t, fragranceId)) / FILL_UL[10];
+const items = async (use: 'flacon' | 'box', ml: number) => (await consumable(t, use, ml)).onHand;
 const setOnHand = async (vialMl: number) =>
   (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
 describe('recording an Uzum sale', () => {
-  it('lowers on hand at once, lists it in the fragrance history and audits it', async () => {
+  it('fills its bottles at once, lists it in the fragrance history and audits it', async () => {
     const res = await record(
       sale({ lines: [{ kind: 'volume', volumeId: A.vol[10]!, qty: 2, price: 69_000 }] }),
     );
@@ -123,12 +135,20 @@ describe('recording an Uzum sale', () => {
       costs: null,
     });
     expect(res.body.lines[0]).toMatchObject({ name: A.name, ml: 10, qty: 2, unitCost: null });
-    expect(await onHand(A.vol[10]!)).toBe(18);
+    expect(await tens(A.id)).toBe(18);
+    // a bottle sold alone takes its flacon and its box
+    expect([await items('flacon', 10), await items('box', 10)]).toEqual([98, 98]);
 
     const history = (await page(A.id)).history;
     expect(history[0]).toMatchObject({
       kind: 'uzum_sale',
+      concentrateMl: -20.6,
       bottles: [{ ml: 10, change: -2 }],
+      consumables: [
+        expect.objectContaining({ change: -2, nameRu: 'Флакон 10 мл' }),
+        expect.objectContaining({ change: -2, nameRu: 'Коробка 10 мл' }),
+      ],
+      short: null,
       uzumOrder: 'UZ-1001',
       actorName: manager.staff.name,
     });
@@ -180,7 +200,7 @@ describe('recording an Uzum sale', () => {
       owner,
     );
     expect(res.costs).toMatchObject({ profit: null, missing: [C.name] });
-    expect(await onHand(C.vol[10]!)).toBe(19);
+    expect(await tens(C.id)).toBe(19);
   });
 
   it('sells either Discovery set from its own stock, picked by its vial ml', async () => {
@@ -207,10 +227,9 @@ describe('recording an Uzum sale', () => {
 
   it('never sells a 5 ml bottle alone, and does not offer one', async () => {
     const [five] = await t.db
-      .update(volumes)
-      .set({ onHand: 20 })
-      .where(and(eq(volumes.fragranceId, A.id), eq(volumes.ml, 5)))
-      .returning({ id: volumes.id });
+      .select({ id: volumes.id })
+      .from(volumes)
+      .where(and(eq(volumes.fragranceId, A.id), eq(volumes.ml, 5)));
     const res = await record(
       sale({ lines: [{ kind: 'volume', volumeId: five!.id, qty: 1, price: 30_000 }] }),
     );
@@ -219,7 +238,7 @@ describe('recording an Uzum sale', () => {
       code: 'invalid',
       fields: ['lines.0.volumeId'],
     });
-    expect(await onHand(five!.id)).toBe(20);
+    expect(await tens(A.id)).toBe(20);
     const list = await manager.client.admin.uzum.list({ query: {} });
     expect(
       list.status === 200 && list.body.items.some((i) => i.kind === 'volume' && i.ml === 5),
@@ -259,8 +278,8 @@ describe('recording an Uzum sale', () => {
     expect(row!.commissionPercent).toBe(20.56);
   });
 
-  it('refuses more than is available (on hand less the reserve) and writes nothing', async () => {
-    await t.db.update(volumes).set({ onHand: 2 }).where(eq(volumes.id, A.vol[10]!));
+  it('refuses more than is available (concentrate less the reserve) and writes nothing', async () => {
+    await stockBottles(t, A.id, 10, 2);
     // an order holds one of the two
     const client = await shopper(t, ali, '998901112233');
     await client.cart.addLine({ body: { slug: A.slug, ml: 10, qty: 1 } });
@@ -281,8 +300,9 @@ describe('recording an Uzum sale', () => {
         { kind: 'volume', volumeId: A.vol[10]!, name: A.name, ml: 10, wanted: 2, available: 1 },
       ],
     });
-    expect(await onHand(A.vol[10]!)).toBe(2);
-    expect(await onHand(B.vol[10]!)).toBe(20);
+    expect(await tens(A.id)).toBe(2);
+    expect(await tens(B.id)).toBe(20);
+    expect(await items('flacon', 10)).toBe(100);
     expect(await audits('uzum.sale_recorded')).toHaveLength(0);
     // one is still available
     const ok = await record(
@@ -291,12 +311,58 @@ describe('recording an Uzum sale', () => {
     expect(ok.status).toBe(201);
   });
 
+  it('fills the volumes of one fragrance from its one liquid, in the order the lines name them', async () => {
+    // 51.5 ml: a 30 ml (30.9) leaves 20.6 ml, two 10 ml
+    await stockBottles(t, A.id, 50, 1);
+    const three = await record(
+      sale({
+        lines: [
+          { kind: 'volume', volumeId: A.vol[30]!, qty: 1, price: 189_000 },
+          { kind: 'volume', volumeId: A.vol[10]!, qty: 3, price: 69_000 },
+        ],
+      }),
+    );
+    expect(three.status === 409 && three.body).toEqual({
+      code: 'stock_short',
+      short: [
+        { kind: 'volume', volumeId: A.vol[10]!, name: A.name, ml: 10, wanted: 3, available: 2 },
+      ],
+    });
+    const two = await recorded(
+      sale({
+        lines: [
+          { kind: 'volume', volumeId: A.vol[30]!, qty: 1, price: 189_000 },
+          { kind: 'volume', volumeId: A.vol[10]!, qty: 2, price: 69_000 },
+        ],
+      }),
+    );
+    expect(two.units).toBe(3);
+    expect(await concentrateUl(t, A.id)).toBe(0);
+    expect([await items('flacon', 30), await items('flacon', 10)]).toEqual([99, 98]);
+  });
+
+  it('never stops for short flacons: the count stops at 0 and the move says what was short', async () => {
+    const flacon = await consumable(t, 'flacon', 10);
+    await setConsumable(t, flacon.id, 1);
+    const res = await recorded(
+      sale({ lines: [{ kind: 'volume', volumeId: A.vol[10]!, qty: 3, price: 69_000 }] }),
+    );
+    expect(res.units).toBe(3);
+    const after = await consumable(t, 'flacon', 10);
+    expect([after.onHand, after.needsRecount]).toEqual([0, true]);
+    expect((await page(A.id)).history[0]).toMatchObject({
+      kind: 'uzum_sale',
+      concentrateMl: -30.9,
+      short: { consumables: [expect.objectContaining({ consumableId: flacon.id, change: 2 })] },
+    });
+  });
+
   it('keeps one standing sale per Uzum order number', async () => {
     const first = await recorded(sale());
     const again = await record(sale());
     expect(again.status).toBe(409);
     expect(again.status === 409 && again.body.code).toBe('duplicate_order');
-    expect(await onHand(A.vol[10]!)).toBe(19);
+    expect(await tens(A.id)).toBe(19);
     // a voided one can be typed again
     await voidSale(first.id);
     expect((await record(sale())).status).toBe(201);
@@ -315,11 +381,13 @@ describe('recording an Uzum sale', () => {
 });
 
 describe('voiding an Uzum sale', () => {
-  it('brings the bottles back, keeps the sale with its reason, and audits it', async () => {
+  it('brings the liquid, flacons and boxes back, keeps the sale with its reason, and audits it', async () => {
     const s = await recorded(
       sale({ lines: [{ kind: 'volume', volumeId: A.vol[30]!, qty: 3, price: 189_000 }] }),
     );
-    expect(await onHand(A.vol[30]!)).toBe(17);
+    // 206 − 3 × 30.9 = 113.3 ml
+    expect(await concentrateUl(t, A.id)).toBe(113_300);
+    expect(await items('box', 30)).toBe(97);
 
     const res = await voidSale(s.id, 'Возврат на Uzum');
     expect(res.status).toBe(200);
@@ -328,9 +396,11 @@ describe('voiding an Uzum sale', () => {
       voidReason: 'Возврат на Uzum',
       voidedByName: manager.staff.name,
     });
-    expect(await onHand(A.vol[30]!)).toBe(20);
+    expect(await tens(A.id)).toBe(20);
+    expect([await items('flacon', 30), await items('box', 30)]).toEqual([100, 100]);
     expect((await page(A.id)).history[0]).toMatchObject({
       kind: 'uzum_sale_voided',
+      concentrateMl: 92.7,
       bottles: [{ ml: 30, change: 3 }],
       reason: 'Возврат на Uzum',
       uzumOrder: 'UZ-1001',
@@ -341,7 +411,7 @@ describe('voiding an Uzum sale', () => {
     const twice = await voidSale(s.id);
     expect(twice.status).toBe(409);
     expect(twice.status === 409 && twice.body.code).toBe('voided');
-    expect(await onHand(A.vol[30]!)).toBe(20);
+    expect(await tens(A.id)).toBe(20);
     expect((await voidSale(999_999)).status).toBe(404);
   });
 
@@ -358,15 +428,16 @@ describe('voiding an Uzum sale', () => {
 
 describe('an Uzum sale and a Mini App order at once', () => {
   /**
-   * Both requests line up behind a lock on the bottle's row, `first` ahead of `second` (waiters on
-   * a row are let through in the order they came), then race for the last bottle.
+   * Both requests line up behind a lock on the fragrance's row (the first stock lock of both, ADR
+   * 0043), `first` ahead of `second` (waiters on a row are let through in the order they came),
+   * then race for the last 10 ml fill.
    */
   async function queued<A, B>(first: () => Promise<A>, second: () => Promise<B>) {
     const locker = new pg.Client({ connectionString: t.env.DATABASE_URL });
     await locker.connect();
     try {
       await locker.query('begin');
-      await locker.query('select 1 from volumes where id = $1 for update', [A.vol[10]!]);
+      await locker.query('select 1 from fragrances where id = $1 for update', [A.id]);
       const a = first();
       await untilWaitingOnLocks(locker, 1);
       const b = second();
@@ -379,7 +450,7 @@ describe('an Uzum sale and a Mini App order at once', () => {
   }
 
   async function lastBottle() {
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, A.vol[10]!));
+    await stockBottles(t, A.id, 10, 1);
     const client = await shopper(t, ali, '998901112233');
     await client.cart.addLine({ body: { slug: A.slug, ml: 10, qty: 1 } });
     const point = await samarkandPoint(t);
@@ -388,11 +459,11 @@ describe('an Uzum sale and a Mini App order at once', () => {
     return () => client.orders.create({ body: orderBody(point.id, checkout.body.quote.total) });
   }
 
-  /** Nothing overdrawn: on hand covers what open orders reserve, to the bottle. */
+  /** Nothing overdrawn: the concentrate covers what open orders reserve, to the microlitre. */
   async function expectNoOverdraw(left: number) {
-    const reserved = (await reservedByVolume(t.db, [A.vol[10]!])).get(A.vol[10]!) ?? 0;
-    expect(await onHand(A.vol[10]!)).toBe(left);
-    expect(left - reserved).toBe(0);
+    const reserved = (await readLiquidStock(t.db, [A.id])).of(A.id).reservedUl;
+    expect(await tens(A.id)).toBe(left);
+    expect(left * FILL_UL[10] - reserved).toBe(0);
   }
 
   it('refuses the sale when the order took the last bottle first', async () => {

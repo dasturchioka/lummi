@@ -1341,9 +1341,9 @@ export const screens: Screen[] = [
       const file = await exportWorkbook(page, (wb) => {
         const v = wb.getWorksheet('Объёмы')!;
         cell(v, 3, 'Цена, сум').value = 'дорого';
-        cell(v, 4, 'В наличии, шт.').value = -2;
         cell(v, 5, 'Объём, мл').value = 20;
         const f = wb.getWorksheet('Ароматы')!;
+        cell(f, 4, 'Концентрат, мл').value = -2;
         cell(f, 6, 'Верхние ноты').value = 'бергамот, ноты которой нет в справочнике';
         cell(f, 7, 'Хит').value = 'возможно';
       });
@@ -1357,26 +1357,41 @@ export const screens: Screen[] = [
     path: '/catalog/import',
     as: 'owner',
     act: async ({ page }) => {
-      // Reserves come from orders; stub 25 held on the first listed volume of the dry run's
-      // answer, so the on hand the file sets shows the warning an open order would give it.
+      // Reserves come from orders; stub 25.75 ml held on the first fragrance of the dry run's
+      // answer, so the concentrate the file sets shows the warning an open order would give it.
       await page.route('**/api/admin/catalog/import/dry-run', async (route) => {
         const response = await route.fetch();
         const report = (await response.json()) as {
-          stock: { reserved: number; newOnHand: number; available: number; negative: boolean }[];
+          stock: {
+            reservedMl: number;
+            newConcentrateMl: number;
+            availableMl: number;
+            negative: boolean;
+          }[];
           warnings: unknown[];
           warningTotal: number;
         };
         const s = report.stock[0];
         if (s) {
-          Object.assign(s, { reserved: 25, available: s.newOnHand - 25, negative: true });
-          report.warnings.push({ sheet: 'volumes', row: 2, column: null, code: 'below_reserve' });
+          Object.assign(s, {
+            reservedMl: 25.75,
+            availableMl: s.newConcentrateMl - 25.75,
+            negative: true,
+          });
+          report.warnings.push({
+            sheet: 'fragrances',
+            row: 2,
+            column: null,
+            code: 'below_reserve',
+          });
           report.warningTotal += 1;
         }
         await route.fulfill({ response, json: report });
       });
       const file = await exportWorkbook(page, (wb) => {
+        const f = wb.getWorksheet('Ароматы')!;
+        cell(f, 2, 'Концентрат, мл').value = 18;
         const v = wb.getWorksheet('Объёмы')!;
-        cell(v, 2, 'В наличии, шт.').value = 18;
         cell(v, 3, 'Цена, сум').value = 155_000;
         cell(v, 4, 'Цена, сум').value = 160_000;
       });
@@ -1414,11 +1429,11 @@ export const screens: Screen[] = [
         const body = (await response.json()) as { warnings: unknown[] };
         body.warnings = [
           {
-            sheet: 'volumes',
+            sheet: 'fragrances',
             row: 2,
             column: null,
             code: 'below_reserve',
-            params: { name: 'Guidance', ml: 10, onHand: 18, reserved: 25 },
+            params: { name: 'Guidance', onHand: 18, reserved: 25.75 },
           },
         ];
         await route.fulfill({ response, json: body });
@@ -1507,25 +1522,20 @@ export const screens: Screen[] = [
     fullPage: false,
     act: async ({ page, t }) => {
       await openFragrance(page, 1);
-      // a manager counts the 10 ml while the owner has the form open
+      // a manager counts the concentrate while the owner has the form open (ADR 0043)
       const id = new URL(page.url()).pathname.split('/').pop();
       const one = (await (
         await page.request.get(new URL(`/api/admin/catalog/fragrances/${id}`, page.url()).href)
-      ).json()) as {
-        volumes: { id: number; ml: number; onHand: number }[];
-      };
-      const v10 = one.volumes.find((v) => v.ml === 10)!;
-      const res = await page.request.patch(
-        new URL(`/api/admin/volumes/${v10.id}/on-hand`, page.url()).href,
-        {
-          data: { onHand: v10.onHand + 1, reason: 'Пересчёт' },
-        },
+      ).json()) as { stock: { concentrateMl: number } };
+      const res = await page.request.put(
+        new URL(`/api/admin/warehouse/fragrances/${id}/concentrate`, page.url()).href,
+        { data: { ml: one.stock.concentrateMl + 1, reason: 'Пересчёт' } },
       );
-      if (!res.ok()) throw new Error(`on hand change failed: ${res.status()}`);
-      await page.locator('#f-hand-10').fill(String(v10.onHand + 5));
+      if (!res.ok()) throw new Error(`concentrate count failed: ${res.status()}`);
+      await page.locator('#f-concentrate').fill(String(one.stock.concentrateMl + 5));
       await page.getByRole('button', { name: t.catalog.save, exact: true }).click();
       await page.getByText(t.catalog.onHandChanged).waitFor();
-      await scrollToVolumes(page);
+      await page.locator('#f-concentrate').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     },
   },
   {
@@ -1534,20 +1544,20 @@ export const screens: Screen[] = [
     as: 'owner',
     fullPage: false,
     act: async ({ page, t }) => {
-      // Reserves arrive with orders (a later ticket): stub 25 held on the first volume of the
-      // editor's server payload, so the on hand of 20 shows the warning it will get then.
+      // Reserves arrive with orders: stub 1 200 ml held in the editor's server payload, so the
+      // seed's 1 000 ml of concentrate shows the warning an order would give it (ADR 0043).
       await page.route(
         (url) => /^\/catalog\/\d+$/.test(url.pathname),
         async (route) => {
           if (route.request().headers()['rsc'] !== '1') return route.continue();
           const response = await route.fetch();
-          const body = (await response.text()).replace('"reserved":0', '"reserved":25');
+          const body = (await response.text()).replace('"reservedMl":0', '"reservedMl":1200');
           await route.fulfill({ response, body });
         },
       );
       await openFragrance(page);
       await page.getByText(t.catalog.belowReserve).waitFor();
-      await scrollToVolumes(page);
+      await page.locator('#f-concentrate').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     },
   },
   {

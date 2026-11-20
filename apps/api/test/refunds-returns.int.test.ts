@@ -16,7 +16,6 @@ import {
   outbox,
   regions,
   upgradeRights,
-  volumes,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { BirthdayCouponJob } from '../src/birthday/birthday-job';
@@ -25,6 +24,8 @@ import { ReceiptsService } from '../src/receipts/receipts.service';
 import { shopper, slugs, whileLockedUntil } from './harness/orders';
 import { payWithCredit, recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
+import { FILL_UL } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
@@ -48,6 +49,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 
@@ -492,37 +495,38 @@ describe('a refund changes no discount and shows on the orders list', () => {
   });
 });
 
-/** On hand per volume id and for the Discovery set, as the stock page (#27) shows it to staff. */
+/**
+ * Each fragrance's ready concentrate in µl (ADR 0043) and the 5 × 10 ml Discovery set's boxes, as
+ * the stock page (#27) shows them to staff.
+ */
 async function onHand(client: StaffClient) {
-  const volumes = new Map<number, number>();
+  const concentrate = new Map<number, number>();
   let discovery = -1;
   for (let page = 1; ; page++) {
     const res = await client.admin.stock.list({ query: { page, pageSize: 50 } });
     if (res.status !== 200) throw new Error(`stock ${res.status}`);
-    for (const row of res.body.rows) {
-      // the 5 × 10 ml set's row (the 5 × 5 ml set has its own, `discovery-5`, ADR 0042)
-      if (row.key === 'discovery') discovery = row.onHand;
-      else if (row.kind === 'volume') volumes.set(row.volumeId!, row.onHand);
-    }
+    for (const row of res.body.fragrances)
+      concentrate.set(row.fragranceId, Math.round(row.concentrateMl * 1000));
+    // the 5 × 10 ml set's row (the 5 × 5 ml set has its own, `discovery-5`, ADR 0042)
+    for (const row of res.body.sets) if (row.key === 'discovery') discovery = row.onHand;
     if (page * res.body.pageSize >= res.body.total) break;
   }
-  return { volumes, discovery };
+  return { concentrate, discovery };
 }
 
-/** The 10 ml or other volume ids of fragrances, by slug. */
-async function volumeIds(picks: string[], ml: number) {
+/** The fragrance ids, by slug. */
+async function fragranceIds(picks: string[]) {
   const rows = await t.db
-    .select({ id: volumes.id, slug: fragrances.slug })
-    .from(volumes)
-    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-    .where(and(inArray(fragrances.slug, picks), eq(volumes.ml, ml)));
+    .select({ id: fragrances.id, slug: fragrances.slug })
+    .from(fragrances)
+    .where(inArray(fragrances.slug, picks));
   return picks.map((s) => rows.find((r) => r.slug === s)!.id);
 }
 
 describe('a Return: «Доставлен» → «Возвращён» in the admin panel (ADR 0006, 0010)', () => {
   /**
    * An order of every line kind: two 30 ml bottles, a Discovery set and a builder set of five,
-   * delivered. Answers its number and the ids of the shelves each line's bottles came from.
+   * delivered. Answers its number and the fragrances each line's bottles were filled from.
    */
   async function deliveredMix() {
     const client = await shopper(t, ali, '998901112233');
@@ -536,8 +540,8 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
     await fulfilTo(number, 'delivered');
     return {
       number,
-      bottleVolume: (await volumeIds([bottle], 30))[0]!,
-      builderVolumes: await volumeIds(picked, 10),
+      bottleFragrance: (await fragranceIds([bottle]))[0]!,
+      builderFragrances: await fragranceIds(picked),
     };
   }
 
@@ -553,7 +557,7 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
   }
 
   it('the flagged lines go back on hand, per line kind; the unflagged stay off the shelf', async () => {
-    const { number, bottleVolume, builderVolumes } = await deliveredMix();
+    const { number, bottleFragrance, builderFragrances } = await deliveredMix();
     const manager = await t.managerSession();
     const before = await onHand(manager.client);
     const lines = await linesOfPage(manager.client, number);
@@ -582,9 +586,13 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
     expect(res.body.money.owed).toBe((await orderRow(number)).amountDue);
 
     const after = await onHand(manager.client);
-    expect(after.volumes.get(bottleVolume)).toBe(before.volumes.get(bottleVolume)! + 2);
+    // two 30 ml fills back into the bottle's concentrate (ADR 0043)
+    expect(after.concentrate.get(bottleFragrance)).toBe(
+      before.concentrate.get(bottleFragrance)! + 2 * FILL_UL[30],
+    );
     expect(after.discovery).toBe(before.discovery + 1);
-    for (const id of builderVolumes) expect(after.volumes.get(id)).toBe(before.volumes.get(id));
+    for (const id of builderFragrances)
+      expect(after.concentrate.get(id)).toBe(before.concentrate.get(id));
     // audited with the manager, with the on-hand changes
     expect(await auditOf(number, 'order.returned')).toMatchObject([
       { actorType: 'staff', actorId: manager.staff.id },
@@ -605,7 +613,7 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
   });
 
   it('a builder set flagged back puts one 10 ml of each of its five back; the rest stays', async () => {
-    const { number, bottleVolume, builderVolumes } = await deliveredMix();
+    const { number, bottleFragrance, builderFragrances } = await deliveredMix();
     const { client } = await t.managerSession();
     const before = await onHand(client);
     const lines = await linesOfPage(client, number);
@@ -619,9 +627,9 @@ describe('a Return: «Доставлен» → «Возвращён» in the adm
     });
     expect(res.status).toBe(200);
     const after = await onHand(client);
-    for (const id of builderVolumes)
-      expect(after.volumes.get(id)).toBe(before.volumes.get(id)! + 1);
-    expect(after.volumes.get(bottleVolume)).toBe(before.volumes.get(bottleVolume));
+    for (const id of builderFragrances)
+      expect(after.concentrate.get(id)).toBe(before.concentrate.get(id)! + FILL_UL[10]);
+    expect(after.concentrate.get(bottleFragrance)).toBe(before.concentrate.get(bottleFragrance));
     expect(after.discovery).toBe(before.discovery);
   });
 });

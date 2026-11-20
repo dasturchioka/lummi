@@ -3,6 +3,7 @@ import type { CatalogQuery } from '@lummi/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AuditService } from '../src/audit/audit.service';
 import { SettingsService } from '../src/settings/settings.service';
+import { FILL_UL, setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -34,12 +35,12 @@ async function setPrice(slug: string, ml: number, price: number) {
     .set({ price })
     .where(and(eq(volumes.fragranceId, await idOf(slug)), eq(volumes.ml, ml)));
 }
-async function sellOut(slug: string, ml?: number) {
-  const id = await idOf(slug);
-  await t.db
-    .update(volumes)
-    .set({ onHand: 0 })
-    .where(ml ? and(eq(volumes.fragranceId, id), eq(volumes.ml, ml)) : eq(volumes.fragranceId, id));
+/**
+ * Nothing left of the fragrance; with `ml`, just under one fill of it, so that volume is sold out
+ * while the smaller ones still fill from the same liquid (ADR 0043).
+ */
+async function sellOut(slug: string, ml?: 30 | 50) {
+  await setConcentrateUl(t, slug, ml ? FILL_UL[ml] - 1 : 0);
 }
 
 describe('GET /catalog/fragrances: the list', () => {
@@ -170,16 +171,19 @@ describe('query validation', () => {
 
 describe('one lowest-price rule', () => {
   it('a sold-out cheap volume counts nowhere: card, price filter and price sort agree', async () => {
+    // one liquid fills every volume (ADR 0043), so only the biggest bottle can run out alone:
+    // the cheap one here is the 50 ml, with too little concentrate left for it
+    await setPrice('aventus', 50, 39_000);
     await setPrice('aventus', 10, 99_000);
     await setPrice('aventus', 30, 199_000);
-    await sellOut('aventus', 10);
+    await sellOut('aventus', 50);
     const asc = await list({ limit: 100, sort: 'price_asc' });
     const card = asc.items.find((i) => i.slug === 'aventus')!;
-    expect(card.from).toEqual({ price: 199_000, ml: 30, regularPrice: null });
+    expect(card.from).toEqual({ price: 99_000, ml: 10, regularPrice: null });
     expect(card.soldOut).toBe(false);
     // the filter and the sort judge the same number the card shows
-    expect(await slugsOf({ priceMax: 150_000 })).not.toContain('aventus');
-    expect(await slugsOf({ priceMin: 190_000, priceMax: 200_000 })).toEqual(['aventus']);
+    expect(await slugsOf({ priceMax: 50_000 })).not.toContain('aventus');
+    expect(await slugsOf({ priceMin: 95_000, priceMax: 100_000 })).toEqual(['aventus']);
     const order = asc.items.flatMap((i) => (i.from ? [i.from.price] : []));
     expect(order).toEqual([...order].sort((a, b) => a - b));
     expect(asc.items.at(-1)?.slug).toBe('aventus');

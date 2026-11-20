@@ -4,6 +4,7 @@ import type { AdminHome, HomeQueue } from '@lummi/contracts';
 import {
   and,
   backupStatus,
+  discoverySet,
   eq,
   errorEvents,
   fragrances,
@@ -17,6 +18,7 @@ import {
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { HomeService } from '../src/home/home.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import {
   cancelByStaff,
@@ -31,6 +33,7 @@ import {
 import { shopper, slugs } from './harness/orders';
 import { recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 /**
@@ -180,7 +183,8 @@ describe('the work queue', () => {
     await payAt(cancelled, '2026-11-14 09:05');
     t.edges.clock.set(tashkent('2026-11-14 09:15'));
     await cancelByStaff(t, cancelled);
-    // stock: one volume sold out, one at the threshold, a hidden fragrance's sold out (not counted)
+    // stock (ADR 0043): one fragrance's concentrate gone, one under `stock.lowConcentrateMl` (300),
+    // a hidden fragrance's gone (not counted)
     const [outSlug, lowSlug, hiddenSlug] = (await slugs(t, 67)).slice(60);
     const volumeOf = async (slug: string, ml: number) => {
       const [v] = await t.db
@@ -193,9 +197,9 @@ describe('the work queue', () => {
     const out = await volumeOf(outSlug!, 30);
     const low = await volumeOf(lowSlug!, 50);
     const hidden = await volumeOf(hiddenSlug!, 10);
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, out.id));
-    await t.db.update(volumes).set({ onHand: 3 }).where(eq(volumes.id, low.id));
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, hidden.id));
+    await setConcentrateUl(t, out.fragranceId, 0);
+    await setConcentrateUl(t, low.fragranceId, 200_000);
+    await setConcentrateUl(t, hidden.fragranceId, 0);
     await t.db
       .update(fragrances)
       .set({ hidden: true })
@@ -262,7 +266,7 @@ describe('the work queue', () => {
       count: 2,
       out: 1,
       low: 1,
-      first: { kind: 'volume', name: out.name, ml: 30, available: 0, level: 'zero' },
+      first: { kind: 'fragrance', name: out.name, availableMl: 0, level: 'zero' },
     });
     expect(q.reviews).toEqual({
       count: 1,
@@ -296,12 +300,48 @@ describe('the work queue', () => {
     const stock = await manager.stock.list({
       query: { filter: 'low', visibility: 'visible', pageSize: 50 },
     });
-    expect(stock.status === 200 && stock.body.rows.map((r) => r.key).sort()).toEqual(
-      [`v${out.id}`, `v${low.id}`].sort(),
-    );
+    expect(
+      stock.status === 200 && stock.body.fragrances.map((r) => r.fragranceId).sort((x, y) => x - y),
+    ).toEqual([out.fragranceId, low.fragranceId].sort((x, y) => x - y));
 
     // the first queue that is not empty is the Now item: the receipt
     expect(home.now).toMatchObject({ kind: 'receipt', number: a, waitedSeconds: 20 * MIN });
+  });
+
+  it('says concentrate in ml and boxes in pieces, nothing left first, never one scale for both (ADR 0043)', async () => {
+    const [x, y] = await slugs(t, 2);
+    const named = async (slug: string) => {
+      const [f] = await t.db
+        .select({ fragranceId: fragrances.id, name: fragrances.name })
+        .from(fragrances)
+        .where(eq(fragrances.slug, slug));
+      return f!;
+    };
+    const lowX = await named(x!);
+    const lowY = await named(y!);
+    // 250.5 ml free and 120 ml free: both under the 300 ml threshold; a set with 2 boxes
+    await setConcentrateUl(t, lowX.fragranceId, 250_500);
+    await setConcentrateUl(t, lowY.fragranceId, 120_000);
+    await t.db.update(discoverySet).set({ onHand: 2 }).where(eq(discoverySet.vialMl, 10));
+    await t.db.update(discoverySet).set({ onHand: 0 }).where(eq(discoverySet.vialMl, 5));
+    const home = await homeAs('manager');
+    const stock = home.queues.stock;
+    expect(stock.first).toEqual({ kind: 'discovery', vialMl: 5, available: 0, level: 'zero' });
+    const items = await t.app.get(HomeService).stockItems();
+    const ours = items.filter(
+      (i) =>
+        i.kind === 'discovery' ||
+        (i.kind === 'fragrance' && [lowX.name, lowY.name].includes(i.name)),
+    );
+    // nothing left first; then each kind in its own unit, sets before fragrances, by name
+    expect(ours).toEqual([
+      { kind: 'discovery', vialMl: 5, available: 0, level: 'zero' },
+      { kind: 'discovery', vialMl: 10, available: 2, level: 'low' },
+      ...[
+        { kind: 'fragrance', name: lowX.name, availableMl: 250.5, level: 'low' },
+        { kind: 'fragrance', name: lowY.name, availableMl: 120, level: 'low' },
+      ].sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    ]);
   });
 
   it('lists refund owed until the refunds cover what paid the order', async () => {

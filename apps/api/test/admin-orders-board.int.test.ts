@@ -24,6 +24,7 @@ import {
 import { samarkandPoint, shopper, slugs } from './harness/orders';
 import { uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 /** Seam 1 (ADR 0028): the orders board (#52) over HTTP, as staff open it. */
@@ -42,6 +43,8 @@ beforeEach(async () => {
   t.edges.clock.set(tashkent('2026-11-16 09:00'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 

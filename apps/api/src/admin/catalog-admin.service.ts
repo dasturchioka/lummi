@@ -5,7 +5,6 @@ import type {
   FragranceCosts,
   FragranceInput,
   AdminFragranceListItem,
-  OnHandItem,
   VolumeInput,
 } from '@lummi/contracts';
 import { tashkentToUtc, utcToTashkent } from '@lummi/contracts';
@@ -30,7 +29,7 @@ import {
 import { normalizeUzbek } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
-import { available, belowReserve, reservedByVolume } from '../catalog/catalog.service';
+import { belowReserve, readLiquidStock } from '../catalog/catalog.service';
 import { readCostSettings } from '../cost/cost-settings';
 import { fragranceCosts } from '../cost/fragrance-costs';
 import { readSettings } from '../settings/settings.service';
@@ -41,14 +40,13 @@ import type { Edges } from '../edges';
 import { DB, EDGES } from '../tokens';
 import { apostropheLike, withoutApostrophes } from '../util/apostrophe-match';
 import { retryOrTryAgain } from '../util/transient';
-import { recordCountChanges, recordStockMove } from '../warehouse/stock-moves';
+import { mlFromUl, ulFromMl } from '../warehouse/oil';
+import { recordStockMove } from '../warehouse/stock-moves';
 
 export type Failure = {
   ok: false;
-  reason: 'not_found' | 'conflict' | 'invalid' | 'on_hand_changed' | 'try_again';
+  reason: 'not_found' | 'conflict' | 'invalid' | 'concentrate_changed' | 'try_again';
   fields?: string[];
-  /** With `on_hand_changed` from a single-count edit: the count as it is now. */
-  current?: number;
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
 const fail = (reason: Failure['reason'], fields?: string[]): Failure => ({
@@ -58,8 +56,9 @@ const fail = (reason: Failure['reason'], fields?: string[]): Failure => ({
 });
 
 /**
- * A transaction that locks volume rows, retried once on a deadlock or serialization failure
- * (checkout locks the same rows); a second one is the clean `try_again` instead of a 500.
+ * A transaction that locks the fragrance row, retried once on a deadlock or serialization failure
+ * (checkout and the handover lock the same rows); a second one is the clean `try_again` instead of
+ * a 500.
  */
 const transient = <T>(run: () => Promise<Outcome<T>>): Promise<Outcome<T>> =>
   retryOrTryAgain(run, fail('try_again'));
@@ -150,6 +149,10 @@ export class CatalogAdminService {
       .where(and(...where))
       .orderBy(asc(sql`lower(${fragrances.name})`), asc(fragrances.id));
     if (rows.length === 0) return [];
+    const stock = await readLiquidStock(
+      this.db,
+      rows.map((r) => r.id),
+    );
     const vols = await this.db
       .select()
       .from(volumes)
@@ -159,7 +162,7 @@ export class CatalogAdminService {
             volumes.fragranceId,
             rows.map((r) => r.id),
           ),
-          // the form's volumes: the 5 ml has no price and is counted on the stock page (ADR 0042)
+          // the form's volumes: the 5 ml has no price and is filled for samples and sets (ADR 0042)
           sellableVolume(),
         ),
       )
@@ -173,9 +176,10 @@ export class CatalogAdminService {
           ml: v.ml,
           price: v.price,
           salePrice: v.salePrice,
-          onHand: v.onHand,
+          available: stock.bottles(r.id, v.ml),
           photo: v.photoHash,
         })),
+        concentrateMl: mlFromUl(stock.of(r.id).concentrateUl),
       };
     });
   }
@@ -200,10 +204,8 @@ export class CatalogAdminService {
         .where(and(eq(volumes.fragranceId, id), sellableVolume()))
         .orderBy(asc(volumes.ml)),
     ]);
-    const reserved = await reservedByVolume(
-      db,
-      volumeRows.map((v) => v.id),
-    );
+    const stock = await readLiquidStock(db, [id]);
+    const liquid = stock.of(id);
     const shownCfg = await readSettings(db, ['stock.shownDefault', 'stock.shownMax']);
     const level = (l: 'top' | 'heart' | 'base') =>
       noteRows.filter((n) => n.level === l).map((n) => n.noteId);
@@ -247,12 +249,15 @@ export class CatalogAdminService {
         price: v.price,
         salePrice: v.salePrice,
         saleEndsOn: saleEndDay(v.saleEndsAt),
-        onHand: v.onHand,
-        reserved: reserved.get(v.id) ?? 0,
-        belowReserve: belowReserve(v.onHand, reserved.get(v.id) ?? 0),
+        available: stock.bottles(id, v.ml),
         photo: v.photoHash,
         isPlaceholder: v.isPlaceholder,
       })),
+      stock: {
+        concentrateMl: mlFromUl(liquid.concentrateUl),
+        reservedMl: mlFromUl(liquid.reservedUl),
+        belowReserve: belowReserve(liquid.concentrateUl, liquid.reservedUl),
+      },
     };
   }
 
@@ -308,25 +313,19 @@ export class CatalogAdminService {
       ).rows as [{ next: number }];
       code = String(next).padStart(3, '0');
     }
+    const concentrateUl = ulFromMl(input.concentrateMl ?? 0);
     const [row] = await tx
       .insert(fragrances)
-      .values({ ...this.columns(input), slug, code })
+      .values({ ...this.columns(input), slug, code, concentrateUl })
       .returning({ id: fragrances.id });
     const id = row!.id;
     await this.writeLinks(tx, id, input);
     for (const v of input.volumes) await this.insertVolume(tx, id, v, opts.placeholder);
-    // the 5 ml bottle (ADR 0042): stocked and bottled for the 5 × 5 ml set and the gift sample,
-    // never sold, so it has no price and no place in the form
-    await tx.insert(volumes).values({ fragranceId: id, ml: NOT_SOLD_ALONE_ML, price: 0, onHand: 0 });
-    // the first counts are a correction from the form or the import (#76); the seed writes none
-    if (actor)
-      await this.recordFormCounts(
-        tx,
-        actor,
-        id,
-        input.volumes.map((v) => [v.ml, v.onHand]),
-        opts.source,
-      );
+    // the 5 ml bottle (ADR 0042): filled for the 5 × 5 ml set and the gift sample, never sold, so
+    // it has no price and no place in the form
+    await tx.insert(volumes).values({ fragranceId: id, ml: NOT_SOLD_ALONE_ML, price: 0 });
+    // the first count is a correction from the form or the import (#76, #82); the seed writes none
+    if (actor) await this.recordFormCount(tx, actor, id, 0, concentrateUl, opts.source);
     await reindexFragrances(tx, [id]);
     if (actor) {
       await this.audit.record(tx, {
@@ -339,6 +338,8 @@ export class CatalogAdminService {
           slug,
           code,
           hidden: input.hidden,
+          // the starting count of its ready concentrate (ADR 0043), as the form or the file set it
+          concentrateMl: mlFromUl(concentrateUl),
           ...(opts.source ? { source: opts.source } : {}),
         },
       });
@@ -359,72 +360,63 @@ export class CatalogAdminService {
     input: FragranceInput,
     opts: { source?: 'import' } = {},
   ): Promise<Outcome<FragranceAdmin>> {
+    // The fragrance row is locked before its concentrate is read: a count made meanwhile (a
+    // manager's, a mixing, the BTS handover's) is either seen here or waits for this save.
     const [locked] = await tx
-      .select({ id: fragrances.id })
+      .select({ id: fragrances.id, concentrateUl: fragrances.concentrateUl })
       .from(fragrances)
       .where(eq(fragrances.id, id))
       .for('update');
     if (!locked) return fail('not_found');
     const bad = await this.checkReferences(tx, input, id);
     if (bad.length) return fail('invalid', bad);
-    // The volume rows are locked before they are read: a count made meanwhile (a manager's, or
-    // the BTS handover's) is either seen here or waits for this save (ADR 0010).
-    await tx
-      .select({ id: volumes.id })
-      .from(volumes)
-      .where(eq(volumes.fragranceId, id))
-      .orderBy(asc(volumes.id)) // ascending id, like checkout: no lock-order deadlock
-      .for('update');
     const before = (await this.get(id, tx))!;
-    // On hand is compare-and-set: the owner's form carries the count it loaded; a changed
-    // count is written only if the stored one still equals it. Nothing is written otherwise.
-    for (const v of input.volumes) {
-      const old = before.volumes.find((x) => x.ml === v.ml);
-      if (old && this.onHandEdited(v) && old.onHand !== v.loadedOnHand) {
-        return fail('on_hand_changed', [`volumes.${input.volumes.indexOf(v)}.onHand`]);
-      }
-    }
+    // The concentrate is compare-and-set (ADR 0043): the owner's form carries the count it loaded;
+    // a changed count is written only if the stored one still equals it. Nothing is written otherwise.
+    const counted = this.concentrateEdited(input);
+    if (counted !== null && locked.concentrateUl !== ulFromMl(input.loadedConcentrateMl!))
+      return fail('concentrate_changed', ['concentrateMl']);
 
     await tx
       .update(fragrances)
-      .set({ ...this.columns(input), updatedAt: this.edges.clock.now() })
+      .set({
+        ...this.columns(input),
+        ...(counted !== null ? { concentrateUl: counted } : {}),
+        updatedAt: this.edges.clock.now(),
+      })
       .where(eq(fragrances.id, id));
     await tx.delete(fragranceNotes).where(eq(fragranceNotes.fragranceId, id));
     await tx.delete(fragranceSimilar).where(eq(fragranceSimilar.fragranceId, id));
     await this.writeLinks(tx, id, input);
     const volumeChanges: Record<string, unknown>[] = [];
-    const counted: [ml: number, change: number][] = [];
     for (const v of input.volumes) {
       const old = before.volumes.find((x) => x.ml === v.ml);
       if (!old) {
         await this.insertVolume(tx, id, v);
-        volumeChanges.push({ ml: v.ml, added: true, price: v.price, onHand: v.onHand });
-        counted.push([v.ml, v.onHand]);
+        volumeChanges.push({ ml: v.ml, added: true, price: v.price });
         continue;
       }
       const end = v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null;
-      const writeOnHand = this.onHandEdited(v);
-      const touched = old.price !== v.price || writeOnHand;
       await tx
         .update(volumes)
         .set({
           price: v.price,
           salePrice: v.salePrice,
           saleEndsAt: end,
-          ...(writeOnHand ? { onHand: v.onHand } : {}),
-          ...(touched ? { isPlaceholder: false } : {}),
+          ...(old.price !== v.price ? { isPlaceholder: false } : {}),
         })
         .where(eq(volumes.id, old.id));
-      const diff = this.volumeDiff(old, v, writeOnHand);
+      const diff = this.volumeDiff(old, v);
       if (diff) volumeChanges.push({ ml: v.ml, ...diff });
-      if (writeOnHand) counted.push([v.ml, v.onHand - old.onHand]);
     }
-    if (actor) await this.recordFormCounts(tx, actor, id, counted, opts.source);
+    if (actor && counted !== null)
+      await this.recordFormCount(tx, actor, id, locked.concentrateUl, counted, opts.source);
 
     await reindexFragrances(tx, [id]);
     const after = (await this.get(id, tx))!;
     const changed = (Object.keys(after) as (keyof FragranceAdmin)[]).filter(
-      (k) => k !== 'volumes' && JSON.stringify(before[k]) !== JSON.stringify(after[k]),
+      (k) =>
+        k !== 'volumes' && k !== 'stock' && JSON.stringify(before[k]) !== JSON.stringify(after[k]),
     );
     if (actor) {
       await this.audit.record(tx, {
@@ -436,6 +428,9 @@ export class CatalogAdminService {
           name: after.name,
           changed,
           volumes: volumeChanges,
+          ...(counted !== null && counted !== locked.concentrateUl
+            ? { concentrateMl: [mlFromUl(locked.concentrateUl), mlFromUl(counted)] }
+            : {}),
           ...(opts.source ? { source: opts.source } : {}),
         },
       });
@@ -573,39 +568,46 @@ export class CatalogAdminService {
       price: v.price,
       salePrice: v.salePrice,
       saleEndsAt: v.saleEndsOn ? saleEndInstant(v.saleEndsOn) : null,
-      onHand: v.onHand,
     });
   }
 
-  /** Counts the form or the import changed, as one correction in the fragrance's history (#76). */
-  private async recordFormCounts(
+  /**
+   * A concentrate count the form or the import made, as one correction in the fragrance's history
+   * (#76, #82); none when it did not move.
+   */
+  private async recordFormCount(
     tx: DbOrTx,
     actor: StaffRow,
     fragranceId: number,
-    changes: [ml: number, change: number][],
+    fromUl: number,
+    toUl: number,
     source: 'import' | undefined,
   ) {
-    if (!changes.some(([, change]) => change !== 0)) return;
+    if (fromUl === toUl) return;
     await recordStockMove(tx, {
       fragranceId,
       kind: 'correction',
       actor: { type: 'staff', id: actor.id },
-      bottles: Object.fromEntries(changes),
+      concentrateUl: toUl - fromUl,
       details: { source: source ?? 'form' },
     });
   }
 
-  /** The owner typed a new count for an existing volume (it differs from the one the form loaded). */
-  private onHandEdited(v: VolumeInput) {
-    return v.loadedOnHand != null && v.loadedOnHand !== v.onHand;
+  /**
+   * The concentrate the owner typed, µl, when it differs from the one the form loaded (on an
+   * existing fragrance); null: not written.
+   */
+  private concentrateEdited(input: FragranceInput): number | null {
+    if (input.concentrateMl === undefined || input.loadedConcentrateMl == null) return null;
+    const typed = ulFromMl(input.concentrateMl);
+    return typed === ulFromMl(input.loadedConcentrateMl) ? null : typed;
   }
 
-  private volumeDiff(old: FragranceAdmin['volumes'][number], v: VolumeInput, writeOnHand: boolean) {
+  private volumeDiff(old: FragranceAdmin['volumes'][number], v: VolumeInput) {
     const out: Record<string, [unknown, unknown]> = {};
     if (old.price !== v.price) out.price = [old.price, v.price];
     if (old.salePrice !== v.salePrice) out.salePrice = [old.salePrice, v.salePrice];
     if (old.saleEndsOn !== v.saleEndsOn) out.saleEndsOn = [old.saleEndsOn, v.saleEndsOn];
-    if (writeOnHand && old.onHand !== v.onHand) out.onHand = [old.onHand, v.onHand];
     return Object.keys(out).length ? out : null;
   }
 
@@ -740,87 +742,7 @@ export class CatalogAdminService {
     return { ok: true, value: item } as const;
   }
 
-  // ---- on hand and photos ----
-
-  /**
-   * The one write of a volume's on hand from the panel (the fragrance form's compare-and-set aside,
-   * which it shares the rule with). `expected` is the count the editor was shown: when the row under
-   * the lock holds another, nothing is written and the current count comes back (409). Below the
-   * reserve is allowed (ADR 0010); the item says so.
-   */
-  async setOnHand(
-    actor: StaffRow,
-    volumeId: number,
-    onHand: number,
-    expected: number | undefined,
-    reason: string,
-  ): Promise<Outcome<OnHandItem>> {
-    return transient(() =>
-      this.db.transaction(async (tx) => {
-        const [old] = await tx.select().from(volumes).where(eq(volumes.id, volumeId)).for('update');
-        if (!old) return fail('not_found');
-        if (expected !== undefined && old.onHand !== expected) {
-          return { ...fail('on_hand_changed'), current: old.onHand };
-        }
-        await tx
-          .update(volumes)
-          .set({ onHand, ...(old.onHand !== onHand ? { isPlaceholder: false } : {}) })
-          .where(eq(volumes.id, volumeId));
-        const [f] = await tx
-          .select({ id: fragrances.id, name: fragrances.name, hidden: fragrances.hidden })
-          .from(fragrances)
-          .where(eq(fragrances.id, old.fragranceId));
-        await this.audit.record(tx, {
-          actor: { type: 'staff', id: actor.id },
-          action: 'catalog.on_hand_changed',
-          targetType: 'volume',
-          targetId: volumeId,
-          payload: { fragrance: f!.name, ml: old.ml, onHand: [old.onHand, onHand], reason },
-        });
-        // a count from the stock page is a correction in the fragrance's history (#76)
-        await recordCountChanges(tx, [{ volumeId, from: old.onHand, to: onHand }], {
-          kind: 'correction',
-          actor: { type: 'staff', id: actor.id },
-          reason,
-          details: { source: 'stock' },
-        });
-        const reserved = (await reservedByVolume(tx, [volumeId])).get(volumeId) ?? 0;
-        return {
-          ok: true,
-          value: this.onHandItem(
-            {
-              volumeId,
-              fragranceId: f!.id,
-              name: f!.name,
-              hidden: f!.hidden,
-              ml: old.ml,
-              onHand,
-            },
-            reserved,
-          ),
-        } as const;
-      }),
-    );
-  }
-
-  private onHandItem(
-    r: {
-      volumeId: number;
-      fragranceId: number;
-      name: string;
-      hidden: boolean;
-      ml: number;
-      onHand: number;
-    },
-    reserved: number,
-  ): OnHandItem {
-    return {
-      ...r,
-      reserved,
-      available: available(r.onHand, reserved),
-      belowReserve: belowReserve(r.onHand, reserved),
-    };
-  }
+  // ---- photos ----
 
   /** Runs the upload through the WebP pipeline (the original bytes are kept) and points the volume at it. */
   async setPhoto(actor: StaffRow, volumeId: number, bytes: Uint8Array): Promise<Outcome<string>> {

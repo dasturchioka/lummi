@@ -11,12 +11,12 @@ import {
   type HomeQueues,
   type HomeSales,
   type HomeStockItem,
+  type StockLevel,
   type HomeSystem,
   type OrderStatus,
   type PaidFigures,
   type TashkentMoment,
 } from '@lummi/contracts';
-import { NOT_SOLD_ALONE_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -51,6 +51,7 @@ import {
   paymentState,
 } from '../orders/order-read';
 import { matchesStockQuery, stockRows } from '../admin/stock-admin.service';
+import { readStockContext } from '../warehouse/fragrance-stock';
 import { giftSampleStock } from '../orders/gift-sample';
 import type { Edges } from '../edges';
 import { creditC, creditsFor, FREE_CREDIT } from '../payment/rules';
@@ -141,7 +142,7 @@ export class HomeService {
       readShopCard(this.db),
       this.db.select().from(paymentPauses).where(isNull(paymentPauses.endedAt)),
       this.waiting(now),
-      this.stock(),
+      this.stockItems(),
     ]);
     const queues = this.queues(waiting, stock, now);
     const counts = Object.fromEntries(HOME_QUEUES.map((q) => [q, queues[q].count])) as Record<
@@ -219,40 +220,56 @@ export class HomeService {
   }
 
   /**
-   * The stock page's `filter=low&visibility=visible`: nothing available, or at most the threshold,
-   * among what the shop sells (a hidden fragrance is not for sale). Nothing left first, then the
-   * fewest available, then the page's order.
+   * The stock queue's items: the stock page's `filter=low&visibility=visible` (a hidden fragrance
+   * is not for sale) and the gift sample's own warning, each kind in its own unit (ADR 0043): a
+   * fragrance's free concentrate in ml, a Discovery set's boxes, the samples. Nothing left first;
+   * then sets, samples and fragrances, each by name: ml and boxes are never put on one scale.
    */
-  private async stock(): Promise<HomeStockItem[]> {
+  async stockItems(): Promise<HomeStockItem[]> {
     const { 'stock.lowAvailableThreshold': threshold } = await readSettings(this.db, [
       'stock.lowAvailableThreshold',
     ]);
-    const { volumes, discovery } = await stockRows(this.db, threshold);
-    // the filter leaves each 5 ml out: it is not sold alone (ADR 0042); the gift sample's 5 ml
-    // stock is one item of its own, against its own threshold
-    const rows = [...discovery, ...volumes].filter((r) =>
-      matchesStockQuery(r, { filter: 'low', visibility: 'visible' }),
-    );
-    const items: HomeStockItem[] = rows.map((r) => ({
-      kind: r.kind,
-      name: r.name,
-      ml: r.ml,
-      available: r.available,
-      level: r.level === 'zero' ? ('zero' as const) : ('low' as const),
-    }));
+    const ctx = await readStockContext(this.db, false);
+    const rows = await stockRows(this.db, ctx, threshold);
+    const low = { filter: 'low', visibility: 'visible' } as const;
+    const levelOf = (l: StockLevel) => (l === 'zero' ? ('zero' as const) : ('low' as const));
+    const items: HomeStockItem[] = [
+      ...rows.sets
+        .filter((r) => matchesStockQuery(r, low))
+        .map((r) => ({
+          kind: 'discovery' as const,
+          vialMl: r.vialMl,
+          available: r.available,
+          level: levelOf(r.level),
+        })),
+      ...rows.fragrances
+        .filter((r) => matchesStockQuery(r, low))
+        .map((r) => ({
+          kind: 'fragrance' as const,
+          name: r.name,
+          availableMl: r.availableMl,
+          level: levelOf(r.level),
+        })),
+    ];
+    // the gift sample's 5 ml stock is one item of its own, against its own threshold
     const sample = await giftSampleStock(this.db);
     if (sample && (sample.missing || sample.level !== 'ok'))
       items.push({
         kind: 'sample',
         name: sample.fragrance,
-        ml: NOT_SOLD_ALONE_ML,
         available: sample.available,
         level: sample.level === 'low' ? 'low' : 'zero',
       });
-    return items
-      .map((item, i) => ({ item, i }))
-      .sort((a, b) => a.item.available - b.item.available || a.i - b.i)
-      .map(({ item }) => item);
+    const group = { discovery: 0, sample: 1, fragrance: 2 } as const;
+    // a set's name is its vial ml (5 before 10, as the stock page lists them)
+    const nameOf = (i: HomeStockItem) =>
+      i.kind === 'discovery' ? String(i.vialMl).padStart(3, '0') : (i.name ?? '');
+    return items.sort(
+      (a, b) =>
+        Number(a.level === 'low') - Number(b.level === 'low') ||
+        group[a.kind] - group[b.kind] ||
+        nameOf(a).localeCompare(nameOf(b), 'ru'),
+    );
   }
 
   private queues(waiting: WaitingQueues, stock: HomeStockItem[], now: Date): HomeQueues {

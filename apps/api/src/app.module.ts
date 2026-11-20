@@ -7,11 +7,7 @@ import { AdminOrdersController } from './admin-orders/admin-orders.controller';
 import { AdminOrdersService } from './admin-orders/admin-orders.service';
 import { AdminLoginService } from './admin/admin-login.service';
 import { AuditController } from './admin/audit.controller';
-import {
-  CatalogAdminController,
-  OnHandController,
-  ShownCountController,
-} from './admin/catalog-admin.controller';
+import { CatalogAdminController, ShownCountController } from './admin/catalog-admin.controller';
 import { CatalogImportController } from './admin/catalog-import.controller';
 import { CatalogAdminService } from './admin/catalog-admin.service';
 import { CatalogImportService } from './catalog-import/catalog-import.service';
@@ -60,6 +56,8 @@ import { CustomersAdminController } from './admin/customers-admin.controller';
 import { StockAdminController } from './admin/stock-admin.controller';
 import { CustomersAdminService } from './admin/customers-admin.service';
 import { StockAdminService } from './admin/stock-admin.service';
+import { ConsumablesController } from './warehouse/consumables.controller';
+import { ConsumablesService } from './warehouse/consumables.service';
 import { WarehouseController } from './warehouse/warehouse.controller';
 import { WarehouseExport } from './warehouse/warehouse-export';
 import { WarehouseService } from './warehouse/warehouse.service';
@@ -171,11 +169,11 @@ export class AppModule {
         AuditController,
         CatalogAdminController,
         CatalogImportController,
-        OnHandController,
         ShownCountController,
         SetsAdminController,
         StockAdminController,
         WarehouseController,
+        ConsumablesController,
         UzumController,
         CustomersAdminController,
         ContentController,
@@ -236,6 +234,7 @@ export class AppModule {
         SetsAdminService,
         StockAdminService,
         WarehouseService,
+        ConsumablesService,
         WarehouseExport,
         UzumSalesService,
         UzumImportService,

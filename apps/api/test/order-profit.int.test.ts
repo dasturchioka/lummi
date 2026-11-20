@@ -8,6 +8,7 @@ import { freezeMissingOrderCosts } from '../src/cost/freeze-order-costs';
 import { fulfilTo, orderRow, pay, placeOrder, tashkent } from './harness/fulfilment';
 import { shopper, slugs } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
@@ -44,6 +45,8 @@ beforeEach(async () => {
   t.edges.clock.set(tashkent('2026-11-19 10:00'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
   const picked = [];
@@ -52,7 +55,7 @@ beforeEach(async () => {
     for (const ml of [10, 30, 50])
       await t.db
         .update(volumes)
-        .set({ price: PRICES[ml]!, salePrice: null, saleEndsAt: null, onHand: 20 })
+        .set({ price: PRICES[ml]!, salePrice: null, saleEndsAt: null })
         .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)));
     picked.push({ slug, id: f!.id, name: f!.name });
   }

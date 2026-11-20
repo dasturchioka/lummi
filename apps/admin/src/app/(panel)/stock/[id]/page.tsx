@@ -4,7 +4,7 @@ import { WarehouseView } from '@/components/warehouse/warehouse-view';
 import { getAdminMessages } from '@/lib/i18n';
 import { serverApi } from '@/lib/server-api';
 
-/** A fragrance's warehouse page (#76): its oil, bottles, receipts, bottling and history. */
+/** A fragrance's warehouse page (#76, #82): its concentrate, oil, mixing, receipts and history. */
 export default async function WarehousePage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) notFound();

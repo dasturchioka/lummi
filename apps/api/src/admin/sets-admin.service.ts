@@ -97,14 +97,17 @@ export class SetsAdminService {
     });
   }
 
-  /** Same rule as a volume's count (`CatalogAdminService.setOnHand`): `expected` guards a concurrent edit; below the reserve is allowed. */
+  /** The boxes counted: `expected` guards a concurrent edit; below the reserve is allowed (ADR 0010). */
   async setOnHand(
     actor: StaffRow,
     vialMl: DiscoveryVialMl,
     onHand: number,
     expected: number | undefined,
     reason: string,
-  ): Promise<Outcome<AdminDiscoverySet>> {
+  ): Promise<
+    | { ok: true; value: AdminDiscoverySet }
+    | { ok: false; reason: 'on_hand_changed'; current: number }
+  > {
     return this.db.transaction(async (tx) => {
       const old = await readDiscoverySet(tx, vialMl, true);
       if (expected !== undefined && old.onHand !== expected) {

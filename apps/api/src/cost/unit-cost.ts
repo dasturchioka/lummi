@@ -1,4 +1,5 @@
 import {
+  UL_PER_ML,
   settingDefinitions,
   type SalesChannel,
   type SettingKey,
@@ -188,6 +189,25 @@ const ethanolPerMl = (l: LiquidSettings) =>
   ((l.ethanolPerLitre / 1000) * l.ethanolPercent) / 100 + l.fixativePerMl;
 
 /**
+ * One bottle's fill of ready concentrate (ADR 0043), whole µl: its ml with the filling loss, the
+ * liquid `bottleCost` costs. The reserve, the handover and every available count take this.
+ */
+export function fillUl(ml: number, l: LiquidSettings): number {
+  return Math.round(filled(ml, l) * UL_PER_ML);
+}
+
+/**
+ * What mixing `ml` of ready concentrate takes (ADR 0043), unrounded: grams of oil and ml of ethanol
+ * by the cost model's shares, without the filling loss (each bottle's fill counts that).
+ */
+export function mixNeeds(ml: number, l: LiquidSettings): { oilGrams: number; ethanolMl: number } {
+  return {
+    oilGrams: oilShare(ml, l) * l.oilDensity,
+    ethanolMl: (ml * l.ethanolPercent) / 100,
+  };
+}
+
+/**
  * What filling `ml` of perfume uses up, the filling loss included: grams of oil and ml of ethanol
  * (unrounded). The oil part of a bottle's cost is these grams at the landed price.
  */
@@ -195,21 +215,16 @@ export function liquidNeeded(
   ml: number,
   l: LiquidSettings,
 ): { oilGrams: number; ethanolMl: number } {
-  const liquid = filled(ml, l);
-  return {
-    oilGrams: oilShare(liquid, l) * l.oilDensity,
-    ethanolMl: (liquid * l.ethanolPercent) / 100,
-  };
+  return mixNeeds(filled(ml, l), l);
 }
 
 /**
- * The ml of perfume `oilGrams` of oil can still be bottled into (unrounded): `liquidNeeded` read
- * backwards (the grams over what one ml takes), so the warehouse's litres are what a bottling can
- * use (ADR 0041). The calculator's planner (`buyCalc`) takes the loss off as × (1 − loss) instead;
- * the two differ by about 0.1 %.
+ * Ml of ready concentrate at cost, unrounded (ADR 0043): its oil at the landed oil price and its
+ * ethanol with the fixative, no loss, no packaging. The stock value counts the concentrate at it.
  */
-export function liquidFromOil(oilGrams: number, l: LiquidSettings): number {
-  return oilGrams / liquidNeeded(1, l).oilGrams;
+export function concentrateCost(oilPrice: number, ml: number, s: CostSettings): number {
+  const l = s.liquid;
+  return landedOilPrice(oilPrice, l) * l.oilDensity * oilShare(ml, l) + ethanolPerMl(l) * ml;
 }
 
 type Parts = Omit<UnitCost, 'base' | 'defect' | 'total'>;

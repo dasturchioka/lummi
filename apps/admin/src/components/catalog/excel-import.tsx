@@ -379,23 +379,25 @@ function ChangeList({ report, x }: { report: ImportReport; x: Excel }) {
 }
 
 function StockList({ report, x }: { report: ImportReport; x: Excel }) {
+  // ml as the panel writes them: grouped digits, a decimal comma, a true minus
+  const ml = (n: number) =>
+    `${n < 0 ? '\u2212' : ''}${Math.abs(n).toLocaleString('ru-RU').replace(/\s/g, '\u202f')}`;
   const line = (s: ImportReport['stock'][number]) =>
     fill(x.stockLine, {
       name: s.name,
-      ml: String(s.ml),
-      was: s.onHand === null ? x.newVolume : String(s.onHand),
-      now: String(s.newOnHand),
-      reserved: String(s.reserved),
-      available: `${s.available < 0 ? '\u2212' : ''}${Math.abs(s.available)}`,
+      was: s.concentrateMl === null ? x.newVolume : ml(s.concentrateMl),
+      now: ml(s.newConcentrateMl),
+      reserved: ml(s.reservedMl),
+      available: ml(s.availableMl),
     });
   return (
     <div className="grid gap-2">
       <h3 className="text-[13px] font-medium text-muted-foreground">{x.stockTitle}</h3>
-      {/* phones: one block per volume */}
+      {/* phones: one block per fragrance */}
       <ul className="grid gap-2 sm:hidden" data-testid="excel-stock-list">
         {report.stock.map((s) => (
           <li
-            key={`${s.code}-${s.ml}`}
+            key={s.code}
             className="rounded-button bg-milk px-4 py-3 text-sm text-pretty"
             data-negative={s.negative || undefined}
           >
@@ -413,7 +415,6 @@ function StockList({ report, x }: { report: ImportReport; x: Excel }) {
           <THead>
             <TR>
               <TH>{x.colAroma}</TH>
-              <TH>{x.colMl}</TH>
               <TH className="text-right">{x.colOnHand}</TH>
               <TH className="text-right">{x.colNew}</TH>
               <TH className="text-right">{x.colReserve}</TH>
@@ -422,15 +423,15 @@ function StockList({ report, x }: { report: ImportReport; x: Excel }) {
           </THead>
           <TBody>
             {report.stock.map((s) => (
-              <TR key={`${s.code}-${s.ml}`} data-negative={s.negative || undefined}>
+              <TR key={s.code} data-negative={s.negative || undefined}>
                 <TD className="min-w-40 font-medium">{s.name}</TD>
-                <TD>{s.ml}</TD>
-                <TD className="text-right">{s.onHand ?? x.newVolume}</TD>
-                <TD className="text-right">{s.newOnHand}</TD>
-                <TD className="text-right">{s.reserved}</TD>
-                <TD className="text-right font-semibold whitespace-nowrap">
-                  {s.available < 0 ? '\u2212' : ''}
-                  {Math.abs(s.available)}
+                <TD className="text-right tabular-nums">
+                  {s.concentrateMl === null ? x.newVolume : ml(s.concentrateMl)}
+                </TD>
+                <TD className="text-right tabular-nums">{ml(s.newConcentrateMl)}</TD>
+                <TD className="text-right tabular-nums">{ml(s.reservedMl)}</TD>
+                <TD className="text-right font-semibold whitespace-nowrap tabular-nums">
+                  {ml(s.availableMl)}
                   {s.negative && (
                     <Badge tone="sage" className="ml-2 align-middle">
                       {x.belowReserveTag}

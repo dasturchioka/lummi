@@ -115,7 +115,7 @@ export function CatalogList({
       parts={[f.originalBrand, c.options.type[f.type], language === 'uz' ? f.familyUz : f.familyRu]}
     />
   );
-  /** One line per volume: the volume, its price (a markdown strikes the regular one), on hand. */
+  /** One line per volume: the volume, its price (a markdown strikes the regular one), the bottles its concentrate fills. */
   const volumes = (f: AdminFragranceListItem) => (
     <dl className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-[13px] leading-snug tabular-nums">
       {f.volumes.map((v) => (
@@ -140,10 +140,10 @@ export function CatalogList({
           <dd
             className={cn(
               'text-right whitespace-nowrap',
-              v.onHand === 0 && 'text-muted-foreground',
+              v.available === 0 && 'text-muted-foreground',
             )}
           >
-            {fill(c.pieces, { n: groupDigits(v.onHand) })}
+            {fill(c.pieces, { n: groupDigits(v.available) })}
           </dd>
         </Fragment>
       ))}

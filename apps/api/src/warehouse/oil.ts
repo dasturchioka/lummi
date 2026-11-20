@@ -1,48 +1,55 @@
 import type { StockLevel } from '@lummi/contracts';
-import { landedOilPrice, liquidNeeded, type LiquidSettings } from '../cost/unit-cost';
+import { ulFromMl } from '@lummi/contracts';
+import { landedOilPrice, mixNeeds, type LiquidSettings } from '../cost/unit-cost';
 
 /**
- * The warehouse's arithmetic (ADR 0041), pure. Oil is kept in whole milligrams, so a bottling's
- * fractions of a gram add up exactly; the API speaks grams. What a fill uses up is the cost model's
- * `liquidNeeded` (ADR 0040), never a second formula.
+ * The warehouse's arithmetic (ADR 0041, 0043), pure. Oil is kept in whole milligrams and the ready
+ * concentrate in whole microlitres, so fractions add up exactly; the API speaks grams and ml. What
+ * a mixing uses up is the cost model's `mixNeeds` (ADR 0040), never a second formula.
  */
 
 export const MG_PER_GRAM = 1000;
 export const mgFromGrams = (grams: number) => Math.round(grams * MG_PER_GRAM);
 export const gramsFromMg = (mg: number) => mg / MG_PER_GRAM;
+// ml and µl: the contracts' one pair, here beside grams and mg
+export { mlFromUl, ulFromMl } from '@lummi/contracts';
 
-/** One volume of a bottling: how many bottles of that size. */
-export interface BottlingLine {
-  ml: number;
-  quantity: number;
+/**
+ * The oil (mg) and ethanol (whole ml) mixing `ml` of ready concentrate takes: the cost model's
+ * shares without the filling loss, each rounded once, half up.
+ */
+export function mixingNeeds(ml: number, l: LiquidSettings): { oilMg: number; ethanolMl: number } {
+  const need = mixNeeds(ml, l);
+  return { oilMg: mgFromGrams(need.oilGrams), ethanolMl: Math.round(need.ethanolMl) };
+}
+
+/** Ml of oil in `grams`, by the oil density setting. */
+export const oilMlOf = (grams: number, l: Pick<LiquidSettings, 'oilDensity'>) =>
+  l.oilDensity > 0 ? grams / l.oilDensity : 0;
+
+/**
+ * THE low-stock rule (ADR 0041, 0043): none left at or under 0, running low at or under the
+ * threshold, else fine; a threshold of 0 warns only when nothing is left. The oil in ml
+ * (`stock.lowOilMl`), a consumable against its own threshold, a Discovery set's boxes
+ * (`stock.lowAvailableThreshold`) and the gift samples (`giftSample.lowStock`) all read it; the
+ * concentrate's «none» is «can't fill the smallest bottle» (`concentrateLevel`).
+ */
+export function stockLevelOf(amount: number, low: number): StockLevel {
+  if (amount <= 0) return 'zero';
+  return amount <= low ? 'low' : 'ok';
 }
 
 /**
- * The oil (mg) and ethanol (ml) a bottling uses up, the filling loss included: each line's
- * `liquidNeeded` times its count, summed unrounded and rounded once, half up. Ethanol is costed,
- * not stocked: the figure is for the record.
+ * The low-concentrate warning (ADR 0043): none while the free concentrate can't fill the smallest
+ * bottle sold (`smallestFillUl`), at or under the `stock.lowConcentrateMl` setting, or fine.
  */
-export function bottlingNeeds(
-  lines: readonly BottlingLine[],
-  l: LiquidSettings,
-): { oilMg: number; ethanolMl: number } {
-  let oilGrams = 0;
-  let ethanolMl = 0;
-  for (const { ml, quantity } of lines) {
-    const each = liquidNeeded(ml, l);
-    oilGrams += each.oilGrams * quantity;
-    ethanolMl += each.ethanolMl * quantity;
-  }
-  return { oilMg: mgFromGrams(oilGrams), ethanolMl: Math.round(ethanolMl) };
-}
-
-/**
- * The low-oil warning: none left, at or under the `stock.lowOilLitres` setting (litres of
- * perfume the oil still makes), or fine. A threshold of 0 warns only when nothing is left.
- */
-export function oilLevel(litres: number, lowLitres: number): StockLevel {
-  if (litres <= 0) return 'zero';
-  return litres <= lowLitres ? 'low' : 'ok';
+export function concentrateLevel(
+  freeUl: number,
+  smallestFillUl: number,
+  lowMl: number,
+): StockLevel {
+  if (freeUl < smallestFillUl) return 'zero';
+  return freeUl <= ulFromMl(lowMl) ? 'low' : 'ok';
 }
 
 /** What an oil receipt's oil cost, as typed from the invoice. */

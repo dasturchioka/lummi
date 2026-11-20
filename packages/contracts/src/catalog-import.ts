@@ -23,18 +23,18 @@ export interface ImportIssue {
   params?: Record<string, string | number>;
 }
 
+/** A fragrance's ready concentrate the file counts (ADR 0043), ml. */
 export interface ImportStockRow {
-  /** The Excel row on «Объёмы». */
+  /** The Excel row on «Ароматы». */
   row: number;
   code: string;
   name: string;
-  ml: number;
-  /** null for a volume the file adds. */
-  onHand: number | null;
-  newOnHand: number;
-  reserved: number;
-  /** newOnHand − reserved; negative is a warning (ADR 0010). */
-  available: number;
+  /** null for a fragrance the file adds. */
+  concentrateMl: number | null;
+  newConcentrateMl: number;
+  reservedMl: number;
+  /** newConcentrateMl − reservedMl; negative is a warning (ADR 0010). */
+  availableMl: number;
   negative: boolean;
 }
 
@@ -48,7 +48,7 @@ export interface ImportCounts {
 /** One value of a change; arrays are lists (notes, key notes, aliases, similar codes). */
 export type ImportValue = string | number | boolean | null | string[];
 export interface ImportChangeField {
-  /** `price`, `salePrice`, `saleEndsOn`, `onHand`, or a fragrance column key (`descriptionRu`, `topNotes` …). */
+  /** `price`, `salePrice`, `saleEndsOn`, `concentrateMl`, or a fragrance column key (`descriptionRu`, `topNotes` …). */
   field: string;
   before: ImportValue;
   after: ImportValue;
@@ -57,7 +57,7 @@ export interface ImportChangeField {
 export interface ImportChange {
   kind: 'new' | 'changed';
   group: 'price' | 'stock' | 'content';
-  /** The Excel row (on «Объёмы» for a volume, on «Ароматы» for a fragrance). */
+  /** The Excel row (on «Объёмы» for a volume, on «Ароматы» for a fragrance and its concentrate). */
   row: number;
   code: string;
   name: string;

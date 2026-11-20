@@ -25,7 +25,7 @@ A LUMMI perfume, identified by its name and inspired by («по мотивам»
 _Avoid_: Product (too broad), SKU, aroma No., копия
 
 **Volume**:
-One bottle size of a fragrance (10, 30 or 50 ml) with its own price, stock and photo. A fragrance also has a 5 ml volume, stocked and bottled but never sold alone: it fills the 5 × 5 ml Discovery set and is the Gift sample.
+One bottle size of a fragrance (10, 30 or 50 ml) with its own price and photo. Its bottles are not counted: they are filled from the fragrance's Ready concentrate when they ship. A fragrance also has a 5 ml volume, never sold alone: it fills the 5 × 5 ml Discovery set and is the Gift sample.
 _Avoid_: Variant, size, SKU
 
 **Note**:
@@ -59,35 +59,51 @@ _Avoid_: Custom set, own set
 ### Stock
 
 **On hand**:
-Units physically in the Termez warehouse, as counted by staff.
+What is physically in the Termez warehouse, as counted by staff: a fragrance's Ready concentrate in ml, a Discovery set's boxes, a Consumable's units.
 _Avoid_: Stock, остаток, inventory
 
+**Ready concentrate**:
+A fragrance's perfume liquid, mixed and ready to pour («Готовая концентрация» / «Tayyor konsentrat»), kept in ml to the microlitre. Up with a Mixing, down when a bottle is filled at BTS handover or on Uzum; every bottle of every volume of the fragrance is filled from it.
+_Avoid_: Liquid stock, perfume stock, bottles
+
+**Fill**:
+The Ready concentrate one bottle of a volume takes: its ml plus the filling loss, by the cost model's formula («Розлив» in the cost) at the settings of the moment.
+_Avoid_: Bottling (the old step), dose, portion
+
 **Reserve**:
-Units held by orders that are neither handed to BTS nor cancelled.
+What orders that are neither handed to BTS nor cancelled hold: for a fragrance, the Fills of their bottles in ml; for a Discovery set, its boxes.
 _Avoid_: Booking, hold, allocation
 
 **Available**:
-On hand minus reserve: what a customer can still order.
+On hand minus reserve: what a customer can still order. For a volume, the whole bottles the fragrance's free Ready concentrate still fills.
 _Avoid_: Stock, in stock
 
 **Oil balance**:
-The grams of a fragrance's perfume oil in the warehouse («Масло» / «Moy»), kept to the milligram: up with an Oil receipt, down with a Bottling. The stock page also reads it as the litres of perfume it still makes, the filling loss taken off. The shop sells bottles, never oil.
+The grams of a fragrance's perfume oil in the warehouse («Парфюм масло» / «Atir moyi»), kept to the milligram: up with an Oil receipt, down with a Mixing. The panel also reads it in ml, by the oil density setting. The shop sells bottles, never oil.
 _Avoid_: Oil stock, liquid stock, остаток масла (in code), raw material
 
 **Oil receipt**:
 Oil of one fragrance as a supplier's invoice reads: supplier, invoice number, the day, grams, so'm per gram before the discount, the discount and the delivery to Termez for that invoice («Приход масла» / «Moy kirimi»). It adds to the Oil balance; it is corrected or voided with a reason, never deleted. Not the shopper's payment Receipt.
 _Avoid_: Receipt (that is the shopper's payment proof), purchase, delivery, invoice (that is the supplier's paper)
 
-**Bottling**:
-Turning a fragrance's oil into bottles («Розлив» / «Quyish»): counts per volume, the oil they take by the cost model's formula with the filling loss, off the Oil balance, and the bottles onto On hand, in one step. Refused when the Oil balance holds less. Ethanol is costed, not counted. A set bottling fills a Discovery set's boxes the same way from the oil of its five.
-_Avoid_: Filling (that is the per-bottle work cost), production, decanting
+**Mixing**:
+Making a fragrance's Ready concentrate («Приготовить концентрат» / «Konsentrat tayyorlash»): the ml made, the oil and the ethanol in them by the cost model's shares (no filling loss: that is in each Fill), off the Oil balance and the ethanol Consumable, onto the Ready concentrate, in one step. Refused when either holds less. Replaced the Bottling of bottles per volume, which stays in old history lines.
+_Avoid_: Bottling, production, blending
+
+**Set assembly**:
+Packing Discovery set boxes («Собрать наборы» / «Toʻplam yigʻish»): one Fill of the set's vial ml from each of its five fragrances' Ready concentrate and one flacon per vial, onto the set's boxes on hand.
+_Avoid_: Set bottling, kitting
+
+**Consumable**:
+A packing or mixing material counted on its own («Расходник» / «Sarf materiali»): a flacon or box of a given ml, the ethanol, or any item staff add. Received, used by the bottles filled at handover and the sets assembled (ethanol by Mixing), corrected with a reason. A shortage never stops a sale: the count stops at zero and asks for a recount.
+_Avoid_: Packaging (that is the cost settings' word), supplies, materials
 
 **Stock move**:
-One line of a fragrance's warehouse history («История» / «Tarix»): an Oil receipt, its correction or void, a Bottling, bottles leaving at BTS handover or coming back, a manual count with its reason, or an Uzum sale or its void. Written with the change it records.
+One line of the warehouse history («История» / «Tarix»): an Oil receipt, its correction or void, a Mixing, a Set assembly, bottles filled at BTS handover or coming back, a manual count with its reason, an Uzum sale or its void, or a Consumable received or counted. Written with the change it records; it names the fragrance and the Consumables it moved.
 _Avoid_: Transaction, movement log, audit entry (that is the audit log's)
 
 **Uzum sale**:
-A sale on Uzum Market recorded by the owner or a manager («Продажа на Uzum» / «Uzumdagi sotuv»), by hand or from an Excel file: the day, Uzum's order number, its lines (a fragrance's volume or the Discovery set, quantity, what the buyer paid for one) and Uzum's commission. Its bottles leave On hand at once, within Available; its profit is frozen on the Uzum channel when it is recorded. Voided with a reason, never deleted; a void brings the bottles back. Not an Order.
+A sale on Uzum Market recorded by the owner or a manager («Продажа на Uzum» / «Uzumdagi sotuv»), by hand or from an Excel file: the day, Uzum's order number, its lines (a fragrance's volume or the Discovery set, quantity, what the buyer paid for one) and Uzum's commission. Its bottles are filled from the Ready concentrate at once, within Available; its profit is frozen on the Uzum channel when it is recorded. Voided with a reason, never deleted; a void brings the liquid and the Consumables back. Not an Order.
 _Avoid_: Uzum order (that is Uzum's own record), marketplace order, external order
 
 ### Money

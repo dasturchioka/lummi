@@ -12,6 +12,7 @@ import {
 } from '@lummi/db';
 import { normalizeUzbek } from '@lummi/i18n';
 import { saleEndDay } from '../admin/catalog-admin.service';
+import { mlFromUl } from '../warehouse/oil';
 import type {
   CatalogData,
   DictionaryDraft,
@@ -57,14 +58,16 @@ export function normDraft(d: FragranceDraft): FragranceDraft {
     oilInvoice: d.oilInvoice.trim(),
   };
 }
+/** The draft's content, without the concentrate count (stock, judged on its own, ADR 0043). */
+export const contentOf = (d: FragranceDraft): FragranceDraft => ({
+  ...normDraft(d),
+  concentrateMl: null,
+});
 export const sameDraft = (a: FragranceDraft, b: FragranceDraft) =>
-  JSON.stringify(normDraft(a)) === JSON.stringify(normDraft(b));
+  JSON.stringify(contentOf(a)) === JSON.stringify(contentOf(b));
 
 export const sameVolume = (a: VolumeDraft, b: VolumeDraft) =>
-  a.price === b.price &&
-  a.salePrice === b.salePrice &&
-  a.saleEndsOn === b.saleEndsOn &&
-  a.onHand === b.onHand;
+  a.price === b.price && a.salePrice === b.salePrice && a.saleEndsOn === b.saleEndsOn;
 
 /** The whole catalog as the template carries it (a few hundred rows). */
 export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
@@ -80,7 +83,7 @@ export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
       .select()
       .from(fragranceSimilar)
       .orderBy(asc(fragranceSimilar.fragranceId), asc(fragranceSimilar.position)),
-    // the workbook's volumes: the 5 ml is counted on the stock page, never sold (ADR 0042)
+    // the workbook's volumes: the 5 ml is never sold (ADR 0042)
     db
       .select()
       .from(volumes)
@@ -110,7 +113,6 @@ export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
               price: v.price,
               salePrice: v.salePrice,
               saleEndsOn: saleEndDay(v.saleEndsAt),
-              onHand: v.onHand,
               isPlaceholder: v.isPlaceholder,
             },
           ]),
@@ -149,6 +151,7 @@ export async function readSnapshot(db: DbOrTx): Promise<Snapshot> {
         tier: f.tier,
         oilSupplier: f.oilSupplier ?? '',
         oilInvoice: f.oilInvoice ?? '',
+        concentrateMl: mlFromUl(f.concentrateUl),
       }),
     });
   }
@@ -172,13 +175,7 @@ export function snapshotToData(s: Snapshot): CatalogData {
         draft: f.draft,
         volumes: [...f.volumes.values()]
           .sort((a, b) => a.ml - b.ml)
-          .map(({ ml, price, salePrice, saleEndsOn, onHand }) => ({
-            ml,
-            price,
-            salePrice,
-            saleEndsOn,
-            onHand,
-          })),
+          .map(({ ml, price, salePrice, saleEndsOn }) => ({ ml, price, salePrice, saleEndsOn })),
       })),
   };
 }

@@ -10,6 +10,7 @@ import {
   customers,
   desc,
   eq,
+  consumables,
   fragrances,
   inArray,
   orderLines,
@@ -110,8 +111,8 @@ export class AuditQueryService {
 
   /**
    * Names for the targets that have one, in one query per kind for the whole page: a banner's
-   * titles (RU and UZ), a fragrance's name, and the fragrance a volume belongs to. A deleted row
-   * has none.
+   * titles (RU and UZ), a fragrance's name, the fragrance a volume belongs to, and a consumable's
+   * names (ADR 0043). A deleted row has none.
    */
   async targetNames(rows: { targetType: string; targetId: string | null }[]) {
     const ids = (type: string) => [
@@ -144,6 +145,13 @@ export class AuditQueryService {
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
         .where(inArray(volumes.id, vols)))
         out.set(`volume:${v.id}`, { ru: v.name, uz: v.name });
+    const items = ids('consumable');
+    if (items.length)
+      for (const c of await this.db
+        .select({ id: consumables.id, ru: consumables.nameRu, uz: consumables.nameUz })
+        .from(consumables)
+        .where(inArray(consumables.id, items)))
+        out.set(`consumable:${c.id}`, { ru: c.ru, uz: c.uz });
     return out;
   }
 

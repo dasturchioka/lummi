@@ -27,7 +27,7 @@ import {
   type CartRow,
   type DbOrTx,
 } from '@lummi/db';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { bottlesOf, readLiquidStock } from '../catalog/catalog.service';
 import { readDeliveryCity } from '../delivery/delivery.service';
 import { loadEntitlements } from '../entitlements/entitlements';
 import { readPricingSettings } from '../pricing/pricing-settings';
@@ -227,7 +227,6 @@ export async function loadQuote(
             price: volumes.price,
             salePrice: volumes.salePrice,
             saleEndsAt: volumes.saleEndsAt,
-            onHand: volumes.onHand,
           })
           .from(volumes)
           .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
@@ -238,10 +237,6 @@ export async function loadQuote(
     const v = l.kind === 'volume' && l.volumeId !== null ? infoOf.get(l.volumeId) : undefined;
     return v ? [{ ...v, lineId: l.lineId, qty: l.qty }] : [];
   });
-  const reserved = await reservedByVolume(
-    tx,
-    rows.map((r) => r.volumeId),
-  );
   type Priced = { price: number; salePrice: number | null; saleEndsAt: Date | null };
 
   // Set lines (ADR 0009, 0042): each Discovery set from its own stock at its own price, a builder
@@ -260,16 +255,28 @@ export async function loadQuote(
       : (await tenMlOf(tx, { ids: builderIds })).map((t) => [t.fragranceId, t]),
   );
 
-  // What each volume still has for the lines after the ones already placed, in line order: one 10 ml
-  // may sit in a volume line and in builder sets of the same cart, and the last unit is sold once
-  // (ADR 0010). A line that no longer fits is flagged like a sold-out one and takes nothing.
+  // What each fragrance's concentrate still has for the lines after the ones already placed, in
+  // line order (ADR 0043): its volumes share one liquid, a 10 ml may sit in a volume line and in
+  // builder sets of the same cart, and the last ml is sold once (ADR 0010). A line that no longer
+  // fits is flagged like a sold-out one and takes nothing. A hidden fragrance is not for sale.
+  const stock = await readLiquidStock(tx, [
+    ...rows.map((r) => r.fragranceId),
+    ...tenMlOfFragrance.keys(),
+  ]);
+  const hidden = new Set([
+    ...rows.filter((r) => r.hidden).map((r) => r.fragranceId),
+    ...[...tenMlOfFragrance.values()].filter((t) => t.hidden).map((t) => t.fragranceId),
+  ]);
   const free = new Map<number, number>();
-  for (const r of rows)
-    free.set(r.volumeId, r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0));
-  for (const t of tenMlOfFragrance.values())
-    if (!free.has(t.volumeId)) free.set(t.volumeId, t.available);
-  const take = (volumeIds: number[], qty: number) => {
-    for (const id of volumeIds) free.set(id, (free.get(id) ?? 0) - qty);
+  const freeOf = (fragranceId: number) => {
+    if (!free.has(fragranceId))
+      free.set(fragranceId, hidden.has(fragranceId) ? 0 : stock.free(fragranceId));
+    return free.get(fragranceId)!;
+  };
+  /** Whole bottles of `ml` a fragrance still fills for this line. */
+  const left = (fragranceId: number, ml: number) => bottlesOf(freeOf(fragranceId), stock.fill(ml));
+  const take = (fragranceIds: number[], ml: number, qty: number) => {
+    for (const id of fragranceIds) free.set(id, freeOf(id) - qty * stock.fill(ml));
   };
   // each Discovery set's own stock, shared the same way (a cart holds one line of each, but
   // «Повторить заказ» weighs the old order's after it)
@@ -286,8 +293,8 @@ export async function loadQuote(
     const r = volumeById.get(lineId);
     if (r) {
       // a hidden fragrance is not for sale: its line stays, flagged like a sold-out one
-      const view = capped(r.qty, free.get(r.volumeId) ?? 0);
-      if (!view.soldOut) take([r.volumeId], view.qty);
+      const view = capped(r.qty, left(r.fragranceId, r.ml));
+      if (!view.soldOut) take([r.fragranceId], r.ml, view.qty);
       volumeLines.push({
         kind: 'volume',
         lineId: r.lineId,
@@ -328,16 +335,19 @@ export async function loadQuote(
       const five = (sr.fragranceIds ?? []).flatMap((id) => tenMlOfFragrance.get(id) ?? []);
       const view = capped(
         sr.qty,
-        five.length === SET_SIZE ? Math.min(...five.map((t) => free.get(t.volumeId) ?? 0)) : 0,
+        five.length === SET_SIZE
+          ? Math.min(...five.map((t) => left(t.fragranceId, SET_VIAL_ML)))
+          : 0,
       );
       const short = view.soldOut
         ? five
-            .filter((t) => (free.get(t.volumeId) ?? 0) <= 0)
+            .filter((t) => left(t.fragranceId, SET_VIAL_ML) <= 0)
             .map((t) => ({ slug: t.slug, name: t.name, inCart: t.available > 0 }))
         : [];
       if (!view.soldOut)
         take(
-          five.map((t) => t.volumeId),
+          five.map((t) => t.fragranceId),
+          SET_VIAL_ML,
           view.qty,
         );
       setLines.push({
@@ -372,7 +382,8 @@ export async function loadQuote(
   const promoGift =
     terms && !('refused' in terms) && terms.kind === 'gift'
       ? await loadPromoGift(tx, terms.promoGiftItem, {
-          volumeLeft: (id) => free.get(id),
+          bottlesLeft: (fragranceId, ml) =>
+            free.has(fragranceId) ? left(fragranceId, ml) : undefined,
           discovery: discovery.has(SET_VIAL_ML)
             ? { state: discovery.get(SET_VIAL_ML)!, left: discoveryFree.get(SET_VIAL_ML) ?? 0 }
             : null,
@@ -439,14 +450,14 @@ function withPromoGift(
 /**
  * A gift code's item at its regular price (a markdown changes nothing: reports count the regular
  * price, ADR 0039), sold out when nothing is left of it once the cart's lines took theirs: a
- * volume the cart already holds is what `volumeLeft` says is left; the Discovery set likewise when
- * the cart holds it. A hidden fragrance is not for sale, so its gift is sold out too.
+ * fragrance the cart already fills from is what `bottlesLeft` says is left; the Discovery set
+ * likewise when the cart holds it. A hidden fragrance is not for sale, so its gift is sold out too.
  */
 async function loadPromoGift(
   tx: DbOrTx,
   item: PromoGiftItem,
   cart: {
-    volumeLeft: (volumeId: number) => number | undefined;
+    bottlesLeft: (fragranceId: number, ml: number) => number | undefined;
     discovery: { state: DiscoveryState; left: number } | null;
   },
 ): Promise<PromoGiftView> {
@@ -478,17 +489,14 @@ async function loadPromoGift(
       ml: volumes.ml,
       photo: volumes.photoHash,
       price: volumes.price,
-      onHand: volumes.onHand,
     })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(eq(volumes.id, item.volumeId));
   if (!v) throw new Error(`gift volume ${item.volumeId} is not in the catalog`);
   const left =
-    cart.volumeLeft(item.volumeId) ??
-    (v.hidden
-      ? 0
-      : available(v.onHand, (await reservedByVolume(tx, [item.volumeId])).get(item.volumeId) ?? 0));
+    cart.bottlesLeft(v.fragranceId, v.ml) ??
+    (v.hidden ? 0 : (await readLiquidStock(tx, [v.fragranceId])).bottles(v.fragranceId, v.ml));
   return {
     kind: 'volume',
     volumeId: item.volumeId,

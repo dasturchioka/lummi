@@ -26,7 +26,6 @@ import {
   eq,
   inArray,
   lt,
-  or,
   orderLines,
   orders,
   regions,
@@ -54,6 +53,7 @@ import {
   type StoredLine,
 } from '../cart/load-cart';
 import { lockDiscoverySets } from '../sets/sets';
+import { lockFragrances } from '../warehouse/stock-changes';
 import { giftSampleLine, giftSampleStillAvailable, pickGiftSample } from './gift-sample';
 import { toRegionDto } from '../delivery/dto';
 import { defaultSavedPoint, listSavedPoints, rememberPoint } from '../delivery/saved-points';
@@ -206,11 +206,11 @@ export class OrdersService {
    * once on a deadlock or serialization failure, then answered with `try_again`):
    * 0. the customer row is locked, so a repeat of the same request (same idempotency key) waits
    *    for the first and then returns the order it made, never a second one;
-   * 1. the cart row, then the Discovery set rows the lines hold (ascending vial ml), then the stock
-   *    rows of its lines (a volume line's volume, the five 10 ml of a builder line, a first order's
-   *    gift sample's 5 ml, ADR 0042) are locked
-   *    (`FOR UPDATE`, volumes in ascending id), so a concurrent checkout for the same last unit
-   *    waits here and then sees this order's reserve; every checkout takes them in this order;
+   * 1. the cart row, then the fragrances its bottles are filled from (a volume line's, the five of
+   *    a builder line, a gift code's, a first order's gift sample's; `FOR NO KEY UPDATE`, ascending
+   *    id, ADR 0043), then the Discovery set rows the lines hold (ascending vial ml) are locked, so
+   *    a concurrent checkout for the same last ml waits here and then sees this order's reserve;
+   *    every stock path takes them in this order;
    *    then the entered promo code's row, so one for its last use waits and then sees this use;
    *    the applied entitlement (a birthday coupon, #30) is locked last, by its conditional hold
    *    once the order row exists (3); one already taken there creates the order again from a new
@@ -219,7 +219,8 @@ export class OrdersService {
    *    capped at available; a total other than the one the shopper confirmed is refused (409)
    *    with the new checkout, since they will transfer exactly that amount;
    * 3. the order and its lines are written as a snapshot, with `reserve_until`, «Ожидает оплаты»
-   *    and its number; the lines are the reserve (ADR 0010);
+   *    and its number; the lines are the reserve (ADR 0010); a first order's gift sample joins
+   *    last if a 5 ml fill is still free once they hold theirs (ADR 0042, 0043);
    * 4. the ordered cart lines are removed (a cart order only), the recipient and point pair is
    *    remembered («Мои пункты BTS»), consent is stored on the first order, and the "order
    *    created" message goes into the outbox.
@@ -296,9 +297,9 @@ export class OrdersService {
       const source = await this.sourceOf(tx, input.item);
       if (!source) return { kind: 'invalid', code: 'unknown_item' } as const;
 
-      // 1. Freeze the cart (a cart order), then the Discovery set rows (when a line holds one), then
-      // the stock of every volume in id order: the same order in every checkout, buy-now included,
-      // so none can deadlock another.
+      // 1. Freeze the cart (a cart order), then the fragrances in id order, then the Discovery set
+      // rows (when a line holds one): the same order in every checkout, buy-now included, and every
+      // stock path, so none can deadlock another.
       let wanted: readonly StoredLine[];
       if (source.kind === 'cart') {
         await tx
@@ -308,41 +309,34 @@ export class OrdersService {
           .for('update');
         wanted = await readCartLines(tx, c.id);
       } else wanted = source.lines;
-      // A gift code's item (ADR 0039) is stock like a line: read without a lock here, its row locked
-      // with the others below, and checked again once the code itself is locked.
+      // A gift code's item (ADR 0039) is stock like a line: read without a lock here, its fragrance
+      // locked with the others below, and checked again once the code itself is locked.
       const promoGift = source.kind === 'cart' ? await enteredPromoGift(tx, c.id) : null;
-      // each Discovery set a line holds (a gift code's is the 5 × 10 ml one), in ascending vial ml
+      // A first order's gift sample (ADR 0042): picked here, its fragrance locked with the others
+      // below and checked again once the order's own lines hold their fills.
+      const sample = await pickGiftSample(tx, c.id);
+      // Every fragrance a bottle comes from (ADR 0043): a volume line's, a builder line's five, the
+      // gift's, the sample's; in ascending id, the lock every stock path takes first.
+      const lockVolumes = [
+        ...wanted.flatMap((w) => w.volumeId ?? []),
+        ...(promoGift?.kind === 'volume' ? [promoGift.volumeId] : []),
+      ];
+      const ofVolumes = lockVolumes.length
+        ? await tx
+            .select({ fragranceId: volumes.fragranceId })
+            .from(volumes)
+            .where(inArray(volumes.id, lockVolumes))
+        : [];
+      await lockFragrances(tx, [
+        ...ofVolumes.map((v) => v.fragranceId),
+        ...wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : [])),
+        ...(sample ? [sample.fragranceId] : []),
+      ]);
+      // then each Discovery set a line holds (a gift code's is the 5 × 10 ml one), in ascending vial ml
       await lockDiscoverySets(tx, [
         ...wanted.flatMap((w) => (w.kind === 'discovery_set' && w.vialMl ? [w.vialMl] : [])),
         ...(promoGift?.kind === 'discovery_set' ? [SET_VIAL_ML as DiscoveryVialMl] : []),
       ]);
-      // A first order's gift sample (ADR 0042): picked here, its 5 ml locked with the others below
-      // and checked again under the lock.
-      const sample = await pickGiftSample(tx, c.id);
-      // a volume line locks its volume; a builder line the 10 ml of each of its five
-      const lockVolumes = [
-        ...wanted.flatMap((w) => w.volumeId ?? []),
-        ...(promoGift?.kind === 'volume' ? [promoGift.volumeId] : []),
-        ...(sample ? [sample.volumeId] : []),
-      ];
-      const lockFragrances = [
-        ...new Set(wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : []))),
-      ];
-      if (lockVolumes.length > 0 || lockFragrances.length > 0) {
-        await tx
-          .select({ id: volumes.id })
-          .from(volumes)
-          .where(
-            or(
-              lockVolumes.length > 0 ? inArray(volumes.id, lockVolumes) : undefined,
-              lockFragrances.length > 0
-                ? and(eq(volumes.ml, 10), inArray(volumes.fragranceId, lockFragrances))
-                : undefined,
-            ),
-          )
-          .orderBy(asc(volumes.id))
-          .for('update');
-      }
       // The entered promo code's row last (ADR 0005): a concurrent order for its last use waits
       // here, then the quote below counts the use the first one held. A buy-now order never uses
       // the cart's code, so it takes no such lock.
@@ -389,9 +383,6 @@ export class OrdersService {
       const heldPromoCodeId = quote.discount?.type === 'promo_code' ? loaded.promoCodeId : null;
       if (quote.discount?.type === 'promo_code' && heldPromoCodeId === null)
         throw new Error(`promo ${quote.discount.code}: applied without passing its checks`);
-      // the sample's last bottle may have gone to another first order meanwhile: then there is none
-      const giftSample =
-        sample && (await giftSampleStillAvailable(tx, sample.volumeId)) ? sample : null;
 
       // 3. The snapshot.
       const reserveUntil = new Date(now.getTime() + settings['orders.reserveTtlSeconds'] * 1000);
@@ -511,18 +502,18 @@ export class OrdersService {
           ...(promoGiftOf(quote.discount) && loaded.promoGift
             ? [promoGiftLine(order.id, bought.length, loaded.promoGift)]
             : []),
-          // The first order's gift sample (ADR 0042): last, at 0; not a discount, so with any.
-          ...(giftSample
-            ? [
-                giftSampleLine(
-                  order.id,
-                  bought.length + (promoGiftOf(quote.discount) && loaded.promoGift ? 1 : 0),
-                  giftSample,
-                ),
-              ]
-            : []),
         ])
         .returning();
+      // The first order's gift sample (ADR 0042): last, at 0; not a discount, so with any. Its 5 ml
+      // fill is judged now that the order's own lines hold theirs (ADR 0043): the sample never takes
+      // liquid this order's bottles need, and another first order's may have taken the last of it.
+      if (sample && (await giftSampleStillAvailable(tx, sample.fragranceId)))
+        lines.push(
+          ...(await tx
+            .insert(orderLines)
+            .values(giftSampleLine(order.id, lines.length, sample))
+            .returning()),
+        );
 
       // 4. The cart, the saved pair, consent, audit and the message. A cart order takes the entered
       // code with it, held or refused, so the next cart starts without one (spec Changes 2026-11-11

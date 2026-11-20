@@ -298,7 +298,12 @@ const LONG_FIVE_NAMES = [
   'Montabaco Intensivo',
 ];
 const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
-const tenMlOf = `ml = 10 and fragrance_id in (select id from fragrances where slug = any($1))`;
+/**
+ * A fragrance's ready concentrate (ADR 0043) as `n` bottles of `ml`: a fill is ml × 1.03 at the
+ * default filling loss, µl. Its other volumes share the same liquid.
+ */
+const FILL_UL: Record<number, number> = { 5: 5150, 10: 10300, 30: 30900, 50: 51500 };
+const concentrateSql = `update fragrances set concentrate_ul = $2 where slug = any($1)`;
 async function worstSets(db: ShotDb) {
   await db.query('update discovery_set set price = 1250000, on_hand = 120 where vial_ml = 10');
   await db.query('delete from discovery_set_items where vial_ml = 10');
@@ -308,7 +313,7 @@ async function worstSets(db: ShotDb) {
      from generate_subscripts($1::text[], 1) as i`,
     [LONG_FIVE],
   );
-  await db.query(`update volumes set on_hand = 120 where ${tenMlOf}`, [LONG_FIVE]);
+  await db.query(concentrateSql, [LONG_FIVE, 120 * FILL_UL[10]!]);
 }
 async function bestSets(db: ShotDb) {
   await db.query('update discovery_set set price = 299000, on_hand = 10 where vial_ml = 10');
@@ -335,7 +340,7 @@ async function fillWorstSetsCart(api: ApiClient, db: ShotDb) {
   if (long.status !== 200) throw new Error(`builder add: HTTP ${long.status}`);
   const gone = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
   if (gone.status !== 200) throw new Error(`builder add: HTTP ${gone.status}`);
-  await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [SOLD_FIVE]);
+  await db.query(concentrateSql, [SOLD_FIVE, 0]);
 }
 /** The name of the n-th builder row, and its slug, so a shot can take its 10 ml away. */
 let builderVictim: string | undefined;
@@ -1068,7 +1073,8 @@ const shortcutScreens: ScreenDef[] = [
     path: '/search?q=symphony&s=1',
     setup: async ({ db }) => {
       await db.query(
-        `update volumes set on_hand = 0 where ml <> 30 and fragrance_id = (select id from fragrances where slug = 'symphony')`,
+        // one liquid for every volume (ADR 0043): exactly one 30 ml fill, so 50 ml is gone
+        `update fragrances set concentrate_ul = 30900 where slug = 'symphony'`,
       );
     },
     act: async ({ page }) => {
@@ -1109,7 +1115,8 @@ const shortcutScreens: ScreenDef[] = [
     setup: async ({ api, db }) => {
       await checkoutReady(api, db, 'given');
       await db.query(
-        `update volumes set on_hand = 0 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'tygar')`,
+        // less than a 50 ml fill: 50 ml is gone, 10 and 30 ml stay (ADR 0043)
+        `update fragrances set concentrate_ul = 50000 where slug = 'tygar'`,
       );
     },
     teardown: checkoutDone,
@@ -1173,10 +1180,10 @@ const shortcutScreens: ScreenDef[] = [
       });
       await setStatuses(db, ['delivered']);
       const vol = (slug: string, ml: number, onHand: number) =>
-        db.query(
-          `update volumes set on_hand = $3 where ml = $2 and fragrance_id = (select id from fragrances where slug = $1)`,
-          [slug, ml, onHand],
-        );
+        db.query(`update fragrances set concentrate_ul = $2 where slug = $1`, [
+          slug,
+          onHand * FILL_UL[ml]!,
+        ]);
       await vol('symphony', 10, 1);
       await vol('tygar', 30, 200);
       await vol('ink-mark', 50, 0);
@@ -1264,9 +1271,7 @@ const polishScreens: ScreenDef[] = [
     path: '/search?q=rain%20tea&s=1',
     setup: async ({ db }) => {
       await db.markdown('rain-tea', 30, 119_000, 4);
-      await db.query(
-        `update volumes set on_hand = 0 where ml = 50 and fragrance_id = (select id from fragrances where slug = 'rain-tea')`,
-      );
+      await db.query(`update fragrances set concentrate_ul = 50000 where slug = 'rain-tea'`);
     },
     act: async ({ page }) => {
       await openVolumeSheet(page);
@@ -1299,7 +1304,8 @@ const polishScreens: ScreenDef[] = [
     path: '/catalog',
     setup: async ({ db }) => {
       await db.query(
-        `update volumes set on_hand = 0 where ml <> 10 and fragrance_id = (select id from fragrances where slug = 'rain-tea')`,
+        // two 10 ml fills: no 30 or 50 ml (ADR 0043)
+        `update fragrances set concentrate_ul = 20600 where slug = 'rain-tea'`,
       );
     },
     act: async ({ page }) => {
@@ -1494,10 +1500,10 @@ const worstShortcutScreens: ScreenDef[] = [
       await placeOrder(api, TWELVE_LINES);
       await setStatuses(db, ['delivered']);
       const vol = (slug: string, ml: number, onHand: number) =>
-        db.query(
-          `update volumes set on_hand = $3 where ml = $2 and fragrance_id = (select id from fragrances where slug = $1)`,
-          [slug, ml, onHand],
-        );
+        db.query(`update fragrances set concentrate_ul = $2 where slug = $1`, [
+          slug,
+          onHand * FILL_UL[ml]!,
+        ]);
       await vol('elysium-pour-homme-parfum', 50, 0);
       await vol('blue-sapphire', 30, 0);
       await vol('hibiscus-mahajad', 10, 0);
@@ -3424,8 +3430,7 @@ export const screens: ScreenDef[] = [
       await fillCart(api, [['symphony', 10]]);
       const res = await api.cart.addBuilder({ body: { slugs: SOLD_FIVE, qty: 1 } });
       if (res.status !== 200) throw new Error(`builder add: HTTP ${res.status}`);
-      await db.query(`update volumes set on_hand = 1 where ml = 10 and fragrance_id =
-        (select id from fragrances where slug = 'symphony')`);
+      await db.query(`update fragrances set concentrate_ul = 10300 where slug = 'symphony'`);
     },
     teardown: async (ctx) => {
       await emptyCart(ctx);
@@ -3483,7 +3488,7 @@ export const screens: ScreenDef[] = [
     setup: ({ db }) => worstSets(db),
     act: async ({ page, db }) => {
       await pickByName(page, LONG_FIVE_NAMES);
-      await db.query(`update volumes set on_hand = 0 where ${tenMlOf}`, [LONG_FIVE]);
+      await db.query(concentrateSql, [LONG_FIVE, 0]);
       await page.getByRole('button', { name: /В корзину|Savatga/ }).click();
       await page.getByTestId('dock-alert').waitFor();
       await page.waitForFunction(

@@ -4,6 +4,7 @@ export * from './schema';
 export { schema };
 export { createDb, type Db, type DbOrTx } from './client';
 export { migrateDb } from './migrate';
+export { SEEDED_CONSUMABLES } from './consumables-seed';
 export {
   eq,
   and,

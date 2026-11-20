@@ -53,7 +53,6 @@ const emptyVolume = (ml: Mls) => ({
   price: 0,
   salePrice: null,
   saleEndsOn: null,
-  onHand: 0,
 });
 
 function toForm(f: FragranceAdmin | null): FragranceInput {
@@ -65,8 +64,6 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
           price: v.price,
           salePrice: v.salePrice,
           saleEndsOn: v.saleEndsOn,
-          onHand: v.onHand,
-          loadedOnHand: v.onHand,
         }
       : emptyVolume(ml);
   });
@@ -100,6 +97,7 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
       notes: { top: [], heart: [], base: [] },
       similarIds: [],
       volumes,
+      concentrateMl: 0,
     };
   }
   return {
@@ -111,6 +109,9 @@ function toForm(f: FragranceAdmin | null): FragranceInput {
     keyNotesRu: [0, 1, 2].map((i) => f.keyNotesRu[i] ?? ''),
     keyNotesUz: [0, 1, 2].map((i) => f.keyNotesUz[i] ?? ''),
     volumes,
+    // the count the form loaded: the server writes a changed one only if it still holds (ADR 0043)
+    concentrateMl: f.stock.concentrateMl,
+    loadedConcentrateMl: f.stock.concentrateMl,
   };
 }
 
@@ -143,6 +144,11 @@ function message(t: AdminMessages, e?: FieldError): string | undefined {
 // rhf also feeds setValueAs the default value (a number or null), not only typed strings
 const num = (v: unknown) => (v === '' || v == null ? Number.NaN : Number(v));
 const numOrNull = (v: unknown) => (v === '' || v == null ? null : Number(v));
+/** Ml as typed: a comma is the decimal point. */
+const decimal = (v: unknown) =>
+  v === '' || v == null ? Number.NaN : Number(String(v).replace(/\s/g, '').replace(',', '.'));
+/** A figure as the panel shows it: grouped digits, a decimal comma. */
+const shown = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, '\u202f');
 const textOrNull = (v: unknown) => (v ? String(v) : null);
 /** A typed price read back with its thousands («1250000» -> «1 250 000 сум»), once it has some. */
 const priceEcho = (v: unknown, language: Language) =>
@@ -189,9 +195,6 @@ export function FragranceForm({
   const [code, setCode] = useState(initial?.code ?? null);
   const [photos, setPhotos] = useState<Record<number, string | null>>(() =>
     Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.photo])),
-  );
-  const reservedByMl: Record<number, number> = Object.fromEntries(
-    (initial?.volumes ?? []).map((x) => [x.ml, x.reserved]),
   );
   const volumeIds = useMemo(
     () => Object.fromEntries((initial?.volumes ?? []).map((v) => [v.ml, v.id])),
@@ -264,7 +267,7 @@ export function FragranceForm({
         router.refresh();
         return;
       }
-      if (res?.status === 409 && (res.body as { code?: string }).code === 'on_hand_changed') {
+      if (res?.status === 409 && (res.body as { code?: string }).code === 'concentrate_changed') {
         for (const f of (res.body as { fields?: string[] }).fields ?? [])
           setError(f as never, { type: 'server', message: 'server' });
         setBanner({ kind: 'error', text: c.onHandChanged });
@@ -282,7 +285,7 @@ export function FragranceForm({
     () => setBanner({ kind: 'error', text: c.fixErrors }),
   );
 
-  const volumeErr = (i: number, key: 'price' | 'salePrice' | 'saleEndsOn' | 'onHand') =>
+  const volumeErr = (i: number, key: 'price' | 'salePrice' | 'saleEndsOn') =>
     err(
       (errors.volumes as FieldErrors<FragranceInput['volumes']> | undefined)?.[i]?.[
         key
@@ -604,7 +607,7 @@ export function FragranceForm({
         <Section title={c.sectionVolumes}>
           {/* the rules once, not repeated under every volume column */}
           <ul className="-mt-2 grid gap-1 text-small text-pretty text-muted-foreground">
-            {[c.salePriceHint, c.saleEndsOnHint, c.onHandHint, c.photoHint].map((h) => (
+            {[c.salePriceHint, c.saleEndsOnHint, c.photoHint].map((h) => (
               <li key={h}>{h}</li>
             ))}
           </ul>
@@ -674,18 +677,6 @@ export function FragranceForm({
                           {...reg(`volumes.${i}.saleEndsOn`, { setValueAs: textOrNull })}
                         />
                       </Field>
-                      <Field id={`f-hand-${ml}`} label={c.onHand} error={volumeErr(i, 'onHand')}>
-                        <Input
-                          inputMode="numeric"
-                          className="tabular-nums"
-                          {...reg(`volumes.${i}.onHand`, { setValueAs: num })}
-                        />
-                      </Field>
-                      {(reservedByMl[ml] ?? 0) > typed.onHand && (
-                        <Notice title={c.belowReserve}>
-                          {fill(c.reserved, { n: String(reservedByMl[ml]) })}
-                        </Notice>
-                      )}
                       <PhotoUpload
                         slot={ml}
                         label={`${c.photo} ${ml} ${c.ml}`}
@@ -747,6 +738,36 @@ export function FragranceForm({
             language={language}
             t={t}
           />
+        </Section>
+
+        <Section title={c.sectionStock}>
+          <Field
+            id="f-concentrate"
+            label={c.concentrate}
+            hint={c.concentrateHint}
+            error={err(errors.concentrateMl)}
+          >
+            <Input
+              inputMode="decimal"
+              className="max-w-48 tabular-nums"
+              {...reg('concentrateMl', { setValueAs: decimal })}
+            />
+          </Field>
+          {initial && (
+            <p className="-mt-2 text-small text-muted-foreground tabular-nums">
+              {fill(c.reservedMl, { n: shown(initial.stock.reservedMl) })} ·{' '}
+              {fill(c.bottlesNow, {
+                list: initial.volumes
+                  .map((x) => fill(c.bottle, { ml: String(x.ml), n: shown(x.available) }))
+                  .join(' · '),
+              })}
+            </p>
+          )}
+          {initial && (v.concentrateMl ?? 0) < initial.stock.reservedMl && (
+            <Notice title={c.belowReserve}>
+              {fill(c.reservedMl, { n: shown(initial.stock.reservedMl) })}
+            </Notice>
+          )}
         </Section>
 
         <Section title={c.sectionFlags}>

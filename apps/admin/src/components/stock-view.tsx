@@ -1,10 +1,12 @@
-import type { GiftSampleStock, StockList, StockQuery } from '@lummi/contracts';
+import type { Consumable, GiftSampleStock, StockList, StockQuery } from '@lummi/contracts';
 import type { Language } from '@lummi/i18n';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
 import { PageHeader } from '@/components/page-header';
 import { StockTable } from '@/components/stock-table';
+import { ConsumablesSection } from '@/components/stock/consumables-section';
+import { SetsStock } from '@/components/stock/sets-stock';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -16,18 +18,22 @@ import { num } from '@/lib/setting-copy';
 import { fill } from '@/lib/utils';
 
 /**
- * The stock page: a GET form (the URL is the state, so a filtered view can be linked, as on the
- * audit page) over the editable table.
+ * The stock page (ADR 0043): a GET form (the URL is the state, so a filtered view can be linked, as
+ * on the audit page) over the fragrances' concentrate and oil; on page 1 the Discovery sets' boxes
+ * and the consumables, which the filters do not narrow.
  */
 export function StockView({
   t,
   language,
   data,
+  consumables,
   query,
 }: {
   t: AdminMessages;
   language: Language;
   data: StockList;
+  /** Null after page 1: the section heads the first page only. */
+  consumables: Consumable[] | null;
   query: StockQuery;
 }) {
   const s = t.stock;
@@ -100,7 +106,9 @@ export function StockView({
           </div>
         </form>
       </Card>
-      {data.rows.length === 0 ? (
+      {data.page === 1 && <SetsStock rows={data.sets} lowThreshold={data.lowThreshold} t={t} />}
+      {consumables && <ConsumablesSection items={consumables} language={language} t={t} />}
+      {data.fragrances.length === 0 ? (
         <EmptyState
           title={s.empty}
           action={
@@ -115,11 +123,10 @@ export function StockView({
         </EmptyState>
       ) : (
         <StockTable
-          rows={data.rows}
-          oil={data.oil}
+          rows={data.fragrances}
           shown={data.shown}
-          lowThreshold={data.lowThreshold}
-          lowOilLitres={data.lowOilLitres}
+          lowConcentrateMl={data.lowConcentrateMl}
+          lowOilMl={data.lowOilMl}
           total={data.total}
           language={language}
           t={t}

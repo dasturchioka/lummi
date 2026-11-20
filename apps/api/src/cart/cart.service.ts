@@ -27,7 +27,7 @@ import {
   type DbOrTx,
 } from '@lummi/db';
 import { Inject, Injectable } from '@nestjs/common';
-import { available, CatalogService, reservedByVolume } from '../catalog/catalog.service';
+import { CatalogService, readLiquidStock } from '../catalog/catalog.service';
 import type { Edges } from '../edges';
 import {
   discountOptionsOf,
@@ -153,7 +153,6 @@ export class CartService {
           price: volumes.price,
           salePrice: volumes.salePrice,
           saleEndsAt: volumes.saleEndsAt,
-          onHand: volumes.onHand,
         })
         .from(volumes)
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
@@ -169,13 +168,13 @@ export class CartService {
     const position = new Map(rank.map((id, i) => [id, i]));
     const at = (id: number) => position.get(id) ?? Number.MAX_SAFE_INTEGER;
     const rows = found.sort((a, b) => at(a.fragranceId) - at(b.fragranceId));
-    const reserved = await reservedByVolume(
+    const stock = await readLiquidStock(
       tx,
-      rows.map((r) => r.volumeId),
+      rows.map((r) => r.fragranceId),
     );
     const out: CartSuggestionDto[] = [];
     for (const r of rows) {
-      if (available(r.onHand, reserved.get(r.volumeId) ?? 0) === 0) continue;
+      if (stock.bottles(r.fragranceId, 10) === 0) continue;
       const price = activeMarkdown(volumePrice(r), now) ?? r.price;
       if (price < gap) continue;
       out.push({ slug: r.slug, name: r.name, brand: r.brand, ml: 10, photo: r.photo, price });
@@ -188,7 +187,7 @@ export class CartService {
   async add(customerId: number, slug: string, ml: number, qty: number): Promise<AddOutcome> {
     return this.db.transaction(async (tx) => {
       const [v] = await tx
-        .select({ id: volumes.id, onHand: volumes.onHand })
+        .select({ id: volumes.id, fragranceId: volumes.fragranceId })
         .from(volumes)
         .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
         .where(
@@ -201,8 +200,9 @@ export class CartService {
           ),
         );
       if (!v) return 'not_found' as const;
-      const reserved = await reservedByVolume(tx, [v.id]);
-      const left = available(v.onHand, reserved.get(v.id) ?? 0);
+      // what the line may grow to: the bottles the free concentrate fills (the cart's read weighs
+      // its other lines of the same fragrance, ADR 0043)
+      const left = (await readLiquidStock(tx, [v.fragranceId])).bottles(v.fragranceId, ml);
       if (left === 0) return 'sold_out' as const;
       await this.touch(tx, customerId);
       await this.grow(tx, customerId, { kind: 'volume', volumeId: v.id }, qty, left);

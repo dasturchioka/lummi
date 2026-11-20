@@ -1,4 +1,9 @@
-import { DISCOVERY_VIAL_MLS, SET_SIZE, type DiscoveryVialMl } from '@lummi/contracts/constants';
+import {
+  DISCOVERY_VIAL_MLS,
+  SET_SIZE,
+  SET_VIAL_ML,
+  type DiscoveryVialMl,
+} from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -13,12 +18,12 @@ import {
   type DbOrTx,
   type DiscoverySetRow,
 } from '@lummi/db';
-import { available, reservedByVolume } from '../catalog/catalog.service';
+import { available, readLiquidStock } from '../catalog/catalog.service';
 
 /**
  * What is held back of a Discovery set's own stock: the units on its lines (a Discovery line's `ml`
  * is its vial size, ADR 0042) of orders that are neither handed to BTS nor cancelled
- * (`RESERVING_STATUSES`, ADR 0010). Like `reservedByVolume`, the one place that knows, so
+ * (`RESERVING_STATUSES`, ADR 0010). Like `reservedLiquid` for the fragrances (ADR 0043), the one place that knows, so
  * "available" is on hand minus reserve.
  */
 export async function reservedDiscovery(db: DbOrTx, vialMl: DiscoveryVialMl): Promise<number> {
@@ -46,15 +51,19 @@ export async function readDiscoverySet(
 }
 
 /**
- * Locks the rows of the given Discovery sets `FOR UPDATE` in ascending vial ml: the order every
- * checkout and handover takes them in, before any volume, so none waits on another.
+ * Locks the rows of the given Discovery sets `FOR UPDATE` in ascending vial ml, after the
+ * fragrances (ADR 0043): the order every checkout, handover, Uzum sale and assembly takes them in,
+ * so none waits on another. The rows as they are under the lock. The one place that takes it.
  */
 export async function lockDiscoverySets(
   db: DbOrTx,
   vialMls: Iterable<DiscoveryVialMl>,
-): Promise<void> {
-  const wanted = DISCOVERY_VIAL_MLS.filter((ml) => [...vialMls].includes(ml)).sort((a, b) => a - b);
-  for (const ml of wanted) await readDiscoverySet(db, ml, true);
+): Promise<Map<DiscoveryVialMl, DiscoverySetRow>> {
+  const asked = [...vialMls];
+  const wanted = DISCOVERY_VIAL_MLS.filter((ml) => asked.includes(ml)).sort((a, b) => a - b);
+  const out = new Map<DiscoveryVialMl, DiscoverySetRow>();
+  for (const ml of wanted) out.set(ml, await readDiscoverySet(db, ml, true));
+  return out;
 }
 
 export interface SetFragranceRow {
@@ -141,7 +150,7 @@ export interface TenMl {
   brand: string;
   /** Hidden from the catalog: not for sale and not offered to the builder. */
   hidden: boolean;
-  /** On hand minus reserve of the 10 ml; 0 for a hidden fragrance (not for sale). */
+  /** The 10 ml fills its free concentrate makes (ADR 0043); 0 for a hidden fragrance (not for sale). */
   available: number;
 }
 
@@ -159,13 +168,12 @@ export async function tenMlOf(
       name: fragrances.name,
       brand: fragrances.originalBrand,
       hidden: fragrances.hidden,
-      onHand: volumes.onHand,
     })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(
       and(
-        eq(volumes.ml, 10),
+        eq(volumes.ml, SET_VIAL_ML),
         'all' in by
           ? undefined
           : 'ids' in by
@@ -175,22 +183,17 @@ export async function tenMlOf(
     )
     .orderBy(asc(volumes.id));
   const rows = await q;
-  const reserved = await reservedByVolume(
+  const stock = await readLiquidStock(
     db,
-    rows.map((r) => r.volumeId),
+    rows.map((r) => r.fragranceId),
   );
   return rows.map((r) => ({
-    fragranceId: r.fragranceId,
-    volumeId: r.volumeId,
-    slug: r.slug,
-    name: r.name,
-    brand: r.brand,
-    hidden: r.hidden,
-    available: r.hidden ? 0 : available(r.onHand, reserved.get(r.volumeId) ?? 0),
+    ...r,
+    available: r.hidden ? 0 : stock.bottles(r.fragranceId, SET_VIAL_ML),
   }));
 }
 
-/** A builder set takes one 10 ml of each of its five: as many sets as the scarcest allows. */
+/** A builder set takes one 10 ml fill of each of its five: as many sets as the scarcest allows. */
 export const builderAvailable = (tenMl: readonly { available: number }[]): number =>
   tenMl.length === SET_SIZE ? Math.min(...tenMl.map((t) => t.available)) : 0;
 

@@ -25,13 +25,12 @@ import { OutboxService } from '../outbox/outbox.service';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES, ENV } from '../tokens';
 import { retryTransientOnce, TryAgainError } from '../util/transient';
-import { recordCountChanges } from '../warehouse/stock-moves';
 import { DiscountSourceHooks } from './discount-sources';
 import { EFFECTS, type Effects, type Move } from './effects';
 import { cancellationOf } from './history';
 import { planTransition } from './machine';
 import { orderMessage } from './messages';
-import { changeOnHand, type OnHandChange } from './on-hand';
+import { changeOnHand } from './on-hand';
 
 /** The moves only their one door makes, holding the capability `issueDoor()` gave it. */
 export const GUARDED_ACTIONS = ['confirm_payment', 'reject_receipt', 'payment_not_found'] as const;
@@ -177,9 +176,26 @@ export class OrderStatusService {
     if (fx.fits && !fx.fits(move)) return { kind: 'refused', code: 'invalid_payload' };
 
     const now = this.edges.clock.now();
-    const onHand: OnHandChange[] = fx.onHand
-      ? await changeOnHand(tx, order.id, move.lines, fx.onHand(move))
-      : [];
+    const actorId = 'id' in actor ? actor.id : null;
+    // bottles filled at handover or back on the shelf are moves in their fragrances' history (#76, #82)
+    const stock = fx.onHand
+      ? await changeOnHand(
+          tx,
+          order.id,
+          move.lines,
+          fx.onHand(move),
+          { type: actor.type, id: actorId },
+          action === 'hand_to_bts' ? 'sale' : 'returned',
+          now,
+        )
+      : null;
+    const moved =
+      stock &&
+      (stock.fragrances.some((c) => c.from !== c.to) ||
+        stock.sets.length > 0 ||
+        stock.consumables.length > 0)
+        ? { stock }
+        : {};
     switch (fx.discountSource) {
       case 'release':
         await this.discountSources.release(tx, order);
@@ -204,8 +220,7 @@ export class OrderStatusService {
       string,
       unknown
     >;
-    const recorded = { ...details, ...(onHand.length > 0 ? { onHand } : {}) };
-    const actorId = 'id' in actor ? actor.id : null;
+    const recorded = { ...details, ...moved };
     const [event] = await tx
       .insert(orderEvents)
       .values({
@@ -220,18 +235,6 @@ export class OrderStatusService {
         createdAt: now,
       })
       .returning();
-    // bottles that left at handover or came back are moves in their fragrances' history (#76)
-    await recordCountChanges(
-      tx,
-      onHand
-        .filter((c) => c.shelf === 'volumes')
-        .map((c) => ({ volumeId: c.id, from: c.from, to: c.to })),
-      {
-        kind: action === 'hand_to_bts' ? 'sale' : 'returned',
-        actor: { type: actor.type, id: actorId },
-        orderId: order.id,
-      },
-    );
     await this.audit.record(tx, {
       actor: { type: actor.type, id: actorId },
       action: fx.audit,
