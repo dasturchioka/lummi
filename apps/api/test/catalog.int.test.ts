@@ -1,8 +1,9 @@
-import { discoverySet, families, fragrances, volumes, eq, and } from '@lummi/db';
+import { and, discoverySet, families, fragrances, volumes, eq } from '@lummi/db';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { beforeEach, afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedCatalog } from '../src/catalog/seed';
+import { PLACEHOLDER_CONCENTRATE_ML, seedCatalog } from '../src/catalog/seed';
+import { FILL_UL, setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 const materialsDir = fileURLToPath(new URL('../../../materials', import.meta.url));
@@ -27,10 +28,10 @@ describe('seed', () => {
     expect(await t.db.select().from(fragrances)).toHaveLength(67);
     expect(await t.db.select().from(families)).toHaveLength(29);
     const all = await t.db.select().from(volumes);
-    // the 5 ml (ADR 0042): stocked, never sold, so no price and nothing on hand until bottled
+    // the 5 ml (ADR 0042): filled for samples and sets, never sold, so no price
     const fives = all.filter((v) => v.ml === 5);
     expect(fives).toHaveLength(67);
-    expect(fives.every((v) => v.price === 0 && v.onHand === 0 && !v.isPlaceholder)).toBe(true);
+    expect(fives.every((v) => v.price === 0 && !v.isPlaceholder)).toBe(true);
     const vols = all.filter((v) => v.ml !== 5);
     expect(vols).toHaveLength(67 * 3);
     // both Discovery sets' seeded boxes are ours, so both rows stay flagged (ADR 0042)
@@ -39,7 +40,10 @@ describe('seed', () => {
       [5, 10, true],
       [10, 10, true],
     ]);
-    expect(vols.every((v) => v.isPlaceholder && v.onHand === 20)).toBe(true);
+    expect(vols.every((v) => v.isPlaceholder)).toBe(true);
+    // the stock is each fragrance's ready concentrate (ADR 0043): ours, 1 000 ml
+    const frs = await t.db.select().from(fragrances);
+    expect(frs.every((f) => f.concentrateUl === PLACEHOLDER_CONCENTRATE_ML * 1000)).toBe(true);
     expect(vols.filter((v) => v.ml === 30).every((v) => v.price === 149_000)).toBe(true);
   });
 
@@ -49,13 +53,16 @@ describe('seed', () => {
     expect(new Set(rows.map((r) => r.longevityUz))).toEqual(new Set(['24 soatgacha']));
   });
 
-  it('is idempotent and keeps prices someone has since changed', async () => {
+  it('is idempotent and keeps prices and concentrate someone has since changed', async () => {
     await t.db.update(volumes).set({ price: 123_000 }).where(eq(volumes.ml, 10));
+    await t.db.update(fragrances).set({ concentrateUl: 5_000 }).where(eq(fragrances.slug, 'tygar'));
     // the real seed again: this is what is tested, not the harness's copy
     await seedCatalog(t.db, { materialsDir });
     expect(await t.db.select().from(fragrances)).toHaveLength(67);
     const [v] = await t.db.select().from(volumes).where(eq(volumes.ml, 10)).limit(1);
     expect(v?.price).toBe(123_000);
+    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'tygar'));
+    expect(f?.concentrateUl).toBe(5_000);
   });
 });
 
@@ -78,7 +85,9 @@ describe('GET /catalog/fragrances/:slug', () => {
     expect(c.family?.ru).toBeTruthy();
     expect(c.volumes.map((v) => v.ml)).toEqual([10, 30, 50]);
     expect(c.volumes.map((v) => v.price)).toEqual([69_000, 149_000, 219_000]);
-    expect(c.volumes.every((v) => v.salePrice === null && v.available === 20)).toBe(true);
+    expect(c.volumes.every((v) => v.salePrice === null)).toBe(true);
+    // the seed's 1 000 ml of concentrate fills every volume (ADR 0043)
+    expect(c.volumes.map((v) => v.available)).toEqual([97, 32, 19]);
   });
 
   it('offers the step-ups the settings allow (#57)', async () => {
@@ -99,13 +108,15 @@ describe('GET /catalog/fragrances/:slug', () => {
     // 10 → 30 saves 28 %, 30 → 50 11 %
     await set('catalog.stepUp.minPercent', 20);
     expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
-    // a sold-out 30 ml: the 10 ml steps over it
-    const [sym] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'symphony'));
-    await t.db
-      .update(volumes)
-      .set({ onHand: 0 })
-      .where(and(eq(volumes.fragranceId, sym!.id), eq(volumes.ml, 30)));
-    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 50, saving: 126_000 }]);
+    // one liquid fills every volume (ADR 0043), so only the biggest bottle runs out alone, and a
+    // sold-out 50 ml is offered to nobody
+    await set('catalog.stepUp.minPercent', 10);
+    expect(await stepsOf('symphony')).toEqual([
+      { fromMl: 10, toMl: 30, saving: 58_000 },
+      { fromMl: 30, toMl: 50, saving: 29_000 },
+    ]);
+    await setConcentrateUl(t, 'symphony', FILL_UL[50] - 1);
+    expect(await stepsOf('symphony')).toEqual([{ fromMl: 10, toMl: 30, saving: 58_000 }]);
     await set('catalog.stepUp.enabled', false);
     expect(await stepsOf('symphony')).toEqual([]);
   });
@@ -194,14 +205,13 @@ describe('GET /catalog/fragrances/:slug', () => {
     });
   });
 
-  it('marks a sold-out volume with zero available', async () => {
-    const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'tygar'));
-    await t.db
-      .update(volumes)
-      .set({ onHand: 0 })
-      .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 50)));
+  it('marks a sold-out volume with zero available, the others with the fills left (ADR 0043)', async () => {
+    // just under one 50 ml fill: four 10 ml and one 30 ml still fill from it
+    await setConcentrateUl(t, 'tygar', FILL_UL[50] - 1);
     const res = await card('tygar');
-    expect(res.status === 200 && res.body.volumes.find((v) => v.ml === 50)?.available).toBe(0);
+    expect(
+      res.status === 200 && Object.fromEntries(res.body.volumes.map((v) => [v.ml, v.available])),
+    ).toEqual({ 10: 4, 30: 1, 50: 0 });
   });
 });
 

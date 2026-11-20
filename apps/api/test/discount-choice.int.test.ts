@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { CreateOrderBody } from '@lummi/contracts';
-import { and, birthdayCoupons, eq, fragrances, orders, upgradeRights, volumes } from '@lummi/db';
+import { birthdayCoupons, eq, fragrances, orders, upgradeRights } from '@lummi/db';
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { samarkandPoint, shopper, slugs as slugsOf, untilWaitingOnLocks } from './harness/orders';
 import type { TestUser } from './harness/sign-init-data';
+import { concentrateUl, setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 /**
@@ -575,16 +576,12 @@ describe('«Не применять»', () => {
     const { c, coupon: b, slugs } = await aliWithCoupon();
     await c.cart.chooseDiscount({ body: { type: 'none' } });
     // the 50 ml sells out: the coupon has nothing to discount, but it is still Ali's
-    const [v] = await t.db
-      .select({ id: volumes.id, onHand: volumes.onHand })
-      .from(volumes)
-      .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-      .where(and(eq(fragrances.slug, slugs[0]!), eq(volumes.ml, 50)));
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, v!.id));
+    const stocked = await concentrateUl(t, slugs[0]!);
+    await setConcentrateUl(t, slugs[0]!, 0);
     expect((await cartOf(c)).quote).toMatchObject({ discount: null, alternatives: [] });
 
     // restocked: «Не применять» still holds, the coupon still waits
-    await t.db.update(volumes).set({ onHand: v!.onHand }).where(eq(volumes.id, v!.id));
+    await setConcentrateUl(t, slugs[0]!, stocked);
     expect((await cartOf(c)).quote).toMatchObject({
       discount: null,
       total: 244_000,

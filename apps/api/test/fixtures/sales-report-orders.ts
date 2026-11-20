@@ -25,7 +25,9 @@ import {
   signedIn,
   tashkent,
 } from '../harness/fulfilment';
+import { giftSampleOff } from '../harness/gift-sample';
 import { shopper, slugs } from '../harness/orders';
+import { FILL_UL, setConcentrateUl } from '../harness/stock';
 import type { TestUser } from '../harness/sign-init-data';
 import type { TestApp } from '../harness/test-app';
 
@@ -965,12 +967,16 @@ async function setUpShop(t: TestApp): Promise<FixtureCatalog> {
     for (const ml of [10, 30, 50] as const) {
       const [v] = await t.db
         .update(volumes)
-        .set({ price: PRICES[letter][ml], salePrice: null, saleEndsAt: null, onHand: 20 })
+        .set({ price: PRICES[letter][ml], salePrice: null, saleEndsAt: null })
         .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)))
         .returning();
       catalog.volumeId[`${letter}${ml}`] = v!.id;
     }
+    // twenty bottles of each volume in ready concentrate (ADR 0043), as the shelf held before
+    await setConcentrateUl(t, f!.id, 20 * (FILL_UL[10] + FILL_UL[30] + FILL_UL[50]));
   }
+  // the hand calculation above has no gift samples: the seed's concentrate would give one
+  await giftSampleOff(t);
   await t.db
     .update(discoverySet)
     .set({ price: SET_PRICE, onHand: 10, isPlaceholder: false })

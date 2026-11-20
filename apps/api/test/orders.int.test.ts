@@ -20,6 +20,8 @@ import {
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
+import { giftSampleOff } from './harness/gift-sample';
+import { stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -36,6 +38,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 
@@ -82,10 +86,8 @@ async function volumeOf(slug: string, ml: number) {
   return v!;
 }
 
-async function setStock(slug: string, ml: number, onHand: number) {
-  const v = await volumeOf(slug, ml);
-  await t.db.update(volumes).set({ onHand }).where(eq(volumes.id, v.id));
-}
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043): its other volumes share it. */
+const setStock = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
 
 /** An active BTS point in Samarkand, its region's tariff set to `tariff`. */
 async function samarkandPoint(tariff = 31_000) {
@@ -311,7 +313,7 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     const confirmed = { pointId: point.id, confirmedTotal: 244_000 };
 
     // Both requests run while order lines cannot be written yet, so each reads the stock before
-    // either has reserved it: only the row lock on the volume keeps the second from selling it again.
+    // either has reserved it: only the row lock on the fragrance keeps the second from selling it again.
     const results = await whileTableLocked('order_lines', () =>
       Promise.all([
         a.client.orders.create({ body: body(confirmed) }),
@@ -332,9 +334,8 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
   it('available drops by the ordered quantity on the card, the list and in another cart', async () => {
     const [s1] = await slugs();
     const { point } = await samarkandPoint(25_000);
+    // five 10 ml fills (51.5 ml): the 30 and 50 ml share the same liquid (ADR 0043)
     await setStock(s1!, 10, 5);
-    await setStock(s1!, 30, 0);
-    await setStock(s1!, 50, 0);
     const buyer = await shopper();
     const other = await shopper(vali, '998907654321');
     await other.add(s1!, 10, 5);
@@ -395,7 +396,7 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     expect(order.body.delivery.point?.address).toBe(point.address);
   });
 
-  it('on hand set below the reserve is flagged in the admin on-hand list', async () => {
+  it('a concentrate count below the reserve is flagged on the warehouse page (ADR 0043)', async () => {
     const [s1] = await slugs();
     const { point } = await samarkandPoint(25_000);
     const { client, add } = await shopper();
@@ -406,14 +407,15 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
     ).toBe(201);
     const v = await volumeOf(s1!, 10);
     const manager = await t.managerSession();
-    const res = await manager.client.admin.onHand.set({
-      params: { id: v.id },
-      body: { onHand: 2, reason: 'Пересчёт' },
+    // two 10 ml fills counted, four held by the order
+    const res = await manager.client.admin.warehouse.countConcentrate({
+      params: { id: v.fragranceId },
+      body: { ml: 20.6, reason: 'Пересчёт' },
     });
-    expect(res.status === 200 && res.body).toMatchObject({
-      onHand: 2,
-      reserved: 4,
-      available: 0,
+    expect(res.status === 200 && res.body.stock).toMatchObject({
+      concentrateMl: 20.6,
+      reservedMl: 41.2,
+      availableMl: 0,
       belowReserve: true,
     });
   });
@@ -469,14 +471,15 @@ describe('stock: the order is the reserve (ADR 0010)', () => {
         brand: 'B',
       })),
     });
+    // two 10 ml fills of each (20.6 ml) are held: 979.4 ml of the seed's 1 000 fill 95 (ADR 0043)
     for (const slug of five) {
       const card = await client.catalog.fragrance({ params: { slug } });
-      expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(18);
+      expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(95);
     }
     // a cancelled order holds nothing
     await t.db.update(orders).set({ status: 'cancelled' }).where(eq(orders.id, order!.id));
     const card = await client.catalog.fragrance({ params: { slug: five[0]! } });
-    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(20);
+    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(97);
   });
 });
 
@@ -770,20 +773,20 @@ describe('retries and repeats', () => {
     expect(cart.status === 200 && cart.body.lines).toHaveLength(1);
   });
 
-  it('the admin on-hand change answers 409 try_again on a deadlock that persists', async () => {
+  it('the admin concentrate count answers 409 try_again on a deadlock that persists', async () => {
     const [s1] = await slugs();
     const v = await volumeOf(s1!, 10);
     const manager = await t.managerSession();
-    await failWrites('volumes', '40P01');
+    await failWrites('fragrances', '40P01');
     try {
-      const res = await manager.client.admin.onHand.set({
-        params: { id: v.id },
-        body: { onHand: 5, reason: 'Пересчёт' },
+      const res = await manager.client.admin.warehouse.countConcentrate({
+        params: { id: v.fragranceId },
+        body: { ml: 5, reason: 'Пересчёт' },
       });
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ code: 'try_again' });
     } finally {
-      await stopFailingWrites('volumes');
+      await stopFailingWrites('fragrances');
     }
   });
 });

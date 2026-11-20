@@ -13,6 +13,7 @@ import { OrderStatusService } from '../src/order-status/order-status.service';
 import { ReceiptsService } from '../src/receipts/receipts.service';
 import { payWithCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
 import { createTestApp, TEST_BOT_TOKEN, type StaffSession, type TestApp } from './harness/test-app';
 
 /**
@@ -34,6 +35,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
   owner = await t.ownerSession();
 });

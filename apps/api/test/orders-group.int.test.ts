@@ -17,7 +17,6 @@ import {
   regions,
   settings,
   staff,
-  volumes,
 } from '@lummi/db';
 import { fill, formatMoney, formatPhone } from '@lummi/i18n';
 import { botMessages, orderCancelledText } from '@lummi/i18n/bot';
@@ -32,6 +31,8 @@ import { WorkerRuntime } from '../src/worker/runtime';
 import { plainText, type SentMessage } from './fakes';
 import { payWithCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { concentrateUl, FILL_UL, type FillMl } from './harness/stock';
+import { giftSampleOff } from './harness/gift-sample';
 import { createTestApp, TEST_BOT_TOKEN, TEST_MINIAPP_URL, type TestApp } from './harness/test-app';
 
 const snapshot = JSON.parse(
@@ -57,6 +58,8 @@ beforeEach(async () => {
   await t.reset();
   t.edges.telegram.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
   const config = t.app.get(SettingsService);
   await config.set('bot.groupChatId', GROUP, { type: 'system' });
@@ -331,11 +334,13 @@ async function availableOf(orderId: number) {
   return res.body.volumes.find((v) => v.ml === line!.ml)!.available;
 }
 
-/** On hand of the order's first line's volume. */
+/**
+ * Bottles of the order's first line's volume its fragrance's concentrate fills, reserve aside: the
+ * shelf's count of that volume now that stock is liquid (ADR 0043).
+ */
 async function onHandOf(orderId: number) {
   const [line] = await t.db.select().from(orderLines).where(eq(orderLines.orderId, orderId));
-  const [v] = await t.db.select().from(volumes).where(eq(volumes.id, line!.volumeId!));
-  return v!.onHand;
+  return Math.floor((await concentrateUl(t, line!.fragranceId!)) / FILL_UL[line!.ml as FillMl]);
 }
 
 describe('the card in «Заказы» (spec Changes 2026-11-07)', () => {

@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  and,
   asc,
   cartLines,
   carts,
@@ -11,7 +10,6 @@ import {
   orderLines,
   orders,
   promoCodeUses,
-  volumes,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
@@ -23,6 +21,8 @@ import {
   tenMl as tenMlOf,
   whileTableLocked as lockedWhile,
 } from './harness/orders';
+import { stockBottles } from './harness/stock';
+import { giftSampleOff } from './harness/gift-sample';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -39,6 +39,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-11T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
   await t.db.update(discoverySet).set({ onHand: 5 });
 });
@@ -48,15 +50,6 @@ const vali: TestUser = { id: 72, first_name: 'Vali', language_code: 'uz' };
 
 const slugs = (n: number) => slugsOf(t, n);
 const point = () => pointOf(t);
-
-async function volumeOf(slug: string, ml: number) {
-  const [v] = await t.db
-    .select({ id: volumes.id })
-    .from(volumes)
-    .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
-    .where(and(eq(fragrances.slug, slug), eq(volumes.ml, ml)));
-  return v!;
-}
 
 /** The customer's cart exactly as stored: its row and every line, all columns. */
 async function cartRows(customerId: number) {
@@ -205,7 +198,8 @@ describe('«Купить сейчас»: one line, the cart untouched (spec Chan
     const tenMlIds = await Promise.all(five.map(async (f) => (await tenMlOf(t, f)).id));
     expect([...line!.setVolumeIds!].sort()).toEqual([...tenMlIds].sort());
     const card = await client.catalog.fragrance({ params: { slug: s[7]! } });
-    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(19);
+    // 1 000 ml less one 10 ml fill (10.3 ml) fills 96 bottles of 10 ml (ADR 0043)
+    expect(card.status === 200 && card.body.volumes.find((v) => v.ml === 10)?.available).toBe(96);
     expect(await cartRows(id)).toBe(before);
   });
 
@@ -269,8 +263,7 @@ describe('«Купить сейчас» reserves like a cart order (ADR 0010)', 
     const p = await point();
     const client = await shopper(t, ali, '998901234567');
     const [s] = await slugs(1);
-    const v = await volumeOf(s!, 10);
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, v.id));
+    await stockBottles(t, s!, 10, 0);
     const checkout = await client.checkout.get({ query: { item: `volume:${s}:10` } });
     expect(
       checkout.status === 200 && [checkout.body.itemCount, checkout.body.item?.soldOut],
@@ -284,8 +277,7 @@ describe('«Купить сейчас» reserves like a cart order (ADR 0010)', 
   it('a builder set with one 10 ml short is quoted sold out, naming it (not unknown)', async () => {
     const client = await shopper(t, ali, '998901234567');
     const five = await slugs(5);
-    const v = await volumeOf(five[3]!, 10);
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, v.id));
+    await stockBottles(t, five[3]!, 10, 0);
     const checkout = await client.checkout.get({
       query: { item: `builder_set:${five.join(',')}` },
     });
@@ -300,8 +292,7 @@ describe('«Купить сейчас» reserves like a cart order (ADR 0010)', 
   it('the last unit: a buy-now and a cart checkout cannot both win', async () => {
     const p = await point();
     const [s] = await slugs(1);
-    const v = await volumeOf(s!, 10);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    await stockBottles(t, s!, 10, 1);
     const a = await shopper(t, ali, '998901234567');
     const b = await shopper(t, vali, '998907654321');
     await b.cart.addLine({ body: { slug: s!, ml: 10, qty: 1 } });
@@ -320,8 +311,8 @@ describe('«Купить сейчас» reserves like a cart order (ADR 0010)', 
   it('the last unit taken by a buy-now: a later cart checkout sees nothing left', async () => {
     const p = await point();
     const [s] = await slugs(1);
-    const v = await volumeOf(s!, 30);
-    await t.db.update(volumes).set({ onHand: 1 }).where(eq(volumes.id, v.id));
+    // one 30 ml fill: what is left after it fills no 30 ml (ADR 0043)
+    await stockBottles(t, s!, 30, 1);
     const a = await shopper(t, ali, '998901234567');
     await a.cart.addLine({ body: { slug: s!, ml: 30, qty: 1 } });
     const bought = await a.orders.create({

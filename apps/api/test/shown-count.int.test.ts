@@ -1,6 +1,7 @@
-import { auditLog, eq, fragrances, volumes, and } from '@lummi/db';
+import { auditLog, eq, fragrances } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { shownCount } from '../src/catalog/catalog.service';
+import { FILL_UL, setConcentrateUl, stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 /** #83: the count the shop shows customers («В наличии: N шт.»). */
@@ -41,12 +42,8 @@ async function fragranceId(slug: string) {
   const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug));
   return f!.id;
 }
-async function setOnHand(slug: string, ml: number, onHand: number) {
-  await t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(and(eq(volumes.fragranceId, await fragranceId(slug)), eq(volumes.ml, ml)));
-}
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043): its volumes share it. */
+const setOnHand = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
 /** The volume cards of the product page, as a customer gets them. */
 async function shownOf(slug: string) {
   const { client } = await t.signIn();
@@ -64,11 +61,15 @@ async function shownInList(slug: string) {
 
 describe('the shown count on the card', () => {
   it('is the default (7) capped by the real available, 0 when sold out', async () => {
-    await setOnHand('symphony', 10, 20);
-    await setOnHand('symphony', 30, 3);
-    await setOnHand('symphony', 50, 0);
-    expect(await shownOf('symphony')).toEqual({ 10: 7, 30: 3, 50: 0 });
-    expect(await shownInList('symphony')).toEqual({ 10: 7, 30: 3, 50: 0 });
+    // one liquid fills every volume (ADR 0043): just under two 50 ml fills is nine 10 ml, three
+    // 30 ml and one 50 ml
+    await setConcentrateUl(t, 'symphony', 2 * FILL_UL[50] - 1);
+    expect(await shownOf('symphony')).toEqual({ 10: 7, 30: 3, 50: 1 });
+    expect(await shownInList('symphony')).toEqual({ 10: 7, 30: 3, 50: 1 });
+    // just under one 50 ml: four 10 ml, one 30 ml, no 50 ml
+    await setConcentrateUl(t, 'symphony', FILL_UL[50] - 1);
+    expect(await shownOf('symphony')).toEqual({ 10: 4, 30: 1, 50: 0 });
+    expect(await shownInList('symphony')).toEqual({ 10: 4, 30: 1, 50: 0 });
   });
 
   it('follows the fragrance own number and the settings', async () => {

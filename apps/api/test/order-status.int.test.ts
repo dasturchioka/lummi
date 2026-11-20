@@ -30,6 +30,8 @@ import { ReceiptsService } from '../src/receipts/receipts.service';
 import { WorkerRuntime } from '../src/worker/runtime';
 import { payWithCredit, recordCredit } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { giftSampleOff } from './harness/gift-sample';
+import { concentrateUl, FILL_UL, stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
 const snapshot = JSON.parse(
@@ -45,6 +47,8 @@ beforeEach(async () => {
   t.edges.clock.set(new Date('2026-11-09T10:00:00Z'));
   await t.reset();
   await t.seedCatalog();
+  // the seed's concentrate would give each first order a 5 ml sample; not what these tests are about
+  await giftSampleOff(t);
   await importBtsPoints(t.db, snapshot);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -83,18 +87,17 @@ const firstSlug = async () => (await slugs(1))[0]!;
 
 async function volumeOf(slug: string, ml: number) {
   const [v] = await t.db
-    .select({ id: volumes.id, onHand: volumes.onHand })
+    .select({ id: volumes.id, fragranceId: volumes.fragranceId })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(and(eq(fragrances.slug, slug), eq(volumes.ml, ml)));
   return v!;
 }
-async function setOnHand(slug: string, ml: number, onHand: number) {
-  await t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(eq(volumes.id, (await volumeOf(slug, ml)).id));
-}
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043). */
+const setOnHand = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
+/** Bottles of `ml` the fragrance's concentrate fills, reserve aside: the shelf's count of them. */
+const onHandOf = async (slug: string, ml: FillMl) =>
+  Math.floor((await concentrateUl(t, slug)) / FILL_UL[ml]);
 
 /** What a shopper sees as available for that volume on the fragrance card. */
 async function available(client: Client, slug: string, ml: number) {
@@ -267,7 +270,7 @@ describe('the shopper cancels their own order', () => {
     });
     // the reserve is gone at once; on hand never moved (nothing left the warehouse)
     expect(await available(client, slug, 10)).toBe(3);
-    expect((await volumeOf(slug, 10)).onHand).toBe(3);
+    expect(await onHandOf(slug, 10)).toBe(3);
 
     const [event] = await eventsOf(number);
     expect(event).toMatchObject({
@@ -596,11 +599,11 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
     const number = await placeOrder(client, slug, 2);
     const { id } = await orderRow(number);
     const manager = await staff();
-    const volumeId = (await volumeOf(slug, 10)).id;
+    const fragranceId = (await volumeOf(slug, 10)).fragranceId;
 
     await walkTo(number, 'assembling');
     // a reserve, not yet on hand: 5 on the shelf, 2 held
-    expect((await volumeOf(slug, 10)).onHand).toBe(5);
+    expect(await onHandOf(slug, 10)).toBe(5);
     expect(await available(client, slug, 10)).toBe(3);
 
     // «Передан в BTS» needs the tracking number; without it nothing moves
@@ -613,7 +616,7 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
     });
     expect(handed.kind === 'done' && handed.order.trackingNumber).toBe('BTS 4471 0098');
     // the bottles left: on hand drops, the reserve with it, available stays
-    expect((await volumeOf(slug, 10)).onHand).toBe(3);
+    expect(await onHandOf(slug, 10)).toBe(3);
     expect(await available(client, slug, 10)).toBe(3);
 
     expect(
@@ -626,7 +629,7 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
       lines: [{ position: 0, backToStock: true }],
     });
     expect(returned.kind).toBe('done');
-    expect((await volumeOf(slug, 10)).onHand).toBe(5);
+    expect(await onHandOf(slug, 10)).toBe(5);
     // a returned order releases its source and closes the rights it opened (ADR 0005)
     expect([release.mock.calls.length, close.mock.calls.length]).toEqual([1, 1]);
 
@@ -640,15 +643,20 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
       ['handed_to_bts', 'delivered', 'staff'],
       ['delivered', 'returned', 'staff'],
     ]);
+    // two 10 ml fills left the concentrate (ADR 0043); no flacon or box was counted to take
     expect(events[4]!.payload).toEqual({
       trackingNumber: 'BTS 4471 0098',
-      onHand: [{ shelf: 'volumes', id: volumeId, from: 5, to: 3 }],
+      stock: {
+        fragrances: [{ id: fragranceId, from: 5 * FILL_UL[10], to: 3 * FILL_UL[10] }],
+        sets: [],
+        consumables: [],
+      },
     });
     expect(events[6]).toMatchObject({
       reason: 'Не подошёл аромат',
       payload: {
         lines: [{ position: 0, backToStock: true }],
-        onHand: [{ shelf: 'volumes', id: volumeId, from: 3, to: 5 }],
+        stock: { fragrances: [{ id: fragranceId, from: 3 * FILL_UL[10], to: 5 * FILL_UL[10] }] },
       },
     });
     const audit = await t.db.select().from(auditLog).orderBy(asc(auditLog.id));
@@ -663,7 +671,7 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
       'order.returned',
     ]);
     expect(audit.find((a) => a.action === 'order.handed_to_bts')!.payload).toMatchObject({
-      onHand: [{ shelf: 'volumes', id: volumeId, from: 5, to: 3 }],
+      stock: { fragrances: [{ id: fragranceId, from: 5 * FILL_UL[10], to: 3 * FILL_UL[10] }] },
     });
     // a message for each step but «Принят» and the return
     expect((await messages()).map((m) => m.text.split('\n')[0])).toEqual([
@@ -761,7 +769,7 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
     const client = await shopper();
     const number = await placeOrder(client, slug, 3);
     await walkTo(number, 'handed_to_bts');
-    expect((await volumeOf(slug, 10)).onHand).toBe(1);
+    expect(await onHandOf(slug, 10)).toBe(1);
     const { id } = await orderRow(number);
 
     const cancelled = await machine().transition(id, 'cancel', await staff(), 'handed_to_bts', {
@@ -769,12 +777,15 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
       note: 'Посылка вернулась в Термез',
     });
     expect(cancelled.kind).toBe('done');
-    expect((await volumeOf(slug, 10)).onHand).toBe(4);
+    expect(await onHandOf(slug, 10)).toBe(4);
     expect(await available(client, slug, 10)).toBe(4);
     const event = (await eventsOf(number)).at(-1);
     expect(event).toMatchObject({
       reason: 'not_collected_at_bts',
-      payload: { note: 'Посылка вернулась в Термез', onHand: [{ from: 1, to: 4 }] },
+      payload: {
+        note: 'Посылка вернулась в Термез',
+        stock: { fragrances: [{ from: FILL_UL[10], to: 4 * FILL_UL[10] }] },
+      },
     });
     expect((await cancelMessages()).at(-1)!.text).toBe(
       `Заказ № ${number} отменён.\nЗаказ не забрали в пункте BTS.\nМенеджер свяжется с вами, чтобы вернуть деньги.`,
@@ -818,14 +829,12 @@ describe('transition(): one door for every caller (ADR 0011, 0006, 0010)', () =>
     });
     expect(done.kind).toBe('done');
     const [first, second] = await t.db
-      .select({ position: orderLines.position, volumeId: orderLines.volumeId })
+      .select({ position: orderLines.position, slug: orderLines.slug })
       .from(orderLines)
       .where(eq(orderLines.orderId, id))
       .orderBy(asc(orderLines.position));
-    const onHand = async (volumeId: number) =>
-      (await t.db.select().from(volumes).where(eq(volumes.id, volumeId)))[0]!.onHand;
-    expect(await onHand(first!.volumeId!)).toBe(4);
-    expect(await onHand(second!.volumeId!)).toBe(5);
+    expect(await onHandOf(first!.slug!, 10)).toBe(4);
+    expect(await onHandOf(second!.slug!, 10)).toBe(5);
   });
 
   it('a rejected receipt goes back to «Ожидает оплаты» with the manager’s reason and «Написать менеджеру»', async () => {

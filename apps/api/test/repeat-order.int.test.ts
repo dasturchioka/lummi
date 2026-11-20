@@ -6,6 +6,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { orderBody, samarkandPoint, shopper, slugs as slugsOf } from './harness/orders';
+import { stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
@@ -33,18 +34,15 @@ type Client = Awaited<ReturnType<typeof shopper>>;
 
 async function volumeOf(slug: string, ml: number) {
   const [v] = await t.db
-    .select({ id: volumes.id, onHand: volumes.onHand })
+    .select({ id: volumes.id })
     .from(volumes)
     .innerJoin(fragrances, eq(fragrances.id, volumes.fragranceId))
     .where(and(eq(fragrances.slug, slug), eq(volumes.ml, ml)));
   return v!;
 }
 
-const setOnHand = async (slug: string, ml: number, onHand: number) =>
-  t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(eq(volumes.id, (await volumeOf(slug, ml)).id));
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043): its volumes share it. */
+const setOnHand = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
 
 /**
  * Checks the client's cart out and returns the order number (the cart is empty after). The order
@@ -82,7 +80,7 @@ describe('«Повторить заказ» (spec Changes 2026-11-07 cart, 2026-
     await client.cart.addDiscovery({ body: { qty: 1 } });
     const number = await order(client);
 
-    // today: the 30 ml costs more, the 10 ml is gone
+    // today: the 30 ml costs more, the 10 ml is gone (its fragrance's concentrate with it)
     await t.db
       .update(volumes)
       .set({ price: 155_000 })

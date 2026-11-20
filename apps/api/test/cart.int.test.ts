@@ -17,6 +17,7 @@ import { initClient } from '@ts-rest/core';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { importBtsPoints, type Snapshot } from '../src/bts/import-points';
 import { loadCartQuote } from '../src/cart/load-cart';
+import { stockBottles, type FillMl } from './harness/stock';
 import { createTestApp, TEST_BOT_TOKEN, type TestApp } from './harness/test-app';
 
 const snapshot = JSON.parse(
@@ -44,13 +45,8 @@ async function slugs(n = 6) {
     .sort()
     .slice(0, n);
 }
-async function setStock(slug: string, ml: number, onHand: number) {
-  const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug));
-  await t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, ml)));
-}
+/** Exactly `bottles` fills of `ml` of the fragrance's concentrate (ADR 0043): its other volumes share it. */
+const setStock = (slug: string, ml: FillMl, bottles: number) => stockBottles(t, slug, ml, bottles);
 async function me(user = ali) {
   const { client } = await t.signIn(user);
   const get = async () => {
@@ -90,7 +86,8 @@ describe('cart read and add', () => {
       slug,
       ml: 10,
       qty: 1,
-      available: 20,
+      // the seed's 1 000 ml of concentrate fills 97 bottles of 10 ml (10.3 ml each, ADR 0043)
+      available: 97,
       soldOut: false,
     });
     const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug!));

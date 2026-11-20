@@ -7,11 +7,10 @@ import {
   discoverySetItems,
   eq,
   fragrances,
-  volumes,
-  and,
 } from '@lummi/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { moveCartData } from '../src/cart/move-cart';
+import { concentrateUl, FILL_UL, stockBottles } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
 let t: TestApp;
@@ -37,21 +36,11 @@ async function slugs(n = 8) {
     .sort()
     .slice(0, n);
 }
-async function setTenMl(slug: string, onHand: number) {
-  const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug));
-  await t.db
-    .update(volumes)
-    .set({ onHand })
-    .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 10)));
-}
-async function tenMlOnHand(slug: string) {
-  const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, slug));
-  const [v] = await t.db
-    .select()
-    .from(volumes)
-    .where(and(eq(volumes.fragranceId, f!.id), eq(volumes.ml, 10)));
-  return v!.onHand;
-}
+/** Exactly `bottles` 10 ml fills of the fragrance's concentrate (ADR 0043). */
+const setTenMl = (slug: string, bottles: number) => stockBottles(t, slug, 10, bottles);
+/** 10 ml bottles the fragrance's concentrate fills, reserve aside: the shelf's count of them. */
+const tenMlOnHand = async (slug: string) =>
+  Math.floor((await concentrateUl(t, slug)) / FILL_UL[10]);
 const setOnHand = (onHand: number) => t.db.update(discoverySet).set({ onHand });
 
 /** Raw POST: the contract does not list the 400 a schema failure answers with. */
@@ -494,7 +483,7 @@ describe('admin: the not-for-sale rule and the placeholder flag', () => {
 describe('relink keeps the per-line ceiling', () => {
   it('caps volume and set lines at 99 when two carts of 60 merge', async () => {
     const five = await slugs(5);
-    await t.db.update(volumes).set({ onHand: 500 });
+    await t.db.update(fragrances).set({ concentrateUl: 500 * FILL_UL[10] });
     await t.db.update(discoverySet).set({ onHand: 500 });
     const a = await t.signIn(ali);
     const b = await t.signIn({ id: 53, first_name: 'Sam', language_code: 'ru' });

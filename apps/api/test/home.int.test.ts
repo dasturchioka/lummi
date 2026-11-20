@@ -31,6 +31,7 @@ import {
 import { shopper, slugs } from './harness/orders';
 import { recordCredit, uniqueReceiptImage } from './harness/payments';
 import type { TestUser } from './harness/sign-init-data';
+import { setConcentrateUl } from './harness/stock';
 import { createTestApp, type TestApp } from './harness/test-app';
 
 /**
@@ -180,7 +181,8 @@ describe('the work queue', () => {
     await payAt(cancelled, '2026-11-14 09:05');
     t.edges.clock.set(tashkent('2026-11-14 09:15'));
     await cancelByStaff(t, cancelled);
-    // stock: one volume sold out, one at the threshold, a hidden fragrance's sold out (not counted)
+    // stock (ADR 0043): one fragrance's concentrate gone, one under `stock.lowConcentrateMl` (300),
+    // a hidden fragrance's gone (not counted)
     const [outSlug, lowSlug, hiddenSlug] = (await slugs(t, 67)).slice(60);
     const volumeOf = async (slug: string, ml: number) => {
       const [v] = await t.db
@@ -193,9 +195,9 @@ describe('the work queue', () => {
     const out = await volumeOf(outSlug!, 30);
     const low = await volumeOf(lowSlug!, 50);
     const hidden = await volumeOf(hiddenSlug!, 10);
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, out.id));
-    await t.db.update(volumes).set({ onHand: 3 }).where(eq(volumes.id, low.id));
-    await t.db.update(volumes).set({ onHand: 0 }).where(eq(volumes.id, hidden.id));
+    await setConcentrateUl(t, out.fragranceId, 0);
+    await setConcentrateUl(t, low.fragranceId, 200_000);
+    await setConcentrateUl(t, hidden.fragranceId, 0);
     await t.db
       .update(fragrances)
       .set({ hidden: true })
@@ -262,7 +264,7 @@ describe('the work queue', () => {
       count: 2,
       out: 1,
       low: 1,
-      first: { kind: 'volume', name: out.name, ml: 30, available: 0, level: 'zero' },
+      first: { kind: 'fragrance', name: out.name, ml: null, available: 0, level: 'zero' },
     });
     expect(q.reviews).toEqual({
       count: 1,
@@ -296,9 +298,9 @@ describe('the work queue', () => {
     const stock = await manager.stock.list({
       query: { filter: 'low', visibility: 'visible', pageSize: 50 },
     });
-    expect(stock.status === 200 && stock.body.rows.map((r) => r.key).sort()).toEqual(
-      [`v${out.id}`, `v${low.id}`].sort(),
-    );
+    expect(
+      stock.status === 200 && stock.body.fragrances.map((r) => r.fragranceId).sort((x, y) => x - y),
+    ).toEqual([out.fragranceId, low.fragranceId].sort((x, y) => x - y));
 
     // the first queue that is not empty is the Now item: the receipt
     expect(home.now).toMatchObject({ kind: 'receipt', number: a, waitedSeconds: 20 * MIN });
