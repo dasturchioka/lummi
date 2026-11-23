@@ -11,8 +11,10 @@ import {
   discoverySet,
   discoverySetItems,
   eq,
+  families,
   fragrances,
   inArray,
+  notes,
   sql,
   volumes,
   type Db,
@@ -44,7 +46,9 @@ export const PLACEHOLDER_CONCENTRATE_ML = 1000;
 export const PLACEHOLDER_DISCOVERY_ON_HAND = 10;
 /** Customer, 2026-11-07: «до 24 часов» for every fragrance, whatever the guide says. */
 export const LONGEVITY = { ru: 'до 24 часов', uz: '24 soatgacha' } as const;
-export const SEED_WORKBOOK = fileURLToPath(new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url));
+export const SEED_WORKBOOK = fileURLToPath(
+  new URL('../../seed/LUMMI_Katalog.xlsx', import.meta.url),
+);
 
 /**
  * Spelling variants (aliases) for names whose Cyrillic or phonetic reading does not follow from
@@ -71,6 +75,12 @@ export interface SeedOptions {
   limit?: number;
   /** Another workbook in the template (tests); default is the committed seed. */
   workbook?: string;
+  /**
+   * Only the workbook's fragrances whose code the catalog does not have yet (and the families and
+   * notes it does not have): how fragrances added to the seed later (068–082) reach a catalog that
+   * already has data, without touching anything there. No Discovery set or consumables step.
+   */
+  onlyMissing?: boolean;
 }
 
 /**
@@ -121,7 +131,9 @@ export const PLACEHOLDER_BOTTLES_PER_VOLUME = 20;
  */
 async function seedConsumables(tx: DbOrTx): Promise<void> {
   const [{ n } = { n: 0 }] = await tx.select({ n: sql<number>`count(*)::int` }).from(fragrances);
-  const spirit = Math.round(mixNeeds(PLACEHOLDER_CONCENTRATE_ML, defaultCostSettings().liquid).ethanolMl);
+  const spirit = Math.round(
+    mixNeeds(PLACEHOLDER_CONCENTRATE_ML, defaultCostSettings().liquid).ethanolMl,
+  );
   await tx
     .update(consumables)
     .set({
@@ -142,7 +154,9 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
   const bytes = await readFile(opts.workbook ?? SEED_WORKBOOK);
   const raw = await readWorkbook(bytes, { maxRows: 100_000 });
   if (opts.limit !== undefined) {
-    const keep = new Set(raw.fragrances.slice(0, opts.limit).map((r) => normaliseCode(r.cells.code)));
+    const keep = new Set(
+      raw.fragrances.slice(0, opts.limit).map((r) => normaliseCode(r.cells.code)),
+    );
     raw.fragrances = raw.fragrances.filter((r) => keep.has(normaliseCode(r.cells.code)));
     raw.volumes = raw.volumes.filter((r) => keep.has(normaliseCode(r.cells.code)));
     // curated similar fragrances inside the kept ones only
@@ -152,6 +166,22 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
         .filter((c) => keep.has(normaliseCode(c)))
         .join(', ');
     }
+  }
+
+  if (opts.onlyMissing) {
+    const have = new Set(
+      (await db.select({ code: fragrances.code }).from(fragrances)).map((f) => f.code),
+    );
+    const missing = (c: string) => !have.has(normaliseCode(c) ?? c);
+    raw.fragrances = raw.fragrances.filter((r) => missing(r.cells.code));
+    raw.volumes = raw.volumes.filter((r) => missing(r.cells.code));
+    if (!raw.fragrances.length) return { fragrances: 0 };
+    const known = async (table: typeof families | typeof notes) =>
+      new Set((await db.select({ n: table.nameRu }).from(table)).map((r) => r.n.toLowerCase()));
+    const fam = await known(families);
+    const nts = await known(notes);
+    raw.families = raw.families.filter((r) => !fam.has(r.cells.nameRu.trim().toLowerCase()));
+    raw.notes = raw.notes.filter((r) => !nts.has(r.cells.nameRu.trim().toLowerCase()));
   }
 
   const clock = new SystemClock();
@@ -185,7 +215,10 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
         // until he sends them or the admin uploads one
         if (!existsSync(file)) continue;
         const { hash } = await storePhoto(opts.photos, await readFile(file));
-        const [f] = await db.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.slug, slug));
+        const [f] = await db
+          .select({ id: fragrances.id })
+          .from(fragrances)
+          .where(eq(fragrances.slug, slug));
         if (f) {
           await db
             .update(volumes)
@@ -195,9 +228,19 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
       }
     }
   }
+  if (opts.onlyMissing) return { fragrances: raw.fragrances.length };
   // Discovery set (#22): outside the workbook, by the first five fragrances in workbook order.
-  const first = await db.select({ id: fragrances.id }).from(fragrances).orderBy(asc(fragrances.id)).limit(SET_SIZE);
-  await db.transaction((tx) => seedDiscoverySet(tx, first.map((f) => f.id)));
+  const first = await db
+    .select({ id: fragrances.id })
+    .from(fragrances)
+    .orderBy(asc(fragrances.id))
+    .limit(SET_SIZE);
+  await db.transaction((tx) =>
+    seedDiscoverySet(
+      tx,
+      first.map((f) => f.id),
+    ),
+  );
   await db.transaction((tx) => seedConsumables(tx));
   return { fragrances: raw.fragrances.length };
 }

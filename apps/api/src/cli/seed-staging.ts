@@ -11,7 +11,8 @@ import { LocalFileStore } from '../edges';
 
 /**
  * The deploy's seed step, safe to run on every deploy: seed data only, never overwrites.
- *   - catalog (82 fragrances, placeholder prices, photos): only while the catalog is empty;
+ *   - catalog (82 fragrances, placeholder prices, photos): all of it while the catalog is empty,
+ *     afterwards only the seed's fragrances whose code it lacks (existing rows never touched);
  *   - oil prices and tiers from the file at OIL_PRICES_FILE (#75, kept off the repository): only
  *     where a fragrance has none; skipped without the variable or the file;
  *   - BTS pickup points: adds missing codes, never touches existing rows;
@@ -29,7 +30,18 @@ try {
       photos: new LocalFileStore(process.env.FILES_DIR ?? './media'),
     }),
   );
-  console.log(seeded ? 'catalog: seeded' : 'catalog: already has data, left as it is');
+  if (seeded) console.log('catalog: seeded');
+  else {
+    // fragrances added to the seed later (068–082): only codes the catalog lacks, nothing else touched
+    const added = await seedCatalog(db, {
+      materialsDir: fileURLToPath(new URL('../../../../materials', import.meta.url)),
+      photos: new LocalFileStore(process.env.FILES_DIR ?? './media'),
+      onlyMissing: true,
+    });
+    console.log(
+      `catalog: already has data; ${added.fragrances} new fragrances from the seed added`,
+    );
+  }
   // the cost model (#75): oil prices from OIL_PRICES_FILE where still empty, never overwritten
   await seedOilPrices(db);
   const snapshot = JSON.parse(
