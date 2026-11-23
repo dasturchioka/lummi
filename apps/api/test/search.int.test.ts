@@ -228,6 +228,6 @@ describe('search document stays current', () => {
     await Promise.all([syncSearchIndex(t.db), syncSearchIndex(t.db)]);
     const n = (await t.db.execute<{ n: string }>(sql`select count(*) as n from fragrance_search`))
       .rows[0]!.n;
-    expect(Number(n)).toBe(67);
+    expect(Number(n)).toBe(82);
   });
 });
