@@ -24,16 +24,16 @@ async function card(slug: string) {
 }
 
 describe('seed', () => {
-  it('loads all 67 fragrances, 29 families, three flagged placeholder volumes each and a 5 ml', async () => {
-    expect(await t.db.select().from(fragrances)).toHaveLength(67);
-    expect(await t.db.select().from(families)).toHaveLength(29);
+  it('loads all 82 fragrances, 30 families, three flagged placeholder volumes each and a 5 ml', async () => {
+    expect(await t.db.select().from(fragrances)).toHaveLength(82);
+    expect(await t.db.select().from(families)).toHaveLength(30);
     const all = await t.db.select().from(volumes);
     // the 5 ml (ADR 0042): filled for samples and sets, never sold, so no price
     const fives = all.filter((v) => v.ml === 5);
-    expect(fives).toHaveLength(67);
+    expect(fives).toHaveLength(82);
     expect(fives.every((v) => v.price === 0 && !v.isPlaceholder)).toBe(true);
     const vols = all.filter((v) => v.ml !== 5);
-    expect(vols).toHaveLength(67 * 3);
+    expect(vols).toHaveLength(82 * 3);
     // both Discovery sets' seeded boxes are ours, so both rows stay flagged (ADR 0042)
     const sets = await t.db.select().from(discoverySet).orderBy(discoverySet.vialMl);
     expect(sets.map((s) => [s.vialMl, s.onHand, s.isPlaceholder])).toEqual([
@@ -58,7 +58,7 @@ describe('seed', () => {
     await t.db.update(fragrances).set({ concentrateUl: 5_000 }).where(eq(fragrances.slug, 'tygar'));
     // the real seed again: this is what is tested, not the harness's copy
     await seedCatalog(t.db, { materialsDir });
-    expect(await t.db.select().from(fragrances)).toHaveLength(67);
+    expect(await t.db.select().from(fragrances)).toHaveLength(82);
     const [v] = await t.db.select().from(volumes).where(eq(volumes.ml, 10)).limit(1);
     expect(v?.price).toBe(123_000);
     const [f] = await t.db.select().from(fragrances).where(eq(fragrances.slug, 'tygar'));

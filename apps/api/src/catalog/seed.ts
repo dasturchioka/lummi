@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DISCOVERY_VIAL_MLS, SET_SIZE } from '@lummi/contracts/constants';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,7 @@ import { storePhoto } from './photo-pipeline';
 /**
  * Seed from the customer's guide, loaded through the Excel import (#26). The guide (`materials/catalog/`,
  * ADR 0018) was converted once into the import template `apps/api/seed/LUMMI_Katalog.xlsx`
- * (`npm run seed:workbook -w @lummi/api`): 67 fragrances with RU/UZ text, families, notes by level,
+ * (`npm run seed:workbook -w @lummi/api`): 82 fragrances (the guide's 67 and 068–082) with RU/UZ text, families, notes by level,
  * curated similar fragrances. Everything the guide does not give is OURS and flagged `is_placeholder`:
  * prices and the ready concentrate (docs/catalog-sample.md -> Seed data). The bottle photos go
  * through the photo pipeline afterwards. Idempotent: run it again and rows are updated in place; an
@@ -180,6 +181,9 @@ export async function seedCatalog(db: Db, opts: SeedOptions): Promise<{ fragranc
       const slug = slugify(r.cells.name);
       for (const ml of [10, 30, 50]) {
         const file = join(opts.materialsDir, `flakons/${slug}_${ml}ml.webp`);
+        // the customer's later additions (068–082) come without bottle photos yet: no photo
+        // until he sends them or the admin uploads one
+        if (!existsSync(file)) continue;
         const { hash } = await storePhoto(opts.photos, await readFile(file));
         const [f] = await db.select({ id: fragrances.id }).from(fragrances).where(eq(fragrances.slug, slug));
         if (f) {

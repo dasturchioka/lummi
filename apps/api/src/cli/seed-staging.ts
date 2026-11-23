@@ -11,7 +11,7 @@ import { LocalFileStore } from '../edges';
 
 /**
  * The deploy's seed step, safe to run on every deploy: seed data only, never overwrites.
- *   - catalog (67 fragrances, placeholder prices, photos): only while the catalog is empty;
+ *   - catalog (82 fragrances, placeholder prices, photos): only while the catalog is empty;
  *   - oil prices and tiers from the file at OIL_PRICES_FILE (#75, kept off the repository): only
  *     where a fragrance has none; skipped without the variable or the file;
  *   - BTS pickup points: adds missing codes, never touches existing rows;

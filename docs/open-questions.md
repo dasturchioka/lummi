@@ -13,6 +13,8 @@ Received (in `materials/`): TZ v1.11, Brandbook v2.0, logo pack, 15 bottle photo
 
 Received 2026-11-07: **design approval** (variant 2 + elements of variant 1, `design/approved/`), **bottle photos for all 67 fragrances** in 10/30/50 ml (`materials/flakons/`), and the **full fragrance guide** (`materials/catalog/`: RU/UZ texts, notes by level, families, sillage, season, time, curated similar fragrances, note dictionary).
 
+Received 2026-11-23: **15 more fragrances** (codes 068–082) in our import template (`materials/catalog/LUMMI_Katalog_15_novyh.xlsx`), in the seed since then. **Missing: their bottle photos** (10/30/50 ml); until they arrive these cards show no photo. Their oil prices are in the original file only, not in the repository.
+
 Asked the customer for the items below on 2026-11-06 (chat msg 524878). Answers so far are marked inline. That message asked only for card number + holder. Whether the card must belong to an IP/LLC and who verifies payments were not asked. We write the catalog Excel template ourselves (`docs/spec.md` → Changes, 2026-11-07). Develop on seed data per `docs/catalog-sample.md`.
 
 Missing — **day 1** (blocks the 14-day clock):

@@ -5,7 +5,7 @@ import { seedCatalog } from '../catalog/seed';
 import { seedOilPrices } from '../catalog/seed-oil-prices';
 
 /**
- * Seed the 67-fragrance catalog with placeholder prices and stock, photos included:
+ * Seed the 82-fragrance catalog with placeholder prices and stock, photos included:
  *   npm run seed:catalog -w @lummi/api
  * Idempotent. Needs DATABASE_URL and FILES_DIR (like the API). Reads `materials/`, and the oil
  * prices from OIL_PRICES_FILE when it is set (kept off the repository, #75).

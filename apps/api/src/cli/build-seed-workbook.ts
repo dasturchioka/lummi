@@ -14,11 +14,16 @@ import {
   type CatalogData,
   type FragranceDraft,
   type LABELS,
+  readWorkbook,
 } from '../catalog-import/workbook';
+import { planImport } from '../catalog-import/plan';
+import type { Snapshot } from '../catalog-import/snapshot';
 
 /**
  * Rebuilds the seed workbook `apps/api/seed/LUMMI_Katalog.xlsx` from the customer's guide
- * (`materials/catalog/`): the 67 fragrances in the import template, with placeholder prices and
+ * (`materials/catalog/`): the 67 fragrances in the import template, then the customer's later
+ * additions (`materials/catalog/LUMMI_Katalog_15_novyh.xlsx`, codes 068–082, already in the
+ * template, cost columns stripped), with placeholder prices and
  * stock (docs/catalog-sample.md) and longevity «до 24 часов». The cost columns (#75) stay empty:
  * the oil prices come from the file at OIL_PRICES_FILE (`seedOilPrices`). The workbook is
  * committed; this script is how it was made and how it is remade when the guide changes:
@@ -124,6 +129,57 @@ const data: CatalogData = {
     };
   }),
 };
+
+// The customer's additions, filled in the import template itself (2026-11-23: 068–082). Read
+// through the importer against the guide's catalog, so their similar codes and notes resolve;
+// prices, concentrate and cost columns follow the guide's rules above, the rest is the customer's.
+for (const file of ['LUMMI_Katalog_15_novyh.xlsx']) {
+  const raw = await readWorkbook(await readFile(`${materials}/catalog/${file}`), {
+    maxRows: 100_000,
+  });
+  let id = 1;
+  const snap: Snapshot = {
+    families: data.families.map((f) => ({ ...f, id: id++ })),
+    notes: data.notes.map((n) => ({ ...n, id: id++ })),
+    byCode: new Map(
+      data.fragrances.map((f) => [
+        f.draft.code,
+        { id: id++, slug: slugify(f.draft.name), draft: f.draft, volumes: new Map() },
+      ]),
+    ),
+  };
+  const plan = planImport(raw, snap, { today: '2026-11-23' });
+  if (plan.errors.length) {
+    throw new Error(
+      `${file}: ${plan.errors.map((e) => `${e.sheet} row ${e.row} ${e.column ?? ''} ${e.code}`).join('; ')}`,
+    );
+  }
+  for (const f of plan.families)
+    if (f.existingId === null) data.families.push({ nameRu: f.nameRu, nameUz: f.nameUz });
+  for (const n of plan.notes)
+    if (n.existingId === null) data.notes.push({ nameRu: n.nameRu, nameUz: n.nameUz });
+  for (const f of plan.fragrances) {
+    if (f.existingId !== null) throw new Error(`${file}: ${f.code} is already in the guide`);
+    data.fragrances.push({
+      draft: {
+        ...f.draft,
+        longevityRu: LONGEVITY.ru,
+        longevityUz: LONGEVITY.uz,
+        oilPrice: null,
+        tier: null,
+        oilSupplier: '',
+        oilInvoice: '',
+        concentrateMl: PLACEHOLDER_CONCENTRATE_ML,
+      },
+      volumes: ([10, 30, 50] as const).map((ml) => ({
+        ml,
+        price: PLACEHOLDER_PRICES[ml],
+        salePrice: null,
+        saleEndsOn: null,
+      })),
+    });
+  }
+}
 
 await writeFile(SEED_WORKBOOK, await writeWorkbook(data));
 console.log(`Wrote ${SEED_WORKBOOK}: ${data.fragrances.length} fragrances.`);

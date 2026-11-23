@@ -47,24 +47,24 @@ describe('GET /catalog/fragrances: the list', () => {
   it('needs a session but no registration, and answers 401 without one', async () => {
     const anon = await t.client.catalog.list({ query: {} });
     expect(anon.status).toBe(401);
-    expect((await list()).total).toBe(67);
+    expect((await list()).total).toBe(82);
   });
 
   it('pages the list and counts every match in total', async () => {
     const first = await list({ limit: 10 });
     expect(first.items).toHaveLength(10);
-    expect(first.total).toBe(67);
+    expect(first.total).toBe(82);
     const second = await list({ limit: 10, offset: 10 });
     const seen = new Set([...first.items, ...second.items].map((i) => i.slug));
     expect(seen.size).toBe(20);
-    expect((await list({ limit: 10, offset: 60 })).items).toHaveLength(7);
+    expect((await list({ limit: 10, offset: 80 })).items).toHaveLength(2);
   });
 
   it('never lists a hidden fragrance, nor counts it', async () => {
     await t.db.update(fragrances).set({ hidden: true }).where(eq(fragrances.slug, 'aventus'));
     const res = await list({ limit: 100 });
     expect(res.items.map((i) => i.slug)).not.toContain('aventus');
-    expect(res.total).toBe(66);
+    expect(res.total).toBe(81);
     expect(await slugsOf({ sort: 'new' })).not.toContain('aventus');
     expect(await slugsOf({ sort: 'price_asc' })).not.toContain('aventus');
   });
@@ -104,7 +104,7 @@ describe('GET /catalog/fragrances: the list', () => {
     await sellOut('aventus', 50);
     expect(await slugsOf({ volume: 50 })).not.toContain('aventus');
     expect(await slugsOf({ volume: 10 })).toContain('aventus');
-    expect((await list({ volume: 50 })).total).toBe(66);
+    expect((await list({ volume: 50 })).total).toBe(81);
   });
 
   it('filters by price range on the lowest available effective price', async () => {
@@ -112,7 +112,7 @@ describe('GET /catalog/fragrances: the list', () => {
     await setPrice('tygar', 10, 120_000);
     expect(await slugsOf({ priceMax: 50_000 })).toEqual(['aventus']);
     expect(await slugsOf({ priceMin: 100_000 })).toEqual(['tygar']);
-    expect((await slugsOf({ priceMin: 40_000, priceMax: 70_000 })).length).toBe(66);
+    expect((await slugsOf({ priceMin: 40_000, priceMax: 70_000 })).length).toBe(81);
   });
 
   it('judges the price range by the chosen volume', async () => {
@@ -138,7 +138,7 @@ describe('GET /catalog/fragrances: the list', () => {
   it('offers the families present and the price bounds, hidden ones excluded', async () => {
     const res = await list({ type: 'homme', limit: 1 });
     // facets describe the catalog, not the current filter
-    expect(res.facets.families.length).toBe(29);
+    expect(res.facets.families.length).toBe(30);
     expect(res.facets.price).toEqual({ min: 69_000, max: 69_000 });
     await setPrice('tygar', 10, 55_000);
     expect((await list()).facets.price?.min).toBe(55_000);

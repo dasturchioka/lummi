@@ -18,7 +18,7 @@ Telegram Mini App + bot + admin panel for **LUMMI.**, a perfume brand selling Ex
   - `brandbook/` — Brandbook v2.0 PDF, `.txt` dump, `pages/bb-NN.png` renders (`pages/_overview.png` = all pages)
   - `logo-pack/` — logo, monogram, avatar as SVG + PNG
   - `flakons/` — bottle photos for all 67 fragrances, `<slug>_<ml>ml.webp` (WebP q90 at full 1086×1448, converted from the PNG originals in `_archives/LUMMI_FLAKONS_67.zip`; slug = fragrance name in ASCII kebab case)
-  - `catalog/` — the customer's full fragrance guide (67 fragrances, RU/UZ, notes by level, families, similar fragrances, note dictionary); `catalog/README.md` maps its fields to our model and lists the slugs
+  - `catalog/` — the customer's full fragrance guide (67 fragrances, RU/UZ, notes by level, families, similar fragrances, note dictionary; plus 068–082 in the import template, 2026-11-23, no photos yet); `catalog/README.md` maps its fields to our model and lists the slugs
   - `photos/discovery-set-box.jpg`
   - `_archives/` — the original zips
 

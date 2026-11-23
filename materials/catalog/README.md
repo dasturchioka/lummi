@@ -1,4 +1,4 @@
-# Catalog guide — 67 fragrances (customer, 2026-11-07)
+# Catalog guide — 67 + 15 fragrances (customer, 2026-11-07 and 2026-11-23)
 
 Sent by the customer in the project chat on 2026-11-07 (msg 28, `LUMMI — Полный гайд об ароматах.zip`, original in `_archives/LUMMI_Polnyy_gayd_aromatov.zip`): "all fragrances: notes, description, longevity, sillage, season, time and similar fragrances". It replaces the 5-fragrance sample in `docs/catalog-sample.md` as the seed source. **No prices, stock, Uzum links or Discovery set composition yet.**
 
@@ -7,6 +7,7 @@ Sent by the customer in the project chat on 2026-11-07 (msg 28, `LUMMI — По�
 | `lummi_aromatlar.json` | Machine-readable source: 67 records, RU and UZ blocks, `similar_ids`. Use this for the seed. |
 | `lummi_aromatlar_uz_ru.xlsx` | The same data as sheets "UZ — oʻzbekcha", "RU — русский", "Lugʻat — Словарь нот". The customer's own format, not our import template. |
 | `notalar_lugati.txt` | Note dictionary, RU — UZ, ~145 notes. Seeds the note dictionary. |
+| `LUMMI_Katalog_15_novyh.xlsx` | 15 more fragrances, codes 068–082 (2026-11-23), filled in **our import template**, with their own new family and notes in its «Справочник». Our copy has the five cost/concentrate columns removed: the customer's oil prices, suppliers and invoices stay off the repository (#75). `npm run seed:workbook -w @lummi/api` appends it to the guide. **No bottle photos yet.** |
 
 Bottle photos for all 67 are in `../flakons/<slug>_<ml>ml.webp` (10 / 30 / 50 ml, 1086×1448, WebP q90 converted from the PNG originals in `_archives/LUMMI_FLAKONS_67.zip`). The photo's two-digit prefix in the zip equals the guide `id`.
 
@@ -101,3 +102,18 @@ Bottle photos for all 67 are in `../flakons/<slug>_<ml>ml.webp` (10 / 30 / 50 ml
 | 65 | `ink-mark` | Ink Mark | Louis Vuitton |
 | 66 | `moon-tale` | Moon Tale | Louis Vuitton |
 | 67 | `rain-tea` | Rain Tea | Louis Vuitton |
+| 68 | `212-men` | 212 Men | Carolina Herrera |
+| 69 | `coco-mademoiselle` | Coco Mademoiselle | Chanel |
+| 70 | `chance-eau-fraiche` | Chance Eau Fraîche | Chanel |
+| 71 | `chance-eau-tendre` | Chance Eau Tendre | Chanel |
+| 72 | `aventus-cologne` | Aventus Cologne | Creed |
+| 73 | `dior-homme-intense` | Dior Homme Intense | Dior |
+| 74 | `light-blue` | Light Blue | Dolce & Gabbana |
+| 75 | `limperatrice` | L'Impératrice | Dolce & Gabbana |
+| 76 | `cherry-in-the-air` | Cherry in the Air | Escada |
+| 77 | `bois-imperial` | Bois Impérial | Essential Parfums |
+| 78 | `acqua-di-gio` | Acqua di Giò | Giorgio Armani |
+| 79 | `le-male` | Le Male | Jean Paul Gaultier |
+| 80 | `no-4-apres-lamour` | No.4 Après l'Amour | Thomas Kosmala |
+| 81 | `bombshell` | Bombshell | Victoria's Secret |
+| 82 | `accento` | Accento | Xerjoff |
