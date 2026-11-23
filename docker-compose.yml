@@ -25,7 +25,7 @@ x-api-env: &api-env
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
   # Only the userbot's network (ADR 0031, 0035): nothing on `lummi`, Caddy included, passes the check.
-  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,172.28.1.0/24
+  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,${USERBOT_SUBNET:-172.28.1.0/24}
   FILES_DIR: /data/files
   # The owner's oil price list for the seed (#75): a path inside the container, never committed.
   OIL_PRICES_FILE: ${OIL_PRICES_FILE:-}
@@ -203,15 +203,16 @@ services:
 
 networks:
   lummi:
-    # Pinned: the staging host already uses 172.17-172.22/16.
+    # Pinned: the shared host already uses 172.17-172.22/16. Staging keeps the defaults; production on
+    # the same host sets LUMMI_SUBNET / USERBOT_SUBNET to 172.29.x in its .env.
     ipam:
       config:
-        - subnet: 172.28.0.0/24
+        - subnet: ${LUMMI_SUBNET:-172.28.0.0/24}
   # The userbot and the API only. Not `internal`: the userbot must reach Telegram.
   userbot:
     ipam:
       config:
-        - subnet: 172.28.1.0/24
+        - subnet: ${USERBOT_SUBNET:-172.28.1.0/24}
 
 volumes:
   pgdata:

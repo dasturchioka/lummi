@@ -39,10 +39,14 @@ dc ps
 # and this deploy's tag stay. The previous tag stays too, for a quick roll back.
 prev=$(sed -n 's/^IMAGE_TAG=//p' .deploy.env.prev 2>/dev/null || true)
 inuse=$(docker ps --format '{{.Image}}')
+# Staging (/opt/lummi-staging) and production (/opt/lummi) share the host and the image names: keep
+# every tag either stack runs now or rolls back to, not only this one's.
+keep=$(cat /opt/lummi*/.deploy.env /opt/lummi*/.deploy.env.prev 2>/dev/null | sed -n 's/^IMAGE_TAG=//p' | sort -u || true)
 # `|| true` on the grep: no match must not fail the deploy under `set -euo pipefail`
 { docker images --format '{{.Repository}}:{{.Tag}}' | grep "^ghcr.io/${OWNER}/lummi-" || true; } |
   while read -r ref; do
     case "$ref" in *":$TAG"|*":${prev:-none}"|*":stage-1"|*":main") continue ;; esac
     printf '%s\n' "$inuse" | grep -qx "$ref" && continue
+    printf '%s\n' "$keep" | grep -qx "${ref##*:}" && continue
     docker rmi "$ref" >/dev/null 2>&1 || true
   done

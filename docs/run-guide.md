@@ -163,6 +163,18 @@ Then add `COMPOSE_PROFILES=userbot` to `.env` and `$dc up -d userbot`. Deploys k
 - `/setdomain` for the staging bot = `admin.<DOMAIN>` (the admin Login Widget).
 - Bot Settings > Configure Mini App > set `https://<DOMAIN>/` as the bot's main Mini App (needed for `?startapp=` links).
 
+## Production now (shared VPS 185.209.228.62, since 2026-11-23)
+
+Until the customer's own server, production runs on the staging host next to staging, laid out the same way:
+
+- Domain `lummi.uz` on Cloudflare (DNS only, no proxy): A records `lummi.uz`, `api.`, `admin.`, `media.` → 185.209.228.62, no AAAA.
+- Host nginx `/etc/nginx/sites-available/lummi.uz.conf` terminates TLS (certbot cert `lummi.uz` for the four hosts, renewed by the certbot timer) and proxies to `127.0.0.1:4280` with `X-Forwarded-For $remote_addr`.
+- Deploy dir `/opt/lummi` (owner `lummi-deploy`, 700), `.env` mode 600: `COMPOSE_PROJECT_NAME=lummi`, `CADDY_SCHEME=http://`, `CADDY_HTTP_PUBLISH=127.0.0.1:4280:80`, `CADDY_HTTPS_PUBLISH=127.0.0.1:4243:443`, `LUMMI_SUBNET=172.29.0.0/24`, `USERBOT_SUBNET=172.29.1.0/24` (staging holds 172.28.x), `TRUSTED_PROXIES=172.29.0.1/32`, `BOT_LINK`/`ADMIN_BOT_USERNAME` = @Lummiuz_bot, `USERBOT_REQUIRE_VERIFIED=true`. Secrets were generated on the server.
+- Deploy: push a `v*` tag (`.github/workflows/deploy-production.yml`). It reuses a CI pass of the same tree, builds the four images tagged with the tag name (the web image bakes `vars.PROD_BOT_LINK`, so it never shares a tag with staging), and runs `deploy/remote-deploy.sh` with `DEPLOY_DIR=/opt/lummi`. GitHub environment `production` allows only `v*` tags; secrets `PROD_SSH_HOST`, `PROD_SSH_USER` (`lummi-deploy`), `PROD_SSH_KEY` (its own key, comment `lummi-prod-deploy`), `PROD_SSH_KNOWN_HOSTS`; variables `PROD_DOMAIN`, `PROD_BOT_LINK`.
+- Manual commands: `cd /opt/lummi && dc='docker compose --env-file .env --env-file .deploy.env'`; then the owner, BotFather and userbot steps above, with `/opt/lummi` in place of `/opt/lummi-staging`.
+- Image cleanup on either deploy keeps every tag in `/opt/lummi*/.deploy.env{,.prev}`, so one stack never deletes the other's roll-back images.
+- ADR 0020 (data in Uzbekistan) is not met on this host; it holds until the move to the customer's Tashkent server.
+
 ## Production (customer's dedicated VPS)
 
 Same Compose file: `CADDY_SCHEME` empty (Caddy then also sends HSTS), no `CADDY_*_PUBLISH` or `TRUSTED_PROXIES` lines, DNS for the four hosts pointing at the server (A records; an AAAA record only with Docker IPv6, see the IPv6 note under Staging), ports 80/443 free. Caddy gets certificates itself. Deploys come from `v*` tags only (not wired yet; it needs the customer's SSH secrets).
