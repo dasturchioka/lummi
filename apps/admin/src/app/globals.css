@@ -341,14 +341,23 @@ main:has(> [data-layout='wide']) {
   scrollbar-width: thin;
   scroll-padding-inline: 16px;
 }
-/* from 640 px a sideways scroll comes to rest on whole columns at both ends (the board sizes them) */
+/*
+ * from 640 px a sideways scroll that ends near a column's edge settles on it (the board sizes
+ * them). Proximity, not mandatory: mandatory pulled every wheel step and trackpad swipe back to
+ * the column it started on (feedback 2026-11-25). A mouse pan (board-pan.ts) snaps only once let go.
+ */
 @media (min-width: 640px) {
   .board-scroller {
     scroll-padding-inline: 0;
-    scroll-snap-type: x mandatory;
+    scroll-snap-type: x proximity;
   }
-  .board-scroller[data-carrying] {
+  .board-scroller[data-carrying],
+  .board-scroller[data-panning] {
     scroll-snap-type: none;
+  }
+  .board-scroller[data-panning] {
+    cursor: grabbing;
+    user-select: none;
   }
 }
 @media (max-width: 639px) {

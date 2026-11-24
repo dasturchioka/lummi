@@ -37,6 +37,7 @@ import {
   useBoardSensors,
 } from './board-dnd';
 import { useColumnLayout, useFillHeight, useReducedMotion, useWide } from './board-layout';
+import { useBoardPan } from './board-pan';
 import { BoardVoice, FunnelLine, SkeletonColumn } from './board-parts';
 import { arrivals, moveKind, moveLabel, withMoves } from './board-state';
 import { useBoardMoves } from './use-board-moves';
@@ -222,6 +223,7 @@ export function OrdersBoard({
 
   const { ref: frame, height } = useFillHeight();
   const { ref: scroller, layout } = useColumnLayout(COLUMNS.length);
+  useBoardPan(scroller, wide);
   /** Marks the edges the board continues past, for their fade (globals.css). */
   const markEdges = useCallback(() => {
     const el = scroller.current;
