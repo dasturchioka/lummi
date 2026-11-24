@@ -249,6 +249,7 @@ function toListItem(e: CatalogEntry): FragranceListItem {
           price: fv.effectivePrice,
           ml: fv.ml,
           regularPrice: fv.salePrice !== null ? fv.price : null,
+          wasPrice: fv.wasPrice,
         }
       : null,
     soldOut: soldOut(e.cards),
@@ -281,6 +282,15 @@ export interface ShownRule {
 }
 
 /**
+ * THE struck «was» price (Sardor 2026-11-24): the price plus `percent`, rounded up to a whole
+ * 1 000 so'm; null when the percent is 0. Display only, never charged. The one place that says so.
+ */
+export function wasPrice(price: number, percent: number): number | null {
+  if (percent <= 0 || price <= 0) return null;
+  return Math.ceil((price * (100 + percent)) / 100 / 1000) * 1000;
+}
+
+/**
  * THE count a customer is shown («В наличии: N шт.», #83): the fragrance's own number (or the
  * default), never above the maximum and never above what the server can actually sell; 0 when
  * nothing is available, so a sold-out volume shows no count. The one place that says so.
@@ -300,6 +310,8 @@ export function toVolumeCard(
   bottles: number,
   now: Date,
   rule: ShownRule,
+  /** Setting `pricing.shownWasPricePercent`. */
+  wasPercent: number,
 ): VolumeCard {
   const sale = activeMarkdown(volumePrice(v), now);
   return {
@@ -309,6 +321,7 @@ export function toVolumeCard(
     salePercent: sale === null ? null : Math.round(((v.price - sale) / v.price) * 100),
     saleEndsAt: sale === null || v.saleEndsAt === null ? null : v.saleEndsAt.toISOString(),
     effectivePrice: sale ?? v.price,
+    wasPrice: sale === null ? wasPrice(v.price, wasPercent) : null,
     available: bottles,
     shown: shownCount(bottles, rule),
     photo: v.photoHash,
@@ -399,17 +412,27 @@ export class CatalogService {
       rows.map((r) => r.id),
     );
     const now = this.edges.clock.now();
-    const shownCfg = await readSettings(this.db, ['stock.shownDefault', 'stock.shownMax']);
+    const shownCfg = await readSettings(this.db, [
+      'stock.shownDefault',
+      'stock.shownMax',
+      'pricing.shownWasPricePercent',
+    ]);
     const ownOf = new Map(rows.map((r) => [r.id, r.shownCount]));
     const cardsOf = new Map<number, VolumeCard[]>();
     for (const v of vols)
       cardsOf.set(v.fragranceId, [
         ...(cardsOf.get(v.fragranceId) ?? []),
-        toVolumeCard(v, stock.bottles(v.fragranceId, v.ml), now, {
-          own: ownOf.get(v.fragranceId) ?? null,
-          fallback: shownCfg['stock.shownDefault'],
-          max: shownCfg['stock.shownMax'],
-        }),
+        toVolumeCard(
+          v,
+          stock.bottles(v.fragranceId, v.ml),
+          now,
+          {
+            own: ownOf.get(v.fragranceId) ?? null,
+            fallback: shownCfg['stock.shownDefault'],
+            max: shownCfg['stock.shownMax'],
+          },
+          shownCfg['pricing.shownWasPricePercent'],
+        ),
       ]);
     return rows.map((r) => ({
       id: r.id,
@@ -596,6 +619,7 @@ export class CatalogService {
         'catalog.showAvailableCount',
         'stock.shownDefault',
         'stock.shownMax',
+        'pricing.shownWasPricePercent',
       ]),
     ]);
     const rule: ShownRule = {
@@ -603,7 +627,8 @@ export class CatalogService {
       fallback: step['stock.shownDefault'],
       max: step['stock.shownMax'],
     };
-    const cards = volumeRows.map((v) => toVolumeCard(v, stock.bottles(f.id, v.ml), now, rule));
+    const was = step['pricing.shownWasPricePercent'];
+    const cards = volumeRows.map((v) => toVolumeCard(v, stock.bottles(f.id, v.ml), now, rule, was));
     // no step-up onto or from a volume the customer's right prices: the tiles and the dock show
     // the right's price there, so «+N сум» would contradict them (the right's strip nudges then)
     const righted = new Set<number>(rights.map((r) => r.ml));

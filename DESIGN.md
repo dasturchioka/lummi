@@ -325,7 +325,11 @@ Dark is the optional theme, switched in Profile. The Home top block uses the dar
 ### Named Rules
 **The Sage Thread Rule.** Sage is the measure, not decoration. If something fills, completes or confirms, it is Sage. If something is just pretty, it is not.
 
-**The No Alarm Rule.** Discounts and savings are Sage Ink, and old prices are struck through in Muted Ink. Sale prices are never red. Burgundy, rose gold and gold never appear.
+**The No Alarm Rule.** Discounts and savings are Sage Ink, and old prices are struck through in Muted Ink. Sale prices are never red. Burgundy, rose gold and gold never appear. Exception (Sardor, 2026-11-24): warnings and errors use Alert (`#A8443A`, dark `#F0A49A`) for their icon or inline text, and plates sit on Alert Wash (`#F8E3DF`, dark 16% red); the text on a plate stays Graphite.
+
+**Was price (Sardor, 2026-11-24).** Every price in the Mini App carries a struck «was» price in Muted Ink: the price plus setting `pricing.shownWasPricePercent` (default 30), rounded up to 1 000 so'm; display only. A real markdown or upgrade right strikes the regular price instead and keeps the Sage Ink price.
+
+**Home header (Sardor, 2026-11-24).** The fabric top block stays still while the Milk sheet slides up over it; the search row and search field stick under the top safe area with a hairline once content runs under them.
 
 ## Typography
 

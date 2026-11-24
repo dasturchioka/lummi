@@ -93,7 +93,8 @@ describe('search', () => {
       keyNotes: { ru: ['ананас', 'берёза', 'мускус'], uz: expect.any(Array) },
       isHit: false,
       isNew: false,
-      from: { price: 69_000, ml: 10, regularPrice: null },
+      // the default 30% struck over 69 000, rounded up to 1 000
+      from: { price: 69_000, ml: 10, regularPrice: null, wasPrice: 90_000 },
       soldOut: false,
       photo: null,
       // the volumes as the card's tiles show them (the list «+» reads them, #25)
@@ -111,6 +112,7 @@ describe('search', () => {
         salePercent: null,
         saleEndsAt: null,
         effectivePrice: expect.any(Number),
+        wasPrice: expect.any(Number),
         available,
         // #83: the default shown count (7) under the real available
         shown: 7,

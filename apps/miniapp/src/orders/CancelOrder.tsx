@@ -120,7 +120,7 @@ export function CancelOrder({ order, spaced }: { order: OrderDto; spaced: boolea
         ) : (
           <div className="flex flex-col gap-2 pb-1" data-testid="cancel-sheet">
             {failed ? (
-              <p className="type-small mb-2 text-ink" role="alert">
+              <p className="type-small mb-2 text-alert" role="alert">
                 {o.orders.cancelFailed}
               </p>
             ) : null}

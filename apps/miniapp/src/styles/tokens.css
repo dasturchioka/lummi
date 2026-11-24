@@ -17,6 +17,8 @@
   --c-sage-ink: #5c6855; /* Sage deepened for text and icons */
   --c-on-sage: #2a2a2a; /* Graphite on a Sage fill (badge, confirmed disc), in both themes */
   --c-sage-wash: rgba(154, 165, 146, 0.18);
+  --c-alert: #a8443a; /* warnings and errors: a soft brick red, 5:1 on Milk (Sardor, 2026-11-24) */
+  --c-alert-wash: #f8e3df; /* light red plate behind a warning */
   --c-line: rgba(42, 42, 42, 0.11);
   --c-line-strong: rgba(42, 42, 42, 0.22);
   --c-btn: #2a2a2a;
@@ -63,6 +65,8 @@
   --c-sage: #9aa592; /* unchanged */
   --c-sage-ink: #aeb8a6;
   --c-sage-wash: rgba(154, 165, 146, 0.16);
+  --c-alert: #f0a49a;
+  --c-alert-wash: rgba(224, 108, 94, 0.16);
   --c-line: rgba(245, 242, 236, 0.1);
   --c-line-strong: rgba(245, 242, 236, 0.22);
   --c-btn: #f5f2ec; /* primary inverts */

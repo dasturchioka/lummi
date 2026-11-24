@@ -392,7 +392,7 @@ function SaleForm({
           <Notice title={state.kind === 'busy' ? u.tryAgain : u.failed} />
         )}
         {state.kind === 'invalid' && (
-          <p role="alert" className="text-xs font-medium">
+          <p role="alert" className="text-alert text-xs font-medium">
             {f.invalid}
           </p>
         )}

@@ -170,7 +170,7 @@ function useRepeatFlow(number: number) {
 function RepeatError({ text }: { text: string | null }) {
   if (!text) return null;
   return (
-    <p role="alert" className="type-small mt-2 flex items-start gap-2 text-ink">
+    <p role="alert" className="type-small mt-2 flex items-start gap-2 text-alert">
       <span className="mt-px shrink-0">
         <AlertIcon size={16} />
       </span>

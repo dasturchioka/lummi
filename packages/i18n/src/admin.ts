@@ -137,7 +137,8 @@ export const adminMessages = defineMessages(
         locked: 'Слишком много неудачных попыток',
         lockedHint: 'Вход закрыт до {time}. Попробуйте снова после этого времени.',
         loginTaken: 'Такой логин уже занят. Выберите другой.',
-        inactiveMember: 'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
+        inactiveMember:
+          'Отключённого сотрудника нельзя сделать владельцем. Сначала включите доступ.',
         ownRole: 'Свою роль менять нельзя: попросите другого владельца.',
         lastOwner: 'В магазине должен остаться хотя бы один действующий владелец.',
         telegramOnly:
@@ -374,13 +375,12 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Сотрудники',
-        description:
-          'Кто может входить в панель и что кому открыто.',
+        description: 'Кто может входить в панель и что кому открыто.',
         add: 'Добавить сотрудника',
         addTitle: 'Новый сотрудник',
         roleChoice: 'Роль',
         opensManager: 'Открыто: {sections}',
-        opensOwner: 'Всё, что у менеджера, и ещё: {sections}',
+        opensOwner: 'Полный доступ',
         changeRole: 'Сменить роль',
         roleToOwnerTitle: 'Сделать владельцем?',
         roleToOwnerText:
@@ -1391,7 +1391,8 @@ export const adminMessages = defineMessages(
           'Считается по сохранённой цене масла и настройкам себестоимости. Прибыль — цена минус себестоимость, без расходов на заказ: пакета, доставки, рекламы, налога.',
         costSettings: 'Настройки себестоимости',
         costAfterSave: 'Себестоимость каждого объёма появится здесь после сохранения аромата.',
-        costNoOil: 'Укажите цену масла и сохраните аромат: здесь появится себестоимость каждого объёма.',
+        costNoOil:
+          'Укажите цену масла и сохраните аромат: здесь появится себестоимость каждого объёма.',
         landedOil: 'Масло после скидки поставщика и доставки: {price} за 1 г',
         costParts: {
           oil: 'Масло',
@@ -1565,7 +1566,8 @@ export const adminMessages = defineMessages(
           },
           warnTitle: 'Можно применить, но проверьте',
           belowReserveTag: 'ниже резерва',
-          stockLine: '{name}: концентрат {was} → {now} мл, резерв {reserved} мл, свободно {available} мл',
+          stockLine:
+            '{name}: концентрат {was} → {now} мл, резерв {reserved} мл, свободно {available} мл',
           aNew: 'добавлено',
           aChanged: 'изменено',
           aUnchanged: 'без изменений',
@@ -1852,7 +1854,13 @@ export const adminMessages = defineMessages(
           many: '{total} промокодов',
           other: '{total} промокода',
         },
-        columns: { code: 'Код', uses: 'Использовано', fulfilled: 'Выданные заказы', net: 'Чистые продажи', state: 'Состояние' },
+        columns: {
+          code: 'Код',
+          uses: 'Использовано',
+          fulfilled: 'Выданные заказы',
+          net: 'Чистые продажи',
+          state: 'Состояние',
+        },
         report: 'Отчёт по коду',
         reportLabel: 'Отчёт по коду {code}: маркетинг',
         statsHint:
@@ -1890,7 +1898,8 @@ export const adminMessages = defineMessages(
         amountHint: 'Не больше суммы подходящих товаров: итог не уходит в минус.',
         /** A gift code's free item (ADR 0039): a fragrance and its volume, or the Discovery set. */
         gift: 'Подарок',
-        giftHint: 'Добавляется к заказу бесплатно, 1 шт. Если подарка нет в наличии, код не применяется.',
+        giftHint:
+          'Добавляется к заказу бесплатно, 1 шт. Если подарка нет в наличии, код не применяется.',
         giftChoose: 'Выберите аромат или набор',
         giftDiscovery: 'Discovery set',
         giftVolume: 'Объём',
@@ -2496,7 +2505,8 @@ export const adminMessages = defineMessages(
           'Коробки собираются из готовой концентрации пяти ароматов состава: по флакону {ml} мл каждого на коробку, с потерями при розливе. Концентрат и флаконы списываются со склада, коробки прибавляются к остатку. Концентрат, который держат заказы, не трогается.',
         assembleQuantity: 'Коробок, шт.',
         assembleSubmit: 'Собрать',
-        assembled: 'Собрано {qty} шт.: по {ml} мл концентрата у каждого аромата, флаконов {flacons}.',
+        assembled:
+          'Собрано {qty} шт.: по {ml} мл концентрата у каждого аромата, флаконов {flacons}.',
         assembleShort: 'Не хватает концентрата: {name}. Нужно {needed} мл, свободно {balance} мл.',
         failed: 'Не удалось сохранить. Попробуйте ещё раз.',
         invalidComposition: 'Аромат не найден. Обновите страницу.',
@@ -2510,7 +2520,8 @@ export const adminMessages = defineMessages(
         sampleOutNamed: 'Пробников {name} 5 мл не осталось: первые заказы идут без пробника',
         sampleMissing:
           'Аромат пробника скрыт или удалён из каталога: первые заказы идут без пробника. Выберите другой в настройках.',
-        sampleHint: 'Пробник наливается из готовой концентрации: приготовьте её на странице аромата.',
+        sampleHint:
+          'Пробник наливается из готовой концентрации: приготовьте её на странице аромата.',
         /** The number the shop shows customers («В наличии: N шт.», #83). */
         shownLabel: 'Показывать клиенту, шт',
         shownOwn: '{n} шт.',
@@ -2654,7 +2665,8 @@ export const adminMessages = defineMessages(
           unit: 'Единица',
           use: 'Уходит автоматически',
           ml: 'Объём, мл',
-          linkTaken: 'Такой расходник уже есть: у одного объёма один флакон и одна коробка, спирт один.',
+          linkTaken:
+            'Такой расходник уже есть: у одного объёма один флакон и одна коробка, спирт один.',
           invalid: 'Проверьте отмеченные поля.',
           required: 'Заполните.',
           wholeNumber: 'Целое число от {min}.',
@@ -2871,7 +2883,8 @@ export const adminMessages = defineMessages(
           voidConfirm: 'Отменить приход',
           save: 'Сохранить',
           cancel: 'Отмена',
-          short: 'Это масло уже ушло в концентрат: забрать нужно {needed} г, а в остатке {balance} г.',
+          short:
+            'Это масло уже ушло в концентрат: забрать нужно {needed} г, а в остатке {balance} г.',
           alreadyVoided: 'Приход уже отменён. Обновите страницу.',
           draft: 'Черновик',
           draftLine: 'По плану закупки: подтвердите, как в накладной, или удалите.',
@@ -3156,9 +3169,8 @@ export const adminMessages = defineMessages(
         draftsDone: 'Создано черновиков: {n}. Они ждут на страницах ароматов в разделе «Склад».',
         draftsFailed: 'Не удалось создать черновики. Попробуйте ещё раз.',
         inputsTitle: 'Что считаем',
-        whatIf:
-          'Значения здесь для пробы, они не сохраняются. Остальные числа закупки — в настройках.',
-        toSettings: 'Открыть настройки закупки',
+        whatIf: 'Для пробы, не сохраняется.',
+        toSettings: 'Настройки закупки',
         defaultKg: 'Масла каждого аромата, кг',
         apply: 'Пересчитать',
         reset: 'Как в настройках',
@@ -3206,11 +3218,12 @@ export const adminMessages = defineMessages(
         rowProfit: 'Прибыль',
         own: 'своё',
         noOilPrice: {
-          one: '{n} аромат без цены масла не вошёл в расчёт. Укажите цену в каталоге.',
-          few: '{n} аромата без цены масла не вошли в расчёт. Укажите цены в каталоге.',
-          many: '{n} ароматов без цены масла не вошли в расчёт. Укажите цены в каталоге.',
-          other: '{n} аромата без цены масла не вошли в расчёт. Укажите цены в каталоге.',
+          one: '{n} аромат без цены масла — не в расчёте',
+          few: '{n} аромата без цены масла — не в расчёте',
+          many: '{n} ароматов без цены масла — не в расчёте',
+          other: '{n} аромата без цены масла — не в расчёте',
         },
+        noOilPriceMore: 'и ещё {n}',
         empty: 'В расчёте нет ароматов: укажите цены масла в каталоге.',
         sheet: 'Закупка',
         sheetTable: 'По ароматам',
@@ -3286,7 +3299,8 @@ export const adminMessages = defineMessages(
             one: '{n} заказ без себестоимости не учтён: нет цены масла или оплачен до её учёта.',
             few: '{n} заказа без себестоимости не учтены: нет цены масла или оплачены до её учёта.',
             many: '{n} заказов без себестоимости не учтены: нет цены масла или оплачены до её учёта.',
-            other: '{n} заказа без себестоимости не учтены: нет цены масла или оплачены до её учёта.',
+            other:
+              '{n} заказа без себестоимости не учтены: нет цены масла или оплачены до её учёта.',
           },
           none: 'Ни у одного заказа периода нет себестоимости.',
         },
@@ -3887,13 +3901,12 @@ export const adminMessages = defineMessages(
       },
       staff: {
         title: 'Xodimlar',
-        description:
-          'Panelga kim kira oladi va kimga nima ochiq.',
+        description: 'Panelga kim kira oladi va kimga nima ochiq.',
         add: 'Xodim qoʻshish',
         addTitle: 'Yangi xodim',
         roleChoice: 'Rol',
         opensManager: 'Ochiq: {sections}',
-        opensOwner: 'Menejerdagi hammasi va yana: {sections}',
+        opensOwner: 'Toʻliq kirish',
         changeRole: 'Rolni almashtirish',
         roleToOwnerTitle: 'Egasi qilinsinmi?',
         roleToOwnerText:
@@ -3912,8 +3925,7 @@ export const adminMessages = defineMessages(
           'Lotin harflari, raqamlar, nuqta, _ va -; 3 dan 32 belgigacha. Katta-kichik harf farqi yoʻq.',
         noLogin: 'loginsiz',
         password: 'Vaqtinchalik parol',
-        passwordHint:
-          'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
+        passwordHint: 'Kamida {min} belgi. Birinchi kirishda xodim uni oʻz paroliga almashtiradi.',
         pendingPassword: 'parol almashtirilishi kutilmoqda',
         addedTitle: 'Xodim qoʻshildi',
         addedText:
@@ -4716,7 +4728,8 @@ export const adminMessages = defineMessages(
           cancel: 'Bekor qilish',
           needsPhoto: 'Bannerni yoqish uchun rasm yuklang.',
           title: 'Sarlavha',
-          titleHint: 'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
+          titleHint:
+            'Bannerda ikki qator koʻrinadi, taxminan 40 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi.',
           subtitle: 'Qisqa matn',
           subtitleHint:
             'Ikki qator koʻrinadi, taxminan 55 belgi. Uzunrogʻi koʻp nuqta bilan kesiladi: asosiysini boshida yozing.',
@@ -4914,7 +4927,8 @@ export const adminMessages = defineMessages(
           'Saqlangan moy narxi va tannarx sozlamalari boʻyicha hisoblanadi. Foyda — narx minus tannarx, buyurtma xarajatlarisiz: paket, yetkazib berish, reklama, soliq.',
         costSettings: 'Tannarx sozlamalari',
         costAfterSave: 'Har bir hajmning tannarxi ifor saqlangandan keyin shu yerda chiqadi.',
-        costNoOil: 'Moy narxini kiriting va iforni saqlang: bu yerda har bir hajmning tannarxi chiqadi.',
+        costNoOil:
+          'Moy narxini kiriting va iforni saqlang: bu yerda har bir hajmning tannarxi chiqadi.',
         landedOil: 'Yetkazib beruvchi chegirmasi va yetkazishdan keyin moy: 1 g uchun {price}',
         costParts: {
           oil: 'Moy',
@@ -5088,7 +5102,8 @@ export const adminMessages = defineMessages(
           },
           warnTitle: 'Qoʻllash mumkin, lekin tekshiring',
           belowReserveTag: 'zaxiradan past',
-          stockLine: '{name}: konsentrat {was} → {now} ml, zaxira {reserved} ml, boʻsh {available} ml',
+          stockLine:
+            '{name}: konsentrat {was} → {now} ml, zaxira {reserved} ml, boʻsh {available} ml',
           aNew: 'qoʻshildi',
           aChanged: 'oʻzgartirildi',
           aUnchanged: 'oʻzgarishsiz',
@@ -5382,7 +5397,13 @@ export const adminMessages = defineMessages(
           many: '{total} ta promokod',
           other: '{total} ta promokod',
         },
-        columns: { code: 'Kod', uses: 'Foydalanilgan', fulfilled: 'Yetkazilgan buyurtmalar', net: 'Sof savdo', state: 'Holat' },
+        columns: {
+          code: 'Kod',
+          uses: 'Foydalanilgan',
+          fulfilled: 'Yetkazilgan buyurtmalar',
+          net: 'Sof savdo',
+          state: 'Holat',
+        },
         report: 'Kod hisoboti',
         reportLabel: '{code} kodi hisoboti: marketing',
         statsHint:
@@ -6114,7 +6135,8 @@ export const adminMessages = defineMessages(
         reasonPlaceholder: 'Qayta sanoq, toʻkildi, brak…',
         reasonRequired: 'Sababini yozing: u tarixda qoladi.',
         sets: 'Discovery set',
-        setsHint: 'Tayyor qutilar, har birining oʻz qoldigʻi bor. Yangilarini «Toʻplamlar»da yigʻing.',
+        setsHint:
+          'Tayyor qutilar, har birining oʻz qoldigʻi bor. Yangilarini «Toʻplamlar»da yigʻing.',
         discovery: 'Discovery set',
         discoverySub: '5 × {ml} ml quti',
         boxes: '{n} dona',
@@ -6287,7 +6309,8 @@ export const adminMessages = defineMessages(
           commissionHead: 'Komissiya',
           apply: 'Sotuvlarni yozish',
           applyTitle: 'Fayldagi sotuvlar yozilsinmi?',
-          applyBody: 'Flakonlar ombordan chiqariladi. Har bir sotuvni keyin sabab bilan bekor qilish mumkin.',
+          applyBody:
+            'Flakonlar ombordan chiqariladi. Har bir sotuvni keyin sabab bilan bekor qilish mumkin.',
           applying: 'Yozilmoqda…',
           cancel: 'Orqaga',
           stale: 'Fayl tekshiruvdan keyin oʻzgardi. Uni qayta yuklang.',
@@ -6311,7 +6334,8 @@ export const adminMessages = defineMessages(
             bad_percent: '0 dan 100 gacha foiz kerak: «{value}».',
             unknown_item: 'Bunday atir yoʻq: «{value}».',
             bad_ml: '{name} atirida «{value}» hajmi yoʻq.',
-            mixed_order: '{order} buyurtmasi: sana yoki komissiya {first}-qatordagidan farq qiladi.',
+            mixed_order:
+              '{order} buyurtmasi: sana yoki komissiya {first}-qatordagidan farq qiladi.',
             too_many_lines: '{order} buyurtmasida {max} tadan koʻp qator.',
             already_recorded: '{order} buyurtmasi allaqachon yozilgan.',
             stock_short: '{item}: faylda {wanted}, mavjud {available}.',
@@ -6356,7 +6380,8 @@ export const adminMessages = defineMessages(
           oilShort: 'Moy yetmaydi: {needed} g kerak, {balance} g bor.',
           ethanolShort:
             'Spirt yetmaydi: {needed} ml kerak, omborda {balance} ml. Spirt kirimini ombor sahifasidagi «Sarf materiallari»da yozing.',
-          noEthanol: '«Spirt» sarf materiali yoʻq: uni ombor sahifasidagi «Sarf materiallari»ga qoʻshing.',
+          noEthanol:
+            '«Spirt» sarf materiali yoʻq: uni ombor sahifasidagi «Sarf materiallari»ga qoʻshing.',
           invalid: '0 dan katta son, verguldan keyin koʻpi bilan uch raqam.',
         },
         count: {
@@ -6394,7 +6419,8 @@ export const adminMessages = defineMessages(
           voidConfirm: 'Kirimni bekor qilish',
           save: 'Saqlash',
           cancel: 'Bekor qilish',
-          short: 'Bu moy allaqachon konsentratga ketgan: {needed} g olish kerak, qoldiqda esa {balance} g.',
+          short:
+            'Bu moy allaqachon konsentratga ketgan: {needed} g olish kerak, qoldiqda esa {balance} g.',
           alreadyVoided: 'Kirim allaqachon bekor qilingan. Sahifani yangilang.',
           draft: 'Qoralama',
           draftLine: 'Xarid rejasidan: yuk xatidagidek tasdiqlang yoki oʻchiring.',
@@ -6673,9 +6699,8 @@ export const adminMessages = defineMessages(
           'Qoralamalar yaratildi: {n}. Ular «Ombor» boʻlimidagi atir sahifalarida kutmoqda.',
         draftsFailed: 'Qoralamalarni yaratib boʻlmadi. Yana urinib koʻring.',
         inputsTitle: 'Nimani hisoblaymiz',
-        whatIf:
-          'Bu yerdagi qiymatlar sinov uchun, saqlanmaydi. Xaridning boshqa raqamlari sozlamalarda.',
-        toSettings: 'Xarid sozlamalarini ochish',
+        whatIf: 'Sinov uchun, saqlanmaydi.',
+        toSettings: 'Xarid sozlamalari',
         defaultKg: 'Har bir hid uchun moy, kg',
         apply: 'Qayta hisoblash',
         reset: 'Sozlamalardagidek',
@@ -6723,11 +6748,12 @@ export const adminMessages = defineMessages(
         rowProfit: 'Foyda',
         own: 'oʻzi',
         noOilPrice: {
-          one: 'Moy narxi yoʻq {n} ta hid hisobga kirmadi. Narxni katalogda kiriting.',
-          few: 'Moy narxi yoʻq {n} ta hid hisobga kirmadi. Narxlarni katalogda kiriting.',
-          many: 'Moy narxi yoʻq {n} ta hid hisobga kirmadi. Narxlarni katalogda kiriting.',
-          other: 'Moy narxi yoʻq {n} ta hid hisobga kirmadi. Narxlarni katalogda kiriting.',
+          one: 'Moy narxi yoʻq {n} ta hid — hisobda emas',
+          few: 'Moy narxi yoʻq {n} ta hid — hisobda emas',
+          many: 'Moy narxi yoʻq {n} ta hid — hisobda emas',
+          other: 'Moy narxi yoʻq {n} ta hid — hisobda emas',
         },
+        noOilPriceMore: 'yana {n} ta',
         empty: 'Hisobda hidlar yoʻq: moy narxlarini katalogda kiriting.',
         sheet: 'Xarid',
         sheetTable: 'Hidlar boʻyicha',
@@ -6803,7 +6829,8 @@ export const adminMessages = defineMessages(
             one: 'Tannarxsiz {n} ta buyurtma hisobga olinmadi: moy narxi yoʻq yoki tannarx qayd etilishidan oldin toʻlangan.',
             few: 'Tannarxsiz {n} ta buyurtma hisobga olinmadi: moy narxi yoʻq yoki tannarx qayd etilishidan oldin toʻlangan.',
             many: 'Tannarxsiz {n} ta buyurtma hisobga olinmadi: moy narxi yoʻq yoki tannarx qayd etilishidan oldin toʻlangan.',
-            other: 'Tannarxsiz {n} ta buyurtma hisobga olinmadi: moy narxi yoʻq yoki tannarx qayd etilishidan oldin toʻlangan.',
+            other:
+              'Tannarxsiz {n} ta buyurtma hisobga olinmadi: moy narxi yoʻq yoki tannarx qayd etilishidan oldin toʻlangan.',
           },
           none: 'Davrdagi birorta buyurtmada tannarx yoʻq.',
         },
@@ -6969,7 +6996,8 @@ export const adminMessages = defineMessages(
           'Bitta flakon yoki toʻplamning bitta sotuvi. Narx — hozir doʻkondagidek (arzonlashtirish bilan); Uzumda — oddiy narx. Buyurtma xarajatlari: mini ilovada pochta paketi, mijoz toʻlagani ayirilgan BTS yetkazib berish (bepul yetkazib berish chegarasigacha), onlayn toʻlov; Uzumda — uning komissiyasi. Hamma joyda reklama va soliq.',
         afterSetHint:
           'Toʻplamdan keyingi chegirma — yangilash huquqi: foiz sozlamalardan, faqat toʻliq hajmlarga, arzonlashganlarsiz.',
-        giftHint: 'Namuna — moy narxi bor barcha atirlar boʻyicha 5 ml flakonning oʻrtacha tannarxi.',
+        giftHint:
+          'Namuna — moy narxi bor barcha atirlar boʻyicha 5 ml flakonning oʻrtacha tannarxi.',
         settingsLink: 'Tannarx sozlamalari',
         openCalculator: 'Kalkulyatorda ochish',
         calculator: {
@@ -6996,7 +7024,8 @@ export const adminMessages = defineMessages(
           toFree: 'Mijoz yetkazib berish uchun {fee} toʻlaydi. Bepulgacha: {amount}.',
           afterSetNote:
             'Toʻplamdan keyingi chegirma buyurtmaga bitta: eng qimmat toʻliq flakonga, doʻkondagidek.',
-          uzumNote: 'Uzumda yetkazib berish va paket bizniki emas; narx — oddiy, arzonlashtirishsiz.',
+          uzumNote:
+            'Uzumda yetkazib berish va paket bizniki emas; narx — oddiy, arzonlashtirishsiz.',
         },
         costs: {
           revenue: 'Tushum',

@@ -179,7 +179,7 @@ describe('one lowest-price rule', () => {
     await sellOut('aventus', 50);
     const asc = await list({ limit: 100, sort: 'price_asc' });
     const card = asc.items.find((i) => i.slug === 'aventus')!;
-    expect(card.from).toEqual({ price: 99_000, ml: 10, regularPrice: null });
+    expect(card.from).toEqual({ price: 99_000, ml: 10, regularPrice: null, wasPrice: 129_000 });
     expect(card.soldOut).toBe(false);
     // the filter and the sort judge the same number the card shows
     expect(await slugsOf({ priceMax: 50_000 })).not.toContain('aventus');
@@ -224,7 +224,12 @@ describe('list photo and struck price', () => {
       .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 30)));
     t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
     // 10 ml (60 000, regular) ties the marked-down 30 ml (60 000): the marked-down one is the from-volume
-    expect((await card('tygar')).from).toEqual({ price: 60_000, ml: 30, regularPrice: 90_000 });
+    expect((await card('tygar')).from).toEqual({
+      price: 60_000,
+      ml: 30,
+      regularPrice: 90_000,
+      wasPrice: null,
+    });
   });
 
   it('from.ml is the volume from.price belongs to', async () => {
@@ -244,6 +249,18 @@ describe('list photo and struck price', () => {
     expect(await card('tygar')).toMatchObject({ from: { price: 60_000, regularPrice: 80_000 } });
     t.edges.clock.set(new Date('2026-11-12T19:00:00Z'));
     expect(await card('tygar')).toMatchObject({ from: { price: 80_000, regularPrice: null } });
+  });
+
+  it('strikes the shown «was» price over a regular price, never during a markdown', async () => {
+    await setPrice('tygar', 10, 69_000);
+    // 69 000 + 30% = 89 700, rounded up to a whole 1 000
+    expect((await card('tygar')).from).toMatchObject({ price: 69_000, wasPrice: 90_000 });
+    await t.db
+      .update(volumes)
+      .set({ salePrice: 50_000, saleEndsAt: new Date('2026-11-12T18:59:59Z') })
+      .where(and(eq(volumes.fragranceId, await idOf('tygar')), eq(volumes.ml, 10)));
+    t.edges.clock.set(new Date('2026-11-10T10:00:00Z'));
+    expect((await card('tygar')).from).toMatchObject({ regularPrice: 69_000, wasPrice: null });
   });
 });
 

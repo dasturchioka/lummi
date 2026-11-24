@@ -110,18 +110,18 @@ export function navFor(role: Role): NavGroup[] {
 /**
  * What a role opens, for the staff page: section labels straight from `NAV`, so a role change in
  * the table above shows up in the copy. Home and the member's own profile are every role's, so
- * they are left out. An owner's line is only what a manager can't open («всё это и ещё: …»).
+ * they are left out. An owner's line is just «Полный доступ» (the full list was too long to read).
  */
 export function opensFor(role: Role, t: AdminMessages): string {
   const keys = (r: Role) =>
     NAV.flatMap((g) => g.items)
       .filter((i) => i.roles.includes(r) && i.key !== 'home' && i.key !== 'profile')
       .map((i) => i.key);
-  const own = keys(role);
-  const shared = role === 'owner' ? new Set(keys('manager')) : new Set<NavKey>();
-  const labels = own.filter((k) => !shared.has(k)).map((k) => t.nav[k]);
-  return fill(role === 'owner' ? t.staff.opensOwner : t.staff.opensManager, {
-    sections: labels.join(', '),
+  if (role === 'owner') return t.staff.opensOwner;
+  return fill(t.staff.opensManager, {
+    sections: keys(role)
+      .map((k) => t.nav[k])
+      .join(', '),
   });
 }
 

@@ -57,7 +57,7 @@ export function OilReceiptDraftsButton({
           </span>
         )}
         {state.kind === 'failed' && (
-          <span role="alert" className="text-small font-medium">
+          <span role="alert" className="text-alert text-small font-medium">
             {p.draftsFailed}
           </span>
         )}

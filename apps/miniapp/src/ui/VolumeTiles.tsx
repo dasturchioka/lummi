@@ -41,7 +41,10 @@ function VolumeTile({
 }) {
   const { t } = usePrefs();
   const soldOut = v.available === 0;
-  const struck = !soldOut && (v.salePrice !== null || rightPrice !== undefined);
+  // a real discount (a markdown or the customer's right) strikes the regular price and tints the
+  // price Sage Ink; otherwise the shown «was» price is struck (display only, Sardor 2026-11-24)
+  const discounted = !soldOut && (v.salePrice !== null || rightPrice !== undefined);
+  const strikeAmount = discounted ? v.price : soldOut ? null : v.wasPrice;
   const look = soldOut
     ? selected
       ? 'bg-muted text-btn-ink'
@@ -66,9 +69,9 @@ function VolumeTile({
       <span className="type-price leading-5">
         {v.ml} {t.card.ml}
       </span>
-      {struck ? (
+      {strikeAmount !== null ? (
         <s className={`mt-0.5 ${selected ? 'opacity-60' : 'text-muted'}`}>
-          <Money amount={v.price} size="small" />
+          <Money amount={strikeAmount} size="small" />
         </s>
       ) : strikeSlot ? (
         <span aria-hidden="true" className="type-price-sm invisible mt-0.5">
@@ -82,7 +85,7 @@ function VolumeTile({
           amount={rightPrice ?? v.effectivePrice}
           size="small"
           className={`${strikeSlot ? '' : 'mt-0.5'} ${
-            struck && !selected ? 'text-sage-ink' : quiet
+            discounted && !selected ? 'text-sage-ink' : quiet
           }`}
         />
       )}
@@ -124,7 +127,9 @@ export function VolumeTiles({
     refs.current[volumes.findIndex((v) => v.ml === selected)]?.focus({ preventScroll: true });
   }, [focusTick, selected, volumes]);
   const strikeSlot = volumes.some(
-    (v) => v.available > 0 && (v.salePrice !== null || rightPrices[v.ml] !== undefined),
+    (v) =>
+      v.available > 0 &&
+      (v.salePrice !== null || v.wasPrice !== null || rightPrices[v.ml] !== undefined),
   );
   const locked = (v: VolumeCard) => !soldOutChoosable && v.available === 0;
   const onKey = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {

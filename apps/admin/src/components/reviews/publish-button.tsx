@@ -56,7 +56,7 @@ export function PublishButton({
         {published ? r.hide : r.publish}
       </Button>
       {failed && (
-        <p role="alert" className="text-[13px] text-muted-foreground">
+        <p role="alert" className="text-[13px] text-alert">
           {r.failed}
         </p>
       )}

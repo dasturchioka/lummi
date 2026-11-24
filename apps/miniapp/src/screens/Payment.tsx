@@ -10,7 +10,14 @@ import { useParams, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CancelOrder } from '../orders/CancelOrder';
 import { StatusPill, Timeline } from '../orders/parts';
-import { holdPolls, ORDERS_KEY, orderKey, paymentKey, usePayment, useOrdersText } from '../orders/queries';
+import {
+  holdPolls,
+  ORDERS_KEY,
+  orderKey,
+  paymentKey,
+  usePayment,
+  useOrdersText,
+} from '../orders/queries';
 import { precheckReceipt, uploadReceipt, UploadNetworkError } from '../orders/upload';
 import { copyText } from '../lib/clipboard';
 import { formatFileSize } from '../lib/format';
@@ -463,9 +470,9 @@ function ReceiptZone({
           <p
             role="alert"
             data-testid="receipt-refused"
-            className="type-small mt-2.5 flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+            className="type-small mt-2.5 flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-alert-wash px-3 py-2.5 text-ink"
           >
-            <span className="shrink-0">
+            <span className="shrink-0 text-alert">
               <AlertIcon size={18} />
             </span>
             <span className="pt-px text-pretty">
@@ -536,9 +543,9 @@ function ReceiptZone({
       {upload.phase === 'failed' ? (
         <p
           role="alert"
-          className="type-small mt-2.5 flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+          className="type-small mt-2.5 flex animate-[rise-in_0.22s_cubic-bezier(0.23,1,0.32,1)] items-start gap-2 rounded-btn bg-alert-wash px-3 py-2.5 text-ink"
         >
-          <span className="shrink-0">
+          <span className="shrink-0 text-alert">
             <AlertIcon size={18} />
           </span>
           <span className="pt-px text-pretty">{upload.message}</span>

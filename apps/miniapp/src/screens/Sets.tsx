@@ -418,7 +418,7 @@ function PickRow({
   );
 }
 
-/** A problem with the last tap, said in the dock over the button (Graphite, never red). */
+/** A problem with the last tap, said in the dock over the button (Alert red, as every warning). */
 function DockAlert({ text, action }: { text: string; action?: ReactNode }) {
   return (
     <div
@@ -426,10 +426,10 @@ function DockAlert({ text, action }: { text: string; action?: ReactNode }) {
       data-testid="dock-alert"
       className={`mb-2.5 flex items-center gap-2.5 transition-[opacity,translate] duration-200 ${EASE_OUT} starting:translate-y-1 starting:opacity-0`}
     >
-      <span className="shrink-0 text-ink" aria-hidden="true">
+      <span className="shrink-0 text-alert" aria-hidden="true">
         <AlertIcon size={18} />
       </span>
-      <p className="type-small min-w-0 flex-1 text-pretty text-ink">{text}</p>
+      <p className="type-small min-w-0 flex-1 text-pretty text-alert">{text}</p>
       {action}
     </div>
   );

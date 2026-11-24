@@ -43,7 +43,7 @@ export function FieldError({
     <p
       id={id}
       role="alert"
-      className={`type-hint mt-1.5 flex items-start font-medium text-ink ${inset ? 'gap-3' : 'gap-1.5'}`}
+      className={`type-hint mt-1.5 flex items-start font-medium text-alert ${inset ? 'gap-3' : 'gap-1.5'}`}
     >
       <span
         aria-hidden="true"

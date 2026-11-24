@@ -285,7 +285,7 @@ function Dock({
       <BuyPair
         toCart={t.card.toCart}
         price={right?.price ?? volume.effectivePrice}
-        was={right ? volume.price : undefined}
+        was={right || volume.salePrice !== null ? volume.price : (volume.wasPrice ?? undefined)}
         adding={adding}
         onAdd={() => onAddToCart?.(volume.ml)}
         onBuyNow={() => onBuyNow?.(volume.ml)}

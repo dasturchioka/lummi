@@ -99,9 +99,9 @@ export function FragranceListCard({
           ml: String(item.from.ml),
         })}
       </span>
-      {item.from.regularPrice !== null ? (
+      {(item.from.regularPrice ?? item.from.wasPrice) !== null ? (
         <s data-testid="regular-price" className="text-muted">
-          <Money amount={item.from.regularPrice} size="small" />
+          <Money amount={(item.from.regularPrice ?? item.from.wasPrice)!} size="small" />
         </s>
       ) : null}
     </span>

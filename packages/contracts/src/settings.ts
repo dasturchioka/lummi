@@ -77,7 +77,11 @@ function costSom<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; min?: number },
 ) {
   return {
-    schema: z.number().int().min(meta.min ?? 0).max(MAX_PRICE),
+    schema: z
+      .number()
+      .int()
+      .min(meta.min ?? 0)
+      .max(MAX_PRICE),
     default: def,
     area,
     unit: 'sum' as const,
@@ -93,7 +97,10 @@ function costPercent<A extends SettingArea>(
   meta: { label: Bilingual; hint?: Bilingual; max?: number },
 ) {
   return {
-    schema: z.number().min(0).max(meta.max ?? 100),
+    schema: z
+      .number()
+      .min(0)
+      .max(meta.max ?? 100),
     default: def,
     area,
     unit: 'none' as const,
@@ -590,6 +597,22 @@ export const settingDefinitions = {
       after: { ru: 'После скидки', uz: 'Chegirmadan keyin' },
     },
   },
+  /**
+   * The struck price over every price in the Mini App (Sardor 2026-11-24): the price plus this
+   * percent, rounded up to a whole 1 000 so'm. Display only, the server never charges it; a real
+   * markdown shows its own regular price instead. 0 turns it off.
+   */
+  'pricing.shownWasPricePercent': {
+    schema: z.number().int().min(0).max(200),
+    default: 30,
+    area: 'pricing',
+    unit: 'none',
+    label: { ru: 'Зачёркнутая цена, % сверху', uz: 'Chizilgan narx, % ustiga' },
+    hint: {
+      ru: 'Над ценой показывается зачёркнутая: цена плюс этот процент. 0 — не показывать.',
+      uz: 'Narx ustida chizilgan narx chiqadi: narx plyus shu foiz. 0 — koʻrsatmaslik.',
+    },
+  },
   /** Whether upgrade rights and birthday coupons also discount marked-down items; promo codes carry their own flag (ADR 0008). */
   'pricing.discountsApplyToMarkedDown': {
     schema: z.object({ upgradeRight: z.boolean(), birthdayCoupon: z.boolean() }),
@@ -967,7 +990,10 @@ export const settingDefinitions = {
     max: 50,
   }),
   'cost.liquid.oilImportPercent': costPercent('costLiquid', 3, {
-    label: { ru: 'Доставка масла до Термеза, % к цене', uz: 'Moyni Termizgacha yetkazish, narxga %' },
+    label: {
+      ru: 'Доставка масла до Термеза, % к цене',
+      uz: 'Moyni Termizgacha yetkazish, narxga %',
+    },
     hint: {
       ru: 'Добавляется к цене масла после скидки поставщика.',
       uz: 'Yetkazib beruvchi chegirmasidan keyingi moy narxiga qoʻshiladi.',

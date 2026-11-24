@@ -366,7 +366,7 @@ function MixingSection({ data, t }: { data: WarehouseFragrance; t: AdminMessages
           <Notice title={state.kind === 'busy' ? w.tryAgain : w.failed} />
         )}
         {state.kind === 'invalid' && (
-          <p role="alert" className="text-xs font-medium">
+          <p role="alert" className="text-alert text-xs font-medium">
             {m.invalid}
           </p>
         )}
@@ -528,7 +528,7 @@ function OilReceiptSection({
           w={w}
         />
         {bad.size > 0 && (
-          <p role="alert" className="text-xs font-medium">
+          <p role="alert" className="text-alert text-xs font-medium">
             {r.invalid}
           </p>
         )}
@@ -752,7 +752,7 @@ function CorrectDialog({
             </Field>
           )}
           {bad.size > 0 && (
-            <p role="alert" className="text-xs font-medium">
+            <p role="alert" className="text-alert text-xs font-medium">
               {w.oilReceipt.invalid}
             </p>
           )}

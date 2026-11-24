@@ -28,6 +28,12 @@ export const volumeCardSchema = z.object({
   saleEndsAt: z.string().datetime().nullable(),
   /** The price to pay: the sale price while a markdown is active, otherwise the regular one. */
   effectivePrice: z.number().int(),
+  /**
+   * Display only: the struck price over the regular one when no markdown is active (setting
+   * `pricing.shownWasPricePercent`, rounded up to 1 000 so'm); null when that is 0 or during a
+   * markdown (which strikes its own regular price).
+   */
+  wasPrice: z.number().int().nullable(),
   /** On hand minus reserve. 0 means the volume is sold out. */
   available: z.number().int(),
   /**
@@ -136,6 +142,8 @@ export const fragranceListItemSchema = z.object({
       price: z.number().int(),
       ml: volumeCardSchema.shape.ml,
       regularPrice: z.number().int().nullable(),
+      /** The from-volume's `wasPrice`: struck when there is no `regularPrice`. */
+      wasPrice: z.number().int().nullable(),
     })
     .nullable(),
   /** Every volume is out of stock. */

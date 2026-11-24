@@ -218,12 +218,11 @@ export function StaffManager({
                       />
                     </div>
                     <div className="shrink-0">{status(s)}</div>
-                    <div className="basis-full">
-                      <p className="text-[13px] text-pretty text-muted-foreground">
-                        {opensFor(s.role, t)}
-                      </p>
-                      {pending(s) && <p className="mt-0.5">{pending(s)}</p>}
-                    </div>
+                    {pending(s) && (
+                      <div className="basis-full">
+                        <p>{pending(s)}</p>
+                      </div>
+                    )}
                     {rowActions && (
                       <div className="-ml-3 flex basis-full flex-wrap gap-x-1.5">{rowActions}</div>
                     )}
@@ -256,9 +255,6 @@ export function StaffManager({
                             </p>
                             <p className="mt-0.5 text-[13px] text-muted-foreground">
                               {t.roles[s.role]}
-                            </p>
-                            <p className="mt-0.5 max-w-[34ch] text-[13px] text-pretty text-muted-foreground">
-                              {opensFor(s.role, t)}
                             </p>
                             {s.id !== meId && <div className="-ml-3 mt-1">{roleButton(s)}</div>}
                           </div>

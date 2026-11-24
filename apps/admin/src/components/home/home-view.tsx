@@ -118,7 +118,7 @@ export function HomeView({
     body = (
       <div
         role="alert"
-        className="flex flex-col items-stretch gap-6 rounded-card bg-field p-6 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col items-stretch gap-6 rounded-card bg-alert-wash p-6 sm:flex-row sm:items-center sm:justify-between"
       >
         <span>
           <b className="block text-[17px] leading-[1.35] font-semibold">{copy.error.title}</b>

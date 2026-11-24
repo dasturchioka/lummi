@@ -78,7 +78,7 @@ export function VolumeSheet({
           </div>
         ) : null}
         {error ? (
-          <p role="alert" className="type-small -mb-1 flex items-start gap-2 text-ink">
+          <p role="alert" className="type-small -mb-1 flex items-start gap-2 text-alert">
             <span className="mt-px shrink-0">
               <AlertIcon size={16} />
             </span>

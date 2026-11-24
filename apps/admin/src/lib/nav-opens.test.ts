@@ -10,17 +10,14 @@ describe('opensFor', () => {
       'Открыто: Заказы, Поступления, Продажи Uzum, Пункты BTS, Клиенты, Отзывы, Склад, Наборы',
     );
   });
-  it('lists only what an owner adds to a manager', () => {
-    const line = opensFor('owner', ru);
-    expect(line.startsWith('Всё, что у менеджера, и ещё: Каталог')).toBe(true);
-    expect(line).toContain('Сотрудники');
-    expect(line).not.toContain('Заказы');
+  it('sums an owner up as full access', () => {
+    expect(opensFor('owner', ru)).toBe('Полный доступ');
   });
   it('reads the same in UZ, from the same table', () => {
     const uz = adminMessages.uz.admin;
     expect(opensFor('manager', uz)).toBe(
       'Ochiq: Buyurtmalar, Tushumlar, Uzum savdolari, BTS punktlari, Mijozlar, Sharhlar, Ombor, Toʻplamlar',
     );
-    expect(opensFor('owner', uz).startsWith('Menejerdagi hammasi va yana: Katalog')).toBe(true);
+    expect(opensFor('owner', uz)).toBe('Toʻliq kirish');
   });
 });

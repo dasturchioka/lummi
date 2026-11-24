@@ -173,7 +173,7 @@ export function CountEditor({
         </div>
       </div>
       {edit.error && (
-        <p role="alert" className="text-xs font-medium">
+        <p role="alert" className="text-alert text-xs font-medium">
           {edit.error === 'invalid'
             ? (invalidText ?? (unit === 'ml' ? s.invalidMl : s.invalid))
             : edit.error === 'reason'

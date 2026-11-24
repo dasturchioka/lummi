@@ -139,7 +139,10 @@ export function PurchasePlanView({
       {plan.withoutOilPrice.length > 0 && (
         <div className="mb-4 lg:mb-6">
           <Notice title={plural(language, plan.withoutOilPrice.length, p.noOilPrice)}>
-            {plan.withoutOilPrice.map((f) => f.name).join(', ')}
+            <NamesPreview
+              names={plan.withoutOilPrice.map((f) => f.name)}
+              more={(n) => fill(p.noOilPriceMore, { n: num(n) })}
+            />
           </Notice>
         </div>
       )}
@@ -266,5 +269,26 @@ export function PurchasePlanView({
         </div>
       )}
     </>
+  );
+}
+
+/** The first few names, the rest behind «и ещё N» (a long list buries the notice). */
+function NamesPreview({ names, more }: { names: string[]; more: (n: number) => string }) {
+  const SHOWN = 6;
+  if (names.length <= SHOWN) return <>{names.join(', ')}</>;
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        {names.slice(0, SHOWN).join(', ')}
+        <span className="group-open:hidden">
+          {' '}
+          <span className="underline decoration-border-strong underline-offset-[3px]">
+            {more(names.length - SHOWN)}
+          </span>
+        </span>
+        <span className="hidden group-open:inline">, </span>
+      </summary>
+      {names.slice(SHOWN).join(', ')}
+    </details>
   );
 }

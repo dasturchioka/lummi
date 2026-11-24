@@ -15,6 +15,8 @@
   --color-sage-ink: var(--c-sage-ink);
   --color-on-sage: var(--c-on-sage);
   --color-sage-wash: var(--c-sage-wash);
+  --color-alert: var(--c-alert);
+  --color-alert-wash: var(--c-alert-wash);
   --color-line: var(--c-line);
   --color-line-strong: var(--c-line-strong);
   --color-btn: var(--c-btn);

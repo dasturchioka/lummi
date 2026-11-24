@@ -34,7 +34,7 @@ const item = (n: number): FragranceListItem => ({
   keyNotes: { ru: ['лимон'], uz: ['limon'] },
   isHit: false,
   isNew: false,
-  from: { price: 69_000, ml: 10, regularPrice: null },
+  from: { price: 69_000, ml: 10, regularPrice: null, wasPrice: null },
   soldOut: false,
   photo: null,
   volumes: [],

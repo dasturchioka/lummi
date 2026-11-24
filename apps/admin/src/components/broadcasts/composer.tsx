@@ -474,7 +474,7 @@ export function BroadcastComposer({
                     <p
                       key={imageState?.text ?? errors.imageKey?.message}
                       role="alert"
-                      className="flex animate-[overlay-in_200ms_var(--ease-out)] items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
+                      className="text-alert flex animate-[overlay-in_200ms_var(--ease-out)] items-start gap-1.5 text-xs leading-snug font-medium text-pretty"
                     >
                       <CircleAlert className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
                       {imageState?.kind === 'error' ? imageState.text : errors.imageKey?.message}

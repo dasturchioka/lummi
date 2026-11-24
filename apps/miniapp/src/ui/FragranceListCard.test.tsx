@@ -32,7 +32,7 @@ const item = (over: Partial<FragranceListItem> = {}): FragranceListItem => ({
   },
   isHit: false,
   isNew: false,
-  from: { price: 99_000, ml: 10, regularPrice: null },
+  from: { price: 99_000, ml: 10, regularPrice: null, wasPrice: null },
   soldOut: false,
   photo: null,
   volumes: [],
@@ -54,7 +54,9 @@ describe('FragranceListCard', () => {
   it('strikes the regular price when the from-price is a markdown (RU)', () => {
     language = 'ru';
     render(
-      <FragranceListCard item={item({ from: { price: 79_000, ml: 10, regularPrice: 99_000 } })} />,
+      <FragranceListCard
+        item={item({ from: { price: 79_000, ml: 10, regularPrice: 99_000, wasPrice: null } })}
+      />,
     );
     expect(screen.getByText(/^79\s000\sсум\s·\s10\sмл$/)).toBeTruthy();
     const struck = screen.getByTestId('regular-price');
@@ -65,12 +67,24 @@ describe('FragranceListCard', () => {
   it('strikes the regular price in Uzbek, and shows none without a markdown', () => {
     language = 'uz';
     const { unmount } = render(
-      <FragranceListCard item={item({ from: { price: 79_000, ml: 10, regularPrice: 99_000 } })} />,
+      <FragranceListCard
+        item={item({ from: { price: 79_000, ml: 10, regularPrice: 99_000, wasPrice: null } })}
+      />,
     );
     expect(screen.getByTestId('regular-price').textContent).toMatch(/^99\s000\ssoʻm$/);
     unmount();
     render(<FragranceListCard item={item()} />);
     expect(screen.queryByTestId('regular-price')).toBeNull();
+  });
+
+  it('strikes the shown «was» price when there is no markdown', () => {
+    language = 'ru';
+    render(
+      <FragranceListCard
+        item={item({ from: { price: 69_000, ml: 10, regularPrice: null, wasPrice: 90_000 } })}
+      />,
+    );
+    expect(screen.getByTestId('regular-price').textContent).toMatch(/^90\s000\sсум$/);
   });
 
   it('speaks Uzbek', () => {
@@ -82,7 +96,7 @@ describe('FragranceListCard', () => {
 
   it('names the volume the price belongs to, with a 7-digit price (RU, UZ)', () => {
     language = 'ru';
-    const big = item({ from: { price: 1_249_000, ml: 50, regularPrice: null } });
+    const big = item({ from: { price: 1_249_000, ml: 50, regularPrice: null, wasPrice: null } });
     const { unmount } = render(<FragranceListCard item={big} />);
     expect(screen.getByText(/^1\s249\s000\sсум\s·\s50\sмл$/)).toBeTruthy();
     unmount();

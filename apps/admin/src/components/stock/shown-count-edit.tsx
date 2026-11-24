@@ -125,7 +125,7 @@ export function ShownCountEdit({
           {fill(s.shownHint, { max: String(max) })}
         </p>
         {error && (
-          <p role="alert" className="text-xs font-medium">
+          <p role="alert" className="text-alert text-xs font-medium">
             {error === 'invalid' ? fill(s.shownInvalid, { max: String(max) }) : s.shownFailed}
           </p>
         )}

@@ -520,9 +520,9 @@ export function DeliveryPicker({
       {error ? (
         <p
           role="alert"
-          className="type-small mb-3 flex items-start gap-2 rounded-btn bg-field px-3 py-2.5 text-ink"
+          className="type-small mb-3 flex items-start gap-2 rounded-btn bg-alert-wash px-3 py-2.5 text-ink"
         >
-          <span className="shrink-0">
+          <span className="shrink-0 text-alert">
             <AlertIcon size={18} />
           </span>
           <span className="pt-px">{error}</span>
