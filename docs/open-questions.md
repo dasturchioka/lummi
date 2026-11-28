@@ -13,6 +13,8 @@ Received (in `materials/`): TZ v1.11, Brandbook v2.0, logo pack, 15 bottle photo
 
 Received 2026-11-07: **design approval** (variant 2 + elements of variant 1, `design/approved/`), **bottle photos for all 67 fragrances** in 10/30/50 ml (`materials/flakons/`), and the **full fragrance guide** (`materials/catalog/`: RU/UZ texts, notes by level, families, sillage, season, time, curated similar fragrances, note dictionary).
 
+Received 2026-11-23: **15 more fragrances** (codes 068–082) in our import template (`materials/catalog/LUMMI_Katalog_15_novyh.xlsx`), in the seed since then. **Missing: their bottle photos** (10/30/50 ml); until they arrive these cards show no photo. Their oil prices are in the original file only, not in the repository.
+
 Asked the customer for the items below on 2026-11-06 (chat msg 524878). Answers so far are marked inline. That message asked only for card number + holder. Whether the card must belong to an IP/LLC and who verifies payments were not asked. We write the catalog Excel template ourselves (`docs/spec.md` → Changes, 2026-11-07). Develop on seed data per `docs/catalog-sample.md`.
 
 Missing — **day 1** (blocks the 14-day clock):
@@ -37,10 +39,16 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - Up to 3 photos, sent to the bot after the comment.
   - A review shows on every fragrance and set of its order.
   - Card block: average rating, count, latest published reviews.
+  - Built (#41): the block is on the fragrance and Discovery set cards; the builder («Свой набор») screen has none yet (the API serves `builder-set`). Our defaults, to confirm with the customer: request after 24 h, low = 1–3, three photos, five reviews on the card.
 - **«Это подарок».**
-  - Is gift packaging free?
-  - Is the greeting card text typed by the customer, and is there a length limit?
+  - Is gift packaging free? (Built free, spec Changes 2026-11-10 checkout.)
+  - Is the greeting card text typed by the customer, and is there a length limit? (Built: typed, optional, at most 250 characters, an admin setting.)
   - "без чека" = no price slip or receipt in the parcel: does this interact with the fiscal receipt procedure (accountant)?
+- **Checkout (ticket #23, 2026-11-10).**
+  - Consent wording: built as the mockup's «Согласен(на) на обработку персональных данных, включая дату рождения.» (TZ §9 asks consent incl. birthday on the first order); the lawyer should approve it with the public offer, and say whether it needs a link to a privacy page.
+  - The Recipient phone is accepted only from the countries in the setting `orders.recipientPhoneCountryCodes` (default +998 only). Should a foreign number be allowed for a recipient collecting at a BTS point?
+- **Tracking number length (ticket #33).** «Передан в BTS» takes a tracking number of 6–64 characters, trimmed, with no pattern. Confirm the minimum against a real BTS waybill once the first parcel is shipped, and tighten it (a pattern setting) only if staff mistype.
+- **A transfer that differs from the amount due (ticket #32).** The AI confirms only an exact transfer to the shop card. A manager may link a credit with another amount (tiyin included) or on another card, with a typed reason; the difference is recorded on the order. Who handles the difference? An overpayment: refund the difference (a Refund) or keep it? An underpayment: accept it, or ask the customer for the rest before the order is «Принят»? Built: nothing happens automatically; the manager's reason records what was decided. Since #40 a Refund records money sent back on a paid order, up to the whole credit that paid it (so an overpaid difference can be refunded and recorded).
 - **Favourites.** Not in the TZ; it comes from the approved design (heart on cards). The list lives in Profile → «Избранное».
 - **Delivery city on Home.**
   - Region + city from the BTS list, saved per customer.
@@ -53,7 +61,9 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
   - «Sauvage EDT»: EDT names the original's concentration, while LUMMI sells Extrait de Parfum.
   - «Pink Molécule 090.09»: a number in the name, while LUMMI never shows fragrance numbers; it is the original's name.
   - «Rain Tea»: the guide notes it is sold as «Tea Storm» from 2026.
-- **Banner slider dropped.** TZ §3.1 had an admin-managed banner slider; the approved Home has none. The Discovery set banner and the slogan are editable in admin instead.
+- **Banner slider back (2026-11-18, #62).** TZ §3.1 had an admin-managed banner slider; the approved Home had none, so stage 1 first shipped one promo banner under the Discovery set. After Nurmuhammad's review (2026-11-17) Home has one slider again: the Discovery set slide first, then up to 5 active promo banners in the owner's order (`docs/spec.md` → Changes 2026-11-18).
+- **UZ label of the Home tab.** The tab bar reads «Asosiy» (main) in UZ: «Bosh sahifa» does not fit a 360 px phone beside four other labels. Ask Nurmuhammad to confirm it with the customer.
+- **Fabric photos for the Home top block** (light and dark, full resolution) are still needed; the shell shows a Stone stand-in in that slot. It is one 3:2 image per theme: set the two paths in `FABRIC` in `apps/miniapp/src/screens/Home.tsx` (WebP, at least 1170 px wide, a quiet upper third for the logo and slogan).
 
 ## Deferred to the next version
 
@@ -61,15 +71,22 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 
 ## Our proposals awaiting customer approval
 
-- **Upgrade right from a single 10 ml bottle** (2026-11-07, ADR 0003). A delivered 10 ml bottle gives a one-time discount on a 30/50 ml bottle of the same fragrance, like the set discount. Outside the TZ, so it ships switched off. Ask the customer: on or off, percentage (set source is 20%), validity (set source is 30 days). Free-delivery threshold for it defaults to "before discount", like the set source.
+- **Upgrade right from a single 10 ml bottle** (2026-11-07, ADR 0003). A delivered 10 ml bottle gives a one-time discount on a 30/50 ml bottle of the same fragrance, like the set discount. Outside the TZ, so it ships switched off. Ask the customer: on or off, percentage (set source is 20%), validity (set source is 30 days). Free-delivery threshold for it defaults to "before discount", like the set source. Built in #38 behind `upgradeRights.single10ml.enabled` (off), with placeholders 20% and 30 days in `upgradeRights.single10ml.percent` / `.validityDays`.
+
+- **«Мои наборы» as a history of sets** (2026-11-11, ticket #38). The TZ puts the set's fragrances in Profile → «Мои наборы»; we show them inside each open discount in «Мои скидки». Показывать ли историю наборов (ароматы из прошлых наборов) отдельно от действующих скидок?
 
 - **Tell the customer about our TZ deviations** (2026-11-07, via Nurmuhammad). The internal decisions in `docs/spec.md` → Changes alter visible behaviour: status «Возвращён» and refunds; customer can cancel an unpaid order; orders reach the group only once paid; group topics; fully automatic payment matching and "payment not found" instead of manual review; account phone only via Telegram contact; BTS point list instead of street address. None needs approval to build, but acceptance runs against the TZ.
 
+- **UZ disclaimer text (2026-11-09).** The approved RU line is «Аромат LUMMI по мотивам, не оригинальный парфюм». Our UZ version on the card is «LUMMI ifori ilhom asosida yaratilgan, asl parfyum emas» (we avoid «original» in UZ too). Needs the customer's or a native reviewer's approval, with the RU text.
+- **«Купить сейчас» and the promo code** (2026-11-11, ticket #25). A buy-now order takes only the discount the server picks by itself (none in stage 1), never the promo code the shopper entered in the cart, because the code lives on the cart and a buy-now order leaves the cart alone. Should a buy-now checkout have its own promo field (#29), or is «enter the code in the cart» acceptable? Also confirm: buy-now is always one unit; «Повторить заказ» adds today's Discovery set even if its five fragrances changed since the old order.
+- **«Купить сейчас» and «Не применять»** (2026-11-11, ticket #39). The cart's discount switch lets a shopper keep a birthday coupon or a set discount for a later order («Не применять»). «Купить сейчас» has no switch: it applies whatever the server picks by itself, so a shopper who wants to keep the coupon has to order through the cart. Is that acceptable, or should the buy-now checkout offer «Не применять» too?
+- **A shopper who pays but never uploads a receipt** (2026-11-10, ticket #24). The expiry sweep cancels an order still «Ожидает оплаты» at `reserve_until` (12 h), while their credit sits «Не привязано». A manager can confirm such an order by linking the credit before then (the table allows it from «Ожидает оплаты»), but once it is «Отменён» it is terminal and the only way out is a Refund and a new order. Does the customer want something else, e.g. a manager alert for unlinked credits near a reserve's end, or longer reserves?
+
 ## Bracketed values to confirm (TZ placeholders)
 
-- Discovery set price (expected after 2026-11-09).
+- Discovery set price (expected after 2026-11-09). The seed carries our placeholder 299 000 сум, flagged in the database; the admin «Наборы» page says so until the owner saves a price (the builder set costs the same).
 - Card disclaimer text: «Аромат LUMMI по мотивам, не оригинальный парфюм» (+ UZ version).
-- Birthday coupon: max discount (so'm) and free-delivery threshold base. Our defaults (2026-11-07): threshold computed **after** the coupon, like a promo code; cap 100 000 so'm (placeholder). Both are admin settings; confirm with the customer.
+- Birthday coupon: max discount (so'm) and free-delivery threshold base. Our defaults (2026-11-07): threshold computed **after** the coupon, like a promo code; cap 100 000 so'm (placeholder). Both are admin settings; confirm with the customer. Built with these defaults (ticket #30, 2026-11-11), plus: percent and cap are fixed on each coupon when it is issued; the first coupon comes no sooner than 14 days after the date was entered (TZ «не ранее чем через 14 дней», a setting); only the owner corrects a date of birth (TZ «только админ»; loosen to managers only if the customer asks); one coupon per **birthday** year, not per calendar year, so a birthday early in January can bring two coupons into one calendar year (late-December window and next December's): acceptable unless the customer objects; the coupon message text (RU/UZ in `packages/i18n/src/bot.ts`, `birthdayCoupon`) needs the customer's approval like the other bot texts.
 - Defaults to confirm: top-sales window 30 d, reserve 12 h, review delay 24 h, receipt-unchecked alert 15 min, match window 5 min, AI thresholds (now P ≥ 0.8 for predicates, confidence ≥ 0.6 for the date-time choice, ADR 0013), no-credit wait 2 h (TZ had 10 min to manual review; ADR 0012), Humo-silence alert 30 min, review period 3 working days, returns window 3 days.
 - "Working hours" (used by several alerts) — not defined anywhere.
 - Fiscal receipt procedure and Asl Belgisi marking — customer's accountant.
@@ -79,9 +96,98 @@ Recorded in `docs/spec.md` → Changes 2026-11-07 (design approved; catalog guid
 - Humo userbot (see `docs/spec.md` → Changes 2026-11-07). Needed before payment auto-verification (days 6–10):
   - Which Telegram account receives the Humo notifications for the shop card? The card isn't opened yet.
   - A login session with the customer, who must enter the SMS code and 2FA password once.
-  - A sample **incoming** (➕) notification, P2P transfer to the card. So far we only have a debit sample.
+  - A sample **incoming** (➕) notification, P2P transfer to the card. **Answered 2026-11-14/15** (Sardor's own card, #51): three real ➕ and two ➖ are in `apps/api/test/fixtures/humo-messages.ts` and parse as the documented layout («🎉 To'ldirish» on a credit). The parser (ticket #13) accepts only the variants listed in `docs/spec.md` → Changes 2026-11-09 «Humo credit intake» and alerts the owner on anything that looks like an operation (a card mask or something amount-shaped) but does not fit; the Humo bot's own talk (menus, settings answers) is kept raw without an alert, a notice about the card itself (blocked, a limit) alerts (spec Changes 2026-11-16). Add each new real sample to the fixtures. Still to check on the shop card: whether its notifications reach an account that holds other cards too, since matching filters on the card's last 4 digits.
   - Whether a P2P fee is ever deducted from the **recipient** (credit < amount sent). Matching needs credit = order total exactly; check on the first test transfer.
   - What the 3 inline buttons under the notification do. If one opens a detailed receipt with an operation id, the userbot can read it and restore the strongest match signal.
+  - The official Humo bot's numeric id, for `USERBOT_LISTEN_CHAT_ID` in production (ticket #19). After the login, `whois.ts @<its username>` prints it. Which username is the official one: ask the customer, or read it off his chat with the bot.
+  - **To confirm:** that the official Humo bot carries Telegram's verified tick (`whois.ts` says `verified: true`). Production runs with `USERBOT_REQUIRE_VERIFIED=true`, so without the tick the userbot parks at start; we would then pin the id alone and record that here.
+  - The customer's account must have a two-step verification password before the login (the session is full access to it), and must be a member of the orders supergroup, since the forwards to «Поступления» are sent as him. Ask him to watch Settings > Devices: «LUMMI userbot» is ours; ending it stops the payment feed until the next login.
 - Off-site backup location inside Uzbekistan (ADR 0025): a separate PRO-DATA storage or a small second Uzbek VPS. Extra monthly cost for the customer; ask before launch.
 - Customer action: convert the "Lummi" orders group (`-5579977857`, a basic group) to a supergroup with topics Заказы / Поступления / Отзывы / Системные, and add the bot as admin. The chat id becomes `-100…`; update `CLAUDE.md` then. The owner must also `/start` the bot to receive alerts in DM.
 - Hosting + domain bought on the customer's name (TZ §9). Sardor will ask (2026-11-07). Needed for production only; the day 6–10 demo runs on staging on Sardor's VPS (ADR 0023).
+- BTS point text (city, address, landmark, hours) has only a Russian source (bts.uz), so UZ shoppers see Russian there; this deviates from "bilingual everything". Ask the customer: is that acceptable, or should we transliterate to Uzbek Latin (extra work, error-prone for street names)? Region names are already RU/UZ.
+- Telegram below Mini Apps 6.9 (roughly before mid-2023) cannot call `requestContact`, so such a customer cannot register or order; the registration sheet tells them to update Telegram. Confirm with the customer that this is acceptable (no typed-phone fallback, ADR 0004), or whether the manager should take orders from them by hand. The sheet already offers «Написать менеджеру» there (2026-11-10).
+- **Who sees the account phone, for a trust line in the registration sheet** (2026-11-10). A design review asked for a line above the buttons such as «Номер видят только менеджеры LUMMI и курьер BTS». The docs don't settle it: ADR 0020 and 0025 say only where personal data is stored (in Uzbekistan), not who may see it; `docs/spec.md` §6 puts the phone on the order card in the orders group (owner and managers, admin panel too); BTS gets the **recipient's** phone, which defaults to the account phone but may differ (ADR 0004). The sheet carries no such line until the customer approves the wording, ideally together with the data-processing consent text (§3.6, §9). Never promise "no third parties".
+- **Removing a volume in the admin** (2026-11-10, ticket #17). TZ §7 does not say whether the owner can delete a 10 / 30 / 50 ml volume of a fragrance. Our build lets the owner add one but not remove it (hiding the fragrance takes it off sale), so order history and stock counts never point at a vanished row. Confirm with the customer that this is acceptable, or say when a volume should be removable.
+
+- **Broadcast button label (#14).** The link button under a broadcast reads a fixed «Открыть» / «Ochish». Does the owner want to write the label per broadcast (RU and UZ)? Default until answered: fixed.
+
+## Info pages (ticket #21)
+- The info pages are seeded as drafts from the TZ appendix and wait for the customer's approval (the owner ticks «Текст готов» in the admin). The public offer is a placeholder until the customer's lawyer sends the text.
+- Returns window «[3] дней» is written as «3 дней»: confirm the number, and have the customer's lawyer check the whole returns text (the 3-day window and the rule for opened perfume). The FAQ's first question was reworded to avoid the banned word «оригинал»; confirm the wording. Longevity in the FAQ reads «до 24 часов» (customer, 2026-11-07), not the draft's «[8–12] часов».
+- **Uzum Market store URL.** Ask the customer for the link to the LUMMI store on Uzum Market. The Contacts page names the store as plain text until then (there is no setting or placeholder for it yet); once the URL arrives, the owner can make it a link in the admin. The page also lists @lummi_manager (from `shop.managerUsername`), t.me/lummi_uz and instagram.com/lummi.uz.
+- Promo banner title is set in Manrope 600, not the Cormorant italic (promo copy is not a fragrance or set name). Ask the customer to confirm the font for banner titles.
+
+## Campaign links (ticket #35)
+- **Share mark.** ADR 0022 says plain navigation links are "not tracked beyond a share mark". We log nothing for them (the `p_<slug>` shape is the mark). If the owner wants shares counted, we need a separate event, since «Поделиться» opens by someone else are indistinguishable from direct launches.
+- **Prefill replaces the cart's code.** A link's promo code overwrites a code the shopper already entered. Confirm, or keep the shopper's own code.
+- **Automatic links for promo codes** lead to the catalog with source «Другое»; the owner edits them (target, source, label) per campaign.
+
+## Payment not found and alerts (ticket #36)
+- **Look-alike receipts.** TZ and the 2026-11-07 decision treat a receipt whose image looks like another order's as a repeat. The 64-bit perceptual hash (#28) cannot tell two receipts of one bank app apart: in our test, different receipts of one layout were 0–8 bits apart and the same receipt re-saved was 4–7 bits apart. So the look-alike rule is built but **off** (setting `receipts.duplicateImageDistance` empty), and only the same file counts as a repeat. Нужны 20–30 реальных чеков, чтобы решить, включать ли (with the AI eval set, or a finer image comparison). Sardor and Nurmuhammad sign off.
+- **Humo silence in quiet hours.** When a receipt waits for its money with no candidate and no credit at all has come for 30 min, its timer pauses; the pause ends only when a credit arrives. In a quiet period a receipt with no money behind it therefore waits until some credit arrives, and the owner is told once («Таймеры чеков на паузе»). Confirm this trade-off (a Humo failure must never cancel a paid order), or give working hours outside which the pause and its alerts stay quiet.
+- **Alerts at night.** The unchecked-receipt alert (15 min) and the pause alerts go out at any hour; TZ says «в рабочее время», which is not defined (see "Working hours" above).
+
+## Backups and monitoring (ticket #20)
+- **Second backup location inside Uzbekistan** (ADR 0025): the customer names it (a second PRO-DATA storage or a small Uzbek VPS, his cost). Until then `BACKUP_RSYNC_TARGET` stays empty and only the VPS holds backups.
+- **The owner's age key pair.** The owner (or Sardor with him) generates it on his own computer and sends only the public `age1...` line; the private file is kept offline in two places. Confirm who holds it and that he has tested a decrypt.
+- **Developer's Telegram id** for `ops.developerChatId`, and the account for the external uptime monitor (customer's or ours).
+- **Second location setup.** It needs a user for the VPS with the restricted `rrsync` keys (or the rotation script), and a cron for `offsite-rotate.sh`; receipts there are `age`-encrypted per file, the public photos are plain.
+
+## Home fabric photo (ticket #61)
+- **Larger original of the fabric photo.** The light-theme Home hero uses the 884 × 708 PNG from the chat (2026-11-17); the slot asks for 1170 px wide, so it is upscaled a little on 3x phones. Ask the customer for a larger original, and for a dark-theme photo if he wants one.
+
+## Promo gift (ticket #69, ADR 0039)
+- **Does a gift open an Upgrade right?** The setting `promo.giftOpensUpgradeRights` (on by default) decides: a delivered gift 10 ml (while the 10 ml source is on) or a gift Discovery set opens rights like a bought one, since the right is about a fragrance the customer received. Ask the customer whether a free gift should count; if not, the owner switches it off.
+- **The orders group card names the code** («Подарок по промокоду RAINTEA: Rain Tea 10 мл»), so staff see where the gift comes from; the ticket's wording had no code. Accepted in review (staff-only, like «Скидка (Промокод X)»).
+
+## Cost model (ticket #75, ADR 0040)
+- **Parfums de Marly Greenley has no oil price**: it is not in the owner's price list. The owner types it on the fragrance page; until then it has no cost.
+- **15 fragrances in the owner's price list are not in our catalog** (no guide texts, no photos): Creed Aventus Cologne, Victoria's Secret Bombshell, Escada Cherry In The Air, Dolce & Gabbana Imperatrice, Essential Parfums Bois Impérial, Xerjoff (Sospiro) Accento, Chanel Chance Eau Fraiche, Chanel Chance Tendre, Jean Paul Gaultier Le Male, Giorgio Armani Acqua Di Gio, Thomas Kosmala Après l'Amour №4, Dolce & Gabbana Light Blue, Dior Homme Intense, Chanel Coco Mademoiselle, Carolina Herrera 212 Men. Are they coming to the shop (then they need RU/UZ texts and bottle photos), or only bought for later?
+- **Names we matched by hand**, to confirm: «Gaba Harmone Paris» = Hormone Paris Gaba; «Clive Christian Blond Amber» = Blonde Amber; «Dior Sauvage EDT 2015» = Dior Sauvage EDT; «Miss Dior Blooming Bouquet» = Dior Miss Dior Blooming Bouquet; «Baccarat Rouge 540» = Maison Francis Kurkdjian Baccarat Rouge 540; «Bvlgari Tygar Extrait 2026» = Bvlgari Tygar Extrait, whose price comes from an earlier list, on no invoice.
+- **No tier** for Louis Vuitton Ink Mark, Moon Tale and Rain Tea (their supplier's receipt gives none). The owner sets it, or it stays empty.
+- **Oil + ethanol need not make 100 %**: the calculator does not check it, so neither do the settings; the hint says so.
+- **The gift sample's cost** is the calculator's average 5 ml vial over the fragrances given. With #79 the server picks the sample's fragrance, so its cost can be that fragrance's own vial: decide there.
+
+## Order profit and «Рентабельность» (ticket #77)
+- **Refunds and profit.** A refund is not taken off an order's profit (it stays in «Возвраты денег»): a partly refunded order shows the profit frozen at its payment. Should the report's profit subtract refunds too?
+- **The online-payment %** is taken of the items' revenue, as in the calculator; if the card or payment service charges on the whole transfer (delivery included), the base should be the amount due. 0 % today, so nothing changes yet.
+- **Uzum** is costed at our regular price with the Uzum commission (20.5 %), no mailer and no delivery, until real Uzum sales come (#80). Confirm Uzum prices are ours, or give them. Since #80 the real Uzum sales are recorded at the price they sold for; the «Рентабельность» page still simulates at our price.
+- **One after-set discount per order.** In the simulator the «Скидка после набора» takes one Full size bottle (the dearest), as the shop does; the customer's calculator took 20 % off every 30 / 50 ml line. Confirm the shop's rule is what he wants to see.
+- **The margin floor** «Ниже 15 %» is the calculator's 15 %, now the setting `cost.order.lowMarginPercent`.
+- **The gift sample in an order** (#79): the snapshot has a gift-sample line, 0 until #79 says when a sample went in and which one.
+
+## Raw-material warehouse (ticket #76, ADR 0041)
+- **Should an oil receipt update the fragrance's oil price** (and supplier, invoice) to the latest invoice? Now it does not: the owner changes the oil price in the fragrance form, and unit costs follow that price.
+- **The low-oil threshold** `stock.lowOilLitres` defaults to 1 litre of perfume (about 310 g of oil at 30 %). Our default; the owner sets it.
+- **Ethanol is not stocked**, only costed per bottling. Does the owner want an ethanol balance too?
+- **Stock value** takes the oil at the average landed price of the fragrance's standing receipts. Does the owner value it another way (the latest invoice, FIFO)?
+- **History before launch:** counts made before the warehouse shipped are not in the history; the first lines are what happens after it.
+
+## 5 ml, the 5 × 5 ml set and the gift sample (ticket #79, ADR 0042)
+
+- **The 5 × 5 ml set's photo and five fragrances:** it starts with the 5 × 10 ml set's five and the app's box photo until the owner uploads his own. Does it hold the same five as the 5 × 10 ml box or its own?
+- **The 5 × 5 ml set has no heart, share link or reviews block yet**, and a gift promo code can name only the 5 × 10 ml set. Wanted for it too?
+- **Which fragrance is the sample:** our default is the one with the most 5 ml bottles available; the owner can pick one by name in «Настройки → Магазин». A chosen fragrance out of 5 ml gives no sample (not another one), with a warning on the stock page and the Home. Confirm. The warning threshold `giftSample.lowStock` (10 bottles) is ours.
+- **«First order»:** a customer with no order that is not cancelled. An unpaid order that expires counts as cancelled, so the next order gets the sample; a returned one does not. Confirm.
+- **The after-set discount on any fragrance** (`entitlements.setDiscountScope`) stays on «Аромат из набора» (TZ) until the owner switches it.
+
+## Uzum sales (ticket #80)
+- **Uzum's seller export.** We have not seen Uzum's own Excel export of orders, so the import reads our template (`LUMMI_Uzum_shablon.xlsx`: date, Uzum order number, fragrance or «Discovery set», ml, quantity, price for one, commission %; one row per line, the rows of one order make one sale). Ask the customer for one real export file from the seller cabinet (seller.uzum.uz → Заказы → Выгрузить) to map its columns; the template stays as the fallback.
+- **What «цена» means.** The price typed is what the Uzum buyer paid for one unit, before Uzum's commission; the commission % comes off it in the profit. Confirm, or say whether he would rather type what Uzum pays out.
+- **Logistics and storage fees.** Only the commission is costed (the calculator's note). If Uzum charges for delivery or storage (FBO/FBS), say so: it becomes a setting, or part of the commission.
+- **A sale beyond what is available** is refused: the owner or manager first recounts the volume on the stock page with a reason, then records the sale. Confirm, or say if he wants to record it anyway and sort the count out later.
+- **Uzum's warehouse (FBO).** We assume each Uzum parcel leaves our own shelf when it sells (FBS). If stock is sent to Uzum's warehouse in advance, that shipment should leave on hand instead, and the sale should not.
+- **Two date bases in «По каналам».** The Mini App counts an order on the day it was delivered (as the rest of the report); Uzum counts a sale on the day it sold (`sold_on`), since we do not see Uzum's delivery. Confirm, or say if Uzum should count on its payout day.
+
+## Shown stock count (ticket #83)
+
+- **«Changes daily».** The customer said the shown number should change every day. We built the owner-set number only: he edits it on the stock page, nothing moves it automatically. Confirm that is enough, or whether he wants a daily drift or schedule.
+- **List card.** Only the product page shows «В наличии: N шт.» today (the list card never showed a count). Confirm he does not want it on the list card too.
+
+## Stock in liquid and consumables (ticket #82, ADR 0043)
+- **Thresholds are ours:** «Мало концентрата» at 300 ml of free concentrate (`stock.lowConcentrateMl`), «Мало масла» at 300 ml of oil (`stock.lowOilMl`), each consumable's own low count (seeded 20 flacons or boxes, 1 000 ml of spirit). The owner sets them.
+- **Boxes for sets:** a builder set's five 10 ml vials and the 5 ml gift sample take a flacon each but no 10 ml box (the cost model gives a set one set box). No «коробка набора» item is seeded; if the owner adds one, should a handed-over builder set or an assembled Discovery set take it?
+- **Returns give back a flacon and a box** with the liquid (the bottle is back on the shelf). Confirm, or say if a returned bottle is thrown away.
+- **Spirit for mixing is required:** mixing is refused while the «Спирт» count is short, so the owner first receives his spirit on the stock page. Confirm, or say if mixing should go on and ask for a recount, as flacons do.
+- **The fold of bottles into concentrate** counts each bottle on hand as its fill (10 ml at 3 % loss = 10.3 ml) and its flacon and box as in stock. If his shelf holds bottles that stay bottles (not poured back), he may keep them as concentrate (the next sale «fills» one) or recount.

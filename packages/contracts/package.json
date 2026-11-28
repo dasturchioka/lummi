@@ -1,0 +1,28 @@
+{
+  "name": "@lummi/contracts",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./sign-contact": "./src/sign-contact.ts",
+    "./constants": "./src/constants.ts",
+    "./buy-now": "./src/buy-now.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@lummi/i18n": "*",
+    "@ts-rest/core": "~3.52.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@lummi/config": "*",
+    "vitest": "^5.1.0"
+  },
+  "sideEffects": false
+}

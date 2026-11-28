@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Главная — макет</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&family=Tenor+Sans&display=swap" rel="stylesheet">
+<style>
+/* Admin tokens, as apps/admin/src/app/globals.css names them. Light only, flat. */
+:root{
+  --milk:#f5f2ec;--stone:#cfc6b8;--graphite:#2a2a2a;--sage:#9aa592;--card:#fff;--field:#ece7df;
+  --muted:#67625b;--faint:#a39d94;--sage-ink:#5c6855;--hl:rgba(42,42,42,.11);--hls:rgba(42,42,42,.22);
+  --on-dark:#f5f2ec;--on-dark-2:rgba(245,242,236,.74);--dark-hl:rgba(245,242,236,.22);
+  --ease-out:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:light;-webkit-text-size-adjust:100%;scrollbar-color:var(--stone) transparent}
+body{background:var(--milk);color:var(--graphite);font:400 14px/1.5 Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+::selection{background:var(--stone);color:var(--graphite)}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--sage-ink);outline-offset:2px}
+svg.i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.tnum{font-feature-settings:"tnum";white-space:nowrap}
+
+/* ---------- shell ---------- */
+.app{container-type:inline-size;min-height:100vh;background:var(--milk)}
+.app.phone{width:390px;margin:0 auto;box-shadow:0 0 0 1px var(--hl)}
+.shell{display:flex;min-height:100vh}
+.side{width:280px;flex:none;border-right:1px solid var(--hl);padding:28px 14px 20px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;justify-content:space-between;padding:0 4px 22px 10px}
+.logo{font:400 20px/1 "Tenor Sans",Manrope,sans-serif;letter-spacing:.32em}
+.seg{display:flex;background:var(--field);border-radius:999px;padding:3px}
+.seg span{font:500 12.5px/1 Manrope;padding:7px 11px;border-radius:999px;color:var(--muted)}
+.seg span.on{background:var(--card);color:var(--graphite)}
+.nav{flex:1;overflow:auto}
+.grp{font-size:12.5px;color:var(--muted);padding:14px 10px 6px}
+.it{display:flex;gap:12px;align-items:center;height:40px;padding:0 10px;border-radius:10px;font-size:15px}
+.it.on{background:var(--graphite);color:var(--milk)}
+.me{display:flex;align-items:center;gap:12px;padding:12px 6px 0 10px}
+.ava{width:40px;height:40px;border-radius:50%;background:var(--stone);display:grid;place-items:center;font:600 13px Manrope}
+.me .n{font-weight:600;font-size:14px;line-height:1.3}.me .r{font-size:12.5px;color:var(--muted)}
+.me .out{margin-left:auto;color:var(--graphite)}
+.topbar{display:none}
+main{flex:1;min-width:0;padding:44px 56px 64px}
+.page{max-width:1080px}
+
+/* ---------- page head ---------- */
+.title{font:400 22px/1.25 "Tenor Sans",Manrope,sans-serif;letter-spacing:.2em;text-transform:uppercase}
+.sub{color:var(--muted);margin-top:6px}
+.card{background:var(--card);border-radius:12px}
+.stack>*+*{margin-top:16px}
+.stack{margin-top:28px}
+
+/* ---------- reports (owner) ---------- */
+.rep{padding:20px 24px 22px}
+.rep-h{display:flex;justify-content:space-between;align-items:baseline}
+.h3{font:600 15px/1.35 Manrope}
+.vs{font:400 12.5px/1.45 Manrope;color:var(--muted);margin-left:8px}
+.more{display:inline-flex;align-items:center;gap:6px;font:600 14px Manrope;border-bottom:1px solid var(--hls);padding-bottom:1px}
+.more svg.i{width:16px;height:16px}
+.rep-b{display:flex;flex-wrap:wrap;gap:20px 40px;align-items:flex-end;margin-top:16px}
+.figs{display:flex;flex-wrap:wrap;gap:16px 40px}
+.spark{flex:1 0 128px;max-width:168px;margin-left:auto}
+.bars{display:flex;align-items:flex-end;gap:4px;height:44px}
+.bars i{flex:1;background:var(--stone);border-radius:2px 2px 0 0;min-height:2px}
+.bars i.today{background:var(--sage)}
+.bars-l{display:flex;justify-content:space-between;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.fig .k{font-size:12.5px;color:var(--muted)}
+.fig .v{font:600 22px/1.2 Manrope;margin-top:4px}
+.fig .d{font-size:12.5px;color:var(--muted);margin-top:2px}
+
+/* ---------- the Now block ---------- */
+.now{background:var(--graphite);color:var(--on-dark);border-radius:12px;padding:24px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px 32px;align-items:end}
+.now h2{font:600 17px/1.35 Manrope;text-wrap:balance}
+.now .facts{margin-top:8px;color:var(--on-dark-2);font-size:13.5px}
+.now .facts b{color:var(--on-dark);font-weight:600}
+.now .why{margin-top:10px;font-size:14px;max-width:62ch}
+.thread{margin-top:18px;max-width:440px}
+.track{height:2px;border-radius:2px;background:var(--dark-hl);overflow:hidden}
+.fill{height:100%;background:var(--sage);border-radius:2px;transform-origin:left;transition:transform .5s var(--ease-out)}
+.ends{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 16px;margin-top:8px;font-size:11.5px;color:var(--on-dark-2)}
+.ends span:last-child{margin-left:auto;text-align:right}
+.acts{display:flex;gap:10px;align-items:center}
+.btn{height:48px;padding:0 18px;border-radius:10px;font:600 15px/1 Manrope;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;transition:transform .16s ease-out,background-color .15s ease}
+.btn:active{transform:scale(.97)}
+.btn.inv{background:var(--milk);color:var(--graphite)}
+.btn.ghost{box-shadow:inset 0 0 0 1px var(--dark-hl);color:var(--on-dark)}
+.btn.pri{background:var(--graphite);color:var(--milk)}
+@media (hover:hover) and (pointer:fine){.btn.ghost:hover{background:rgba(245,242,236,.08)}.btn.inv:hover{background:#fff}}
+.note{font-size:13px;color:var(--on-dark-2);max-width:30ch;text-align:right}
+.ban{display:flex;gap:12px;align-items:flex-start;background:var(--field);color:var(--graphite);border-radius:12px;padding:14px 18px;font-size:14px}
+.ban b{font-weight:600}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* calm variant: nothing waits */
+.now.calm{background:var(--card);color:var(--graphite);grid-template-columns:auto minmax(0,1fr);align-items:center;gap:20px}
+.disc{width:56px;height:56px;border-radius:50%;background:var(--sage);display:grid;place-items:center;color:var(--graphite)}
+.disc svg.i{width:26px;height:26px;stroke-width:1.75}
+.now.calm .why{margin-top:4px;color:var(--muted)}
+
+/* ---------- the queue ---------- */
+.q-h{display:flex;justify-content:space-between;align-items:baseline;padding:18px 24px 12px}
+.q-h .s{font-size:12.5px;color:var(--muted)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 120px 220px 20px;align-items:center;gap:16px;padding:12px 24px;min-height:62px;border-top:1px solid var(--hl);transition:background-color .15s ease}
+.row:last-child{border-radius:0 0 12px 12px}
+@media (hover:hover) and (pointer:fine){.row:hover{background:var(--milk)}}
+.row:active{background:var(--field)}
+.row .t{font-size:15px;line-height:1.35}
+.row .s{font-size:12.5px;color:var(--muted)}
+.row .c{font:600 18px/1.2 Manrope;text-align:right}
+.row .c small{font-size:12.5px;font-weight:500;color:var(--muted);margin-left:4px}
+.row .a{font-size:12.5px;color:var(--muted)}
+.row .chev{color:var(--muted)}
+.row .a.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+.row .chev svg.i{width:18px;height:18px}
+.row.zero .t,.row.zero .c{color:var(--muted)}
+.row.zero .c{font-weight:500}
+.row.lift .t{font-weight:600}
+
+/* ---------- owner system line ---------- */
+.sys{display:flex;flex-wrap:wrap;gap:8px 28px;font-size:12.5px;color:var(--muted);padding:0 4px}
+.sys span{display:inline-flex;align-items:center;gap:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--sage)}
+.sys .bad{color:var(--graphite);font-weight:600}
+.sys .bad .dot{background:none;box-shadow:inset 0 0 0 1.5px var(--graphite)}
+
+/* ---------- loading / error ---------- */
+@keyframes breathe{50%{opacity:.55}}
+.sk{background:var(--field);border-radius:6px;animation:breathe 1.6s ease-in-out infinite}
+.err{background:var(--field);border-radius:12px;padding:24px;display:flex;gap:24px;align-items:center;justify-content:space-between}
+.err b{font:600 17px/1.35 Manrope;display:block}.err p{color:var(--muted);margin-top:2px}
+
+/* ---------- motion: values that changed on refresh resolve out of a 2 px blur ---------- */
+@keyframes settle{from{opacity:.25;filter:blur(2px)}}
+@keyframes arrive{from{opacity:0;filter:blur(2px);transform:translateY(6px)}}
+.changed{animation:settle .32s var(--ease-out)}
+.arrive>*{animation:arrive .32s var(--ease-out) both}
+.arrive>*:nth-child(2){animation-delay:.04s}
+@media (prefers-reduced-motion:reduce){
+  .changed,.arrive>*{animation:fade .2s ease both}
+  @keyframes fade{from{opacity:0}}
+  .sk{animation:none}.fill{transition:none}.btn:active{transform:none}
+}
+
+/* ---------- phone (the app column at 390) ---------- */
+@container (max-width: 820px){
+  .side{display:none}
+  .topbar{display:flex;align-items:center;justify-content:space-between;height:60px;padding:0 16px;border-bottom:1px solid var(--hl);position:sticky;top:0;background:var(--milk);z-index:2}
+  .topbar .r{display:flex;align-items:center;gap:14px}
+  .topbar svg.i{width:24px;height:24px}
+  main{padding:24px 16px 120px}
+  .stack{margin-top:22px}
+  .rep{padding:18px 18px 20px}
+  .fig .v{font-size:17px}
+  .now{grid-template-columns:minmax(0,1fr);padding:20px 18px;gap:18px}
+  .now h2{font-size:17px}
+  .acts{flex-direction:column-reverse;align-items:stretch}
+  .note{text-align:left;max-width:none}
+  .now.calm{grid-template-columns:auto 1fr;gap:16px}
+  .disc{width:48px;height:48px}
+  .q-h{padding:16px 18px 10px}
+  .row{grid-template-columns:minmax(0,1fr) auto 18px;gap:12px;padding:12px 18px}
+  .row{min-height:58px}
+  .row .s{display:none}
+  .row.zero .s{display:block}
+  .row.zero .a{display:none}
+  .row .a{grid-column:1;grid-row:2;margin-top:-10px}
+  .row .a.clamp{-webkit-line-clamp:2}
+  .row.zero .c,.row.zero .chev{grid-row:1}
+  .rep-b{display:block}
+  .figs{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px}
+  .spark{max-width:none;margin-top:18px}
+  .vs{display:block;margin:2px 0 0}
+  .bars{height:40px}
+  .row .c{grid-row:1/3;grid-column:2}
+  .row .chev{grid-row:1/3;grid-column:3}
+  .err{flex-direction:column;align-items:stretch}
+}
+
+/* ---------- mockup toolbar (not part of the design) ---------- */
+.mock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;background:#1d1c1a;color:#f5f2ec;border-radius:12px;padding:8px 12px;font:500 12.5px Manrope;max-width:calc(100vw - 24px)}
+.mock label{display:flex;align-items:center;gap:6px;opacity:.75}
+.mock select,.mock button{background:#353330;color:#f5f2ec;border:0;border-radius:8px;height:30px;padding:0 10px;font:500 12.5px Manrope}
+.mock button{opacity:1}
+.mock .tag{opacity:.55;letter-spacing:.08em;text-transform:uppercase;font-size:11px}
+.shot .mock{display:none}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div class="sr" id="live" aria-live="polite"></div>
+<div class="mock" id="mock">
+  <span class="tag">Maket</span>
+  <label>Rol <select id="m-role"><option value="owner">Egasi</option><option value="manager">Menejer</option></select></label>
+  <label>Til <select id="m-lang"><option value="ru">RU</option><option value="uz">UZ</option></select></label>
+  <label>Holat <select id="m-state">
+    <option value="normal">Oddiy kun</option><option value="resolved">Chek hal qilingach</option>
+    <option value="humo">Humo jim</option><option value="nocard">Karta yoʻq</option>
+    <option value="clear">Hammasi bajarilgan</option><option value="loading">Yuklanmoqda</option><option value="error">Xato</option>
+  </select></label>
+  <label>Ekran <select id="m-view"><option value="desktop">Kompyuter</option><option value="phone">Telefon 390</option></select></label>
+  <button id="m-refresh" type="button">30 s yangilanish</button>
+</div>
+<script src="icons.js"></script>
+<script src="home.js"></script>
+</body>
+</html>

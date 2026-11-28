@@ -1,0 +1,224 @@
+# The whole stack, for staging and production (ADR 0024). Same file, different `.env`.
+#   docker compose --env-file .env up -d      (see docs/run-guide.md)
+# Staging: Caddy listens on 127.0.0.1 only and the host's nginx terminates TLS (CADDY_SCHEME=http://).
+# Production: Caddy owns 80/443 with automatic HTTPS (CADDY_SCHEME empty, default publish).
+name: ${COMPOSE_PROJECT_NAME:-lummi}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
+
+x-api-env: &api-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://lummi:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/lummi
+  REDIS_URL: redis://redis:6379
+  BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN}
+  SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+  BOT_MODE: ${BOT_MODE:-webhook}
+  WEBHOOK_URL: https://api.${DOMAIN:?set DOMAIN}/telegram/webhook
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
+  MINIAPP_URL: https://${DOMAIN}/
+  BOT_LINK: ${BOT_LINK:?set BOT_LINK}
+  TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:?set TYPESAFE_API_KEY}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
+  # Only the userbot's network (ADR 0031, 0035): nothing on `lummi`, Caddy included, passes the check.
+  INTERNAL_ALLOWED_CIDRS: 127.0.0.0/8,::1/128,${USERBOT_SUBNET:-172.28.1.0/24}
+  FILES_DIR: /data/files
+  # The owner's oil price list for the seed (#75): a path inside the container, never committed.
+  OIL_PRICES_FILE: ${OIL_PRICES_FILE:-}
+  API_HOST: 0.0.0.0
+  API_PORT: '4000'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-api: &api
+  image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-api:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  environment: *api-env
+  networks: [lummi]
+  logging: *logging
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  caddy:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_SCHEME: ${CADDY_SCHEME:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/32}
+    ports:
+      - '${CADDY_HTTP_PUBLISH:-80:80}'
+      - '${CADDY_HTTPS_PUBLISH:-443:443}'
+    volumes:
+      # Only public/ of the files volume (needs Compose >= 2.27); receipts under private/ never enter Caddy.
+      - type: volume
+        source: files
+        target: /srv/public
+        read_only: true
+        volume:
+          subpath: public
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [lummi]
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+      admin: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:2019/config/ || exit 1']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  api:
+    <<: *api
+    # `userbot`: the only network the userbot shares with us, so it never sees Postgres or Redis.
+    networks: [lummi, userbot]
+    volumes:
+      - files:/data/files
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+
+  worker:
+    <<: *api
+    command: ['node', '--import', 'tsx', 'src/worker.ts']
+    volumes:
+      - files:/data/files
+    depends_on:
+      api: { condition: service_healthy }
+    # The worker listens on nothing; it is healthy while its node process is. Compose restarts it if it exits.
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 1']
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  admin:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-admin:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:4000
+      BOT_USERNAME: ${ADMIN_BOT_USERNAME:-}
+    networks: [lummi]
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1),()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # The Humo userbot (ADR 0014, ADR 0035): a personal Telegram account, so it is off until someone has
+  # logged in on this server. Enable it with COMPOSE_PROFILES=userbot in .env (docs/run-guide.md →
+  # Userbot). Its own network holds only it and the API (172.28.1.0/24, the one subnet in
+  # INTERNAL_ALLOWED_CIDRS); it calls the API with x-internal-secret and reaches nothing else of ours:
+  # no database, no Redis, no files volume. It holds no capabilities, cannot gain privileges, and
+  # writes only its session volume and a tmpfs /tmp.
+  # The USERBOT_* values are checked by the userbot itself at start (`:?` here would break every
+  # stack that does not run it).
+  userbot:
+    image: ghcr.io/${GHCR_OWNER:-dasturchioka}/lummi-userbot:${IMAGE_TAG:-latest}
+    profiles: [userbot]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:?set INTERNAL_API_SECRET}
+      USERBOT_API_ID: ${USERBOT_API_ID:-}
+      USERBOT_API_HASH: ${USERBOT_API_HASH:-}
+      USERBOT_SESSION_KEY: ${USERBOT_SESSION_KEY:-}
+      USERBOT_LISTEN_CHAT_ID: ${USERBOT_LISTEN_CHAT_ID:-}
+      # Production: true (the official Humo bot is verified). Off for the staging test bot.
+      USERBOT_REQUIRE_VERIFIED: ${USERBOT_REQUIRE_VERIFIED:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - userbot-data:/data/userbot
+    networks: [userbot]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    # A small init as PID 1 passes SIGTERM on, so `stop` works even while it is parked.
+    init: true
+    logging: *logging
+    depends_on:
+      api: { condition: service_healthy }
+    # No Docker healthcheck on purpose: a parked userbot (no session yet, or the session was ended)
+    # would fail every `up -d --wait` deploy. Its health is its heartbeat: the API pauses receipt
+    # timers and alerts the owner when it goes stale (#36, ADR 0025).
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lummi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: lummi
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [lummi]
+    logging: *logging
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lummi -d lummi']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    networks: [lummi]
+    logging: *logging
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  lummi:
+    # Pinned: the shared host already uses 172.17-172.22/16. Staging keeps the defaults; production on
+    # the same host sets LUMMI_SUBNET / USERBOT_SUBNET to 172.29.x in its .env.
+    ipam:
+      config:
+        - subnet: ${LUMMI_SUBNET:-172.28.0.0/24}
+  # The userbot and the API only. Not `internal`: the userbot must reach Telegram.
+  userbot:
+    ipam:
+      config:
+        - subnet: ${USERBOT_SUBNET:-172.28.1.0/24}
+
+volumes:
+  pgdata:
+  redisdata:
+  files:
+  caddy-data:
+  caddy-config:
+  # The userbot's sealed session (ADR 0014). Back it up with the encrypted .env (ADR 0025).
+  userbot-data:

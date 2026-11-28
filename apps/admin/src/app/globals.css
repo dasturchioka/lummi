@@ -1,0 +1,514 @@
+@import 'tailwindcss';
+
+/*
+ * Brandbook v2.0 tokens, exactly as DESIGN.md names them. Light is the default; dark (Admin dark, #68) swaps the same variables under [data-theme='dark'].
+ * Flat: depth comes from tone (Milk ground, white cards, Milk Field fills) and 1 px hairlines,
+ * never from shadows. No burgundy or gold. Warnings and errors sit on a light red plate (Alert Wash) with an Alert icon.
+ */
+:root {
+  --milk: #f5f2ec;
+  --stone: #cfc6b8;
+  --graphite: #2a2a2a;
+  --sage: #9aa592;
+  --card-white: #ffffff;
+  --milk-field: #ece7df;
+  --ink-muted: #67625b;
+  --ink-faint: #a39d94;
+  --sage-ink: #5c6855;
+  --hairline: rgba(42, 42, 42, 0.11);
+  --hairline-strong: rgba(42, 42, 42, 0.22);
+  --sage-wash: rgba(154, 165, 146, 0.18);
+  --alert: #a8443a; /* warnings and errors: a soft brick red, 5:1 on Milk (Sardor, 2026-11-24) */
+  --alert-wash: #f8e3df; /* light red plate behind a warning */
+  --overlay: rgba(42, 42, 42, 0.4);
+  --chart-bar: #8f8a82; /* quiet chart bars: 3.4:1 on a white card */
+  /* brand constants: a surface that mimics the Mini App's light look in both admin themes */
+  --brand-graphite: #2a2a2a;
+  --brand-milk: #f5f2ec;
+  --brand-stone: #cfc6b8;
+
+  --radius-card: 12px;
+  --radius-button: 10px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/*
+ * Admin dark (#68, DESIGN.md "Admin dark"): the same variable names, derived from the Mini App's
+ * approved dark. Graphite and Milk swap roles (primary buttons, blocks and toasts invert as in
+ * the Mini App), so no component needs a second class. Sage stays, Sage Ink lightens for AA.
+ */
+:root[data-theme='dark'] {
+  --milk: #1d1c1a;
+  --stone: #3d3a35;
+  --graphite: #f5f2ec;
+  --sage: #9aa592;
+  --card-white: #2a2a2a;
+  --milk-field: #353330;
+  --ink-muted: #cfc6b8;
+  --ink-faint: #8a857c;
+  --sage-ink: #aeb8a6;
+  --hairline: rgba(245, 242, 236, 0.1);
+  --hairline-strong: rgba(245, 242, 236, 0.22);
+  --sage-wash: rgba(154, 165, 146, 0.16);
+  --alert: #f0a49a;
+  --alert-wash: rgba(224, 108, 94, 0.16);
+  --overlay: rgba(0, 0, 0, 0.55);
+  --chart-bar: #8a857c; /* 3.9:1 on a Graphite card */
+}
+
+@theme inline {
+  --color-background: var(--milk);
+  --color-foreground: var(--graphite);
+  --color-card: var(--card-white);
+  --color-field: var(--milk-field);
+  --color-muted: var(--milk-field);
+  --color-muted-foreground: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-border: var(--hairline);
+  --color-border-strong: var(--hairline-strong);
+  --color-primary: var(--graphite);
+  --color-primary-foreground: var(--milk);
+  --color-milk: var(--milk);
+  --color-stone: var(--stone);
+  --color-graphite: var(--graphite);
+  --color-sage: var(--sage);
+  --color-sage-ink: var(--sage-ink);
+  --color-sage-wash: var(--sage-wash);
+  --color-alert: var(--alert);
+  --color-alert-wash: var(--alert-wash);
+  --color-overlay: var(--overlay);
+  --color-chart-bar: var(--chart-bar);
+  --color-brand-graphite: var(--brand-graphite);
+  --color-brand-milk: var(--brand-milk);
+  --color-brand-stone: var(--brand-stone);
+  --radius-card: var(--radius-card);
+  --radius-button: var(--radius-button);
+  --ease-out: var(--ease-out);
+  --font-sans: var(--font-manrope), system-ui, sans-serif;
+  --font-display: var(--font-tenor), var(--font-manrope), sans-serif;
+  --font-name: var(--font-cormorant), Georgia, serif;
+}
+
+/* DESIGN.md "Body small" (12.5 px / 1.45): meta lines, counts and secondary text under a value. */
+@theme {
+  --text-small: 12.5px;
+  --text-small--line-height: 1.45;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-color: var(--stone) transparent;
+  }
+  body {
+    background: var(--milk);
+    color: var(--graphite);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    caret-color: var(--graphite);
+  }
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+  ::selection {
+    background: var(--stone);
+    color: var(--graphite);
+  }
+  /* Controls answer the tap at once (no double-tap-zoom wait) and never select their label. */
+  a,
+  button,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  /* Sage Ink, not Sage: Sage is about 2.6:1 on white, Sage Ink clears 3:1 on every surface. */
+  :focus-visible {
+    outline: 2px solid var(--sage-ink);
+    outline-offset: 2px;
+  }
+}
+
+/* Screen titles (DESIGN.md "Title"): Tenor Sans, caps, +0.2em. */
+.title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+/* Loading placeholders: a slow breathing tone, still for reduced motion. */
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+.skeleton {
+  background: var(--milk-field);
+  border-radius: 6px;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/*
+ * Overlay motion (Radix sets data-state; it waits for the closing animation before unmounting).
+ * Enter on the brand ease-out (sheets on the iOS drawer curve), exit faster on the same curves,
+ * never ease-in. Phones get a bottom sheet, wider screens a centred dialog (scales from its
+ * centre, it has no trigger anchor). Reduced motion keeps only the fades.
+ */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes overlay-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes rise-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes rise-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes slide-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+.motion-overlay[data-state='open'] {
+  animation: overlay-in 220ms var(--ease-out);
+}
+.motion-overlay[data-state='closed'] {
+  animation: overlay-out 160ms var(--ease-out) forwards;
+}
+.motion-dialog[data-state='open'] {
+  animation: rise-in 280ms var(--ease-drawer);
+}
+.motion-dialog[data-state='closed'] {
+  animation: rise-out 180ms var(--ease-drawer) forwards;
+}
+@media (min-width: 640px) {
+  .motion-dialog[data-state='open'] {
+    animation: dialog-in 220ms var(--ease-out);
+  }
+  .motion-dialog[data-state='closed'] {
+    animation: dialog-out 140ms var(--ease-out) forwards;
+  }
+}
+.motion-sheet[data-state='open'] {
+  animation: slide-in 280ms var(--ease-drawer);
+}
+.motion-sheet[data-state='closed'] {
+  animation: slide-out 180ms var(--ease-drawer) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-dialog[data-state='open'],
+  .motion-sheet[data-state='open'] {
+    animation: overlay-in 160ms var(--ease-out);
+  }
+  .motion-dialog[data-state='closed'],
+  .motion-sheet[data-state='closed'] {
+    animation: overlay-out 120ms var(--ease-out) forwards;
+  }
+}
+
+/*
+ * Select popover: a quick fade and scale from the trigger (it has an anchor, unlike the dialog),
+ * the exit faster. The keyboard path needs no motion, so reduced motion keeps only a fade.
+ */
+@keyframes select-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes select-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+.motion-select {
+  transform-origin: var(--radix-select-content-transform-origin);
+}
+.motion-select[data-state='open'] {
+  animation: select-in 160ms var(--ease-out);
+}
+.motion-select[data-state='closed'] {
+  animation: select-out 100ms var(--ease-out) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-select[data-state='open'] {
+    animation: overlay-in 120ms var(--ease-out);
+  }
+  .motion-select[data-state='closed'] {
+    animation: overlay-out 80ms var(--ease-out) forwards;
+  }
+}
+
+/*
+ * Admin Home (#48): only what changed moves. A value that changed on a refresh settles out of a
+ * 2 px blur; a new Now item arrives (opacity, blur, 6 px). Nothing animates on first load (the
+ * components add these classes only on a change). Reduced motion keeps the fades.
+ */
+@keyframes settle {
+  from {
+    opacity: 0.25;
+    filter: blur(2px);
+  }
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateY(6px);
+  }
+}
+.motion-settle {
+  animation: settle 320ms var(--ease-out);
+}
+.motion-arrive > * {
+  animation: arrive 320ms var(--ease-out) both;
+}
+.motion-arrive > :nth-child(2) {
+  animation-delay: 40ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-settle,
+  .motion-arrive > * {
+    animation: overlay-in 200ms ease both;
+  }
+}
+
+/*
+ * The orders board (#52). The board needs the panel's whole width, so its page drops the content
+ * column's 1120 px cap. Its scroller snaps column by column on phones (not while a card is
+ * carried: snapping fights the auto-scroll). A picked-up card lifts flat (1.02, no shadow); a card
+ * that arrived settles out of a 2 px blur, as the Home's values do. Reduced motion keeps fades.
+ */
+main:has(> [data-layout='wide']) {
+  max-width: none;
+}
+/* the board's page gives its sides to the columns: 24 px instead of the panel's 40 */
+@media (min-width: 1024px) {
+  main:has(> [data-layout='wide']) {
+    padding-inline: 24px;
+  }
+}
+.board-scroller {
+  scrollbar-width: thin;
+  scroll-padding-inline: 16px;
+}
+/*
+ * from 640 px a sideways scroll that ends near a column's edge settles on it (the board sizes
+ * them). Proximity, not mandatory: mandatory pulled every wheel step and trackpad swipe back to
+ * the column it started on (feedback 2026-11-25). A mouse pan (board-pan.ts) snaps only once let go.
+ */
+@media (min-width: 640px) {
+  .board-scroller {
+    scroll-padding-inline: 0;
+    scroll-snap-type: x proximity;
+  }
+  .board-scroller[data-carrying],
+  .board-scroller[data-panning] {
+    scroll-snap-type: none;
+  }
+  .board-scroller[data-panning] {
+    cursor: grabbing;
+    user-select: none;
+  }
+}
+@media (max-width: 639px) {
+  .board-scroller {
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .board-scroller[data-carrying] {
+    scroll-snap-type: none;
+  }
+}
+/*
+ * Where the board continues past an edge (the next column peeking in, or columns scrolled out),
+ * the edge fades over 24 px instead of cutting a card's words: a scroll cue, not a surface.
+ */
+.board-scroller[data-more-start] {
+  mask-image: linear-gradient(to right, transparent, #000 24px);
+}
+.board-scroller[data-more-end] {
+  mask-image: linear-gradient(to left, transparent, #000 24px);
+}
+.board-scroller[data-more-start][data-more-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 24px,
+    #000 calc(100% - 24px),
+    transparent
+  );
+}
+.board-list {
+  scrollbar-width: thin;
+}
+@keyframes lift {
+  from {
+    transform: scale(1);
+  }
+}
+.motion-lift {
+  transform: scale(1.02);
+  animation: lift 160ms var(--ease-out);
+}
+@keyframes card-arrive {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+    transform: scale(0.98);
+  }
+}
+.motion-card-arrive {
+  animation: card-arrive 240ms var(--ease-out);
+}
+/* the column's second line: its money at rest, the move it offers while a card is carried */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+.motion-swap {
+  animation: swap-in 160ms var(--ease-out);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.motion-toast {
+  animation: toast-in 200ms var(--ease-out);
+}
+.motion-menu {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+}
+.motion-menu[data-state='open'] {
+  animation: select-in 160ms var(--ease-out);
+}
+.motion-menu[data-state='closed'] {
+  animation: select-out 100ms var(--ease-out) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-lift {
+    transform: none;
+    animation: none;
+  }
+  .motion-card-arrive,
+  .motion-swap,
+  .motion-toast {
+    animation: overlay-in 160ms ease both;
+  }
+  .motion-menu[data-state='open'] {
+    animation: overlay-in 120ms var(--ease-out);
+  }
+  .motion-menu[data-state='closed'] {
+    animation: overlay-out 80ms var(--ease-out) forwards;
+  }
+}
+
+/*
+ * The broadcast preview as a Telegram chat (#broadcasts, 2026-11-28): Telegram's own colours, not
+ * the brand's, so the owner sees what a customer sees. Light is Telegram's default gradient
+ * wallpaper; the panel's dark theme shows Telegram's night look.
+ */
+.tg-preview {
+  --tg-header: #ffffff;
+  --tg-text: #000000;
+  --tg-muted: #8d8e93;
+  --tg-accent: #3390ec;
+  --tg-bubble: #ffffff;
+  --tg-time: #a1aab3;
+  --tg-overlay: rgba(64, 104, 70, 0.42);
+  --tg-wallpaper:
+    radial-gradient(circle at 12% 18%, #dbddbb 0, transparent 55%),
+    radial-gradient(circle at 88% 30%, #6ba587 0, transparent 60%),
+    radial-gradient(circle at 20% 88%, #88b884 0, transparent 55%),
+    radial-gradient(circle at 85% 90%, #d5d88d 0, transparent 60%), #a8c69a;
+  color: var(--tg-text);
+  background: var(--tg-header);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+:root[data-theme='dark'] .tg-preview {
+  --tg-header: #17212b;
+  --tg-text: #f5f5f5;
+  --tg-muted: #708499;
+  --tg-accent: #5eb5f7;
+  --tg-bubble: #182533;
+  --tg-time: #6d7f8f;
+  --tg-overlay: rgba(36, 52, 68, 0.72);
+  --tg-wallpaper: #0e1621;
+}
+.tg-preview .tg-header {
+  background: var(--tg-header);
+}
+.tg-preview .tg-wallpaper {
+  background: var(--tg-wallpaper);
+}
+.tg-preview .tg-muted {
+  color: var(--tg-muted);
+}
+.tg-preview .tg-accent {
+  color: var(--tg-accent);
+}
+.tg-preview .tg-bubble {
+  background: var(--tg-bubble);
+}
+.tg-preview .tg-time {
+  color: var(--tg-time);
+}
+.tg-preview .tg-service,
+.tg-preview .tg-button {
+  color: #ffffff;
+  background: var(--tg-overlay);
+  backdrop-filter: blur(8px);
+}
