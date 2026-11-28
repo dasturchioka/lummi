@@ -980,11 +980,11 @@ async function setUpShop(t: TestApp): Promise<FixtureCatalog> {
   await t.db
     .update(discoverySet)
     .set({ price: SET_PRICE, onHand: 10, isPlaceholder: false })
-    .where(eq(discoverySet.vialMl, 10));
-  await t.db.delete(discoverySetItems).where(eq(discoverySetItems.vialMl, 10));
+    .where(eq(discoverySet.key, 'discovery'));
+  await t.db.delete(discoverySetItems).where(eq(discoverySetItems.setKey, 'discovery'));
   await t.db.insert(discoverySetItems).values(
     LETTERS.map((l, i) => ({
-      vialMl: 10,
+      setKey: 'discovery',
       position: i + 1,
       fragranceId: catalog.fragranceId[l],
     })),

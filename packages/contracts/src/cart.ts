@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { deliveryCitySchema } from './delivery';
 import { CART_MAX_QTY } from './constants';
 import { discountSchema, quoteSchema, upgradeRightSourceSchema } from './quote';
-import { discoveryVialMlSchema } from './sets';
+import { discoveryVialMlSchema, setKeySchema, setNameSchema } from './sets';
 
 /**
  * The server-side cart (spec Changes 2026-11-10, cart). Every response carries a fresh Quote; the
@@ -36,8 +36,10 @@ const setFragrances = z.array(z.object({ slug: z.string(), name: z.string(), bra
 export const discoveryLineSchema = z.object({
   ...lineBase,
   kind: z.literal('discovery_set'),
-  /** Which Discovery set: 10 = «Discovery Set 5×10 мл», 5 = «Discovery Set 5×5 мл» (ADR 0042). */
+  /** Which Discovery set (ADR 0044): its key, the ml of its vials and its name. */
+  key: setKeySchema,
   vialMl: discoveryVialMlSchema,
+  setName: setNameSchema,
   fragrances: setFragrances,
 });
 export const builderLineSchema = z.object({

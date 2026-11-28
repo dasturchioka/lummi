@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   NOT_SOLD_ALONE_ML,
+  asDiscoveryVialMl,
   UZUM_IMPORT_ISSUE_CAP,
   UZUM_IMPORT_SALE_CAP,
   formatLocalDate,
@@ -28,6 +29,7 @@ import type { ImportLimits } from '../catalog-import/catalog-import.service';
 import { UNPACK_RATIO, zipUnpackedBytes } from '../catalog-import/workbook';
 import { readCostSettings } from '../cost/cost-settings';
 import type { Edges } from '../edges';
+import { listDiscoverySets } from '../sets/sets';
 import { DB, EDGES } from '../tokens';
 import {
   planUzumImport,
@@ -38,6 +40,7 @@ import {
   type UzumCatalogFragrance,
   type UzumPlan,
   type UzumRawRow,
+  type UzumCatalogSet,
 } from './uzum-import';
 import { readLiquidStock } from '../catalog/catalog.service';
 import {
@@ -83,7 +86,7 @@ export class UzumImportService {
   ) {}
 
   async template(): Promise<Buffer> {
-    return writeUzumTemplate(await readCatalog(this.db));
+    return writeUzumTemplate(await readCatalog(this.db), await readSets(this.db));
   }
 
   private today() {
@@ -182,6 +185,7 @@ export class UzumImportService {
     const plan = planUzumImport(rows, catalog, {
       today: this.today(),
       standing: new Set(standing.map((s) => s.uzumOrder)),
+      sets: await readSets(tx),
     });
     const { order } = await readCostSettings(tx);
     return { plan, commission: order.uzumCommissionPercent };
@@ -221,14 +225,19 @@ function report(plan: UzumPlan, commission: number, token: string | null): UzumI
   };
 }
 
-/** A short line as the report says it: a fragrance's name and ml, or a Discovery set's vial ml. */
+/** A short line as the report says it: a fragrance's name and ml, or a Discovery set's names. */
 const shortIssue = (s: UzumShortLine): UzumImportIssue => ({
   row: null,
   column: null,
   code: 'stock_short',
   params:
     s.kind === 'discovery_set'
-      ? { set: s.ml, wanted: s.wanted, available: s.available }
+      ? {
+          setRu: s.set?.name.ru ?? '',
+          setUz: s.set?.name.uz ?? '',
+          wanted: s.wanted,
+          available: s.available,
+        }
       : { name: s.name ?? '', ml: s.ml, wanted: s.wanted, available: s.available },
 });
 
@@ -251,12 +260,26 @@ async function stockIssues(
     ),
   );
   const sets = new Map(
-    items.flatMap((i) => (i.kind === 'discovery_set' ? [[i.vialMl, i.available] as const] : [])),
+    items.flatMap((i) =>
+      i.kind === 'discovery_set'
+        ? [[i.key, { available: i.available, vialMl: i.vialMl, name: i.name }] as const]
+        : [],
+    ),
   );
   const stock = await readLiquidStock(tx, [
     ...new Set([...volumes.values()].map((v) => v.fragranceId)),
   ]);
   return shortLines(wanted, volumes, sets, stock).map(shortIssue);
+}
+
+/** Every Discovery set, hidden ones too (a box may still sell on Uzum), for the template and the plan. */
+async function readSets(tx: DbOrTx): Promise<UzumCatalogSet[]> {
+  return (await listDiscoverySets(tx)).map((r) => ({
+    key: r.key,
+    vialMl: asDiscoveryVialMl(r.vialMl),
+    nameRu: r.nameRu,
+    nameUz: r.nameUz,
+  }));
 }
 
 /** Every fragrance with its volumes, for the template and the plan. */

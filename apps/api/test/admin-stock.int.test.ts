@@ -148,7 +148,7 @@ describe('the rows', () => {
         { ml: 50, available: 19 },
       ],
     });
-    expect((await discoveryRow()).reserved).toBe(await reservedDiscovery(t.db, 10));
+    expect((await discoveryRow()).reserved).toBe(await reservedDiscovery(t.db, 'discovery'));
   });
 
   it('shows the oil in grams and in ml by the density, with its own level', async () => {

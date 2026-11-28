@@ -9,9 +9,9 @@ import { asc, fragrances, inArray, sql, type Db, type DbOrTx, type StaffRow } fr
 import { normalizeUzbek, stripApostrophes } from '@lummi/i18n';
 import { Inject, Injectable } from '@nestjs/common';
 import { belowReserve } from '../catalog/catalog.service';
-import { DISCOVERY_SETS, DISCOVERY_VIAL_MLS } from '@lummi/contracts/constants';
+import { asDiscoveryVialMl } from '@lummi/contracts/constants';
 import { giftSampleStock } from '../orders/gift-sample';
-import { loadDiscovery } from '../sets/sets';
+import { listDiscoverySets, withState } from '../sets/sets';
 import { readSettings } from '../settings/settings.service';
 import { isOwner } from '../staff/staff.guard';
 import { DB } from '../tokens';
@@ -60,11 +60,14 @@ export async function stockRows(
     ctx,
   );
   const sets: StockSetRow[] = [];
-  for (const vialMl of DISCOVERY_VIAL_MLS) {
-    const set = await loadDiscovery(db, vialMl);
+  // a hidden set keeps its row while it still holds boxes: they are in the warehouse
+  for (const row of await listDiscoverySets(db)) {
+    if (row.hidden && row.onHand === 0) continue;
+    const set = await withState(db, row);
     sets.push({
-      vialMl,
-      key: DISCOVERY_SETS[vialMl].key,
+      vialMl: asDiscoveryVialMl(row.vialMl),
+      key: row.key,
+      name: { ru: row.nameRu, uz: row.nameUz },
       onHand: set.row.onHand,
       reserved: set.reserved,
       available: set.available,

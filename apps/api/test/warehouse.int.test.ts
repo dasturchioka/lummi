@@ -21,6 +21,9 @@ import { shopper, slugs as slugsOf } from './harness/orders';
 import { concentrateUl, consumable, setConcentrateUl, setConsumable } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
+/** The two first sets' keys by vial ml (ADR 0044). */
+const keyOf = (vialMl: number) => (vialMl === 5 ? 'discovery-5' : 'discovery');
+
 /**
  * Seam 1 (ADR 0028): the warehouse (#76, ADR 0041, 0043) over HTTP. Amounts are worked out by hand
  * from the cost settings' defaults (oil 30 %, ethanol 70 %, density 1 g/ml, filling loss 3 %): a
@@ -80,7 +83,7 @@ async function receive(id: number, over: Partial<OilReceiptInput> = {}) {
 const mix = (id: number, ml: number, as = manager) =>
   as.client.admin.warehouse.mix({ params: { id }, body: { ml } });
 const assemble = (vialMl: 5 | 10, quantity: number, as = manager) =>
-  as.client.admin.warehouse.assembleSet({ params: { vialMl }, body: { quantity } });
+  as.client.admin.warehouse.assembleSet({ params: { key: keyOf(vialMl) }, body: { quantity } });
 /** The spirit on hand, ml. */
 async function setEthanol(ml: number) {
   await setConsumable(t, (await consumable(t, 'ethanol')).id, ml);
@@ -123,7 +126,12 @@ const formInput = (concentrateMl: number, loadedConcentrateMl?: number): Fragran
 });
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 const setOnHand = async (vialMl: number) =>
-  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
+  (
+    await t.db
+      .select()
+      .from(discoverySet)
+      .where(eq(discoverySet.key, keyOf(vialMl)))
+  )[0]!.onHand;
 
 describe('an oil receipt, then a mixing', () => {
   it('adds the grams to the oil, then takes the oil and spirit of the ml made into concentrate', async () => {
@@ -712,7 +720,7 @@ describe('the stock page', () => {
 
 describe('set assembly (ADR 0043)', () => {
   it("packs boxes from the five fragrances' concentrate, a flacon per vial, a move per fragrance", async () => {
-    const five = await readComposition(t.db, 10);
+    const five = await readComposition(t.db, 'discovery');
     expect(five).toHaveLength(5);
     const flacon = await consumable(t, 'flacon', 10);
     await setConsumable(t, flacon.id, 20);
@@ -753,7 +761,7 @@ describe('set assembly (ADR 0043)', () => {
   it('refuses when a fragrance is short of free concentrate, naming the first in the set; the reserve stays', async () => {
     await importBtsPoints(t.db, snapshot);
     await t.db.insert(settings).values({ key: 'giftSample.enabled', value: false });
-    const five = await readComposition(t.db, 10);
+    const five = await readComposition(t.db, 'discovery');
     // the third holds 15 ml
     await setConcentrateUl(t, five[2]!.id, 15_000);
     const before = await setOnHand(10);
@@ -805,7 +813,7 @@ describe('set assembly (ADR 0043)', () => {
   it('is refused while the set is not five (422)', async () => {
     await t.db
       .delete(discoverySetItems)
-      .where(and(eq(discoverySetItems.vialMl, 5), eq(discoverySetItems.position, 1)));
+      .where(and(eq(discoverySetItems.setKey, 'discovery-5'), eq(discoverySetItems.position, 1)));
     const res = await assemble(5, 1);
     expect(res.status === 422 && res.body).toMatchObject({ code: 'invalid' });
     const raw = await fetch(`${t.baseUrl}/admin/warehouse/sets/10/assemblies`, {

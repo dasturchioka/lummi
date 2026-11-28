@@ -199,9 +199,11 @@ import {
   adminSetsErrorSchema,
   builderSchema,
   discoveryQuerySchema,
-  discoveryVialMlSchema,
+  discoverySetListSchema,
   discoverySetInputSchema,
   discoverySetSchema,
+  newDiscoverySetSchema,
+  setKeySchema,
   setsErrorSchema,
 } from './sets';
 import {
@@ -483,13 +485,19 @@ export const contract = c.router({
     },
   },
   sets: {
+    list: {
+      method: 'GET',
+      path: '/sets',
+      responses: { 200: discoverySetListSchema, 401: setsErrorSchema },
+      summary: 'The Discovery sets on sale, in the owner order (ADR 0044)',
+    },
     discovery: {
       method: 'GET',
       path: '/sets/discovery',
       query: discoveryQuerySchema,
-      responses: { 200: discoverySetSchema, 401: setsErrorSchema },
+      responses: { 200: discoverySetSchema, 401: setsErrorSchema, 404: setsErrorSchema },
       summary:
-        'A Discovery set (`vialMl` 10, the default, or 5): price, its own availability, photo and its five fragrances',
+        'A Discovery set (`key`, the main one by default): name, price, its own availability, photo and its five fragrances; 404 for a hidden or unknown key',
     },
     builder: {
       method: 'GET',
@@ -521,9 +529,14 @@ export const contract = c.router({
       method: 'POST',
       path: '/cart/sets/discovery',
       body: addDiscoveryBodySchema,
-      responses: { 200: cartSchema, 401: addSetErrorSchema, 409: addSetErrorSchema },
+      responses: {
+        200: cartSchema,
+        401: addSetErrorSchema,
+        404: addSetErrorSchema,
+        409: addSetErrorSchema,
+      },
       summary:
-        'Add a Discovery set (`vialMl`, capped at its own stock); 409 sold_out when none is left',
+        'Add a Discovery set (`key`, capped at its own stock); 404 for a hidden or unknown set, 409 sold_out when none is left',
     },
     addBuilder: {
       method: 'POST',
@@ -1311,15 +1324,38 @@ const adminCore = c.router({
   },
 });
 
-/** Staff routes for the Discovery set (the builder shares its price). */
+/** Staff routes for the Discovery sets (the builder shares the main one's price). */
 const adminSets = c.router({
   sets: {
+    list: {
+      method: 'GET',
+      path: '/admin/sets',
+      responses: { 200: z.array(adminDiscoverySetSchema), 401: adminSetsErrorSchema },
+      summary: 'Staff: every Discovery set, hidden ones too, in the owner order (ADR 0044)',
+    },
+    create: {
+      method: 'POST',
+      path: '/admin/sets',
+      body: newDiscoverySetSchema,
+      responses: {
+        201: adminDiscoverySetSchema,
+        401: adminSetsErrorSchema,
+        403: adminSetsErrorSchema,
+        422: adminSetsErrorSchema,
+      },
+      summary:
+        'Owner only: a new Discovery set (ADR 0044) with its name, vial ml, price and five fragrances; no boxes yet (audited)',
+    },
     get: {
       method: 'GET',
       path: '/admin/sets/discovery',
       query: discoveryQuerySchema,
-      responses: { 200: adminDiscoverySetSchema, 401: adminSetsErrorSchema },
-      summary: 'Staff: a Discovery set (`vialMl`) with its own on hand, reserve and available',
+      responses: {
+        200: adminDiscoverySetSchema,
+        401: adminSetsErrorSchema,
+        404: adminSetsErrorSchema,
+      },
+      summary: 'Staff: a Discovery set (`key`) with its own on hand, reserve and available',
     },
     update: {
       method: 'PUT',
@@ -1330,10 +1366,11 @@ const adminSets = c.router({
         200: adminDiscoverySetSchema,
         401: adminSetsErrorSchema,
         403: adminSetsErrorSchema,
+        404: adminSetsErrorSchema,
         422: adminSetsErrorSchema,
       },
       summary:
-        "Owner only: a Discovery set's price (the 5 × 10 ml one's is the builder's too) and its five fragrances, in order (audited)",
+        "Owner only: a Discovery set's name, price (the main one's is the builder's too), whether it is on sale, and its five fragrances, in order (audited)",
     },
     setOnHand: {
       method: 'PATCH',
@@ -1343,6 +1380,7 @@ const adminSets = c.router({
       responses: {
         200: adminDiscoverySetSchema,
         401: adminSetsErrorSchema,
+        404: adminSetsErrorSchema,
         409: adminSetsErrorSchema,
       },
       summary: 'Owner and manager: boxes in the warehouse (audited); `expected` as for a volume',
@@ -2080,8 +2118,8 @@ const adminWarehouse = c.router({
     },
     assembleSet: {
       method: 'POST',
-      path: '/admin/warehouse/sets/:vialMl/assemblies',
-      pathParams: z.object({ vialMl: z.coerce.number().pipe(discoveryVialMlSchema) }),
+      path: '/admin/warehouse/sets/:key/assemblies',
+      pathParams: z.object({ key: setKeySchema }),
       body: setAssemblyBodySchema,
       responses: {
         201: setAssemblyResultSchema,

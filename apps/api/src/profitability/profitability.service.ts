@@ -1,6 +1,7 @@
 import {
   PROFITABILITY_VOLUMES,
   SET_SIZE,
+  MAIN_SET_KEY,
   SET_VIAL_ML,
   type ProfitabilityQuote,
   type ProfitabilityQuoteBody,
@@ -307,12 +308,12 @@ async function readShop(tx: DbOrTx): Promise<Shop> {
     // what the shop sells: the 5 ml never alone (ADR 0042)
     .where(sellableVolume())
     .orderBy(asc(volumes.ml));
-  // the page's set is the 5 × 10 ml Discovery set (#77)
-  const [set] = await tx.select().from(discoverySet).where(eq(discoverySet.vialMl, SET_VIAL_ML));
+  // the page's set is the main Discovery set, 5 × 10 ml (#77, ADR 0044)
+  const [set] = await tx.select().from(discoverySet).where(eq(discoverySet.key, MAIN_SET_KEY));
   const items = await tx
     .select({ fragranceId: discoverySetItems.fragranceId })
     .from(discoverySetItems)
-    .where(eq(discoverySetItems.vialMl, SET_VIAL_ML))
+    .where(eq(discoverySetItems.setKey, MAIN_SET_KEY))
     .orderBy(asc(discoverySetItems.position));
   const cost = await readCostSettings(tx);
   const s = await readSettings(tx, [

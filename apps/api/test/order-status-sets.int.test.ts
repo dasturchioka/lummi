@@ -119,7 +119,9 @@ describe('on hand through the status machine: sets (ADR 0009, 0010)', () => {
     const [event] = (
       await t.db.select().from(orderEvents).where(eq(orderEvents.orderId, id))
     ).filter((e) => e.action === 'hand_to_bts');
-    expect(event!.payload).toMatchObject({ stock: { sets: [{ id: 10, from: 5, to: 3 }] } });
+    expect(event!.payload).toMatchObject({
+      stock: { sets: [{ id: 'discovery', from: 5, to: 3 }] },
+    });
   });
 
   it('a builder handover lowers each of the five 10 ml by the set count', async () => {

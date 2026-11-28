@@ -1,7 +1,7 @@
 'use client';
 
 import { MAX_ON_HAND, type StockSetRow } from '@lummi/contracts';
-import { asDiscoveryVialMl } from '@lummi/contracts/constants';
+import type { Language } from '@lummi/i18n';
 import { Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { LevelTag, levelTone } from '@/components/stock-table';
@@ -21,15 +21,18 @@ import { useCount, type CountRow } from './use-count';
 export function SetsStock({
   rows,
   lowThreshold,
+  language,
   t,
 }: {
   rows: StockSetRow[];
   lowThreshold: number;
+  language: Language;
   t: AdminMessages;
 }) {
   const s = t.stock;
+  // each set by its own name (ADR 0044), its box size beside it
   const name = (r: StockSetRow) =>
-    `${s.discovery} ${fill(s.discoverySub, { ml: String(r.vialMl) })}`;
+    `${r.name[language]} · ${fill(s.discoverySub, { ml: String(r.vialMl) })}`;
   const countRow = (r: StockSetRow): CountRow => ({
     key: r.key,
     onHand: r.onHand,
@@ -38,9 +41,8 @@ export function SetsStock({
     max: MAX_ON_HAND,
   });
   const count = useCount(async (key, value, expected, reason) => {
-    const row = rows.find((r) => r.key === key)!;
     const res = await browserApi.sets.setOnHand({
-      query: { vialMl: asDiscoveryVialMl(row.vialMl) },
+      query: { key },
       body: { onHand: value, expected, reason },
     });
     if (res.status === 200) return { kind: 'saved' };

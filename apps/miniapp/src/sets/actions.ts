@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DiscoveryVialMl } from '@lummi/contracts/constants';
+import { MAIN_SET_KEY } from '@lummi/contracts/constants';
 import { setsMessages } from '@lummi/i18n/sets';
 import { CART_KEY } from '../cart/queries';
 import { api, unwrap } from '../lib/api';
@@ -23,10 +23,10 @@ export function useBuilder() {
   });
 }
 
-export function useAddDiscovery(vialMl: DiscoveryVialMl = 10) {
+export function useAddDiscovery(key: string = MAIN_SET_KEY) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => unwrap(await api.cart.addDiscovery({ body: { qty: 1, vialMl } }), 200),
+    mutationFn: async () => unwrap(await api.cart.addDiscovery({ body: { qty: 1, key } }), 200),
     onSuccess: (cart) => qc.setQueryData(CART_KEY, cart),
     // stock moved under the customer (409): show what is true now
     onError: () => void qc.invalidateQueries({ queryKey: DISCOVERY_KEY }),

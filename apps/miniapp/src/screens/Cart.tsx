@@ -308,7 +308,7 @@ function Line({
   onQty: (qty: number) => void;
   onRemove: () => void;
 }) {
-  const { t } = usePrefs();
+  const { t, language } = usePrefs();
   const s = useSetsText();
   const d = useDiscountsText();
   const router = useRouter();
@@ -358,7 +358,7 @@ function Line({
                   className={`type-name mt-px text-[18px] text-pretty [overflow-wrap:anywhere] ${out ? 'text-muted' : 'text-ink'}`}
                   data-testid="set-name"
                 >
-                  {line.kind === 'discovery_set' ? s.discovery[line.vialMl].line : s.lineBuilder}
+                  {line.kind === 'discovery_set' ? line.setName[language] : s.lineBuilder}
                 </p>
               </>
             )}

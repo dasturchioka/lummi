@@ -210,13 +210,13 @@ export function SalesStrip({
 // ---- the queue
 
 /** A stock row's name: a fragrance (its ready concentrate, ADR 0043), a Discovery set, or the gift samples' 5 ml. */
-export function stockLabel(item: HomeStockItem, copy: HomeCopy) {
+export function stockLabel(item: HomeStockItem, copy: HomeCopy, language: Language) {
   switch (item.kind) {
     // the gift sample's 5 ml stock (#79): all of it, or the chosen fragrance's
     case 'sample':
       return item.name === null ? copy.samples : fill(copy.sample, { name: item.name });
     case 'discovery':
-      return fill(copy.discoverySet, { ml: String(item.vialMl) });
+      return item.name[language];
     case 'fragrance':
       return item.name;
   }
@@ -244,7 +244,7 @@ export function QueueCard({
     if (key === 'stock') {
       const first = queues.stock.first;
       if (!first) return '—';
-      const item = stockLabel(first, copy);
+      const item = stockLabel(first, copy, language);
       return queues.stock.count > 1
         ? fill(copy.oldest.stockMore, { item, n: String(queues.stock.count - 1) })
         : fill(copy.oldest.stock, { item });

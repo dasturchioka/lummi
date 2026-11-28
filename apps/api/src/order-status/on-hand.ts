@@ -1,4 +1,4 @@
-import { asDiscoveryVialMl, type DiscoveryVialMl } from '@lummi/contracts/constants';
+import { FIVE_ML_SET_KEY, MAIN_SET_KEY } from '@lummi/contracts/constants';
 import { sql, type DbOrTx, type OrderLineRow } from '@lummi/db';
 import type { Actor } from '../audit/audit.service';
 import { lineFills } from '../catalog/catalog.service';
@@ -47,8 +47,9 @@ async function fillsOf(
   }));
 }
 
-/** A Discovery line's set: its `ml` is the set's vial size (ADR 0042). */
-const setOf = (l: OrderLineRow): DiscoveryVialMl => asDiscoveryVialMl(l.ml);
+/** A Discovery line's set: its key (ADR 0044); the migration gave every older line one. */
+const setOf = (l: OrderLineRow): string =>
+  l.setKey ?? (l.ml === 5 ? FIVE_ML_SET_KEY : MAIN_SET_KEY);
 
 /**
  * Locks the stock of every line of the order (the fragrances in ascending id, then the Discovery
@@ -72,16 +73,16 @@ export async function changeOnHand(
   const moved = await fillsOf(tx, orderId, move.lines);
   const locked = await lockStock(tx, {
     fragranceIds: all.map((f) => f.fragranceId),
-    setMls: lines.filter((l) => l.kind === 'discovery_set').map(setOf),
+    setKeys: lines.filter((l) => l.kind === 'discovery_set').map(setOf),
     links: linksOf(moved),
   });
-  const sets = new Map<DiscoveryVialMl, number>();
+  const sets = new Map<string, number>();
   for (const l of move.lines)
     if (l.kind === 'discovery_set') sets.set(setOf(l), (sets.get(setOf(l)) ?? 0) + l.qty);
   return applyStock(tx, locked, {
     fills: moved,
     sign: move.sign,
-    sets: [...sets].map(([vialMl, qty]) => ({ vialMl, change: move.sign * qty })),
+    sets: [...sets].map(([key, qty]) => ({ key, change: move.sign * qty })),
     move: { kind, actor, orderId },
     now,
   });

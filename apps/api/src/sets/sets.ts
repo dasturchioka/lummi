@@ -1,9 +1,4 @@
-import {
-  DISCOVERY_VIAL_MLS,
-  SET_SIZE,
-  SET_VIAL_ML,
-  type DiscoveryVialMl,
-} from '@lummi/contracts/constants';
+import { SET_SIZE, SET_VIAL_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -21,12 +16,12 @@ import {
 import { available, readLiquidStock } from '../catalog/catalog.service';
 
 /**
- * What is held back of a Discovery set's own stock: the units on its lines (a Discovery line's `ml`
- * is its vial size, ADR 0042) of orders that are neither handed to BTS nor cancelled
+ * What is held back of a Discovery set's own stock: the units on its lines (by `set_key`, ADR 0044)
+ * of orders that are neither handed to BTS nor cancelled
  * (`RESERVING_STATUSES`, ADR 0010). Like `reservedLiquid` for the fragrances (ADR 0043), the one place that knows, so
  * "available" is on hand minus reserve.
  */
-export async function reservedDiscovery(db: DbOrTx, vialMl: DiscoveryVialMl): Promise<number> {
+export async function reservedDiscovery(db: DbOrTx, key: string): Promise<number> {
   const statuses = sql.join(
     RESERVING_STATUSES.map((s) => sql`${s}`),
     sql`, `,
@@ -34,35 +29,49 @@ export async function reservedDiscovery(db: DbOrTx, vialMl: DiscoveryVialMl): Pr
   const { rows } = await db.execute<{ reserved: string | null }>(sql`
     select sum(ol.qty) as reserved
     from order_lines ol join orders o on o.id = ol.order_id
-    where o.status in (${statuses}) and ol.kind = 'discovery_set' and ol.ml = ${vialMl}`);
+    where o.status in (${statuses}) and ol.kind = 'discovery_set' and ol.set_key = ${key}`);
   return Number(rows[0]?.reserved ?? 0);
 }
 
-/** A Discovery set's row. The migrations insert both, so it always exists. */
+/** A Discovery set's row, hidden or not; null for a key no set has. */
+export async function findDiscoverySet(
+  db: DbOrTx,
+  key: string,
+  lock = false,
+): Promise<DiscoverySetRow | null> {
+  const q = db.select().from(discoverySet).where(eq(discoverySet.key, key));
+  const [row] = await (lock ? q.for('update') : q);
+  return row ?? null;
+}
+
+/** A Discovery set's row that must exist (a stored line's, or the main one the migrations insert). */
 export async function readDiscoverySet(
   db: DbOrTx,
-  vialMl: DiscoveryVialMl,
+  key: string,
   lock = false,
 ): Promise<DiscoverySetRow> {
-  const q = db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl));
-  const [row] = await (lock ? q.for('update') : q);
-  if (!row) throw new Error(`discovery_set ${vialMl} ml row missing: run the migrations`);
+  const row = await findDiscoverySet(db, key, lock);
+  if (!row) throw new Error(`discovery_set ${key} row missing`);
   return row;
 }
 
+/** Every Discovery set, hidden ones too, in the owner's order (ADR 0044). */
+export async function listDiscoverySets(db: DbOrTx): Promise<DiscoverySetRow[]> {
+  return db.select().from(discoverySet).orderBy(asc(discoverySet.position), asc(discoverySet.key));
+}
+
 /**
- * Locks the rows of the given Discovery sets `FOR UPDATE` in ascending vial ml, after the
- * fragrances (ADR 0043): the order every checkout, handover, Uzum sale and assembly takes them in,
- * so none waits on another. The rows as they are under the lock. The one place that takes it.
+ * Locks the rows of the given Discovery sets `FOR UPDATE` in ascending key, after the fragrances
+ * (ADR 0043): the order every checkout, handover, Uzum sale and assembly takes them in, so none
+ * waits on another. The rows as they are under the lock. The one place that takes it.
  */
 export async function lockDiscoverySets(
   db: DbOrTx,
-  vialMls: Iterable<DiscoveryVialMl>,
-): Promise<Map<DiscoveryVialMl, DiscoverySetRow>> {
-  const asked = [...vialMls];
-  const wanted = DISCOVERY_VIAL_MLS.filter((ml) => asked.includes(ml)).sort((a, b) => a - b);
-  const out = new Map<DiscoveryVialMl, DiscoverySetRow>();
-  for (const ml of wanted) out.set(ml, await readDiscoverySet(db, ml, true));
+  keys: Iterable<string>,
+): Promise<Map<string, DiscoverySetRow>> {
+  const wanted = [...new Set(keys)].sort();
+  const out = new Map<string, DiscoverySetRow>();
+  for (const key of wanted) out.set(key, await readDiscoverySet(db, key, true));
   return out;
 }
 
@@ -77,10 +86,7 @@ export interface SetFragranceRow {
 }
 
 /** A Discovery set's composition in the owner's order. */
-export async function readComposition(
-  db: DbOrTx,
-  vialMl: DiscoveryVialMl,
-): Promise<SetFragranceRow[]> {
+export async function readComposition(db: DbOrTx, key: string): Promise<SetFragranceRow[]> {
   return db
     .select({
       id: fragrances.id,
@@ -93,7 +99,7 @@ export async function readComposition(
     })
     .from(discoverySetItems)
     .innerJoin(fragrances, eq(fragrances.id, discoverySetItems.fragranceId))
-    .where(eq(discoverySetItems.vialMl, vialMl))
+    .where(eq(discoverySetItems.setKey, key))
     .orderBy(asc(discoverySetItems.position));
 }
 
@@ -110,11 +116,11 @@ export function discoveryAvailable(
 }
 
 export interface DiscoveryState {
-  vialMl: DiscoveryVialMl;
+  key: string;
   row: DiscoverySetRow;
   composition: SetFragranceRow[];
   reserved: number;
-  /** Own on hand minus own reserve; 0 while the composition is not five fragrances. */
+  /** Own on hand minus own reserve; 0 while the composition is not five fragrances. A hidden set's boxes still count here (Uzum, the stock page); the shop refuses it on its own. */
   available: number;
 }
 
@@ -125,16 +131,21 @@ export interface DiscoveryState {
  */
 export async function loadDiscovery(
   db: DbOrTx,
-  vialMl: DiscoveryVialMl,
+  key: string,
   opts: { lock?: boolean } = {},
 ): Promise<DiscoveryState> {
-  const row = await readDiscoverySet(db, vialMl, opts.lock);
+  const row = await readDiscoverySet(db, key, opts.lock);
+  return withState(db, row);
+}
+
+/** `loadDiscovery` for a row in hand. */
+export async function withState(db: DbOrTx, row: DiscoverySetRow): Promise<DiscoveryState> {
   const [composition, reserved] = await Promise.all([
-    readComposition(db, vialMl),
-    reservedDiscovery(db, vialMl),
+    readComposition(db, row.key),
+    reservedDiscovery(db, row.key),
   ]);
   return {
-    vialMl,
+    key: row.key,
     row,
     composition,
     reserved,

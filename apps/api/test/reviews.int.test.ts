@@ -735,6 +735,7 @@ describe('the product card block', () => {
       orderId: o.id,
       position: 5,
       kind: 'discovery_set',
+      setKey: 'discovery',
       nameRu: 'Discovery set',
       nameUz: 'Discovery set',
       ml: 10,

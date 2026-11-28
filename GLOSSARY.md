@@ -49,11 +49,11 @@ Five different fragrances sold as one item at one price: a Discovery set (5 × 1
 _Avoid_: Kit, bundle, sampler, gift box
 
 **Discovery set**:
-A ready-made set whose five fragrances the owner chooses; a pre-packed box. There are two, told apart by the ml of their vials: «Discovery set» (5 × 10 ml) and «Discovery set 5 × 5 мл», each with its own price, photo, composition and stock.
+A ready-made set whose five fragrances the owner chooses; a pre-packed box of 5 × 10 ml or 5 × 5 ml, each with its own key, name (RU/UZ), price, photo, composition and stock. The owner adds as many as he likes (ADR 0044); the **main set** («Discovery set», key `discovery`) is never hidden and its price is the builder set's. A hidden set is off sale in the shop, its boxes and history kept.
 _Avoid_: Starter set, sample set
 
 **Builder set**:
-A set whose five fragrances the customer picks, 10 ml each; priced the same as the 5 × 10 ml Discovery set.
+A set whose five fragrances the customer picks, 10 ml each; priced the same as the main Discovery set.
 _Avoid_: Custom set, own set
 
 ### Stock

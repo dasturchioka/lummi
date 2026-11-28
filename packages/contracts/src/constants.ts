@@ -88,51 +88,29 @@ export const SET_SIZE = 5;
 /** The ml of a builder set's vials and of the first Discovery set, «Discovery Set 5×10 мл» (ADR 0009). */
 export const SET_VIAL_ML = 10;
 /**
- * The Discovery sets by the ml of their vials (ADR 0042): «Discovery Set 5×10 мл» and «Discovery
- * Set 5×5 мл». Each is its own product with its own price, photo, composition and stock.
+ * The ml of a Discovery set's five vials (ADR 0042): 10 or 5. Every set, the two first and the
+ * ones the owner adds (ADR 0044), is one of these, with its own price, photo, composition and stock.
  */
 export const DISCOVERY_VIAL_MLS = [10, 5] as const;
 export type DiscoveryVialMl = (typeof DISCOVERY_VIAL_MLS)[number];
 
 /**
- * What tells the two Discovery sets apart, in one place for every caller (ADR 0042); their texts
- * are the i18n `sets.discovery[vialMl]`, keyed the same way.
+ * A Discovery set's key (ADR 0044): what names it everywhere, the Mini App route `/sets/<key>`, the
+ * stock row, the audit target and the photo slot. The two first keep theirs: `discovery`, the main
+ * «Discovery set» (5 × 10 ml), and `discovery-5` (5 × 5 ml); the owner's new ones are `set-<n>`.
  */
-export interface DiscoverySetFacts {
-  vialMl: DiscoveryVialMl;
-  /**
-   * Its key: the stock page's row, the audit target, the photo slot. The 5 × 10 ml set keeps the
-   * one it had before the 5 × 5 ml set came (#79).
-   */
-  key: 'discovery' | 'discovery-5';
-  /** Its Mini App screen. */
-  route: '/sets/discovery' | '/sets/discovery-5';
-  /** Its «Купить сейчас» item text (`@lummi/contracts/buy-now`). */
-  buyNow: 'discovery_set' | 'discovery_set:5';
-  /** The heart, the share link and the reviews block: the 5 × 10 ml set's only, for now. */
-  extras: boolean;
-}
-export const DISCOVERY_SETS: Readonly<Record<DiscoveryVialMl, DiscoverySetFacts>> = {
-  10: {
-    vialMl: 10,
-    key: 'discovery',
-    route: '/sets/discovery',
-    buyNow: 'discovery_set',
-    extras: true,
-  },
-  5: {
-    vialMl: 5,
-    key: 'discovery-5',
-    route: '/sets/discovery-5',
-    buyNow: 'discovery_set:5',
-    extras: false,
-  },
-};
+export const SET_KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The main set: never hidden; its price is the builder set's, and it alone has the heart, the share link, the reviews block and a promo gift. */
+export const MAIN_SET_KEY = 'discovery';
+/** The 5 × 5 ml set the migration found (ADR 0042); `discovery_set:5` still buys it. */
+export const FIVE_ML_SET_KEY = 'discovery-5';
+/** A set's Mini App screen. */
+export const setRoute = (key: string): string => `/sets/${key}`;
 
-/** A stored vial ml as the Discovery set it names; the DB allows no other, so anything else throws. */
+/** A stored vial ml as the size it is; the DB allows no other, so anything else throws. */
 export function asDiscoveryVialMl(ml: number | null): DiscoveryVialMl {
   const found = DISCOVERY_VIAL_MLS.find((v) => v === ml);
-  if (found === undefined) throw new Error(`no Discovery set of ${ml} ml vials`);
+  if (found === undefined) throw new Error(`no Discovery set vial of ${ml} ml`);
   return found;
 }
 /**

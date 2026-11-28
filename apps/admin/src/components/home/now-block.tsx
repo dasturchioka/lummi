@@ -194,7 +194,7 @@ export function nowContent(data: AdminHome, copy: HomeCopy, language: Language):
         primary: order(now.number),
       };
     case 'stock': {
-      const item = stockLabel(now.item, copy);
+      const item = stockLabel(now.item, copy, language);
       // each kind in its own unit (ADR 0043): concentrate in ml, boxes and samples in pieces
       const concentrate = now.item.kind === 'fragrance';
       const title =

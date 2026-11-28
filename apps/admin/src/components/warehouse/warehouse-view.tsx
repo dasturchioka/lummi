@@ -901,12 +901,12 @@ function shortText(m: StockMove, language: Language, w: W): string | null {
 }
 
 /** Where it came from: the order, the Uzum order, the set, the invoice, where a count was typed, a note. */
-function documentText(m: StockMove, w: W): string | null {
+function documentText(m: StockMove, w: W, language: Language): string | null {
   if (m.orderNumber !== null) return fill(w.order, { number: String(m.orderNumber) });
   if (m.uzumOrder !== null) return fill(w.uzumOrder, { number: m.uzumOrder });
   // a set bottling (#79) or assembly (ADR 0043): that set's boxes
   if (m.set !== null)
-    return fill(w.setBottling, { ml: String(m.set.vialMl), qty: String(m.set.quantity) });
+    return fill(w.setBottling, { name: m.set.name[language], qty: String(m.set.quantity) });
   if (m.invoice !== null) return [m.supplier, m.invoice].filter(Boolean).join(', ');
   if (m.source !== null) return w.sources[m.source];
   return m.note;
@@ -937,7 +937,7 @@ export function HistoryList({
       consumablesText(m.consumables, language) || null,
     ].filter(Boolean);
   const notes = (m: StockMove) =>
-    [documentText(m, w), m.reason, shortText(m, language, w)].filter(Boolean);
+    [documentText(m, w, language), m.reason, shortText(m, language, w)].filter(Boolean);
   return (
     <>
       {/* phones and dialogs: one block per move */}
@@ -979,7 +979,7 @@ export function HistoryList({
             </THead>
             <TBody>
               {history.map((m) => {
-                const doc = documentText(m, w);
+                const doc = documentText(m, w, language);
                 const consumed = consumablesText(m.consumables, language);
                 const short = shortText(m, language, w);
                 return (

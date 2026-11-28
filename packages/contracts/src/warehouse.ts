@@ -254,8 +254,15 @@ export const stockMoveSchema = z.object({
   orderNumber: z.number().int().nullable(),
   /** Uzum's order number, for `uzum_sale` and `uzum_sale_voided` (#80). */
   uzumOrder: z.string().nullable(),
-  /** A set bottling's or assembly's set (its vial ml) and boxes; null for every other move. */
-  set: z.object({ vialMl: z.number().int(), quantity: z.number().int() }).nullable(),
+  /** A set bottling's or assembly's set (its key, name and vial ml) and boxes; null for every other move. */
+  set: z
+    .object({
+      key: z.string(),
+      name: z.object({ ru: z.string(), uz: z.string() }),
+      vialMl: z.number().int(),
+      quantity: z.number().int(),
+    })
+    .nullable(),
   /**
    * Where a `correction` came from: the stock page, the fragrance form, the Excel import, or the
    * migration that folded the bottles into concentrate (ADR 0043).

@@ -23,6 +23,9 @@ import type { TestUser } from './harness/sign-init-data';
 import { concentrateUl, consumable, FILL_UL, setConsumable, stockBottles } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
+/** The two first sets' keys by vial ml (ADR 0044). */
+const keyOf = (vialMl: number) => (vialMl === 5 ? 'discovery-5' : 'discovery');
+
 /**
  * Seam 1 (ADR 0028): Uzum sales (#80) over HTTP. A sale fills its bottles from the ready
  * concentrate at once (ADR 0043: 10 ml takes 10.3 ml, a flacon and a box) and freezes its profit on
@@ -113,7 +116,12 @@ async function page(id: number): Promise<WarehouseFragrance> {
 const tens = async (fragranceId: number) => (await concentrateUl(t, fragranceId)) / FILL_UL[10];
 const items = async (use: 'flacon' | 'box', ml: number) => (await consumable(t, use, ml)).onHand;
 const setOnHand = async (vialMl: number) =>
-  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
+  (
+    await t.db
+      .select()
+      .from(discoverySet)
+      .where(eq(discoverySet.key, keyOf(vialMl)))
+  )[0]!.onHand;
 const audits = (action: string) => t.db.select().from(auditLog).where(eq(auditLog.action, action));
 
 describe('recording an Uzum sale', () => {
@@ -208,8 +216,8 @@ describe('recording an Uzum sale', () => {
     const res = await recorded(
       sale({
         lines: [
-          { kind: 'discovery_set', vialMl: 10, qty: 1, price: 299_000 },
-          { kind: 'discovery_set', vialMl: 5, qty: 2, price: 99_000 },
+          { kind: 'discovery_set', key: 'discovery', qty: 1, price: 299_000 },
+          { kind: 'discovery_set', key: 'discovery-5', qty: 2, price: 99_000 },
         ],
       }),
     );
@@ -249,21 +257,46 @@ describe('recording an Uzum sale', () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
     await t.db
       .delete(discoverySetItems)
-      .where(and(eq(discoverySetItems.vialMl, 5), eq(discoverySetItems.position, 1)));
+      .where(and(eq(discoverySetItems.setKey, 'discovery-5'), eq(discoverySetItems.position, 1)));
 
     const list = await manager.client.admin.uzum.list({ query: {} });
     const sets =
       list.status === 200 ? list.body.items.filter((i) => i.kind === 'discovery_set') : [];
     expect(sets).toEqual([
-      { kind: 'discovery_set', vialMl: 10, available: 3 },
-      { kind: 'discovery_set', vialMl: 5, available: 0 },
+      {
+        kind: 'discovery_set',
+        key: 'discovery',
+        vialMl: 10,
+        name: { ru: 'Discovery set', uz: 'Discovery set' },
+        hidden: false,
+        available: 3,
+      },
+      {
+        kind: 'discovery_set',
+        key: 'discovery-5',
+        vialMl: 5,
+        name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+        hidden: false,
+        available: 0,
+      },
     ]);
     const res = await record(
-      sale({ lines: [{ kind: 'discovery_set', vialMl: 5, qty: 1, price: 99_000 }] }),
+      sale({ lines: [{ kind: 'discovery_set', key: 'discovery-5', qty: 1, price: 99_000 }] }),
     );
     expect(res.status).toBe(409);
     expect(res.status === 409 && res.body.short).toEqual([
-      { kind: 'discovery_set', volumeId: null, name: null, ml: 5, wanted: 1, available: 0 },
+      {
+        kind: 'discovery_set',
+        volumeId: null,
+        name: null,
+        ml: 5,
+        set: {
+          key: 'discovery-5',
+          name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+        },
+        wanted: 1,
+        available: 0,
+      },
     ]);
     expect(await setOnHand(5)).toBe(3);
   });
@@ -297,7 +330,15 @@ describe('recording an Uzum sale', () => {
     expect(res.status === 409 && res.body).toEqual({
       code: 'stock_short',
       short: [
-        { kind: 'volume', volumeId: A.vol[10]!, name: A.name, ml: 10, wanted: 2, available: 1 },
+        {
+          kind: 'volume',
+          volumeId: A.vol[10]!,
+          name: A.name,
+          ml: 10,
+          set: null,
+          wanted: 2,
+          available: 1,
+        },
       ],
     });
     expect(await tens(A.id)).toBe(2);
@@ -325,7 +366,15 @@ describe('recording an Uzum sale', () => {
     expect(three.status === 409 && three.body).toEqual({
       code: 'stock_short',
       short: [
-        { kind: 'volume', volumeId: A.vol[10]!, name: A.name, ml: 10, wanted: 3, available: 2 },
+        {
+          kind: 'volume',
+          volumeId: A.vol[10]!,
+          name: A.name,
+          ml: 10,
+          set: null,
+          wanted: 3,
+          available: 2,
+        },
       ],
     });
     const two = await recorded(
@@ -418,7 +467,7 @@ describe('voiding an Uzum sale', () => {
   it("brings the Discovery set's boxes back to its own stock", async () => {
     await t.db.update(discoverySet).set({ onHand: 3 });
     const s = await recorded(
-      sale({ lines: [{ kind: 'discovery_set', vialMl: 10, qty: 2, price: 299_000 }] }),
+      sale({ lines: [{ kind: 'discovery_set', key: 'discovery', qty: 2, price: 299_000 }] }),
     );
     expect(await setOnHand(10)).toBe(1);
     await voidSale(s.id);

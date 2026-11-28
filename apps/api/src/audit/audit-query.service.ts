@@ -11,6 +11,7 @@ import {
   desc,
   eq,
   consumables,
+  discoverySet,
   fragrances,
   inArray,
   orderLines,
@@ -111,8 +112,8 @@ export class AuditQueryService {
 
   /**
    * Names for the targets that have one, in one query per kind for the whole page: a banner's
-   * titles (RU and UZ), a fragrance's name, the fragrance a volume belongs to, and a consumable's
-   * names (ADR 0043). A deleted row has none.
+   * titles (RU and UZ), a fragrance's name, the fragrance a volume belongs to, a consumable's
+   * names (ADR 0043) and a Discovery set's (ADR 0044). A deleted row has none.
    */
   async targetNames(rows: { targetType: string; targetId: string | null }[]) {
     const ids = (type: string) => [
@@ -152,6 +153,20 @@ export class AuditQueryService {
         .from(consumables)
         .where(inArray(consumables.id, items)))
         out.set(`consumable:${c.id}`, { ru: c.ru, uz: c.uz });
+    // a Discovery set by its key (ADR 0044): its own names
+    const setKeys = [
+      ...new Set(
+        rows.flatMap((r) =>
+          r.targetType === 'discovery_set' && r.targetId !== null ? [r.targetId] : [],
+        ),
+      ),
+    ];
+    if (setKeys.length)
+      for (const d of await this.db
+        .select({ key: discoverySet.key, ru: discoverySet.nameRu, uz: discoverySet.nameUz })
+        .from(discoverySet)
+        .where(inArray(discoverySet.key, setKeys)))
+        out.set(`discovery_set:${d.key}`, { ru: d.ru, uz: d.uz });
     return out;
   }
 

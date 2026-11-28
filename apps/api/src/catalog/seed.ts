@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DISCOVERY_VIAL_MLS, SET_SIZE } from '@lummi/contracts/constants';
+import { FIVE_ML_SET_KEY, MAIN_SET_KEY, SET_SIZE } from '@lummi/contracts/constants';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -92,16 +92,17 @@ export interface SeedOptions {
  */
 async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<void> {
   if (fragranceIds.length < SET_SIZE) return;
-  for (const vialMl of DISCOVERY_VIAL_MLS) {
+  // the two the migrations insert; the owner's own sets (ADR 0044) are never seeded
+  for (const key of [MAIN_SET_KEY, FIVE_ML_SET_KEY]) {
     const [has] = await tx
       .select()
       .from(discoverySetItems)
-      .where(eq(discoverySetItems.vialMl, vialMl))
+      .where(eq(discoverySetItems.setKey, key))
       .limit(1);
     if (has) continue;
     await tx.insert(discoverySetItems).values(
       fragranceIds.slice(0, SET_SIZE).map((fragranceId, i) => ({
-        vialMl,
+        setKey: key,
         position: i + 1,
         fragranceId,
       })),
@@ -111,7 +112,7 @@ async function seedDiscoverySet(tx: DbOrTx, fragranceIds: number[]): Promise<voi
       .set({ onHand: PLACEHOLDER_DISCOVERY_ON_HAND, isPlaceholder: true })
       .where(
         and(
-          eq(discoverySet.vialMl, vialMl),
+          eq(discoverySet.key, key),
           eq(discoverySet.onHand, 0),
           eq(discoverySet.isPlaceholder, true),
         ),

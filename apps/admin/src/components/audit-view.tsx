@@ -14,7 +14,7 @@ import { TBody, TD, TH, THead, TR, Table } from '@/components/ui/table';
 import type { AdminMessages } from '@/lib/i18n';
 import { displayValue, formatTashkent, num, pick } from '@/lib/setting-copy';
 import { describeInput } from '@/lib/setting-input';
-import { describeAudit, discoverySetOf, humanise } from '@/lib/audit-describe';
+import { describeAudit, humanise } from '@/lib/audit-describe';
 import { fill } from '@/lib/utils';
 
 export type { AuditFilters };
@@ -57,9 +57,6 @@ function Target({ t, language, e }: { t: AdminMessages; language: Language; e: A
     return <>{pick(settingMeta(e.targetId).label, language)}</>;
   }
   if (e.targetType === 'staff') return <>{e.targetName ?? t.audit.actors.unknownStaff}</>;
-  // a Discovery set by its own name («Discovery set 5 × 5 мл»), never its key
-  const set = discoverySetOf(e);
-  if (set !== null) return <>{fill(t.sets.setTitle, { ml: String(set) })}</>;
   // a promo code by its code, which every promo entry carries (a deleted one has no page to open)
   if (e.targetType === 'promo_code' && typeof e.payload.code === 'string')
     return (

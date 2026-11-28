@@ -305,22 +305,22 @@ const SOLD_FIVE = ['symphony', 'tygar', 'ink-mark', 'power-of-you', 'rain-tea'];
 const FILL_UL: Record<number, number> = { 5: 5150, 10: 10300, 30: 30900, 50: 51500 };
 const concentrateSql = `update fragrances set concentrate_ul = $2 where slug = any($1)`;
 async function worstSets(db: ShotDb) {
-  await db.query('update discovery_set set price = 1250000, on_hand = 120 where vial_ml = 10');
-  await db.query('delete from discovery_set_items where vial_ml = 10');
+  await db.query("update discovery_set set price = 1250000, on_hand = 120 where key = 'discovery'");
+  await db.query("delete from discovery_set_items where set_key = 'discovery'");
   await db.query(
-    `insert into discovery_set_items (vial_ml, position, fragrance_id)
-     select 10, i, (select id from fragrances where slug = ($1::text[])[i])
+    `insert into discovery_set_items (set_key, position, fragrance_id)
+     select 'discovery', i, (select id from fragrances where slug = ($1::text[])[i])
      from generate_subscripts($1::text[], 1) as i`,
     [LONG_FIVE],
   );
   await db.query(concentrateSql, [LONG_FIVE, 120 * FILL_UL[10]!]);
 }
 async function bestSets(db: ShotDb) {
-  await db.query('update discovery_set set price = 299000, on_hand = 10 where vial_ml = 10');
-  await db.query('delete from discovery_set_items where vial_ml = 10');
+  await db.query("update discovery_set set price = 299000, on_hand = 10 where key = 'discovery'");
+  await db.query("delete from discovery_set_items where set_key = 'discovery'");
   await db.query(
-    `insert into discovery_set_items (vial_ml, position, fragrance_id)
-     select 10, row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
+    `insert into discovery_set_items (set_key, position, fragrance_id)
+     select 'discovery', row_number() over (order by id), id from (select id from fragrances order by id limit 5) f`,
   );
   for (const slug of [...LONG_FIVE, ...SOLD_FIVE]) await db.restore(slug);
 }
@@ -3741,10 +3741,10 @@ function upgradeRightScreens(): ScreenDef[] {
     await chooseCity(api);
     await clearOrders(db);
     await db.query('update discovery_set set on_hand = 10');
-    await db.query('delete from discovery_set_items');
+    await db.query("delete from discovery_set_items where set_key = 'discovery'");
     await db.query(
-      `insert into discovery_set_items (position, fragrance_id)
-       select i, (select id from fragrances where slug = ($1::text[])[i])
+      `insert into discovery_set_items (set_key, position, fragrance_id)
+       select 'discovery', i, (select id from fragrances where slug = ($1::text[])[i])
        from generate_subscripts($1::text[], 1) as i`,
       [RIGHT_FIVE],
     );

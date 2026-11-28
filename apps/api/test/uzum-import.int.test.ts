@@ -97,9 +97,7 @@ describe('the template', () => {
       .map((v) => String(v));
     expect(names).toContain(A.name);
     // both Discovery sets (ADR 0042); a fragrance's 5 ml is never sold alone, so never listed
-    expect(names).toEqual(
-      expect.arrayContaining(['Discovery set 5 × 10 мл', 'Discovery set 5 × 5 мл']),
-    );
+    expect(names).toEqual(expect.arrayContaining(['Discovery set', 'Discovery set 5 × 5 мл']));
     const rows = wb.getWorksheet('Ароматы')!.getSheetValues() as unknown[][];
     expect(rows.find((r) => r?.[1] === A.name)?.[2]).toBe('10, 30, 50');
   });

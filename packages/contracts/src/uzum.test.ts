@@ -13,7 +13,11 @@ describe('the Uzum link rule', () => {
   });
 
   it('is the same rule for the set and the fragrance', () => {
-    const set = { price: 1000, composition: [1, 2, 3, 4, 5] };
+    const set = {
+      name: { ru: 'Discovery set', uz: 'Discovery set' },
+      price: 1000,
+      composition: [1, 2, 3, 4, 5],
+    };
     expect(discoverySetInputSchema.safeParse({ ...set, uzumUrl: 'http://uzum.uz' }).success).toBe(
       false,
     );

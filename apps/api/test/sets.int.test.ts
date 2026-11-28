@@ -13,6 +13,8 @@ import { moveCartData } from '../src/cart/move-cart';
 import { concentrateUl, FILL_UL, stockBottles } from './harness/stock';
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 
+const MAIN_NAME = { ru: 'Discovery set', uz: 'Discovery set' };
+
 let t: TestApp;
 let owner: StaffSession;
 let manager: StaffSession;
@@ -253,7 +255,7 @@ describe('the builder', () => {
     await client.cart.addDiscovery({ body: { qty: 1 } });
     const ids = (await owner.client.admin.sets.get()).body as { composition: { id: number }[] };
     const res = await owner.client.admin.sets.update({
-      body: { price: 250_000, composition: ids.composition.map((c) => c.id) },
+      body: { name: MAIN_NAME, price: 250_000, composition: ids.composition.map((c) => c.id) },
     });
     expect(res.status).toBe(200);
     const cart = await client.cart.get();
@@ -274,12 +276,12 @@ describe('admin: the Discovery set', () => {
     const got = await owner.client.admin.sets.get();
     const ids = (got.body as { composition: { id: number }[] }).composition.map((c) => c.id);
     const denied = await manager.client.admin.sets.update({
-      body: { price: 100_000, composition: ids },
+      body: { name: MAIN_NAME, price: 100_000, composition: ids },
     });
     expect(denied.status).toBe(403);
     const reordered = [...ids].reverse();
     const ok = await owner.client.admin.sets.update({
-      body: { price: 310_000, composition: reordered },
+      body: { name: MAIN_NAME, price: 310_000, composition: reordered },
     });
     expect(ok.status).toBe(200);
     expect(ok.status === 200 && ok.body.composition.map((c) => c.id)).toEqual(reordered);
@@ -299,7 +301,7 @@ describe('admin: the Discovery set', () => {
         await fetch(`${t.baseUrl}/admin/sets/discovery`, {
           method: 'PUT',
           headers: { cookie: owner.cookie, 'content-type': 'application/json' },
-          body: JSON.stringify({ price: 299_000, composition: ids, uzumUrl }),
+          body: JSON.stringify({ name: MAIN_NAME, price: 299_000, composition: ids, uzumUrl }),
         })
       ).status;
     const { client } = await t.signIn(ali);
@@ -313,7 +315,7 @@ describe('admin: the Discovery set', () => {
     });
     // a save without the field keeps the link; an empty one clears it
     const kept = await owner.client.admin.sets.update({
-      body: { price: 299_000, composition: ids },
+      body: { name: MAIN_NAME, price: 299_000, composition: ids },
     });
     expect(kept.status === 200 && kept.body.uzumUrl).toBe(
       'https://uzum.uz/product/lummi-discovery',
@@ -330,7 +332,7 @@ describe('admin: the Discovery set', () => {
         await fetch(`${t.baseUrl}/admin/sets/discovery`, {
           method: 'PUT',
           headers: { cookie: owner.cookie, 'content-type': 'application/json' },
-          body: JSON.stringify({ price: 1000, composition }),
+          body: JSON.stringify({ name: MAIN_NAME, price: 1000, composition }),
         })
       ).status;
     expect(await send([ids[0]!, ids[0]!, ids[1]!, ids[2]!, ids[3]!])).toBe(400);
@@ -474,7 +476,7 @@ describe('admin: the not-for-sale rule and the placeholder flag', () => {
     expect(got.status === 200 && got.body.isPlaceholder).toBe(true);
     const ids = (got.body as { composition: { id: number }[] }).composition.map((c) => c.id);
     const res = await owner.client.admin.sets.update({
-      body: { price: 299_000, composition: ids },
+      body: { name: MAIN_NAME, price: 299_000, composition: ids },
     });
     expect(res.status === 200 && res.body.isPlaceholder).toBe(false);
   });

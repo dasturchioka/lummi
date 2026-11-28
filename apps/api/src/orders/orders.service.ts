@@ -14,7 +14,7 @@ import {
   type OrdersPageDto,
   type PromoGiftItem,
 } from '@lummi/contracts';
-import { SET_VIAL_ML, type DiscoveryVialMl } from '@lummi/contracts/constants';
+import { MAIN_SET_KEY, SET_VIAL_ML } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -332,10 +332,10 @@ export class OrdersService {
         ...wanted.flatMap((w) => (w.kind === 'builder_set' ? (w.fragranceIds ?? []) : [])),
         ...(sample ? [sample.fragranceId] : []),
       ]);
-      // then each Discovery set a line holds (a gift code's is the 5 × 10 ml one), in ascending vial ml
+      // then each Discovery set a line holds (a gift code's is the main one), in ascending key
       await lockDiscoverySets(tx, [
-        ...wanted.flatMap((w) => (w.kind === 'discovery_set' && w.vialMl ? [w.vialMl] : [])),
-        ...(promoGift?.kind === 'discovery_set' ? [SET_VIAL_ML as DiscoveryVialMl] : []),
+        ...wanted.flatMap((w) => (w.kind === 'discovery_set' && w.setKey ? [w.setKey] : [])),
+        ...(promoGift?.kind === 'discovery_set' ? [MAIN_SET_KEY] : []),
       ]);
       // The entered promo code's row last (ADR 0005): a concurrent order for its last use waits
       // here, then the quote below counts the use the first one held. A buy-now order never uses
@@ -479,16 +479,15 @@ export class OrdersService {
               };
             // A set line (ADR 0009): its five fragrances as bought. A builder set also records the
             // five 10 ml volumes its reserve takes one of each from; a Discovery set holds none
-            // (its own stock is its reserve), its `ml` is its vial size (ADR 0042) and its
-            // snapshot is the composition alone.
-            const name = (t: typeof dictionaries.ru.sets) =>
-              l.kind === 'discovery_set' ? t.discovery[l.vialMl].line : t.lineBuilder;
+            // (its own stock is its reserve), its `ml` is its vial size (ADR 0042), its key names
+            // it and its name is the owner's of the day (ADR 0044); the snapshot is the composition.
             return {
               ...base,
               kind: l.kind,
-              nameRu: name(dictionaries.ru.sets),
-              nameUz: name(dictionaries.uz.sets),
+              nameRu: l.kind === 'discovery_set' ? l.setName.ru : dictionaries.ru.sets.lineBuilder,
+              nameUz: l.kind === 'discovery_set' ? l.setName.uz : dictionaries.uz.sets.lineBuilder,
               ml: l.kind === 'discovery_set' ? l.vialMl : SET_VIAL_ML,
+              setKey: l.kind === 'discovery_set' ? l.key : null,
               photo: l.photo,
               setVolumeIds: l.kind === 'builder_set' ? l.items.map((i) => i.volumeId) : null,
               setComposition: l.items.map((i) => ({
@@ -747,9 +746,10 @@ function promoGiftLine(orderId: number, position: number, g: PromoGiftView) {
   return {
     ...base,
     kind: 'discovery_set' as const,
-    nameRu: dictionaries.ru.sets.discovery[SET_VIAL_ML].line,
-    nameUz: dictionaries.uz.sets.discovery[SET_VIAL_ML].line,
-    ml: 10,
+    nameRu: g.setName.ru,
+    nameUz: g.setName.uz,
+    ml: g.vialMl,
+    setKey: g.key,
     setComposition: g.items.map((i) => ({
       fragranceId: i.fragranceId,
       name: i.name,

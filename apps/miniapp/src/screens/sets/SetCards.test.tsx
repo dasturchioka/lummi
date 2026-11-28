@@ -11,7 +11,27 @@ vi.mock('../../lib/prefs', () => ({
   }),
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
-vi.mock('../../sets/queries', () => ({ useDiscoverySet: () => ({ data: undefined }) }));
+const SETS = [
+  { key: 'discovery', vialMl: 10, name: { ru: 'Discovery set', uz: 'Discovery set' } },
+  {
+    key: 'discovery-5',
+    vialMl: 5,
+    name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+  },
+  { key: 'set-3', vialMl: 10, name: { ru: 'Вечерний', uz: 'Kechki' } },
+].map((s) => ({
+  ...s,
+  price: 299_000,
+  available: 3,
+  soldOut: false,
+  photo: null,
+  uzumUrl: null,
+  fragrances: [],
+}));
+vi.mock('../../sets/queries', () => ({
+  useDiscoverySet: (key = 'discovery') => ({ data: SETS.find((s) => s.key === key) }),
+  useDiscoverySets: () => ({ data: SETS }),
+}));
 vi.mock('../../sets/actions', async () => {
   const { setsMessages } = await import('@lummi/i18n/sets');
   return { useSetsText: () => setsMessages.ru.sets };
@@ -42,5 +62,14 @@ describe('SetCards', () => {
     expect(ten.compareDocumentPosition(five) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(five.textContent).toContain('Discovery set 5 × 5 мл');
     expect(five.parentElement?.querySelector('[aria-pressed]')).toBeNull();
+  });
+
+  it("lists every set the owner added after them, by the owner's name (ADR 0044)", () => {
+    render(<SetCards />);
+    const five = screen.getByTestId('discovery-5-card');
+    const third = screen.getByTestId('set-3-card');
+    expect(five.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(third.textContent).toContain('Вечерний');
+    expect(third.parentElement?.querySelector('[aria-pressed]')).toBeNull();
   });
 });

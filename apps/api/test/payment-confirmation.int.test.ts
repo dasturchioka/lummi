@@ -652,7 +652,7 @@ describe('«Популярное» ranks by paid orders (#15, now that orders ge
 
   it('counts each paid order once per fragrance in a bottle or a builder set; never unpaid, cancelled, returned, old, or the Discovery set', async () => {
     const discoveryIds = (
-      await t.db.select().from(discoverySetItems).where(eq(discoverySetItems.vialMl, 10))
+      await t.db.select().from(discoverySetItems).where(eq(discoverySetItems.setKey, 'discovery'))
     ).map((i) => i.fragranceId);
     const all = await t.db.select().from(fragrances).orderBy(asc(fragrances.slug));
     const discoveryFive = all.filter((f) => discoveryIds.includes(f.id)).map((f) => f.slug);

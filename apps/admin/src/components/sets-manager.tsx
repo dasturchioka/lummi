@@ -1,13 +1,20 @@
 'use client';
 
 import { isUzumUrl, STOCK_REASON_MAX, type AdminDiscoverySet } from '@lummi/contracts';
-import { DISCOVERY_SETS, SET_SIZE } from '@lummi/contracts/constants';
+import {
+  DISCOVERY_VIAL_MLS,
+  MAIN_SET_KEY,
+  SET_SIZE,
+  type DiscoveryVialMl,
+} from '@lummi/contracts/constants';
 import { formatMoney, type Language } from '@lummi/i18n';
-import { Check } from 'lucide-react';
+import { Check, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { PhotoUpload } from '@/components/catalog/photo-upload';
 import { PageHeader } from '@/components/page-header';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -32,10 +39,11 @@ function Saved({ text }: { text: string }) {
 }
 
 /**
- * The Discovery sets (ADR 0009, 0042), the 5 × 10 ml and the 5 × 5 ml box, one block each: its own
- * boxes on hand and a set assembly from concentrate (owner and manager), and the owner's price (the builder set
- * costs the 5 × 10 ml one's), five fragrances in order and photo. Every change is audited by the
- * API with the old and the new value.
+ * The Discovery sets (ADR 0009, 0042, 0044), one block each in the owner's order: its own boxes on
+ * hand and a set assembly from concentrate (owner and manager), and the owner's name, price (the
+ * builder set costs the main one's), on sale or not, five fragrances in order and photo. The owner
+ * adds more sets («Добавить набор», `/sets/new`). Every change is audited by the API with the old
+ * and the new value.
  *
  * From 1024 px: the stock and the assembly over the photo on the left, the price and the
  * composition on the right (the longest card spans the rows, so no left card is stretched).
@@ -55,13 +63,21 @@ export function SetsManager({
   t: AdminMessages;
 }) {
   const s = t.sets;
+  const add = owner ? (
+    <Button asChild className="max-sm:w-full">
+      <Link href="/sets/new">
+        <Plus strokeWidth={1.5} aria-hidden />
+        {s.add}
+      </Link>
+    </Button>
+  ) : null;
   return (
     <>
-      <PageHeader title={s.title} description={s.description} />
+      <PageHeader title={s.title} description={s.description} actions={add} />
       <div className="grid gap-10 lg:gap-12">
         {sets.map((set) => (
           <SetBlock
-            key={set.vialMl}
+            key={set.key}
             set={set}
             options={options}
             owner={owner}
@@ -91,12 +107,24 @@ function SetBlock({
   const [priceSaved, setPriceSaved] = useState(false);
   const s = t.sets;
   const hidden = set.composition.filter((c) => c.hidden);
-  const headingId = `set-${set.vialMl}`;
+  const headingId = `set-${set.key}`;
   return (
-    <section aria-labelledby={headingId} data-testid={`set-${set.vialMl}`}>
-      <h2 id={headingId} className="mb-4 font-name text-[24px] leading-[1.1] font-medium italic">
-        {fill(s.setTitle, { ml: String(set.vialMl) })}
-      </h2>
+    <section
+      id={set.key}
+      aria-labelledby={headingId}
+      data-testid={`set-${set.key}`}
+      className="scroll-mt-6"
+    >
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id={headingId} className="font-name text-[24px] leading-[1.1] font-medium italic">
+          {set.name[language]}
+        </h2>
+        <span className="text-small text-muted-foreground tabular-nums">
+          {fill(s.setSub, { ml: String(set.vialMl) })}
+        </span>
+        {set.key === MAIN_SET_KEY && <Badge tone="sage">{s.mainTag}</Badge>}
+        {set.hidden && <Badge>{s.hiddenTag}</Badge>}
+      </div>
       {hidden.length > 0 && (
         <Notice title={s.hiddenWarning} className="mb-6">
           {hidden.map((c) => c.name).join(', ')}
@@ -106,8 +134,8 @@ function SetBlock({
         <StockCard set={set} t={t} onSaved={() => router.refresh()} />
         <Section title={s.priceTitle} className="lg:row-span-3">
           {owner ? (
-            <PriceForm
-              key={`${set.price}-${set.composition.map((c) => c.id).join()}`}
+            <SetForm
+              key={`${set.price}-${set.name.ru}-${set.name.uz}-${set.hidden}-${set.composition.map((c) => c.id).join()}`}
               set={set}
               options={options}
               language={language}
@@ -128,9 +156,9 @@ function SetBlock({
           <Section title={s.photoTitle}>
             <p className="-mt-2 text-small text-pretty text-muted-foreground">{s.photoHint}</p>
             <PhotoUpload
-              slot={DISCOVERY_SETS[set.vialMl].key}
+              slot={set.key}
               label={t.catalog.photo}
-              url={`/api/admin/sets/discovery/photo?vialMl=${set.vialMl}`}
+              url={`/api/admin/sets/discovery/photo?key=${set.key}`}
               hash={set.photo}
               messages={t.catalog}
               onUploaded={() => router.refresh()}
@@ -163,7 +191,7 @@ function AssembleCard({
   const quantity = Number(value);
   const valid = /^\d{1,5}$/.test(value) && quantity > 0;
   const complete = set.composition.length === SET_SIZE;
-  const id = `set-${set.vialMl}-assemble`;
+  const id = `set-${set.key}-assemble`;
   return (
     <Section title={s.assembleTitle}>
       <p className="-mt-2 text-small text-pretty text-muted-foreground">
@@ -178,7 +206,7 @@ function AssembleCard({
           setPending(true);
           setResult(null);
           const res = await browserApi.warehouse
-            .assembleSet({ params: { vialMl: set.vialMl }, body: { quantity } })
+            .assembleSet({ params: { key: set.key }, body: { quantity } })
             .catch(() => null);
           setPending(false);
           if (res?.status === 201) {
@@ -260,7 +288,7 @@ function StockCard({
     setState('idle');
     const res = await browserApi.sets
       .setOnHand({
-        query: { vialMl: set.vialMl },
+        query: { key: set.key },
         body: { onHand, expected, reason: reason.trim() },
       })
       .catch(() => null);
@@ -307,7 +335,7 @@ function StockCard({
           else void save(next, set.onHand);
         }}
       >
-        <Field id={`set-${set.vialMl}-on-hand`} label={s.onHand} hint={s.onHandHint}>
+        <Field id={`set-${set.key}-on-hand`} label={s.onHand} hint={s.onHandHint}>
           <Input
             inputMode="numeric"
             pattern="[0-9]+"
@@ -323,7 +351,7 @@ function StockCard({
             }}
           />
         </Field>
-        <Field id={`set-${set.vialMl}-on-hand-reason`} label={st.reason}>
+        <Field id={`set-${set.key}-on-hand-reason`} label={st.reason}>
           <Input
             autoComplete="off"
             maxLength={STOCK_REASON_MAX}
@@ -460,37 +488,52 @@ function ReadOnly({
   );
 }
 
-function PriceForm({
+/**
+ * The owner's form for one set: its names, the ml of its vials (a new set only: fixed after),
+ * whether the shop sells it (never off for the main set), price, Uzum link and five fragrances in
+ * order. `set` null makes a new set (`POST /admin/sets`) and opens the list at it.
+ */
+export function SetForm({
   set,
   options,
   language,
-  saved,
+  saved = false,
   t,
   onEdit,
   onSaved,
 }: {
-  set: AdminDiscoverySet;
+  set: AdminDiscoverySet | null;
   options: Option[];
   language: Language;
   /** The last save went through (the page re-reads; this survives the form's remount). */
-  saved: boolean;
+  saved?: boolean;
   t: AdminMessages;
-  onEdit: () => void;
-  onSaved: () => void;
+  onEdit?: () => void;
+  onSaved?: () => void;
 }) {
   const s = t.sets;
-  const [price, setPrice] = useState(String(set.price));
+  const router = useRouter();
+  const edited = () => onEdit?.();
+  const main = set?.key === MAIN_SET_KEY;
+  const base = set ? `set-${set.key}` : 'set-new';
+  const [nameRu, setNameRu] = useState(set?.name.ru ?? '');
+  const [nameUz, setNameUz] = useState(set?.name.uz ?? '');
+  const [vialMl, setVialMl] = useState<DiscoveryVialMl>(set?.vialMl ?? 10);
+  const [onSale, setOnSale] = useState(!(set?.hidden ?? false));
+  const [price, setPrice] = useState(set ? String(set.price) : '');
   const [picks, setPicks] = useState<string[]>(() =>
-    Array.from({ length: SET_SIZE }, (_, i) => String(set.composition[i]?.id ?? '')),
+    Array.from({ length: SET_SIZE }, (_, i) => String(set?.composition[i]?.id ?? '')),
   );
-  const [uzumUrl, setUzumUrl] = useState(set.uzumUrl ?? '');
+  const [uzumUrl, setUzumUrl] = useState(set?.uzumUrl ?? '');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const validUzum = isUzumUrl(uzumUrl);
+  const validNames = nameRu.trim() !== '' && nameUz.trim() !== '';
   const chosen = picks.filter(Boolean);
   const duplicate = new Set(chosen).size !== chosen.length;
   const complete = chosen.length === SET_SIZE;
   const validPrice = /^\d{1,9}$/.test(price);
+  const ready = validNames && validPrice && complete && !duplicate && validUzum;
   const sorted = [...options].sort((a, b) => a.name.localeCompare(b.name));
   const byId = new Map(options.map((o) => [String(o.id), o]));
   // the typed price read back with its thousands («1250000» -> «1 250 000 сум»), as the volume form does
@@ -501,36 +544,115 @@ function PriceForm({
       className="grid gap-5"
       onSubmit={async (e) => {
         e.preventDefault();
-        if (!validPrice || !complete || duplicate || !validUzum) return;
+        if (!ready) return;
         setPending(true);
         setError(null);
-        const res = await browserApi.sets
-          .update({
-            query: { vialMl: set.vialMl },
-            body: {
-              price: Number(price),
-              uzumUrl: uzumUrl.trim(),
-              composition: picks.map(Number),
-            },
-          })
-          .catch(() => null);
+        const body = {
+          name: { ru: nameRu.trim(), uz: nameUz.trim() },
+          hidden: main ? false : !onSale,
+          price: Number(price),
+          uzumUrl: uzumUrl.trim(),
+          composition: picks.map(Number),
+        };
+        if (set) {
+          const res = await browserApi.sets
+            .update({ query: { key: set.key }, body })
+            .catch(() => null);
+          setPending(false);
+          if (res?.status === 200) onSaved?.();
+          else
+            setError(
+              res?.status === 403
+                ? t.errors.forbidden
+                : res?.status === 422
+                  ? s.invalidComposition
+                  : s.failed,
+            );
+          return;
+        }
+        const res = await browserApi.sets.create({ body: { ...body, vialMl } }).catch(() => null);
         setPending(false);
-        if (res?.status === 200) onSaved();
-        else
+        if (res?.status === 201) {
+          router.push(`/sets#${res.body.key}`);
+          router.refresh();
+        } else
           setError(
             res?.status === 403
               ? t.errors.forbidden
               : res?.status === 422
                 ? s.invalidComposition
-                : s.failed,
+                : s.createFailed,
           );
       }}
     >
-      {set.isPlaceholder && <Notice title={s.placeholderPrice} />}
+      {set?.isPlaceholder && <Notice title={s.placeholderPrice} />}
+      <div className="grid items-start gap-5 sm:grid-cols-2">
+        <Field id={`${base}-name-ru`} label={s.nameRu} hint={s.nameHint}>
+          <Input
+            lang="ru"
+            autoComplete="off"
+            maxLength={60}
+            required
+            value={nameRu}
+            onChange={(e) => {
+              setNameRu(e.target.value);
+              edited();
+            }}
+          />
+        </Field>
+        <Field id={`${base}-name-uz`} label={s.nameUz}>
+          <Input
+            lang="uz"
+            autoComplete="off"
+            maxLength={60}
+            required
+            value={nameUz}
+            onChange={(e) => {
+              setNameUz(e.target.value);
+              edited();
+            }}
+          />
+        </Field>
+      </div>
+      {!set && (
+        <Field id={`${base}-vial`} label={s.vialMl} hint={s.vialHint}>
+          <Select
+            value={String(vialMl)}
+            onChange={(e) => setVialMl(Number(e.target.value) as DiscoveryVialMl)}
+          >
+            {DISCOVERY_VIAL_MLS.map((ml) => (
+              <option key={ml} value={ml}>
+                {fill(s.vialOption, { ml: String(ml) })}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {main ? (
+        <p className="text-xs text-pretty text-muted-foreground">{s.mainOnSale}</p>
+      ) : (
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-[18px] shrink-0 accent-graphite"
+            checked={onSale}
+            onChange={(e) => {
+              setOnSale(e.target.checked);
+              edited();
+            }}
+          />
+          <span className="min-w-0">
+            <span className="block font-medium">{s.onSale}</span>
+            <span className="block text-[13px] text-pretty text-muted-foreground">
+              {s.onSaleHint}
+            </span>
+          </span>
+        </label>
+      )}
       <Field
-        id={`set-${set.vialMl}-price`}
+        id={`${base}-price`}
         label={s.price}
-        hint={s.priceHint[set.vialMl]}
+        hint={main ? s.priceHint.main : s.priceHint.other}
         aside={
           readout && (
             <span className="text-small font-medium text-foreground tabular-nums">{readout}</span>
@@ -547,12 +669,12 @@ function PriceForm({
           value={price}
           onChange={(e) => {
             setPrice(e.target.value);
-            onEdit();
+            edited();
           }}
         />
       </Field>
       <Field
-        id={`set-${set.vialMl}-uzum`}
+        id={`${base}-uzum`}
         label={s.uzumUrl}
         hint={s.uzumHint}
         error={validUzum ? undefined : s.uzumInvalid}
@@ -565,7 +687,7 @@ function PriceForm({
           value={uzumUrl}
           onChange={(e) => {
             setUzumUrl(e.target.value);
-            onEdit();
+            edited();
           }}
         />
       </Field>
@@ -578,7 +700,7 @@ function PriceForm({
           {picks.map((value, i) => {
             const repeated = Boolean(value) && picks.indexOf(value) !== i;
             const isHidden = byId.get(value)?.hidden ?? false;
-            const id = `set-${set.vialMl}-pick-${i}`;
+            const id = `${base}-pick-${i}`;
             const note = repeated ? s.duplicate : isHidden ? s.hiddenPick : null;
             return (
               <li key={i} className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-2">
@@ -600,7 +722,7 @@ function PriceForm({
                     aria-describedby={note ? `${id}-note` : undefined}
                     onChange={(e) => {
                       setPicks((p) => p.map((v, j) => (j === i ? e.target.value : v)));
-                      onEdit();
+                      edited();
                     }}
                   >
                     <option value="">{s.choose}</option>
@@ -627,13 +749,14 @@ function PriceForm({
       {!complete && <p className="text-xs text-muted-foreground">{s.incomplete}</p>}
       {error && <Notice title={error} />}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button
-          type="submit"
-          loading={pending}
-          disabled={!validPrice || !complete || duplicate || !validUzum}
-        >
-          {s.save}
+        <Button type="submit" loading={pending} disabled={!ready}>
+          {set ? s.save : s.create}
         </Button>
+        {!set && (
+          <Button asChild variant="outline">
+            <Link href="/sets">{s.backToList}</Link>
+          </Button>
+        )}
         {saved && !error && <Saved text={s.saved} />}
       </div>
     </form>

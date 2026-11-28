@@ -175,10 +175,7 @@ function BuyNowItem({ line, priced }: { line: BuyNowLineDto; priced: QuoteLine }
     line.kind === 'volume'
       ? { ru: line.name, uz: line.name }
       : line.kind === 'discovery_set'
-        ? {
-            ru: setsMessages.ru.sets.discovery[line.vialMl].line,
-            uz: setsMessages.uz.sets.discovery[line.vialMl].line,
-          }
+        ? line.setName
         : { ru: setsMessages.ru.sets.lineBuilder, uz: setsMessages.uz.sets.lineBuilder };
   return (
     <>

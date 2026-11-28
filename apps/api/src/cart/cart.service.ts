@@ -8,7 +8,7 @@ import {
   type RepeatResultDto,
   type RepeatShortReason,
 } from '@lummi/contracts';
-import { asDiscoveryVialMl, type DiscoveryVialMl } from '@lummi/contracts/constants';
+import { FIVE_ML_SET_KEY, MAIN_SET_KEY } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -42,7 +42,13 @@ import {
 } from '../pricing/quote';
 import { readSettings } from '../settings/settings.service';
 import { DB, EDGES } from '../tokens';
-import { builderAvailable, judgeBuilderPick, loadDiscovery, tenMlOf } from '../sets/sets';
+import {
+  builderAvailable,
+  findDiscoverySet,
+  judgeBuilderPick,
+  tenMlOf,
+  withState,
+} from '../sets/sets';
 import {
   loadCartQuote,
   loadQuote,
@@ -210,17 +216,15 @@ export class CartService {
     });
   }
 
-  /** Adds the Discovery set; the total on the line never passes the set's own stock. */
-  async addDiscovery(
-    customerId: number,
-    vialMl: DiscoveryVialMl,
-    qty: number,
-  ): Promise<AddSetOutcome> {
+  /** Adds a Discovery set; the total on the line never passes the set's own stock. A hidden or unknown set is not found. */
+  async addDiscovery(customerId: number, key: string, qty: number): Promise<AddSetOutcome> {
     return this.db.transaction(async (tx) => {
-      const { available: left } = await loadDiscovery(tx, vialMl);
+      const row = await findDiscoverySet(tx, key);
+      if (!row || row.hidden) return { result: 'not_found' } as const;
+      const { available: left } = await withState(tx, row);
       if (left === 0) return { result: 'sold_out' } as const;
       await this.touch(tx, customerId);
-      await this.grow(tx, customerId, { kind: 'discovery_set', vialMl }, qty, left);
+      await this.grow(tx, customerId, { kind: 'discovery_set', setKey: key }, qty, left);
       return { result: 'ok' } as const;
     });
   }
@@ -287,12 +291,16 @@ export class CartService {
           qty: l.qty,
           volumeId: null,
           fragranceIds: null,
-          vialMl: null,
+          setKey: null,
         };
         if (l.kind === 'volume') return { ...line, kind: 'volume', volumeId: l.volumeId };
-        // a Discovery line's ml is its set's vial size (ADR 0042)
         if (l.kind === 'discovery_set')
-          return { ...line, kind: 'discovery_set', vialMl: asDiscoveryVialMl(l.ml) };
+          return {
+            ...line,
+            kind: 'discovery_set',
+            // a line from before the keys carried only its vial ml (ADR 0044)
+            setKey: l.setKey ?? (l.ml === 5 ? FIVE_ML_SET_KEY : MAIN_SET_KEY),
+          };
         const ids = (l.setComposition ?? []).map((f) => f.fragranceId).sort((a, b) => a - b);
         return { ...line, kind: 'builder_set', fragranceIds: ids };
       });
@@ -355,7 +363,7 @@ export class CartService {
     customerId: number,
     line:
       | { kind: 'volume'; volumeId: number | null }
-      | { kind: 'discovery_set'; vialMl: DiscoveryVialMl | null }
+      | { kind: 'discovery_set'; setKey: string | null }
       | { kind: 'builder_set'; fragranceIds: number[] | null },
     qty: number,
     left: number = CART_MAX_QTY,
@@ -371,9 +379,9 @@ export class CartService {
     else if (line.kind === 'discovery_set')
       await tx
         .insert(cartLines)
-        .values({ ...values, kind: 'discovery_set', vialMl: line.vialMl })
+        .values({ ...values, kind: 'discovery_set', setKey: line.setKey })
         .onConflictDoUpdate({
-          target: [cartLines.customerId, cartLines.vialMl],
+          target: [cartLines.customerId, cartLines.setKey],
           targetWhere: sql`kind = 'discovery_set'`,
           set,
         });
@@ -600,7 +608,7 @@ function progress(q: {
 function sameLine(a: StoredLine, b: StoredLine): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'volume') return a.volumeId === b.volumeId;
-  if (a.kind === 'discovery_set') return a.vialMl === b.vialMl;
+  if (a.kind === 'discovery_set') return a.setKey === b.setKey;
   return (a.fragranceIds ?? []).join(',') === (b.fragranceIds ?? []).join(',');
 }
 

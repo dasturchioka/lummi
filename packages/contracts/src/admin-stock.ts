@@ -23,8 +23,9 @@ export type StockFragranceRow = z.infer<typeof stockFragranceRowSchema>;
 /** A Discovery set on the stock page: its own boxes (ADR 0009, 0042). */
 export const stockSetRowSchema = z.object({
   vialMl: z.number().int(),
-  /** `discovery` or `discovery-5` (`DISCOVERY_SETS`): stable, for React keys and test ids. */
+  /** The set's key (ADR 0044): stable, for React keys and test ids. */
   key: z.string(),
+  name: z.object({ ru: z.string(), uz: z.string() }),
   onHand: z.number().int(),
   reserved: z.number().int(),
   available: z.number().int(),

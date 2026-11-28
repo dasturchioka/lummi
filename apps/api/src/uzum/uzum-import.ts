@@ -1,5 +1,7 @@
 import {
   DISCOVERY_VIAL_MLS,
+  FIVE_ML_SET_KEY,
+  MAIN_SET_KEY,
   MAX_PRICE,
   SET_VIAL_ML,
   UZUM_ORDER_MAX,
@@ -44,14 +46,19 @@ export interface UzumCatalogFragrance {
   volumes: { id: number; ml: number }[];
 }
 
-/** A Discovery set's name in the file: «Discovery set 5 × 10 мл», «Discovery set 5 × 5 мл» (ADR 0042). */
-export const DISCOVERY_NAME = 'Discovery set';
-export const discoveryName = (vialMl: DiscoveryVialMl) => `${DISCOVERY_NAME} 5 × ${vialMl} мл`;
+/** A Discovery set as the import knows it (ADR 0044): its key, vial ml and both names. */
+export interface UzumCatalogSet {
+  key: string;
+  vialMl: DiscoveryVialMl;
+  nameRu: string;
+  nameUz: string;
+}
 
 /**
- * A Discovery set as a file names it: «Discovery set», «Набор Discovery», «Discovery set 5 × 5 мл»,
- * «discovery 5x10». Its vial ml from the name, else null (the «Объём, мл» cell decides); not a set
- * at all: undefined.
+ * A Discovery set as a file names it without its own name: «Discovery set», «Набор Discovery»,
+ * «Discovery set 5 × 5 мл», «discovery 5x10» (the main set, or the 5 × 5 ml one). Its vial ml
+ * from the name, else null (the «Объём, мл» cell decides); not such a name at all: undefined. A
+ * set's own name (RU or UZ) is matched first.
  */
 function discoveryOf(folded: string): DiscoveryVialMl | null | undefined {
   const m =
@@ -73,7 +80,10 @@ const fold = (s: string) =>
     .trim();
 
 /** The template: the sales sheet with its headers, and every fragrance with its volumes to copy from. */
-export async function writeUzumTemplate(catalog: readonly UzumCatalogFragrance[]): Promise<Buffer> {
+export async function writeUzumTemplate(
+  catalog: readonly UzumCatalogFragrance[],
+  sets: readonly UzumCatalogSet[],
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'LUMMI.';
   const ws = wb.addWorksheet(UZUM_SHEETS.sales, { views: [{ state: 'frozen', ySplit: 1 }] });
@@ -95,7 +105,7 @@ export async function writeUzumTemplate(catalog: readonly UzumCatalogFragrance[]
   items.getRow(1).eachCell((cell) => (cell.fill = HEADER_FILL));
   for (const f of [...catalog].sort((a, b) => a.name.localeCompare(b.name)))
     items.addRow([f.name, f.volumes.map((v) => v.ml).join(', ')]);
-  for (const ml of DISCOVERY_VIAL_MLS) items.addRow([discoveryName(ml), String(ml)]);
+  for (const s of sets) items.addRow([s.nameRu, String(s.vialMl)]);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
@@ -207,7 +217,7 @@ function day(text: string): string | null {
 export function planUzumImport(
   rows: readonly UzumRawRow[],
   catalog: readonly UzumCatalogFragrance[],
-  ctx: { today: string; standing: ReadonlySet<string> },
+  ctx: { today: string; standing: ReadonlySet<string>; sets?: readonly UzumCatalogSet[] },
 ): UzumPlan {
   const errors: UzumImportIssue[] = [];
   const warnings: UzumImportIssue[] = [];
@@ -215,6 +225,11 @@ export function planUzumImport(
   for (const f of catalog) {
     byName.set(fold(f.name), f);
     byName.set(fold(f.code), f);
+  }
+  const setByName = new Map<string, UzumCatalogSet>();
+  for (const s of ctx.sets ?? []) {
+    setByName.set(fold(s.nameRu), s);
+    setByName.set(fold(s.nameUz), s);
   }
   const issue = (
     row: number,
@@ -251,13 +266,22 @@ export function planUzumImport(
       issue(row, 'price', 'bad_number', { min: 1, max: MAX_PRICE });
     if (required('item')) {
       const name = fold(cells.item);
-      const set = discoveryOf(name);
-      if (set !== undefined) {
+      const named = setByName.get(name);
+      const set = named ? undefined : discoveryOf(name);
+      if (named) {
+        line = { kind: 'discovery_set', key: named.key, qty: qty ?? 1, price: price ?? 1 };
+      } else if (set !== undefined) {
         // the vial ml from the name, else from «Объём, мл» (empty: the 5 × 10 ml set)
         const ml = set ?? (cells.ml === '' ? SET_VIAL_ML : wholeNumber(cells.ml));
         const vialMl = DISCOVERY_VIAL_MLS.find((v) => v === ml);
         if (vialMl === undefined) issue(row, 'ml', 'bad_ml', { name: cells.item, value: cells.ml });
-        else line = { kind: 'discovery_set', vialMl, qty: qty ?? 1, price: price ?? 1 };
+        else
+          line = {
+            kind: 'discovery_set',
+            key: vialMl === 5 ? FIVE_ML_SET_KEY : MAIN_SET_KEY,
+            qty: qty ?? 1,
+            price: price ?? 1,
+          };
       } else {
         const f = byName.get(name);
         if (!f) issue(row, 'item', 'unknown_item', { value: cells.item });

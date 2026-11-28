@@ -724,16 +724,26 @@ export const favourites = pgTable(
 );
 
 /**
- * The Discovery sets (ADR 0009, 0042), one row each, keyed by the ml of their vials: 10 =
- * «Discovery Set 5×10 мл», 5 = «Discovery Set 5×5 мл». Each is a product with its own price, photo
- * and stock; `on_hand` never touches the bottles' stock. A builder set has no row of its own and
- * costs the 5 × 10 ml set's `price` (spec Changes 2026-11-10, sets). The composition is the five
- * ordered fragrances in `discovery_set_items`.
+ * The Discovery sets (ADR 0009, 0042, 0044), one row each, keyed by `key`: `discovery` is the main
+ * «Discovery set» (5 × 10 ml), `discovery-5` the «Discovery set 5 × 5 мл», and the owner adds more
+ * (`set-<n>`, 2026-11-28), each 5 × 10 ml or 5 × 5 ml by `vial_ml`. Each is a product with its own
+ * name, price, photo and stock; `on_hand` never touches the bottles' stock. A builder set has no
+ * row of its own and costs the main set's `price` (spec Changes 2026-11-10, sets). The composition
+ * is the five ordered fragrances in `discovery_set_items`.
  */
 export const discoverySet = pgTable(
   'discovery_set',
   {
-    vialMl: smallint('vial_ml').primaryKey(),
+    /** Its key: the Mini App route `/sets/<key>`, the stock row, the audit target, the photo slot. */
+    key: text('key').primaryKey(),
+    /** The ml of its five vials: 10 or 5. */
+    vialMl: smallint('vial_ml').notNull(),
+    nameRu: text('name_ru').notNull(),
+    nameUz: text('name_uz').notNull(),
+    /** The order the shop and the panel list the sets in. */
+    position: smallint('position').notNull().default(0),
+    /** Off sale and out of the shop; its orders and history stay. The main set is never hidden. */
+    hidden: boolean('hidden').notNull().default(false),
     /** Integer so'm. */
     price: integer('price').notNull(),
     /** Boxes assembled and in the warehouse; available = on hand - reserve (ADR 0010). */
@@ -748,6 +758,7 @@ export const discoverySet = pgTable(
   },
   (t) => [
     check('discovery_set_vial_ml_check', sql`${t.vialMl} in (5, 10)`),
+    check('discovery_set_key_check', sql`${t.key} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
     check('discovery_set_money_check', sql`${t.price} >= 0 and ${t.onHand} >= 0`),
   ],
 );
@@ -756,17 +767,17 @@ export const discoverySet = pgTable(
 export const discoverySetItems = pgTable(
   'discovery_set_items',
   {
-    vialMl: smallint('vial_ml')
+    setKey: text('set_key')
       .notNull()
-      .references(() => discoverySet.vialMl),
+      .references(() => discoverySet.key),
     position: smallint('position').notNull(),
     fragranceId: bigint('fragrance_id', { mode: 'number' })
       .notNull()
       .references(() => fragrances.id),
   },
   (t) => [
-    primaryKey({ columns: [t.vialMl, t.position] }),
-    uniqueIndex('discovery_set_items_fragrance_idx').on(t.vialMl, t.fragranceId),
+    primaryKey({ columns: [t.setKey, t.position] }),
+    uniqueIndex('discovery_set_items_fragrance_idx').on(t.setKey, t.fragranceId),
     check('discovery_set_items_position', sql`${t.position} between 1 and 5`),
   ],
 );
@@ -774,7 +785,7 @@ export const discoverySetItems = pgTable(
 export const cartLineKindEnum = pgEnum('cart_line_kind', LINE_KINDS);
 
 /**
- * One cart line: a volume x quantity, a Discovery set (by `vial_ml`) x quantity, or a builder set x quantity.
+ * One cart line: a volume x quantity, a Discovery set (by `set_key`) x quantity, or a builder set x quantity.
  * Quantity is what the customer asked for; the server caps it at available on read. A builder
  * line keeps the five chosen fragrance ids (sorted, so the same five add up on one line); their
  * 10 ml volumes are resolved on read.
@@ -791,15 +802,15 @@ export const cartLines = pgTable(
       onDelete: 'cascade',
     }),
     fragranceIds: bigint('fragrance_ids', { mode: 'number' }).array(),
-    /** Which Discovery set a `discovery_set` line holds (ADR 0042); null on the other kinds. */
-    vialMl: smallint('vial_ml'),
+    /** Which Discovery set a `discovery_set` line holds (ADR 0044); null on the other kinds. */
+    setKey: text('set_key').references(() => discoverySet.key),
     qty: integer('qty').notNull(),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('cart_lines_customer_volume_idx').on(t.customerId, t.volumeId),
     uniqueIndex('cart_lines_customer_discovery_idx')
-      .on(t.customerId, t.vialMl)
+      .on(t.customerId, t.setKey)
       .where(sql`kind = 'discovery_set'`),
     uniqueIndex('cart_lines_customer_builder_idx')
       .on(t.customerId, t.fragranceIds)
@@ -813,9 +824,9 @@ export const cartLines = pgTable(
     ),
     check(
       'cart_lines_kind_check',
-      sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null and vial_ml is null)
-        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null and vial_ml in (5, 10))
-        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5 and vial_ml is null)`,
+      sql`(kind = 'volume' and volume_id is not null and fragrance_ids is null and set_key is null)
+        or (kind = 'discovery_set' and volume_id is null and fragrance_ids is null and set_key is not null)
+        or (kind = 'builder_set' and volume_id is null and cardinality(fragrance_ids) = 5 and set_key is null)`,
     ),
   ],
 );
@@ -1035,6 +1046,11 @@ export const orderLines = pgTable(
     giftSample: boolean('gift_sample').notNull().default(false),
     /** A builder set's five 10 ml volumes, its reserve takes one of each per set unit. A Discovery set has none (its own stock is the reserve); its `ml` is its vial size. */
     setVolumeIds: bigint('set_volume_ids', { mode: 'number' }).array(),
+    /**
+     * Which Discovery set a `discovery_set` line holds (ADR 0044); null on the other kinds. No
+     * foreign key, as on `stock_moves`: a key check would queue behind the set's `FOR UPDATE`.
+     */
+    setKey: text('set_key'),
     /** A set's five fragrances as bought: `[{ fragranceId, name, brand }]` (ADR 0009). */
     setComposition:
       jsonb('set_composition').$type<{ fragranceId: number; name: string; brand: string }[]>(),
@@ -1050,7 +1066,7 @@ export const orderLines = pgTable(
     check('order_lines_qty_check', sql`${t.qty} > 0`),
     check(
       'order_lines_kind_check',
-      sql`(${t.kind}::text = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind}::text = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5 and jsonb_array_length(${t.setComposition}) = 5) or (${t.kind}::text = 'discovery_set' and ${t.volumeId} is null and ${t.setVolumeIds} is null and jsonb_array_length(${t.setComposition}) = 5)`,
+      sql`(${t.kind}::text = 'volume' and ${t.volumeId} is not null and ${t.setVolumeIds} is null) or (${t.kind}::text = 'builder_set' and ${t.volumeId} is null and cardinality(${t.setVolumeIds}) = 5 and jsonb_array_length(${t.setComposition}) = 5) or (${t.kind}::text = 'discovery_set' and ${t.volumeId} is null and ${t.setVolumeIds} is null and ${t.setKey} is not null and jsonb_array_length(${t.setComposition}) = 5)`,
     ),
     check(
       'order_lines_money_check',
@@ -1948,11 +1964,11 @@ export const bottlings = pgTable(
     /** Bottles per volume, as the form sent them: `[{ ml, quantity }]`. */
     lines: jsonb('lines').$type<{ ml: number; quantity: number }[]>().notNull(),
     /**
-     * A set bottling (#79, ADR 0042): the Discovery set (its vial ml) whose boxes this fragrance's
-     * oil went into; `lines` are then the set's vials of it, not bottles on hand. Null for a
-     * bottling into the fragrance's own volumes.
+     * A set bottling (#79, ADR 0042, 0044): the Discovery set whose boxes this fragrance's oil went
+     * into; `lines` are then the set's vials of it, not bottles on hand. Null for a bottling into
+     * the fragrance's own volumes.
      */
-    setVialMl: smallint('set_vial_ml'),
+    setKey: text('set_key'),
     oilMg: integer('oil_mg').notNull(),
     ethanolMl: integer('ethanol_ml').notNull(),
     createdAt: createdAt(),
@@ -1960,7 +1976,6 @@ export const bottlings = pgTable(
   (t) => [
     index('bottlings_fragrance_idx').on(t.fragranceId, t.id),
     check('bottlings_amounts_check', sql`${t.oilMg} >= 0 and ${t.ethanolMl} >= 0`),
-    check('bottlings_set_vial_ml_check', sql`${t.setVialMl} is null or ${t.setVialMl} in (5, 10)`),
   ],
 );
 export type BottlingRow = typeof bottlings.$inferSelect;
@@ -2042,6 +2057,8 @@ export const uzumSaleLines = pgTable(
     lineTotal: integer('line_total').notNull(),
     /** Frozen when recorded (ADR 0040); null without an oil price. */
     unitCost: integer('unit_cost'),
+    /** Which Discovery set a `discovery_set` line sold (ADR 0044); null on a volume. */
+    setKey: text('set_key'),
     setFragranceIds: bigint('set_fragrance_ids', { mode: 'number' }).array(),
   },
   (t) => [
@@ -2049,6 +2066,10 @@ export const uzumSaleLines = pgTable(
     check(
       'uzum_sale_lines_item_check',
       sql`(${t.kind} = 'volume') = (${t.volumeId} is not null and ${t.fragranceId} is not null)`,
+    ),
+    check(
+      'uzum_sale_lines_set_check',
+      sql`(${t.kind} = 'discovery_set') = (${t.setKey} is not null)`,
     ),
     check(
       'uzum_sale_lines_amounts_check',

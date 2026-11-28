@@ -1,4 +1,4 @@
-import { DISCOVERY_SETS, DISCOVERY_VIAL_MLS, SET_SIZE, type DiscoveryVialMl } from './constants';
+import { FIVE_ML_SET_KEY, MAIN_SET_KEY, SET_KEY, SET_SIZE } from './constants';
 
 /**
  * «Купить сейчас»: the one item a one-line checkout buys, without touching the cart (spec Changes
@@ -6,14 +6,15 @@ import { DISCOVERY_SETS, DISCOVERY_VIAL_MLS, SET_SIZE, type DiscoveryVialMl } fr
  * as `item` (the checkout query and the order body) without the schema runtime (ADR 0030); it
  * imports `@lummi/contracts/buy-now`.
  *
- * As text: `volume:<slug>:<ml>`, `discovery_set` (the 5 × 10 ml set), `discovery_set:5` (the 5 × 5 ml
- * set, ADR 0042), or `builder_set:<slug>,<slug>,<slug>,<slug>,<slug>`
+ * As text: `volume:<slug>:<ml>`, `discovery_set:<key>` (a Discovery set, ADR 0044; the older
+ * `discovery_set` and `discovery_set:5` still name the main and the 5 × 5 ml one), or
+ * `builder_set:<slug>,<slug>,<slug>,<slug>,<slug>`
  * (five different fragrances, ADR 0009). Slugs are ASCII kebab case (ADR 0016), so `:` and `,`
  * never occur inside one.
  */
 export type BuyNowItem =
   | { kind: 'volume'; slug: string; ml: 10 | 30 | 50 }
-  | { kind: 'discovery_set'; vialMl: DiscoveryVialMl }
+  | { kind: 'discovery_set'; key: string }
   | { kind: 'builder_set'; slugs: string[] };
 
 /** The longest `item` text: five slugs of the 100 characters a slug may have, and the separators. */
@@ -27,7 +28,7 @@ export function buyNowParam(item: BuyNowItem): string {
     case 'volume':
       return `volume:${item.slug}:${item.ml}`;
     case 'discovery_set':
-      return DISCOVERY_SETS[item.vialMl].buyNow;
+      return `discovery_set:${item.key}`;
     case 'builder_set':
       return `builder_set:${item.slugs.join(',')}`;
   }
@@ -36,9 +37,13 @@ export function buyNowParam(item: BuyNowItem): string {
 /** The item an `item` text names; null when it is not one (a builder needs five different slugs). */
 export function parseBuyNowParam(text: string): BuyNowItem | null {
   if (text.length > BUY_NOW_ITEM_MAX) return null;
-  const set = DISCOVERY_VIAL_MLS.find((ml) => DISCOVERY_SETS[ml].buyNow === text);
-  if (set !== undefined) return { kind: 'discovery_set', vialMl: set };
+  if (text === 'discovery_set') return { kind: 'discovery_set', key: MAIN_SET_KEY };
+  if (text === 'discovery_set:5') return { kind: 'discovery_set', key: FIVE_ML_SET_KEY };
   const [kind, ...rest] = text.split(':');
+  if (kind === 'discovery_set' && rest.length === 1) {
+    const key = rest[0]!;
+    return SET_KEY.test(key) && key.length <= 40 ? { kind: 'discovery_set', key } : null;
+  }
   if (kind === 'volume' && rest.length === 2) {
     const [slug, ml] = rest as [string, string];
     if (!SLUG.test(slug) || (ml !== '10' && ml !== '30' && ml !== '50')) return null;

@@ -36,6 +36,9 @@ import {
 import { createTestApp, type StaffSession, type TestApp } from './harness/test-app';
 import type { TestUser } from './harness/sign-init-data';
 
+/** The two first sets' keys by vial ml (ADR 0044). */
+const keyOf = (vialMl: number) => (vialMl === 5 ? 'discovery-5' : 'discovery');
+
 /**
  * Seam 1 (ADR 0028), ticket #79: the 5 ml bottle (stocked, never sold alone), the «Discovery Set
  * 5×5 мл» as a second ready-made set, a first order's gift sample, and the set-discount scope.
@@ -86,14 +89,22 @@ async function compositionOf(vialMl: 5 | 10) {
     .select({ id: fragrances.id, slug: fragrances.slug, name: fragrances.name })
     .from(discoverySetItems)
     .innerJoin(fragrances, eq(fragrances.id, discoverySetItems.fragranceId))
-    .where(eq(discoverySetItems.vialMl, vialMl))
+    .where(eq(discoverySetItems.setKey, keyOf(vialMl)))
     .orderBy(discoverySetItems.position);
   return rows;
 }
 const setOnHand = async (vialMl: 5 | 10) =>
-  (await t.db.select().from(discoverySet).where(eq(discoverySet.vialMl, vialMl)))[0]!.onHand;
+  (
+    await t.db
+      .select()
+      .from(discoverySet)
+      .where(eq(discoverySet.key, keyOf(vialMl)))
+  )[0]!.onHand;
 const setSetOnHand = (vialMl: 5 | 10, onHand: number) =>
-  t.db.update(discoverySet).set({ onHand }).where(eq(discoverySet.vialMl, vialMl));
+  t.db
+    .update(discoverySet)
+    .set({ onHand })
+    .where(eq(discoverySet.key, keyOf(vialMl)));
 
 async function fiveMl(slug: string) {
   const [v] = await t.db
@@ -239,7 +250,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
     await setSetOnHand(5, 3);
     await setSetOnHand(10, 3);
     const client = await shopper(t, ali, '998901234567');
-    const shown = await client.sets.discovery({ query: { vialMl: 5 } });
+    const shown = await client.sets.discovery({ query: { key: 'discovery-5' } });
     expect(shown.status === 200 && shown.body).toMatchObject({
       vialMl: 5,
       price: 99_000,
@@ -248,9 +259,9 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
     });
     expect(shown.status === 200 && shown.body.fragrances).toHaveLength(5);
 
-    const cart = await client.cart.addDiscovery({ body: { qty: 2, vialMl: 5 } });
+    const cart = await client.cart.addDiscovery({ body: { qty: 2, key: 'discovery-5' } });
     expect(cart.status === 200 && cart.body.lines).toMatchObject([
-      { kind: 'discovery_set', vialMl: 5, qty: 2 },
+      { kind: 'discovery_set', key: 'discovery-5', qty: 2 },
     ]);
     expect(cart.status === 200 && cart.body.quote.itemsSubtotal).toBe(198_000);
 
@@ -259,7 +270,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
       { kind: 'discovery_set', ml: 5, name: { ru: 'Discovery set 5 × 5 мл' }, unitPrice: 99_000 },
     ]);
     // the reserve: its own, never the 5 × 10 ml set's
-    const after = await client.sets.discovery({ query: { vialMl: 5 } });
+    const after = await client.sets.discovery({ query: { key: 'discovery-5' } });
     expect(after.status === 200 && after.body.available).toBe(1);
     const ten = await client.sets.discovery();
     expect(ten.status === 200 && ten.body).toMatchObject({ vialMl: 10, available: 3 });
@@ -269,7 +280,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
     await setSetOnHand(5, 3);
     await setSetOnHand(10, 3);
     const client = await shopper(t, ali, '998901234567');
-    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     const both = await client.cart.addDiscovery({ body: { qty: 1 } });
     expect(
       both.status === 200 && both.body.lines.map((l) => l.kind === 'discovery_set' && l.vialMl),
@@ -286,7 +297,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
 
   it('a sold-out 5 × 5 ml set refuses the cart', async () => {
     const client = await shopper(t, ali, '998901234567');
-    const res = await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    const res = await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     expect(res.status).toBe(409);
   });
 
@@ -294,7 +305,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
     await setSetOnHand(5, 4);
     await setSetOnHand(10, 4);
     const client = await shopper(t, ali, '998901234567');
-    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     const o = await order(client);
     const id = await walkTo(o.number, 'handed_to_bts');
     expect(await setOnHand(5)).toBe(3);
@@ -303,7 +314,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
       await t.db.select().from(orderEvents).where(eq(orderEvents.orderId, id))
     ).filter((e) => e.action === 'hand_to_bts');
     expect(handed!.payload).toMatchObject({
-      stock: { sets: [{ id: 5, from: 4, to: 3 }] },
+      stock: { sets: [{ id: 'discovery-5', from: 4, to: 3 }] },
     });
 
     await walkToDelivered(id);
@@ -325,7 +336,7 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
   it('cancelling after handover puts its box back', async () => {
     await setSetOnHand(5, 2);
     const client = await shopper(t, ali, '998901234567');
-    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     const o = await order(client);
     const id = await walkTo(o.number, 'handed_to_bts');
     expect(await setOnHand(5)).toBe(1);
@@ -341,8 +352,12 @@ describe('«Discovery Set 5×5 мл», a second ready-made set (ADR 0042)', () =
       (f) => f.id,
     );
     const res = await owner.client.admin.sets.update({
-      query: { vialMl: 5 },
-      body: { price: 109_000, composition: ids.slice(5, 10) },
+      query: { key: 'discovery-5' },
+      body: {
+        name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+        price: 109_000,
+        composition: ids.slice(5, 10),
+      },
     });
     expect(res.status === 200 && res.body).toMatchObject({ vialMl: 5, price: 109_000 });
     expect((await compositionOf(5)).map((f) => f.id)).toEqual(ids.slice(5, 10));
@@ -371,7 +386,7 @@ describe('a Return of the 5 × 5 ml set and of a gift sample (ADR 0042)', () => 
     await setSetOnHand(5, 4);
     await setSetOnHand(10, 4);
     const client = await shopper(t, ali, '998901234567');
-    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     const o = await order(client);
     const id = await walkTo(o.number, 'handed_to_bts');
     await walkToDelivered(id);
@@ -454,7 +469,7 @@ describe('a set assembly packs boxes from the five concentrates (ADR 0042, 0043)
     const flacon = await consumable(t, 'flacon', 5);
     await setConsumable(t, flacon.id, 20);
     const res = await owner.client.admin.warehouse.assembleSet({
-      params: { vialMl: 5 },
+      params: { key: 'discovery-5' },
       body: { quantity: 4 },
     });
     // 4 × 5.15 ml of each, 20 flacons
@@ -485,7 +500,7 @@ describe('a set assembly packs boxes from the five concentrates (ADR 0042, 0043)
     for (const f of five) await setConcentrateUl(t, f.id, 100_000);
     await setConcentrateUl(t, five[2]!.id, 5_000);
     const res = await owner.client.admin.warehouse.assembleSet({
-      params: { vialMl: 5 },
+      params: { key: 'discovery-5' },
       body: { quantity: 1 },
     });
     expect(res.status === 409 && res.body).toMatchObject({
@@ -772,7 +787,7 @@ describe('the set-discount scope (entitlements.setDiscountScope)', () => {
   async function rightFromSet() {
     await setSetOnHand(5, 2);
     const client = await shopper(t, ali, '998901234567');
-    await client.cart.addDiscovery({ body: { qty: 1, vialMl: 5 } });
+    await client.cart.addDiscovery({ body: { qty: 1, key: 'discovery-5' } });
     const o = await order(client);
     await walkTo(o.number, 'delivered');
     const five = await compositionOf(5);

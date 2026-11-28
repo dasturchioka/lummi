@@ -60,11 +60,17 @@ function percent(v: string): number | null {
   return n <= 100 ? n : null;
 }
 
-/** What a sale's line or a short line names: «Rain Tea 10 мл», or a Discovery set by its vial ml. */
-const itemName = (l: { name: string | null; ml: number }, u: U) =>
-  l.name === null
-    ? fill(u.setName, { ml: String(l.ml) })
-    : `${l.name} ${fill(u.ml, { ml: String(l.ml) })}`;
+/** What a sale's line or a short line names: «Rain Tea 10 мл», or a Discovery set by its own name (ADR 0044). */
+const itemName = (
+  l: { name: string | null; ml: number; set: { name: { ru: string; uz: string } } | null },
+  u: U,
+  language: Language,
+) =>
+  l.set
+    ? l.set.name[language]
+    : l.name === null
+      ? fill(u.setName, { ml: String(l.ml) })
+      : `${l.name} ${fill(u.ml, { ml: String(l.ml) })}`;
 
 /**
  * Uzum sales (#80): the form that records one (its bottles leave the shelf at once), the list of
@@ -188,7 +194,7 @@ function SaleForm({
       if (l.item === '' || q === null || p === null) continue;
       out.push(
         l.item.startsWith('set:')
-          ? { kind: 'discovery_set', vialMl: l.item === 'set:5' ? 5 : 10, qty: q, price: p }
+          ? { kind: 'discovery_set', key: l.item.slice(4), qty: q, price: p }
           : { kind: 'volume', volumeId: Number(l.item.slice(2)), qty: q, price: p },
       );
     }
@@ -227,7 +233,7 @@ function SaleForm({
     label:
       it.kind === 'volume'
         ? fill(f.itemOption, { name: it.name, ml: String(it.ml), n: num(it.available) })
-        : fill(f.setOption, { ml: String(it.vialMl), n: num(it.available) }),
+        : fill(f.setOption, { name: it.name[language], n: num(it.available) }),
     muted: it.available <= 0,
   }));
 
@@ -379,7 +385,7 @@ function SaleForm({
             {state.short
               .map((s) =>
                 fill(f.shortLine, {
-                  item: itemName(s, u),
+                  item: itemName(s, u, language),
                   wanted: num(s.wanted),
                   available: num(s.available),
                 }),
@@ -413,7 +419,7 @@ function SaleForm({
 }
 
 const optionValue = (it: UzumSaleItem) =>
-  it.kind === 'volume' ? `v:${it.volumeId}` : `set:${it.vialMl}`;
+  it.kind === 'volume' ? `v:${it.volumeId}` : `set:${it.key}`;
 
 function SalesList({
   sales,
@@ -430,7 +436,9 @@ function SalesList({
   const [voiding, setVoiding] = useState<UzumSale | null>(null);
   const money = (n: number) => formatMoney(n, language);
   const linesText = (s: UzumSale) =>
-    s.lines.map((x) => fill(l.line, { item: itemName(x, u), qty: num(x.qty) })).join(', ');
+    s.lines
+      .map((x) => fill(l.line, { item: itemName(x, u, language), qty: num(x.qty) }))
+      .join(', ');
   const profitText = (s: UzumSale) =>
     s.costs === null ? '—' : s.costs.profit ? money(s.costs.profit.profit) : l.noCost;
   const voidButton = (s: UzumSale) =>

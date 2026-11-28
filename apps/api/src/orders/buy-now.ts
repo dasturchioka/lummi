@@ -13,7 +13,7 @@ const BUY_NOW_LINE_ID = 1;
  * available is the quote's to judge, like any cart line's.
  */
 export async function buyNowLine(tx: DbOrTx, item: BuyNowItem): Promise<StoredLine | null> {
-  const line = { lineId: BUY_NOW_LINE_ID, qty: 1, vialMl: null };
+  const line = { lineId: BUY_NOW_LINE_ID, qty: 1, setKey: null };
   switch (item.kind) {
     case 'volume': {
       const [v] = await tx
@@ -36,7 +36,7 @@ export async function buyNowLine(tx: DbOrTx, item: BuyNowItem): Promise<StoredLi
         kind: 'discovery_set',
         volumeId: null,
         fragranceIds: null,
-        vialMl: item.vialMl,
+        setKey: item.key,
       };
     case 'builder_set': {
       // the builder's own judge: five different visible fragrances with a 10 ml (a hidden one

@@ -1,4 +1,5 @@
 import {
+  MAIN_SET_KEY,
   adminReviewsQuerySchema,
   tashkentDayStart,
   type AdminReviewDto,
@@ -168,9 +169,9 @@ export class ReviewsService {
    * the Discovery set, or a builder set. A published review shows on all of them (spec 2026-11-07).
    */
   private orderHas(target: Target): SQL {
-    // the 5 × 10 ml set's card (the 5 × 5 ml one shows no reviews yet, ADR 0042)
+    // the main set's card (the others show no reviews yet, ADR 0042, 0044)
     if (target.kind === 'discovery')
-      return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'discovery_set' and ol.ml = 10)`;
+      return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'discovery_set' and ol.set_key = ${MAIN_SET_KEY})`;
     if (target.kind === 'builder')
       return sql`exists (select 1 from ${orderLines} ol where ol.order_id = ${reviews.orderId} and ol.kind = 'builder_set')`;
     // a gift sample came free with the order (ADR 0042): it is not what the review is about

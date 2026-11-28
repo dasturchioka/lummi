@@ -1,13 +1,13 @@
 import type { Builder, DiscoverySet, FragranceListItem } from '@lummi/contracts';
 import {
   DISCOVERY_FAVOURITE,
-  DISCOVERY_SETS,
+  FIVE_ML_SET_KEY,
+  MAIN_SET_KEY,
   SET_SIZE,
-  type DiscoveryVialMl,
 } from '@lummi/contracts/constants';
 import { buyNowParam } from '@lummi/contracts/buy-now';
 import { fill, plural } from '@lummi/i18n';
-import { useRouter, useSearch } from '@tanstack/react-router';
+import { useParams, useRouter, useSearch } from '@tanstack/react-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   SetUnavailableError,
@@ -112,10 +112,10 @@ export function DiscoverySetView({
   const { t, language } = usePrefs();
   const s = useSetsText();
   const ready = set.fragrances.length === SET_SIZE;
-  // each set's own name and lead (ADR 0042); the heart and the share link are the 5 × 10 ml
-  // set's only for now (`extras`)
-  const text = s.discovery[set.vialMl];
-  const { extras } = DISCOVERY_SETS[set.vialMl];
+  // each set's own name (ADR 0044) and its box's lead (ADR 0042); the heart and the share link
+  // are the main set's only for now
+  const text = { title: set.name[language], lead: s.discovery[set.vialMl].lead };
+  const extras = set.key === MAIN_SET_KEY;
   return (
     <Screen
       tabBar={false}
@@ -215,22 +215,29 @@ export function DiscoverySetView({
   );
 }
 
-/** `/sets/discovery`, also the target of the `set_discovery` deep link. */
+/** `/sets/discovery`, the main set, also the target of the `set_discovery` deep link. */
 export function DiscoverySetScreen() {
-  return <DiscoveryScreenOf vialMl={10} />;
+  return <DiscoveryScreenOf setKey={MAIN_SET_KEY} />;
 }
 
 /** `/sets/discovery-5`: the 5 × 5 ml set (ADR 0042). */
 export function Discovery5SetScreen() {
-  return <DiscoveryScreenOf vialMl={5} />;
+  return <DiscoveryScreenOf setKey={FIVE_ML_SET_KEY} />;
 }
 
-function DiscoveryScreenOf({ vialMl }: { vialMl: DiscoveryVialMl }) {
+/** `/sets/$key`: any other set the owner added (ADR 0044). */
+export function DiscoveryKeySetScreen() {
+  const { key } = useParams({ strict: false }) as { key?: string };
+  return <DiscoveryScreenOf setKey={key ?? MAIN_SET_KEY} />;
+}
+
+function DiscoveryScreenOf({ setKey }: { setKey: string }) {
   const router = useRouter();
   const open = useOpenFragrance();
   const s = useSetsText();
-  const query = useDiscoverySet(vialMl);
-  const add = useAddDiscovery(vialMl);
+  const { language } = usePrefs();
+  const query = useDiscoverySet(setKey);
+  const add = useAddDiscovery(setKey);
   const [note, setNote] = useNote();
   if (query.isError && !query.data)
     return (
@@ -246,12 +253,12 @@ function DiscoveryScreenOf({ vialMl }: { vialMl: DiscoveryVialMl }) {
       note={note}
       onBack={() => goBackOrCatalog(router)}
       onOpen={open}
-      onShare={() => void shareDiscovery(s.discovery[vialMl].title)}
-      reviews={DISCOVERY_SETS[vialMl].extras ? <ReviewsBlock target="discovery-set" /> : undefined}
+      onShare={() => void shareDiscovery(query.data.name[language])}
+      reviews={setKey === MAIN_SET_KEY ? <ReviewsBlock target="discovery-set" /> : undefined}
       onBuyNow={() =>
         void router.navigate({
           to: '/checkout',
-          search: { item: buyNowParam({ kind: 'discovery_set', vialMl }) },
+          search: { item: buyNowParam({ kind: 'discovery_set', key: setKey }) },
         })
       }
       onAdd={() =>

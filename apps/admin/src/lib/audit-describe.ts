@@ -1,10 +1,5 @@
 import type { AuditEntryDto } from '@lummi/contracts';
 import {
-  DISCOVERY_SETS,
-  DISCOVERY_VIAL_MLS,
-  type DiscoveryVialMl,
-} from '@lummi/contracts/constants';
-import {
   formatCalendarDate,
   formatMoney,
   formatTiyin,
@@ -886,10 +881,34 @@ const describers: Record<string, Describer> = {
     return [fill(c.t.audit.detail.exported, { count: String(int(c.p.count) ?? 0) })];
   },
 
-  // which set is the Target column's (`discoverySetOf`); `vialMl` names it there
-  'sets.discovery_changed': (c) => {
-    c.take('vialMl', 'price', 'uzumUrl', 'composition');
+  // the Target column names the set (the API looks its name up by key, ADR 0044)
+  'sets.discovery_created': (c) => {
+    c.take('vialMl', 'name', 'price', 'hidden', 'composition');
     const d = c.t.audit.detail;
+    const s = c.t.sets;
+    const name = isRecord(c.p.name) ? c.p.name : {};
+    const composition = Array.isArray(c.p.composition)
+      ? c.p.composition.filter((x): x is string => typeof x === 'string')
+      : [];
+    return [
+      fill(d.field, {
+        label: s.vialMl,
+        value: fill(s.setSub, { ml: valueText(c, c.p.vialMl) }),
+      }),
+      fill(d.field, { label: s.nameRu, value: valueText(c, name.ru) }),
+      fill(d.field, { label: s.nameUz, value: valueText(c, name.uz) }),
+      fill(d.field, { label: s.price, value: money(c, int(c.p.price) ?? 0) }),
+      fill(d.field, { label: s.onSale, value: valueText(c, c.p.hidden !== true) }),
+      fill(d.composition, { list: clip(composition.join(', ')) }),
+    ];
+  },
+  'sets.discovery_changed': (c) => {
+    c.take('vialMl', 'name', 'hidden', 'price', 'uzumUrl', 'composition');
+    const d = c.t.audit.detail;
+    const s = c.t.sets;
+    const setNames = asPair(c.p.name);
+    const nameOf = (v: unknown, l: 'ru' | 'uz') => (isRecord(v) ? valueText(c, v[l]) : '—');
+    const hidden = asPair(c.p.hidden);
     const price = asPair(c.p.price);
     const comp = asPair(c.p.composition);
     const names = (v: unknown) =>
@@ -906,6 +925,21 @@ const describers: Record<string, Describer> = {
       .join('; ');
     const uzum = asPair(c.p.uzumUrl);
     return [
+      ...(setNames
+        ? (['ru', 'uz'] as const).map(
+            (l) =>
+              nameOf(setNames[0], l) !== nameOf(setNames[1], l) &&
+              fill(d.field, {
+                label: l === 'ru' ? s.nameRu : s.nameUz,
+                value: `${nameOf(setNames[0], l)} → ${nameOf(setNames[1], l)}`,
+              }),
+          )
+        : []),
+      hidden &&
+        fill(d.field, {
+          label: s.onSale,
+          value: `${valueText(c, hidden[0] !== true)} → ${valueText(c, hidden[1] !== true)}`,
+        }),
       price &&
         price[0] !== price[1] &&
         fill(d.price, { old: money(c, int(price[0]) ?? 0), new: money(c, int(price[1]) ?? 0) }),
@@ -1170,19 +1204,4 @@ function uzumSale(c: Ctx): ReturnType<Describer> {
     c.p.via === 'import' && fill(d.uzumImported, { rows: rows.join(', ') || '—' }),
     str(c.p.reason) && fill(d.reason, { reason: str(c.p.reason)! }),
   ];
-}
-
-/**
- * The Discovery set an audit entry is about (ADR 0042): its `vialMl`, else its target key (an
- * entry from before the 5 × 5 ml set has `discovery` and no `vialMl`). Null when it names neither.
- */
-export function discoverySetOf(e: {
-  targetType: string;
-  targetId: string | null;
-  payload: Record<string, unknown>;
-}): DiscoveryVialMl | null {
-  if (e.targetType !== 'discovery_set') return null;
-  const byMl = DISCOVERY_VIAL_MLS.find((ml) => ml === e.payload.vialMl);
-  if (byMl !== undefined) return byMl;
-  return DISCOVERY_VIAL_MLS.find((ml) => DISCOVERY_SETS[ml].key === e.targetId) ?? null;
 }

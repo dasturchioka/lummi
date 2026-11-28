@@ -13,16 +13,17 @@ import {
 } from '@lummi/contracts';
 import { formatLocalDate, tashkentDay } from '@lummi/contracts';
 import {
-  DISCOVERY_SETS,
+  FIVE_ML_SET_KEY,
+  MAIN_SET_KEY,
   SET_SIZE,
   type ConsumableUnit,
-  type DiscoveryVialMl,
 } from '@lummi/contracts/constants';
 import {
   and,
   asc,
   consumables,
   desc,
+  discoverySet,
   eq,
   fragrances,
   inArray,
@@ -50,7 +51,7 @@ import { fragranceStock, readStockContext } from './fragrance-stock';
 import { gramsFromMg, mgFromGrams, mixingNeeds, mlFromUl, oilReceiptCost, ulFromMl } from './oil';
 import { applyStock, linkOf, lockFragrances, lockStock } from './stock-changes';
 import { recordStockMove } from './stock-moves';
-import { readComposition } from '../sets/sets';
+import { findDiscoverySet, readComposition } from '../sets/sets';
 
 export type WarehouseFailure =
   | { ok: false; reason: 'not_found' | 'voided' | 'draft' | 'not_draft' | 'try_again' }
@@ -487,12 +488,12 @@ export class WarehouseService {
   /** A set assembly (`assembleDiscoverySet`), retried once on a deadlock. */
   async assembleSet(
     actor: StaffRow,
-    vialMl: DiscoveryVialMl,
+    key: string,
     quantity: number,
   ): Promise<WarehouseOutcome<SetAssemblyResult>> {
     return transient(() =>
       this.db.transaction((tx) =>
-        assembleDiscoverySet(tx, this.audit, actor, vialMl, quantity, this.edges.clock.now()),
+        assembleDiscoverySet(tx, this.audit, actor, key, quantity, this.edges.clock.now()),
       ),
     );
   }
@@ -636,17 +637,20 @@ export async function assembleDiscoverySet(
   tx: DbOrTx,
   audit: AuditService,
   actor: StaffRow,
-  vialMl: DiscoveryVialMl,
+  key: string,
   quantity: number,
   now: Date,
 ): Promise<WarehouseOutcome<SetAssemblyResult>> {
-  const composition = await readComposition(tx, vialMl);
+  const set = await findDiscoverySet(tx, key);
+  if (!set) return { ok: false, reason: 'not_found' } as const;
+  const vialMl = set.vialMl;
+  const composition = await readComposition(tx, key);
   if (composition.length !== SET_SIZE)
     return { ok: false, reason: 'invalid', fields: ['composition'] } as const;
   const ids = composition.map((f) => f.id);
   const locked = await lockStock(tx, {
     fragranceIds: ids,
-    setMls: [vialMl],
+    setKeys: [key],
     links: [linkOf('flacon', vialMl)],
   });
   const stock = await readLiquidStock(tx, ids);
@@ -662,22 +666,22 @@ export async function assembleDiscoverySet(
         fragrance: name,
       } as const;
   }
-  const before = locked.sets.get(vialMl)!.onHand;
+  const before = locked.sets.get(key)!.onHand;
   const actorRef = { type: 'staff' as const, id: actor.id };
   const applied = await applyStock(tx, locked, {
     fills: ids.map((fragranceId) => ({ fragranceId, ml: vialMl, qty: quantity, boxed: false })),
     sign: -1,
-    sets: [{ vialMl, change: quantity }],
-    move: { kind: 'set_assembly', actor: actorRef, details: { set: { vialMl, quantity } } },
+    sets: [{ key, change: quantity }],
+    move: { kind: 'set_assembly', actor: actorRef, details: { set: { key, vialMl, quantity } } },
     now,
   });
-  const onHand = locked.sets.get(vialMl)!.onHand;
+  const onHand = locked.sets.get(key)!.onHand;
   const flacons = applied.consumables.reduce((a, c) => a + (c.from - c.to), 0);
   await audit.record(tx, {
     actor: actorRef,
     action: 'warehouse.set_assembled',
     targetType: 'discovery_set',
-    targetId: DISCOVERY_SETS[vialMl].key,
+    targetId: key,
     payload: {
       vialMl,
       quantity,
@@ -783,13 +787,20 @@ export async function stockHistory(
         };
       })
       .sort((a, b) => a.consumableId - b.consumableId);
+  const setNames = new Map(
+    (
+      await tx
+        .select({ key: discoverySet.key, nameRu: discoverySet.nameRu, nameUz: discoverySet.nameUz })
+        .from(discoverySet)
+    ).map((r) => [r.key, { ru: r.nameRu, uz: r.nameUz }]),
+  );
   return rows.map(({ move: m, staffName, orderNumber, fragranceName }) => {
     const d = m.details as {
       invoice?: string;
       supplier?: string;
       source?: StockMove['source'];
       uzumOrder?: string;
-      set?: { vialMl: number; quantity: number };
+      set?: { key?: string; vialMl: number; quantity: number };
       note?: string;
       short?: { concentrateUl?: number; consumables?: Record<string, number> };
     };
@@ -818,9 +829,23 @@ export async function stockHistory(
       supplier: withOilReceipts ? (d.supplier ?? null) : null,
       orderNumber: orderNumber ?? null,
       uzumOrder: d.uzumOrder ?? null,
-      set: d.set ?? null,
+      set: d.set ? setOfMove(d.set, setNames) : null,
       source: d.source ?? null,
       note: d.note ?? null,
     };
   });
+}
+
+/** A move's set: its key, or, on a move from before the keys, the one its vial ml named (ADR 0044). */
+function setOfMove(
+  set: { key?: string; vialMl: number; quantity: number },
+  names: ReadonlyMap<string, { ru: string; uz: string }>,
+) {
+  const key = set.key ?? (set.vialMl === 5 ? FIVE_ML_SET_KEY : MAIN_SET_KEY);
+  return {
+    key,
+    name: names.get(key) ?? { ru: key, uz: key },
+    vialMl: set.vialMl,
+    quantity: set.quantity,
+  };
 }

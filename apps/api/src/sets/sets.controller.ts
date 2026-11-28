@@ -9,12 +9,22 @@ import { SetsService } from './sets.service';
 export class SetsController {
   constructor(@Inject(SetsService) private readonly sets: SetsService) {}
 
+  @TsRestHandler(contract.sets.list)
+  list() {
+    return tsRestHandler(contract.sets.list, async () => ({
+      status: 200 as const,
+      body: await this.sets.list(),
+    }));
+  }
+
   @TsRestHandler(contract.sets.discovery)
   discovery() {
-    return tsRestHandler(contract.sets.discovery, async ({ query }) => ({
-      status: 200 as const,
-      body: await this.sets.discovery(query.vialMl),
-    }));
+    return tsRestHandler(contract.sets.discovery, async ({ query }) => {
+      const set = await this.sets.discovery(query.key);
+      return set
+        ? { status: 200 as const, body: set }
+        : { status: 404 as const, body: { code: 'not_found' as const } };
+    });
   }
 
   @TsRestHandler(contract.sets.builder)

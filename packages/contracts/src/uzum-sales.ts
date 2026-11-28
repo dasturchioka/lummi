@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { tashkentDaySchema } from './admin';
 import { MAX_PRICE } from './constants';
 import { orderCostSnapshotSchema } from './cost';
-import { discoveryVialMlSchema } from './sets';
+import { discoveryVialMlSchema, setKeySchema, setNameSchema } from './sets';
 import { stockReasonSchema } from './warehouse';
 
 /*
@@ -29,11 +29,11 @@ const percent = z
 
 /**
  * A line of a sale: a fragrance's volume (never a 5 ml bottle, which is not sold alone), or a
- * Discovery set by the ml of its vials (ADR 0042).
+ * Discovery set by its key (ADR 0044).
  */
 export const uzumSaleLineInputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('volume'), volumeId: z.number().int().positive(), qty, price }),
-  z.object({ kind: z.literal('discovery_set'), vialMl: discoveryVialMlSchema, qty, price }),
+  z.object({ kind: z.literal('discovery_set'), key: setKeySchema, qty, price }),
 ]);
 export type UzumSaleLineInput = z.infer<typeof uzumSaleLineInputSchema>;
 
@@ -66,6 +66,8 @@ export const uzumSaleSchema = z.object({
       name: z.string().nullable(),
       /** The bottle's ml, or a Discovery set's vial ml. */
       ml: z.number().int(),
+      /** A Discovery set's key and name (ADR 0044); null for a volume. */
+      set: z.object({ key: z.string(), name: setNameSchema }).nullable(),
       qty: z.number().int(),
       price: z.number().int(),
       lineTotal: z.number().int(),
@@ -112,7 +114,10 @@ export const uzumSaleItemSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('discovery_set'),
+    key: setKeySchema,
     vialMl: discoveryVialMlSchema,
+    name: setNameSchema,
+    hidden: z.boolean(),
     available: z.number().int(),
   }),
 ]);
@@ -131,13 +136,14 @@ export type UzumSalesPage = z.infer<typeof uzumSalesPageSchema>;
 
 /**
  * A line the stock can't cover: what the sale wants of it and what is available. A Discovery set
- * has no volume or name, and its vial ml as `ml`.
+ * has no volume or fragrance name: its key and name in `set`, its vial ml as `ml`.
  */
 export const uzumShortLineSchema = z.object({
   kind: z.enum(['volume', 'discovery_set']),
   volumeId: z.number().int().nullable(),
   name: z.string().nullable(),
   ml: z.number().int(),
+  set: z.object({ key: z.string(), name: setNameSchema }).nullable(),
   wanted: z.number().int(),
   available: z.number().int(),
 });

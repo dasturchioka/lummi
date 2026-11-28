@@ -141,6 +141,11 @@ const routeTree = rootRoute.addChildren([
     ...at('/sets/discovery-5'),
     component: lazyRouteComponent(setsScreens, 'Discovery5SetScreen'),
   }),
+  // the owner's other sets (ADR 0044); `builder` and the two above are matched first
+  createRoute({
+    ...at('/sets/$key'),
+    component: lazyRouteComponent(setsScreens, 'DiscoveryKeySetScreen'),
+  }),
   createRoute({
     ...at('/sets/builder'),
     // `?pick=a,b,c`: the cart's «Изменить набор» opens the builder with that line's picks

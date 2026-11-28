@@ -45,7 +45,9 @@ const builder = (n = 7): Builder => ({
   options: Array.from({ length: n }, (_, i) => item(i + 1)),
 });
 const set = (over: Partial<DiscoverySet> = {}): DiscoverySet => ({
+  key: 'discovery',
   vialMl: 10,
+  name: { ru: 'Discovery set', uz: 'Discovery set' },
   price: 299_000,
   available: 10,
   soldOut: false,

@@ -74,6 +74,8 @@ export const homeStockItemSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('discovery'),
+    key: z.string(),
+    name: z.object({ ru: z.string(), uz: z.string() }),
     vialMl: z.number().int(),
     available: count,
     level: stockLevel,

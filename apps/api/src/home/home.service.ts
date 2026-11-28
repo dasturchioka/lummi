@@ -238,6 +238,8 @@ export class HomeService {
         .filter((r) => matchesStockQuery(r, low))
         .map((r) => ({
           kind: 'discovery' as const,
+          key: r.key,
+          name: r.name,
           vialMl: r.vialMl,
           available: r.available,
           level: levelOf(r.level),
@@ -261,9 +263,8 @@ export class HomeService {
         level: sample.level === 'low' ? 'low' : 'zero',
       });
     const group = { discovery: 0, sample: 1, fragrance: 2 } as const;
-    // a set's name is its vial ml (5 before 10, as the stock page lists them)
-    const nameOf = (i: HomeStockItem) =>
-      i.kind === 'discovery' ? String(i.vialMl).padStart(3, '0') : (i.name ?? '');
+    // a set by its own name (ADR 0044)
+    const nameOf = (i: HomeStockItem) => (i.kind === 'discovery' ? i.name.ru : (i.name ?? ''));
     return items.sort(
       (a, b) =>
         Number(a.level === 'low') - Number(b.level === 'low') ||

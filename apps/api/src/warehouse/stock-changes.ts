@@ -1,4 +1,4 @@
-import type { ConsumableUse, DiscoveryVialMl } from '@lummi/contracts/constants';
+import type { ConsumableUse } from '@lummi/contracts/constants';
 import {
   and,
   asc,
@@ -55,7 +55,8 @@ export interface FillLine {
 export interface LockedStock {
   liquid: LiquidSettings;
   fragrances: Map<number, LockedFragrance>;
-  sets: Map<DiscoveryVialMl, DiscoverySetRow>;
+  /** By key. */
+  sets: Map<string, DiscoverySetRow>;
   /** The active consumable of each link asked for; a link with none is simply not counted. */
   consumables: Map<ConsumableLink, ConsumableRow>;
 }
@@ -102,19 +103,19 @@ export async function lockFragrances(
 }
 
 /**
- * Locks the fragrances (ascending id), then the Discovery sets (ascending vial ml), then the
+ * Locks the fragrances (ascending id), then the Discovery sets (ascending key), then the
  * consumables of `links` (ascending id), and reads them under the locks.
  */
 export async function lockStock(
   tx: DbOrTx,
   want: {
     fragranceIds: readonly number[];
-    setMls?: readonly DiscoveryVialMl[];
+    setKeys?: readonly string[];
     links?: readonly ConsumableLink[];
   },
 ): Promise<LockedStock> {
   const locked = await lockFragrances(tx, want.fragranceIds);
-  const sets = await lockDiscoverySets(tx, want.setMls ?? []);
+  const sets = await lockDiscoverySets(tx, want.setKeys ?? []);
   const links = [...new Set(want.links ?? [])];
   const found = links.length
     ? await tx
@@ -150,7 +151,7 @@ export interface CountChange<K> {
 /** What `applyStock` moved: for the order's history and the audit. */
 export interface AppliedStock {
   fragrances: CountChange<number>[];
-  sets: CountChange<DiscoveryVialMl>[];
+  sets: CountChange<string>[];
   consumables: CountChange<number>[];
 }
 
@@ -167,7 +168,7 @@ export async function applyStock(
   change: {
     fills: readonly FillLine[];
     sign: 1 | -1;
-    sets?: readonly { vialMl: DiscoveryVialMl; change: number }[];
+    sets?: readonly { key: string; change: number }[];
     move: Omit<
       StockMoveInput,
       'fragranceId' | 'concentrateUl' | 'bottles' | 'consumables' | 'oilMg'
@@ -179,14 +180,14 @@ export async function applyStock(
   const { sign } = change;
   const out: AppliedStock = { fragrances: [], sets: [], consumables: [] };
 
-  for (const s of [...(change.sets ?? [])].sort((a, b) => a.vialMl - b.vialMl)) {
-    const row = locked.sets.get(s.vialMl);
-    if (!row) throw new Error(`discovery_set ${s.vialMl} is not locked`);
+  for (const s of [...(change.sets ?? [])].sort((a, b) => a.key.localeCompare(b.key))) {
+    const row = locked.sets.get(s.key);
+    if (!row) throw new Error(`discovery_set ${s.key} is not locked`);
     const from = row.onHand;
     const to = Math.max(0, from + s.change);
     row.onHand = to;
-    await tx.update(discoverySet).set({ onHand: to }).where(eq(discoverySet.vialMl, s.vialMl));
-    out.sets.push({ id: s.vialMl, from, to });
+    await tx.update(discoverySet).set({ onHand: to }).where(eq(discoverySet.key, s.key));
+    out.sets.push({ id: s.key, from, to });
   }
 
   // per fragrance, in ascending id: its bottles, its liquid, the consumables its bottles take

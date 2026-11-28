@@ -163,10 +163,10 @@ export class WarehouseController {
   @TsRestHandler(adminContract.warehouse.assembleSet)
   assembleSet(@CurrentStaff() actor: StaffRow) {
     return tsRestHandler(adminContract.warehouse.assembleSet, async ({ params, body }) => {
-      const res = await this.warehouse.assembleSet(actor, params.vialMl, body.quantity);
+      const res = await this.warehouse.assembleSet(actor, params.key, body.quantity);
       if (res.ok) return { status: 201 as const, body: res.value };
       const f = failure(res);
-      // a set has no 404: both rows always exist
+      // an unknown key reads as a set that cannot be assembled
       return f.status === 404 ? { status: 422 as const, body: { code: 'invalid' as const } } : f;
     });
   }

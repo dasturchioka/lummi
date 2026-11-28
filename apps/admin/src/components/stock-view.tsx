@@ -106,7 +106,9 @@ export function StockView({
           </div>
         </form>
       </Card>
-      {data.page === 1 && <SetsStock rows={data.sets} lowThreshold={data.lowThreshold} t={t} />}
+      {data.page === 1 && (
+        <SetsStock rows={data.sets} lowThreshold={data.lowThreshold} language={language} t={t} />
+      )}
       {consumables && <ConsumablesSection items={consumables} language={language} t={t} />}
       {data.fragrances.length === 0 ? (
         <EmptyState

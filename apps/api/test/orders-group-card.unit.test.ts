@@ -93,6 +93,7 @@ const line = (position: number): OrderLineRow => ({
   orderId: 7,
   position,
   kind: 'volume',
+  setKey: null,
   volumeId: 1,
   fragranceId: 1,
   slug: 'symphony',

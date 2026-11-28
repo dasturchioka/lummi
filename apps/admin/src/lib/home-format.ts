@@ -79,7 +79,7 @@ export function nowKey(now: HomeNow): string {
       return `credit:${now.id}`;
     case 'stock':
       return now.item.kind === 'discovery'
-        ? `stock:discovery:${now.item.vialMl}`
+        ? `stock:discovery:${now.item.key}`
         : `stock:${now.item.kind}:${now.item.name ?? ''}`;
     default:
       return now.kind;

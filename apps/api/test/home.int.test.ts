@@ -322,11 +322,18 @@ describe('the work queue', () => {
     // 250.5 ml free and 120 ml free: both under the 300 ml threshold; a set with 2 boxes
     await setConcentrateUl(t, lowX.fragranceId, 250_500);
     await setConcentrateUl(t, lowY.fragranceId, 120_000);
-    await t.db.update(discoverySet).set({ onHand: 2 }).where(eq(discoverySet.vialMl, 10));
-    await t.db.update(discoverySet).set({ onHand: 0 }).where(eq(discoverySet.vialMl, 5));
+    await t.db.update(discoverySet).set({ onHand: 2 }).where(eq(discoverySet.key, 'discovery'));
+    await t.db.update(discoverySet).set({ onHand: 0 }).where(eq(discoverySet.key, 'discovery-5'));
     const home = await homeAs('manager');
     const stock = home.queues.stock;
-    expect(stock.first).toEqual({ kind: 'discovery', vialMl: 5, available: 0, level: 'zero' });
+    expect(stock.first).toEqual({
+      kind: 'discovery',
+      key: 'discovery-5',
+      name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+      vialMl: 5,
+      available: 0,
+      level: 'zero',
+    });
     const items = await t.app.get(HomeService).stockItems();
     const ours = items.filter(
       (i) =>
@@ -335,8 +342,22 @@ describe('the work queue', () => {
     );
     // nothing left first; then each kind in its own unit, sets before fragrances, by name
     expect(ours).toEqual([
-      { kind: 'discovery', vialMl: 5, available: 0, level: 'zero' },
-      { kind: 'discovery', vialMl: 10, available: 2, level: 'low' },
+      {
+        kind: 'discovery',
+        key: 'discovery-5',
+        name: { ru: 'Discovery set 5 × 5 мл', uz: 'Discovery set 5 × 5 ml' },
+        vialMl: 5,
+        available: 0,
+        level: 'zero',
+      },
+      {
+        kind: 'discovery',
+        key: 'discovery',
+        name: { ru: 'Discovery set', uz: 'Discovery set' },
+        vialMl: 10,
+        available: 2,
+        level: 'low',
+      },
       ...[
         { kind: 'fragrance', name: lowX.name, availableMl: 250.5, level: 'low' },
         { kind: 'fragrance', name: lowY.name, availableMl: 120, level: 'low' },

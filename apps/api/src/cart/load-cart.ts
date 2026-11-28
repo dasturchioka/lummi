@@ -9,6 +9,7 @@ import {
 import {
   asDiscoveryVialMl,
   CART_MAX_QTY,
+  MAIN_SET_KEY,
   SET_SIZE,
   SET_VIAL_ML,
   type DiscoveryVialMl,
@@ -74,10 +75,12 @@ export interface SetItem {
   brand: string;
 }
 
-/** A Discovery set (5 × 10 ml or 5 × 5 ml, ADR 0042): five fragrances from its own stock, never touching a bottle's. */
+/** A Discovery set (5 × 10 ml or 5 × 5 ml, ADR 0042, 0044): five fragrances from its own stock, never touching a bottle's. */
 export interface DiscoveryLineView extends LineBase {
   kind: 'discovery_set';
+  key: string;
   vialMl: DiscoveryVialMl;
+  setName: { ru: string; uz: string };
   items: SetItem[];
 }
 
@@ -107,7 +110,13 @@ export type PromoGiftView = { regular: number; soldOut: boolean; photo: string |
       brand: string;
       ml: number;
     }
-  | { kind: 'discovery_set'; vialMl: DiscoveryVialMl; items: SetItem[] }
+  | {
+      kind: 'discovery_set';
+      key: string;
+      vialMl: DiscoveryVialMl;
+      setName: { ru: string; uz: string };
+      items: SetItem[];
+    }
 );
 
 /** Caps what the customer asked for at what is available; a sold-out line keeps its own. */
@@ -142,8 +151,8 @@ export interface StoredLine {
   kind: LineKind;
   volumeId: number | null;
   fragranceIds: number[] | null;
-  /** Which Discovery set a `discovery_set` line holds; null on the other kinds. */
-  vialMl: DiscoveryVialMl | null;
+  /** Which Discovery set a `discovery_set` line holds (its key); null on the other kinds. */
+  setKey: string | null;
   qty: number;
 }
 
@@ -163,16 +172,13 @@ export async function readCartLines(tx: DbOrTx, customerId: number): Promise<Sto
       kind: cartLines.kind,
       volumeId: cartLines.volumeId,
       fragranceIds: cartLines.fragranceIds,
-      vialMl: cartLines.vialMl,
+      setKey: cartLines.setKey,
       qty: cartLines.qty,
     })
     .from(cartLines)
     .where(eq(cartLines.customerId, customerId))
     .orderBy(asc(cartLines.id));
-  return rows.map((r) => ({
-    ...r,
-    vialMl: r.kind === 'discovery_set' ? asDiscoveryVialMl(r.vialMl) : null,
-  }));
+  return rows.map((r) => ({ ...r, setKey: r.kind === 'discovery_set' ? r.setKey : null }));
 }
 
 /** The cart's quote: `loadQuote` with the cart as the line source. */
@@ -239,15 +245,16 @@ export async function loadQuote(
   });
   type Priced = { price: number; salePrice: number | null; saleEndsAt: Date | null };
 
-  // Set lines (ADR 0009, 0042): each Discovery set from its own stock at its own price, a builder
-  // set from each chosen 10 ml at the 5 × 10 ml set's price.
+  // Set lines (ADR 0009, 0042, 0044): each Discovery set from its own stock at its own price, a
+  // builder set from each chosen 10 ml at the main set's price.
   const setRows = stored.filter((l) => l.kind !== 'volume');
-  const discovery = new Map<DiscoveryVialMl, DiscoveryState>();
-  const wantedSets = new Set<DiscoveryVialMl>(
-    setRows.flatMap((r) => (r.kind === 'builder_set' ? [SET_VIAL_ML] : r.vialMl ? [r.vialMl] : [])),
+  const discovery = new Map<string, DiscoveryState>();
+  const wantedSets = new Set<string>(
+    setRows.flatMap((r) =>
+      r.kind === 'builder_set' ? [MAIN_SET_KEY] : r.setKey ? [r.setKey] : [],
+    ),
   );
-  for (const ml of [...wantedSets].sort((a, b) => a - b))
-    discovery.set(ml, await loadDiscovery(tx, ml));
+  for (const key of [...wantedSets].sort()) discovery.set(key, await loadDiscovery(tx, key));
   const builderIds = [...new Set(setRows.flatMap((r) => r.fragranceIds ?? []))];
   const tenMlOfFragrance = new Map<number, TenMl>(
     builderIds.length === 0
@@ -280,7 +287,10 @@ export async function loadQuote(
   };
   // each Discovery set's own stock, shared the same way (a cart holds one line of each, but
   // «Повторить заказ» weighs the old order's after it)
-  const discoveryFree = new Map([...discovery].map(([ml, d]) => [ml, d.available]));
+  // a hidden set is off sale in the shop (ADR 0044): its line stays, flagged like a sold-out one
+  const discoveryFree = new Map(
+    [...discovery].map(([key, d]) => [key, d.row.hidden ? 0 : d.available]),
+  );
 
   const volumeById = new Map(rows.map((r) => [r.lineId, r]));
   const setById = new Map(setRows.map((r) => [r.lineId, r]));
@@ -313,14 +323,16 @@ export async function loadQuote(
       continue;
     }
     const sr = setById.get(lineId)!;
-    const set = sr.kind === 'discovery_set' && sr.vialMl ? discovery.get(sr.vialMl) : undefined;
+    const set = sr.kind === 'discovery_set' && sr.setKey ? discovery.get(sr.setKey) : undefined;
     if (set) {
-      const left = discoveryFree.get(set.vialMl) ?? 0;
+      const left = discoveryFree.get(set.key) ?? 0;
       const view = capped(sr.qty, left);
-      if (!view.soldOut) discoveryFree.set(set.vialMl, left - view.qty);
+      if (!view.soldOut) discoveryFree.set(set.key, left - view.qty);
       setLines.push({
         kind: 'discovery_set',
-        vialMl: set.vialMl,
+        key: set.key,
+        vialMl: asDiscoveryVialMl(set.row.vialMl),
+        setName: { ru: set.row.nameRu, uz: set.row.nameUz },
         lineId: sr.lineId,
         photo: set.row.photoHash,
         items: set.composition.map((f) => ({
@@ -384,8 +396,8 @@ export async function loadQuote(
       ? await loadPromoGift(tx, terms.promoGiftItem, {
           bottlesLeft: (fragranceId, ml) =>
             free.has(fragranceId) ? left(fragranceId, ml) : undefined,
-          discovery: discovery.has(SET_VIAL_ML)
-            ? { state: discovery.get(SET_VIAL_ML)!, left: discoveryFree.get(SET_VIAL_ML) ?? 0 }
+          discovery: discovery.has(MAIN_SET_KEY)
+            ? { state: discovery.get(MAIN_SET_KEY)!, left: discoveryFree.get(MAIN_SET_KEY) ?? 0 }
             : null,
         })
       : null;
@@ -398,13 +410,13 @@ export async function loadQuote(
       price: volumePrice(l),
       soldOut: l.soldOut,
     })),
-    // a Discovery set costs its own price, a builder set the 5 × 10 ml one's; never marked down
+    // a Discovery set costs its own price, a builder set the main one's; never marked down
     ...setLines.map((l): QuoteLineInput => ({
       key: String(l.lineId),
       item: { kind: 'set' },
       qty: l.qty,
       price: {
-        regular: discovery.get(l.kind === 'discovery_set' ? l.vialMl : SET_VIAL_ML)?.row.price ?? 0,
+        regular: discovery.get(l.kind === 'discovery_set' ? l.key : MAIN_SET_KEY)?.row.price ?? 0,
         markdown: null,
       },
       soldOut: l.soldOut,
@@ -462,12 +474,14 @@ async function loadPromoGift(
   },
 ): Promise<PromoGiftView> {
   if (item.kind === 'discovery_set') {
-    // a gift code's set is the 5 × 10 ml one (ADR 0039)
-    const state = cart.discovery?.state ?? (await loadDiscovery(tx, SET_VIAL_ML));
+    // a gift code's set is the main one (ADR 0039)
+    const state = cart.discovery?.state ?? (await loadDiscovery(tx, MAIN_SET_KEY));
     const left = cart.discovery ? cart.discovery.left : state.available;
     return {
       kind: 'discovery_set',
-      vialMl: SET_VIAL_ML,
+      key: state.key,
+      vialMl: asDiscoveryVialMl(state.row.vialMl),
+      setName: { ru: state.row.nameRu, uz: state.row.nameUz },
       regular: state.row.price,
       soldOut: left < 1,
       photo: state.row.photoHash,
@@ -563,7 +577,14 @@ export function toLineDto(l: CartLineView): DistributiveOmit<CartLineDto, 'id'> 
     case 'builder_set':
       return { ...base, kind: l.kind, fragrances: fragrancesOf(l.items), short: l.short };
     case 'discovery_set':
-      return { ...base, kind: l.kind, vialMl: l.vialMl, fragrances: fragrancesOf(l.items) };
+      return {
+        ...base,
+        kind: l.kind,
+        key: l.key,
+        vialMl: l.vialMl,
+        setName: l.setName,
+        fragrances: fragrancesOf(l.items),
+      };
   }
 }
 

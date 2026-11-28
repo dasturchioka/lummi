@@ -315,3 +315,90 @@ describe('one 10 ml shared by several lines of one order (ADR 0010)', () => {
     expect(await t.db.select().from(orders)).toHaveLength(0);
   });
 });
+
+describe("the owner's own Discovery sets (ADR 0044)", () => {
+  const evening = { ru: 'Вечерний', uz: 'Kechki' };
+  async function newSet(hidden = false) {
+    const owner = await t.ownerSession();
+    const ids = (await t.db.select({ id: fragrances.id }).from(fragrances).limit(10)).map(
+      (f) => f.id,
+    );
+    const res = await owner.client.admin.sets.create({
+      body: { name: evening, vialMl: 10, price: 350_000, hidden, composition: ids.slice(5, 10) },
+    });
+    if (res.status !== 201) throw new Error(`create: ${res.status}`);
+    await owner.client.admin.sets.setOnHand({
+      query: { key: res.body.key },
+      body: { onHand: 4, reason: 'Пересчёт' },
+    });
+    return { owner, set: res.body };
+  }
+
+  it('adds a set under the next key, last in the list, sold from its own boxes', async () => {
+    const { owner, set } = await newSet();
+    expect(set).toMatchObject({ key: 'set-3', vialMl: 10, name: evening, price: 350_000 });
+    expect(set.composition).toHaveLength(5);
+    const list = await owner.client.admin.sets.list();
+    expect(list.status === 200 && list.body.map((s) => s.key)).toEqual([
+      'discovery',
+      'discovery-5',
+      'set-3',
+    ]);
+    const client = await signedUp(ali, '998901234567');
+    const shop = await client.sets.list();
+    expect(shop.status === 200 && shop.body.map((s) => s.key)).toContain('set-3');
+    const one = await client.sets.discovery({ query: { key: 'set-3' } });
+    expect(one.status === 200 && one.body).toMatchObject({ name: evening, available: 4 });
+  });
+
+  it("orders it by its key and name, and its reserve is its own, never the main set's", async () => {
+    const point = await samarkandPoint();
+    await t.db.update(discoverySet).set({ onHand: 3 }).where(eq(discoverySet.key, 'discovery'));
+    await newSet();
+    const client = await signedUp(ali, '998901234567');
+    const cart = await client.cart.addDiscovery({ body: { qty: 2, key: 'set-3' } });
+    expect(cart.status === 200 && cart.body.lines).toMatchObject([
+      { kind: 'discovery_set', key: 'set-3', setName: evening, qty: 2 },
+    ]);
+    const res = await client.orders.create({ body: orderBody(point.id, 2 * 350_000) });
+    expect(res.status).toBe(201);
+    const [line] = await t.db.select().from(orderLines);
+    expect(line).toMatchObject({ setKey: 'set-3', nameRu: 'Вечерний', nameUz: 'Kechki', ml: 10 });
+    const mine = await client.sets.discovery({ query: { key: 'set-3' } });
+    expect(mine.status === 200 && mine.body.available).toBe(2);
+    const main = await client.sets.discovery();
+    expect(main.status === 200 && main.body.available).toBe(3);
+  });
+
+  it('a hidden set leaves the shop: not listed, not found, not added; the main set never hides', async () => {
+    const { owner, set } = await newSet(true);
+    expect(set.hidden).toBe(true);
+    const client = await signedUp(ali, '998901234567');
+    const shop = await client.sets.list();
+    expect(shop.status === 200 && shop.body.map((s) => s.key)).not.toContain('set-3');
+    expect((await client.sets.discovery({ query: { key: 'set-3' } })).status).toBe(404);
+    expect((await client.cart.addDiscovery({ body: { qty: 1, key: 'set-3' } })).status).toBe(404);
+    const main = await owner.client.admin.sets.get();
+    if (main.status !== 200) throw new Error('main');
+    const res = await owner.client.admin.sets.update({
+      body: {
+        name: main.body.name,
+        hidden: true,
+        price: main.body.price,
+        composition: main.body.composition.map((c) => c.id),
+      },
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it('is the owner’s to add: a manager is refused', async () => {
+    const manager = await t.managerSession();
+    const ids = (await t.db.select({ id: fragrances.id }).from(fragrances).limit(5)).map(
+      (f) => f.id,
+    );
+    const res = await manager.client.admin.sets.create({
+      body: { name: evening, vialMl: 5, price: 99_000, hidden: false, composition: ids },
+    });
+    expect(res.status).toBe(403);
+  });
+});
