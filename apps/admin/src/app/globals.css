@@ -455,3 +455,60 @@ main:has(> [data-layout='wide']) {
     animation: overlay-out 80ms var(--ease-out) forwards;
   }
 }
+
+/*
+ * The broadcast preview as a Telegram chat (#broadcasts, 2026-11-28): Telegram's own colours, not
+ * the brand's, so the owner sees what a customer sees. Light is Telegram's default gradient
+ * wallpaper; the panel's dark theme shows Telegram's night look.
+ */
+.tg-preview {
+  --tg-header: #ffffff;
+  --tg-text: #000000;
+  --tg-muted: #8d8e93;
+  --tg-accent: #3390ec;
+  --tg-bubble: #ffffff;
+  --tg-time: #a1aab3;
+  --tg-overlay: rgba(64, 104, 70, 0.42);
+  --tg-wallpaper:
+    radial-gradient(circle at 12% 18%, #dbddbb 0, transparent 55%),
+    radial-gradient(circle at 88% 30%, #6ba587 0, transparent 60%),
+    radial-gradient(circle at 20% 88%, #88b884 0, transparent 55%),
+    radial-gradient(circle at 85% 90%, #d5d88d 0, transparent 60%), #a8c69a;
+  color: var(--tg-text);
+  background: var(--tg-header);
+  font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+:root[data-theme='dark'] .tg-preview {
+  --tg-header: #17212b;
+  --tg-text: #f5f5f5;
+  --tg-muted: #708499;
+  --tg-accent: #5eb5f7;
+  --tg-bubble: #182533;
+  --tg-time: #6d7f8f;
+  --tg-overlay: rgba(36, 52, 68, 0.72);
+  --tg-wallpaper: #0e1621;
+}
+.tg-preview .tg-header {
+  background: var(--tg-header);
+}
+.tg-preview .tg-wallpaper {
+  background: var(--tg-wallpaper);
+}
+.tg-preview .tg-muted {
+  color: var(--tg-muted);
+}
+.tg-preview .tg-accent {
+  color: var(--tg-accent);
+}
+.tg-preview .tg-bubble {
+  background: var(--tg-bubble);
+}
+.tg-preview .tg-time {
+  color: var(--tg-time);
+}
+.tg-preview .tg-service,
+.tg-preview .tg-button {
+  color: #ffffff;
+  background: var(--tg-overlay);
+  backdrop-filter: blur(8px);
+}

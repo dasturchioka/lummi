@@ -487,6 +487,9 @@ export const adminMessages = defineMessages(
         sectionPreview: 'Предпросмотр',
         previewLanguage: 'Язык предпросмотра',
         previewEmpty: 'Здесь появится текст.',
+        previewBot: 'бот',
+        previewToday: 'Сегодня',
+        previewMessage: 'Сообщение',
         previewLocked: {
           ru: 'Рассылка только русскоязычным: узбекскую версию никто не получит.',
           uz: 'Рассылка только узбекоязычным: русскую версию никто не получит.',
@@ -4014,6 +4017,9 @@ export const adminMessages = defineMessages(
         sectionPreview: 'Oldindan koʻrish',
         previewLanguage: 'Koʻrinish tili',
         previewEmpty: 'Matn shu yerda chiqadi.',
+        previewBot: 'bot',
+        previewToday: 'Bugun',
+        previewMessage: 'Xabar',
         previewLocked: {
           ru: 'Faqat ruscha mijozlarga: oʻzbekcha variantni hech kim olmaydi.',
           uz: 'Faqat oʻzbekcha mijozlarga: ruscha variantni hech kim olmaydi.',
